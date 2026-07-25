@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "id": "basic",
+  "display_name": "Basic / Fast",
+  "tier_preference": "fast",
+  "description": "Smallest dubbing spine: VAD, tiny ASR, Kokoro TTS, universal Phi translation.",
+  "profiles": [
+    {
+      "id": "default",
+      "display_name": "Default"
+    }
+  ],
+  "models": [
+    {
+      "model_id": "onnx-community/silero-vad",
+      "stage": "vad",
+      "required": true,
+      "alias": "silero-vad",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "int8", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "cpu" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "cpu" }
+      }
+    },
+    {
+      "model_id": "onnx-community/whisper-tiny",
+      "stage": "asr",
+      "required": false,
+      "alias": "whisper-tiny",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "directml" }
+      }
+    },
+    {
+      "model_id": "onnx-community/Kokoro-82M-v1.0-ONNX",
+      "stage": "tts",
+      "required": true,
+      "alias": "kokoro-onnx",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "q8f16", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "cpu" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "cpu" }
+      }
+    },
+    {
+      "model_id": "microsoft/Phi-4-mini-instruct-onnx",
+      "stage": "translation",
+      "required": true,
+      "alias": "phi-4-mini",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "cpu-int4", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "gpu-int4", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "gpu-int4", "execution_provider": "trt-rtx" }
+      }
+    }
+  ],
+  "translation": {
+    "strategy": "universal",
+    "model_id": "microsoft/Phi-4-mini-instruct-onnx",
+    "alias": "phi-4-mini"
+  },
+  "optional_models": [
+    "cgus/diar_streaming_sortformer_4spk-v2.1-onnx",
+    "csukuangfj/sherpa-onnx-spleeter-2stems"
+  ],
+  "olive_auto_run": false
+}

@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute ref="xml:space" use="default">
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:NMTOKEN">
+                    <xsd:enumeration value="preserve" />
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Stage.VAD" xml:space="preserve"><value>Detectie van spraakactiviteit</value></data>
+  <data name="Stage.ASR" xml:space="preserve"><value>Transcriptie</value></data>
+  <data name="Stage.Translation" xml:space="preserve"><value>Vertaling</value></data>
+  <data name="Stage.TTS" xml:space="preserve"><value>Spraaksynthese</value></data>
+  <data name="Stage.Mixing" xml:space="preserve"><value>Audiomix</value></data>
+  <data name="Status.Idle" xml:space="preserve"><value>Inactief</value></data>
+  <data name="Status.Running" xml:space="preserve"><value>Hardlopen…</value></data>
+  <data name="Status.Failed" xml:space="preserve"><value>Mislukt</value></data>
+  <data name="Status.Completed" xml:space="preserve"><value>Voltooid</value></data>
+  <data name="Window_Title_Crash" xml:space="preserve"><value>Trackdub — Onverwachte fout</value></data>
+  <data name="Crash_Header" xml:space="preserve"><value>Er is iets misgegaan</value></data>
+  <data name="Crash_Subtitle" xml:space="preserve"><value>Er is een onverwachte fout opgetreden in Trackdub. U kunt de onderstaande gegevens kopiëren of de logmap openen voor ondersteuning.</value></data>
+  <data name="Crash_Button_Copy" xml:space="preserve"><value>Gegevens kopiëren</value></data>
+  <data name="Crash_Button_OpenLogFolder" xml:space="preserve"><value>Logmap openen</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>Sluiten</value></data>
+  <data name="Settings.Label_Language" xml:space="preserve"><value>Taal</value></data>
+  <data name="Settings.Hint_LanguageRestart" xml:space="preserve"><value>Er is een herstart nodig om de taalwijziging door te voeren</value></data>
+  <!--  Transport  -->
+  <data name="Transport.ToolTip_SkipPrevious" xml:space="preserve"><value>Vorige overslaan</value></data>
+  <!--  Clippy Assistant  -->
+  <data name="Clippy_Tooltip_AskAssistant" xml:space="preserve"><value>Vraag het aan de Trackdub-assistent</value></data>
+  <data name="Clippy_Text_AskAboutTrackdub" xml:space="preserve"><value>Vraag naar Trackdub</value></data>
+  <data name="Clippy_Placeholder_WhatDoesStarterPackDo" xml:space="preserve"><value>Wat doet dit starterspakket?</value></data>
+  <data name="Clippy_Button_Ask" xml:space="preserve"><value>Vraag</value></data>
+  <data name="Transport.ToolTip_Play" xml:space="preserve"><value>Afspelen</value></data>
+  <data name="Transport.ToolTip_Pause" xml:space="preserve"><value>Pauze</value></data>
+  <data name="Transport.ToolTip_SkipNext" xml:space="preserve"><value>Volgende overslaan</value></data>
+  <data name="Transport.ToolTip_Subtitles" xml:space="preserve"><value>Ondertitels</value></data>
+  <data name="Transport.ToolTip_Karaoke" xml:space="preserve"><value>Karaoke</value></data>
+  <data name="Transport.ToolTip_Bilingual" xml:space="preserve"><value>Tweetalig</value></data>
+  <data name="Transport.ToolTip_Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Transport.ToolTip_Mute" xml:space="preserve"><value>Dempen</value></data>
+  <data name="Transport.ToolTip_Fullscreen" xml:space="preserve"><value>Volledig scherm</value></data>
+  <data name="Transport.RetryPreview" xml:space="preserve"><value>Opnieuw proberen</value></data>
+  <data name="Transport.ToolTip_RetryPreview" xml:space="preserve"><value>Voorbeeld opnieuw weergeven</value></data>
+  <!--  Titlebar  -->
+  <data name="Titlebar.ToolTip_Undo" xml:space="preserve"><value>Ongedaan maken</value></data>
+  <data name="Titlebar.ToolTip_Redo" xml:space="preserve"><value>Opnieuw uitvoeren</value></data>
+  <data name="Titlebar.ToolTip_NewProject" xml:space="preserve"><value>Nieuw project</value></data>
+  <data name="Titlebar.Label_Recent" xml:space="preserve"><value>Recent</value></data>
+  <data name="Titlebar.ToolTip_AIModels" xml:space="preserve"><value>AI-modellen</value></data>
+  <data name="Titlebar.ToolTip_Settings" xml:space="preserve"><value>Instellingen</value></data>
+  <data name="Titlebar.ToolTip_CheckForUpdates" xml:space="preserve"><value>Controleer of er updates beschikbaar zijn</value></data>
+  <data name="Titlebar.ToolTip_DIAG" xml:space="preserve"><value>Diagnostiek</value></data>
+  <data name="Titlebar.ToolTip_BENCH" xml:space="preserve"><value>Benchmarks</value></data>
+  <data name="Titlebar.Label_Update" xml:space="preserve"><value>UPD</value></data>
+  <data name="Titlebar.ToolTip_Minimize" xml:space="preserve"><value>Minimaliseren</value></data>
+  <data name="Titlebar.ToolTip_Maximize" xml:space="preserve"><value>Maximaliseren</value></data>
+  <data name="Titlebar.ToolTip_Close" xml:space="preserve"><value>Sluiten</value></data>
+  <data name="StatusBar.Engine" xml:space="preserve"><value>Motor:</value></data>
+  <data name="StatusBar.Local" xml:space="preserve"><value>Lokaal</value></data>
+  <data name="StatusBar.Gpu" xml:space="preserve"><value>GPU:</value></data>
+  <data name="StatusBar.Settings" xml:space="preserve"><value>Instellingen</value></data>
+  <data name="StatusBar.StarterPacks" xml:space="preserve"><value>Startpakketten</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>Bestand</value></data>
+  <data name="Menu.Project" xml:space="preserve"><value>Project</value></data>
+  <data name="Menu.Media" xml:space="preserve"><value>Media</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>Bekijken</value></data>
+  <data name="Menu.Window" xml:space="preserve"><value>Venster</value></data>
+  <data name="Menu.Help" xml:space="preserve"><value>Hulp</value></data>
+  <data name="Menu.File.NewFromMedia" xml:space="preserve"><value>Nieuws uit de media…</value></data>
+  <data name="Menu.File.OpenProject" xml:space="preserve"><value>Project openen…</value></data>
+  <data name="Menu.File.Save" xml:space="preserve"><value>Opslaan</value></data>
+  <data name="Menu.File.CloseProject" xml:space="preserve"><value>Project afsluiten</value></data>
+  <data name="Menu.File.Exit" xml:space="preserve"><value>Afsluiten</value></data>
+  <data name="Menu.Project.AIModels" xml:space="preserve"><value>AI-modellen…</value></data>
+  <data name="Menu.Project.Settings" xml:space="preserve"><value>Instellingen…</value></data>
+  <data name="Menu.Media.Import" xml:space="preserve"><value>Media importeren…</value></data>
+  <data name="MediaPicker.WindowRequired" xml:space="preserve"><value>Er moet een venster geopend zijn voordat de mediakiezer kan worden geopend.</value></data>
+  <data name="MediaPicker.LocalPathRequired" xml:space="preserve"><value>Het lokale pad voor het geselecteerde bestand kon niet worden vastgesteld. Kopieer het bestand naar een lokale map en probeer het opnieuw.</value></data>
+  <data name="MediaPicker.ImportNoLocalPaths" xml:space="preserve"><value>De lokale paden voor de geselecteerde bestanden konden niet worden vastgesteld. Kopieer de bestanden naar een lokale map en probeer het opnieuw.</value></data>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve"><value>{0} De geselecteerde bestanden konden niet worden geïmporteerd omdat er geen lokaal pad beschikbaar was.</value></data>
+  <data name="MediaPicker.ImportMediaFiles.Title" xml:space="preserve"><value>Mediabestanden importeren</value></data>
+  <data name="MediaPicker.ImportMediaFiles.MediaFilesFilter" xml:space="preserve"><value>Mediabestanden</value></data>
+  <data name="MediaPicker.ImportMediaFiles.AllFilesFilter" xml:space="preserve"><value>Alle bestanden</value></data>
+  <data name="ProjectPicker.WindowRequired" xml:space="preserve"><value>Er moet een venster geopend zijn voordat de projectkiezer kan worden geopend.</value></data>
+  <data name="Menu.View.ToggleLeftPanel" xml:space="preserve"><value>Het linkerpaneel in- of uitklappen</value></data>
+  <data name="Menu.View.ToggleRightPanel" xml:space="preserve"><value>Rechtspaneel weergeven/verbergen</value></data>
+  <data name="Menu.View.ToggleTimeline" xml:space="preserve"><value>Tijdlijn weergeven/verbergen</value></data>
+  <data name="Menu.View.ToggleExportPanel" xml:space="preserve"><value>Exportvenster openen/sluiten</value></data>
+  <data name="Menu.View.ToggleSubtitles" xml:space="preserve"><value>Ondertitels in- of uitschakelen</value></data>
+  <data name="Menu.Window.Minimize" xml:space="preserve"><value>Minimaliseren</value></data>
+  <data name="Menu.Window.Maximize" xml:space="preserve"><value>Maximaliseren / Herstellen</value></data>
+  <data name="Menu.Help.CheckForUpdates" xml:space="preserve"><value>Controleer of er updates beschikbaar zijn</value></data>
+  <data name="Menu.Help.Diagnostics" xml:space="preserve"><value>Diagnostische gegevens exporteren…</value></data>
+  <data name="Menu.Help.Benchmarks" xml:space="preserve"><value>Benchmarks</value></data>
+  <data name="Menu.Help.StarterPacks" xml:space="preserve"><value>Startpakketten…</value></data>
+  <data name="Menu.Help.About" xml:space="preserve"><value>Over…</value></data>
+  <!--  Speakers  -->
+  <data name="Speakers.Header" xml:space="preserve"><value>Stemmen en sprekers</value></data>
+  <data name="Speakers.EmptyState" xml:space="preserve"><value>Er zijn nog geen sprekers gedetecteerd. Voer eerst de transcriptie en de sprekersidentificatie uit.</value></data>
+  <data name="Speakers.GenerateAll" xml:space="preserve"><value>Alles genereren</value></data>
+  <data name="Speakers.Count" xml:space="preserve"><value>{0} sprekers</value></data>
+  <!--  Speaker  -->
+  <data name="Speaker.RenameTip" xml:space="preserve"><value>De naam van de luidspreker wijzigen</value></data>
+  <data name="Speaker.ConfirmRenameTip" xml:space="preserve"><value>Bevestig de naamswijziging</value></data>
+  <data name="Speaker.CancelRenameTip" xml:space="preserve"><value>Hernoemen annuleren</value></data>
+  <data name="Speaker.NewNamePlaceholder" xml:space="preserve"><value>Nieuwe naam...</value></data>
+  <data name="Speaker.SyntheticVoice" xml:space="preserve"><value>Synthetische stem</value></data>
+  <data name="Speaker.CloneVoice" xml:space="preserve"><value>Kopieer deze stem</value></data>
+  <data name="Speaker.SelectVoicePlaceholder" xml:space="preserve"><value>Kies een stem...</value></data>
+  <data name="Speaker.AssignVoice" xml:space="preserve"><value>Stem toewijzen</value></data>
+  <data name="Speaker.PreviewVoice" xml:space="preserve"><value>Voorbeeldstem</value></data>
+  <data name="Speaker.NoReferenceClip" xml:space="preserve"><value>Er is nog geen referentiefragment</value></data>
+  <data name="Speaker.ExtractAutoClip" xml:space="preserve"><value>Automatische clip extraheren</value></data>
+  <data name="Speaker.ExtractAutoClipTip" xml:space="preserve"><value>Referentie-audio uit gedagboekte beurtdelen extraheren</value></data>
+  <data name="Speaker.UploadReference" xml:space="preserve"><value>Referentie uploaden</value></data>
+  <data name="Speaker.UploadReferenceTip" xml:space="preserve"><value>Referentie-audio voor stemklonen uploaden</value></data>
+  <data name="Speaker.StaleTtsWarning" xml:space="preserve"><value>⚠ TTS is verouderd — genereer opnieuw na het opnieuw toewijzen van de stem.</value></data>
+  <data name="Speaker.RegenerateStaleDub" xml:space="preserve"><value>Verouderde dub vernieuwen</value></data>
+  <data name="Speaker.Generating" xml:space="preserve"><value>Bezig met genereren...</value></data>
+  <data name="Speaker.PreviewDubTip" xml:space="preserve"><value>Bekijk een voorproefje van de eerste voltooide nasynchronisatie-opname voor deze spreker</value></data>
+  <data name="Speaker.MergeInto" xml:space="preserve"><value>Invoegen in:</value></data>
+  <data name="Speaker.SelectTargetPlaceholder" xml:space="preserve"><value>Selecteer doel...</value></data>
+  <data name="Speaker.Merge" xml:space="preserve"><value>Samenvoegen</value></data>
+  <data name="Speaker.MergeTip" xml:space="preserve"><value>Voeg deze spreker samen met het geselecteerde doel (deze spreker wordt verwijderd)</value></data>
+  <!--  Timeline  -->
+  <data name="Timeline.Title" xml:space="preserve"><value>Tijdlijn</value></data>
+  <data name="Timeline.SplitTip" xml:space="preserve"><value>Splitsen bij de afspeelpositie (S)</value></data>
+  <data name="Timeline.MergeTip" xml:space="preserve"><value>Geselecteerde fragmenten samenvoegen</value></data>
+  <data name="Timeline.TrimTip" xml:space="preserve"><value>Bijsnijden tot selectie</value></data>
+  <data name="Timeline.DeleteTip" xml:space="preserve"><value>Geselecteerde items verwijderen (Del)</value></data>
+  <data name="Timeline.ZoomOutTip" xml:space="preserve"><value>Uitzoomen</value></data>
+  <data name="Timeline.ZoomInTip" xml:space="preserve"><value>Inzoomen</value></data>
+  <data name="Timeline.CollapseTip" xml:space="preserve"><value>Tijdlijn samenvouwen</value></data>
+  <data name="Timeline.Reference" xml:space="preserve"><value>Referentie</value></data>
+  <data name="Timeline.MuteTip" xml:space="preserve"><value>Dempen (binnenkort beschikbaar)</value></data>
+  <data name="Timeline.SoloTip" xml:space="preserve"><value>Solo (binnenkort beschikbaar)</value></data>
+  <!--  Pipeline  -->
+  <data name="Pipeline.Header" xml:space="preserve"><value>Pijplijncoördinator</value></data>
+  <data name="Pipeline.Col_Job" xml:space="preserve"><value>Vacature</value></data>
+  <data name="Pipeline.Col_Stage" xml:space="preserve"><value>Podium</value></data>
+  <data name="Pipeline.Col_Progress" xml:space="preserve"><value>Voortgang</value></data>
+  <data name="Pipeline.Col_Detail" xml:space="preserve"><value>Detail</value></data>
+  <data name="Pipeline.StarterPack" xml:space="preserve"><value>Startpakket</value></data>
+  <data name="Pipeline.StarterPack_Placeholder" xml:space="preserve"><value>Startpakket</value></data>
+  <data name="Pipeline.RunSelectedStages" xml:space="preserve"><value>Geselecteerde run uitvoeren</value></data>
+  <data name="Pipeline.CommercialOnly" xml:space="preserve"><value>Uitsluitend voor commerciële doeleinden</value></data>
+  <data name="Pipeline.ConfigHeader" xml:space="preserve"><value>PIPELINE-CONFIGURATIE</value></data>
+  <data name="Pipeline.Config" xml:space="preserve"><value>Configuratie</value></data>
+  <data name="Pipeline.StemSeparation" xml:space="preserve"><value>Scheiding van de stengel</value></data>
+  <data name="Pipeline.StemSeparation_Tip" xml:space="preserve"><value>Scheid de zang van de achtergrondgeluiden vóór de transcriptie</value></data>
+  <data name="Pipeline.AudioCleanup" xml:space="preserve"><value>Audiobewerking</value></data>
+  <data name="Pipeline.AudioCleanup_Tip" xml:space="preserve"><value>Ruisonderdrukking en audio-opschoning toepassen (wordt automatisch overgeslagen wanneer de scheiding is geslaagd)</value></data>
+  <data name="Pipeline.SpeakerDiarization" xml:space="preserve"><value>Diarisatie van sprekers</value></data>
+  <data name="Pipeline.SpeakerDiarization_Tip" xml:space="preserve"><value>Verschillende sprekers in de audio identificeren</value></data>
+  <data name="Pipeline.Voice" xml:space="preserve"><value>Stem</value></data>
+  <data name="Pipeline.Voice_Tip" xml:space="preserve"><value>Strategie voor de toewijzing van stemmen aan nasynchronisatiesprekers</value></data>
+  <data name="Pipeline.VoiceOption_Manual" xml:space="preserve"><value>Handleiding</value></data>
+  <data name="Pipeline.VoiceOption_KokoroDefaults" xml:space="preserve"><value>Kokoro-standaardinstellingen</value></data>
+  <data name="Pipeline.VoiceOption_AutoClone" xml:space="preserve"><value>Automatisch klonen</value></data>
+  <data name="Pipeline.RunAllStages" xml:space="preserve"><value>Voer alle fasen uit</value></data>
+  <data name="Pipeline.RunTranscriptToDub" xml:space="preserve"><value>Van start tot finish</value></data>
+  <data name="Pipeline.Options" xml:space="preserve"><value>Opties</value></data>
+  <data name="Pipeline.Model" xml:space="preserve"><value>Model</value></data>
+  <data name="Pipeline.NotDownloaded" xml:space="preserve"><value>⚠ Niet gedownload</value></data>
+  <data name="Pipeline.NoApiKey" xml:space="preserve"><value>⚠ Geen API-sleutel</value></data>
+  <data name="Pipeline.ExecutionProvider" xml:space="preserve"><value>Uitvoeringsdienstverlener</value></data>
+  <data name="Pipeline.SeparateOnImport" xml:space="preserve"><value>Zang en omgevingsgeluid bij het importeren scheiden</value></data>
+  <data name="Pipeline.SeparateOnImport_Hint" xml:space="preserve"><value>Bij het opnieuw uitvoeren wordt het geselecteerde scheidingsmodel gebruikt.</value></data>
+  <data name="Pipeline.SeparationOptionalHint" xml:space="preserve"><value>Gebruik de rijschakelaar om scheidingstekens in reeksen op te nemen.</value></data>
+  <data name="Pipeline.CleanupHint" xml:space="preserve"><value>De spraakverbetering wordt uitgevoerd als onderdeel van de opschoningsfase wanneer u op ‘Uitvoeren’ klikt.</value></data>
+  <data name="Pipeline.AsrHint" xml:space="preserve"><value>De modus ‘Commercial Safe’ bovenaan de pijplijn beperkt de modelkeuzes tot standaardinstellingen die veilig zijn voor gelicentieerd gebruik.</value></data>
+  <data name="Pipeline.EnableAsrTextPolish" xml:space="preserve"><value>Pools ASR-tekst na transcriptie</value></data>
+  <data name="Pipeline.EnableAsrTextPolish_Hint" xml:space="preserve"><value>Optionele correctie van interpunctie en grammatica in onbewerkte ASR-segmenten. Hiervoor is het GenAI-model voor tekstverfijning vereist.</value></data>
+  <data name="Pipeline.TextRefinementAsrHint" xml:space="preserve"><value>Gebruik de rijschakelaar om ASR-polish in de runs op te nemen.</value></data>
+  <data name="Pipeline.DetectSpeakersOnImport" xml:space="preserve"><value>Luidsprekers herkennen bij het importeren</value></data>
+  <data name="Pipeline.DiarizationHint" xml:space="preserve"><value>Met de functie ‘Identify’ worden na de transcriptie sprekers aan transcriptsegmenten toegewezen.</value></data>
+  <data name="Pipeline.OverlapRescueHint" xml:space="preserve"><value>De functie „Overlap Speech Rescue” splitst overlappende dialogen op in mogelijke bronnen (niet-bevestigde sprekers). Voer deze functie uit na de „Diarization”-bewerking wanneer overlappende beurtwisselingen worden gedetecteerd.</value></data>
+  <data name="Pipeline.OverlapRescueModel" xml:space="preserve"><value>Reddingsmodel met overlapping</value></data>
+  <data name="Pipeline.OverlapRescueExecutionProvider" xml:space="preserve"><value>Aanbieder van reddingsoperaties bij overlapping</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe" xml:space="preserve"><value>Transcribeer de kandidaat-bronnen opnieuw na de reddingsoperatie</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe_Hint" xml:space="preserve"><value>Voert ASR uit op elke afzonderlijke kandidaat en markeert de resultaten ter beoordeling.</value></data>
+  <data name="Pipeline.RunOverlapRescue" xml:space="preserve"><value>Reddingsactie bij overlappende ritten</value></data>
+  <data name="Pipeline.OverlapRescueReviewHeader" xml:space="preserve"><value>Potentiële kandidaten</value></data>
+  <data name="Pipeline.OverlapRescueReviewBadge" xml:space="preserve"><value>Recensie</value></data>
+  <data name="Pipeline.TranslationConfiguredAbove" xml:space="preserve"><value>De bron en het doel zijn hierboven geconfigureerd.</value></data>
+  <data name="Pipeline.ApplyTargetLanguage" xml:space="preserve"><value>De geselecteerde doeltaal toepassen</value></data>
+  <data name="Pipeline.TtsHint" xml:space="preserve"><value>Wijs Kokoro-stemmen toe in het paneel ‘Stemmen’ en voer vervolgens ‘Dub’ uit om opnames te genereren.</value></data>
+  <data name="Pipeline.LipSyncHint" xml:space="preserve"><value>Pas de nagesynchroniseerde audio aan de lippensynchronisatie aan en rek deze uit met behulp van het hierboven geselecteerde model voor geforceerde uitlijning.</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesis" xml:space="preserve"><value>Videolipsynchronisatie wordt uitgevoerd…</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesisExperimental" xml:space="preserve"><value>Videolipsynchronisatie uitvoeren (experimenteel)…</value></data>
+  <data name="Pipeline.LipSynthesisHint" xml:space="preserve"><value>Videolip-synchronisatie (LatentSync ~6,7 GB + gezichtsmodellen). Hiervoor zijn een video, een nasynchronisatiemix en de spreekbeurten van de sprekers nodig. Download de modellen voordat u het programma start.</value></data>
+  <data name="Pipeline.ExportHint" xml:space="preserve"><value>Stel de mixniveaus en het exportformaat in via het paneel ‘Exporteren’ onder de tijdlijn.</value></data>
+  <data name="Pipeline.OpenExportPanel" xml:space="preserve"><value>Exportvenster openen</value></data>
+  <!--  RunConfig  -->
+  <data name="RunConfig.Header" xml:space="preserve"><value>CONFIGURATIE UITVOEREN</value></data>
+  <data name="RunConfig.Source" xml:space="preserve"><value>Bron</value></data>
+  <data name="RunConfig.TranslateTo" xml:space="preserve"><value>Vertalen naar</value></data>
+  <data name="RunConfig.TargetLanguage_Placeholder" xml:space="preserve"><value>Doeltaal</value></data>
+  <!--  Export  -->
+  <data name="Export.Header" xml:space="preserve"><value>Exporteren en mixen</value></data>
+  <data name="Export.MixLabel" xml:space="preserve"><value>MIX</value></data>
+  <data name="Export.Src" xml:space="preserve"><value>Src</value></data>
+  <data name="Export.Src_Tip" xml:space="preserve"><value>Versterking van het brongeluid (dB)</value></data>
+  <data name="Export.Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Export.Dub_Tip" xml:space="preserve"><value>Versterking bij onduidelijke spraak (dB)</value></data>
+  <data name="Export.Duck" xml:space="preserve"><value>Eend</value></data>
+  <data name="Export.Duck_Tip" xml:space="preserve"><value>Brononderdrukking (dB)</value></data>
+  <data name="Export.Timbre" xml:space="preserve"><value>Klankkleur</value></data>
+  <data name="Export.Timbre_Tip" xml:space="preserve"><value>Pas klankkleuraanpassing toe op ingesproken tekst</value></data>
+  <data name="Export.Pan" xml:space="preserve"><value>Pan</value></data>
+  <data name="Export.Pan_Tip" xml:space="preserve"><value>De oorspronkelijke stereopanning herstellen</value></data>
+  <data name="Export.ExportLabel" xml:space="preserve"><value>EXPORT</value></data>
+  <data name="Export.BurnIn" xml:space="preserve"><value>Inbranden</value></data>
+  <data name="Export.BurnIn_Tip" xml:space="preserve"><value>Ondertitels in de videostream vastleggen</value></data>
+  <data name="Export.SubtitleSource_Tip" xml:space="preserve"><value>Bron van de ondertiteltekst</value></data>
+  <data name="Export.Container_Tip" xml:space="preserve"><value>Uitvoercontainer</value></data>
+  <data name="Export.Lufs_Tip" xml:space="preserve"><value>Beoogde geluidssterkte (LUFS)</value></data>
+  <data name="Export.Match" xml:space="preserve"><value>Wedstrijd</value></data>
+  <data name="Export.Match_Tip" xml:space="preserve"><value>Pas het geluidsniveau aan dat van de originele bron aan</value></data>
+  <data name="Export.ExportButton" xml:space="preserve"><value>Exporteren</value></data>
+  <!--  Crash  -->
+  <data name="Crash.ExportDiagnostics" xml:space="preserve"><value>Diagnostiek exporteren</value></data>
+  <!--  Dialog  -->
+  <data name="Dialog.VendorLicense_Title" xml:space="preserve"><value>Verkopersvergunning</value></data>
+  <data name="Dialog.VendorLicense_Acceptance" xml:space="preserve"><value>Door op ‘Ik ga akkoord’ te klikken, bevestigt u dat u deze gebruiksvoorwaarden voor deze installatie hebt gelezen en hiermee akkoord gaat.</value></data>
+  <data name="Dialog.VendorLicense_Accept" xml:space="preserve"><value>Ik ga akkoord</value></data>
+  <data name="Dialog.SpeakerDetection_Title" xml:space="preserve"><value>Sprekerherkenning</value></data>
+  <data name="Dialog.SpeakerDetection_UseSingle" xml:space="preserve"><value>Gebruik één luidspreker</value></data>
+  <data name="Dialog.SpeakerDetection_Download" xml:space="preserve"><value>Nu downloaden</value></data>
+  <data name="Dialog.ModelNotReady_Title" xml:space="preserve"><value>Model niet beschikbaar</value></data>
+  <data name="Dialog.ModelSetup_Title" xml:space="preserve"><value>Modelconfiguratie</value></data>
+  <data name="Dialog.FallbackVoice_Title" xml:space="preserve"><value>Wilt u reserve-stemmen gebruiken?</value></data>
+  <data name="Dialog.FallbackVoice_Message" xml:space="preserve"><value>Sommige sprekers hebben geen toegewezen stem. Trackdub zal voor elke niet-toegewezen spreker uitsluitend voor deze generatie de eerste compatibele Kokoro-stem gebruiken.</value></data>
+  <data name="Dialog.FallbackVoice_Confirm" xml:space="preserve"><value>Genereren met alternatieve stemmen</value></data>
+  <!--  Glossary  -->
+  <data name="Glossary.Header" xml:space="preserve"><value>Woordenlijst</value></data>
+  <data name="Glossary.ProjectHeader" xml:space="preserve"><value>Projectwoordenlijst</value></data>
+  <data name="Glossary.AddTerm" xml:space="preserve"><value>+ Term toevoegen</value></data>
+  <data name="Glossary.TermCount" xml:space="preserve"><value>{0} voorwaarden</value></data>
+  <data name="Glossary.Loading" xml:space="preserve"><value>Bezig met laden…</value></data>
+  <data name="Glossary.SourceTerm_Placeholder" xml:space="preserve"><value>Bronterm</value></data>
+  <data name="Glossary.TargetTerm_Placeholder" xml:space="preserve"><value>Doelterm</value></data>
+  <data name="Glossary.CaseSensitive" xml:space="preserve"><value>Hoofdlettergevoelig</value></data>
+  <data name="Glossary.DeleteTerm_Tip" xml:space="preserve"><value>Term verwijderen</value></data>
+  <data name="Glossary.Scope.Project" xml:space="preserve"><value>Project</value></data>
+  <data name="Glossary.Scope.Global" xml:space="preserve"><value>Wereldwijd</value></data>
+  <data name="Glossary.Scope.GlobalBadge" xml:space="preserve"><value>Wereldwijd</value></data>
+  <data name="Glossary.NoteLine_GlobalCaseSensitive" xml:space="preserve"><value>Globaal · hoofdlettergevoelig</value></data>
+  <data name="Glossary.ImportCsv" xml:space="preserve"><value>CSV importeren</value></data>
+  <!--  MediaBin  -->
+  <data name="MediaBin.Header" xml:space="preserve"><value>Media</value></data>
+  <data name="MediaBin.Context_ProjectWide" xml:space="preserve"><value>Projectcontext</value></data>
+  <data name="MediaBin.Import" xml:space="preserve"><value>Importeren</value></data>
+  <data name="MediaBin.Import_Tip" xml:space="preserve"><value>Mediabestanden importeren</value></data>
+  <data name="MediaBin.NewProjectImport" xml:space="preserve"><value>Nieuw project importeren</value></data>
+  <data name="MediaBin.DetectSpeakers" xml:space="preserve"><value>Luidsprekers detecteren</value></data>
+  <data name="MediaBin.SeparateVocals" xml:space="preserve"><value>Zang en omgevingsgeluid scheiden</value></data>
+  <data name="MediaBin.ImportHint" xml:space="preserve"><value>Importeer media of maak een project aan om deze boomstructuur te vullen.</value></data>
+  <data name="MediaBin.EmptyTreeHint" xml:space="preserve"><value>Nog geen stengels</value></data>
+  <data name="Timeline.CollapsedEmptyHint" xml:space="preserve"><value>Uitvouwen voor tracks · media hierheen slepen om de lijst te vullen</value></data>
+  <data name="Inspector.EmptyShort" xml:space="preserve"><value>Kies een segment om te bekijken</value></data>
+  <data name="Transcript.EmptySegments" xml:space="preserve"><value>Er zijn nog geen segmenten. Voer de transcriptie uit om deze lijst te vullen.</value></data>
+  <data name="MediaBin.Tab_Source" xml:space="preserve"><value>Bron</value></data>
+  <data name="MediaBin.Tab_Generated" xml:space="preserve"><value>Gegenereerd</value></data>
+  <data name="Navigator.Section.SourceMedia" xml:space="preserve"><value>Bronmedia</value></data>
+  <data name="Navigator.Section.Transcript" xml:space="preserve"><value>Transcript</value></data>
+  <data name="Navigator.Section.Speakers" xml:space="preserve"><value>Sprekers</value></data>
+  <data name="Navigator.Section.Voices" xml:space="preserve"><value>Stemmen</value></data>
+  <data name="Navigator.Section.GeneratedAudio" xml:space="preserve"><value>Gegenereerde audio</value></data>
+  <data name="Navigator.Section.Mixes" xml:space="preserve"><value>Mixen</value></data>
+  <data name="Navigator.Section.Exports" xml:space="preserve"><value>Uitvoer</value></data>
+  <data name="Navigator.Empty.SourceMedia" xml:space="preserve"><value>Importeer bronmateriaal om dit gedeelte te vullen.</value></data>
+  <data name="Navigator.Empty.Transcript" xml:space="preserve"><value>Voer de transcriptie uit om transcriptsegmenten te genereren.</value></data>
+  <data name="Navigator.Empty.Speakers" xml:space="preserve"><value>Voer na de transcriptie een diarisatie uit of wijs sprekers toe.</value></data>
+  <data name="Navigator.Empty.Voices" xml:space="preserve"><value>Wijs stemmen toe aan sprekers in het paneel ‘Stem’.</value></data>
+  <data name="Navigator.Empty.GeneratedAudio" xml:space="preserve"><value>Hier verschijnen door TTS gegenereerde elementen en verwerkingsartefacten.</value></data>
+  <data name="Navigator.Empty.Mixes" xml:space="preserve"><value>Voorbeeldmixen verschijnen hier na het exporteren of na de mixfase.</value></data>
+  <data name="Navigator.Empty.Exports" xml:space="preserve"><value>De definitieve exportbestanden worden hier weergegeven na afloop van de exportfase.</value></data>
+  <data name="FloatingMonitor.Title" xml:space="preserve"><value>Videomonitor</value></data>
+  <data name="FloatingMonitor.Hide" xml:space="preserve"><value>Monitor verbergen</value></data>
+  <data name="FloatingMonitor.NoVideo" xml:space="preserve"><value>Er is nog geen videoframe</value></data>
+  <data name="Transport.ToolTip_PipMonitor" xml:space="preserve"><value>De beeld-in-beeld-videomonitor in- of uitschakelen</value></data>
+  <!--  Segment  -->
+  <data name="Segment.Start" xml:space="preserve"><value>Start</value></data>
+  <data name="Segment.End" xml:space="preserve"><value>Einde</value></data>
+  <data name="Segment.Duration" xml:space="preserve"><value>Duur</value></data>
+  <data name="Segment.Speaker" xml:space="preserve"><value>Spreker</value></data>
+  <data name="Segment.Source" xml:space="preserve"><value>Bron</value></data>
+  <data name="Segment.VoiceCandidates" xml:space="preserve"><value>Kandidaten voor de stemrol</value></data>
+  <data name="Segment.VoiceCandidates_Hint" xml:space="preserve"><value>Klik op ‘Genereren’ om stemvoorstellen te genereren voor een A/B-voorbeeld</value></data>
+  <data name="Segment.GenerateCandidates" xml:space="preserve"><value>Kandidaten genereren</value></data>
+  <data name="Segment.LipSyncAlign" xml:space="preserve"><value>ALIGN</value></data>
+  <data name="Segment.LipSynthesisRepair" xml:space="preserve"><value>REPARATIE</value></data>
+  <data name="Segment.Review" xml:space="preserve"><value>RECENSIE</value></data>
+  <data name="Segment.SaveSettings" xml:space="preserve"><value>Instellingen opslaan</value></data>
+  <data name="Segment.GenerateDub" xml:space="preserve"><value>Dub genereren</value></data>
+  <data name="Segment.Regenerate" xml:space="preserve"><value>Opnieuw genereren</value></data>
+  <data name="Segment.MatchTiming" xml:space="preserve"><value>Wedstrijdtijd</value></data>
+  <data name="Segment.Runtime.Dub" xml:space="preserve"><value>Duur van de nasynchronisatie</value></data>
+  <data name="Segment.Runtime.Translation" xml:space="preserve"><value>Vertaaltijd</value></data>
+  <data name="Segment.Runtime.Transcription" xml:space="preserve"><value>Looptijd van de transcriptie</value></data>
+  <data name="Segment.Runtime.Alignment" xml:space="preserve"><value>Looptijd van de lipsynchronisatie</value></data>
+  <data name="Segment.Runtime.Provider" xml:space="preserve"><value>Aanbieder</value></data>
+  <data name="Segment.Runtime.Model" xml:space="preserve"><value>Model</value></data>
+  <data name="Segment.Runtime.Precision" xml:space="preserve"><value>Nauwkeurigheid</value></data>
+  <!--  ApiKeys  -->
+  <data name="Window_Title_ApiKeys" xml:space="preserve"><value>API-sleutels</value></data>
+  <data name="Chrome_Minimize" xml:space="preserve"><value>Minimaliseren</value></data>
+  <data name="Chrome_MaximizeRestore" xml:space="preserve"><value>Maximaliseren / Herstellen</value></data>
+  <data name="Chrome_Close" xml:space="preserve"><value>Sluiten</value></data>
+  <data name="Api_Tooltip_ToggleReveal" xml:space="preserve"><value>Toets weergeven / verbergen</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>Opslaan</value></data>
+  <data name="Common_Clear" xml:space="preserve"><value>Wissen</value></data>
+  <data name="Api_Footer_MoreProviders" xml:space="preserve"><value>Binnenkort volgen er meer aanbieders</value></data>
+  <data name="Api_Footer_StorageSecurity" xml:space="preserve"><value>Opslag en beveiliging</value></data>
+  <!--  Common  -->
+  <data name="Common.Save" xml:space="preserve"><value>Opslaan</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>Annuleren</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>Sluiten</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>Toevoegen</value></data>
+  <data name="Common.Segments" xml:space="preserve"><value>segmenten</value></data>
+  <data name="Common.DownloadFfmpeg" xml:space="preserve"><value>FFmpeg downloaden</value></data>
+  <data name="Common.DropVideoPlaceholder" xml:space="preserve"><value>Sla een video op of begin met een mediabestand</value></data>
+  <data name="Common.NewFromMedia" xml:space="preserve"><value>Nieuws uit de media</value></data>
+  <data name="Common.OpenProject" xml:space="preserve"><value>Project openen</value></data>
+  <data name="Common.Transcript" xml:space="preserve"><value>Transcript</value></data>
+  <data name="Transcript.AllSegments" xml:space="preserve"><value>Alle segmenten</value></data>
+  <data name="Common.CollapseRightPanel_Tip" xml:space="preserve"><value>Het rechterpaneel samenvouwen</value></data>
+  <data name="Common.ChannelStrip" xml:space="preserve"><value>Kanaalstrip</value></data>
+  <data name="Common.ExpandChannelStrip_Tip" xml:space="preserve"><value>Kanaalstrip uitvouwen</value></data>
+  <data name="Common.CollapseChannelStrip_Tip" xml:space="preserve"><value>Kanaalstrip samenvouwen</value></data>
+  <!--  LeftPanel stage tooltips  -->
+  <data name="Common.Stage_Separation" xml:space="preserve"><value>Scheiding</value></data>
+  <data name="Common.Stage_Cleanup" xml:space="preserve"><value>Opruimen</value></data>
+  <data name="Common.Stage_Transcribe" xml:space="preserve"><value>Transcriberen</value></data>
+  <data name="Common.Stage_Identify" xml:space="preserve"><value>Identificeer</value></data>
+  <data name="Common.Stage_Translate" xml:space="preserve"><value>Vertalen</value></data>
+  <data name="Common.Stage_Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Common.Stage_Export" xml:space="preserve"><value>Exporteren</value></data>
+  <!--  MiniPreviewPlayer  -->
+  <data name="MiniPlayer.NoFileLoaded" xml:space="preserve"><value>Er is geen bestand geladen</value></data>
+  <data name="MiniPlayer.CannotPlayFile" xml:space="preserve"><value>⚠ Het bestand kan niet worden afgespeeld</value></data>
+  <data name="MiniPlayer.UnsupportedFormat" xml:space="preserve"><value>Niet-ondersteunde indeling</value></data>
+  <data name="MiniPlayer.PlayPauseTip" xml:space="preserve"><value>Afspelen/Pauzeren</value></data>
+  <!--  Settings - General  -->
+  <data name="Settings.Title" xml:space="preserve"><value>Instellingen</value></data>
+  <data name="Settings.Tab_General" xml:space="preserve"><value>Algemeen</value></data>
+  <data name="Settings.Heading_General" xml:space="preserve"><value>Algemene instellingen</value></data>
+  <data name="Settings.Label_Theme" xml:space="preserve"><value>Uiterlijk — Thema</value></data>
+  <data name="Settings.Hint_Theme" xml:space="preserve"><value>Wijzigingen aan het thema worden onmiddellijk doorgevoerd en blijven ook na het opnieuw opstarten behouden.</value></data>
+  <!--  Update  -->
+  <data name="Update.BannerMessage" xml:space="preserve"><value>Trackdub {0} ({1}) is beschikbaar</value></data>
+  <data name="Update.Banner_Subtitle" xml:space="preserve"><value>Er is een nieuwe versie van Trackdub beschikbaar om te downloaden.</value></data>
+  <data name="Update.Button_ReleaseNotes" xml:space="preserve"><value>Release-opmerkingen</value></data>
+  <data name="Update.Download" xml:space="preserve"><value>Downloaden</value></data>
+  <data name="Settings.Label_UpdateChannel" xml:space="preserve"><value>Updatekanaal</value></data>
+  <data name="Settings.Hint_UpdateChannel" xml:space="preserve"><value>De Stable-versie bevat geteste releases. De Preview-versie biedt vroegtijdige toegang tot toekomstige functies.</value></data>
+  <data name="Settings.Label_ModelTier" xml:space="preserve"><value>Modelcategorie</value></data>
+  <data name="Settings.Hint_CommercialOnly" xml:space="preserve"><value>Trackdub levert uitsluitend modellen die geschikt zijn voor commercieel gebruik. Geïmporteerde modellen die niet voor commercieel gebruik bestemd zijn, blijven geblokkeerd.</value></data>
+  <data name="Settings.Label_AsrEngine" xml:space="preserve"><value>ASR-motor</value></data>
+  <data name="Settings.Label_TranslationEngine" xml:space="preserve"><value>Vertaalengine</value></data>
+  <data name="Settings.Label_VoiceSynthesisEngine" xml:space="preserve"><value>Stemgenerator</value></data>
+  <data name="Settings.Label_StemSeparationEngine" xml:space="preserve"><value>Motor voor het scheiden van stengels</value></data>
+  <data name="Settings.Label_RubberbandStretch" xml:space="preserve"><value>TTS Timing — Rekken met een elastiek</value></data>
+  <data name="Settings.Label_ReduceMotion" xml:space="preserve"><value>Beweging beperken</value></data>
+  <data name="Settings.Hint_ReduceMotion" xml:space="preserve"><value>Schakelt de pulserende lichteffecten uit bij het afspelen van accentstrepen in de pijplijnfase.</value></data>
+  <data name="Settings.Label_StretchThreshold" xml:space="preserve"><value>Rekdrempel</value></data>
+  <data name="Settings.Label_ExportFormat" xml:space="preserve"><value>Exportformaat</value></data>
+  <data name="Settings.Label_ExportSubtitles" xml:space="preserve"><value>Ondertitels exporteren</value></data>
+  <data name="Settings.Label_VideoEncoder" xml:space="preserve"><value>Videocodec (Burn-in-export)</value></data>
+  <data name="Settings.Label_PreviewVideoDecode" xml:space="preserve"><value>Videodecodering in het voorbeeldvenster</value></data>
+  <data name="Settings.Label_Subtitles" xml:space="preserve"><value>Ondertitels</value></data>
+  <data name="Settings.Label_SubtitleContentMode" xml:space="preserve"><value>Weergavemodus voor ondertitels</value></data>
+  <!--  Settings - Starter Packs  -->
+  <data name="Settings.Tab_StarterPacks" xml:space="preserve"><value>Startpakketten</value></data>
+  <data name="Settings.StarterPacks_Heading" xml:space="preserve"><value>Startpakketten</value></data>
+  <data name="Settings.StarterPacks_Hint" xml:space="preserve"><value>Download de gebundelde modelsets en pas deze vervolgens toe om aliasen voor configuratiefasen en standaardinstellingen voor de uitvoering te configureren. De geïnstalleerde bestanden zijn bestanden waarvan de checksum is gevalideerd, maar ze zijn nog niet klaar voor gebruik tijdens de uitvoering.</value></data>
+  <data name="Settings.StarterPacks_RecommendedBadge" xml:space="preserve"><value>Aanbevolen op basis van de vastgestelde categorie</value></data>
+  <data name="Settings.StarterPacks_AppliedBadge" xml:space="preserve"><value>Toegepast</value></data>
+  <data name="Settings.StarterPacks_Download" xml:space="preserve"><value>Downloaden</value></data>
+  <data name="Settings.StarterPacks_Apply" xml:space="preserve"><value>Solliciteren</value></data>
+  <data name="Settings.StarterPacks_ProfileLabel" xml:space="preserve"><value>Profiel</value></data>
+  <data name="Settings.StarterPacks_InstalledLabel" xml:space="preserve"><value>Geïnstalleerde modellen:</value></data>
+  <data name="Settings.StarterPacks_DownloadComplete" xml:space="preserve"><value>Het downloaden is voltooid. Er zijn geen instellingen gewijzigd.</value></data>
+  <data name="Settings.StarterPacks_DownloadFailed" xml:space="preserve"><value>Het downloaden is mislukt.</value></data>
+  <data name="Settings.StarterPacks_ApplyComplete" xml:space="preserve"><value>Het starterspakket is toegepast.</value></data>
+  <data name="Settings.StarterPacks_ApplyFailed" xml:space="preserve"><value>Het toepassen is mislukt.</value></data>
+  <data name="Settings.StarterPacks_ConsentRequired" xml:space="preserve"><value>Voordat u dit pakket toepast, is toestemming voor stemklonen vereist.</value></data>
+  <data name="Settings.StarterPacks_CompatibleBadge" xml:space="preserve"><value>Volledig compatibel</value></data>
+  <data name="Settings.StarterPacks_FallbackBadge" xml:space="preserve"><value>Vervangende opties vereist</value></data>
+  <data name="Settings.StarterPacks_NotRunnableBadge" xml:space="preserve"><value>Kan niet worden uitgevoerd</value></data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve"><value>Het GPU-pad is niet beschikbaar voor {0}. Er wordt gebruikgemaakt van {1} op {2}.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupSummary" xml:space="preserve"><value>{0} De modellen in dit pakket worden op de CPU uitgevoerd totdat de GPU-runtime voor uw hardware is geïnstalleerd.</value></data>
+  <data name="Settings.StarterPacks_GpuVariantNudge" xml:space="preserve"><value>Voor sommige modellen zijn ook voor de GPU geoptimaliseerde varianten nodig. Gebruik de functie ‘Optimaliseren’ in Model Manager zodra de GPU-runtime gereed is.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Nvidia" xml:space="preserve"><value>Installeer de NVIDIA TensorRT RTX-runtime</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Amd" xml:space="preserve"><value>Installeer de AMD MIGraphX-runtime</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Intel" xml:space="preserve"><value>Installeer Intel OpenVINO Runtime</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Qualcomm" xml:space="preserve"><value>Installeer de Qualcomm QNN-runtime</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_AmdNpu" xml:space="preserve"><value>Installeer de AMD VitisAI NPU-runtime</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Bundle" xml:space="preserve"><value>GPU-runtimes installeren</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallComplete" xml:space="preserve"><value>De installatie van de GPU-runtime is voltooid.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallFailed" xml:space="preserve"><value>De installatie van de GPU-runtime is mislukt.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupLicenseRequired" xml:space="preserve"><value>Accepteer de licentie van de leverancier om de GPU-runtime te installeren.</value></data>
+  <data name="Settings.StarterPacks_CloudReadyBadge" xml:space="preserve"><value>API-sleutels geconfigureerd</value></data>
+  <data name="Settings.StarterPacks_CloudKeysMissingBadge" xml:space="preserve"><value>API-sleutels ontbreken</value></data>
+  <data name="Settings.StarterPacks_CloudKeysButton" xml:space="preserve"><value>API-sleutels configureren</value></data>
+  <data name="Settings.StarterPacks_ImportButton" xml:space="preserve"><value>Importpakket…</value></data>
+  <data name="Settings.StarterPacks_ExportButton" xml:space="preserve"><value>Exporteren…</value></data>
+  <data name="Settings.StarterPacks_UserPacksHeader" xml:space="preserve"><value>Uw pakketten</value></data>
+  <data name="Settings.StarterPacks_OpenLocalModelsLink" xml:space="preserve"><value>Modellen afzonderlijk downloaden</value></data>
+  <data name="Settings.StarterPacks_OptimizeNudge" xml:space="preserve"><value>Er zijn voor {0} model(len) GPU-geoptimaliseerde varianten beschikbaar. Optimaliseer deze in ‘Local Models’ voor de beste prestaties.</value></data>
+  <data name="Settings.StarterPacks_ReviewOptimizations" xml:space="preserve"><value>Optimalisaties beoordelen</value></data>
+  <data name="Settings.LocalModels_AppliedPackBadge" xml:space="preserve"><value>Toegepast pakket: {0}</value></data>
+  <data name="Settings.Label_PackTierFilter" xml:space="preserve"><value>Pakketfilter</value></data>
+  <data name="Settings.Button_Dismiss" xml:space="preserve"><value>Sluiten</value></data>
+  <!--  Onboarding - Starter Packs  -->
+  <data name="Onboarding.StarterPacks_Title" xml:space="preserve"><value>Kies een starterspakket</value></data>
+  <data name="Onboarding.StarterPacks_Body" xml:space="preserve"><value>Kies een bundel met modellen om te downloaden en toe te passen, of configureer modellen afzonderlijk in ‘Lokale modellen’.</value></data>
+  <data name="Onboarding.StarterPacks_Skip" xml:space="preserve"><value>Voorlopig overslaan</value></data>
+  <data name="Onboarding.StarterPacks_ConfigureIndividually" xml:space="preserve"><value>Individueel configureren</value></data>
+  <!--  Settings - Local Models  -->
+  <data name="Settings.Tab_LocalModels" xml:space="preserve"><value>Lokale modellen</value></data>
+  <data name="Settings.Hint_CommercialOnlyLane" xml:space="preserve"><value>Rijstrook uitsluitend voor commerciële voertuigen. Ingevoerde niet-commerciële modellen blijven geblokkeerd.</value></data>
+  <data name="Settings.Label_NonCommercial" xml:space="preserve"><value>niet-commercieel</value></data>
+  <data name="Settings.Button_Download" xml:space="preserve"><value>Downloaden</value></data>
+  <data name="Settings.Button_Repair" xml:space="preserve"><value>Reparatie</value></data>
+  <data name="Settings.Button_Uninstall" xml:space="preserve"><value>Verwijderen</value></data>
+  <data name="Settings.Label_Optimize" xml:space="preserve"><value>Optimaliseren:</value></data>
+  <data name="Settings.Tip_PrecisionHeader" xml:space="preserve"><value>Nauwkeurigheid voor de geoptimaliseerde modelvariant (opties zijn afhankelijk van de aanbieder):</value></data>
+  <data name="Settings.Tip_Fp32" xml:space="preserve"><value>fp32 — volledige 32-bits gewichten. Hoogste nauwkeurigheid; grootste bestand. Alleen CPU.</value></data>
+  <data name="Settings.Tip_Fp16" xml:space="preserve"><value>fp16 — 16-bits halve precisie. Goede nauwkeurigheid, de helft van de bestandsgrootte van fp32. DirectML / CUDA / TensorRT.</value></data>
+  <data name="Settings.Tip_Int8" xml:space="preserve"><value>int8 — 8-bits gekwantiseerd. Kleiner en sneller dan fp16; een gering verlies aan nauwkeurigheid bij de meeste audiomodellen. CPU / DirectML / CUDA.</value></data>
+  <data name="Settings.Tip_Int4" xml:space="preserve"><value>int4 — 4-bits gekwantiseerd. Het kleinste en snelste; bij sommige modellen is er een merkbaar verlies aan nauwkeurigheid. Alleen DirectML / CUDA.</value></data>
+  <data name="Settings.Button_Optimize" xml:space="preserve"><value>Optimaliseren</value></data>
+  <data name="Settings.Status_Optimizing" xml:space="preserve"><value>Bezig met optimaliseren…</value></data>
+  <data name="Settings.Button_Cancel" xml:space="preserve"><value>Annuleren</value></data>
+  <data name="Settings.Button_Use" xml:space="preserve"><value>Gebruik</value></data>
+  <data name="Settings.Button_Clear" xml:space="preserve"><value>Wissen</value></data>
+  <data name="Settings.Status_Loading" xml:space="preserve"><value>Bezig met laden…</value></data>
+  <!--  Settings - Cloud Models  -->
+  <data name="Settings.Tab_CloudModels" xml:space="preserve"><value>Cloudmodellen</value></data>
+  <data name="Settings.Button_Save" xml:space="preserve"><value>Opslaan</value></data>
+  <data name="Settings.Hint_MoreProviders" xml:space="preserve"><value>Binnenkort volgen er nog meer cloudproviders.</value></data>
+  <!--  Settings - Hardware  -->
+  <data name="Settings.Tab_Hardware" xml:space="preserve"><value>Hardware</value></data>
+  <data name="Settings.Heading_Hardware" xml:space="preserve"><value>Hardwareconfiguratie</value></data>
+  <data name="Settings.Label_FfmpegEncoders" xml:space="preserve"><value>FFmpeg-videocodecs</value></data>
+  <data name="Settings.Label_FfmpegHwDecode" xml:space="preserve"><value>FFmpeg-hardware-decodering</value></data>
+  <data name="Settings.Toggle_NativeCuda" xml:space="preserve"><value>Native CUDA / TensorRT inschakelen op Windows (gevorderd)</value></data>
+  <data name="Settings.Hint_NativeCuda" xml:space="preserve"><value>Standaard uitgeschakeld. Wanneer deze optie is ingeschakeld, maken expliciete CUDA- of TensorRT-verzoeken gebruik van native ONNX Runtime-providers in plaats van DirectML / TensorRT RTX (WinML). De automatische selectie van de pijplijn blijft ongewijzigd.</value></data>
+  <data name="Settings.Label_WinMlPolicy" xml:space="preserve"><value>Windows ML-apparaatbeleid (geavanceerd)</value></data>
+  <data name="Settings.Hint_WinMlPolicy" xml:space="preserve"><value>Experimenteel. Maakt gebruik van de automatische selectie van EP’s en apparaten door ONNX Runtime uit de geregistreerde Windows ML-catalogusaanbieders. De keuze van de stage-aanbieder blijft ongewijzigd. Start Trackdub opnieuw op nadat u deze instelling hebt gewijzigd.</value></data>
+  <data name="Settings.Label_GpuProviders" xml:space="preserve"><value>Aanbieders van GPU-inferentie</value></data>
+  <data name="Settings.Label_AllCertified" xml:space="preserve"><value>Alle gecertificeerde catalogusaanbieders</value></data>
+  <data name="Settings.Hint_AllCertified" xml:space="preserve"><value>Hiermee worden alle beschikbare Windows ML-catalogusproviders op deze computer geïnstalleerd. Op geschikte NVIDIA-hardware kan hiermee ook de TensorRT RTX-plug-in worden aangeboden (aparte NVIDIA-licentie). Bij de eerste keer uitvoeren kunnen er meerdere pakketten worden gedownload en kan het enkele minuten duren. De installatieknoppen per provider blijven beschikbaar voor gerichte installaties, ongeacht of u deze functie uitvoert of niet.</value></data>
+  <data name="Settings.Button_InstallAllCertified" xml:space="preserve"><value>Installeer alle gecertificeerde providers</value></data>
+  <data name="Settings.Label_NvidiaTensorRt" xml:space="preserve"><value>NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.Button_Refresh" xml:space="preserve"><value>Vernieuwen</value></data>
+  <data name="Settings.Button_InstallProvider" xml:space="preserve"><value>Provider installeren</value></data>
+  <data name="Settings.Button_InstallTrtRtxPlugin" xml:space="preserve"><value>Plug-in installeren</value></data>
+  <data name="Settings.Button_ViewLicense" xml:space="preserve"><value>Licentie bekijken</value></data>
+  <data name="Settings.Label_AmdMigraphx" xml:space="preserve"><value>AMD MIGraphX</value></data>
+  <data name="Settings.Label_IntelOpenVino" xml:space="preserve"><value>Intel OpenVINO (WinML-catalogus)</value></data>
+  <data name="Settings.Label_QualcommQnn" xml:space="preserve"><value>Qualcomm QNN (WinML-catalogus)</value></data>
+  <data name="Settings.Label_AmdVitisAi" xml:space="preserve"><value>AMD VitisAI (WinML-catalogus)</value></data>
+  <data name="Settings.Label_NativeOrtGpu" xml:space="preserve"><value>Native ORT GPU (gevorderd)</value></data>
+  <data name="Settings.Label_ExecutionProviders" xml:space="preserve"><value>Uitvoeringsdienstverleners</value></data>
+  <data name="Settings.Label_PerStageOverrides" xml:space="preserve"><value>Aanpassingen per fase door de aanbieder</value></data>
+  <!--  Settings - Profiler  -->
+  <data name="Settings.Tab_Profiler" xml:space="preserve"><value>Profiler</value></data>
+  <data name="Settings.Heading_Profiler" xml:space="preserve"><value>Hardware-profiler</value></data>
+  <data name="Settings.Hint_Profiler" xml:space="preserve"><value>Voert korte VAD-, ASR-, vertaal- en TTS-benchmarks uit om een kwaliteitsvoorinstelling aan te bevelen. Vereist Windows met de meegeleverde ONNX-modellen geïnstalleerd.</value></data>
+  <data name="Settings.Button_RunBenchmarks" xml:space="preserve"><value>Voer benchmarks voor de verschillende fasen uit</value></data>
+  <data name="Settings.Label_QualityPreset" xml:space="preserve"><value>Kwaliteitsinstelling</value></data>
+  <data name="Settings.Hint_QualityPreset" xml:space="preserve"><value>Met de optie ‘Gebruiksaanbeveling’ wordt het resultaat van de profiler toegepast op de planning van de modellaag. Met de optie ‘Overschrijven’ blijft uw keuze van kracht totdat u deze wijzigt.</value></data>
+  <!--  Settings - Recent Projects  -->
+  <data name="Settings.Tab_RecentProjects" xml:space="preserve"><value>Recente projecten</value></data>
+  <data name="Settings.Heading_RecentProjects" xml:space="preserve"><value>Recente projecten</value></data>
+  <!--  Settings - About  -->
+  <data name="Settings.Tab_About" xml:space="preserve"><value>Over</value></data>
+  <data name="Settings.Heading_About" xml:space="preserve"><value>Over Trackdub</value></data>
+  <data name="Settings.About_Tagline" xml:space="preserve"><value>Trackdub — Door AI aangestuurd werkstation voor nasynchronisatie</value></data>
+  <data name="Settings.About_Edition" xml:space="preserve"><value>Platformonafhankelijke Avalonia-editie</value></data>
+  <!--  Settings - Developer  -->
+  <data name="Settings.Tab_Developer" xml:space="preserve"><value>Ontwikkelaar</value></data>
+  <data name="Settings.Heading_Developer" xml:space="preserve"><value>Opties voor ontwikkelaars</value></data>
+  <data name="Settings.Hint_Developer" xml:space="preserve"><value>Ontwikkelaarstools en diagnostische functies zijn beschikbaar in ontwikkelingsversies.</value></data>
+  <!--  Settings - Footer  -->
+  <data name="Settings.Button_SaveAndClose" xml:space="preserve"><value>Opslaan en sluiten</value></data>
+  <!--  Dialog - SourceLanguagePicker  -->
+  <data name="Dialog.SourceLanguage_Title" xml:space="preserve"><value>Bron van het transcript</value></data>
+  <data name="Dialog.SourceLanguage_Hint" xml:space="preserve"><value>Het wijzigen van de brontaal heeft gevolgen voor toekomstige vertalingen en de spellingcontrole.</value></data>
+  <data name="Dialog.SourceLanguage_Placeholder" xml:space="preserve"><value>Brontaal</value></data>
+  <!--  Dialog - UnsavedInlineEdit  -->
+  <data name="Dialog.UnsavedEdit_KeepEditing" xml:space="preserve"><value>Blijf bewerken</value></data>
+  <data name="Dialog.UnsavedEdit_Discard" xml:space="preserve"><value>Verwijderen</value></data>
+  <!--  Dialog - VoiceCloneConsent  -->
+  <data name="Dialog.VoiceClone_Title" xml:space="preserve"><value>Toestemming voor stemklonen</value></data>
+  <data name="Dialog.VoiceClone_Body" xml:space="preserve"><value>Tijdens deze sessie worden de door u geüploade referentie-geluidsfragmenten gebruikt om stemkenmerken te synthetiseren. Door op ‘Ik ga akkoord’ te klikken, bevestigt u dat u het wettelijke recht hebt om deze stemmen voor dit project te klonen.</value></data>
+  <data name="Dialog.VoiceClone_SessionNote" xml:space="preserve"><value>Deze toestemming geldt uitsluitend voor de huidige sessie van de applicatie en moet opnieuw worden verleend wanneer u de applicatie de volgende keer opstart.</value></data>
+  <data name="Dialog.VoiceClone_Agree" xml:space="preserve"><value>Ik ga akkoord</value></data>
+  <!--  Timeline - Waveform  -->
+  <data name="Timeline.WaveformNotAvailable" xml:space="preserve"><value>Voorbeeld van de golfvorm is nog niet beschikbaar</value></data>
+  <data name="Timeline.ComputingPeaks" xml:space="preserve"><value>Het berekenen van pieken in golfvormen…</value></data>
+  <!--  Timeline - ZoomLevel (non-localizable display but test flags it)  -->
+  <data name="Timeline.ZoomLevel" xml:space="preserve"><value>100 pps</value></data>
+  <!--  Inspector  -->
+  <data name="Inspector.Header" xml:space="preserve"><value>Inspecteur</value></data>
+  <data name="Inspector.Empty" xml:space="preserve"><value>Selecteer een segment, een spreker of een bronartefact om dit te bekijken.</value></data>
+  <data name="Inspector.UnknownTarget" xml:space="preserve"><value>Dit inspectiedoel wordt nog niet ondersteund.</value></data>
+  <data name="Inspector.OpenInEditor" xml:space="preserve"><value>Openen in de editor</value></data>
+  <data name="Inspector.Tab_Content" xml:space="preserve"><value>Inhoud</value></data>
+  <data name="Inspector.Tab_Timing" xml:space="preserve"><value>Tijdschema</value></data>
+  <data name="Inspector.Tab_Voice" xml:space="preserve"><value>Stem</value></data>
+  <data name="Inspector.Tab_QC" xml:space="preserve"><value>Kwaliteitscontrole</value></data>
+  <data name="Inspector.SegmentDuration" xml:space="preserve"><value>Segment</value></data>
+  <data name="Inspector.GeneratedDuration" xml:space="preserve"><value>Gegenereerd</value></data>
+  <data name="Inspector.Overrun" xml:space="preserve"><value>Overschrijding</value></data>
+  <data name="Inspector.TimingAdjustment" xml:space="preserve"><value>Tijdschema</value></data>
+  <data name="Inspector.ConfidenceReview" xml:space="preserve"><value>Beoordeling aanbevolen</value></data>
+  <data name="Inspector.Artifact" xml:space="preserve"><value>Artefact</value></data>
+  <data name="Inspector.ArtifactType" xml:space="preserve"><value>Type</value></data>
+  <data name="Inspector.ArtifactDuration" xml:space="preserve"><value>Duur</value></data>
+  <data name="Inspector.ArtifactSize" xml:space="preserve"><value>Afmetingen</value></data>
+  <data name="Inspector.ArtifactPath" xml:space="preserve"><value>Pad</value></data>
+  <data name="Inspector.ArtifactType_Audio" xml:space="preserve"><value>Audio</value></data>
+  <data name="Inspector.ArtifactType_Video" xml:space="preserve"><value>Video</value></data>
+  <data name="Inspector.ArtifactType_Subtitle" xml:space="preserve"><value>Ondertitel</value></data>
+  <data name="Inspector.ArtifactType_Unknown" xml:space="preserve"><value>Onbekend</value></data>
+  <data name="Attention.translation.stale" xml:space="preserve"><value>De vertaling is verouderd.</value></data>
+  <data name="Attention.tts.failed" xml:space="preserve"><value>Het genereren van de dub is mislukt.</value></data>
+  <data name="Attention.tts.stale" xml:space="preserve"><value>Dub is achterhaald.</value></data>
+  <data name="Attention.tts.pending" xml:space="preserve"><value>Dub-generatie in behandeling.</value></data>
+  <data name="Attention.tts.duration-overrun" xml:space="preserve"><value>De dub-timing overschrijdt de tolerantie.</value></data>
+  <data name="Attention.tts.speed-limit" xml:space="preserve"><value>Tijdverlenging kan de kwaliteit verminderen.</value></data>
+  <data name="Attention.asr.low-confidence" xml:space="preserve"><value>De betrouwbaarheid van het transcript moet worden beoordeeld.</value></data>
+  <data name="Attention.lipsync.error" xml:space="preserve"><value>De lipsynchronisatie is mislukt.</value></data>
+  <data name="Attention.lipsync.warning" xml:space="preserve"><value>De lipsynchronisatie moet worden gecontroleerd.</value></data>
+  <data name="Attention.lipsynthesis.error" xml:space="preserve"><value>Het herstel van de lip is mislukt.</value></data>
+  <data name="Attention.lipsynthesis.warning" xml:space="preserve"><value>De beoordeling van het lippenherstelproduct moet worden herzien.</value></data>
+  <data name="Attention.stage.failed" xml:space="preserve"><value>De pijplijnfase is mislukt.</value></data>
+  <data name="Attention.stage.in-progress" xml:space="preserve"><value>De pijplijnfase is in uitvoering.</value></data>
+  <!--  License  -->
+  <data name="License.Tab" xml:space="preserve"><value>Licentie</value></data>
+  <data name="License.Heading" xml:space="preserve"><value>Licentie</value></data>
+  <data name="License.CurrentTier" xml:space="preserve"><value>Huidige niveau:</value></data>
+  <data name="License.Tier_Free" xml:space="preserve"><value>Gratis</value></data>
+  <data name="License.Tier_Pro" xml:space="preserve"><value>Pro</value></data>
+  <data name="License.KeyLabel" xml:space="preserve"><value>Licentiesleutel</value></data>
+  <data name="License.KeyPlaceholder" xml:space="preserve"><value>Plak hier uw licentiesleutel</value></data>
+  <data name="License.Button_Activate" xml:space="preserve"><value>Activeren</value></data>
+  <data name="License.Button_Deactivate" xml:space="preserve"><value>Deactiveren</value></data>
+  <data name="License.Degraded" xml:space="preserve"><value>Licentie gedegradeerd</value></data>
+  <data name="License.MachinesRegisteredUnlimited" xml:space="preserve"><value> geregistreerde apparaten (onbeperkte ontwikkelaarslicentie)</value></data>
+</root>

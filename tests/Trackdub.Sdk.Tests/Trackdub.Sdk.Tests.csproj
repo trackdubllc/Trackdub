@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Exercise the Windows SDK runtime graph without making non-Windows agents target Windows. -->
+    <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(OS)' != 'Windows_NT'">net10.0</TargetFrameworks>
+    <!-- Directory.Build.props supplies TargetFramework; clear it when multi-targeting. -->
+    <TargetFramework Condition="'$(TargetFrameworks)' != ''" />
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <LangVersion>preview</LangVersion>
+    <!-- xUnit1051: suppressed pending FsCheck 3.x + xunit v3 API migration pass (see Worker.Tests). -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="FsCheck.Xunit" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Spectre.Console.Testing" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="FsCheck.Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Trackdub.TestDoubles\FakeFileFingerprintService.cs" Link="TestDoubles\FakeFileFingerprintService.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeMediaProbe.cs" Link="TestDoubles\FakeMediaProbe.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakePipelinePreFlightChecker.cs" Link="TestDoubles\FakePipelinePreFlightChecker.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeStudioSettingsService.cs" Link="TestDoubles\FakeStudioSettingsService.cs" />
+    <ProjectReference Include="..\..\src\Trackdub.Sdk\Trackdub.Sdk.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Cli\Trackdub.Cli.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Application\Trackdub.Application.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Composition\Trackdub.Composition.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Fixtures\smoke.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\.gitkeep" CopyToOutputDirectory="Never" />
+  </ItemGroup>
+
+</Project>

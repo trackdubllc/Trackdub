@@ -1,0 +1,6 @@
+# Downloaded espeak-ng binaries and data (acquired via Fetch-EspeakNg.ps1)
+espeak-ng.exe
+libespeak-ng.dll
+espeak-ng-data/
+*.zip
+extracted/

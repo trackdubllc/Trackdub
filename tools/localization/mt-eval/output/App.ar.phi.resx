@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve">
+    <value>لا يمكن تحميل ملف {0} لأن لم يكن هناك مسار محلي متاح.</value>
+  </data>
+  <data name="Speakers.Count" xml:space="preserve">
+    <value>{000} من الناطقين</value>
+  </data>
+  <data name="Glossary.TermCount" xml:space="preserve">
+    <value>{} شروط</value>
+  </data>
+  <data name="Update.BannerMessage" xml:space="preserve">
+    <value>تتبعdub [000] ([001]) متاحًا</value>
+  </data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve">
+    <value>مسار GPU غير متاح لـ {0}. باستخدام {1} على {2}.</value>
+  </data>
+</root>

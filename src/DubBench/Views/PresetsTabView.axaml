@@ -1,0 +1,105 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:DubBench.ViewModels"
+             xmlns:c="clr-namespace:DubBench.Converters"
+             mc:Ignorable="d"
+             d:DesignWidth="700" d:DesignHeight="500"
+             x:Class="DubBench.Views.PresetsTabView"
+             x:DataType="vm:PresetsTabViewModel">
+  <Grid ColumnDefinitions="280,*" RowDefinitions="Auto,*">
+    <!-- Header -->
+    <TextBlock Grid.Row="0" Grid.ColumnSpan="2"
+               Text="Benchmark Presets"
+               FontSize="18" FontWeight="SemiBold"
+               Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+    <!-- Presets list (left side) -->
+    <Border Grid.Row="1" Grid.Column="0"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="0,0,1,0" Padding="0,8,12,0">
+      <StackPanel Spacing="8" Margin="0">
+        <TextBlock Text="Available Presets"
+                   FontSize="13" FontWeight="SemiBold"
+                   Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+        <ListBox ItemsSource="{Binding Presets}"
+                 SelectedItem="{Binding SelectedPreset}"
+                 BorderThickness="1"
+                 BorderBrush="{DynamicResource BorderBrush}"
+                 Background="Transparent"
+                 Height="280">
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="vm:BenchmarkPreset">
+              <Border Padding="6">
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding Name}"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource ThemeForegroundBrush}" />
+                  <TextBlock Text="{Binding Description}"
+                             FontSize="11" Opacity="0.7"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource ThemeForegroundBrush}" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <Button Command="{Binding RunPresetCommand}"
+                IsEnabled="{Binding IsRunning, Converter={x:Static c:BoolConverters.Not}}"
+                Content="Run Selected"
+                Width="160" Height="32"
+                HorizontalAlignment="Left" />
+        <Button Command="{Binding RunAllCommand}"
+                IsEnabled="{Binding IsRunning, Converter={x:Static c:BoolConverters.Not}}"
+                Content="Run All"
+                Width="160" Height="32"
+                HorizontalAlignment="Left" />
+        <Button Command="{Binding ClearResultsCommand}"
+                Content="Clear Results"
+                Width="160" Height="28"
+                HorizontalAlignment="Left" />
+      </StackPanel>
+    </Border>
+
+    <!-- Comparison results (right side) -->
+    <Border Grid.Row="1" Grid.Column="1" Padding="12,8,0,0">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Results Comparison"
+                   FontSize="13" FontWeight="SemiBold"
+                   Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+        <TextBlock Text="{Binding StatusMessage}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ThemeForegroundBrush}"
+                   Opacity="0.8" />
+
+        <ScrollViewer IsVisible="{Binding IsComparisonVisible}">
+          <ItemsControl ItemsSource="{Binding ComparisonResults}"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderBrush}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="vm:BenchmarkPresetResult">
+                <Border Background="{DynamicResource SidebarBackgroundBrush}"
+                        CornerRadius="4" Padding="8" Margin="0,0,0,4">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Summary}"
+                               Foreground="{DynamicResource ThemeForegroundBrush}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding DurationMs}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource ThemeForegroundBrush}" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

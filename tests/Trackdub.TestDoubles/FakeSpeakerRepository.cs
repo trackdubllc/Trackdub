@@ -1,0 +1,155 @@
+using Trackdub.Contracts.Transcripts;
+using Trackdub.Domain.Speakers;
+
+namespace Trackdub.TestDoubles;
+
+public sealed class FakeSpeakerRepository : ISpeakerRepository
+{
+    private readonly List<ProjectSpeaker> speakers = [];
+    private readonly List<SpeakerTurn> turns = [];
+
+    public IReadOnlyList<ProjectSpeaker> Speakers => speakers;
+    public IReadOnlyList<SpeakerTurn> Turns => turns;
+
+    /// <summary>Seed speakers and turns without going through <see cref="ReplaceDiarizationAsync"/>.</summary>
+    public void Seed(IEnumerable<ProjectSpeaker> seedSpeakers, IEnumerable<SpeakerTurn>? seedTurns = null)
+    {
+        speakers.AddRange(seedSpeakers);
+        if (seedTurns is not null)
+        {
+            turns.AddRange(seedTurns);
+        }
+    }
+
+    public Task<IReadOnlyList<ProjectSpeaker>> ListSpeakersAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ProjectSpeaker> result = speakers
+            .Where(s => s.ProjectId == projectId)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<SpeakerTurn>> ListTurnsAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<SpeakerTurn> result = turns
+            .Where(t => t.ProjectId == projectId)
+            .OrderBy(t => t.StartSeconds)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task<ProjectSpeaker> EnsureDefaultSpeakerAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        ProjectSpeaker? existing = speakers.FirstOrDefault(s => s.ProjectId == projectId);
+        if (existing is not null)
+        {
+            return Task.FromResult(existing);
+        }
+
+        ProjectSpeaker speaker = ProjectSpeaker.Create(projectId, "Speaker 1", DateTimeOffset.UtcNow);
+        speakers.Add(speaker);
+        return Task.FromResult(speaker);
+    }
+
+    public Task<ProjectSpeaker> CreateSpeakerAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        ProjectSpeaker speaker = ProjectSpeaker.Create(
+            projectId,
+            BuildNextSpeakerDisplayName(projectId),
+            DateTimeOffset.UtcNow.AddMilliseconds(speakers.Count(s => s.ProjectId == projectId)));
+        speakers.Add(speaker);
+        return Task.FromResult(speaker);
+    }
+
+    public Task ReplaceDiarizationAsync(
+        Guid projectId,
+        IReadOnlyList<ProjectSpeaker> newSpeakers,
+        IReadOnlyList<SpeakerTurn> newTurns,
+        CancellationToken cancellationToken)
+    {
+        bool preserveExistingSpeakers = speakers.Any(s => s.ProjectId == projectId) &&
+                                        !turns.Any(t => t.ProjectId == projectId);
+        if (!preserveExistingSpeakers)
+        {
+            speakers.RemoveAll(s => s.ProjectId == projectId);
+        }
+
+        turns.RemoveAll(t => t.ProjectId == projectId);
+        speakers.AddRange(newSpeakers);
+        turns.AddRange(newTurns);
+        return Task.CompletedTask;
+    }
+
+    public Task RenameSpeakerAsync(
+        Guid projectId,
+        Guid speakerId,
+        string displayName,
+        CancellationToken cancellationToken)
+    {
+        int index = speakers.FindIndex(s => s.ProjectId == projectId && s.Id == speakerId);
+        if (index >= 0)
+        {
+            speakers[index] = speakers[index].Rename(displayName);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task SplitTurnAsync(
+        Guid projectId,
+        Guid speakerTurnId,
+        double splitSeconds,
+        CancellationToken cancellationToken)
+    {
+        int index = turns.FindIndex(t => t.ProjectId == projectId && t.Id == speakerTurnId);
+        if (index < 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        SpeakerTurn original = turns[index];
+        if (splitSeconds <= original.StartSeconds || splitSeconds >= original.EndSeconds)
+        {
+            return Task.CompletedTask;
+        }
+
+        SpeakerTurn first = SpeakerTurn.Create(
+            projectId, original.SpeakerId,
+            original.StartSeconds, splitSeconds,
+            original.Confidence, original.HasOverlap, original.StageRunId);
+
+        SpeakerTurn second = SpeakerTurn.Create(
+            projectId, original.SpeakerId,
+            splitSeconds, original.EndSeconds,
+            original.Confidence, original.HasOverlap, original.StageRunId);
+
+        turns.RemoveAt(index);
+        turns.Insert(index, second);
+        turns.Insert(index, first);
+        return Task.CompletedTask;
+    }
+
+    private string BuildNextSpeakerDisplayName(Guid projectId)
+    {
+        const string prefix = "Speaker ";
+        HashSet<string> names = speakers
+            .Where(s => s.ProjectId == projectId)
+            .Select(s => s.DisplayName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        int nextNumber = names
+            .Select(name => name.Trim())
+            .Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Select(name => int.TryParse(name[prefix.Length..], out int number) ? number : 0)
+            .DefaultIfEmpty(0)
+            .Max() + 1;
+
+        string candidate;
+        do
+        {
+            candidate = $"{prefix}{nextNumber++}";
+        }
+        while (names.Contains(candidate));
+
+        return candidate;
+    }
+}

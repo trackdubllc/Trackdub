@@ -1,0 +1,83 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:DubBench.ViewModels"
+             xmlns:c="clr-namespace:DubBench.Converters"
+             mc:Ignorable="d"
+             d:DesignWidth="700" d:DesignHeight="500"
+             x:Class="DubBench.Views.DubbingTabView"
+             x:DataType="vm:DubbingTabViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="12" Margin="0,0,0,16">
+      <!-- Header -->
+      <TextBlock Text="Dubbing Benchmark"
+                 FontSize="18" FontWeight="SemiBold"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+      <TextBlock Text="Estimate full dubbing pipeline performance for video input."
+                 TextWrapping="Wrap" Opacity="0.7"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+      <Separator Background="{DynamicResource BorderBrush}" Margin="0,4" />
+
+      <!-- Recording fixture capture -->
+      <StackPanel Spacing="8"
+                  IsVisible="{Binding RecordingFixtureAvailable}">
+        <TextBlock Text="Recording Fixture" FontWeight="SemiBold" />
+        <TextBlock Text="Webcam/mic available on Windows — capture a short clip as benchmark input."
+                   TextWrapping="Wrap" Opacity="0.7" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Command="{Binding CaptureRecordingCommand}"
+                  IsEnabled="{Binding IsCapturing, Converter={x:Static c:BoolConverters.Not}}"
+                  Content="Capture Recording"
+                  Width="160" Height="32" />
+          <TextBlock Text="{Binding CapturedFilePath}"
+                     FontSize="11" Opacity="0.6"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"
+                     MaxWidth="300" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Input video path -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="Input Video Path" FontWeight="SemiBold" />
+        <TextBox Text="{Binding InputPath}"
+                 PlaceholderText="Path to video file for dubbing estimate..." />
+      </StackPanel>
+
+      <!-- Target language -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="Target Language Code" FontWeight="SemiBold" />
+        <TextBox Text="{Binding TargetLanguage}"
+                 Width="120" HorizontalAlignment="Left" />
+      </StackPanel>
+
+      <!-- Run button -->
+      <Button Command="{Binding RunBenchmarkCommand}"
+              IsEnabled="{Binding IsRunning, Converter={x:Static c:BoolConverters.Not}}"
+              Content="Run Estimate"
+              Width="200" Height="36"
+              HorizontalAlignment="Left" />
+
+      <!-- Status -->
+      <TextBlock Text="{Binding StatusMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+      <!-- Result -->
+      <Border BorderBrush="{DynamicResource BorderBrush}"
+              BorderThickness="1" CornerRadius="6"
+              Padding="12" Margin="0,8,0,0"
+              IsVisible="{Binding LastResult, Converter={x:Static c:BoolConverters.IsNotNull}}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Estimate Results"
+                     FontSize="14" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding LastResult.SegmentCount, StringFormat='Segments: {0}'}" />
+          <TextBlock Text="{Binding LastResult.TotalDuration, StringFormat='Total: {0:hh\\:mm\\:ss}'}" />
+          <TextBlock Text="{Binding LastResult.HardwareInfo, StringFormat='Hardware: {0}'}" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

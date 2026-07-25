@@ -1,0 +1,305 @@
+# =============================================================================
+# Trackdub .gitignore
+# Keep patterns broad for generated/local junk; never ignore repo-owned tooling.
+# NuGet packages.lock.json files are TRACKED (RestorePackagesWithLockFile=true).
+# =============================================================================
+
+# --- Build outputs ---
+bin/
+obj/
+publish/
+dist/
+out/
+TestResults/
+coverage/
+*.user
+*.suo
+*.out
+*.lscache
+*.csproj.lscache
+
+# --- IDE / editor (local preferences only) ---
+.vs/
+.vscode/
+.idea/
+
+# --- Packages / generated artifacts ---
+packages/
+artifacts/
+_site/
+!src/**/Artifacts/
+!src/**/Artifacts/**
+
+# --- Models and large runtime assets ---
+models/
+!tools/models/
+!tools/models/*.ps1
+model-cache/
+native/win-x64/
+pretrained_models/
+*.onnx
+*.onnx_data
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.gguf
+!src/Trackdub.Inference.Onnx/
+!src/Trackdub.Inference.Onnx/**
+src/Trackdub.Inference.Onnx/bin/
+src/Trackdub.Inference.Onnx/obj/
+
+# Mono runtime telemetry (machine-identifying PII)
+.mono/
+src/Trackdub.Inference.Onnx/.mono/
+
+# --- Media fixtures and project workspaces ---
+*.mp4
+*.mkv
+*.mov
+*.wav
+*.flac
+*.aac
+*.mp3
+*.srt
+*.vtt
+*.trackdub/
+projects/
+!src/**/Projects/
+!src/**/Projects/**
+tests/Trackdub.Sdk.Tests/Fixtures/smoke.mp4
+
+# --- Logs and temp files ---
+logs/
+completion_log/
+PROMPT_build.md
+PROMPT_plan.md
+temp/
+tmp/
+*.tmp
+**/*.*.tmp.*
+*.log
+/diff.txt
+/test_output.txt
+/feature_files.txt
+/_avalonia-build.txt
+/nul
+$null
+
+# --- Local scratch / one-off experiments (repo root) ---
+/scratch/
+/scratch_app/
+scratch/
+/scratch_dump_*.cs
+/test_genai.cs
+/test_tensor.cs
+/test_oga_audio.py
+/test_ml.cs
+/test_ort.cs
+/tmp_serilog_probe.cs
+/tmp_serilog_probe.csproj
+/paths.json
+/diagram.svg
+*.patch
+powers
+TestApp
+salvage-diagnostics.diff
+wave2a-code-changes.diff
+vibe-portrait-2026-05-31.html
+tmp-design-fetch.html
+.tmp-mr-body.md
+/.tmp-linux-publish-test
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.Zone.Identifier
+
+# --- Node / JS tooling ---
+node_modules/
+.pnp.cjs
+.pnp.loader.mjs
+.yarn/
+yarn.lock
+
+# --- Python / local tool environments ---
+.python-version
+.venv/
+venv/
+*.egg-info/
+tools/stemlab/
+tools/win-x64/
+tools/marketing/.venv/
+
+# --- Secrets and credentials ---
+secrets/
+.env
+*.pfx
+*.p12
+*.key
+*.token
+.vault-token
+credentials.xml
+
+# --- Backups and caches ---
+*.bak
+*.backup
+.cache/
+.olive-cache/
+/tools/model_builder/cache_dir
+/tools/models/.staging-hf-publish
+
+# --- Reports and benchmark output ---
+reports/**/*.json
+benchmark-report*.json
+
+# --- Design workspace (local HTML/PNG prototypes; not product docs) ---
+/docs/design/
+.design/app-shell-redesign/screenshots/headless/
+.design/theme-contrast-verification/
+.design/pipeline-stage-handler-audit-*.md
+.design-bundle-extract/
+
+# --- LTM local runtime (portable tooling stays tracked) ---
+/ltm/store/
+/ltm/runtime/
+/ltm/reports/
+/ltm/snapshots/
+!ltm/reports/.gitkeep
+!ltm/snapshots/.gitkeep
+
+# --- MagicPaths prototype (local only) ---
+MagicPaths/
+/MagicPaths
+
+# --- Removed bloat (do not re-commit) ---
+.claude/context/
+.devin/
+.kiro/
+.opencode/
+.codex/
+.bob/
+.oac.json
+/mockups/
+/assets/redesign/
+/docs/API/
+/docs/superpowers/
+/docs/research/
+/docs/milestones/
+/output/
+/tools/marketing/
+/tools/skills/
+/gitlab-ci.yml
+/tools/gitlab-review-agent/
+*.original.md
+/index.html
+/cleanup-manifest.json
+/trt-rtx-null-provider-fix-plan.md
+/GEMINI.md
+.memory/
+
+# --- Agent / AI tooling: local-only state ---
+# Note: .github/ workflows and repo config stay tracked. Only local overlays below.
+.claude/worktrees/
+.claire/worktrees/
+.claude/agent-memory/
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+.openclaude/
+.agents/.serena/
+/.serena
+.sisyphus/
+.artifacts/
+.hf-staging/
+/.hf-staging/
+/.staging/
+.tmp-tools/
+/tmp-tools
+/.agent-tmp
+/.omo
+/.clawpatch
+/.playwright-mcp
+/.openhands
+/.kiro
+/sourcery
+output/unused-code-audit/
+.opencode/opencode.jsonc
+/.opencode/skills
+.codex/config.toml
+.codex/environments/
+.aider*
+.bob/DO NOT USE mcp.json
+
+# Local agent skill overlays (committed skills under these trees are tracked explicitly)
+/.github/skills
+/.bob/skills
+/.autohand/skills
+/.openhands/skills
+/.windsurf/skills
+/.cline/skills
+/.gemini/skills
+/.trae/skills
+/.kiro/skills
+/.codex/skills
+
+# Cursor local state (hooks config + check-pr-threads.ps1 stay tracked)
+.cursor/hooks/state/
+.cursor/babysit-pr
+/.cursor/hooks/*
+!.cursor/hooks/check-pr-threads.ps1
+
+# Local git hooks (use repo scripts under tools/ instead)
+/.githooks
+.githooks/
+/.adal/skills
+/.agents/skills
+/.claude/skills
+/.claude/settings.local.json
+/.openclaude/
+/.codeartsdoer/skills
+/.codemaker
+/.codestudio
+/.commandcode
+/.cortex
+/.crush
+/.factory
+/.goose
+/.forge
+/.inferencesh
+/.iflow
+/.kilocode/skills
+/.junie/skills
+/.jazz
+/.hermes
+/.cursor/skills
+/.mcpjam
+/.lingma
+/.kode
+/.continue
+/.codebuddy
+/.augment
+/.ona
+/.pochi
+/.qwen
+/.reasonix
+/.rovodev
+/.tabnine
+/.zencoder
+/skills
+/data
+/.roo
+/.vibe
+/.vibe
+/.terramind
+/.qoder
+/.pi/skills
+/.neovate
+/.tinycloud
+/.moxby
+/.mux
+smoke-output.txt
+/.cursor/commands
+/.codex-plugins
+__pycache__/
+*.py[cod]

@@ -1,0 +1,417 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trackdub.local/schemas/model-manifest.schema.json",
+  "title": "Trackdub Model Manifest",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/catalog"
+    },
+    {
+      "$ref": "#/$defs/model"
+    }
+  ],
+  "$defs": {
+    "catalog": {
+      "type": "object",
+      "required": [ "models" ],
+      "properties": {
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/model"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "model_id",
+        "task",
+        "engine_family",
+        "license",
+        "commercial_allowed",
+        "redistribution_allowed",
+        "requires_attribution",
+        "requires_user_consent",
+        "voice_cloning"
+      ],
+      "properties": {
+        "model_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "task": {
+          "type": "string",
+          "enum": [ "asr", "translation", "tts", "diarization", "vad", "separation", "speech-enhancement", "forced-alignment", "text-refinement", "overlap-rescue", "lip-synthesis" ]
+        },
+        "engine_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "language_coverage": {
+          "$ref": "#/$defs/languageCoverage"
+        },
+        "tier": {
+          "type": "string",
+          "enum": [ "fast", "balanced", "quality", "accurate" ]
+        },
+        "lane": {
+          "type": "string",
+          "enum": [ "commercial", "non-commercial", "experimental" ]
+        },
+        "license": {
+          "type": "string",
+          "enum": [ "MIT", "Apache-2.0", "CC-BY-4.0", "CC-BY-NC-4.0", "NVIDIA-Open-Model-License", "OpenMDW-1.1", "custom", "unknown", "non-commercial" ]
+        },
+        "commercial_allowed": {
+          "type": "boolean"
+        },
+        "redistribution_allowed": {
+          "type": "boolean"
+        },
+        "requires_attribution": {
+          "type": "boolean"
+        },
+        "requires_user_consent": {
+          "type": "boolean"
+        },
+        "voice_cloning": {
+          "type": "boolean"
+        },
+        "commercial_safe_mode": {
+          "type": "boolean"
+        },
+        "commercial_use_verified": {
+          "type": "boolean"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "root_path": {
+          "type": [ "string", "null" ]
+        },
+        "benchmark_entry": {
+          "type": [ "string", "null" ]
+        },
+        "download_files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/variant"
+          }
+        },
+        "hash_verification": {
+          "$ref": "#/$defs/hashVerification"
+        },
+        "olive_optimizable": {
+          "type": "boolean"
+        },
+        "optimization": {
+          "$ref": "#/$defs/optimization"
+        },
+        "display_name": {
+          "type": [ "string", "null" ]
+        },
+        "provider_id": {
+          "type": [ "string", "null" ]
+        },
+        "expected_runtime": {
+          "type": [ "string", "null" ]
+        },
+        "download_file_sources": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "blocked_reason": {
+          "type": [ "string", "null" ]
+        },
+        "download_file_hashes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        },
+        "notes": {
+          "type": [ "string", "null" ]
+        },
+        "quality_caveats": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "voice_cloning_method": {
+          "type": [ "string", "null" ]
+        },
+        "voice_cloning_requirements": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "optimization": {
+      "type": "object",
+      "properties": {
+        "olive": {
+          "$ref": "#/$defs/oliveOptimization"
+        }
+      },
+      "additionalProperties": false
+    },
+    "oliveOptimization": {
+      "type": "object",
+      "required": [ "mode", "components", "supported_providers" ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.?/).+\\.onnx$"
+          },
+          "uniqueItems": true
+        },
+        "supported_providers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": [ "cpu", "dml", "directml", "cuda", "tensorrt", "trt-rtx", "tensorrt-rtx", "migraphx", "rocm", "vitisai", "vitis-ai", "qnn", "openvino" ]
+          },
+          "uniqueItems": true
+        },
+        "supported_precisions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [ "fp32", "fp16", "int8", "int4", "mxfp8", "nvfp4" ]
+          },
+          "uniqueItems": true
+        },
+        "require_opset_metadata": {
+          "type": "boolean"
+        },
+        "opset_policies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [ "minimum_opset" ],
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [ "cpu", "dml", "directml", "cuda", "tensorrt", "trt-rtx", "tensorrt-rtx", "migraphx", "rocm", "vitisai", "vitis-ai", "qnn", "openvino" ]
+              },
+              "precision": {
+                "type": "string",
+                "enum": [ "fp32", "fp16", "int8", "int4", "mxfp8", "nvfp4" ]
+              },
+              "minimum_opset": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "fallback_policy": {
+          "type": "string",
+          "enum": [ "none", "auto_opt_allowed", "base_variant_allowed", "cpu_runtime_allowed" ]
+        },
+        "recipe_bindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [ "config_relative_path", "operations", "expected_output" ],
+            "properties": {
+              "provider": {
+                "type": "string",
+                "enum": [ "cpu", "dml", "directml", "cuda", "tensorrt", "trt-rtx", "tensorrt-rtx", "migraphx", "rocm", "vitisai", "vitis-ai", "qnn", "openvino" ]
+              },
+              "precision": {
+                "type": "string",
+                "enum": [ "fp32", "fp16", "int8", "int4", "mxfp8", "nvfp4" ]
+              },
+              "config_relative_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "operations": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": [ "onnx_export", "qnn_conversion", "openvino_conversion", "compression", "provider_optimization", "genai_packaging", "model_splitting", "evaluation", "adapter_handling", "registration" ]
+                },
+                "uniqueItems": true
+              },
+              "expected_output": {
+                "type": "string",
+                "enum": [ "onnx_components", "ort_genai", "qnn_model_library", "openvino_model", "split_onnx_components", "adapter_package" ]
+              },
+              "fallback_policy": {
+                "type": "string",
+                "enum": [ "none", "auto_opt_allowed", "base_variant_allowed", "cpu_runtime_allowed" ]
+              },
+              "quantization_method": { "type": "string", "minLength": 1 },
+              "requires_calibration_data": { "type": "boolean" },
+              "script_relative_path": { "type": "string", "minLength": 1 },
+              "script_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+              "evaluator": { "type": "string", "minLength": 1 },
+              "split_count": { "type": "integer", "minimum": 2 },
+              "cost_model_relative_path": { "type": "string", "minLength": 1 },
+              "adapter_relative_path": { "type": "string", "minLength": 1 },
+              "adapter_mode": { "type": "string", "minLength": 1 },
+              "output_manifest_relative_path": { "type": "string", "minLength": 1 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "languageCoverage": {
+      "type": "object",
+      "properties": {
+        "source_languages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "target_languages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "language_pairs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/languagePair"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "languagePair": {
+      "type": "object",
+      "required": [ "source", "target" ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "variant": {
+      "type": "object",
+      "required": [ "alias", "entry_path" ],
+      "properties": {
+        "alias": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entry_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "download_files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "display_name": {
+          "type": [ "string", "null" ]
+        },
+        "description": {
+          "type": [ "string", "null" ]
+        },
+        "is_default": {
+          "type": "boolean"
+        },
+        "supported_providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [ "cpu", "dml", "directml", "cuda", "tensorrt", "trt-rtx", "tensorrt-rtx", "migraphx", "rocm" ]
+          },
+          "uniqueItems": true
+        },
+        "opset": {
+          "type": [ "integer", "null" ],
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "hashVerification": {
+      "type": "object",
+      "required": [ "mode" ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [ "none", "verify-if-sha-present", "required" ]
+        },
+        "algorithm": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

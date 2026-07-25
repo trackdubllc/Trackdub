@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve">
+    <value>无法导入文件，因为没有可用的本地路径。</value>
+  </data>
+  <data name="Speakers.Count" xml:space="preserve">
+    <value>零语者</value>
+  </data>
+  <data name="Glossary.TermCount" xml:space="preserve">
+    <value>{} 项目</value>
+  </data>
+  <data name="Update.BannerMessage" xml:space="preserve">
+    <value>轨道混音 [{0}] ({1}) 已可用</value>
+  </data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve">
+    <value>当 GPU 不可用时，以 {0} 为名的 GPU 使用 {1} 在 {2} 上。</value>
+  </data>
+</root>

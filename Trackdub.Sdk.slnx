@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trackdub.Analyzers/Trackdub.Analyzers.csproj" />
+    <Project Path="src/Trackdub.Application/Trackdub.Application.csproj" />
+    <Project Path="src/Trackdub.Cli/Trackdub.Cli.csproj" />
+    <Project Path="src/Trackdub.Composition/Trackdub.Composition.csproj" />
+    <Project Path="src/Trackdub.Contracts/Trackdub.Contracts.csproj" />
+    <Project Path="src/Trackdub.Domain/Trackdub.Domain.csproj" />
+    <Project Path="src/Trackdub.Inference.Onnx/Trackdub.Inference.Onnx.csproj" />
+    <Project Path="src/Trackdub.Inference/Trackdub.Inference.csproj" />
+    <Project Path="src/Trackdub.Infrastructure/Trackdub.Infrastructure.csproj" />
+    <Project Path="src/Trackdub.Licensing/Trackdub.Licensing.csproj" />
+    <Project Path="src/Trackdub.Media.Playback/Trackdub.Media.Playback.csproj" />
+    <Project Path="src/Trackdub.Media/Trackdub.Media.csproj" />
+    <Project Path="src/Trackdub.Sdk/Trackdub.Sdk.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trackdub.Analyzers.Tests/Trackdub.Analyzers.Tests.csproj" />
+    <Project Path="tests/Trackdub.Sdk.Tests/Trackdub.Sdk.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,14 @@
+{
+  "input_model": {
+    "type": "ONNXModelHandler",
+    "model_path": "{{model_path}}"
+  },
+  "passes": {
+    "to_fp16": {
+      "type": "OnnxFloatToFloat16",
+      "keep_io_types": true,
+      "disable_shape_infer": false
+    }
+  },
+  "output_dir": "{{output_dir}}"
+}

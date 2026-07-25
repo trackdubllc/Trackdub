@@ -1,0 +1,35 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DubBench/Trackdub.DubBench.csproj" />
+    <Project Path="src/Trackdub.Analyzers/Trackdub.Analyzers.csproj" />
+    <Project Path="src/Trackdub.Application/Trackdub.Application.csproj" />
+    <Project Path="src/Trackdub.Benchmarks/Trackdub.Benchmarks.csproj" />
+    <Project Path="src/Trackdub.Cli/Trackdub.Cli.csproj" />
+    <Project Path="src/Trackdub.Composition/Trackdub.Composition.csproj" />
+    <Project Path="src/Trackdub.Contracts/Trackdub.Contracts.csproj" />
+    <Project Path="src/Trackdub.Domain/Trackdub.Domain.csproj" />
+    <Project Path="src/Trackdub.Inference.Onnx/Trackdub.Inference.Onnx.csproj" />
+    <Project Path="src/Trackdub.Inference/Trackdub.Inference.csproj" />
+    <Project Path="src/Trackdub.Infrastructure/Trackdub.Infrastructure.csproj" />
+    <Project Path="src/Trackdub.Licensing/Trackdub.Licensing.csproj" />
+    <Project Path="src/Trackdub.Media.Playback/Trackdub.Media.Playback.csproj" />
+    <Project Path="src/Trackdub.Media/Trackdub.Media.csproj" />
+    <Project Path="src/Trackdub.OnnxRuntime.Dnnl.Native/Trackdub.OnnxRuntime.Dnnl.Native.csproj" />
+    <Project Path="src/Trackdub.Sdk/Trackdub.Sdk.csproj" />
+    <Project Path="src/Trackdub.Tools/Trackdub.Tools.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trackdub.Analyzers.Tests/Trackdub.Analyzers.Tests.csproj" />
+    <Project Path="tests/Trackdub.Application.Tests/Trackdub.Application.Tests.csproj" />
+    <Project Path="tests/Trackdub.Architecture.Tests/Trackdub.Architecture.Tests.csproj" />
+    <Project Path="tests/Trackdub.Benchmarks.Tests/Trackdub.Benchmarks.Tests.csproj" />
+    <Project Path="tests/Trackdub.Composition.Tests/Trackdub.Composition.Tests.csproj" />
+    <Project Path="tests/Trackdub.Domain.Tests/Trackdub.Domain.Tests.csproj" />
+    <Project Path="tests/Trackdub.Inference.Onnx.Tests/Trackdub.Inference.Onnx.Tests.csproj" />
+    <Project Path="tests/Trackdub.Inference.Tests/Trackdub.Inference.Tests.csproj" />
+    <Project Path="tests/Trackdub.Infrastructure.Tests/Trackdub.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Trackdub.Licensing.Tests/Trackdub.Licensing.Tests.csproj" />
+    <Project Path="tests/Trackdub.Media.Tests/Trackdub.Media.Tests.csproj" />
+    <Project Path="tests/Trackdub.Sdk.Tests/Trackdub.Sdk.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,29 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Brush Keys (Dark Theme) -->
+  <SolidColorBrush x:Key="ThemeBackgroundBrush" Color="#1A1A1A" />
+  <SolidColorBrush x:Key="ThemeSurfaceBrush" Color="#2D2D2D" />
+  <SolidColorBrush x:Key="ThemeAccentBrush" Color="#00BFA5" />
+  <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#E8E8E8" />
+  <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#9E9E9E" />
+  <SolidColorBrush x:Key="ThemeBorderBrush" Color="#3D3D3D" />
+  <SolidColorBrush x:Key="BorderBrush" Color="#3D3D3D" />
+  <SolidColorBrush x:Key="ThemeErrorBrush" Color="#FF5252" />
+  <SolidColorBrush x:Key="TabActiveBrush" Color="#00BFA5" />
+  <SolidColorBrush x:Key="TabInactiveBrush" Color="#6B6B6B" />
+  <SolidColorBrush x:Key="ThemeForegroundBrush" Color="#E8E8E8" />
+  <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#1E1E1E" />
+  <SolidColorBrush x:Key="ContentBackgroundBrush" Color="#252525" />
+  <SolidColorBrush x:Key="ButtonPrimaryBackground" Color="#00BFA5" />
+  <SolidColorBrush x:Key="ButtonPrimaryText" Color="#1A1A1A" />
+  <SolidColorBrush x:Key="SuccessGreenBrush" Color="#4CAF50" />
+  <SolidColorBrush x:Key="WarningOrangeBrush" Color="#FF9800" />
+
+  <!-- Typography Keys -->
+  <x:Double x:Key="HeadingFontSize">18</x:Double>
+  <x:Double x:Key="BodyFontSize">14</x:Double>
+  <x:Double x:Key="CaptionFontSize">12</x:Double>
+  <x:Double x:Key="MonospaceFontSize">13</x:Double>
+  <x:Double x:Key="FontSizeTitle">20</x:Double>
+  <x:Double x:Key="FontSizeMicro">10</x:Double>
+</ResourceDictionary>

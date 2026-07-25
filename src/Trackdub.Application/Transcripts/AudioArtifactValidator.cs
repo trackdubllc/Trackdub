@@ -1,0 +1,191 @@
+using System.Buffers.Binary;
+using System.Text;
+
+namespace Trackdub.Application.Transcripts;
+
+// TODO: The WAV chunk scanning logic here (chunk-ID loop, fmt/data parsing, negative-size and
+// overflow checks, padding alignment) is structurally similar to WaveAudioReader in
+// Trackdub.Inference.Onnx/Audio/WaveAudioReader.cs. Extracting a shared internal WAV header
+// parser (e.g. into a dedicated Trackdub.Media.Codecs assembly) would keep edge-case fixes
+// consistent across both paths. Tracked for a follow-up refactoring PR.
+public static class AudioArtifactValidator
+{
+    public sealed record AudioFileInfo(int SampleRate, int ChannelCount, double DurationSeconds);
+
+    public static async Task<AudioFileInfo> ReadAndValidateAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        await using var stream = new FileStream(
+            Path.GetFullPath(path),
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 4096,
+            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        byte[] buf4 = new byte[4];
+        byte[] buf2 = new byte[2];
+
+        await EnsureFourCcAsync(stream, buf4, "RIFF", cancellationToken).ConfigureAwait(false);
+        await ReadInt32Async(stream, buf4, cancellationToken).ConfigureAwait(false);
+        await EnsureFourCcAsync(stream, buf4, "WAVE", cancellationToken).ConfigureAwait(false);
+
+        ushort audioFormat = 0;
+        ushort channelCount = 0;
+        int sampleRate = 0;
+        ushort blockAlign = 0;
+        ushort bitsPerSample = 0;
+        int dataLength = 0;
+        bool fmtChunkSeen = false;
+
+        while (stream.Position < stream.Length)
+        {
+            string chunkId = await ReadFourCcAsync(stream, buf4, cancellationToken).ConfigureAwait(false);
+            int chunkSize = await ReadInt32Async(stream, buf4, cancellationToken).ConfigureAwait(false);
+            if (chunkSize < 0)
+            {
+                throw new InvalidOperationException($"WAV chunk '{chunkId}' at offset {stream.Position} has negative size {chunkSize}.");
+            }
+
+            long nextChunk = stream.Position + chunkSize;
+
+            switch (chunkId)
+            {
+                case "fmt ":
+                    if (chunkSize < 16)
+                    {
+                        throw new InvalidOperationException($"WAV 'fmt ' chunk is too small ({chunkSize} bytes); minimum required is 16.");
+                    }
+
+                    audioFormat = await ReadUInt16Async(stream, buf2, cancellationToken).ConfigureAwait(false);
+                    channelCount = await ReadUInt16Async(stream, buf2, cancellationToken).ConfigureAwait(false);
+                    sampleRate = await ReadInt32Async(stream, buf4, cancellationToken).ConfigureAwait(false);
+                    await ReadInt32Async(stream, buf4, cancellationToken).ConfigureAwait(false);
+                    blockAlign = await ReadUInt16Async(stream, buf2, cancellationToken).ConfigureAwait(false);
+                    bitsPerSample = await ReadUInt16Async(stream, buf2, cancellationToken).ConfigureAwait(false);
+                    fmtChunkSeen = true;
+                    break;
+                case "data":
+                    dataLength = chunkSize;
+                    break;
+            }
+
+            long paddedEnd = nextChunk + (chunkSize % 2);
+            if (paddedEnd < stream.Position || paddedEnd > stream.Length)
+            {
+                throw new InvalidOperationException($"WAV chunk '{chunkId}' at offset {nextChunk} overflows file length {stream.Length}.");
+            }
+
+            stream.Position = paddedEnd;
+        }
+
+        if (!fmtChunkSeen)
+        {
+            throw new InvalidOperationException("WAV file is missing required 'fmt ' chunk.");
+        }
+
+        if (audioFormat != 1)
+        {
+            throw new InvalidOperationException($"Unsupported WAV encoding {audioFormat}. Only PCM (1) is supported.");
+        }
+
+        if (bitsPerSample != 16)
+        {
+            throw new InvalidOperationException($"Unsupported WAV bit depth {bitsPerSample}. Only 16-bit PCM is supported.");
+        }
+
+        if (channelCount == 0 || sampleRate <= 0 || blockAlign == 0)
+        {
+            throw new InvalidOperationException("WAV header contains invalid channel count, sample rate, or block alignment.");
+        }
+
+        int expectedBlockAlign = channelCount * (bitsPerSample / 8);
+        if (blockAlign != expectedBlockAlign)
+        {
+            throw new InvalidOperationException(
+                $"WAV block alignment {blockAlign} is inconsistent with channel count {channelCount} and bit depth {bitsPerSample} (expected {expectedBlockAlign}).");
+        }
+
+        if (dataLength <= 0)
+        {
+            throw new InvalidOperationException($"WAV file '{path}' has no audio data (data chunk length = {dataLength}).");
+        }
+
+        if (dataLength % blockAlign != 0)
+        {
+            throw new InvalidOperationException(
+                $"WAV data chunk length {dataLength} is not a multiple of block alignment {blockAlign}; file is malformed.");
+        }
+
+        long sampleFrames = dataLength / blockAlign;
+        double durationSeconds = (double)sampleFrames / sampleRate;
+
+        if (!double.IsFinite(durationSeconds) || durationSeconds <= 0d)
+        {
+            throw new InvalidOperationException($"WAV file '{path}' computed duration {durationSeconds:G6}s is not a positive finite value.");
+        }
+
+        return new AudioFileInfo(sampleRate, channelCount, durationSeconds);
+    }
+
+    private static async Task EnsureFourCcAsync(
+        FileStream stream,
+        byte[] buf,
+        string expected,
+        CancellationToken cancellationToken)
+    {
+        string actual = await ReadFourCcAsync(stream, buf, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(actual, expected, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Expected WAV marker '{expected}' but found '{actual}'.");
+        }
+    }
+
+    private static async Task<string> ReadFourCcAsync(
+        FileStream stream,
+        byte[] buf,
+        CancellationToken cancellationToken)
+    {
+        await ReadExactAsync(stream, buf.AsMemory(0, 4), cancellationToken).ConfigureAwait(false);
+        return Encoding.ASCII.GetString(buf, 0, 4);
+    }
+
+    private static async Task<ushort> ReadUInt16Async(
+        FileStream stream,
+        byte[] buf,
+        CancellationToken cancellationToken)
+    {
+        await ReadExactAsync(stream, buf.AsMemory(0, 2), cancellationToken).ConfigureAwait(false);
+        return BinaryPrimitives.ReadUInt16LittleEndian(buf);
+    }
+
+    private static async Task<int> ReadInt32Async(
+        FileStream stream,
+        byte[] buf,
+        CancellationToken cancellationToken)
+    {
+        await ReadExactAsync(stream, buf.AsMemory(0, 4), cancellationToken).ConfigureAwait(false);
+        return BinaryPrimitives.ReadInt32LittleEndian(buf);
+    }
+
+    private static async Task ReadExactAsync(
+        FileStream stream,
+        Memory<byte> buf,
+        CancellationToken cancellationToken)
+    {
+        int read = 0;
+        while (read < buf.Length)
+        {
+            int n = await stream.ReadAsync(buf[read..], cancellationToken).ConfigureAwait(false);
+            if (n == 0)
+            {
+                throw new InvalidOperationException("Unexpected end of WAV stream.");
+            }
+
+            read += n;
+        }
+    }
+}

@@ -1,0 +1,97 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:DubBench.ViewModels"
+             xmlns:models="clr-namespace:DubBench.Models"
+             mc:Ignorable="d"
+             d:DesignWidth="700" d:DesignHeight="500"
+             x:Class="DubBench.Views.LeaderboardTabView"
+             x:DataType="vm:LeaderboardTabViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="12" Margin="0,0,0,16">
+      <!-- Header -->
+      <TextBlock Text="Benchmark Leaderboard"
+                 FontSize="18" FontWeight="SemiBold"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+      <!-- Mock disclaimer banner -->
+      <Border Background="#3A5535"
+              CornerRadius="6" Padding="12"
+              IsVisible="{Binding IsLocalMock}">
+        <TextBlock Text="{Binding DisclaimerText}"
+                   TextWrapping="Wrap"
+                   Foreground="#EEFFEE" />
+      </Border>
+
+      <!-- Status bar -->
+      <Grid ColumnDefinitions="Auto,*">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+          <TextBlock Foreground="{DynamicResource ThemeForegroundBrush}"
+                     Opacity="0.7">
+            <Run Text="{Binding ScoreCount}" /><Run Text=" entries" />
+          </TextBlock>
+          <TextBlock Text="\u00B7"
+                     Foreground="{DynamicResource ThemeForegroundBrush}"
+                     Opacity="0.7" />
+          <TextBlock Foreground="{DynamicResource ThemeForegroundBrush}"
+                     Opacity="0.7">
+            <Run Text="Last updated: " /><Run Text="{Binding LastUpdatedText}" />
+          </TextBlock>
+        </StackPanel>
+        <Button Grid.Column="1"
+                Command="{Binding RefreshCommand}"
+                Content="Refresh"
+                Width="100" Height="28"
+                HorizontalAlignment="Right" />
+      </Grid>
+
+      <!-- Leaderboard entries -->
+      <Border BorderBrush="{DynamicResource BorderBrush}"
+              BorderThickness="1" CornerRadius="6"
+              Padding="8">
+        <ItemsControl ItemsSource="{Binding Entries}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="models:LeaderboardEntry">
+              <Border Background="{DynamicResource SidebarBackgroundBrush}"
+                      CornerRadius="4" Padding="10" Margin="0,0,0,4">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                  <!-- Rank placeholder (sequential index not available via binding) -->
+                    <TextBlock Grid.Column="0"
+                               Text="\u25B6"
+                               FontWeight="Bold" Width="40"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource ThemeForegroundBrush}" />
+                  <!-- Summary -->
+                  <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="{Binding Benchmark}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource ThemeForegroundBrush}" />
+                    <TextBlock Text="{Binding Hardware}"
+                               FontSize="11" Opacity="0.7"
+                               Foreground="{DynamicResource ThemeForegroundBrush}" />
+                  </StackPanel>
+                  <!-- Score -->
+                  <Border Grid.Column="2"
+                          Background="#2D5A27" CornerRadius="4"
+                          Padding="8,4" Margin="0,0,8,0"
+                          VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Score}"
+                               FontWeight="Bold" FontSize="14"
+                               Foreground="#CCFFCC" />
+                  </Border>
+                  <!-- Date -->
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding Timestamp}"
+                             FontSize="11" Opacity="0.6"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource ThemeForegroundBrush}" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

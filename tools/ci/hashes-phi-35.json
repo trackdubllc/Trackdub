@@ -1,0 +1,14 @@
+{
+  "model_id": "microsoft/Phi-3.5-mini-instruct-onnx",
+  "revision": "7230dcd6c1dd28aab70f263ecc8734ec9d9bcb70",
+  "download_file_hashes": {
+    "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/config.json": "224de4f6a15b9d2a89695ec04b7f7ab2dd93a008a506979925e5a88cb5804974",
+    "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/configuration_phi3.py": "d25f57c0823fcb9753880a25e79ab562b039d6187102ac13e4ff26dd11e9a81c",
+    "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/genai_config.json": "d1036a44e904c816c864931b961483eccf18e985dbd6797eecb33e01b626f580",
+    "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx": "c4f05e6ef52f2588df181e566afbf5e8eeba097fece2fc8246770473a10225fd",
+    "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data": "3351fe9cc669eba43e07fb3cec436078629d5145531a28bc36fe6d5ad7683eb8",
+    "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/special_tokens_map.json": "474d699677e264edd3851559548cbbb61801ad8da6b249c81455007602313c34",
+    "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/tokenizer.json": "d0f067e1e15cd0a36ebef3668024882cb67a80b86fb4b7b4b128481f0d474db7",
+    "cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4/tokenizer_config.json": "a12badd3fb56adb29bc7cfe03cf6fa7e3e19dd3d7602b85ce6ed63d424f5f222"
+  }
+}

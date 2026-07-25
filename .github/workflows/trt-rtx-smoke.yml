@@ -1,0 +1,66 @@
+name: TRT RTX Smoke
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: trt-rtx-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  trt-rtx-smoke:
+    name: TensorRT RTX benchmark smoke
+    if: vars.TRACKDUB_TRT_RTX_SMOKE == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    # Remove continue-on-error once the self-hosted GPU runner completes ≥3 consecutive green runs.
+    continue-on-error: true
+    env:
+      DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
+      DOTNET_ROOT: ${{ github.workspace }}/.dotnet
+      TRACKDUB_TRT_RTX_SMOKE: '1'
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore Dependencies
+        shell: pwsh
+        run: dotnet restore Trackdub.slnx -m:1
+
+      - name: Fetch TensorRT RTX EP ABI plugin
+        shell: pwsh
+        run: ./tools/dev/Fetch-TrtRtxEp.ps1
+
+      - name: Export plugin directory
+        shell: pwsh
+        run: |
+          $pluginDir = Join-Path $env:LOCALAPPDATA "Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64"
+          if (-not (Test-Path $pluginDir)) {
+            throw "Expected plugin directory not found: $pluginDir"
+          }
+          "TRACKDUB_TRT_RTX_EP_DIR=$pluginDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build Benchmarks
+        shell: pwsh
+        run: dotnet build src/Trackdub.Benchmarks/Trackdub.Benchmarks.csproj -f net10.0-windows10.0.19041.0 -m:1 --no-restore
+
+      - name: Run TRT RTX provider smoke
+        shell: pwsh
+        run: |
+          dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 --no-build -- `
+            --model onnx-community/silero-vad `
+            --provider trt-rtx `
+            --runs 1 `
+            --format console

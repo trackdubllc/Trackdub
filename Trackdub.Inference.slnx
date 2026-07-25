@@ -1,0 +1,28 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Trackdub.Analyzers/Trackdub.Analyzers.csproj" />
+    <Project Path="src/Trackdub.Application/Trackdub.Application.csproj" />
+    <Project Path="src/Trackdub.Benchmarks/Trackdub.Benchmarks.csproj" />
+    <Project Path="src/Trackdub.Composition/Trackdub.Composition.csproj" />
+    <Project Path="src/Trackdub.Contracts/Trackdub.Contracts.csproj" />
+    <Project Path="src/Trackdub.Domain/Trackdub.Domain.csproj" />
+    <Project Path="src/Trackdub.Inference.Onnx/Trackdub.Inference.Onnx.csproj" />
+    <Project Path="src/Trackdub.Inference/Trackdub.Inference.csproj" />
+    <Project Path="src/Trackdub.Infrastructure/Trackdub.Infrastructure.csproj" />
+    <Project Path="src/Trackdub.Licensing/Trackdub.Licensing.csproj" />
+    <Project Path="src/Trackdub.Media.Playback/Trackdub.Media.Playback.csproj" />
+    <Project Path="src/Trackdub.Media/Trackdub.Media.csproj" />
+    <Project Path="src/Trackdub.OnnxRuntime.Dnnl.Native/Trackdub.OnnxRuntime.Dnnl.Native.csproj" />
+    <Project Path="src/Trackdub.Tools/Trackdub.Tools.csproj" />
+  </Folder>
+  <Folder Name="/src/DubBench/">
+    <Project Path="src/DubBench/Trackdub.DubBench.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Trackdub.Analyzers.Tests/Trackdub.Analyzers.Tests.csproj" />
+    <Project Path="tests/Trackdub.Benchmarks.Tests/Trackdub.Benchmarks.Tests.csproj" />
+    <Project Path="tests/Trackdub.Composition.Tests/Trackdub.Composition.Tests.csproj" />
+    <Project Path="tests/Trackdub.Inference.Onnx.Tests/Trackdub.Inference.Onnx.Tests.csproj" />
+    <Project Path="tests/Trackdub.Inference.Tests/Trackdub.Inference.Tests.csproj" />
+  </Folder>
+</Solution>

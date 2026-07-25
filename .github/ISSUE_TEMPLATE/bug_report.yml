@@ -1,0 +1,78 @@
+name: Bug Report
+description: Report a bug or defect
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Please provide as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What is the bug? What did you expect to happen?
+      placeholder: "I tried to..., but instead..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Exact steps to reproduce the bug
+      placeholder: |
+        1. Start the API with `docker-compose up`
+        2. Call endpoint `/api/dubbing/jobs`
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Output
+      description: Include relevant logs (sanitize secrets first!)
+      render: bash
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component is affected?
+      options:
+        - "API"
+        - "Desktop App (Avalonia)"
+        - "CLI"
+        - "Inference"
+        - "Media Processing"
+        - "Docker / Deployment"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        OS, .NET version, Docker version, etc.
+      placeholder: |
+        - OS: Windows 11 / macOS 14 / Ubuntu 22.04
+        - .NET version: 10.0.0
+        - Docker version: 27.0.0
+        - Trackdub version: v0.1.5
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and didn't find a duplicate
+          required: true
+        - label: I'm using the latest version from main branch
+          required: true
+        - label: I've included all relevant logs (sanitized)
+          required: false

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "version": "0.3.0",
+  "cudaVariant": "cu12",
+  "licenseUrl": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/reference/sla.html",
+  "packages": {
+    "win-x64": {
+      "archiveUrl": "https://github.com/NVIDIA/TensorRT-RTX-EP-ABI/releases/download/v0.3.0/TensorRT-RTX-EP-ABI-v0.3.0-cu12.zip",
+      "archiveKind": "zip",
+      "sha256": "15817701b597677e20cb7b2338c7a6f5bb1aa0bb5d84b524aacdef09c4eba206",
+      "sizeBytes": 114201633
+    },
+    "linux-x64": {
+      "archiveUrl": "https://github.com/NVIDIA/TensorRT-RTX-EP-ABI/releases/download/v0.3.0/TensorRT-RTX-EP-ABI-v0.3.0-cu12-linux-x64.tar.gz",
+      "archiveKind": "tar.gz",
+      "sha256": "af6270ec6ed563a22ce15756ecb4c8e14b4dfb0af9a026ef4ef3702141518d29",
+      "sizeBytes": 105298092
+    }
+  }
+}

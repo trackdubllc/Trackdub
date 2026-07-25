@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "premium",
+  "display_name": "Premium / Quality",
+  "tier_preference": "quality",
+  "description": "Higher-quality ASR, voice cloning TTS, and dedicated Madlad multilingual translation.",
+  "profiles": [
+    {
+      "id": "default",
+      "display_name": "Default (Whisper Medium)",
+      "asr_model_id": "openai/whisper-medium"
+    }
+  ],
+  "models": [
+    {
+      "model_id": "onnx-community/silero-vad",
+      "stage": "vad",
+      "required": true,
+      "alias": "silero-vad",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "int8", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "cpu" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "cpu" }
+      }
+    },
+    {
+      "model_id": "cgus/diar_streaming_sortformer_4spk-v2.1-onnx",
+      "stage": "diarization",
+      "required": true,
+      "alias": "sortformer-4spk",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "cuda" }
+      }
+    },
+    {
+      "model_id": "openai/whisper-medium",
+      "stage": "asr",
+      "required": false,
+      "alias": "whisper-medium-genai",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "trt-rtx" }
+      }
+    },
+    {
+      "model_id": "tonythethompson/qwen3-asr-1.7b-onnx",
+      "stage": "asr",
+      "required": false,
+      "alias": "qwen3-asr-1.7b",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "cuda" }
+      }
+    },
+    {
+      "model_id": "ResembleAI/chatterbox-turbo-ONNX",
+      "stage": "tts",
+      "required": true,
+      "alias": "chatterbox-turbo-onnx",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "q4", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "trt-rtx" }
+      }
+    },
+    {
+      "model_id": "google/madlad400-3b-mt",
+      "stage": "translation",
+      "required": true,
+      "alias": "madlad400",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "quantized", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "quantized", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "quantized", "execution_provider": "trt-rtx" }
+      }
+    }
+  ],
+  "translation": {
+    "strategy": "universal",
+    "model_id": "google/madlad400-3b-mt",
+    "alias": "madlad400"
+  },
+  "optional_models": [
+    "tonythethompson/qwen3-asr-1.7b-onnx",
+    "openai/whisper-large-v3",
+    "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx",
+    "microsoft/Phi-4-mini-instruct-onnx",
+    "csukuangfj/sherpa-onnx-spleeter-2stems"
+  ],
+  "olive_auto_run": false
+}

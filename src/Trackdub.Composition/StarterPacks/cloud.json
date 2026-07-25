@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "cloud",
+  "pack_kind": "cloud",
+  "display_name": "Cloud APIs",
+  "tier_preference": "balanced",
+  "description": "Dub with cloud ASR/TTS/translation; minimal local ONNX.",
+  "profiles": [
+    {
+      "id": "default",
+      "display_name": "OpenAI + cloud TTS"
+    }
+  ],
+  "models": [],
+  "cloud_defaults": {
+    "asr": "openai-whisper",
+    "translation": "openai-gpt",
+    "tts": "openai"
+  },
+  "olive_auto_run": false
+}

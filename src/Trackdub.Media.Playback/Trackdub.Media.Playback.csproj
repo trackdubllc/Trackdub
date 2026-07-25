@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+      <!-- Directory.Build.props sets TargetFramework=net10.0; clear it so multi-target restore/build includes both legs consistently. -->
+      <TargetFramework Condition="'$(TargetFrameworks)' != ''"/>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Zero-copy libmpv render path fixes the opaque-alpha byte in place on the locked destination
+         buffer via an unsafe pointer loop (LibMpvCompositedPlaybackBackend.RenderCurrentFrameToDirectTarget). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- LibVLCSharp on all TFMs: Avalonia uses libmpv compositor first; LibVLC compositor is fallback.
+       WinUI shell stays Media Foundation via DefaultPlaybackBackendFactory. -->
+  <ItemGroup>
+    <PackageReference Include="LibVLCSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackdub.Application\Trackdub.Application.csproj" />
+    <ProjectReference Include="..\Trackdub.Domain\Trackdub.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trackdub.Media.Tests" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+  </ItemGroup>
+
+</Project>

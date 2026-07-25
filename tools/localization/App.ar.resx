@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute ref="xml:space" use="default">
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:NMTOKEN">
+                    <xsd:enumeration value="preserve" />
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Stage.VAD" xml:space="preserve"><value>الكشف عن نشاط الصوت</value></data>
+  <data name="Stage.ASR" xml:space="preserve"><value>النص المكتوب</value></data>
+  <data name="Stage.Translation" xml:space="preserve"><value>الترجمة</value></data>
+  <data name="Stage.TTS" xml:space="preserve"><value>توليف الكلام</value></data>
+  <data name="Stage.Mixing" xml:space="preserve"><value>مزج الصوت</value></data>
+  <data name="Status.Idle" xml:space="preserve"><value>خامل</value></data>
+  <data name="Status.Running" xml:space="preserve"><value>الجري…</value></data>
+  <data name="Status.Failed" xml:space="preserve"><value>فشل</value></data>
+  <data name="Status.Completed" xml:space="preserve"><value>تم الانتهاء منه</value></data>
+  <data name="Window_Title_Crash" xml:space="preserve"><value>Trackdub — خطأ غير متوقع</value></data>
+  <data name="Crash_Header" xml:space="preserve"><value>حدث خطأ ما</value></data>
+  <data name="Crash_Subtitle" xml:space="preserve"><value>واجه Trackdub خطأً غير متوقع. يمكنك نسخ التفاصيل الواردة أدناه أو فتح مجلد السجلات للحصول على الدعم.</value></data>
+  <data name="Crash_Button_Copy" xml:space="preserve"><value>نسخ التفاصيل</value></data>
+  <data name="Crash_Button_OpenLogFolder" xml:space="preserve"><value>فتح مجلد السجلات</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>إغلاق</value></data>
+  <data name="Settings.Label_Language" xml:space="preserve"><value>اللغة</value></data>
+  <data name="Settings.Hint_LanguageRestart" xml:space="preserve"><value>يلزم إعادة التشغيل لتطبيق تغيير اللغة</value></data>
+  <!--  Transport  -->
+  <data name="Transport.ToolTip_SkipPrevious" xml:space="preserve"><value>تخطي السابق</value></data>
+  <!--  Clippy Assistant  -->
+  <data name="Clippy_Tooltip_AskAssistant" xml:space="preserve"><value>اسأل مساعد Trackdub</value></data>
+  <data name="Clippy_Text_AskAboutTrackdub" xml:space="preserve"><value>اسأل عن Trackdub</value></data>
+  <data name="Clippy_Placeholder_WhatDoesStarterPackDo" xml:space="preserve"><value>ما هي وظيفة حزمة المبتدئين هذه؟</value></data>
+  <data name="Clippy_Button_Ask" xml:space="preserve"><value>اسأل</value></data>
+  <data name="Transport.ToolTip_Play" xml:space="preserve"><value>تشغيل</value></data>
+  <data name="Transport.ToolTip_Pause" xml:space="preserve"><value>توقف مؤقت</value></data>
+  <data name="Transport.ToolTip_SkipNext" xml:space="preserve"><value>تخطي التالي</value></data>
+  <data name="Transport.ToolTip_Subtitles" xml:space="preserve"><value>الترجمة</value></data>
+  <data name="Transport.ToolTip_Karaoke" xml:space="preserve"><value>الكاريوكي</value></data>
+  <data name="Transport.ToolTip_Bilingual" xml:space="preserve"><value>ثنائي اللغة</value></data>
+  <data name="Transport.ToolTip_Dub" xml:space="preserve"><value>دوب</value></data>
+  <data name="Transport.ToolTip_Mute" xml:space="preserve"><value>كتم الصوت</value></data>
+  <data name="Transport.ToolTip_Fullscreen" xml:space="preserve"><value>شاشة كاملة</value></data>
+  <data name="Transport.RetryPreview" xml:space="preserve"><value>إعادة المحاولة</value></data>
+  <data name="Transport.ToolTip_RetryPreview" xml:space="preserve"><value>إعادة عرض المعاينة</value></data>
+  <!--  Titlebar  -->
+  <data name="Titlebar.ToolTip_Undo" xml:space="preserve"><value>تراجع</value></data>
+  <data name="Titlebar.ToolTip_Redo" xml:space="preserve"><value>إعادة</value></data>
+  <data name="Titlebar.ToolTip_NewProject" xml:space="preserve"><value>مشروع جديد</value></data>
+  <data name="Titlebar.Label_Recent" xml:space="preserve"><value>الأخبار الأخيرة</value></data>
+  <data name="Titlebar.ToolTip_AIModels" xml:space="preserve"><value>نماذج الذكاء الاصطناعي</value></data>
+  <data name="Titlebar.ToolTip_Settings" xml:space="preserve"><value>الإعدادات</value></data>
+  <data name="Titlebar.ToolTip_CheckForUpdates" xml:space="preserve"><value>تحقق من وجود تحديثات</value></data>
+  <data name="Titlebar.ToolTip_DIAG" xml:space="preserve"><value>التشخيص</value></data>
+  <data name="Titlebar.ToolTip_BENCH" xml:space="preserve"><value>المعايير المرجعية</value></data>
+  <data name="Titlebar.Label_Update" xml:space="preserve"><value>تحديث</value></data>
+  <data name="Titlebar.ToolTip_Minimize" xml:space="preserve"><value>تصغير</value></data>
+  <data name="Titlebar.ToolTip_Maximize" xml:space="preserve"><value>تعظيم</value></data>
+  <data name="Titlebar.ToolTip_Close" xml:space="preserve"><value>إغلاق</value></data>
+  <data name="StatusBar.Engine" xml:space="preserve"><value>المحرك:</value></data>
+  <data name="StatusBar.Local" xml:space="preserve"><value>محلي</value></data>
+  <data name="StatusBar.Gpu" xml:space="preserve"><value>وحدة معالجة الرسومات (GPU):</value></data>
+  <data name="StatusBar.Settings" xml:space="preserve"><value>الإعدادات</value></data>
+  <data name="StatusBar.StarterPacks" xml:space="preserve"><value>حزم المبتدئين</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>ملف</value></data>
+  <data name="Menu.Project" xml:space="preserve"><value>المشروع</value></data>
+  <data name="Menu.Media" xml:space="preserve"><value>وسائل الإعلام</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>عرض</value></data>
+  <data name="Menu.Window" xml:space="preserve"><value>نافذة</value></data>
+  <data name="Menu.Help" xml:space="preserve"><value>مساعدة</value></data>
+  <data name="Menu.File.NewFromMedia" xml:space="preserve"><value>أخبار جديدة من وسائل الإعلام…</value></data>
+  <data name="Menu.File.OpenProject" xml:space="preserve"><value>فتح المشروع…</value></data>
+  <data name="Menu.File.Save" xml:space="preserve"><value>حفظ</value></data>
+  <data name="Menu.File.CloseProject" xml:space="preserve"><value>إغلاق المشروع</value></data>
+  <data name="Menu.File.Exit" xml:space="preserve"><value>خروج</value></data>
+  <data name="Menu.Project.AIModels" xml:space="preserve"><value>نماذج الذكاء الاصطناعي…</value></data>
+  <data name="Menu.Project.Settings" xml:space="preserve"><value>الإعدادات…</value></data>
+  <data name="Menu.Media.Import" xml:space="preserve"><value>استيراد الوسائط…</value></data>
+  <data name="MediaPicker.WindowRequired" xml:space="preserve"><value>يلزم وجود نافذة قبل فتح أداة اختيار الوسائط.</value></data>
+  <data name="MediaPicker.LocalPathRequired" xml:space="preserve"><value>تعذر تحديد المسار المحلي للملف المحدد. انسخ الملف إلى مجلد محلي وحاول مرة أخرى.</value></data>
+  <data name="MediaPicker.ImportNoLocalPaths" xml:space="preserve"><value>تعذر تحديد المسارات المحلية للملفات المحددة. انسخ الملفات إلى مجلد محلي وحاول مرة أخرى.</value></data>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve"><value>{0} تعذر استيراد الملفات المحددة بسبب عدم توفر مسار محلي.</value></data>
+  <data name="MediaPicker.ImportMediaFiles.Title" xml:space="preserve"><value>استيراد ملفات الوسائط</value></data>
+  <data name="MediaPicker.ImportMediaFiles.MediaFilesFilter" xml:space="preserve"><value>ملفات الوسائط</value></data>
+  <data name="MediaPicker.ImportMediaFiles.AllFilesFilter" xml:space="preserve"><value>جميع الملفات</value></data>
+  <data name="ProjectPicker.WindowRequired" xml:space="preserve"><value>يلزم وجود نافذة قبل فتح أداة اختيار المشروع.</value></data>
+  <data name="Menu.View.ToggleLeftPanel" xml:space="preserve"><value>تبديل اللوحة اليسرى</value></data>
+  <data name="Menu.View.ToggleRightPanel" xml:space="preserve"><value>تبديل اللوحة اليمنى</value></data>
+  <data name="Menu.View.ToggleTimeline" xml:space="preserve"><value>تبديل عرض الخط الزمني</value></data>
+  <data name="Menu.View.ToggleExportPanel" xml:space="preserve"><value>تبديل لوحة التصدير</value></data>
+  <data name="Menu.View.ToggleSubtitles" xml:space="preserve"><value>تشغيل/إيقاف الترجمة</value></data>
+  <data name="Menu.Window.Minimize" xml:space="preserve"><value>تصغير</value></data>
+  <data name="Menu.Window.Maximize" xml:space="preserve"><value>تكبير / إعادة إلى الحجم الأصلي</value></data>
+  <data name="Menu.Help.CheckForUpdates" xml:space="preserve"><value>تحقق من وجود تحديثات</value></data>
+  <data name="Menu.Help.Diagnostics" xml:space="preserve"><value>تصدير التشخيصات…</value></data>
+  <data name="Menu.Help.Benchmarks" xml:space="preserve"><value>المعايير المرجعية</value></data>
+  <data name="Menu.Help.StarterPacks" xml:space="preserve"><value>حزم المبتدئين…</value></data>
+  <data name="Menu.Help.About" xml:space="preserve"><value>حول…</value></data>
+  <!--  Speakers  -->
+  <data name="Speakers.Header" xml:space="preserve"><value>الأصوات والمتحدثون</value></data>
+  <data name="Speakers.EmptyState" xml:space="preserve"><value>لم يتم الكشف عن أي متحدث حتى الآن. قم أولاً بتشغيل عملية النسخ الصوتي وتحديد المتحدثين.</value></data>
+  <data name="Speakers.GenerateAll" xml:space="preserve"><value>إنشاء الكل</value></data>
+  <data name="Speakers.Count" xml:space="preserve"><value>{0} المتحدثون</value></data>
+  <!--  Speaker  -->
+  <data name="Speaker.RenameTip" xml:space="preserve"><value>إعادة تسمية مكبر الصوت</value></data>
+  <data name="Speaker.ConfirmRenameTip" xml:space="preserve"><value>تأكيد إعادة التسمية</value></data>
+  <data name="Speaker.CancelRenameTip" xml:space="preserve"><value>إلغاء إعادة التسمية</value></data>
+  <data name="Speaker.NewNamePlaceholder" xml:space="preserve"><value>اسم جديد...</value></data>
+  <data name="Speaker.SyntheticVoice" xml:space="preserve"><value>صوت اصطناعي</value></data>
+  <data name="Speaker.CloneVoice" xml:space="preserve"><value>استنساخ هذا الصوت</value></data>
+  <data name="Speaker.SelectVoicePlaceholder" xml:space="preserve"><value>اختر الصوت...</value></data>
+  <data name="Speaker.AssignVoice" xml:space="preserve"><value>تعيين صوت</value></data>
+  <data name="Speaker.PreviewVoice" xml:space="preserve"><value>معاينة الصوت</value></data>
+  <data name="Speaker.NoReferenceClip" xml:space="preserve"><value>لا يوجد مقطع مرجعي حتى الآن</value></data>
+  <data name="Speaker.ExtractAutoClip" xml:space="preserve"><value>استخراج مقطع تلقائي</value></data>
+  <data name="Speaker.ExtractAutoClipTip" xml:space="preserve"><value>استخراج الصوت المرجعي من الأدوار المُدرجة في اليوميات</value></data>
+  <data name="Speaker.UploadReference" xml:space="preserve"><value>تحميل المرجع</value></data>
+  <data name="Speaker.UploadReferenceTip" xml:space="preserve"><value>تحميل ملف صوتي مرجعي لاستنساخ الصوت</value></data>
+  <data name="Speaker.StaleTtsWarning" xml:space="preserve"><value>⚠ خدمة تحويل النص إلى كلام (TTS) قديمة — يُرجى إعادة إنشائها بعد إعادة تعيين الصوت.</value></data>
+  <data name="Speaker.RegenerateStaleDub" xml:space="preserve"><value>إعادة إنشاء نسخة قديمة من الدوب</value></data>
+  <data name="Speaker.Generating" xml:space="preserve"><value>جاري الإنشاء...</value></data>
+  <data name="Speaker.PreviewDubTip" xml:space="preserve"><value>معاينة أول تسجيل دبلجة مكتمل لهذا المتحدث</value></data>
+  <data name="Speaker.MergeInto" xml:space="preserve"><value>الاندماج في:</value></data>
+  <data name="Speaker.SelectTargetPlaceholder" xml:space="preserve"><value>اختر الهدف...</value></data>
+  <data name="Speaker.Merge" xml:space="preserve"><value>دمج</value></data>
+  <data name="Speaker.MergeTip" xml:space="preserve"><value>دمج هذا المتحدث في الهدف المحدد (سيتم حذف هذا المتحدث)</value></data>
+  <!--  Timeline  -->
+  <data name="Timeline.Title" xml:space="preserve"><value>الجدول الزمني</value></data>
+  <data name="Timeline.SplitTip" xml:space="preserve"><value>التقسيم عند مؤشر التشغيل (S)</value></data>
+  <data name="Timeline.MergeTip" xml:space="preserve"><value>دمج المقاطع المحددة</value></data>
+  <data name="Timeline.TrimTip" xml:space="preserve"><value>قص إلى المنطقة المحددة</value></data>
+  <data name="Timeline.DeleteTip" xml:space="preserve"><value>حذف المحدد (Del)</value></data>
+  <data name="Timeline.ZoomOutTip" xml:space="preserve"><value>تصغير العرض</value></data>
+  <data name="Timeline.ZoomInTip" xml:space="preserve"><value>تكبير</value></data>
+  <data name="Timeline.CollapseTip" xml:space="preserve"><value>طي الخط الزمني</value></data>
+  <data name="Timeline.Reference" xml:space="preserve"><value>مرجع</value></data>
+  <data name="Timeline.MuteTip" xml:space="preserve"><value>كتم الصوت (قريبًا)</value></data>
+  <data name="Timeline.SoloTip" xml:space="preserve"><value>&quot;سولو&quot; (قريبًا)</value></data>
+  <!--  Pipeline  -->
+  <data name="Pipeline.Header" xml:space="preserve"><value>مسار عمل المنسق</value></data>
+  <data name="Pipeline.Col_Job" xml:space="preserve"><value>وظيفة</value></data>
+  <data name="Pipeline.Col_Stage" xml:space="preserve"><value>المرحلة</value></data>
+  <data name="Pipeline.Col_Progress" xml:space="preserve"><value>التقدم</value></data>
+  <data name="Pipeline.Col_Detail" xml:space="preserve"><value>التفاصيل</value></data>
+  <data name="Pipeline.StarterPack" xml:space="preserve"><value>حزمة المبتدئين</value></data>
+  <data name="Pipeline.StarterPack_Placeholder" xml:space="preserve"><value>حزمة المبتدئين</value></data>
+  <data name="Pipeline.RunSelectedStages" xml:space="preserve"><value>تشغيل العناصر المحددة</value></data>
+  <data name="Pipeline.CommercialOnly" xml:space="preserve"><value>للاستخدام التجاري فقط</value></data>
+  <data name="Pipeline.ConfigHeader" xml:space="preserve"><value>تكوين خط الأنابيب</value></data>
+  <data name="Pipeline.Config" xml:space="preserve"><value>الإعدادات</value></data>
+  <data name="Pipeline.StemSeparation" xml:space="preserve"><value>انفصال الساق</value></data>
+  <data name="Pipeline.StemSeparation_Tip" xml:space="preserve"><value>افصل الصوت الغنائي عن الصوت الخلفي قبل النسخ</value></data>
+  <data name="Pipeline.AudioCleanup" xml:space="preserve"><value>تنقية الصوت</value></data>
+  <data name="Pipeline.AudioCleanup_Tip" xml:space="preserve"><value>تطبيق إزالة الضوضاء وتنقية الصوت (يتم تخطي هذه الخطوة تلقائيًا عند نجاح عملية الفصل)</value></data>
+  <data name="Pipeline.SpeakerDiarization" xml:space="preserve"><value>تسجيل المحاضرات</value></data>
+  <data name="Pipeline.SpeakerDiarization_Tip" xml:space="preserve"><value>تحديد المتحدثين المختلفين في المقطع الصوتي</value></data>
+  <data name="Pipeline.Voice" xml:space="preserve"><value>الصوت</value></data>
+  <data name="Pipeline.Voice_Tip" xml:space="preserve"><value>استراتيجية توزيع الأصوات للمتحدثين في الأفلام المدبلجة</value></data>
+  <data name="Pipeline.VoiceOption_Manual" xml:space="preserve"><value>دليل الاستخدام</value></data>
+  <data name="Pipeline.VoiceOption_KokoroDefaults" xml:space="preserve"><value>الإعدادات الافتراضية لـ «كوكورو»</value></data>
+  <data name="Pipeline.VoiceOption_AutoClone" xml:space="preserve"><value>النسخ التلقائي</value></data>
+  <data name="Pipeline.RunAllStages" xml:space="preserve"><value>تشغيل جميع المراحل</value></data>
+  <data name="Pipeline.RunTranscriptToDub" xml:space="preserve"><value>تشغيل النسخة المدبلجة</value></data>
+  <data name="Pipeline.Options" xml:space="preserve"><value>خيارات</value></data>
+  <data name="Pipeline.Model" xml:space="preserve"><value>الطراز</value></data>
+  <data name="Pipeline.NotDownloaded" xml:space="preserve"><value>⚠ لم يتم تنزيله</value></data>
+  <data name="Pipeline.NoApiKey" xml:space="preserve"><value>⚠ لا يوجد مفتاح API</value></data>
+  <data name="Pipeline.ExecutionProvider" xml:space="preserve"><value>مزود خدمات التنفيذ</value></data>
+  <data name="Pipeline.SeparateOnImport" xml:space="preserve"><value>فصل الصوت عن المؤثرات الصوتية عند الاستيراد</value></data>
+  <data name="Pipeline.SeparateOnImport_Hint" xml:space="preserve"><value>تستخدم ميزة «إعادة التشغيل» نموذج الفصل المحدد.</value></data>
+  <data name="Pipeline.SeparationOptionalHint" xml:space="preserve"><value>استخدم زر التبديل الخاص بالصف لإدراج فواصل بين المجموعات المتتالية.</value></data>
+  <data name="Pipeline.CleanupHint" xml:space="preserve"><value>يتم تنفيذ عملية تحسين الكلام كجزء من مرحلة التنظيف عند النقر فوق «تشغيل».</value></data>
+  <data name="Pipeline.AsrHint" xml:space="preserve"><value>يؤدي وضع «الأمان التجاري» في الجزء العلوي من مسار المعالجة إلى قصر خيارات النماذج على الإعدادات الافتراضية الآمنة المرخصة.</value></data>
+  <data name="Pipeline.EnableAsrTextPolish" xml:space="preserve"><value>تصحيح النص البولندي المكتوب باللغة الإنجليزية بعد النسخ</value></data>
+  <data name="Pipeline.EnableAsrTextPolish_Hint" xml:space="preserve"><value>تنقيح اختياري لعلامات الترقيم والقواعد النحوية في مقاطع ASR الأولية. يتطلب نموذج GenAI الخاص بتنقيح النص.</value></data>
+  <data name="Pipeline.TextRefinementAsrHint" xml:space="preserve"><value>استخدم زر التبديل الخاص بالصف لإدراج عمليات تنقيح ASR في المقاطع المتتالية.</value></data>
+  <data name="Pipeline.DetectSpeakersOnImport" xml:space="preserve"><value>الكشف عن مكبرات الصوت عند الاستيراد</value></data>
+  <data name="Pipeline.DiarizationHint" xml:space="preserve"><value>تقوم عملية «Identify» بتعيين المتحدثين لمقاطع النص بعد الانتهاء من عملية النسخ.</value></data>
+  <data name="Pipeline.OverlapRescueHint" xml:space="preserve"><value>تعمل تقنية «إنقاذ الكلام المتداخل» على تقسيم الحوار المتداخل إلى «مرشحين للمصدر» (متحدثين غير مؤكدين). ويتم تنفيذها بعد عملية «التقسيم إلى أدوار» عند اكتشاف دورات حوارية متداخلة.</value></data>
+  <data name="Pipeline.OverlapRescueModel" xml:space="preserve"><value>نموذج الإنقاذ بالتداخل</value></data>
+  <data name="Pipeline.OverlapRescueExecutionProvider" xml:space="preserve"><value>مزود تنفيذ عمليات الإنقاذ بالتداخل</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe" xml:space="preserve"><value>إعادة نسخ المرشحات المصدرية بعد عملية الإنقاذ</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe_Hint" xml:space="preserve"><value>يقوم بتشغيل ASR على كل مرشح منفصل ويضع علامات على النتائج لمراجعتها.</value></data>
+  <data name="Pipeline.RunOverlapRescue" xml:space="preserve"><value>تنفيذ عملية الإنقاذ بالتداخل</value></data>
+  <data name="Pipeline.OverlapRescueReviewHeader" xml:space="preserve"><value>المرشحون المحتملون</value></data>
+  <data name="Pipeline.OverlapRescueReviewBadge" xml:space="preserve"><value>مراجعة</value></data>
+  <data name="Pipeline.TranslationConfiguredAbove" xml:space="preserve"><value>تم تكوين المصدر والوجهة أعلاه.</value></data>
+  <data name="Pipeline.ApplyTargetLanguage" xml:space="preserve"><value>تطبيق اللغة المستهدفة المحددة</value></data>
+  <data name="Pipeline.TtsHint" xml:space="preserve"><value>قم بتعيين أصوات «كوكورو» في لوحة «الأصوات»، ثم قم بتشغيل «Dub» لإنشاء التسجيلات.</value></data>
+  <data name="Pipeline.LipSyncHint" xml:space="preserve"><value>قم بمواءمة الصوت المُدبلج ومطابقته مع حركة الشفاه باستخدام نموذج المواءمة القسرية الذي تم اختياره أعلاه.</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesis" xml:space="preserve"><value>جاري تشغيل تركيب شفاه الفيديو…</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesisExperimental" xml:space="preserve"><value>تشغيل عملية توليف شفاه الفيديو (تجريبي)…</value></data>
+  <data name="Pipeline.LipSynthesisHint" xml:space="preserve"><value>إصلاح شفاه الفيديو (LatentSync ~6.7 جيجابايت + نماذج الوجه). يتطلب مقطع فيديو، ومزيجًا مدبلجًا، ومقاطع كلام المتحدثين. قم بتنزيل النماذج قبل التشغيل.</value></data>
+  <data name="Pipeline.ExportHint" xml:space="preserve"><value>قم بضبط مستويات المزج وتنسيق التصدير في لوحة «التصدير» الموجودة أسفل المخطط الزمني.</value></data>
+  <data name="Pipeline.OpenExportPanel" xml:space="preserve"><value>فتح لوحة التصدير</value></data>
+  <!--  RunConfig  -->
+  <data name="RunConfig.Header" xml:space="preserve"><value>تشغيل التكوين</value></data>
+  <data name="RunConfig.Source" xml:space="preserve"><value>المصدر</value></data>
+  <data name="RunConfig.TranslateTo" xml:space="preserve"><value>ترجمة إلى</value></data>
+  <data name="RunConfig.TargetLanguage_Placeholder" xml:space="preserve"><value>اللغة المستهدفة</value></data>
+  <!--  Export  -->
+  <data name="Export.Header" xml:space="preserve"><value>تصدير ومزج</value></data>
+  <data name="Export.MixLabel" xml:space="preserve"><value>MIX</value></data>
+  <data name="Export.Src" xml:space="preserve"><value>المصدر</value></data>
+  <data name="Export.Src_Tip" xml:space="preserve"><value>مكسب الصوت المصدر (ديسيبل)</value></data>
+  <data name="Export.Dub" xml:space="preserve"><value>دوب</value></data>
+  <data name="Export.Dub_Tip" xml:space="preserve"><value>معدل كسب الصوت المُترجم (ديسيبل)</value></data>
+  <data name="Export.Duck" xml:space="preserve"><value>البطة</value></data>
+  <data name="Export.Duck_Tip" xml:space="preserve"><value>تخفيض مستوى صوت المصدر (ديسيبل)</value></data>
+  <data name="Export.Timbre" xml:space="preserve"><value>الطابع الصوتي</value></data>
+  <data name="Export.Timbre_Tip" xml:space="preserve"><value>تطبيق مطابقة النبرة على الكلام المدبلج</value></data>
+  <data name="Export.Pan" xml:space="preserve"><value>مقلاة</value></data>
+  <data name="Export.Pan_Tip" xml:space="preserve"><value>استعادة التوزيع الصوتي الاستريو الأصلي</value></data>
+  <data name="Export.ExportLabel" xml:space="preserve"><value>التصدير</value></data>
+  <data name="Export.BurnIn" xml:space="preserve"><value>التشغيل الأولي</value></data>
+  <data name="Export.BurnIn_Tip" xml:space="preserve"><value>نسخ الترجمة بشكل دائم في دفق الفيديو</value></data>
+  <data name="Export.SubtitleSource_Tip" xml:space="preserve"><value>مصدر نص الترجمة</value></data>
+  <data name="Export.Container_Tip" xml:space="preserve"><value>حاوية الإخراج</value></data>
+  <data name="Export.Lufs_Tip" xml:space="preserve"><value>مستوى الصوت المستهدف (LUFS)</value></data>
+  <data name="Export.Match" xml:space="preserve"><value>المباراة</value></data>
+  <data name="Export.Match_Tip" xml:space="preserve"><value>مطابقة مستوى الصوت مع المصدر الأصلي</value></data>
+  <data name="Export.ExportButton" xml:space="preserve"><value>تصدير</value></data>
+  <!--  Crash  -->
+  <data name="Crash.ExportDiagnostics" xml:space="preserve"><value>تصدير التشخيصات</value></data>
+  <!--  Dialog  -->
+  <data name="Dialog.VendorLicense_Title" xml:space="preserve"><value>ترخيص البائع</value></data>
+  <data name="Dialog.VendorLicense_Acceptance" xml:space="preserve"><value>بالنقر على «أوافق»، فإنك تؤكد أنك قد اطلعت على شروط الاستخدام هذه الخاصة بهذا التثبيت وتوافق عليها.</value></data>
+  <data name="Dialog.VendorLicense_Accept" xml:space="preserve"><value>أوافق</value></data>
+  <data name="Dialog.SpeakerDetection_Title" xml:space="preserve"><value>كشف المتحدث</value></data>
+  <data name="Dialog.SpeakerDetection_UseSingle" xml:space="preserve"><value>استخدم مكبر صوت واحد</value></data>
+  <data name="Dialog.SpeakerDetection_Download" xml:space="preserve"><value>تنزيل الآن</value></data>
+  <data name="Dialog.ModelNotReady_Title" xml:space="preserve"><value>الطراز غير متوفر</value></data>
+  <data name="Dialog.ModelSetup_Title" xml:space="preserve"><value>إعداد النموذج</value></data>
+  <data name="Dialog.FallbackVoice_Title" xml:space="preserve"><value>هل تستخدم أصواتًا بديلة؟</value></data>
+  <data name="Dialog.FallbackVoice_Message" xml:space="preserve"><value>بعض المتحدثين ليس لديهم صوت مخصص. سيستخدم Trackdub أول صوت متوافق من Kokoro لكل متحدث غير مخصص، وذلك لهذا الجيل فقط.</value></data>
+  <data name="Dialog.FallbackVoice_Confirm" xml:space="preserve"><value>إنشاء الصوت باستخدام أصوات بديلة</value></data>
+  <!--  Glossary  -->
+  <data name="Glossary.Header" xml:space="preserve"><value>مسرد المصطلحات</value></data>
+  <data name="Glossary.ProjectHeader" xml:space="preserve"><value>مسرد مصطلحات المشروع</value></data>
+  <data name="Glossary.AddTerm" xml:space="preserve"><value>+ إضافة مصطلح</value></data>
+  <data name="Glossary.TermCount" xml:space="preserve"><value>{0} الشروط</value></data>
+  <data name="Glossary.Loading" xml:space="preserve"><value>جاري التحميل…</value></data>
+  <data name="Glossary.SourceTerm_Placeholder" xml:space="preserve"><value>مصطلح المصدر</value></data>
+  <data name="Glossary.TargetTerm_Placeholder" xml:space="preserve"><value>المصطلح المستهدف</value></data>
+  <data name="Glossary.CaseSensitive" xml:space="preserve"><value>مع مراعاة تمييز الأحرف الكبيرة والصغيرة</value></data>
+  <data name="Glossary.DeleteTerm_Tip" xml:space="preserve"><value>حذف المصطلح</value></data>
+  <data name="Glossary.Scope.Project" xml:space="preserve"><value>المشروع</value></data>
+  <data name="Glossary.Scope.Global" xml:space="preserve"><value>عالمي</value></data>
+  <data name="Glossary.Scope.GlobalBadge" xml:space="preserve"><value>عالمي</value></data>
+  <data name="Glossary.NoteLine_GlobalCaseSensitive" xml:space="preserve"><value>عالمي · مع مراعاة التمييز بين الأحرف الكبيرة والصغيرة</value></data>
+  <data name="Glossary.ImportCsv" xml:space="preserve"><value>استيراد ملف CSV</value></data>
+  <!--  MediaBin  -->
+  <data name="MediaBin.Header" xml:space="preserve"><value>وسائل الإعلام</value></data>
+  <data name="MediaBin.Context_ProjectWide" xml:space="preserve"><value>سياق المشروع</value></data>
+  <data name="MediaBin.Import" xml:space="preserve"><value>استيراد</value></data>
+  <data name="MediaBin.Import_Tip" xml:space="preserve"><value>استيراد ملفات الوسائط</value></data>
+  <data name="MediaBin.NewProjectImport" xml:space="preserve"><value>استيراد مشروع جديد</value></data>
+  <data name="MediaBin.DetectSpeakers" xml:space="preserve"><value>تحديد المتحدثين</value></data>
+  <data name="MediaBin.SeparateVocals" xml:space="preserve"><value>فصل الأصوات عن المؤثرات الصوتية</value></data>
+  <data name="MediaBin.ImportHint" xml:space="preserve"><value>استورد ملفات الوسائط أو أنشئ مشروعًا لملء هذه الشجرة.</value></data>
+  <data name="MediaBin.EmptyTreeHint" xml:space="preserve"><value>لا توجد سيقان حتى الآن</value></data>
+  <data name="Timeline.CollapsedEmptyHint" xml:space="preserve"><value>توسيع لعرض المقاطع الصوتية · سحب الملفات الصوتية لإضافتها</value></data>
+  <data name="Inspector.EmptyShort" xml:space="preserve"><value>اختر مقطعًا لفحصه</value></data>
+  <data name="Transcript.EmptySegments" xml:space="preserve"><value>لا توجد مقاطع حتى الآن. قم بتشغيل عملية النسخ لملء هذه القائمة.</value></data>
+  <data name="MediaBin.Tab_Source" xml:space="preserve"><value>المصدر</value></data>
+  <data name="MediaBin.Tab_Generated" xml:space="preserve"><value>تم إنشاؤه</value></data>
+  <data name="Navigator.Section.SourceMedia" xml:space="preserve"><value>مصدر الوسائط</value></data>
+  <data name="Navigator.Section.Transcript" xml:space="preserve"><value>نص المحادثة</value></data>
+  <data name="Navigator.Section.Speakers" xml:space="preserve"><value>المتحدثون</value></data>
+  <data name="Navigator.Section.Voices" xml:space="preserve"><value>أصوات</value></data>
+  <data name="Navigator.Section.GeneratedAudio" xml:space="preserve"><value>صوت مُولَّد</value></data>
+  <data name="Navigator.Section.Mixes" xml:space="preserve"><value>المزيج</value></data>
+  <data name="Navigator.Section.Exports" xml:space="preserve"><value>الصادرات</value></data>
+  <data name="Navigator.Empty.SourceMedia" xml:space="preserve"><value>استورد الوسائط المصدر لملء هذا القسم.</value></data>
+  <data name="Navigator.Empty.Transcript" xml:space="preserve"><value>قم بتشغيل عملية النسخ لإنشاء مقاطع النص.</value></data>
+  <data name="Navigator.Empty.Speakers" xml:space="preserve"><value>قم بتحديد التواريخ أو تعيين المتحدثين بعد الانتهاء من النسخ.</value></data>
+  <data name="Navigator.Empty.Voices" xml:space="preserve"><value>قم بتعيين الأصوات للمتحدثين في لوحة «الصوت».</value></data>
+  <data name="Navigator.Empty.GeneratedAudio" xml:space="preserve"><value>تظهر هنا عيوب التوليد الصوتي (TTS) ومعالجة البيانات.</value></data>
+  <data name="Navigator.Empty.Mixes" xml:space="preserve"><value>تظهر مزيجات المعاينة هنا بعد مراحل التصدير أو المزج.</value></data>
+  <data name="Navigator.Empty.Exports" xml:space="preserve"><value>تظهر الصادرات النهائية هنا بعد انتهاء مرحلة التصدير.</value></data>
+  <data name="FloatingMonitor.Title" xml:space="preserve"><value>شاشة فيديو</value></data>
+  <data name="FloatingMonitor.Hide" xml:space="preserve"><value>إخفاء الشاشة</value></data>
+  <data name="FloatingMonitor.NoVideo" xml:space="preserve"><value>لا يوجد إطار فيديو حتى الآن</value></data>
+  <data name="Transport.ToolTip_PipMonitor" xml:space="preserve"><value>تشغيل/إيقاف شاشة الفيديو بنظام «صورة داخل صورة»</value></data>
+  <!--  Segment  -->
+  <data name="Segment.Start" xml:space="preserve"><value>ابدأ</value></data>
+  <data name="Segment.End" xml:space="preserve"><value>النهاية</value></data>
+  <data name="Segment.Duration" xml:space="preserve"><value>المدة</value></data>
+  <data name="Segment.Speaker" xml:space="preserve"><value>المتحدث</value></data>
+  <data name="Segment.Source" xml:space="preserve"><value>المصدر</value></data>
+  <data name="Segment.VoiceCandidates" xml:space="preserve"><value>المرشحون الصوتيون</value></data>
+  <data name="Segment.VoiceCandidates_Hint" xml:space="preserve"><value>انقر على «إنشاء» لإنشاء خيارات صوتية للمعاينة A/B</value></data>
+  <data name="Segment.GenerateCandidates" xml:space="preserve"><value>توليد المرشحين</value></data>
+  <data name="Segment.LipSyncAlign" xml:space="preserve"><value>ALIGN</value></data>
+  <data name="Segment.LipSynthesisRepair" xml:space="preserve"><value>الإصلاح</value></data>
+  <data name="Segment.Review" xml:space="preserve"><value>مراجعة</value></data>
+  <data name="Segment.SaveSettings" xml:space="preserve"><value>حفظ الإعدادات</value></data>
+  <data name="Segment.GenerateDub" xml:space="preserve"><value>إنشاء نسخة مدبلجة</value></data>
+  <data name="Segment.Regenerate" xml:space="preserve"><value>إعادة التوليد</value></data>
+  <data name="Segment.MatchTiming" xml:space="preserve"><value>توقيت المباراة</value></data>
+  <data name="Segment.Runtime.Dub" xml:space="preserve"><value>وقت تشغيل Dub</value></data>
+  <data name="Segment.Runtime.Translation" xml:space="preserve"><value>وقت تشغيل الترجمة</value></data>
+  <data name="Segment.Runtime.Transcription" xml:space="preserve"><value>مدة تشغيل النسخ الصوتي</value></data>
+  <data name="Segment.Runtime.Alignment" xml:space="preserve"><value>مدة تشغيل مزامنة الشفاه</value></data>
+  <data name="Segment.Runtime.Provider" xml:space="preserve"><value>المزود</value></data>
+  <data name="Segment.Runtime.Model" xml:space="preserve"><value>الطراز</value></data>
+  <data name="Segment.Runtime.Precision" xml:space="preserve"><value>الدقة</value></data>
+  <!--  ApiKeys  -->
+  <data name="Window_Title_ApiKeys" xml:space="preserve"><value>مفاتيح واجهة برمجة التطبيقات (API)</value></data>
+  <data name="Chrome_Minimize" xml:space="preserve"><value>تصغير</value></data>
+  <data name="Chrome_MaximizeRestore" xml:space="preserve"><value>تكبير / إعادة إلى الحجم الأصلي</value></data>
+  <data name="Chrome_Close" xml:space="preserve"><value>إغلاق</value></data>
+  <data name="Api_Tooltip_ToggleReveal" xml:space="preserve"><value>مفتاح إظهار/إخفاء</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>حفظ</value></data>
+  <data name="Common_Clear" xml:space="preserve"><value>مسح</value></data>
+  <data name="Api_Footer_MoreProviders" xml:space="preserve"><value>سيتم إضافة المزيد من مقدمي الخدمة قريبًا</value></data>
+  <data name="Api_Footer_StorageSecurity" xml:space="preserve"><value>التخزين والأمن</value></data>
+  <!--  Common  -->
+  <data name="Common.Save" xml:space="preserve"><value>حفظ</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>إلغاء</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>إغلاق</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>إضافة</value></data>
+  <data name="Common.Segments" xml:space="preserve"><value>الشرائح</value></data>
+  <data name="Common.DownloadFfmpeg" xml:space="preserve"><value>تنزيل FFmpeg</value></data>
+  <data name="Common.DropVideoPlaceholder" xml:space="preserve"><value>قم بإضافة مقطع فيديو أو ابدأ من الوسائط</value></data>
+  <data name="Common.NewFromMedia" xml:space="preserve"><value>أخبار جديدة من وسائل الإعلام</value></data>
+  <data name="Common.OpenProject" xml:space="preserve"><value>فتح المشروع</value></data>
+  <data name="Common.Transcript" xml:space="preserve"><value>نص المحادثة</value></data>
+  <data name="Transcript.AllSegments" xml:space="preserve"><value>جميع القطاعات</value></data>
+  <data name="Common.CollapseRightPanel_Tip" xml:space="preserve"><value>طي اللوحة اليمنى</value></data>
+  <data name="Common.ChannelStrip" xml:space="preserve"><value>شريط القناة</value></data>
+  <data name="Common.ExpandChannelStrip_Tip" xml:space="preserve"><value>توسيع شريط القناة</value></data>
+  <data name="Common.CollapseChannelStrip_Tip" xml:space="preserve"><value>طي شريط القناة</value></data>
+  <!--  LeftPanel stage tooltips  -->
+  <data name="Common.Stage_Separation" xml:space="preserve"><value>الفصل</value></data>
+  <data name="Common.Stage_Cleanup" xml:space="preserve"><value>التنظيف</value></data>
+  <data name="Common.Stage_Transcribe" xml:space="preserve"><value>نسخ</value></data>
+  <data name="Common.Stage_Identify" xml:space="preserve"><value>تحديد</value></data>
+  <data name="Common.Stage_Translate" xml:space="preserve"><value>ترجمة</value></data>
+  <data name="Common.Stage_Dub" xml:space="preserve"><value>دوب</value></data>
+  <data name="Common.Stage_Export" xml:space="preserve"><value>تصدير</value></data>
+  <!--  MiniPreviewPlayer  -->
+  <data name="MiniPlayer.NoFileLoaded" xml:space="preserve"><value>لم يتم تحميل أي ملف</value></data>
+  <data name="MiniPlayer.CannotPlayFile" xml:space="preserve"><value>⚠ يتعذر تشغيل الملف</value></data>
+  <data name="MiniPlayer.UnsupportedFormat" xml:space="preserve"><value>تنسيق غير مدعوم</value></data>
+  <data name="MiniPlayer.PlayPauseTip" xml:space="preserve"><value>تشغيل/إيقاف مؤقت</value></data>
+  <!--  Settings - General  -->
+  <data name="Settings.Title" xml:space="preserve"><value>الإعدادات</value></data>
+  <data name="Settings.Tab_General" xml:space="preserve"><value>عام</value></data>
+  <data name="Settings.Heading_General" xml:space="preserve"><value>الإعدادات العامة</value></data>
+  <data name="Settings.Label_Theme" xml:space="preserve"><value>المظهر — السمة</value></data>
+  <data name="Settings.Hint_Theme" xml:space="preserve"><value>تُطبق تغييرات السمة على الفور وتبقى سارية حتى بعد إعادة التشغيل.</value></data>
+  <!--  Update  -->
+  <data name="Update.BannerMessage" xml:space="preserve"><value>تطبيق Trackdub {0} ({1}) متاح الآن</value></data>
+  <data name="Update.Banner_Subtitle" xml:space="preserve"><value>أصبح الإصدار الجديد من Trackdub جاهزًا للتنزيل.</value></data>
+  <data name="Update.Button_ReleaseNotes" xml:space="preserve"><value>ملاحظات الإصدار</value></data>
+  <data name="Update.Download" xml:space="preserve"><value>تنزيل</value></data>
+  <data name="Settings.Label_UpdateChannel" xml:space="preserve"><value>تحديث القناة</value></data>
+  <data name="Settings.Hint_UpdateChannel" xml:space="preserve"><value>تتلقى النسخة «المستقرة» الإصدارات التي خضعت للاختبار. أما النسخة «التجريبية» فتتيح الوصول المبكر إلى الميزات المرتقبة.</value></data>
+  <data name="Settings.Label_ModelTier" xml:space="preserve"><value>فئة النموذج</value></data>
+  <data name="Settings.Hint_CommercialOnly" xml:space="preserve"><value>تقوم Trackdub بشحن النماذج المجمعة الآمنة للاستخدام التجاري فقط. أما النماذج المستوردة غير المخصصة للاستخدام التجاري، فهي لا تزال محظورة.</value></data>
+  <data name="Settings.Label_AsrEngine" xml:space="preserve"><value>محرك ASR</value></data>
+  <data name="Settings.Label_TranslationEngine" xml:space="preserve"><value>محرك الترجمة</value></data>
+  <data name="Settings.Label_VoiceSynthesisEngine" xml:space="preserve"><value>محرك توليف الصوت</value></data>
+  <data name="Settings.Label_StemSeparationEngine" xml:space="preserve"><value>محرك فصل الساق</value></data>
+  <data name="Settings.Label_RubberbandStretch" xml:space="preserve"><value>توقيت TTS — شد الشريط المطاطي</value></data>
+  <data name="Settings.Label_ReduceMotion" xml:space="preserve"><value>تقليل الحركة</value></data>
+  <data name="Settings.Hint_ReduceMotion" xml:space="preserve"><value>يعطل نبض التنفس عند تشغيل خطوط التمييز في مرحلة خط الأنابيب.</value></data>
+  <data name="Settings.Label_StretchThreshold" xml:space="preserve"><value>عتبة التمدد</value></data>
+  <data name="Settings.Label_ExportFormat" xml:space="preserve"><value>تنسيق التصدير</value></data>
+  <data name="Settings.Label_ExportSubtitles" xml:space="preserve"><value>تصدير الترجمة</value></data>
+  <data name="Settings.Label_VideoEncoder" xml:space="preserve"><value>مشفر الفيديو (تصدير &quot;Burn-in&quot;)</value></data>
+  <data name="Settings.Label_PreviewVideoDecode" xml:space="preserve"><value>فك تشفير الفيديو المسبق</value></data>
+  <data name="Settings.Label_Subtitles" xml:space="preserve"><value>الترجمة</value></data>
+  <data name="Settings.Label_SubtitleContentMode" xml:space="preserve"><value>وضع محتوى الترجمة</value></data>
+  <!--  Settings - Starter Packs  -->
+  <data name="Settings.Tab_StarterPacks" xml:space="preserve"><value>حزم المبتدئين</value></data>
+  <data name="Settings.StarterPacks_Heading" xml:space="preserve"><value>حزم المبتدئين</value></data>
+  <data name="Settings.StarterPacks_Hint" xml:space="preserve"><value>قم بتنزيل مجموعات النماذج المجمعة، ثم قم بتطبيقها لتكوين الأسماء المستعارة للمرحلة والإعدادات الافتراضية لوقت التشغيل. الأعداد المثبتة هي ملفات صالحة من حيث المجموع الاختباري، وليست جاهزة للتشغيل.</value></data>
+  <data name="Settings.StarterPacks_RecommendedBadge" xml:space="preserve"><value>موصى به بناءً على المستوى المحدد</value></data>
+  <data name="Settings.StarterPacks_AppliedBadge" xml:space="preserve"><value>المطبقة</value></data>
+  <data name="Settings.StarterPacks_Download" xml:space="preserve"><value>تنزيل</value></data>
+  <data name="Settings.StarterPacks_Apply" xml:space="preserve"><value>تقدم بطلب</value></data>
+  <data name="Settings.StarterPacks_ProfileLabel" xml:space="preserve"><value>الملف الشخصي</value></data>
+  <data name="Settings.StarterPacks_InstalledLabel" xml:space="preserve"><value>النماذج المثبتة:</value></data>
+  <data name="Settings.StarterPacks_DownloadComplete" xml:space="preserve"><value>اكتمل التنزيل. لم يتم تغيير الإعدادات.</value></data>
+  <data name="Settings.StarterPacks_DownloadFailed" xml:space="preserve"><value>فشل التنزيل.</value></data>
+  <data name="Settings.StarterPacks_ApplyComplete" xml:space="preserve"><value>تم تطبيق حزمة المبتدئين.</value></data>
+  <data name="Settings.StarterPacks_ApplyFailed" xml:space="preserve"><value>فشل التطبيق.</value></data>
+  <data name="Settings.StarterPacks_ConsentRequired" xml:space="preserve"><value>يلزم الحصول على موافقة على استنساخ الصوت قبل تطبيق هذه الحزمة.</value></data>
+  <data name="Settings.StarterPacks_CompatibleBadge" xml:space="preserve"><value>متوافق تمامًا</value></data>
+  <data name="Settings.StarterPacks_FallbackBadge" xml:space="preserve"><value>الخطط البديلة المطلوبة</value></data>
+  <data name="Settings.StarterPacks_NotRunnableBadge" xml:space="preserve"><value>غير قابل للتشغيل</value></data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve"><value>مسار وحدة معالجة الرسومات (GPU) غير متاح لـ {0}. يتم استخدام {1} على {2}.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupSummary" xml:space="preserve"><value>{0} ستعمل النماذج الموجودة في هذه الحزمة على وحدة المعالجة المركزية (CPU) إلى أن يتم تثبيت بيئة تشغيل وحدة معالجة الرسومات (GPU) الخاصة بأجهزتك.</value></data>
+  <data name="Settings.StarterPacks_GpuVariantNudge" xml:space="preserve"><value>تحتاج بعض النماذج أيضًا إلى إصدارات مُحسَّنة للعمل مع وحدة معالجة الرسومات (GPU). استخدم خيار «Optimize» في «Model Manager» بعد أن يصبح بيئة تشغيل وحدة معالجة الرسومات (GPU) جاهزة.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Nvidia" xml:space="preserve"><value>تثبيت بيئة تشغيل NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Amd" xml:space="preserve"><value>تثبيت بيئة تشغيل AMD MIGraphX</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Intel" xml:space="preserve"><value>تثبيت بيئة تشغيل Intel OpenVINO</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Qualcomm" xml:space="preserve"><value>تثبيت بيئة تشغيل Qualcomm QNN</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_AmdNpu" xml:space="preserve"><value>تثبيت بيئة تشغيل AMD VitisAI NPU</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Bundle" xml:space="preserve"><value>تثبيت بيئات تشغيل وحدة معالجة الرسومات (GPU)</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallComplete" xml:space="preserve"><value>اكتمل تثبيت بيئة تشغيل وحدة معالجة الرسومات (GPU).</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallFailed" xml:space="preserve"><value>فشل تثبيت بيئة تشغيل وحدة معالجة الرسومات (GPU).</value></data>
+  <data name="Settings.StarterPacks_GpuSetupLicenseRequired" xml:space="preserve"><value>وافق على ترخيص المورد لتثبيت بيئة تشغيل وحدة معالجة الرسومات (GPU).</value></data>
+  <data name="Settings.StarterPacks_CloudReadyBadge" xml:space="preserve"><value>تم تكوين مفاتيح واجهة برمجة التطبيقات (API)</value></data>
+  <data name="Settings.StarterPacks_CloudKeysMissingBadge" xml:space="preserve"><value>مفاتيح واجهة برمجة التطبيقات (API) مفقودة</value></data>
+  <data name="Settings.StarterPacks_CloudKeysButton" xml:space="preserve"><value>تكوين مفاتيح واجهة برمجة التطبيقات (API)</value></data>
+  <data name="Settings.StarterPacks_ImportButton" xml:space="preserve"><value>استيراد الحزمة…</value></data>
+  <data name="Settings.StarterPacks_ExportButton" xml:space="preserve"><value>تصدير…</value></data>
+  <data name="Settings.StarterPacks_UserPacksHeader" xml:space="preserve"><value>حزمك</value></data>
+  <data name="Settings.StarterPacks_OpenLocalModelsLink" xml:space="preserve"><value>تنزيل النماذج بشكل فردي</value></data>
+  <data name="Settings.StarterPacks_OptimizeNudge" xml:space="preserve"><value>تتوفر إصدارات مُحسَّنة لـ GPU لنماذج {0}. قم بالتحسين في «النماذج المحلية» للحصول على أفضل أداء.</value></data>
+  <data name="Settings.StarterPacks_ReviewOptimizations" xml:space="preserve"><value>مراجعة عمليات التحسين</value></data>
+  <data name="Settings.LocalModels_AppliedPackBadge" xml:space="preserve"><value>حزمة التطبيقات: {0}</value></data>
+  <data name="Settings.Label_PackTierFilter" xml:space="preserve"><value>مرشح الحزمة</value></data>
+  <data name="Settings.Button_Dismiss" xml:space="preserve"><value>إغلاق</value></data>
+  <!--  Onboarding - Starter Packs  -->
+  <data name="Onboarding.StarterPacks_Title" xml:space="preserve"><value>اختر حزمة المبتدئين</value></data>
+  <data name="Onboarding.StarterPacks_Body" xml:space="preserve"><value>اختر مجموعة نماذج مجمعة لتنزيلها وتطبيقها، أو قم بتكوين النماذج بشكل فردي في قسم «النماذج المحلية».</value></data>
+  <data name="Onboarding.StarterPacks_Skip" xml:space="preserve"><value>تخطي هذا الآن</value></data>
+  <data name="Onboarding.StarterPacks_ConfigureIndividually" xml:space="preserve"><value>تكوين كل عنصر على حدة</value></data>
+  <!--  Settings - Local Models  -->
+  <data name="Settings.Tab_LocalModels" xml:space="preserve"><value>عارضات أزياء محليات</value></data>
+  <data name="Settings.Hint_CommercialOnlyLane" xml:space="preserve"><value>ممر مخصص للطرازات التجارية فقط. ولا تزال الطرازات المستوردة غير التجارية محظورة.</value></data>
+  <data name="Settings.Label_NonCommercial" xml:space="preserve"><value>غير تجاري</value></data>
+  <data name="Settings.Button_Download" xml:space="preserve"><value>تنزيل</value></data>
+  <data name="Settings.Button_Repair" xml:space="preserve"><value>الإصلاح</value></data>
+  <data name="Settings.Button_Uninstall" xml:space="preserve"><value>إلغاء التثبيت</value></data>
+  <data name="Settings.Label_Optimize" xml:space="preserve"><value>التحسين:</value></data>
+  <data name="Settings.Tip_PrecisionHeader" xml:space="preserve"><value>الدقة الخاصة بنسخة النموذج المُحسَّنة (تختلف الخيارات حسب المزود):</value></data>
+  <data name="Settings.Tip_Fp32" xml:space="preserve"><value>fp32 — أوزان كاملة بدقة 32 بت. أعلى دقة؛ أكبر حجم للملف. تعمل على وحدة المعالجة المركزية (CPU) فقط.</value></data>
+  <data name="Settings.Tip_Fp16" xml:space="preserve"><value>fp16 — دقة نصفية 16 بت. دقة جيدة، ونصف حجم fp32. DirectML / CUDA / TensorRT.</value></data>
+  <data name="Settings.Tip_Int8" xml:space="preserve"><value>int8 — تكمية 8 بت. أصغر حجمًا وأسرع من fp16؛ مع تنازل طفيف في الدقة في معظم نماذج الصوت. وحدة المعالجة المركزية (CPU) / DirectML / CUDA.</value></data>
+  <data name="Settings.Tip_Int4" xml:space="preserve"><value>int4 — تكمية 4 بت. الأصغر والأسرع؛ مع فقدان ملحوظ للدقة في بعض النماذج. متاح فقط في DirectML / CUDA.</value></data>
+  <data name="Settings.Button_Optimize" xml:space="preserve"><value>تحسين</value></data>
+  <data name="Settings.Status_Optimizing" xml:space="preserve"><value>جاري التحسين…</value></data>
+  <data name="Settings.Button_Cancel" xml:space="preserve"><value>إلغاء</value></data>
+  <data name="Settings.Button_Use" xml:space="preserve"><value>الاستخدام</value></data>
+  <data name="Settings.Button_Clear" xml:space="preserve"><value>مسح</value></data>
+  <data name="Settings.Status_Loading" xml:space="preserve"><value>جاري التحميل…</value></data>
+  <!--  Settings - Cloud Models  -->
+  <data name="Settings.Tab_CloudModels" xml:space="preserve"><value>نماذج السحابة</value></data>
+  <data name="Settings.Button_Save" xml:space="preserve"><value>حفظ</value></data>
+  <data name="Settings.Hint_MoreProviders" xml:space="preserve"><value>سيتم إضافة المزيد من مزودي خدمات السحابة قريبًا.</value></data>
+  <!--  Settings - Hardware  -->
+  <data name="Settings.Tab_Hardware" xml:space="preserve"><value>الأجهزة</value></data>
+  <data name="Settings.Heading_Hardware" xml:space="preserve"><value>تكوين الأجهزة</value></data>
+  <data name="Settings.Label_FfmpegEncoders" xml:space="preserve"><value>برامج ترميز الفيديو FFmpeg</value></data>
+  <data name="Settings.Label_FfmpegHwDecode" xml:space="preserve"><value>فك الترميز بواسطة الأجهزة في FFmpeg</value></data>
+  <data name="Settings.Toggle_NativeCuda" xml:space="preserve"><value>تمكين CUDA / TensorRT الأصلي على نظام Windows (متقدم)</value></data>
+  <data name="Settings.Hint_NativeCuda" xml:space="preserve"><value>مُعطَّل افتراضيًّا. عند التفعيل، تستخدم الطلبات الصريحة لـ CUDA أو TensorRT موفري ONNX Runtime الأصليين بدلاً من DirectML / TensorRT RTX (WinML). ولا يتغير الاختيار التلقائي لمسار المعالجة.</value></data>
+  <data name="Settings.Label_WinMlPolicy" xml:space="preserve"><value>سياسة أجهزة Windows ML (متقدمة)</value></data>
+  <data name="Settings.Hint_WinMlPolicy" xml:space="preserve"><value>تجريبي. يستخدم ONNX Runtime لاختيار EP/الجهاز تلقائيًّا من بين مزودي كتالوج Windows ML المسجلين. لم يتغير اختيار مزود المرحلة. أعد تشغيل Trackdub بعد تغيير هذا الإعداد.</value></data>
+  <data name="Settings.Label_GpuProviders" xml:space="preserve"><value>مزودي خدمات الاستدلال باستخدام وحدة معالجة الرسومات (GPU)</value></data>
+  <data name="Settings.Label_AllCertified" xml:space="preserve"><value>جميع مزودي الكتالوجات المعتمدين</value></data>
+  <data name="Settings.Hint_AllCertified" xml:space="preserve"><value>يؤدي هذا الإجراء إلى تثبيت جميع مزودي كتالوجات Windows ML المتاحين على هذا الجهاز. وعلى أجهزة NVIDIA المؤهلة، قد يوفر أيضًا المكون الإضافي TensorRT RTX (يتطلب ترخيصًا منفصلاً من NVIDIA). وقد يتم تنزيل حزم متعددة وقد يستغرق الأمر عدة دقائق عند التشغيل لأول مرة. تظل أزرار التثبيت الخاصة بكل مزود متاحة لإجراء عمليات تثبيت محددة، سواء قمت بتشغيل هذا الإجراء أم لا.</value></data>
+  <data name="Settings.Button_InstallAllCertified" xml:space="preserve"><value>تثبيت جميع المزودين المعتمدين</value></data>
+  <data name="Settings.Label_NvidiaTensorRt" xml:space="preserve"><value>NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.Button_Refresh" xml:space="preserve"><value>تحديث</value></data>
+  <data name="Settings.Button_InstallProvider" xml:space="preserve"><value>تثبيت المزود</value></data>
+  <data name="Settings.Button_InstallTrtRtxPlugin" xml:space="preserve"><value>تثبيت المكون الإضافي</value></data>
+  <data name="Settings.Button_ViewLicense" xml:space="preserve"><value>عرض الترخيص</value></data>
+  <data name="Settings.Label_AmdMigraphx" xml:space="preserve"><value>AMD MIGraphX</value></data>
+  <data name="Settings.Label_IntelOpenVino" xml:space="preserve"><value>Intel OpenVINO (كتالوج WinML)</value></data>
+  <data name="Settings.Label_QualcommQnn" xml:space="preserve"><value>Qualcomm QNN (كتالوج WinML)</value></data>
+  <data name="Settings.Label_AmdVitisAi" xml:space="preserve"><value>AMD VitisAI (كتالوج WinML)</value></data>
+  <data name="Settings.Label_NativeOrtGpu" xml:space="preserve"><value>وحدة معالجة الرسومات (GPU) الأصلية من ORT (متقدمة)</value></data>
+  <data name="Settings.Label_ExecutionProviders" xml:space="preserve"><value>مزودي خدمات التنفيذ</value></data>
+  <data name="Settings.Label_PerStageOverrides" xml:space="preserve"><value>تجاوزات المزود لكل مرحلة</value></data>
+  <!--  Settings - Profiler  -->
+  <data name="Settings.Tab_Profiler" xml:space="preserve"><value>أداة تحليل الملامح</value></data>
+  <data name="Settings.Heading_Profiler" xml:space="preserve"><value>أداة تحليل أداء الأجهزة</value></data>
+  <data name="Settings.Hint_Profiler" xml:space="preserve"><value>يقوم بتشغيل اختبارات أداء قصيرة لـ VAD و ASR والترجمة و TTS لتقديم توصية بإعداد مسبق عالي الجودة. يتطلب نظام ويندوز مع تثبيت نماذج ONNX المرفقة.</value></data>
+  <data name="Settings.Button_RunBenchmarks" xml:space="preserve"><value>تشغيل اختبارات الأداء للمرحلة</value></data>
+  <data name="Settings.Label_QualityPreset" xml:space="preserve"><value>إعدادات الجودة المسبقة</value></data>
+  <data name="Settings.Hint_QualityPreset" xml:space="preserve"><value>تطبق «توصية الاستخدام» نتيجة أداة تحليل الأداء على تخطيط طبقة النموذج. أما خيار «التجاوز» فيحتفظ باختيارك حتى تقوم بتغييره.</value></data>
+  <!--  Settings - Recent Projects  -->
+  <data name="Settings.Tab_RecentProjects" xml:space="preserve"><value>المشاريع الحديثة</value></data>
+  <data name="Settings.Heading_RecentProjects" xml:space="preserve"><value>المشاريع الحديثة</value></data>
+  <!--  Settings - About  -->
+  <data name="Settings.Tab_About" xml:space="preserve"><value>نبذة عن</value></data>
+  <data name="Settings.Heading_About" xml:space="preserve"><value>نبذة عن Trackdub</value></data>
+  <data name="Settings.About_Tagline" xml:space="preserve"><value>Trackdub — محطة عمل للدبلجة مدعومة بالذكاء الاصطناعي</value></data>
+  <data name="Settings.About_Edition" xml:space="preserve"><value>إصدار «أفالونيا» المتوافق مع جميع المنصات</value></data>
+  <!--  Settings - Developer  -->
+  <data name="Settings.Tab_Developer" xml:space="preserve"><value>المطور</value></data>
+  <data name="Settings.Heading_Developer" xml:space="preserve"><value>خيارات المطور</value></data>
+  <data name="Settings.Hint_Developer" xml:space="preserve"><value>تتوفر أدوات المطورين وأدوات التشخيص في إصدارات التطوير.</value></data>
+  <!--  Settings - Footer  -->
+  <data name="Settings.Button_SaveAndClose" xml:space="preserve"><value>حفظ وإغلاق</value></data>
+  <!--  Dialog - SourceLanguagePicker  -->
+  <data name="Dialog.SourceLanguage_Title" xml:space="preserve"><value>مصدر النص</value></data>
+  <data name="Dialog.SourceLanguage_Hint" xml:space="preserve"><value>يؤثر تغيير لغة المصدر على الترجمة والتدقيق الإملائي في المستقبل.</value></data>
+  <data name="Dialog.SourceLanguage_Placeholder" xml:space="preserve"><value>اللغة المصدر</value></data>
+  <!--  Dialog - UnsavedInlineEdit  -->
+  <data name="Dialog.UnsavedEdit_KeepEditing" xml:space="preserve"><value>استمر في التحرير</value></data>
+  <data name="Dialog.UnsavedEdit_Discard" xml:space="preserve"><value>تجاهل</value></data>
+  <!--  Dialog - VoiceCloneConsent  -->
+  <data name="Dialog.VoiceClone_Title" xml:space="preserve"><value>الموافقة على استنساخ الصوت</value></data>
+  <data name="Dialog.VoiceClone_Body" xml:space="preserve"><value>ستستخدم هذه الجلسة المقاطع الصوتية المرجعية التي قمت بتحميلها لتوليف خصائص الصوت. بالنقر على «أوافق»، فإنك تؤكد أنك تمتلك الحق القانوني في استنساخ هذه الأصوات من أجل هذا المشروع.</value></data>
+  <data name="Dialog.VoiceClone_SessionNote" xml:space="preserve"><value>ينطبق هذا الموافقة على جلسة العمل الحالية فقط، ويجب إعادة منحها عند تشغيل التطبيق في المرة القادمة.</value></data>
+  <data name="Dialog.VoiceClone_Agree" xml:space="preserve"><value>أوافق</value></data>
+  <!--  Timeline - Waveform  -->
+  <data name="Timeline.WaveformNotAvailable" xml:space="preserve"><value>معاينة شكل الموجة غير متاحة حتى الآن</value></data>
+  <data name="Timeline.ComputingPeaks" xml:space="preserve"><value>حساب قمم أشكال الموجات…</value></data>
+  <!--  Timeline - ZoomLevel (non-localizable display but test flags it)  -->
+  <data name="Timeline.ZoomLevel" xml:space="preserve"><value>100 صفحة في الثانية</value></data>
+  <!--  Inspector  -->
+  <data name="Inspector.Header" xml:space="preserve"><value>المفتش</value></data>
+  <data name="Inspector.Empty" xml:space="preserve"><value>اختر مقطعًا أو متحدثًا أو عنصرًا من المصدر لفحصه.</value></data>
+  <data name="Inspector.UnknownTarget" xml:space="preserve"><value>هذا الهدف الخاص بالمفتش غير مدعوم حتى الآن.</value></data>
+  <data name="Inspector.OpenInEditor" xml:space="preserve"><value>فتح في المحرر</value></data>
+  <data name="Inspector.Tab_Content" xml:space="preserve"><value>المحتوى</value></data>
+  <data name="Inspector.Tab_Timing" xml:space="preserve"><value>التوقيت</value></data>
+  <data name="Inspector.Tab_Voice" xml:space="preserve"><value>الصوت</value></data>
+  <data name="Inspector.Tab_QC" xml:space="preserve"><value>مراقبة الجودة</value></data>
+  <data name="Inspector.SegmentDuration" xml:space="preserve"><value>القطاع</value></data>
+  <data name="Inspector.GeneratedDuration" xml:space="preserve"><value>تم إنشاؤه</value></data>
+  <data name="Inspector.Overrun" xml:space="preserve"><value>التجاوز</value></data>
+  <data name="Inspector.TimingAdjustment" xml:space="preserve"><value>التوقيت</value></data>
+  <data name="Inspector.ConfidenceReview" xml:space="preserve"><value>يُنصح بمراجعة هذا</value></data>
+  <data name="Inspector.Artifact" xml:space="preserve"><value>قطعة أثرية</value></data>
+  <data name="Inspector.ArtifactType" xml:space="preserve"><value>النوع</value></data>
+  <data name="Inspector.ArtifactDuration" xml:space="preserve"><value>المدة</value></data>
+  <data name="Inspector.ArtifactSize" xml:space="preserve"><value>الحجم</value></data>
+  <data name="Inspector.ArtifactPath" xml:space="preserve"><value>المسار</value></data>
+  <data name="Inspector.ArtifactType_Audio" xml:space="preserve"><value>الصوت</value></data>
+  <data name="Inspector.ArtifactType_Video" xml:space="preserve"><value>فيديو</value></data>
+  <data name="Inspector.ArtifactType_Subtitle" xml:space="preserve"><value>العنوان الفرعي</value></data>
+  <data name="Inspector.ArtifactType_Unknown" xml:space="preserve"><value>غير معروف</value></data>
+  <data name="Attention.translation.stale" xml:space="preserve"><value>الترجمة قديمة.</value></data>
+  <data name="Attention.tts.failed" xml:space="preserve"><value>فشل إنشاء النسخة.</value></data>
+  <data name="Attention.tts.stale" xml:space="preserve"><value>موسيقى الدوب أصبحت قديمة.</value></data>
+  <data name="Attention.tts.pending" xml:space="preserve"><value>جاري إنشاء النسخة المكررة.</value></data>
+  <data name="Attention.tts.duration-overrun" xml:space="preserve"><value>تجاوز توقيت الدبلجة حدود التفاوت المسموح به.</value></data>
+  <data name="Attention.tts.speed-limit" xml:space="preserve"><value>قد يؤدي تمديد المدة الزمنية إلى تدهور الجودة.</value></data>
+  <data name="Attention.asr.low-confidence" xml:space="preserve"><value>تحتاج دقة النص إلى مراجعة.</value></data>
+  <data name="Attention.lipsync.error" xml:space="preserve"><value>فشل مزامنة الشفاه.</value></data>
+  <data name="Attention.lipsync.warning" xml:space="preserve"><value>تحتاج مزامنة الشفاه إلى مراجعة.</value></data>
+  <data name="Attention.lipsynthesis.error" xml:space="preserve"><value>فشل إصلاح الشفة.</value></data>
+  <data name="Attention.lipsynthesis.warning" xml:space="preserve"><value>يحتاج منتج العناية بالشفاه إلى مراجعة.</value></data>
+  <data name="Attention.stage.failed" xml:space="preserve"><value>فشل مرحلة خط الأنابيب.</value></data>
+  <data name="Attention.stage.in-progress" xml:space="preserve"><value>مرحلة خط الأنابيب قيد التنفيذ.</value></data>
+  <!--  License  -->
+  <data name="License.Tab" xml:space="preserve"><value>الترخيص</value></data>
+  <data name="License.Heading" xml:space="preserve"><value>الترخيص</value></data>
+  <data name="License.CurrentTier" xml:space="preserve"><value>المستوى الحالي:</value></data>
+  <data name="License.Tier_Free" xml:space="preserve"><value>مجاني</value></data>
+  <data name="License.Tier_Pro" xml:space="preserve"><value>المزايا</value></data>
+  <data name="License.KeyLabel" xml:space="preserve"><value>مفتاح الترخيص</value></data>
+  <data name="License.KeyPlaceholder" xml:space="preserve"><value>الصق مفتاح الترخيص هنا</value></data>
+  <data name="License.Button_Activate" xml:space="preserve"><value>تفعيل</value></data>
+  <data name="License.Button_Deactivate" xml:space="preserve"><value>إلغاء التنشيط</value></data>
+  <data name="License.Degraded" xml:space="preserve"><value>تدهور حالة الترخيص</value></data>
+  <data name="License.MachinesRegisteredUnlimited" xml:space="preserve"><value> عدد الأجهزة المسجلة (ترخيص تطوير غير محدود)</value></data>
+</root>

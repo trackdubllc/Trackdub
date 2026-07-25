@@ -1,0 +1,18 @@
+{
+  "model_id": "microsoft/phi-4-onnx",
+  "revision": "c4e245b57793e8481e0fa9252b3a45dee44a921b",
+  "variant_alias": "cpu-int4",
+  "benchmark_entry": "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/genai_config.json",
+  "download_file_hashes": {
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/config.json": "07eedad2c48798b6e3728e4a1b75e0e092019a375ba725a40e40c78d13664045",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/configuration_phi3.py": "ec2044b77d0b8111640ac134daa3af1f40dc552a739f8959626e7e58ea3352df",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/genai_config.json": "cb5ffa9107d84fe58e1fbacc3819ea88422f00eaab7c28b8ac75fc3089c4b932",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/merges.txt": "b6fe424e334903f7fb84d3a106d9730455f4744b9fe3c21ee136d97a00e72502",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/model.onnx": "f57c1187064f9fb47cadf6ade3b8a38c6256a92b2b19ffd675f63ae71de93465",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/model.onnx.data": "9a91462a3fe396cd28b99351baa3b19f6373056766d0f28ec024c6612d747f30",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/special_tokens_map.json": "80b78737e654c58bfdeca896e45765563f37252efe982251ede7aee157b8549b",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer.json": "c612e57b2763204798271c0cdc14a373a565e6a371f1bfbd44e385a8391c9884",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/tokenizer_config.json": "0eb6d6c0b18f0730c9714dd429004c66aac14b59cd05ee88b9f825a24c12f575",
+    "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/vocab.json": "741943243bd0035a8082ef0ccc09ef62e7ce7ec2f2f053aeedd808dba1c2ffc5"
+  }
+}

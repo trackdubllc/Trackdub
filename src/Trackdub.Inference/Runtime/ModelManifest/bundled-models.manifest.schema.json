@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trackdub.local/schemas/bundled-models.manifest.schema.json",
+  "title": "Trackdub bundled ONNX manifest",
+  "type": "object",
+  "required": ["models"],
+  "additionalProperties": true,
+  "properties": {
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/ModelEntry" }
+    }
+  },
+  "$defs": {
+    "ProfilesDocument": {
+      "type": "object",
+      "required": ["capabilities", "language_coverage"],
+      "properties": {
+        "$schema": { "type": "string" },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "language_coverage": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "source_languages": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "target_languages": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "language_pairs": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/LanguagePair" }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "LanguagePair": {
+      "type": "object",
+      "required": ["source", "target"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "target": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "ModelEntry": {
+      "type": "object",
+      "required": [
+        "model_id",
+        "task",
+        "engine_family",
+        "license",
+        "commercial_allowed",
+        "redistribution_allowed",
+        "requires_attribution",
+        "requires_user_consent",
+        "voice_cloning",
+        "commercial_use_verified"
+      ],
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1 },
+        "task": { "type": "string", "minLength": 1 },
+        "engine_family": { "type": "string", "minLength": 1 },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "profile_ref": { "type": "string", "minLength": 1 },
+        "tier": {
+          "type": "string",
+          "enum": ["fast", "balanced", "quality", "accurate"]
+        },
+        "license": { "type": "string", "minLength": 1 },
+        "commercial_allowed": { "type": "boolean" },
+        "redistribution_allowed": { "type": "boolean" },
+        "requires_attribution": { "type": "boolean" },
+        "requires_user_consent": { "type": "boolean" },
+        "voice_cloning": { "type": "boolean" },
+        "commercial_use_verified": { "type": "boolean" },
+        "source_url": { "type": "string" },
+        "revision": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+        "root_path": { "type": "string" },
+        "benchmark_entry": { "type": "string" },
+        "download_files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "download_file_hashes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          }
+        },
+        "download_file_sources": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "format": "uri" }
+        },
+        "hash_verification": {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["none", "verify-if-sha-present", "required"]
+            }
+          },
+          "additionalProperties": true
+        },
+        "variants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/VariantEntry" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "VariantEntry": {
+      "type": "object",
+      "required": ["alias", "entry_path"],
+      "properties": {
+        "alias": { "type": "string", "minLength": 1 },
+        "entry_path": { "type": "string", "minLength": 1 },
+        "is_default": { "type": "boolean" },
+        "download_files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "supported_providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["cpu", "dml", "directml", "cuda", "tensorrt", "trt-rtx", "tensorrt-rtx", "migraphx", "rocm"]
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

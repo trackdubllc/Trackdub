@@ -1,0 +1,927 @@
+using Trackdub.Domain;
+using Trackdub.Inference.Runtime.Migraphx;
+using Trackdub.Inference.Runtime.ModelManifest;
+using System.Collections.Concurrent;
+
+namespace Trackdub.Inference.Runtime.Planning;
+
+internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester executionProviderSmokeTester)
+{
+    private readonly IExecutionProviderSmokeTester executionProviderSmokeTester = executionProviderSmokeTester ?? throw new ArgumentNullException(nameof(executionProviderSmokeTester));
+
+    public async Task<StageRuntimePlan?> TryCreateReadyPlanAsync(
+        RuntimeStage stage,
+        StageRuntimeRequirements requirements,
+        RankedManifestEntry candidate,
+        HardwareProfile hardwareProfile,
+        IReadOnlyList<ExecutionProviderAvailability> providerAvailabilities,
+        IReadOnlyDictionary<string, IReadOnlyList<LocalModelCacheRecord>> cacheIndex,
+        ConcurrentDictionary<string, bool> fileExistenceCache,
+        ExecutionProviderKind? preferredExecutionProvider,
+        bool requirePreferredExecutionProvider,
+        bool preferMigraphxOnAmdGpu,
+        string? preferredModelVariantAlias,
+        CancellationToken cancellationToken)
+    {
+        cacheIndex.TryGetValue(candidate.Entry.ModelId, out IReadOnlyList<LocalModelCacheRecord>? cacheRecords);
+
+        IReadOnlyList<ExecutionProviderKind> orderedProviders = GetOrderedProviders(
+            requirements,
+            candidate.Entry,
+            preferredExecutionProvider,
+            requirePreferredExecutionProvider,
+            preferMigraphxOnAmdGpu);
+        StageRuntimePlan? earlyExit = TryGetBlockedEarlyExit(stage, orderedProviders, candidate, preferredExecutionProvider, requirePreferredExecutionProvider);
+        if (earlyExit is not null) return earlyExit;
+
+        RuntimePlanFallback? providerFallback = null;
+        foreach (ExecutionProviderKind provider in orderedProviders)
+        {
+            StageRuntimePlan? guardResult = EvaluateProviderGuard(provider, candidate, providerAvailabilities,
+                preferredExecutionProvider, requirePreferredExecutionProvider, stage,
+                out ProviderGuardOutcome outcome, out RuntimePlanFallback? fallbackUpdate);
+            if (outcome == ProviderGuardOutcome.Return) return guardResult;
+            if (outcome == ProviderGuardOutcome.Skip)
+            {
+                if (fallbackUpdate is not null) providerFallback ??= fallbackUpdate;
+                continue;
+            }
+
+            foreach (VariantCandidate variant in EnumerateVariants(
+                         candidate.Entry,
+                         provider,
+                         requirements,
+                         hardwareProfile,
+                         cacheRecords,
+                         preferredModelVariantAlias))
+            {
+                if (!TryResolveCachedEntryPath(
+                        candidate.Entry,
+                        cacheRecords,
+                        variant,
+                        fileExistenceCache,
+                        out string? entryPath,
+                        out string? rootPath,
+                        out RuntimeModelIntegrityStatus modelIntegrityStatus,
+                        out _))
+                {
+                    continue;
+                }
+
+                if (provider is ExecutionProviderKind.Cpu)
+                {
+                    return CreatePlan(
+                        stage,
+                        StageRuntimePlanStatus.Ready,
+                        candidate,
+                        provider,
+                        variant.Alias,
+                        entryPath,
+                        modelIntegrityStatus,
+                        providerFallback,
+                        includeCpuFallbackWarning: providerFallback is not null,
+                        isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
+                        modelRootPath: rootPath,
+                        modelEntryRelativePath: variant.RelativeEntryPath,
+                        requiredModelRelativePaths: variant.RequiredRelativePaths);
+                }
+
+                ExecutionProviderSmokeTestResult smokeResult;
+                try
+                {
+                    smokeResult = await executionProviderSmokeTester.SmokeTestAsync(
+                        new ExecutionProviderSmokeTestRequest(
+                            stage,
+                            candidate.Entry.ModelId,
+                            ResolvePrimaryAlias(candidate.Entry),
+                            candidate.Entry.EngineFamily,
+                            variant.Alias,
+                            provider,
+                            rootPath,
+                            entryPath),
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    smokeResult = new ExecutionProviderSmokeTestResult(false, ex.Message);
+                }
+
+                if (smokeResult.Passed)
+                {
+                    // Non-CPU providers that pass smoke test report Verified — strictly stronger
+                    // than Ready, which is reserved for CPU's file-only check above.
+                    return CreatePlan(
+                        stage,
+                        StageRuntimePlanStatus.Verified,
+                        candidate,
+                        provider,
+                        variant.Alias,
+                        entryPath,
+                        modelIntegrityStatus,
+                        fallback: null,
+                        includeCpuFallbackWarning: false,
+                        isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
+                        modelRootPath: rootPath,
+                        modelEntryRelativePath: variant.RelativeEntryPath,
+                        requiredModelRelativePaths: variant.RequiredRelativePaths);
+                }
+
+                if (requirePreferredExecutionProvider)
+                {
+                    return CreateBlockedPlan(
+                        stage,
+                        new RuntimePlanFallback(
+                            RuntimePlanFallbackCode.ProviderSmokeTestFailed,
+                            smokeResult.Detail ?? $"{provider} smoke test failed for variant '{variant.Alias}'."));
+                }
+
+                providerFallback ??= new RuntimePlanFallback(
+                    RuntimePlanFallbackCode.ProviderSmokeTestFailed,
+                    smokeResult.Detail ?? $"{provider} smoke test failed for variant '{variant.Alias}'.");
+            }
+        }
+
+        return null;
+    }
+
+    public StageRuntimePlan? TryCreateDownloadRequiredPlan(
+        RuntimeStage stage,
+        StageRuntimeRequirements requirements,
+        RankedManifestEntry candidate,
+        HardwareProfile hardwareProfile,
+        IReadOnlyList<ExecutionProviderAvailability> providerAvailabilities,
+        IReadOnlyDictionary<string, IReadOnlyList<LocalModelCacheRecord>> cacheIndex,
+        ConcurrentDictionary<string, bool> fileExistenceCache,
+        ExecutionProviderKind? preferredExecutionProvider,
+        bool requirePreferredExecutionProvider,
+        bool preferMigraphxOnAmdGpu,
+        string? preferredModelVariantAlias)
+    {
+        cacheIndex.TryGetValue(candidate.Entry.ModelId, out IReadOnlyList<LocalModelCacheRecord>? cacheRecords);
+
+        IReadOnlyList<ExecutionProviderKind> orderedProviders = GetOrderedProviders(
+            requirements,
+            candidate.Entry,
+            preferredExecutionProvider,
+            requirePreferredExecutionProvider,
+            preferMigraphxOnAmdGpu);
+        StageRuntimePlan? earlyExit = TryGetBlockedEarlyExit(stage, orderedProviders, candidate, preferredExecutionProvider, requirePreferredExecutionProvider);
+        if (earlyExit is not null) return earlyExit;
+
+        foreach (ExecutionProviderKind provider in orderedProviders)
+        {
+            StageRuntimePlan? guardResult = EvaluateProviderGuard(provider, candidate, providerAvailabilities,
+                preferredExecutionProvider, requirePreferredExecutionProvider, stage,
+                out ProviderGuardOutcome outcome, out _);
+            if (outcome == ProviderGuardOutcome.Return) return guardResult;
+            if (outcome == ProviderGuardOutcome.Skip) continue;
+
+            foreach (VariantCandidate variant in EnumerateVariants(
+                         candidate.Entry,
+                         provider,
+                         requirements,
+                         hardwareProfile,
+                         cacheRecords,
+                         preferredModelVariantAlias))
+            {
+                if (TryResolveCachedEntryPath(
+                        candidate.Entry,
+                        cacheRecords,
+                        variant,
+                        fileExistenceCache,
+                        out _,
+                        out _,
+                        out _,
+                        out RuntimePlanFallback? integrityFallback))
+                {
+                    continue;
+                }
+
+                return CreatePlan(
+                    stage,
+                    StageRuntimePlanStatus.DownloadRequired,
+                    candidate,
+                    provider,
+                    variant.Alias,
+                    null,
+                    RuntimeModelIntegrityStatus.Unknown,
+                    integrityFallback ?? new RuntimePlanFallback(
+                        RuntimePlanFallbackCode.ModelNotCached,
+                        $"Machine-local cache does not contain '{variant.RelativeEntryPath}' for model '{candidate.Entry.ModelId}'."),
+                    includeCpuFallbackWarning: false,
+                    isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
+                    modelRootPath: variant.LocalRootPath,
+                    modelEntryRelativePath: variant.RelativeEntryPath,
+                    requiredModelRelativePaths: variant.RequiredRelativePaths);
+            }
+        }
+
+        return null;
+    }
+
+    public StageRuntimePlan CreateBlockedPlan(
+        RuntimeStage stage,
+        RuntimePlanFallback fallback)
+    {
+        return new StageRuntimePlan
+        {
+            Stage = stage,
+            Status = StageRuntimePlanStatus.Blocked,
+            Fallback = fallback,
+            Warnings = []
+        };
+    }
+
+    private StageRuntimePlan? TryGetBlockedEarlyExit(
+        RuntimeStage stage,
+        IReadOnlyList<ExecutionProviderKind> orderedProviders,
+        RankedManifestEntry candidate,
+        ExecutionProviderKind? preferredExecutionProvider,
+        bool requirePreferredExecutionProvider)
+    {
+        if (orderedProviders.Count == 0 &&
+            requirePreferredExecutionProvider &&
+            preferredExecutionProvider is ExecutionProviderKind requiredProvider)
+        {
+            return CreateBlockedPlan(
+                stage,
+                new RuntimePlanFallback(
+                    RuntimePlanFallbackCode.NoCompatibleVariant,
+                    $"{requiredProvider} is not allowed for {candidate.Entry.EngineFamily} in stage {stage}."));
+        }
+        return null;
+    }
+
+    private StageRuntimePlan? EvaluateProviderGuard(
+        ExecutionProviderKind provider,
+        RankedManifestEntry candidate,
+        IReadOnlyList<ExecutionProviderAvailability> providerAvailabilities,
+        ExecutionProviderKind? preferredExecutionProvider,
+        bool requirePreferredExecutionProvider,
+        RuntimeStage stage,
+        out ProviderGuardOutcome outcome,
+        out RuntimePlanFallback? providerFallbackUpdate)
+    {
+        providerFallbackUpdate = null;
+        outcome = ProviderGuardOutcome.Proceed;
+
+        if (provider is ExecutionProviderKind.Migraphx && !MigraphxModelSupport.SupportsEntry(candidate.Entry))
+        {
+            if (requirePreferredExecutionProvider && preferredExecutionProvider is ExecutionProviderKind.Migraphx)
+            {
+                outcome = ProviderGuardOutcome.Return;
+                return CreateBlockedPlan(stage,
+                    new RuntimePlanFallback(RuntimePlanFallbackCode.NoCompatibleVariant,
+                        $"Model '{candidate.Entry.ModelId}' does not support required execution provider {ExecutionProviderKind.Migraphx}."));
+            }
+            outcome = ProviderGuardOutcome.Skip;
+            return null;
+        }
+
+        ExecutionProviderAvailability availability = GetAvailability(providerAvailabilities, provider);
+        if (provider is not ExecutionProviderKind.Cpu && !availability.IsAvailable)
+        {
+            if (requirePreferredExecutionProvider)
+            {
+                outcome = ProviderGuardOutcome.Return;
+                return CreateBlockedPlan(stage,
+                    new RuntimePlanFallback(RuntimePlanFallbackCode.ProviderUnavailable,
+                        availability.Detail ?? $"{provider} is not available on this machine."));
+            }
+            providerFallbackUpdate = new RuntimePlanFallback(RuntimePlanFallbackCode.ProviderUnavailable,
+                availability.Detail ?? $"{provider} is not available on this machine.");
+            outcome = ProviderGuardOutcome.Skip;
+            return null;
+        }
+
+        return null;
+    }
+
+    private static StageRuntimePlan CreatePlan(
+        RuntimeStage stage,
+        StageRuntimePlanStatus status,
+        RankedManifestEntry candidate,
+        ExecutionProviderKind provider,
+        string variant,
+        string? modelEntryPath,
+        RuntimeModelIntegrityStatus modelIntegrityStatus,
+        RuntimePlanFallback? fallback,
+        bool includeCpuFallbackWarning,
+        bool isLocalOptimizedVariant = false,
+        string? modelRootPath = null,
+        string? modelEntryRelativePath = null,
+        IReadOnlyList<string>? requiredModelRelativePaths = null)
+    {
+        return new StageRuntimePlan
+        {
+            Stage = stage,
+            Status = status,
+            ModelId = candidate.Entry.ModelId,
+            ModelAlias = ResolvePrimaryAlias(candidate.Entry),
+            EngineFamily = candidate.Entry.EngineFamily,
+            ModelTier = candidate.Entry.Tier,
+            Variant = variant,
+            ExecutionProvider = provider,
+            ModelIntegrityStatus = modelIntegrityStatus,
+            ModelEntryPath = modelEntryPath,
+            ModelRootPath = modelRootPath,
+            ModelEntryRelativePath = modelEntryRelativePath,
+            RequiredModelRelativePaths = requiredModelRelativePaths ?? [],
+            IsLocalOptimizedVariant = isLocalOptimizedVariant,
+            Fallback = fallback,
+            Warnings = BuildWarnings(candidate.Entry, provider, includeCpuFallbackWarning, modelIntegrityStatus)
+        };
+    }
+
+    private static IReadOnlyList<RuntimePlanWarning> BuildWarnings(
+        BundledModelManifestEntry entry,
+        ExecutionProviderKind provider,
+        bool includeCpuFallbackWarning,
+        RuntimeModelIntegrityStatus modelIntegrityStatus)
+    {
+        var warnings = new List<RuntimePlanWarning>();
+
+        if (includeCpuFallbackWarning)
+        {
+            warnings.Add(new RuntimePlanWarning(RuntimePlanWarningCode.CpuFallback));
+        }
+
+        if (modelIntegrityStatus is RuntimeModelIntegrityStatus.Skipped)
+        {
+            warnings.Add(new RuntimePlanWarning(
+                RuntimePlanWarningCode.ModelIntegrityNotVerified,
+                "Manifest sha256 is missing, so cached model integrity was not verified."));
+        }
+
+        if (entry.RequiresAttribution)
+        {
+            warnings.Add(new RuntimePlanWarning(RuntimePlanWarningCode.AttributionRequired));
+        }
+
+        if (entry.RequiresUserConsent)
+        {
+            warnings.Add(new RuntimePlanWarning(RuntimePlanWarningCode.UserConsentRequired));
+        }
+
+        if (!RuntimeProviderTokenCompatibility.IsExpectedRuntimeCompatible(entry.ExpectedRuntime, provider))
+        {
+            warnings.Add(new RuntimePlanWarning(
+                RuntimePlanWarningCode.ExpectedRuntimeMismatch,
+                $"Manifest expected_runtime '{entry.ExpectedRuntime}' does not list selected provider '{RuntimeProviderTokenCompatibility.ToManifestToken(provider)}'."));
+        }
+
+        return warnings;
+    }
+
+    private static IReadOnlyList<ExecutionProviderKind> GetOrderedProviders(
+        StageRuntimeRequirements requirements,
+        BundledModelManifestEntry entry,
+        ExecutionProviderKind? preferredExecutionProvider,
+        bool requirePreferredExecutionProvider,
+        bool preferMigraphxOnAmdGpu)
+    {
+        IReadOnlyList<ExecutionProviderKind> allowedProviders = requirements.AllowedProvidersThisMilestone;
+        if (requirements.AllowedProvidersByEngineFamily is not null &&
+            requirements.AllowedProvidersByEngineFamily.TryGetValue(entry.EngineFamily, out IReadOnlyList<ExecutionProviderKind>? engineFamilyProviders))
+        {
+            allowedProviders = engineFamilyProviders;
+        }
+
+        if (requirePreferredExecutionProvider && preferredExecutionProvider is ExecutionProviderKind requiredProvider)
+        {
+            return allowedProviders.Contains(requiredProvider)
+                ? [requiredProvider]
+                : [];
+        }
+
+        var availableProviders = Milestone5PlanningPolicy.SupportedProvidersThisMilestone
+            .Where(provider => allowedProviders.Contains(provider));
+
+        IReadOnlyList<ExecutionProviderKind> ordered = availableProviders.ToArray();
+
+        if (preferredExecutionProvider is ExecutionProviderKind preferred)
+        {
+            ordered = availableProviders
+                .OrderByDescending(p => p == preferred)
+                .ToArray();
+        }
+
+        return MigraphxProviderOrdering.ApplyAmdMigraphxFirst(ordered, preferMigraphxOnAmdGpu);
+    }
+
+    private static ExecutionProviderAvailability GetAvailability(
+        IReadOnlyList<ExecutionProviderAvailability> providerAvailabilities,
+        ExecutionProviderKind provider)
+    {
+        ExecutionProviderAvailability? availability = providerAvailabilities
+            .FirstOrDefault(candidate => candidate.Provider == provider);
+
+        if (availability is not null)
+        {
+            return availability;
+        }
+
+        return provider switch
+        {
+            ExecutionProviderKind.Cpu => new ExecutionProviderAvailability(provider, true),
+            _ => new ExecutionProviderAvailability(provider, false, $"{provider} was not reported by execution provider discovery.")
+        };
+    }
+
+    private static IReadOnlyList<VariantCandidate> EnumerateVariants(
+        BundledModelManifestEntry entry,
+        ExecutionProviderKind provider,
+        StageRuntimeRequirements requirements,
+        HardwareProfile hardwareProfile,
+        IReadOnlyList<LocalModelCacheRecord>? cacheRecords,
+        string? preferredModelVariantAlias)
+    {
+        string? normalizedPreferredVariantAlias = string.IsNullOrWhiteSpace(preferredModelVariantAlias)
+            ? null
+            : preferredModelVariantAlias.Trim();
+        IReadOnlyList<string> preferredAliases = provider switch
+        {
+            ExecutionProviderKind.DirectMl or ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.Migraphx
+                or ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRt or ExecutionProviderKind.OpenVino
+                or ExecutionProviderKind.OpenVinoCatalog or ExecutionProviderKind.Qnn or ExecutionProviderKind.VitisAi =>
+                GpuVariantPreferencePolicy.GetPreferredGpuVariantAliases(requirements, hardwareProfile, provider, entry),
+            _ => requirements.PreferredCpuVariants
+        };
+
+        var candidates = new List<VariantCandidate>();
+        var seenCandidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var variantsByAlias = entry.Variants.ToDictionary(variant => variant.Alias, StringComparer.OrdinalIgnoreCase);
+
+        if (normalizedPreferredVariantAlias is not null)
+        {
+            AddLocalVariantCandidates(candidates, seenCandidates, cacheRecords, normalizedPreferredVariantAlias, provider);
+            if (variantsByAlias.TryGetValue(normalizedPreferredVariantAlias, out BundledModelManifestVariant? preferredManifestVariant) &&
+                VariantManifestReadiness.IsManifestVariantEligibleForPlanning(entry, preferredManifestVariant, provider))
+            {
+                AddVariant(
+                    candidates,
+                    seenCandidates,
+                    entry,
+                    normalizedPreferredVariantAlias,
+                    preferredManifestVariant.EntryPath,
+                    preferredManifestVariant.DownloadFiles);
+            }
+
+            if (normalizedPreferredVariantAlias.Equals("default", StringComparison.OrdinalIgnoreCase))
+            {
+                string preferredDefaultRelativeEntryPath = Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath);
+                BundledModelManifestVariant? preferredDefaultVariant = entry.Variants
+                    .FirstOrDefault(variant =>
+                        variant.Alias.Equals("default", StringComparison.OrdinalIgnoreCase) &&
+                        Path.GetRelativePath(entry.RootDirectory, variant.EntryPath)
+                            .Equals(preferredDefaultRelativeEntryPath, StringComparison.OrdinalIgnoreCase));
+                if (preferredDefaultVariant is null ||
+                    VariantManifestReadiness.IsManifestVariantEligibleForPlanning(entry, preferredDefaultVariant, provider))
+                {
+                    IReadOnlyList<string> preferredDefaultVariantDownloadFiles = preferredDefaultVariant?.DownloadFiles ?? [];
+                    AddVariant(candidates, seenCandidates, entry, "default", entry.DefaultBenchmarkEntryPath, preferredDefaultVariantDownloadFiles);
+                }
+            }
+
+            return candidates;
+        }
+
+        foreach (string alias in preferredAliases)
+        {
+            if (!variantsByAlias.TryGetValue(alias, out BundledModelManifestVariant? variant))
+            {
+                continue;
+            }
+
+            if (!VariantManifestReadiness.IsManifestVariantEligibleForPlanning(entry, variant, provider))
+            {
+                continue;
+            }
+
+            AddVariant(candidates, seenCandidates, entry, alias, variant.EntryPath, variant.DownloadFiles);
+        }
+
+        string defaultRelativeEntryPath = Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath);
+        BundledModelManifestVariant? defaultVariant = entry.Variants
+            .FirstOrDefault(variant =>
+                variant.Alias.Equals("default", StringComparison.OrdinalIgnoreCase) &&
+                Path.GetRelativePath(entry.RootDirectory, variant.EntryPath)
+                    .Equals(defaultRelativeEntryPath, StringComparison.OrdinalIgnoreCase));
+        if (defaultVariant is null ||
+            VariantManifestReadiness.IsManifestVariantEligibleForPlanning(entry, defaultVariant, provider))
+        {
+            IReadOnlyList<string> defaultVariantDownloadFiles = defaultVariant?.DownloadFiles ?? [];
+            AddVariant(candidates, seenCandidates, entry, "default", entry.DefaultBenchmarkEntryPath, defaultVariantDownloadFiles);
+        }
+
+        foreach (BundledModelManifestVariant variant in entry.Variants.OrderBy(variant => variant.Alias, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!VariantManifestReadiness.IsManifestVariantEligibleForPlanning(entry, variant, provider))
+            {
+                continue;
+            }
+
+            AddVariant(candidates, seenCandidates, entry, variant.Alias, variant.EntryPath, variant.DownloadFiles);
+        }
+
+        return candidates;
+    }
+
+    private static void AddLocalVariantCandidates(
+        ICollection<VariantCandidate> candidates,
+        ISet<string> seenCandidates,
+        IReadOnlyList<LocalModelCacheRecord>? cacheRecords,
+        string preferredModelVariantAlias,
+        ExecutionProviderKind provider)
+    {
+        if (cacheRecords is null)
+        {
+            return;
+        }
+
+        foreach (LocalModelCacheRecord cacheRecord in cacheRecords)
+        {
+            foreach (LocalModelVariantRecord variant in cacheRecord.Variants)
+            {
+                if (!variant.Alias.Equals(preferredModelVariantAlias, StringComparison.OrdinalIgnoreCase) ||
+                    variant.ExecutionProvider != provider)
+                {
+                    continue;
+                }
+
+                AddLocalVariantCandidate(candidates, seenCandidates, cacheRecord, variant);
+            }
+        }
+    }
+
+    private static void AddLocalVariantCandidate(
+        ICollection<VariantCandidate> candidates,
+        ISet<string> seenCandidates,
+        LocalModelCacheRecord cacheRecord,
+        LocalModelVariantRecord variant)
+    {
+        string? invalidReason = null;
+        if (!TryResolveRootUnderBase(cacheRecord.RootPath, variant.RootPath, out string? variantRoot, out string? rootInvalidReason))
+        {
+            invalidReason = rootInvalidReason;
+        }
+
+        if (!TryNormalizeLocalRelativePath(variant.EntryRelativePath, out string entryRelativePath))
+        {
+            invalidReason ??= $"Selected optimized variant '{variant.Alias}' has an invalid entry path '{variant.EntryRelativePath}'.";
+            entryRelativePath = variant.EntryRelativePath;
+        }
+
+        var requiredPaths = new List<string> { entryRelativePath };
+        var requiredPathsSet = new HashSet<string>(requiredPaths, StringComparer.OrdinalIgnoreCase);
+        foreach (string componentRelativePath in variant.ComponentRelativePaths)
+        {
+            if (!TryNormalizeLocalRelativePath(componentRelativePath, out string normalizedComponentPath))
+            {
+                invalidReason ??= $"Selected optimized variant '{variant.Alias}' has an invalid component path '{componentRelativePath}'.";
+                normalizedComponentPath = componentRelativePath;
+            }
+
+            if (requiredPathsSet.Add(normalizedComponentPath))
+            {
+                requiredPaths.Add(normalizedComponentPath);
+            }
+        }
+
+        string candidateKey = $"local|{variantRoot ?? variant.RootPath}|{entryRelativePath}";
+        if (!seenCandidates.Add(candidateKey))
+        {
+            return;
+        }
+
+        candidates.Add(new VariantCandidate(
+            variant.Alias,
+            entryRelativePath,
+            requiredPaths,
+            IsLocalOptimizedVariant: true,
+            LocalRootPath: variantRoot,
+            LocalIntegrityFailed: variant.IntegrityFailed,
+            InvalidReason: invalidReason));
+    }
+
+    private static void AddVariant(
+        ICollection<VariantCandidate> candidates,
+        ISet<string> seenPaths,
+        BundledModelManifestEntry entry,
+        string alias,
+        string absoluteEntryPath,
+        IReadOnlyList<string> variantDownloadFiles)
+    {
+        string relativeEntryPath = Path.GetRelativePath(entry.RootDirectory, absoluteEntryPath);
+        if (!seenPaths.Add($"manifest|{relativeEntryPath}"))
+        {
+            return;
+        }
+
+        candidates.Add(new VariantCandidate(
+            alias,
+            relativeEntryPath,
+            BuildRequiredRelativePaths(relativeEntryPath, entry.DownloadFiles, variantDownloadFiles)));
+    }
+
+    private static IReadOnlyList<string> BuildRequiredRelativePaths(
+        string relativeEntryPath,
+        IReadOnlyList<string> entryDownloadFiles,
+        IReadOnlyList<string> variantDownloadFiles)
+    {
+        var requiredFiles = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        AddRequiredFile(relativeEntryPath);
+        foreach (string file in entryDownloadFiles)
+        {
+            AddRequiredFile(file);
+        }
+
+        foreach (string file in variantDownloadFiles)
+        {
+            AddRequiredFile(file);
+        }
+
+        return requiredFiles;
+
+        void AddRequiredFile(string relativePath)
+        {
+            string normalizedPath = relativePath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+            if (seen.Add(normalizedPath))
+            {
+                requiredFiles.Add(normalizedPath);
+            }
+        }
+    }
+
+    private static bool TryResolveCachedEntryPath(
+        BundledModelManifestEntry entry,
+        IReadOnlyList<LocalModelCacheRecord>? cacheRecords,
+        VariantCandidate variant,
+        ConcurrentDictionary<string, bool> fileExistenceCache,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? entryPath,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? rootPath,
+        out RuntimeModelIntegrityStatus integrityStatus,
+        out RuntimePlanFallback? integrityFallback)
+    {
+        entryPath = null;
+        rootPath = null;
+        integrityStatus = RuntimeModelIntegrityStatus.Unknown;
+        integrityFallback = null;
+        if (cacheRecords is null)
+        {
+            return false;
+        }
+
+        if (variant.IsLocalOptimizedVariant)
+        {
+            return TryResolveLocalOptimizedVariant(
+                variant,
+                fileExistenceCache,
+                out entryPath,
+                out rootPath,
+                out integrityStatus,
+                out integrityFallback);
+        }
+
+        foreach (LocalModelCacheRecord cacheRecord in cacheRecords)
+        {
+            string candidatePath = Path.GetFullPath(Path.Combine(cacheRecord.RootPath, variant.RelativeEntryPath));
+            if (RequiredFilesExist(cacheRecord.RootPath, variant.RequiredRelativePaths, fileExistenceCache))
+            {
+                if (HasManifestHashMismatch(entry, cacheRecord, out string? detail))
+                {
+                    integrityFallback ??= new RuntimePlanFallback(
+                        RuntimePlanFallbackCode.ModelIntegrityMismatch,
+                        detail);
+                    continue;
+                }
+
+                entryPath = candidatePath;
+                rootPath = cacheRecord.RootPath;
+                integrityStatus = ResolveIntegrityStatus(entry, cacheRecord);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryResolveLocalOptimizedVariant(
+        VariantCandidate variant,
+        ConcurrentDictionary<string, bool> fileExistenceCache,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? entryPath,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? rootPath,
+        out RuntimeModelIntegrityStatus integrityStatus,
+        out RuntimePlanFallback? integrityFallback)
+    {
+        entryPath = null;
+        rootPath = null;
+        integrityStatus = RuntimeModelIntegrityStatus.Unknown;
+        integrityFallback = null;
+
+        if (!string.IsNullOrWhiteSpace(variant.InvalidReason))
+        {
+            integrityFallback = new RuntimePlanFallback(RuntimePlanFallbackCode.ModelNotCached, variant.InvalidReason);
+            return false;
+        }
+
+        if (variant.LocalIntegrityFailed)
+        {
+            integrityFallback = new RuntimePlanFallback(
+                RuntimePlanFallbackCode.ModelIntegrityMismatch,
+                $"Selected optimized variant '{variant.Alias}' is marked as failed. Re-optimize the model or clear the variant selection.");
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(variant.LocalRootPath))
+        {
+            integrityFallback = new RuntimePlanFallback(
+                RuntimePlanFallbackCode.ModelNotCached,
+                $"Selected optimized variant '{variant.Alias}' has no registered local root path.");
+            return false;
+        }
+
+        foreach (string relativePath in variant.RequiredRelativePaths)
+        {
+            if (!TryResolvePathUnderRoot(variant.LocalRootPath, relativePath, out string? requiredPath))
+            {
+                integrityFallback = new RuntimePlanFallback(
+                    RuntimePlanFallbackCode.ModelNotCached,
+                    $"Selected optimized variant '{variant.Alias}' has an invalid registered path '{relativePath}'.");
+                return false;
+            }
+
+            if (!FileExists(fileExistenceCache, requiredPath))
+            {
+                integrityFallback = new RuntimePlanFallback(
+                    RuntimePlanFallbackCode.ModelNotCached,
+                    $"Selected optimized variant '{variant.Alias}' is missing required local file '{relativePath}'. Re-optimize the model or clear the variant selection.");
+                return false;
+            }
+        }
+
+        if (!TryResolvePathUnderRoot(variant.LocalRootPath, variant.RelativeEntryPath, out entryPath))
+        {
+            integrityFallback = new RuntimePlanFallback(
+                RuntimePlanFallbackCode.ModelNotCached,
+                $"Selected optimized variant '{variant.Alias}' has an invalid entry path '{variant.RelativeEntryPath}'.");
+            return false;
+        }
+
+        rootPath = variant.LocalRootPath;
+        return true;
+    }
+
+    private static RuntimeModelIntegrityStatus ResolveIntegrityStatus(
+        BundledModelManifestEntry entry,
+        LocalModelCacheRecord cacheRecord) =>
+        string.IsNullOrWhiteSpace(entry.Sha256) || string.IsNullOrWhiteSpace(cacheRecord.Sha256)
+            ? RuntimeModelIntegrityStatus.Skipped
+            : RuntimeModelIntegrityStatus.Verified;
+
+    private static bool HasManifestHashMismatch(
+        BundledModelManifestEntry entry,
+        LocalModelCacheRecord cacheRecord,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? detail)
+    {
+        detail = null;
+        if (string.IsNullOrWhiteSpace(entry.Sha256) ||
+            string.IsNullOrWhiteSpace(cacheRecord.Sha256))
+        {
+            return false;
+        }
+
+        if (entry.Sha256.Equals(cacheRecord.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        detail = $"Cached model '{entry.ModelId}' sha256 '{cacheRecord.Sha256}' does not match manifest sha256 '{entry.Sha256}'.";
+        return true;
+    }
+
+    private static bool RequiredFilesExist(
+        string rootPath,
+        IReadOnlyList<string> requiredRelativePaths,
+        ConcurrentDictionary<string, bool> fileExistenceCache)
+    {
+        foreach (string relativePath in requiredRelativePaths)
+        {
+            string requiredPath = Path.GetFullPath(Path.Combine(rootPath, relativePath));
+            if (!FileExists(fileExistenceCache, requiredPath))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryResolveRootUnderBase(
+        string baseRootPath,
+        string variantRootPath,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? normalizedVariantRoot,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? invalidReason)
+    {
+        normalizedVariantRoot = null;
+        invalidReason = null;
+        if (string.IsNullOrWhiteSpace(baseRootPath) || string.IsNullOrWhiteSpace(variantRootPath))
+        {
+            invalidReason = "Selected optimized variant has an invalid registered root path.";
+            return false;
+        }
+
+        string baseRoot = Path.GetFullPath(baseRootPath);
+        string variantRoot = Path.GetFullPath(variantRootPath);
+        if (!IsSameOrUnderRoot(baseRoot, variantRoot))
+        {
+            invalidReason = $"Selected optimized variant root '{variantRootPath}' is outside the base model cache root.";
+            return false;
+        }
+
+        normalizedVariantRoot = variantRoot;
+        return true;
+    }
+
+    private static bool TryNormalizeLocalRelativePath(
+        string relativePath,
+        out string normalizedPath)
+    {
+        normalizedPath = relativePath;
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+        {
+            return false;
+        }
+
+        string[] parts = relativePath
+            .Trim()
+            .Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 ||
+            parts.Any(part => part.Equals(".", StringComparison.Ordinal) || part.Equals("..", StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        normalizedPath = string.Join("/", parts);
+        return true;
+    }
+
+    private static bool TryResolvePathUnderRoot(
+        string rootPath,
+        string relativePath,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? resolvedPath)
+    {
+        resolvedPath = null;
+        if (!TryNormalizeLocalRelativePath(relativePath, out string normalizedRelativePath))
+        {
+            return false;
+        }
+
+        string root = Path.GetFullPath(rootPath);
+        string candidatePath = Path.GetFullPath(Path.Combine(root, Path.Combine(normalizedRelativePath.Split('/'))));
+        if (!IsSameOrUnderRoot(root, candidatePath))
+        {
+            return false;
+        }
+
+        resolvedPath = candidatePath;
+        return true;
+    }
+
+    private static bool IsSameOrUnderRoot(string rootPath, string candidatePath)
+    {
+        string root = Path.GetFullPath(rootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string candidate = Path.GetFullPath(candidatePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        StringComparison comparison = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return candidate.Equals(root, comparison) ||
+            candidate.StartsWith(root + Path.DirectorySeparatorChar, comparison);
+    }
+
+    private static bool FileExists(ConcurrentDictionary<string, bool> fileExistenceCache, string path) =>
+        fileExistenceCache.GetOrAdd(path, static candidatePath => File.Exists(candidatePath));
+
+    private static string ResolvePrimaryAlias(BundledModelManifestEntry entry) =>
+        entry.Aliases.FirstOrDefault() ?? entry.ModelId;
+
+    private enum ProviderGuardOutcome { Proceed, Skip, Return }
+
+    private sealed record VariantCandidate(
+        string Alias,
+        string RelativeEntryPath,
+        IReadOnlyList<string> RequiredRelativePaths,
+        bool IsLocalOptimizedVariant = false,
+        string? LocalRootPath = null,
+        bool LocalIntegrityFailed = false,
+        string? InvalidReason = null);
+}

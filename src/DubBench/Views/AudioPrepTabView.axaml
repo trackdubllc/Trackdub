@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:DubBench.ViewModels"
+             xmlns:c="clr-namespace:DubBench.Converters"
+             mc:Ignorable="d"
+             d:DesignWidth="700" d:DesignHeight="500"
+             x:Class="DubBench.Views.AudioPrepTabView"
+             x:DataType="vm:AudioPrepTabViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="12" Margin="0,0,0,16">
+      <!-- Header -->
+      <TextBlock Text="Audio-Prep Benchmark"
+                 FontSize="18" FontWeight="SemiBold"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+      <TextBlock Text="Evaluate ASR, diarization, and audio preprocessing pipelines against manifest fixtures."
+                 TextWrapping="Wrap" Opacity="0.7"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+      <Separator Background="{DynamicResource BorderBrush}" Margin="0,4" />
+
+      <!-- Manifest path -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="Manifest Path" FontWeight="SemiBold" />
+        <TextBox Text="{Binding ManifestPath}"
+                 PlaceholderText="Path to benchmark manifest JSON..." />
+      </StackPanel>
+
+      <!-- Output path (optional) -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="Output Path (optional)" FontWeight="SemiBold" />
+        <TextBox Text="{Binding OutputPath}"
+                 PlaceholderText="Leave empty for auto-generated temp path..." />
+      </StackPanel>
+
+      <!-- Run button -->
+      <Button Command="{Binding RunBenchmarkCommand}"
+              IsEnabled="{Binding IsRunning, Converter={x:Static c:BoolConverters.Not}}"
+              Content="Run Benchmark"
+              Width="200" Height="36"
+              HorizontalAlignment="Left" />
+
+      <!-- Status -->
+      <TextBlock Text="{Binding StatusMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+      <!-- Result -->
+      <Border BorderBrush="{DynamicResource BorderBrush}"
+              BorderThickness="1" CornerRadius="6"
+              Padding="12" Margin="0,8,0,0"
+              IsVisible="{Binding LastResult, Converter={x:Static c:BoolConverters.IsNotNull}}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Results"
+                     FontSize="14" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding LastResult.ManifestPath, StringFormat='Manifest: {0}'}" />
+          <TextBlock Text="{Binding LastResult.Fixtures.Count, StringFormat='Fixtures: {0}'}" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

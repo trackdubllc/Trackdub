@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "id": "balanced",
+  "display_name": "Balanced / Mid",
+  "tier_preference": "balanced",
+  "description": "Creator-ready spine with diarization, better ASR, Kokoro TTS, and universal Phi translation.",
+  "profiles": [
+    {
+      "id": "default",
+      "display_name": "Default (Whisper Small)",
+      "asr_model_id": "openai/whisper-small"
+    }
+  ],
+  "models": [
+    {
+      "model_id": "onnx-community/silero-vad",
+      "stage": "vad",
+      "required": true,
+      "alias": "silero-vad",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "int8", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "cpu" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "cpu" }
+      }
+    },
+    {
+      "model_id": "cgus/diar_streaming_sortformer_4spk-v2.1-onnx",
+      "stage": "diarization",
+      "required": true,
+      "alias": "sortformer-4spk",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "cuda" }
+      }
+    },
+    {
+      "model_id": "openai/whisper-small",
+      "stage": "asr",
+      "required": false,
+      "alias": "whisper-small-genai",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "trt-rtx" }
+      }
+    },
+    {
+      "model_id": "tonythethompson/qwen3-asr-0.6b-onnx",
+      "stage": "asr",
+      "required": false,
+      "alias": "qwen3-asr-0.6b",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "cuda" }
+      }
+    },
+    {
+      "model_id": "onnx-community/Kokoro-82M-v1.0-ONNX",
+      "stage": "tts",
+      "required": true,
+      "alias": "kokoro-onnx",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "q8f16", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "cpu" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "cpu" }
+      }
+    },
+    {
+      "model_id": "microsoft/Phi-4-mini-instruct-onnx",
+      "stage": "translation",
+      "required": true,
+      "alias": "phi-4-mini",
+      "runtime_defaults": {
+        "cpu_safe": { "variant": "cpu-int4", "execution_provider": "cpu" },
+        "balanced_gpu": { "variant": "gpu-int4", "execution_provider": "directml" },
+        "turbo_gpu": { "variant": "gpu-int4", "execution_provider": "trt-rtx" }
+      }
+    }
+  ],
+  "translation": {
+    "strategy": "universal",
+    "model_id": "microsoft/Phi-4-mini-instruct-onnx",
+    "alias": "phi-4-mini"
+  },
+  "optional_models": [
+    "tonythethompson/qwen3-asr-0.6b-onnx",
+    "onnx-community/whisper-small",
+    "csukuangfj/sherpa-onnx-spleeter-2stems",
+    "Rikorose/DeepFilterNet3"
+  ],
+  "olive_auto_run": false
+}

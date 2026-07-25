@@ -1,0 +1,352 @@
+using System.Collections;
+using System.Text.Json;
+
+namespace Trackdub.Infrastructure.Settings;
+
+public sealed record TrackdubStorageOptions(
+    string UserDataRoot,
+    string UserCacheRoot,
+    string? SharedAssetRoot,
+    bool IsPortable,
+    string? ExplicitModelCacheDirectory = null);
+
+public sealed record TrackdubStoragePathResolutionContext(
+    string AppBaseDirectory,
+    string LocalAppDataRoot,
+    string CommonAppDataRoot,
+    IReadOnlyDictionary<string, string?> EnvironmentVariables);
+
+public static class TrackdubStoragePathResolver
+{
+    public const string ProductDirectoryName = "Trackdub";
+    public const string PortableMarkerFileName = "Trackdub.portable";
+    public const string PortableDataDirectoryName = "portable-data";
+    public const string InstallerConfigFileName = "storage.json";
+    public const string DataRootEnvironmentVariable = "TRACKDUB_DATA_ROOT";
+    public const string CacheRootEnvironmentVariable = "TRACKDUB_CACHE_ROOT";
+    public const string SharedAssetRootEnvironmentVariable = "TRACKDUB_SHARED_ASSET_ROOT";
+    public const string ToolCacheRootEnvironmentVariable = "TRACKDUB_TOOL_CACHE_ROOT";
+    public const string EngineCacheRootEnvironmentVariable = "TRACKDUB_ENGINE_CACHE_ROOT";
+    public const string PortableEnvironmentVariable = "TRACKDUB_PORTABLE";
+    public const string PortableDataRootEnvironmentVariable = "TRACKDUB_PORTABLE_DATA_ROOT";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    // Shared LIFO stacks backing ApplyToCurrentProcessScoped, keyed by env var name. Lets
+    // an out-of-order Dispose() correctly rebase to whatever is now the topmost surviving
+    // override (or the true pre-any-scope baseline) instead of an intermediate value some
+    // other scope already unwound past.
+    private static readonly object EnvironmentStackSyncRoot = new();
+    private static readonly Dictionary<string, LinkedList<string?>> EnvironmentValueStacks =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public static TrackdubStorageOptions Resolve()
+    {
+        string localAppDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppDataRoot))
+        {
+            localAppDataRoot = AppContext.BaseDirectory;
+        }
+
+        string commonAppDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        if (string.IsNullOrWhiteSpace(commonAppDataRoot))
+        {
+            commonAppDataRoot = localAppDataRoot;
+        }
+
+        return Resolve(new TrackdubStoragePathResolutionContext(
+            AppContext.BaseDirectory,
+            localAppDataRoot,
+            commonAppDataRoot,
+            CaptureEnvironment()));
+    }
+
+    public static TrackdubStorageOptions Resolve(TrackdubStoragePathResolutionContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        string appBaseDirectory = NormalizeRequiredPath(context.AppBaseDirectory, nameof(context.AppBaseDirectory));
+        string localAppDataRoot = NormalizeRequiredPath(context.LocalAppDataRoot, nameof(context.LocalAppDataRoot));
+        string commonAppDataRoot = NormalizeRequiredPath(context.CommonAppDataRoot, nameof(context.CommonAppDataRoot));
+        IReadOnlyDictionary<string, string?> environment = context.EnvironmentVariables;
+
+        string? dataRoot = GetValue(environment, DataRootEnvironmentVariable);
+        string? cacheRoot = GetValue(environment, CacheRootEnvironmentVariable);
+        string? sharedAssetRoot = GetValue(environment, SharedAssetRootEnvironmentVariable);
+        if (HasValue(dataRoot) || HasValue(cacheRoot) || HasValue(sharedAssetRoot))
+        {
+            string normalizedDataRoot = NormalizeOptionalPath(dataRoot) ?? Path.Combine(localAppDataRoot, ProductDirectoryName);
+            string normalizedCacheRoot = NormalizeOptionalPath(cacheRoot) ?? normalizedDataRoot;
+            return new TrackdubStorageOptions(
+                normalizedDataRoot,
+                normalizedCacheRoot,
+                NormalizeOptionalPath(sharedAssetRoot),
+                IsPortable: false);
+        }
+
+        bool portableRequested = IsTruthy(GetValue(environment, PortableEnvironmentVariable))
+            || File.Exists(Path.Combine(appBaseDirectory, PortableMarkerFileName))
+            || Directory.Exists(Path.Combine(appBaseDirectory, PortableDataDirectoryName));
+        if (portableRequested)
+        {
+            string portableDataRoot = NormalizeOptionalPath(GetValue(environment, PortableDataRootEnvironmentVariable))
+                ?? Path.Combine(appBaseDirectory, PortableDataDirectoryName);
+            return new TrackdubStorageOptions(portableDataRoot, portableDataRoot, SharedAssetRoot: null, IsPortable: true);
+        }
+
+        StorageConfig? config = ReadStorageConfig(localAppDataRoot, commonAppDataRoot);
+        if (config != null)
+        {
+            string configuredDataRoot = NormalizeOptionalPath(config.UserDataRoot)
+                ?? Path.Combine(localAppDataRoot, ProductDirectoryName);
+            string configuredCacheRoot = NormalizeOptionalPath(config.UserCacheRoot)
+                ?? configuredDataRoot;
+            return new TrackdubStorageOptions(
+                configuredDataRoot,
+                configuredCacheRoot,
+                NormalizeOptionalPath(config.SharedAssetRoot),
+                config.IsPortable ?? config.Portable ?? false);
+        }
+
+        string defaultRoot = Path.Combine(localAppDataRoot, ProductDirectoryName);
+        return new TrackdubStorageOptions(defaultRoot, defaultRoot, SharedAssetRoot: null, IsPortable: false);
+    }
+
+    public static void ApplyToCurrentProcess(TrackdubStoragePaths storagePaths)
+    {
+        ArgumentNullException.ThrowIfNull(storagePaths);
+
+        Environment.SetEnvironmentVariable(DataRootEnvironmentVariable, storagePaths.UserDataRoot);
+        Environment.SetEnvironmentVariable(CacheRootEnvironmentVariable, storagePaths.UserCacheRoot);
+        Environment.SetEnvironmentVariable(ToolCacheRootEnvironmentVariable, storagePaths.ToolCacheDirectory);
+        Environment.SetEnvironmentVariable(EngineCacheRootEnvironmentVariable, storagePaths.EngineCacheDirectory);
+        Environment.SetEnvironmentVariable(SharedAssetRootEnvironmentVariable, storagePaths.SharedAssetRoot);
+        Environment.SetEnvironmentVariable(PortableEnvironmentVariable, storagePaths.IsPortable ? "1" : null);
+    }
+
+    /// <summary>
+    /// Same as <see cref="ApplyToCurrentProcess"/>, but returns a handle that restores the
+    /// prior environment variable values on <see cref="IDisposable.Dispose"/>. Intended for
+    /// hosts (e.g. headless composition roots) that may be created and torn down multiple
+    /// times within a single process, so overrides do not leak across instances.
+    /// </summary>
+    /// <remarks>
+    /// Process environment variables are process-global state. Applies and disposals are
+    /// tracked on a shared per-variable stack, so scopes can be disposed in any order: an
+    /// older host disposing while a newer one is still active never clobbers the newer
+    /// override, and once every scope has disposed the variable correctly rebases all the
+    /// way back to the true pre-any-scope baseline — not an intermediate value some other
+    /// scope already unwound past. A disposing scope restores that preceding value only
+    /// when the process environment still contains the value that scope applied; a newer
+    /// unscoped or external write is preserved. This still isn't true isolation: while two
+    /// hosts with different storage overrides are alive at the same time, whichever applied
+    /// last "wins" the shared variable, and both see that value regardless of which host is
+    /// doing the reading. Callers that need per-host storage overrides and true concurrent
+    /// isolation must run each host in its own process, or hold them one at a time.
+    /// </remarks>
+    public static IDisposable ApplyToCurrentProcessScoped(TrackdubStoragePaths storagePaths)
+    {
+        ArgumentNullException.ThrowIfNull(storagePaths);
+
+        var newValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            [DataRootEnvironmentVariable] = storagePaths.UserDataRoot,
+            [CacheRootEnvironmentVariable] = storagePaths.UserCacheRoot,
+            [ToolCacheRootEnvironmentVariable] = storagePaths.ToolCacheDirectory,
+            [EngineCacheRootEnvironmentVariable] = storagePaths.EngineCacheDirectory,
+            [SharedAssetRootEnvironmentVariable] = storagePaths.SharedAssetRoot,
+            [PortableEnvironmentVariable] = storagePaths.IsPortable ? "1" : null,
+        };
+
+        lock (EnvironmentStackSyncRoot)
+        {
+            var nodes = new Dictionary<string, LinkedListNode<string?>>(StringComparer.OrdinalIgnoreCase);
+            foreach ((string key, string? value) in newValues)
+            {
+                if (!EnvironmentValueStacks.TryGetValue(key, out LinkedList<string?>? stack))
+                {
+                    // Seed the bottom of the stack with the true pre-any-scope baseline,
+                    // captured the first time this variable is ever overridden.
+                    stack = new LinkedList<string?>();
+                    stack.AddFirst(Environment.GetEnvironmentVariable(key));
+                    EnvironmentValueStacks[key] = stack;
+                }
+
+                nodes[key] = stack.AddLast(value);
+                Environment.SetEnvironmentVariable(key, value);
+            }
+
+            return new ProcessEnvironmentRestoreScope(nodes);
+        }
+    }
+
+    private sealed class ProcessEnvironmentRestoreScope(IReadOnlyDictionary<string, LinkedListNode<string?>> nodes) : IDisposable
+    {
+        public void Dispose()
+        {
+            lock (EnvironmentStackSyncRoot)
+            {
+                foreach ((string key, LinkedListNode<string?> node) in nodes)
+                {
+                    if (!EnvironmentValueStacks.TryGetValue(key, out LinkedList<string?>? stack))
+                    {
+                        continue;
+                    }
+
+                    // Check if node is still in the list before attempting removal
+                    if (node.List != stack)
+                    {
+                        continue;
+                    }
+
+                    // Only rewrite the env var if this scope's entry was the topmost
+                    // (most recently applied) override. If a newer scope is still on top,
+                    // just remove ourselves from underneath it — the value it sees stays
+                    // untouched, and whichever scope eventually disposes as the new top
+                    // will correctly rebase to what's now beneath it (possibly the true
+                    // baseline), instead of an intermediate value some other scope had
+                    // already unwound.
+                    bool wasTop = ReferenceEquals(stack.Last, node);
+                    string? currentValue = Environment.GetEnvironmentVariable(key);
+                    stack.Remove(node);
+
+                    // A non-scoped caller may have intentionally changed the process
+                    // environment while this scope was active. Restore the preceding
+                    // scoped/baseline value only if the environment still contains the
+                    // exact value applied by this disposing scope; otherwise preserve the
+                    // newer write.
+                    if (wasTop && string.Equals(currentValue, node.Value, StringComparison.Ordinal))
+                    {
+                        Environment.SetEnvironmentVariable(key, stack.Last?.Value);
+                    }
+
+                    // The bottom entry is always the true pre-any-scope baseline captured
+                    // the first time this variable was overridden. Once every scoped
+                    // override has unwound and only that baseline remains, drop the entry
+                    // entirely so a later ApplyToCurrentProcessScoped re-captures whatever
+                    // the process environment now holds as a fresh true baseline — rather
+                    // than reusing the stale first baseline and corrupting static consumers
+                    // if TRACKDUB_* changed between headless hosts.
+                    if (stack.Count == 1)
+                    {
+                        EnvironmentValueStacks.Remove(key);
+                    }
+                }
+            }
+        }
+    }
+
+    private static StorageConfig? ReadStorageConfig(string localAppDataRoot, string commonAppDataRoot)
+    {
+        foreach (string candidatePath in new[]
+                 {
+                     Path.Combine(localAppDataRoot, ProductDirectoryName, InstallerConfigFileName),
+                     Path.Combine(commonAppDataRoot, ProductDirectoryName, InstallerConfigFileName)
+                 })
+        {
+            if (!File.Exists(candidatePath))
+            {
+                continue;
+            }
+
+            try
+            {
+                using FileStream stream = File.OpenRead(candidatePath);
+                StorageConfig? config = JsonSerializer.Deserialize<StorageConfig>(stream, JsonOptions);
+                if (config != null && config.HasAnyRoot)
+                {
+                    return config;
+                }
+            }
+            catch (JsonException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyDictionary<string, string?> CaptureEnvironment()
+    {
+        var dictionary = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        IDictionary values = Environment.GetEnvironmentVariables();
+        foreach (DictionaryEntry entry in values)
+        {
+            if (entry.Key is string key)
+            {
+                dictionary[key] = entry.Value as string;
+            }
+        }
+
+        return dictionary;
+    }
+
+    private static string? GetValue(IReadOnlyDictionary<string, string?> environment, string name)
+    {
+        if (environment.TryGetValue(name, out string? value))
+        {
+            return value;
+        }
+
+        foreach ((string key, string? candidateValue) in environment)
+        {
+            if (string.Equals(key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidateValue;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasValue(string? value) => !string.IsNullOrWhiteSpace(value);
+
+    private static bool IsTruthy(string? value) =>
+        string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeRequiredPath(string path, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("Storage path must not be empty.", parameterName);
+        }
+
+        return Path.GetFullPath(Environment.ExpandEnvironmentVariables(path));
+    }
+
+    private static string? NormalizeOptionalPath(string? path) =>
+        string.IsNullOrWhiteSpace(path)
+            ? null
+            : Path.GetFullPath(Environment.ExpandEnvironmentVariables(path));
+
+    private sealed class StorageConfig
+    {
+        public string? UserDataRoot { get; set; }
+
+        public string? UserCacheRoot { get; set; }
+
+        public string? SharedAssetRoot { get; set; }
+
+        public bool? IsPortable { get; set; }
+
+        public bool? Portable { get; set; }
+
+        public bool HasAnyRoot =>
+            HasValue(UserDataRoot)
+            || HasValue(UserCacheRoot)
+            || HasValue(SharedAssetRoot)
+            || IsPortable is not null
+            || Portable is not null;
+    }
+}

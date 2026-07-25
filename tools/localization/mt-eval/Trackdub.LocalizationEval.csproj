@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Throwaway eval tool, not part of the shipped product. Invoked manually. -->
+    <IsPublishable>false</IsPublishable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Trackdub.Inference\Trackdub.Inference.csproj" />
+    <ProjectReference Include="..\..\..\src\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj" />
+    <ProjectReference Include="..\..\..\src\Trackdub.Composition\Trackdub.Composition.csproj" />
+    <ProjectReference Include="..\..\..\src\Trackdub.Contracts\Trackdub.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\src\Trackdub.Domain\Trackdub.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

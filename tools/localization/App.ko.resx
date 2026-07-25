@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute ref="xml:space" use="default">
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:NMTOKEN">
+                    <xsd:enumeration value="preserve" />
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Stage.VAD" xml:space="preserve"><value>음성 활동 감지</value></data>
+  <data name="Stage.ASR" xml:space="preserve"><value>대본</value></data>
+  <data name="Stage.Translation" xml:space="preserve"><value>번역</value></data>
+  <data name="Stage.TTS" xml:space="preserve"><value>음성 합성</value></data>
+  <data name="Stage.Mixing" xml:space="preserve"><value>오디오 믹싱</value></data>
+  <data name="Status.Idle" xml:space="preserve"><value>유휴</value></data>
+  <data name="Status.Running" xml:space="preserve"><value>달리기…</value></data>
+  <data name="Status.Failed" xml:space="preserve"><value>실패함</value></data>
+  <data name="Status.Completed" xml:space="preserve"><value>완료됨</value></data>
+  <data name="Window_Title_Crash" xml:space="preserve"><value>Trackdub — 예기치 않은 오류</value></data>
+  <data name="Crash_Header" xml:space="preserve"><value>문제가 발생했습니다</value></data>
+  <data name="Crash_Subtitle" xml:space="preserve"><value>Trackdub에서 예기치 않은 오류가 발생했습니다. 아래 내용을 복사하거나 로그 폴더를 열어 지원팀에 문의할 수 있습니다.</value></data>
+  <data name="Crash_Button_Copy" xml:space="preserve"><value>내역 복사</value></data>
+  <data name="Crash_Button_OpenLogFolder" xml:space="preserve"><value>로그 폴더 열기</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>닫기</value></data>
+  <data name="Settings.Label_Language" xml:space="preserve"><value>언어</value></data>
+  <data name="Settings.Hint_LanguageRestart" xml:space="preserve"><value>언어 변경을 적용하려면 재시작이 필요합니다.</value></data>
+  <!--  Transport  -->
+  <data name="Transport.ToolTip_SkipPrevious" xml:space="preserve"><value>이전 건너뛰기</value></data>
+  <!--  Clippy Assistant  -->
+  <data name="Clippy_Tooltip_AskAssistant" xml:space="preserve"><value>Trackdub 어시스턴트에게 물어보세요</value></data>
+  <data name="Clippy_Text_AskAboutTrackdub" xml:space="preserve"><value>Trackdub에 대해 문의하기</value></data>
+  <data name="Clippy_Placeholder_WhatDoesStarterPackDo" xml:space="preserve"><value>이 스타터 팩은 어떤 기능을 하나요?</value></data>
+  <data name="Clippy_Button_Ask" xml:space="preserve"><value>물어보세요</value></data>
+  <data name="Transport.ToolTip_Play" xml:space="preserve"><value>재생</value></data>
+  <data name="Transport.ToolTip_Pause" xml:space="preserve"><value>일시 정지</value></data>
+  <data name="Transport.ToolTip_SkipNext" xml:space="preserve"><value>건너뛰기 다음</value></data>
+  <data name="Transport.ToolTip_Subtitles" xml:space="preserve"><value>자막</value></data>
+  <data name="Transport.ToolTip_Karaoke" xml:space="preserve"><value>노래방</value></data>
+  <data name="Transport.ToolTip_Bilingual" xml:space="preserve"><value>이중언어</value></data>
+  <data name="Transport.ToolTip_Dub" xml:space="preserve"><value>더빙</value></data>
+  <data name="Transport.ToolTip_Mute" xml:space="preserve"><value>음소거</value></data>
+  <data name="Transport.ToolTip_Fullscreen" xml:space="preserve"><value>전체 화면</value></data>
+  <data name="Transport.RetryPreview" xml:space="preserve"><value>다시 시도</value></data>
+  <data name="Transport.ToolTip_RetryPreview" xml:space="preserve"><value>미리보기 다시 시도</value></data>
+  <!--  Titlebar  -->
+  <data name="Titlebar.ToolTip_Undo" xml:space="preserve"><value>취소</value></data>
+  <data name="Titlebar.ToolTip_Redo" xml:space="preserve"><value>다시 실행</value></data>
+  <data name="Titlebar.ToolTip_NewProject" xml:space="preserve"><value>새로운 프로젝트</value></data>
+  <data name="Titlebar.Label_Recent" xml:space="preserve"><value>최근</value></data>
+  <data name="Titlebar.ToolTip_AIModels" xml:space="preserve"><value>AI 모델</value></data>
+  <data name="Titlebar.ToolTip_Settings" xml:space="preserve"><value>설정</value></data>
+  <data name="Titlebar.ToolTip_CheckForUpdates" xml:space="preserve"><value>업데이트 확인</value></data>
+  <data name="Titlebar.ToolTip_DIAG" xml:space="preserve"><value>진단</value></data>
+  <data name="Titlebar.ToolTip_BENCH" xml:space="preserve"><value>벤치마크</value></data>
+  <data name="Titlebar.Label_Update" xml:space="preserve"><value>UPD</value></data>
+  <data name="Titlebar.ToolTip_Minimize" xml:space="preserve"><value>최소화</value></data>
+  <data name="Titlebar.ToolTip_Maximize" xml:space="preserve"><value>최대화</value></data>
+  <data name="Titlebar.ToolTip_Close" xml:space="preserve"><value>닫기</value></data>
+  <data name="StatusBar.Engine" xml:space="preserve"><value>엔진:</value></data>
+  <data name="StatusBar.Local" xml:space="preserve"><value>지역</value></data>
+  <data name="StatusBar.Gpu" xml:space="preserve"><value>GPU:</value></data>
+  <data name="StatusBar.Settings" xml:space="preserve"><value>설정</value></data>
+  <data name="StatusBar.StarterPacks" xml:space="preserve"><value>스타터 팩</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>파일</value></data>
+  <data name="Menu.Project" xml:space="preserve"><value>프로젝트</value></data>
+  <data name="Menu.Media" xml:space="preserve"><value>미디어</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>보기</value></data>
+  <data name="Menu.Window" xml:space="preserve"><value>창</value></data>
+  <data name="Menu.Help" xml:space="preserve"><value>도움말</value></data>
+  <data name="Menu.File.NewFromMedia" xml:space="preserve"><value>미디어 소식…</value></data>
+  <data name="Menu.File.OpenProject" xml:space="preserve"><value>프로젝트 열기…</value></data>
+  <data name="Menu.File.Save" xml:space="preserve"><value>저장</value></data>
+  <data name="Menu.File.CloseProject" xml:space="preserve"><value>프로젝트 닫기</value></data>
+  <data name="Menu.File.Exit" xml:space="preserve"><value>종료</value></data>
+  <data name="Menu.Project.AIModels" xml:space="preserve"><value>AI 모델…</value></data>
+  <data name="Menu.Project.Settings" xml:space="preserve"><value>설정…</value></data>
+  <data name="Menu.Media.Import" xml:space="preserve"><value>미디어 가져오기…</value></data>
+  <data name="MediaPicker.WindowRequired" xml:space="preserve"><value>미디어 선택기를 열기 전에 창이 열려 있어야 합니다.</value></data>
+  <data name="MediaPicker.LocalPathRequired" xml:space="preserve"><value>선택한 파일의 로컬 경로를 확인할 수 없습니다. 미디어 파일을 로컬 폴더에 복사한 후 다시 시도하십시오.</value></data>
+  <data name="MediaPicker.ImportNoLocalPaths" xml:space="preserve"><value>선택한 파일의 로컬 경로를 확인할 수 없습니다. 미디어 파일을 로컬 폴더에 복사한 후 다시 시도하십시오.</value></data>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve"><value>{0} 로컬 경로가 없으므로 선택한 파일을 가져올 수 없습니다.</value></data>
+  <data name="MediaPicker.ImportMediaFiles.Title" xml:space="preserve"><value>미디어 파일 가져오기</value></data>
+  <data name="MediaPicker.ImportMediaFiles.MediaFilesFilter" xml:space="preserve"><value>미디어 파일</value></data>
+  <data name="MediaPicker.ImportMediaFiles.AllFilesFilter" xml:space="preserve"><value>모든 파일</value></data>
+  <data name="ProjectPicker.WindowRequired" xml:space="preserve"><value>프로젝트 선택기를 열기 전에 창이 열려 있어야 합니다.</value></data>
+  <data name="Menu.View.ToggleLeftPanel" xml:space="preserve"><value>왼쪽 패널 표시/숨기기</value></data>
+  <data name="Menu.View.ToggleRightPanel" xml:space="preserve"><value>오른쪽 패널 표시/숨기기</value></data>
+  <data name="Menu.View.ToggleTimeline" xml:space="preserve"><value>타임라인 표시/숨기기</value></data>
+  <data name="Menu.View.ToggleExportPanel" xml:space="preserve"><value>내보내기 패널 표시/숨기기</value></data>
+  <data name="Menu.View.ToggleSubtitles" xml:space="preserve"><value>자막 표시/숨기기</value></data>
+  <data name="Menu.Window.Minimize" xml:space="preserve"><value>최소화</value></data>
+  <data name="Menu.Window.Maximize" xml:space="preserve"><value>최대화 / 원래 크기 복원</value></data>
+  <data name="Menu.Help.CheckForUpdates" xml:space="preserve"><value>업데이트 확인</value></data>
+  <data name="Menu.Help.Diagnostics" xml:space="preserve"><value>진단 정보 내보내기…</value></data>
+  <data name="Menu.Help.Benchmarks" xml:space="preserve"><value>벤치마크</value></data>
+  <data name="Menu.Help.StarterPacks" xml:space="preserve"><value>스타터 팩…</value></data>
+  <data name="Menu.Help.About" xml:space="preserve"><value>소개…</value></data>
+  <!--  Speakers  -->
+  <data name="Speakers.Header" xml:space="preserve"><value>목소리 및 연사</value></data>
+  <data name="Speakers.EmptyState" xml:space="preserve"><value>아직 화자가 감지되지 않았습니다. 먼저 음성 인식 및 화자 식별을 실행하십시오.</value></data>
+  <data name="Speakers.GenerateAll" xml:space="preserve"><value>모두 생성</value></data>
+  <data name="Speakers.Count" xml:space="preserve"><value>{0} 연사들</value></data>
+  <!--  Speaker  -->
+  <data name="Speaker.RenameTip" xml:space="preserve"><value>스피커 이름 변경</value></data>
+  <data name="Speaker.ConfirmRenameTip" xml:space="preserve"><value>이름 변경 확인</value></data>
+  <data name="Speaker.CancelRenameTip" xml:space="preserve"><value>이름 변경 취소</value></data>
+  <data name="Speaker.NewNamePlaceholder" xml:space="preserve"><value>새로운 이름...</value></data>
+  <data name="Speaker.SyntheticVoice" xml:space="preserve"><value>합성 음성</value></data>
+  <data name="Speaker.CloneVoice" xml:space="preserve"><value>이 목소리를 복제하세요</value></data>
+  <data name="Speaker.SelectVoicePlaceholder" xml:space="preserve"><value>음성 선택...</value></data>
+  <data name="Speaker.AssignVoice" xml:space="preserve"><value>음성 할당</value></data>
+  <data name="Speaker.PreviewVoice" xml:space="preserve"><value>음성 미리 듣기</value></data>
+  <data name="Speaker.NoReferenceClip" xml:space="preserve"><value>아직 참조 클립이 없습니다</value></data>
+  <data name="Speaker.ExtractAutoClip" xml:space="preserve"><value>자동 클립 추출</value></data>
+  <data name="Speaker.ExtractAutoClipTip" xml:space="preserve"><value>일지화된 대화 턴에서 기준 오디오 추출</value></data>
+  <data name="Speaker.UploadReference" xml:space="preserve"><value>참조 파일 업로드</value></data>
+  <data name="Speaker.UploadReferenceTip" xml:space="preserve"><value>음성 복제를 위한 참조 오디오 업로드</value></data>
+  <data name="Speaker.StaleTtsWarning" xml:space="preserve"><value>⚠ TTS가 오래된 상태입니다. 음성을 다시 할당한 후 재생성하십시오.</value></data>
+  <data name="Speaker.RegenerateStaleDub" xml:space="preserve"><value>오래된 더빙 다시 생성하기</value></data>
+  <data name="Speaker.Generating" xml:space="preserve"><value>생성 중...</value></data>
+  <data name="Speaker.PreviewDubTip" xml:space="preserve"><value>이 연사의 첫 번째 더빙 테이크를 미리 들어보세요</value></data>
+  <data name="Speaker.MergeInto" xml:space="preserve"><value>다음에 병합:</value></data>
+  <data name="Speaker.SelectTargetPlaceholder" xml:space="preserve"><value>대상 선택...</value></data>
+  <data name="Speaker.Merge" xml:space="preserve"><value>병합</value></data>
+  <data name="Speaker.MergeTip" xml:space="preserve"><value>이 스피커를 선택한 대상에 병합합니다(이 스피커는 제거됩니다).</value></data>
+  <!--  Timeline  -->
+  <data name="Timeline.Title" xml:space="preserve"><value>연표</value></data>
+  <data name="Timeline.SplitTip" xml:space="preserve"><value>재생 위치에서 분할 (S)</value></data>
+  <data name="Timeline.MergeTip" xml:space="preserve"><value>선택한 클립 병합</value></data>
+  <data name="Timeline.TrimTip" xml:space="preserve"><value>선택 영역으로 자르기</value></data>
+  <data name="Timeline.DeleteTip" xml:space="preserve"><value>선택 항목 삭제 (Del)</value></data>
+  <data name="Timeline.ZoomOutTip" xml:space="preserve"><value>축소</value></data>
+  <data name="Timeline.ZoomInTip" xml:space="preserve"><value>확대</value></data>
+  <data name="Timeline.CollapseTip" xml:space="preserve"><value>타임라인 접기</value></data>
+  <data name="Timeline.Reference" xml:space="preserve"><value>참고 문헌</value></data>
+  <data name="Timeline.MuteTip" xml:space="preserve"><value>음소거 (출시 예정)</value></data>
+  <data name="Timeline.SoloTip" xml:space="preserve"><value>솔로 (곧 공개 예정)</value></data>
+  <!--  Pipeline  -->
+  <data name="Pipeline.Header" xml:space="preserve"><value>코디네이터 파이프라인</value></data>
+  <data name="Pipeline.Col_Job" xml:space="preserve"><value>직업</value></data>
+  <data name="Pipeline.Col_Stage" xml:space="preserve"><value>무대</value></data>
+  <data name="Pipeline.Col_Progress" xml:space="preserve"><value>진행 상황</value></data>
+  <data name="Pipeline.Col_Detail" xml:space="preserve"><value>상세 정보</value></data>
+  <data name="Pipeline.StarterPack" xml:space="preserve"><value>스타터 팩</value></data>
+  <data name="Pipeline.StarterPack_Placeholder" xml:space="preserve"><value>스타터 팩</value></data>
+  <data name="Pipeline.RunSelectedStages" xml:space="preserve"><value>선택한 항목 실행</value></data>
+  <data name="Pipeline.CommercialOnly" xml:space="preserve"><value>상업용 전용</value></data>
+  <data name="Pipeline.ConfigHeader" xml:space="preserve"><value>파이프라인 구성</value></data>
+  <data name="Pipeline.Config" xml:space="preserve"><value>구성</value></data>
+  <data name="Pipeline.StemSeparation" xml:space="preserve"><value>줄기 분리</value></data>
+  <data name="Pipeline.StemSeparation_Tip" xml:space="preserve"><value>전사 작업 전에 보컬을 배경 음향에서 분리하세요</value></data>
+  <data name="Pipeline.AudioCleanup" xml:space="preserve"><value>오디오 보정</value></data>
+  <data name="Pipeline.AudioCleanup_Tip" xml:space="preserve"><value>노이즈 제거 및 오디오 정제 적용 (분리 작업이 성공하면 자동으로 건너뜁니다)</value></data>
+  <data name="Pipeline.SpeakerDiarization" xml:space="preserve"><value>화자 식별</value></data>
+  <data name="Pipeline.SpeakerDiarization_Tip" xml:space="preserve"><value>오디오에서 서로 다른 화자를 식별하세요</value></data>
+  <data name="Pipeline.Voice" xml:space="preserve"><value>음성</value></data>
+  <data name="Pipeline.Voice_Tip" xml:space="preserve"><value>더빙 화자의 목소리 배정 전략</value></data>
+  <data name="Pipeline.VoiceOption_Manual" xml:space="preserve"><value>사용 설명서</value></data>
+  <data name="Pipeline.VoiceOption_KokoroDefaults" xml:space="preserve"><value>코코로 기본값</value></data>
+  <data name="Pipeline.VoiceOption_AutoClone" xml:space="preserve"><value>자동 복제</value></data>
+  <data name="Pipeline.RunAllStages" xml:space="preserve"><value>모든 단계를 실행합니다</value></data>
+  <data name="Pipeline.RunTranscriptToDub" xml:space="preserve"><value>더빙 작업으로 달려가다</value></data>
+  <data name="Pipeline.Options" xml:space="preserve"><value>옵션</value></data>
+  <data name="Pipeline.Model" xml:space="preserve"><value>모델</value></data>
+  <data name="Pipeline.NotDownloaded" xml:space="preserve"><value>⚠ 다운로드되지 않음</value></data>
+  <data name="Pipeline.NoApiKey" xml:space="preserve"><value>⚠ API 키 없음</value></data>
+  <data name="Pipeline.ExecutionProvider" xml:space="preserve"><value>실행 제공자</value></data>
+  <data name="Pipeline.SeparateOnImport" xml:space="preserve"><value>가져오기 시 보컬과 배경음을 분리하기</value></data>
+  <data name="Pipeline.SeparateOnImport_Hint" xml:space="preserve"><value>재실행 시 선택한 분리 모델이 사용됩니다.</value></data>
+  <data name="Pipeline.SeparationOptionalHint" xml:space="preserve"><value>행 토글을 사용하여 연속된 항목 사이에 구분선을 삽입하세요.</value></data>
+  <data name="Pipeline.CleanupHint" xml:space="preserve"><value>‘실행’을 클릭하면 음성 향상 기능이 정리 단계의 일부로 실행됩니다.</value></data>
+  <data name="Pipeline.AsrHint" xml:space="preserve"><value>파이프라인 상단에 위치한 상용 안전 모드는 모델 선택을 라이선스 상 안전한 기본값으로 제한합니다.</value></data>
+  <data name="Pipeline.EnableAsrTextPolish" xml:space="preserve"><value>전사 후 폴란드어 ASR 텍스트</value></data>
+  <data name="Pipeline.EnableAsrTextPolish_Hint" xml:space="preserve"><value>원본 ASR 세그먼트에 대한 선택적 구두점 및 문법 보정. 텍스트 정제용 GenAI 모델이 필요합니다.</value></data>
+  <data name="Pipeline.TextRefinementAsrHint" xml:space="preserve"><value>행 토글을 사용하여 실행에 ASR 폴리시를 포함시키세요.</value></data>
+  <data name="Pipeline.DetectSpeakersOnImport" xml:space="preserve"><value>가져오기 시 화자 감지</value></data>
+  <data name="Pipeline.DiarizationHint" xml:space="preserve"><value>‘식별’ 기능은 전사 작업이 완료된 후 전사본의 각 구간에 화자를 할당합니다.</value></data>
+  <data name="Pipeline.OverlapRescueHint" xml:space="preserve"><value>‘중복 대화 복구’는 겹치는 대화를 소스 후보(확정되지 않은 화자)로 분리합니다. 중복된 대화 순서가 감지되면 대화 분할(Diarization) 단계 이후에 실행됩니다.</value></data>
+  <data name="Pipeline.OverlapRescueModel" xml:space="preserve"><value>중첩 구조 모델</value></data>
+  <data name="Pipeline.OverlapRescueExecutionProvider" xml:space="preserve"><value>중복 구조 실행 제공자</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe" xml:space="preserve"><value>구출 후 후보 유전자 재전사</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe_Hint" xml:space="preserve"><value>분리된 각 후보에 대해 ASR을 실행하고, 검토를 위해 결과를 표시합니다.</value></data>
+  <data name="Pipeline.RunOverlapRescue" xml:space="preserve"><value>중첩 구조 수행</value></data>
+  <data name="Pipeline.OverlapRescueReviewHeader" xml:space="preserve"><value>잠재 후보자</value></data>
+  <data name="Pipeline.OverlapRescueReviewBadge" xml:space="preserve"><value>리뷰</value></data>
+  <data name="Pipeline.TranslationConfiguredAbove" xml:space="preserve"><value>소스와 대상은 위에서 설정되어 있습니다.</value></data>
+  <data name="Pipeline.ApplyTargetLanguage" xml:space="preserve"><value>선택한 대상 언어 적용</value></data>
+  <data name="Pipeline.TtsHint" xml:space="preserve"><value>‘음성’ 패널에서 코코로 음성을 할당한 다음, ‘더빙’을 실행하여 테이크를 생성하세요.</value></data>
+  <data name="Pipeline.LipSyncHint" xml:space="preserve"><value>위에서 선택한 강제 정렬 모델을 사용하여 더빙 오디오를 입모양 타이밍에 맞춰 정렬하고 늘립니다.</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesis" xml:space="preserve"><value>비디오 입술 합성 실행 중…</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesisExperimental" xml:space="preserve"><value>동영상 입술 합성 실행 중 (실험적 기능)…</value></data>
+  <data name="Pipeline.LipSynthesisHint" xml:space="preserve"><value>동영상 입술 동기화 (LatentSync ~6.7 GB + 얼굴 모델). 동영상, 더빙 믹스, 화자의 대사가 필요합니다. 실행 전에 모델을 다운로드하세요.</value></data>
+  <data name="Pipeline.ExportHint" xml:space="preserve"><value>타임라인 하단의 ‘내보내기’ 패널에서 믹스 레벨과 내보내기 형식을 설정하세요.</value></data>
+  <data name="Pipeline.OpenExportPanel" xml:space="preserve"><value>내보내기 패널 열기</value></data>
+  <!--  RunConfig  -->
+  <data name="RunConfig.Header" xml:space="preserve"><value>실행 구성</value></data>
+  <data name="RunConfig.Source" xml:space="preserve"><value>출처</value></data>
+  <data name="RunConfig.TranslateTo" xml:space="preserve"><value>다음 언어로 번역</value></data>
+  <data name="RunConfig.TargetLanguage_Placeholder" xml:space="preserve"><value>목표 언어</value></data>
+  <!--  Export  -->
+  <data name="Export.Header" xml:space="preserve"><value>내보내기 및 믹싱</value></data>
+  <data name="Export.MixLabel" xml:space="preserve"><value>MIX</value></data>
+  <data name="Export.Src" xml:space="preserve"><value>Src</value></data>
+  <data name="Export.Src_Tip" xml:space="preserve"><value>원본 오디오 게인 (dB)</value></data>
+  <data name="Export.Dub" xml:space="preserve"><value>더빙</value></data>
+  <data name="Export.Dub_Tip" xml:space="preserve"><value>음성 증폭도 (dB)</value></data>
+  <data name="Export.Duck" xml:space="preserve"><value>오리</value></data>
+  <data name="Export.Duck_Tip" xml:space="preserve"><value>소스 덕킹 (dB)</value></data>
+  <data name="Export.Timbre" xml:space="preserve"><value>음색</value></data>
+  <data name="Export.Timbre_Tip" xml:space="preserve"><value>더빙된 대사에 음색 매칭 적용하기</value></data>
+  <data name="Export.Pan" xml:space="preserve"><value>팬</value></data>
+  <data name="Export.Pan_Tip" xml:space="preserve"><value>원래의 스테레오 패닝 복원</value></data>
+  <data name="Export.ExportLabel" xml:space="preserve"><value>수출</value></data>
+  <data name="Export.BurnIn" xml:space="preserve"><value>번인</value></data>
+  <data name="Export.BurnIn_Tip" xml:space="preserve"><value>자막을 비디오 스트림에 영구적으로 삽입하기</value></data>
+  <data name="Export.SubtitleSource_Tip" xml:space="preserve"><value>자막 텍스트 출처</value></data>
+  <data name="Export.Container_Tip" xml:space="preserve"><value>출력 컨테이너</value></data>
+  <data name="Export.Lufs_Tip" xml:space="preserve"><value>목표 음량 (LUFS)</value></data>
+  <data name="Export.Match" xml:space="preserve"><value>경기</value></data>
+  <data name="Export.Match_Tip" xml:space="preserve"><value>원본 소스의 음량을 맞추기</value></data>
+  <data name="Export.ExportButton" xml:space="preserve"><value>내보내기</value></data>
+  <!--  Crash  -->
+  <data name="Crash.ExportDiagnostics" xml:space="preserve"><value>진단 정보 내보내기</value></data>
+  <!--  Dialog  -->
+  <data name="Dialog.VendorLicense_Title" xml:space="preserve"><value>판매자 라이선스</value></data>
+  <data name="Dialog.VendorLicense_Acceptance" xml:space="preserve"><value>&apos;동의함&apos;을 클릭하면, 귀하는 본 설치와 관련된 본 이용 약관을 확인했으며 이에 동의함을 확인하는 것입니다.</value></data>
+  <data name="Dialog.VendorLicense_Accept" xml:space="preserve"><value>동의합니다</value></data>
+  <data name="Dialog.SpeakerDetection_Title" xml:space="preserve"><value>화자 감지</value></data>
+  <data name="Dialog.SpeakerDetection_UseSingle" xml:space="preserve"><value>스피커 하나를 사용하세요</value></data>
+  <data name="Dialog.SpeakerDetection_Download" xml:space="preserve"><value>지금 다운로드하기</value></data>
+  <data name="Dialog.ModelNotReady_Title" xml:space="preserve"><value>해당 모델은 판매되지 않습니다.</value></data>
+  <data name="Dialog.ModelSetup_Title" xml:space="preserve"><value>모델 설정</value></data>
+  <data name="Dialog.FallbackVoice_Title" xml:space="preserve"><value>대체 음성을 사용할까요?</value></data>
+  <data name="Dialog.FallbackVoice_Message" xml:space="preserve"><value>일부 화자에게는 할당된 보이스가 없습니다. Trackdub은 이번 세대에 한해, 보이스가 할당되지 않은 각 화자에 대해 호환되는 첫 번째 Kokoro 보이스를 사용합니다.</value></data>
+  <data name="Dialog.FallbackVoice_Confirm" xml:space="preserve"><value>대체 음성으로 생성하기</value></data>
+  <!--  Glossary  -->
+  <data name="Glossary.Header" xml:space="preserve"><value>용어집</value></data>
+  <data name="Glossary.ProjectHeader" xml:space="preserve"><value>프로젝트 용어집</value></data>
+  <data name="Glossary.AddTerm" xml:space="preserve"><value>+ 용어 추가</value></data>
+  <data name="Glossary.TermCount" xml:space="preserve"><value>{0} 용어</value></data>
+  <data name="Glossary.Loading" xml:space="preserve"><value>로딩 중…</value></data>
+  <data name="Glossary.SourceTerm_Placeholder" xml:space="preserve"><value>원천항</value></data>
+  <data name="Glossary.TargetTerm_Placeholder" xml:space="preserve"><value>대상 용어</value></data>
+  <data name="Glossary.CaseSensitive" xml:space="preserve"><value>대소문자 구분</value></data>
+  <data name="Glossary.DeleteTerm_Tip" xml:space="preserve"><value>용어 삭제</value></data>
+  <data name="Glossary.Scope.Project" xml:space="preserve"><value>프로젝트</value></data>
+  <data name="Glossary.Scope.Global" xml:space="preserve"><value>글로벌</value></data>
+  <data name="Glossary.Scope.GlobalBadge" xml:space="preserve"><value>글로벌</value></data>
+  <data name="Glossary.NoteLine_GlobalCaseSensitive" xml:space="preserve"><value>전역 · 대소문자 구분</value></data>
+  <data name="Glossary.ImportCsv" xml:space="preserve"><value>CSV 가져오기</value></data>
+  <!--  MediaBin  -->
+  <data name="MediaBin.Header" xml:space="preserve"><value>미디어</value></data>
+  <data name="MediaBin.Context_ProjectWide" xml:space="preserve"><value>프로젝트 배경</value></data>
+  <data name="MediaBin.Import" xml:space="preserve"><value>가져오기</value></data>
+  <data name="MediaBin.Import_Tip" xml:space="preserve"><value>미디어 파일 가져오기</value></data>
+  <data name="MediaBin.NewProjectImport" xml:space="preserve"><value>새 프로젝트 가져오기</value></data>
+  <data name="MediaBin.DetectSpeakers" xml:space="preserve"><value>화자 감지</value></data>
+  <data name="MediaBin.SeparateVocals" xml:space="preserve"><value>보컬과 배경음을 분리하기</value></data>
+  <data name="MediaBin.ImportHint" xml:space="preserve"><value>이 트리를 채우려면 미디어를 가져오거나 프로젝트를 생성하세요.</value></data>
+  <data name="MediaBin.EmptyTreeHint" xml:space="preserve"><value>아직 줄기가 없네요</value></data>
+  <data name="Timeline.CollapsedEmptyHint" xml:space="preserve"><value>트랙을 보려면 확장 · 미디어를 드래그하여 추가</value></data>
+  <data name="Inspector.EmptyShort" xml:space="preserve"><value>검토할 구간을 선택하세요</value></data>
+  <data name="Transcript.EmptySegments" xml:space="preserve"><value>아직 세그먼트가 없습니다. 이 목록을 채우려면 트랜스크립션 작업을 실행하세요.</value></data>
+  <data name="MediaBin.Tab_Source" xml:space="preserve"><value>출처</value></data>
+  <data name="MediaBin.Tab_Generated" xml:space="preserve"><value>생성됨</value></data>
+  <data name="Navigator.Section.SourceMedia" xml:space="preserve"><value>출처 매체</value></data>
+  <data name="Navigator.Section.Transcript" xml:space="preserve"><value>대본</value></data>
+  <data name="Navigator.Section.Speakers" xml:space="preserve"><value>연사</value></data>
+  <data name="Navigator.Section.Voices" xml:space="preserve"><value>목소리들</value></data>
+  <data name="Navigator.Section.GeneratedAudio" xml:space="preserve"><value>생성된 오디오</value></data>
+  <data name="Navigator.Section.Mixes" xml:space="preserve"><value>믹스</value></data>
+  <data name="Navigator.Section.Exports" xml:space="preserve"><value>수출</value></data>
+  <data name="Navigator.Empty.SourceMedia" xml:space="preserve"><value>이 섹션을 채우려면 소스 미디어를 가져오세요.</value></data>
+  <data name="Navigator.Empty.Transcript" xml:space="preserve"><value>전사 작업을 실행하여 전사 세그먼트를 생성합니다.</value></data>
+  <data name="Navigator.Empty.Speakers" xml:space="preserve"><value>전사 작업 후 ‘Diarization’을 실행하거나 화자를 지정하십시오.</value></data>
+  <data name="Navigator.Empty.Voices" xml:space="preserve"><value>‘음성’ 패널에서 화자에게 목소리를 할당하세요.</value></data>
+  <data name="Navigator.Empty.GeneratedAudio" xml:space="preserve"><value>여기에는 생성된 TTS 및 처리 과정에서 발생한 아티팩트가 표시됩니다.</value></data>
+  <data name="Navigator.Empty.Mixes" xml:space="preserve"><value>미리 듣기 믹스는 내보내기 또는 믹싱 단계가 끝난 후 여기에 표시됩니다.</value></data>
+  <data name="Navigator.Empty.Exports" xml:space="preserve"><value>내보내기 단계가 완료되면 최종 내보내기 결과가 여기에 표시됩니다.</value></data>
+  <data name="FloatingMonitor.Title" xml:space="preserve"><value>비디오 모니터</value></data>
+  <data name="FloatingMonitor.Hide" xml:space="preserve"><value>모니터 숨기기</value></data>
+  <data name="FloatingMonitor.NoVideo" xml:space="preserve"><value>아직 동영상 프레임이 없습니다</value></data>
+  <data name="Transport.ToolTip_PipMonitor" xml:space="preserve"><value>화면 속 화면(PIP) 비디오 모니터 전환</value></data>
+  <!--  Segment  -->
+  <data name="Segment.Start" xml:space="preserve"><value>시작</value></data>
+  <data name="Segment.End" xml:space="preserve"><value>끝</value></data>
+  <data name="Segment.Duration" xml:space="preserve"><value>기간</value></data>
+  <data name="Segment.Speaker" xml:space="preserve"><value>발표자</value></data>
+  <data name="Segment.Source" xml:space="preserve"><value>출처</value></data>
+  <data name="Segment.VoiceCandidates" xml:space="preserve"><value>음성 후보자</value></data>
+  <data name="Segment.VoiceCandidates_Hint" xml:space="preserve"><value>‘생성’을 클릭하여 A/B 미리보기를 위한 음성 후보를 생성하세요</value></data>
+  <data name="Segment.GenerateCandidates" xml:space="preserve"><value>후보 생성</value></data>
+  <data name="Segment.LipSyncAlign" xml:space="preserve"><value>ALIGN</value></data>
+  <data name="Segment.LipSynthesisRepair" xml:space="preserve"><value>수리</value></data>
+  <data name="Segment.Review" xml:space="preserve"><value>리뷰</value></data>
+  <data name="Segment.SaveSettings" xml:space="preserve"><value>설정 저장</value></data>
+  <data name="Segment.GenerateDub" xml:space="preserve"><value>더빙 생성</value></data>
+  <data name="Segment.Regenerate" xml:space="preserve"><value>재생</value></data>
+  <data name="Segment.MatchTiming" xml:space="preserve"><value>경기 시간</value></data>
+  <data name="Segment.Runtime.Dub" xml:space="preserve"><value>더브 런타임</value></data>
+  <data name="Segment.Runtime.Translation" xml:space="preserve"><value>번역 실행 시간</value></data>
+  <data name="Segment.Runtime.Transcription" xml:space="preserve"><value>전사 처리 시간</value></data>
+  <data name="Segment.Runtime.Alignment" xml:space="preserve"><value>립싱크 실행 시간</value></data>
+  <data name="Segment.Runtime.Provider" xml:space="preserve"><value>제공자</value></data>
+  <data name="Segment.Runtime.Model" xml:space="preserve"><value>모델</value></data>
+  <data name="Segment.Runtime.Precision" xml:space="preserve"><value>정밀도</value></data>
+  <!--  ApiKeys  -->
+  <data name="Window_Title_ApiKeys" xml:space="preserve"><value>API 키</value></data>
+  <data name="Chrome_Minimize" xml:space="preserve"><value>최소화</value></data>
+  <data name="Chrome_MaximizeRestore" xml:space="preserve"><value>최대화 / 원래 크기 복원</value></data>
+  <data name="Chrome_Close" xml:space="preserve"><value>닫기</value></data>
+  <data name="Api_Tooltip_ToggleReveal" xml:space="preserve"><value>키 표시/숨기기</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>저장</value></data>
+  <data name="Common_Clear" xml:space="preserve"><value>지우기</value></data>
+  <data name="Api_Footer_MoreProviders" xml:space="preserve"><value>조만간 더 많은 제공업체가 추가될 예정입니다</value></data>
+  <data name="Api_Footer_StorageSecurity" xml:space="preserve"><value>저장 및 보안</value></data>
+  <!--  Common  -->
+  <data name="Common.Save" xml:space="preserve"><value>저장</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>취소</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>닫기</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>추가</value></data>
+  <data name="Common.Segments" xml:space="preserve"><value>세그먼트</value></data>
+  <data name="Common.DownloadFfmpeg" xml:space="preserve"><value>FFmpeg 다운로드</value></data>
+  <data name="Common.DropVideoPlaceholder" xml:space="preserve"><value>동영상을 업로드하거나 미디어에서 시작하기</value></data>
+  <data name="Common.NewFromMedia" xml:space="preserve"><value>미디어 최신 소식</value></data>
+  <data name="Common.OpenProject" xml:space="preserve"><value>프로젝트 열기</value></data>
+  <data name="Common.Transcript" xml:space="preserve"><value>대본</value></data>
+  <data name="Transcript.AllSegments" xml:space="preserve"><value>모든 부문</value></data>
+  <data name="Common.CollapseRightPanel_Tip" xml:space="preserve"><value>오른쪽 패널 접기</value></data>
+  <data name="Common.ChannelStrip" xml:space="preserve"><value>채널 스트립</value></data>
+  <data name="Common.ExpandChannelStrip_Tip" xml:space="preserve"><value>채널 스트립 펼치기</value></data>
+  <data name="Common.CollapseChannelStrip_Tip" xml:space="preserve"><value>채널 스트립 접기</value></data>
+  <!--  LeftPanel stage tooltips  -->
+  <data name="Common.Stage_Separation" xml:space="preserve"><value>분리</value></data>
+  <data name="Common.Stage_Cleanup" xml:space="preserve"><value>정리</value></data>
+  <data name="Common.Stage_Transcribe" xml:space="preserve"><value>전사하기</value></data>
+  <data name="Common.Stage_Identify" xml:space="preserve"><value>식별하다</value></data>
+  <data name="Common.Stage_Translate" xml:space="preserve"><value>번역</value></data>
+  <data name="Common.Stage_Dub" xml:space="preserve"><value>더빙</value></data>
+  <data name="Common.Stage_Export" xml:space="preserve"><value>내보내기</value></data>
+  <!--  MiniPreviewPlayer  -->
+  <data name="MiniPlayer.NoFileLoaded" xml:space="preserve"><value>파일이 불러오지 않았습니다.</value></data>
+  <data name="MiniPlayer.CannotPlayFile" xml:space="preserve"><value>⚠ 파일을 재생할 수 없습니다</value></data>
+  <data name="MiniPlayer.UnsupportedFormat" xml:space="preserve"><value>지원되지 않는 형식</value></data>
+  <data name="MiniPlayer.PlayPauseTip" xml:space="preserve"><value>재생/일시정지</value></data>
+  <!--  Settings - General  -->
+  <data name="Settings.Title" xml:space="preserve"><value>설정</value></data>
+  <data name="Settings.Tab_General" xml:space="preserve"><value>일반</value></data>
+  <data name="Settings.Heading_General" xml:space="preserve"><value>일반 설정</value></data>
+  <data name="Settings.Label_Theme" xml:space="preserve"><value>외관 — 테마</value></data>
+  <data name="Settings.Hint_Theme" xml:space="preserve"><value>테마 변경 사항은 즉시 적용되며, 시스템을 재시작해도 유지됩니다.</value></data>
+  <!--  Update  -->
+  <data name="Update.BannerMessage" xml:space="preserve"><value>Trackdub {0} ({1})을 이용하실 수 있습니다.</value></data>
+  <data name="Update.Banner_Subtitle" xml:space="preserve"><value>Trackdub의 새 버전을 다운로드할 수 있습니다.</value></data>
+  <data name="Update.Button_ReleaseNotes" xml:space="preserve"><value>릴리스 노트</value></data>
+  <data name="Update.Download" xml:space="preserve"><value>다운로드</value></data>
+  <data name="Settings.Label_UpdateChannel" xml:space="preserve"><value>업데이트 채널</value></data>
+  <data name="Settings.Hint_UpdateChannel" xml:space="preserve"><value>Stable 버전에서는 검증된 릴리스가 제공됩니다. Preview 버전은 곧 출시될 기능을 미리 체험할 수 있게 해줍니다.</value></data>
+  <data name="Settings.Label_ModelTier" xml:space="preserve"><value>모델 등급</value></data>
+  <data name="Settings.Hint_CommercialOnly" xml:space="preserve"><value>Trackdub은 상업적 사용이 허용된 번들 모델만 제공합니다. 가져온 비상업용 모델은 계속 차단됩니다.</value></data>
+  <data name="Settings.Label_AsrEngine" xml:space="preserve"><value>ASR 엔진</value></data>
+  <data name="Settings.Label_TranslationEngine" xml:space="preserve"><value>번역 엔진</value></data>
+  <data name="Settings.Label_VoiceSynthesisEngine" xml:space="preserve"><value>음성 합성 엔진</value></data>
+  <data name="Settings.Label_StemSeparationEngine" xml:space="preserve"><value>줄기 분리 엔진</value></data>
+  <data name="Settings.Label_RubberbandStretch" xml:space="preserve"><value>TTS 타이밍 — 고무줄 늘이기</value></data>
+  <data name="Settings.Label_ReduceMotion" xml:space="preserve"><value>움직임 줄이기</value></data>
+  <data name="Settings.Hint_ReduceMotion" xml:space="preserve"><value>파이프라인 스테이지 악센트 줄무늬를 실행할 때 호흡 펄스를 비활성화합니다.</value></data>
+  <data name="Settings.Label_StretchThreshold" xml:space="preserve"><value>신장 임계치</value></data>
+  <data name="Settings.Label_ExportFormat" xml:space="preserve"><value>내보내기 형식</value></data>
+  <data name="Settings.Label_ExportSubtitles" xml:space="preserve"><value>자막 내보내기</value></data>
+  <data name="Settings.Label_VideoEncoder" xml:space="preserve"><value>비디오 인코더 (번인 내보내기)</value></data>
+  <data name="Settings.Label_PreviewVideoDecode" xml:space="preserve"><value>미리보기 동영상 디코딩</value></data>
+  <data name="Settings.Label_Subtitles" xml:space="preserve"><value>자막</value></data>
+  <data name="Settings.Label_SubtitleContentMode" xml:space="preserve"><value>자막 콘텐츠 모드</value></data>
+  <!--  Settings - Starter Packs  -->
+  <data name="Settings.Tab_StarterPacks" xml:space="preserve"><value>스타터 팩</value></data>
+  <data name="Settings.StarterPacks_Heading" xml:space="preserve"><value>스타터 팩</value></data>
+  <data name="Settings.StarterPacks_Hint" xml:space="preserve"><value>번들로 제공되는 모델 세트를 다운로드한 다음, 이를 적용하여 구성 단계 별칭과 런타임 기본값을 설정하십시오. 설치된 파일 수는 체크섬이 유효한 파일 수를 나타낼 뿐, 즉시 실행 가능한 상태는 아닙니다.</value></data>
+  <data name="Settings.StarterPacks_RecommendedBadge" xml:space="preserve"><value>감지된 등급을 기준으로 추천됨</value></data>
+  <data name="Settings.StarterPacks_AppliedBadge" xml:space="preserve"><value>적용됨</value></data>
+  <data name="Settings.StarterPacks_Download" xml:space="preserve"><value>다운로드</value></data>
+  <data name="Settings.StarterPacks_Apply" xml:space="preserve"><value>신청하기</value></data>
+  <data name="Settings.StarterPacks_ProfileLabel" xml:space="preserve"><value>프로필</value></data>
+  <data name="Settings.StarterPacks_InstalledLabel" xml:space="preserve"><value>설치된 모델:</value></data>
+  <data name="Settings.StarterPacks_DownloadComplete" xml:space="preserve"><value>다운로드가 완료되었습니다. 설정은 변경되지 않았습니다.</value></data>
+  <data name="Settings.StarterPacks_DownloadFailed" xml:space="preserve"><value>다운로드에 실패했습니다.</value></data>
+  <data name="Settings.StarterPacks_ApplyComplete" xml:space="preserve"><value>스타터 팩이 적용되었습니다.</value></data>
+  <data name="Settings.StarterPacks_ApplyFailed" xml:space="preserve"><value>적용에 실패했습니다.</value></data>
+  <data name="Settings.StarterPacks_ConsentRequired" xml:space="preserve"><value>이 팩을 적용하기 전에 음성 복제 동의가 필요합니다.</value></data>
+  <data name="Settings.StarterPacks_CompatibleBadge" xml:space="preserve"><value>완벽하게 호환됨</value></data>
+  <data name="Settings.StarterPacks_FallbackBadge" xml:space="preserve"><value>필수 대체 방안</value></data>
+  <data name="Settings.StarterPacks_NotRunnableBadge" xml:space="preserve"><value>실행할 수 없음</value></data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve"><value>{0}에서는 GPU 경로를 사용할 수 없습니다. {2}에서 {1}를 사용하고 있습니다.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupSummary" xml:space="preserve"><value>{0} 이 팩에 포함된 모델은 사용자의 하드웨어에 맞는 GPU 런타임이 설치될 때까지 CPU에서 실행됩니다.</value></data>
+  <data name="Settings.StarterPacks_GpuVariantNudge" xml:space="preserve"><value>일부 모델의 경우 GPU에 최적화된 변형도 필요합니다. GPU 런타임이 준비되면 모델 관리자에서 ‘최적화’ 기능을 사용하세요.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Nvidia" xml:space="preserve"><value>NVIDIA TensorRT RTX 런타임 설치</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Amd" xml:space="preserve"><value>AMD MIGraphX 런타임 설치</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Intel" xml:space="preserve"><value>인텔 OpenVINO 런타임 설치</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Qualcomm" xml:space="preserve"><value>Qualcomm QNN 런타임 설치</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_AmdNpu" xml:space="preserve"><value>AMD VitisAI NPU 런타임 설치</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Bundle" xml:space="preserve"><value>GPU 런타임 설치</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallComplete" xml:space="preserve"><value>GPU 런타임 설치가 완료되었습니다.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallFailed" xml:space="preserve"><value>GPU 런타임 설치에 실패했습니다.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupLicenseRequired" xml:space="preserve"><value>GPU 런타임을 설치하려면 공급업체 라이선스에 동의하십시오.</value></data>
+  <data name="Settings.StarterPacks_CloudReadyBadge" xml:space="preserve"><value>API 키 설정 완료</value></data>
+  <data name="Settings.StarterPacks_CloudKeysMissingBadge" xml:space="preserve"><value>API 키가 없습니다</value></data>
+  <data name="Settings.StarterPacks_CloudKeysButton" xml:space="preserve"><value>API 키 구성</value></data>
+  <data name="Settings.StarterPacks_ImportButton" xml:space="preserve"><value>패키지 가져오기…</value></data>
+  <data name="Settings.StarterPacks_ExportButton" xml:space="preserve"><value>내보내기…</value></data>
+  <data name="Settings.StarterPacks_UserPacksHeader" xml:space="preserve"><value>여러분의 배낭</value></data>
+  <data name="Settings.StarterPacks_OpenLocalModelsLink" xml:space="preserve"><value>모델을 개별적으로 다운로드하기</value></data>
+  <data name="Settings.StarterPacks_OptimizeNudge" xml:space="preserve"><value>{0} 모델에 대해 GPU에 최적화된 변형이 제공됩니다. 최상의 성능을 얻으려면 ‘로컬 모델’에서 최적화하십시오.</value></data>
+  <data name="Settings.StarterPacks_ReviewOptimizations" xml:space="preserve"><value>최적화 사항 검토</value></data>
+  <data name="Settings.LocalModels_AppliedPackBadge" xml:space="preserve"><value>적용된 팩: {0}</value></data>
+  <data name="Settings.Label_PackTierFilter" xml:space="preserve"><value>팩 필터</value></data>
+  <data name="Settings.Button_Dismiss" xml:space="preserve"><value>닫기</value></data>
+  <!--  Onboarding - Starter Packs  -->
+  <data name="Onboarding.StarterPacks_Title" xml:space="preserve"><value>스타터 팩을 선택하세요</value></data>
+  <data name="Onboarding.StarterPacks_Body" xml:space="preserve"><value>다운로드하여 적용할 번들 모델 세트를 선택하거나, ‘로컬 모델’에서 모델을 개별적으로 구성하세요.</value></data>
+  <data name="Onboarding.StarterPacks_Skip" xml:space="preserve"><value>지금은 건너뛰기</value></data>
+  <data name="Onboarding.StarterPacks_ConfigureIndividually" xml:space="preserve"><value>개별적으로 설정하기</value></data>
+  <!--  Settings - Local Models  -->
+  <data name="Settings.Tab_LocalModels" xml:space="preserve"><value>지역 모델</value></data>
+  <data name="Settings.Hint_CommercialOnlyLane" xml:space="preserve"><value>상용 모델 전용 차로입니다. 수입된 비상용 모델은 여전히 통행이 제한됩니다.</value></data>
+  <data name="Settings.Label_NonCommercial" xml:space="preserve"><value>비상업적</value></data>
+  <data name="Settings.Button_Download" xml:space="preserve"><value>다운로드</value></data>
+  <data name="Settings.Button_Repair" xml:space="preserve"><value>수리</value></data>
+  <data name="Settings.Button_Uninstall" xml:space="preserve"><value>제거</value></data>
+  <data name="Settings.Label_Optimize" xml:space="preserve"><value>최적화:</value></data>
+  <data name="Settings.Tip_PrecisionHeader" xml:space="preserve"><value>최적화된 모델 변형의 정확도 (옵션은 제공업체에 따라 다름):</value></data>
+  <data name="Settings.Tip_Fp32" xml:space="preserve"><value>fp32 — 완전한 32비트 가중치. 정확도가 가장 높지만 파일 크기가 가장 큽니다. CPU 전용입니다.</value></data>
+  <data name="Settings.Tip_Fp16" xml:space="preserve"><value>fp16 — 16비트 하프 정밀도. 정확도가 뛰어나며, fp32보다 크기가 절반입니다. DirectML / CUDA / TensorRT.</value></data>
+  <data name="Settings.Tip_Int8" xml:space="preserve"><value>int8 — 8비트 양자화. fp16보다 크기가 작고 처리 속도가 빠르며, 대부분의 오디오 모델에서 정확도가 약간 저하됩니다. CPU / DirectML / CUDA.</value></data>
+  <data name="Settings.Tip_Int4" xml:space="preserve"><value>int4 — 4비트 양자화. 가장 작고 빠르지만, 일부 모델에서는 눈에 띄는 정확도 저하가 발생합니다. DirectML / CUDA 전용입니다.</value></data>
+  <data name="Settings.Button_Optimize" xml:space="preserve"><value>최적화</value></data>
+  <data name="Settings.Status_Optimizing" xml:space="preserve"><value>최적화 중…</value></data>
+  <data name="Settings.Button_Cancel" xml:space="preserve"><value>취소</value></data>
+  <data name="Settings.Button_Use" xml:space="preserve"><value>사용법</value></data>
+  <data name="Settings.Button_Clear" xml:space="preserve"><value>지우기</value></data>
+  <data name="Settings.Status_Loading" xml:space="preserve"><value>로딩 중…</value></data>
+  <!--  Settings - Cloud Models  -->
+  <data name="Settings.Tab_CloudModels" xml:space="preserve"><value>클라우드 모델</value></data>
+  <data name="Settings.Button_Save" xml:space="preserve"><value>저장</value></data>
+  <data name="Settings.Hint_MoreProviders" xml:space="preserve"><value>조만간 더 많은 클라우드 서비스 제공업체가 추가될 예정입니다.</value></data>
+  <!--  Settings - Hardware  -->
+  <data name="Settings.Tab_Hardware" xml:space="preserve"><value>하드웨어</value></data>
+  <data name="Settings.Heading_Hardware" xml:space="preserve"><value>하드웨어 구성</value></data>
+  <data name="Settings.Label_FfmpegEncoders" xml:space="preserve"><value>FFmpeg 비디오 인코더</value></data>
+  <data name="Settings.Label_FfmpegHwDecode" xml:space="preserve"><value>FFmpeg 하드웨어 디코딩</value></data>
+  <data name="Settings.Toggle_NativeCuda" xml:space="preserve"><value>Windows에서 네이티브 CUDA/TensorRT 사용 허용 (고급)</value></data>
+  <data name="Settings.Hint_NativeCuda" xml:space="preserve"><value>기본적으로 비활성화되어 있습니다. 이 기능을 활성화하면 명시적인 CUDA 또는 TensorRT 요청이 DirectML/TensorRT RTX(WinML) 대신 네이티브 ONNX 런타임 제공자를 사용합니다. 파이프라인 자동 선택 기능은 변경되지 않습니다.</value></data>
+  <data name="Settings.Label_WinMlPolicy" xml:space="preserve"><value>Windows ML 장치 정책 (고급)</value></data>
+  <data name="Settings.Hint_WinMlPolicy" xml:space="preserve"><value>실험적 기능입니다. 등록된 Windows ML 카탈로그 제공자 중에서 ONNX Runtime을 통해 EP/장치를 자동으로 선택합니다. 스테이지 제공자 선택은 변경되지 않습니다. 이 설정을 변경한 후 Trackdub을 다시 시작하십시오.</value></data>
+  <data name="Settings.Label_GpuProviders" xml:space="preserve"><value>GPU 추론 제공업체</value></data>
+  <data name="Settings.Label_AllCertified" xml:space="preserve"><value>모든 인증된 카탈로그 제공업체</value></data>
+  <data name="Settings.Hint_AllCertified" xml:space="preserve"><value>이 기능을 실행하면 이 컴퓨터에 사용 가능한 모든 Windows ML 카탈로그 제공자가 설치됩니다. 지원되는 NVIDIA 하드웨어의 경우, TensorRT RTX 플러그인(별도의 NVIDIA 라이선스 필요)도 제공될 수 있습니다. 첫 실행 시 여러 패키지가 다운로드되어 몇 분 정도 소요될 수 있습니다. 이 기능을 실행하든 안 하든, 개별 제공자별 ‘설치’ 버튼을 통해 원하는 제공자만 선택하여 설치할 수 있습니다.</value></data>
+  <data name="Settings.Button_InstallAllCertified" xml:space="preserve"><value>인증된 모든 공급자를 설치하십시오</value></data>
+  <data name="Settings.Label_NvidiaTensorRt" xml:space="preserve"><value>NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.Button_Refresh" xml:space="preserve"><value>새로 고침</value></data>
+  <data name="Settings.Button_InstallProvider" xml:space="preserve"><value>프로바이더 설치</value></data>
+  <data name="Settings.Button_InstallTrtRtxPlugin" xml:space="preserve"><value>플러그인 설치</value></data>
+  <data name="Settings.Button_ViewLicense" xml:space="preserve"><value>라이선스 보기</value></data>
+  <data name="Settings.Label_AmdMigraphx" xml:space="preserve"><value>AMD MIGraphX</value></data>
+  <data name="Settings.Label_IntelOpenVino" xml:space="preserve"><value>인텔 OpenVINO (WinML 카탈로그)</value></data>
+  <data name="Settings.Label_QualcommQnn" xml:space="preserve"><value>퀄컴 QNN (WinML 카탈로그)</value></data>
+  <data name="Settings.Label_AmdVitisAi" xml:space="preserve"><value>AMD VitisAI (WinML 카탈로그)</value></data>
+  <data name="Settings.Label_NativeOrtGpu" xml:space="preserve"><value>네이티브 ORT GPU (고급)</value></data>
+  <data name="Settings.Label_ExecutionProviders" xml:space="preserve"><value>실행 제공자</value></data>
+  <data name="Settings.Label_PerStageOverrides" xml:space="preserve"><value>단계별 제공자 재정의</value></data>
+  <!--  Settings - Profiler  -->
+  <data name="Settings.Tab_Profiler" xml:space="preserve"><value>프로파일러</value></data>
+  <data name="Settings.Heading_Profiler" xml:space="preserve"><value>하드웨어 프로파일러</value></data>
+  <data name="Settings.Hint_Profiler" xml:space="preserve"><value>VAD, ASR, 번역 및 TTS 벤치마크를 실행하여 품질 프리셋을 추천합니다. 번들로 제공되는 ONNX 모델이 설치된 Windows가 필요합니다.</value></data>
+  <data name="Settings.Button_RunBenchmarks" xml:space="preserve"><value>단계별 벤치마크 실행</value></data>
+  <data name="Settings.Label_QualityPreset" xml:space="preserve"><value>고품질 사전 설정</value></data>
+  <data name="Settings.Hint_QualityPreset" xml:space="preserve"><value>&apos;사용 권장&apos;을 선택하면 프로파일러 결과를 모델 계층 계획에 반영합니다. &apos;재정의&apos;를 선택하면 사용자가 설정을 변경할 때까지 해당 선택 사항이 유지됩니다.</value></data>
+  <!--  Settings - Recent Projects  -->
+  <data name="Settings.Tab_RecentProjects" xml:space="preserve"><value>최근 프로젝트</value></data>
+  <data name="Settings.Heading_RecentProjects" xml:space="preserve"><value>최근 프로젝트</value></data>
+  <!--  Settings - About  -->
+  <data name="Settings.Tab_About" xml:space="preserve"><value>소개</value></data>
+  <data name="Settings.Heading_About" xml:space="preserve"><value>Trackdub 소개</value></data>
+  <data name="Settings.About_Tagline" xml:space="preserve"><value>Trackdub — AI 기반 더빙 워크스테이션</value></data>
+  <data name="Settings.About_Edition" xml:space="preserve"><value>크로스 플랫폼 아발로니아 에디션</value></data>
+  <!--  Settings - Developer  -->
+  <data name="Settings.Tab_Developer" xml:space="preserve"><value>개발자</value></data>
+  <data name="Settings.Heading_Developer" xml:space="preserve"><value>개발자 옵션</value></data>
+  <data name="Settings.Hint_Developer" xml:space="preserve"><value>개발 빌드에서는 개발자 도구 및 진단 기능을 사용할 수 있습니다.</value></data>
+  <!--  Settings - Footer  -->
+  <data name="Settings.Button_SaveAndClose" xml:space="preserve"><value>저장 후 닫기</value></data>
+  <!--  Dialog - SourceLanguagePicker  -->
+  <data name="Dialog.SourceLanguage_Title" xml:space="preserve"><value>대본 출처</value></data>
+  <data name="Dialog.SourceLanguage_Hint" xml:space="preserve"><value>원문을 변경하면 향후 번역 및 맞춤법 검사 결과에 영향을 미칩니다.</value></data>
+  <data name="Dialog.SourceLanguage_Placeholder" xml:space="preserve"><value>원문 언어</value></data>
+  <!--  Dialog - UnsavedInlineEdit  -->
+  <data name="Dialog.UnsavedEdit_KeepEditing" xml:space="preserve"><value>계속 편집하기</value></data>
+  <data name="Dialog.UnsavedEdit_Discard" xml:space="preserve"><value>삭제</value></data>
+  <!--  Dialog - VoiceCloneConsent  -->
+  <data name="Dialog.VoiceClone_Title" xml:space="preserve"><value>음성 복제 동의</value></data>
+  <data name="Dialog.VoiceClone_Body" xml:space="preserve"><value>이 세션에서는 사용자가 업로드한 참조 오디오 클립을 사용하여 음성 특성을 합성합니다. ‘동의함’을 클릭하면, 본 프로젝트에서 해당 음성을 복제할 법적 권한이 있음을 확인하는 것입니다.</value></data>
+  <data name="Dialog.VoiceClone_SessionNote" xml:space="preserve"><value>이 동의는 현재 애플리케이션 세션에만 적용되며, 다음에 애플리케이션을 시작할 때 다시 동의해야 합니다.</value></data>
+  <data name="Dialog.VoiceClone_Agree" xml:space="preserve"><value>동의합니다</value></data>
+  <!--  Timeline - Waveform  -->
+  <data name="Timeline.WaveformNotAvailable" xml:space="preserve"><value>파형 미리보기는 아직 사용할 수 없습니다.</value></data>
+  <data name="Timeline.ComputingPeaks" xml:space="preserve"><value>파형의 피크 값 계산 중…</value></data>
+  <!--  Timeline - ZoomLevel (non-localizable display but test flags it)  -->
+  <data name="Timeline.ZoomLevel" xml:space="preserve"><value>100 pps</value></data>
+  <!--  Inspector  -->
+  <data name="Inspector.Header" xml:space="preserve"><value>경위</value></data>
+  <data name="Inspector.Empty" xml:space="preserve"><value>세그먼트, 화자 또는 소스 아티팩트를 선택하여 확인해 보세요.</value></data>
+  <data name="Inspector.UnknownTarget" xml:space="preserve"><value>이 검사 대상은 아직 지원되지 않습니다.</value></data>
+  <data name="Inspector.OpenInEditor" xml:space="preserve"><value>편집기에서 열기</value></data>
+  <data name="Inspector.Tab_Content" xml:space="preserve"><value>내용</value></data>
+  <data name="Inspector.Tab_Timing" xml:space="preserve"><value>시기</value></data>
+  <data name="Inspector.Tab_Voice" xml:space="preserve"><value>음성</value></data>
+  <data name="Inspector.Tab_QC" xml:space="preserve"><value>품질 관리</value></data>
+  <data name="Inspector.SegmentDuration" xml:space="preserve"><value>세그먼트</value></data>
+  <data name="Inspector.GeneratedDuration" xml:space="preserve"><value>생성됨</value></data>
+  <data name="Inspector.Overrun" xml:space="preserve"><value>오버런</value></data>
+  <data name="Inspector.TimingAdjustment" xml:space="preserve"><value>시기</value></data>
+  <data name="Inspector.ConfidenceReview" xml:space="preserve"><value>리뷰를 남겨주세요</value></data>
+  <data name="Inspector.Artifact" xml:space="preserve"><value>유물</value></data>
+  <data name="Inspector.ArtifactType" xml:space="preserve"><value>유형</value></data>
+  <data name="Inspector.ArtifactDuration" xml:space="preserve"><value>기간</value></data>
+  <data name="Inspector.ArtifactSize" xml:space="preserve"><value>크기</value></data>
+  <data name="Inspector.ArtifactPath" xml:space="preserve"><value>경로</value></data>
+  <data name="Inspector.ArtifactType_Audio" xml:space="preserve"><value>오디오</value></data>
+  <data name="Inspector.ArtifactType_Video" xml:space="preserve"><value>동영상</value></data>
+  <data name="Inspector.ArtifactType_Subtitle" xml:space="preserve"><value>자막</value></data>
+  <data name="Inspector.ArtifactType_Unknown" xml:space="preserve"><value>알 수 없음</value></data>
+  <data name="Attention.translation.stale" xml:space="preserve"><value>번역이 오래되었습니다.</value></data>
+  <data name="Attention.tts.failed" xml:space="preserve"><value>더빙 생성에 실패했습니다.</value></data>
+  <data name="Attention.tts.stale" xml:space="preserve"><value>더브는 진부해.</value></data>
+  <data name="Attention.tts.pending" xml:space="preserve"><value>더빙 작업 대기 중입니다.</value></data>
+  <data name="Attention.tts.duration-overrun" xml:space="preserve"><value>더빙 타이밍이 허용 오차를 초과합니다.</value></data>
+  <data name="Attention.tts.speed-limit" xml:space="preserve"><value>시간 신축 처리는 화질을 저하시킬 수 있습니다.</value></data>
+  <data name="Attention.asr.low-confidence" xml:space="preserve"><value>대본의 정확도에 대한 검토가 필요합니다.</value></data>
+  <data name="Attention.lipsync.error" xml:space="preserve"><value>립싱크에 실패했습니다.</value></data>
+  <data name="Attention.lipsync.warning" xml:space="preserve"><value>립싱크 부분을 다시 검토해야 합니다.</value></data>
+  <data name="Attention.lipsynthesis.error" xml:space="preserve"><value>입술 복원 수술이 실패했습니다.</value></data>
+  <data name="Attention.lipsynthesis.warning" xml:space="preserve"><value>립 리페어에 대한 리뷰가 필요합니다.</value></data>
+  <data name="Attention.stage.failed" xml:space="preserve"><value>파이프라인 단계가 실패했습니다.</value></data>
+  <data name="Attention.stage.in-progress" xml:space="preserve"><value>파이프라인 단계가 실행 중입니다.</value></data>
+  <!--  License  -->
+  <data name="License.Tab" xml:space="preserve"><value>라이선스</value></data>
+  <data name="License.Heading" xml:space="preserve"><value>라이선스</value></data>
+  <data name="License.CurrentTier" xml:space="preserve"><value>현재 등급:</value></data>
+  <data name="License.Tier_Free" xml:space="preserve"><value>무료</value></data>
+  <data name="License.Tier_Pro" xml:space="preserve"><value>Pro</value></data>
+  <data name="License.KeyLabel" xml:space="preserve"><value>라이선스 키</value></data>
+  <data name="License.KeyPlaceholder" xml:space="preserve"><value>여기에 라이선스 키를 붙여넣으세요</value></data>
+  <data name="License.Button_Activate" xml:space="preserve"><value>활성화</value></data>
+  <data name="License.Button_Deactivate" xml:space="preserve"><value>비활성화</value></data>
+  <data name="License.Degraded" xml:space="preserve"><value>라이선스 등급 하향 조정</value></data>
+  <data name="License.MachinesRegisteredUnlimited" xml:space="preserve"><value> 등록된 기기 (무제한 개발자 라이선스)</value></data>
+</root>

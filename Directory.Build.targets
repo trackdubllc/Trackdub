@@ -1,0 +1,41 @@
+<Project>
+  <!-- Keep duplicate CPU ONNX Runtime assets out of publish output when the
+       runtime package graph also contains DirectML/Windows ML assets. -->
+  <Target Name="RemoveDuplicateCpuOnnxRuntimePublishAssets" BeforeTargets="_HandleFileConflictsForPublish">
+    <ItemGroup>
+      <!-- Collect ONNX DLL filenames that come from a non-CPU source (DirectML, WinML, etc.).
+           Path is normalised to forward-slashes so the check works on all platforms. -->
+      <_NonCpuOnnxDll Include="%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)"
+          Condition="('%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime.dll' or
+                      '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime_providers_shared.dll') and
+                     !$([System.String]::Copy('%(ResolvedFileToPublish.Identity)').ToLowerInvariant().Replace('\', '/').Contains('/microsoft.ml.onnxruntime/'))" />
+    </ItemGroup>
+    <!-- Only remove the CPU copies when an alternative provider also supplies the same DLL,
+         so a project that depends solely on the CPU package is never broken. -->
+    <ItemGroup Condition="'@(_NonCpuOnnxDll)' != ''">
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+          Condition="$([System.String]::Copy('%(ResolvedFileToPublish.Identity)').ToLowerInvariant().Replace('\', '/').Contains('/microsoft.ml.onnxruntime/')) and
+                     ('%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime.dll' or
+                      '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime_providers_shared.dll')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- GenAI.Cuda and base GenAI both ship onnxruntime-genai native assets. On Linux publish
+       Composition historically pulled base GenAI while Inference.Onnx pulls GenAI.Cuda, which
+       triggers NETSDK1152 for the same publish-relative path. Prefer Cuda when both appear. -->
+  <Target Name="RemoveDuplicateGenAiPublishAssets" BeforeTargets="_HandleFileConflictsForPublish">
+    <ItemGroup>
+      <_CudaGenAiAsset Include="%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)"
+          Condition="('%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime-genai.dll' or
+                      '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'libonnxruntime-genai.so') and
+                     $([System.String]::Copy('%(ResolvedFileToPublish.Identity)').ToLowerInvariant().Replace('\', '/').Contains('/microsoft.ml.onnxruntimegenai.cuda/'))" />
+    </ItemGroup>
+    <ItemGroup Condition="'@(_CudaGenAiAsset)' != ''">
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+          Condition="$([System.String]::Copy('%(ResolvedFileToPublish.Identity)').ToLowerInvariant().Replace('\', '/').Contains('/microsoft.ml.onnxruntimegenai/')) and
+                     !$([System.String]::Copy('%(ResolvedFileToPublish.Identity)').ToLowerInvariant().Replace('\', '/').Contains('/microsoft.ml.onnxruntimegenai.cuda/')) and
+                     ('%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'onnxruntime-genai.dll' or
+                      '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'libonnxruntime-genai.so')" />
+    </ItemGroup>
+  </Target>
+</Project>

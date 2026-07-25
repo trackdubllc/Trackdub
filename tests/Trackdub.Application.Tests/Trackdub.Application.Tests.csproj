@@ -1,0 +1,89 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="FsCheck" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Trackdub.Application\Trackdub.Application.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Domain\Trackdub.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Inference\Trackdub.Inference.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Infrastructure\Trackdub.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Trackdub.TestDoubles\FakeDiarizationEngine.cs" Link="TestDoubles\FakeDiarizationEngine.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\SortFormerTestFixtures.cs" Link="TestDoubles\SortFormerTestFixtures.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\RecordingModelCacheRegistrar.cs" Link="TestDoubles\RecordingModelCacheRegistrar.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTranslationEngine.cs" Link="TestDoubles\FakeTranslationEngine.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeGlossaryRepository.cs" Link="TestDoubles\FakeGlossaryRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeGlobalGlossaryRepository.cs" Link="TestDoubles\FakeGlobalGlossaryRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTranslationLanguageRouter.cs" Link="TestDoubles\FakeTranslationLanguageRouter.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeStemSeparationEngine.cs" Link="TestDoubles\FakeStemSeparationEngine.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeOverlapRescueEngine.cs" Link="TestDoubles\FakeOverlapRescueEngine.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeSpeechAudioEnhancementService.cs" Link="TestDoubles\FakeSpeechAudioEnhancementService.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeAudioQualityServices.cs" Link="TestDoubles\FakeAudioQualityServices.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTtsEngine.cs" Link="TestDoubles\FakeTtsEngine.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeVoiceCloneTtsEngine.cs" Link="TestDoubles\FakeVoiceCloneTtsEngine.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeConsentService.cs" Link="TestDoubles\FakeConsentService.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeAuditLog.cs" Link="TestDoubles\FakeAuditLog.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeReferenceClipAnalyzer.cs" Link="TestDoubles\FakeReferenceClipAnalyzer.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeReferenceClipTrimmer.cs" Link="TestDoubles\FakeReferenceClipTrimmer.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeAudioTimeStretchService.cs" Link="TestDoubles\FakeAudioTimeStretchService.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTtsAudioPostProcessor.cs" Link="TestDoubles\FakeTtsAudioPostProcessor.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeMixRenderer.cs" Link="TestDoubles\FakeMixRenderer.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeLoudnessNormalizer.cs" Link="TestDoubles\FakeLoudnessNormalizer.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeExportRenderer.cs" Link="TestDoubles\FakeExportRenderer.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeVideoRecomposer.cs" Link="TestDoubles\FakeVideoRecomposer.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeMediaProbe.cs" Link="TestDoubles\FakeMediaProbe.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakePhonemizer.cs" Link="TestDoubles\FakePhonemizer.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeVoiceCatalog.cs" Link="TestDoubles\FakeVoiceCatalog.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeProjectStageRunStore.cs" Link="TestDoubles\FakeProjectStageRunStore.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeCancellationAwareProjectStageRunStore.cs" Link="TestDoubles\FakeCancellationAwareProjectStageRunStore.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeArtifactStore.cs" Link="TestDoubles\FakeArtifactStore.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeAudioPreviewTransport.cs" Link="TestDoubles\FakeAudioPreviewTransport.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeFileFingerprintService.cs" Link="TestDoubles\FakeFileFingerprintService.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeFileSystemProbe.cs" Link="TestDoubles\FakeFileSystemProbe.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeSpeechRegionDetector.cs" Link="TestDoubles\FakeSpeechRegionDetector.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeWavHelper.cs" Link="TestDoubles\FakeWavHelper.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeMediaAssetRepository.cs" Link="TestDoubles\FakeMediaAssetRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTranscriptRepository.cs" Link="TestDoubles\FakeTranscriptRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTranslationRepository.cs" Link="TestDoubles\FakeTranslationRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeSpeakerRepository.cs" Link="TestDoubles\FakeSpeakerRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTtsTakeRepository.cs" Link="TestDoubles\FakeTtsTakeRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeVoiceAssignmentRepository.cs" Link="TestDoubles\FakeVoiceAssignmentRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeHardwareCapabilities.cs" Link="TestDoubles\FakeHardwareCapabilities.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeModelInventoryService.cs" Link="TestDoubles\FakeModelInventoryService.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTtsCandidateGroupRepository.cs" Link="TestDoubles\FakeTtsCandidateGroupRepository.cs" />
+    <Compile Include="..\\Trackdub.TestDoubles\\FakeRuntimePlanningPreferences.cs" Link="TestDoubles\\FakeRuntimePlanningPreferences.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakePipelinePreFlightChecker.cs" Link="TestDoubles\FakePipelinePreFlightChecker.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeModelCacheRegistrar.cs" Link="TestDoubles\FakeModelCacheRegistrar.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeForcedAligner.cs" Link="TestDoubles\FakeForcedAligner.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakePhonemeInventoryMapper.cs" Link="TestDoubles\FakePhonemeInventoryMapper.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakePhonemeTimingPlanner.cs" Link="TestDoubles\FakePhonemeTimingPlanner.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakePhonemeStretchService.cs" Link="TestDoubles\FakePhonemeStretchService.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeLipSyncSegmentRepository.cs" Link="TestDoubles\FakeLipSyncSegmentRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeAudioClipExtractor.cs" Link="TestDoubles\FakeAudioClipExtractor.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeLipSynthesisEngine.cs" Link="TestDoubles\FakeLipSynthesisEngine.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeFaceProviders.cs" Link="TestDoubles\FakeFaceProviders.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeLipSynthesisSegmentRepository.cs" Link="TestDoubles\FakeLipSynthesisSegmentRepository.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeTextRefinementEngine.cs" Link="TestDoubles\FakeTextRefinementEngine.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,73 @@
+# Localizely sync configuration for Trackdub Avalonia UI strings.
+# Docs: https://localizely.com/configuration-file/
+#
+# The API token is NOT stored here. The CLI reads it from
+# ~/.localizely/credentials.yaml (written by `localizely-cli init`) or from the
+# --api-token flag. Never commit a token.
+#
+# Path note: `file:` paths are relative to the directory the CLI runs in (and to
+# the repo root for the GitHub/GitLab integration). Run the CLI from the repo
+# root:  localizely-cli push   /   localizely-cli pull
+# Localizely convention is to keep this file at the repo root; it lives under
+# tools/localization/ here to keep all localization assets together — pass
+# --config tools/localization/localizely.yml, or symlink/copy it to the root.
+#
+# Files point at the REAL build-consumed satellite resources
+# (src/Trackdub.App.Avalonia/Resources), so Localizely round-trips directly with
+# what the Avalonia satellite assemblies compile from — no intermediate copy.
+
+config_version: 1.0            # Required. Only 1.0 available.
+project_id: 00000000-0000-0000-0000-000000000000  # Required. Replace with your project ID from https://app.localizely.com/projects
+file_type: dotnet_resx         # Required. .NET .resx format.
+branch: main                   # Optional. Localizely branch to sync with.
+
+# --- Upload: push the English master (source of truth) to Localizely ---
+upload:
+  files:
+    - file: src/Trackdub.App.Avalonia/Resources/App.resx
+      locale_code: en
+      params:
+        overwrite: false       # Don't clobber platform edits with local values by default.
+        reviewed: false
+        tag_updated:
+          - updated
+        tag_added:
+          - new
+
+# --- Download: pull each target locale back into the Resources folder ---
+download:
+  files:
+    - file: src/Trackdub.App.Avalonia/Resources/App.resx
+      locale_code: en
+    - file: src/Trackdub.App.Avalonia/Resources/App.ar.resx
+      locale_code: ar
+    - file: src/Trackdub.App.Avalonia/Resources/App.de.resx
+      locale_code: de
+    - file: src/Trackdub.App.Avalonia/Resources/App.es.resx
+      locale_code: es
+    - file: src/Trackdub.App.Avalonia/Resources/App.fr.resx
+      locale_code: fr
+    - file: src/Trackdub.App.Avalonia/Resources/App.he.resx
+      locale_code: he
+    - file: src/Trackdub.App.Avalonia/Resources/App.hi.resx
+      locale_code: hi
+    - file: src/Trackdub.App.Avalonia/Resources/App.it.resx
+      locale_code: it
+    - file: src/Trackdub.App.Avalonia/Resources/App.ja.resx
+      locale_code: ja
+    - file: src/Trackdub.App.Avalonia/Resources/App.ko.resx
+      locale_code: ko
+    - file: src/Trackdub.App.Avalonia/Resources/App.nl.resx
+      locale_code: nl
+    - file: src/Trackdub.App.Avalonia/Resources/App.pt-BR.resx
+      locale_code: pt-BR
+    - file: src/Trackdub.App.Avalonia/Resources/App.ru.resx
+      locale_code: ru
+    - file: src/Trackdub.App.Avalonia/Resources/App.sv.resx
+      locale_code: sv
+    - file: src/Trackdub.App.Avalonia/Resources/App.tr.resx
+      locale_code: tr
+    - file: src/Trackdub.App.Avalonia/Resources/App.zh-hans.resx
+      locale_code: zh-Hans
+  params:
+    export_empty_as: main      # Untranslated keys fall back to English so the UI never shows blanks.

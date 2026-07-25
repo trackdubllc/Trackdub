@@ -1,0 +1,11 @@
+{
+  "onnx-community/opus-mt-en-es": "fed268dded1979475a180719ddbdd2958b62a7b211cc85eb6ca43d79af9059c8",
+  "onnx-community/opus-mt-es-en": "f96ff688a518c7800e2baa90886737f035d10c14d9e4b209f314462663620d98",
+  "onnx-community/opus-mt-en-fr": "022550dea88dd707b583238bd487c6f317bab7c0a9dbc83884a42ec1639200ba",
+  "onnx-community/opus-mt-en-de": "d45360c86be3845ca64ef16b6b9f08a7f4e9adbd5831c5a1c3e04924a1396e80",
+  "onnx-community/opus-mt-en-it": "a1a7fad9c74bbb689ea413feb5b114351ff5a5b2cde04de9bb00e877b0ecd0b9",
+  "onnx-community/opus-mt-en-ROMANCE": "7a30634ba31a3da758df981b944ca0d5766b9d303e63491870e34bc0e72b87d2",
+  "Xenova/opus-mt-es-fr": "b2f59311dbbf620370ae1134fbe7a7d3cd1cb18ce2703e1c8386f276fc72d29b",
+  "Xenova/opus-mt-es-de": "a95fb5fcdd25cd4c5b070853d56f548a33077527279b8ed9f836a0b20d38ead1",
+  "Xenova/opus-mt-es-it": "f1c9fcc85eda7d22ecbfcf03b25c86b4f33e3447b193fe43a221f1664ebee3dd"
+}

@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute ref="xml:space" use="default">
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:NMTOKEN">
+                    <xsd:enumeration value="preserve" />
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Stage.VAD" xml:space="preserve"><value>आवाज़ गतिविधि का पता लगाना</value></data>
+  <data name="Stage.ASR" xml:space="preserve"><value>प्रतिलिपि</value></data>
+  <data name="Stage.Translation" xml:space="preserve"><value>अनुवाद</value></data>
+  <data name="Stage.TTS" xml:space="preserve"><value>भाषण संश्लेषण</value></data>
+  <data name="Stage.Mixing" xml:space="preserve"><value>ऑडियो मिक्स</value></data>
+  <data name="Status.Idle" xml:space="preserve"><value>निष्क्रिय</value></data>
+  <data name="Status.Running" xml:space="preserve"><value>दौड़ना…</value></data>
+  <data name="Status.Failed" xml:space="preserve"><value>असफल</value></data>
+  <data name="Status.Completed" xml:space="preserve"><value>पूर्ण</value></data>
+  <data name="Window_Title_Crash" xml:space="preserve"><value>ट्रैकडब — अप्रत्याशित त्रुटि</value></data>
+  <data name="Crash_Header" xml:space="preserve"><value>कुछ गलत हो गया</value></data>
+  <data name="Crash_Subtitle" xml:space="preserve"><value>Trackdub को एक अप्रत्याशित त्रुटि हुई। आप नीचे दिए गए विवरण को कॉपी कर सकते हैं या सहायता के लिए लॉग फ़ोल्डर खोल सकते हैं।</value></data>
+  <data name="Crash_Button_Copy" xml:space="preserve"><value>विवरण कॉपी करें</value></data>
+  <data name="Crash_Button_OpenLogFolder" xml:space="preserve"><value>लॉग फ़ोल्डर खोलें</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>बंद करें</value></data>
+  <data name="Settings.Label_Language" xml:space="preserve"><value>भाषा</value></data>
+  <data name="Settings.Hint_LanguageRestart" xml:space="preserve"><value>भाषा परिवर्तन लागू करने के लिए पुनरारंभ आवश्यक है।</value></data>
+  <!--  Transport  -->
+  <data name="Transport.ToolTip_SkipPrevious" xml:space="preserve"><value>पिछले को छोड़ें</value></data>
+  <!--  Clippy Assistant  -->
+  <data name="Clippy_Tooltip_AskAssistant" xml:space="preserve"><value>ट्रैकडब सहायक से पूछें</value></data>
+  <data name="Clippy_Text_AskAboutTrackdub" xml:space="preserve"><value>ट्रैकडब के बारे में पूछें</value></data>
+  <data name="Clippy_Placeholder_WhatDoesStarterPackDo" xml:space="preserve"><value>यह स्टार्टर पैक क्या करता है?</value></data>
+  <data name="Clippy_Button_Ask" xml:space="preserve"><value>पूछो</value></data>
+  <data name="Transport.ToolTip_Play" xml:space="preserve"><value>बजाएँ</value></data>
+  <data name="Transport.ToolTip_Pause" xml:space="preserve"><value>विराम</value></data>
+  <data name="Transport.ToolTip_SkipNext" xml:space="preserve"><value>अगला छोड़ें</value></data>
+  <data name="Transport.ToolTip_Subtitles" xml:space="preserve"><value>उपशीर्षक</value></data>
+  <data name="Transport.ToolTip_Karaoke" xml:space="preserve"><value>कराओके</value></data>
+  <data name="Transport.ToolTip_Bilingual" xml:space="preserve"><value>द्विभाषी</value></data>
+  <data name="Transport.ToolTip_Dub" xml:space="preserve"><value>डब</value></data>
+  <data name="Transport.ToolTip_Mute" xml:space="preserve"><value>म्यूट</value></data>
+  <data name="Transport.ToolTip_Fullscreen" xml:space="preserve"><value>पूर्ण स्क्रीन</value></data>
+  <data name="Transport.RetryPreview" xml:space="preserve"><value>दोबारा प्रयास करें</value></data>
+  <data name="Transport.ToolTip_RetryPreview" xml:space="preserve"><value>पुनः पूर्वावलोकन</value></data>
+  <!--  Titlebar  -->
+  <data name="Titlebar.ToolTip_Undo" xml:space="preserve"><value>रद्द करें</value></data>
+  <data name="Titlebar.ToolTip_Redo" xml:space="preserve"><value>दोबारा करें</value></data>
+  <data name="Titlebar.ToolTip_NewProject" xml:space="preserve"><value>नया प्रोजेक्ट</value></data>
+  <data name="Titlebar.Label_Recent" xml:space="preserve"><value>हाल का</value></data>
+  <data name="Titlebar.ToolTip_AIModels" xml:space="preserve"><value>एआई मॉडल</value></data>
+  <data name="Titlebar.ToolTip_Settings" xml:space="preserve"><value>सेटिंग्स</value></data>
+  <data name="Titlebar.ToolTip_CheckForUpdates" xml:space="preserve"><value>अपडेट्स के लिए जाँच करें</value></data>
+  <data name="Titlebar.ToolTip_DIAG" xml:space="preserve"><value>निदान</value></data>
+  <data name="Titlebar.ToolTip_BENCH" xml:space="preserve"><value>मानदंड</value></data>
+  <data name="Titlebar.Label_Update" xml:space="preserve"><value>अपडेट</value></data>
+  <data name="Titlebar.ToolTip_Minimize" xml:space="preserve"><value>न्यूनतम करें</value></data>
+  <data name="Titlebar.ToolTip_Maximize" xml:space="preserve"><value>अधिकतम करें</value></data>
+  <data name="Titlebar.ToolTip_Close" xml:space="preserve"><value>बंद करें</value></data>
+  <data name="StatusBar.Engine" xml:space="preserve"><value>इंजन:</value></data>
+  <data name="StatusBar.Local" xml:space="preserve"><value>स्थानीय</value></data>
+  <data name="StatusBar.Gpu" xml:space="preserve"><value>जीपीयू:</value></data>
+  <data name="StatusBar.Settings" xml:space="preserve"><value>सेटिंग्स</value></data>
+  <data name="StatusBar.StarterPacks" xml:space="preserve"><value>स्टार्टर पैक</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>फ़ाइल</value></data>
+  <data name="Menu.Project" xml:space="preserve"><value>परियोजना</value></data>
+  <data name="Menu.Media" xml:space="preserve"><value>मीडिया</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>देखें</value></data>
+  <data name="Menu.Window" xml:space="preserve"><value>खिड़की</value></data>
+  <data name="Menu.Help" xml:space="preserve"><value>मदद</value></data>
+  <data name="Menu.File.NewFromMedia" xml:space="preserve"><value>मीडिया से नया…</value></data>
+  <data name="Menu.File.OpenProject" xml:space="preserve"><value>परियोजना खोलें…</value></data>
+  <data name="Menu.File.Save" xml:space="preserve"><value>बचाएँ</value></data>
+  <data name="Menu.File.CloseProject" xml:space="preserve"><value>परियोजना बंद करें</value></data>
+  <data name="Menu.File.Exit" xml:space="preserve"><value>निकास</value></data>
+  <data name="Menu.Project.AIModels" xml:space="preserve"><value>एआई मॉडल…</value></data>
+  <data name="Menu.Project.Settings" xml:space="preserve"><value>सेटिंग्स…</value></data>
+  <data name="Menu.Media.Import" xml:space="preserve"><value>मीडिया आयात करें…</value></data>
+  <data name="MediaPicker.WindowRequired" xml:space="preserve"><value>मीडिया पिकर खोलने से पहले एक विंडो आवश्यक है।</value></data>
+  <data name="MediaPicker.LocalPathRequired" xml:space="preserve"><value>चुनी गई फ़ाइल के लिए स्थानीय पथ हल नहीं हो सका। मीडिया को एक स्थानीय फ़ोल्डर में कॉपी करें और फिर से प्रयास करें।</value></data>
+  <data name="MediaPicker.ImportNoLocalPaths" xml:space="preserve"><value>चयनित फ़ाइलों के स्थानीय पथ हल नहीं हो सके। मीडिया को एक स्थानीय फ़ोल्डर में कॉपी करें और फिर से प्रयास करें।</value></data>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve"><value>{0} चुनी गई फ़ाइल(ओं) को आयात नहीं किया जा सका क्योंकि कोई स्थानीय पथ उपलब्ध नहीं था।</value></data>
+  <data name="MediaPicker.ImportMediaFiles.Title" xml:space="preserve"><value>मीडिया फ़ाइलें आयात करें</value></data>
+  <data name="MediaPicker.ImportMediaFiles.MediaFilesFilter" xml:space="preserve"><value>मीडिया फ़ाइलें</value></data>
+  <data name="MediaPicker.ImportMediaFiles.AllFilesFilter" xml:space="preserve"><value>सभी फ़ाइलें</value></data>
+  <data name="ProjectPicker.WindowRequired" xml:space="preserve"><value>प्रोजेक्ट पिकर खोलने से पहले एक विंडो आवश्यक है।</value></data>
+  <data name="Menu.View.ToggleLeftPanel" xml:space="preserve"><value>बाएँ पैनल को टॉगल करें</value></data>
+  <data name="Menu.View.ToggleRightPanel" xml:space="preserve"><value>दाएँ पैनल को टॉगल करें</value></data>
+  <data name="Menu.View.ToggleTimeline" xml:space="preserve"><value>समयरेखा चालू/बंद करें</value></data>
+  <data name="Menu.View.ToggleExportPanel" xml:space="preserve"><value>निर्यात पैनल टॉगल करें</value></data>
+  <data name="Menu.View.ToggleSubtitles" xml:space="preserve"><value>उपशीर्षक चालू/बंद करें</value></data>
+  <data name="Menu.Window.Minimize" xml:space="preserve"><value>न्यूनतम करें</value></data>
+  <data name="Menu.Window.Maximize" xml:space="preserve"><value>अधिकतम करें / पुनर्स्थापित करें</value></data>
+  <data name="Menu.Help.CheckForUpdates" xml:space="preserve"><value>अपडेट्स के लिए जाँच करें</value></data>
+  <data name="Menu.Help.Diagnostics" xml:space="preserve"><value>निदान निर्यात करें…</value></data>
+  <data name="Menu.Help.Benchmarks" xml:space="preserve"><value>मानदंड</value></data>
+  <data name="Menu.Help.StarterPacks" xml:space="preserve"><value>स्टार्टर पैक…</value></data>
+  <data name="Menu.Help.About" xml:space="preserve"><value>के बारे में…</value></data>
+  <!--  Speakers  -->
+  <data name="Speakers.Header" xml:space="preserve"><value>आवाज़ें और वक्ता</value></data>
+  <data name="Speakers.EmptyState" xml:space="preserve"><value>अभी तक कोई वक्ता नहीं मिला है। पहले ट्रांसक्रिप्शन और वक्ता पहचान चलाएँ।</value></data>
+  <data name="Speakers.GenerateAll" xml:space="preserve"><value>सभी उत्पन्न करें</value></data>
+  <data name="Speakers.Count" xml:space="preserve"><value>{0} वक्ता</value></data>
+  <!--  Speaker  -->
+  <data name="Speaker.RenameTip" xml:space="preserve"><value>वक्ता का नाम बदलें</value></data>
+  <data name="Speaker.ConfirmRenameTip" xml:space="preserve"><value>नाम बदलने की पुष्टि करें</value></data>
+  <data name="Speaker.CancelRenameTip" xml:space="preserve"><value>नाम बदलने को रद्द करें</value></data>
+  <data name="Speaker.NewNamePlaceholder" xml:space="preserve"><value>नया नाम...</value></data>
+  <data name="Speaker.SyntheticVoice" xml:space="preserve"><value>कृत्रिम आवाज़</value></data>
+  <data name="Speaker.CloneVoice" xml:space="preserve"><value>इस आवाज़ का क्लोन बनाएँ</value></data>
+  <data name="Speaker.SelectVoicePlaceholder" xml:space="preserve"><value>आवाज़ चुनें...</value></data>
+  <data name="Speaker.AssignVoice" xml:space="preserve"><value>आवाज़ सौंपें</value></data>
+  <data name="Speaker.PreviewVoice" xml:space="preserve"><value>पूर्वावलोकन आवाज़</value></data>
+  <data name="Speaker.NoReferenceClip" xml:space="preserve"><value>अभी तक कोई संदर्भ क्लिप नहीं है</value></data>
+  <data name="Speaker.ExtractAutoClip" xml:space="preserve"><value>स्वचालित क्लिप निकालें</value></data>
+  <data name="Speaker.ExtractAutoClipTip" xml:space="preserve"><value>डायरीकृत टर्न से संदर्भ ऑडियो निकालें</value></data>
+  <data name="Speaker.UploadReference" xml:space="preserve"><value>संदर्भ अपलोड करें</value></data>
+  <data name="Speaker.UploadReferenceTip" xml:space="preserve"><value>वॉयस क्लोनिंग के लिए संदर्भ ऑडियो अपलोड करें</value></data>
+  <data name="Speaker.StaleTtsWarning" xml:space="preserve"><value>⚠ TTS पुरानी हो गई है — वॉइस फिर से असाइन करने के बाद इसे फिर से जेनरेट करें।</value></data>
+  <data name="Speaker.RegenerateStaleDub" xml:space="preserve"><value>पुराने डब को फिर से उत्पन्न करें</value></data>
+  <data name="Speaker.Generating" xml:space="preserve"><value>उत्पादित हो रहा है...</value></data>
+  <data name="Speaker.PreviewDubTip" xml:space="preserve"><value>इस वक्ता के लिए पहली पूरी की गई डब टेक का पूर्वावलोकन करें</value></data>
+  <data name="Speaker.MergeInto" xml:space="preserve"><value>में विलय करें:</value></data>
+  <data name="Speaker.SelectTargetPlaceholder" xml:space="preserve"><value>लक्ष्य चुनें...</value></data>
+  <data name="Speaker.Merge" xml:space="preserve"><value>मर्ज</value></data>
+  <data name="Speaker.MergeTip" xml:space="preserve"><value>इस स्पीकर को चयनित लक्ष्य में मर्ज करें (यह स्पीकर हटा दिया जाएगा)</value></data>
+  <!--  Timeline  -->
+  <data name="Timeline.Title" xml:space="preserve"><value>समयरेखा</value></data>
+  <data name="Timeline.SplitTip" xml:space="preserve"><value>प्लेहेड (S) पर विभाजित करें</value></data>
+  <data name="Timeline.MergeTip" xml:space="preserve"><value>चयनित क्लिप्स मर्ज करें</value></data>
+  <data name="Timeline.TrimTip" xml:space="preserve"><value>चयन के अनुसार छाँटें</value></data>
+  <data name="Timeline.DeleteTip" xml:space="preserve"><value>चयनित हटाएँ (Del)</value></data>
+  <data name="Timeline.ZoomOutTip" xml:space="preserve"><value>आउट करें</value></data>
+  <data name="Timeline.ZoomInTip" xml:space="preserve"><value>ज़ूम इन</value></data>
+  <data name="Timeline.CollapseTip" xml:space="preserve"><value>समयरेखा संक्षिप्त करें</value></data>
+  <data name="Timeline.Reference" xml:space="preserve"><value>संदर्भ</value></data>
+  <data name="Timeline.MuteTip" xml:space="preserve"><value>म्यूट (जल्द आ रहा है)</value></data>
+  <data name="Timeline.SoloTip" xml:space="preserve"><value>सोलो (जल्द आ रहा है)</value></data>
+  <!--  Pipeline  -->
+  <data name="Pipeline.Header" xml:space="preserve"><value>समन्वयक पाइपलाइन</value></data>
+  <data name="Pipeline.Col_Job" xml:space="preserve"><value>नौकरी</value></data>
+  <data name="Pipeline.Col_Stage" xml:space="preserve"><value>मंच</value></data>
+  <data name="Pipeline.Col_Progress" xml:space="preserve"><value>प्रगति</value></data>
+  <data name="Pipeline.Col_Detail" xml:space="preserve"><value>विवरण</value></data>
+  <data name="Pipeline.StarterPack" xml:space="preserve"><value>शुरुआती पैक</value></data>
+  <data name="Pipeline.StarterPack_Placeholder" xml:space="preserve"><value>शुरुआती पैक</value></data>
+  <data name="Pipeline.RunSelectedStages" xml:space="preserve"><value>चयनित चलाएँ</value></data>
+  <data name="Pipeline.CommercialOnly" xml:space="preserve"><value>केवल वाणिज्यिक</value></data>
+  <data name="Pipeline.ConfigHeader" xml:space="preserve"><value>पाइपलाइन कॉन्फ़िग</value></data>
+  <data name="Pipeline.Config" xml:space="preserve"><value>विन्यास</value></data>
+  <data name="Pipeline.StemSeparation" xml:space="preserve"><value>तनों का पृथक्करण</value></data>
+  <data name="Pipeline.StemSeparation_Tip" xml:space="preserve"><value>ट्रांसक्रिप्शन से पहले वोकल्स को बैकग्राउंड ऑडियो से अलग करें।</value></data>
+  <data name="Pipeline.AudioCleanup" xml:space="preserve"><value>ऑडियो सफाई</value></data>
+  <data name="Pipeline.AudioCleanup_Tip" xml:space="preserve"><value>शोर-निरोध और ऑडियो सफाई लागू करें (जब विभाजन सफल हो तो स्वचालित रूप से छोड़ा जाता है)</value></data>
+  <data name="Pipeline.SpeakerDiarization" xml:space="preserve"><value>वक्ता डायरीकरण</value></data>
+  <data name="Pipeline.SpeakerDiarization_Tip" xml:space="preserve"><value>ऑडियो में अलग-अलग वक्ताओं की पहचान करें।</value></data>
+  <data name="Pipeline.Voice" xml:space="preserve"><value>आवाज़</value></data>
+  <data name="Pipeline.Voice_Tip" xml:space="preserve"><value>डबिंग स्पीकरों के लिए वॉयस असाइनमेंट रणनीति</value></data>
+  <data name="Pipeline.VoiceOption_Manual" xml:space="preserve"><value>हस्तपुस्तिका</value></data>
+  <data name="Pipeline.VoiceOption_KokoroDefaults" xml:space="preserve"><value>कोकोरो डिफ़ॉल्ट</value></data>
+  <data name="Pipeline.VoiceOption_AutoClone" xml:space="preserve"><value>स्व-प्रतिलिपि</value></data>
+  <data name="Pipeline.RunAllStages" xml:space="preserve"><value>सभी चरण चलाएँ</value></data>
+  <data name="Pipeline.RunTranscriptToDub" xml:space="preserve"><value>डबिंग के लिए दौड़ो</value></data>
+  <data name="Pipeline.Options" xml:space="preserve"><value>विकल्प</value></data>
+  <data name="Pipeline.Model" xml:space="preserve"><value>मॉडल</value></data>
+  <data name="Pipeline.NotDownloaded" xml:space="preserve"><value>⚠ डाउनलोड नहीं किया गया</value></data>
+  <data name="Pipeline.NoApiKey" xml:space="preserve"><value>⚠ कोई एपीआई कुंजी नहीं</value></data>
+  <data name="Pipeline.ExecutionProvider" xml:space="preserve"><value>कार्यन्वयन प्रदाता</value></data>
+  <data name="Pipeline.SeparateOnImport" xml:space="preserve"><value>इम्पोर्ट करते समय वोकल्स और एम्बियंस को अलग करें</value></data>
+  <data name="Pipeline.SeparateOnImport_Hint" xml:space="preserve"><value>री-रन चयनित पृथक्करण मॉडल का उपयोग करता है।</value></data>
+  <data name="Pipeline.SeparationOptionalHint" xml:space="preserve"><value>रन में विभाजन शामिल करने के लिए पंक्ति टॉगल का उपयोग करें।</value></data>
+  <data name="Pipeline.CleanupHint" xml:space="preserve"><value>जब आप रन पर क्लिक करते हैं, तो स्पीच एन्हांसमेंट सफाई चरण के हिस्से के रूप में चलता है।</value></data>
+  <data name="Pipeline.AsrHint" xml:space="preserve"><value>पाइपलाइन के शीर्ष पर व्यावसायिक सुरक्षित मोड मॉडल विकल्पों को लाइसेंस प्राप्त सुरक्षित डिफ़ॉल्ट तक सीमित करता है।</value></data>
+  <data name="Pipeline.EnableAsrTextPolish" xml:space="preserve"><value>ट्रांसक्रिप्शन के बाद ASR टेक्स्ट को संपादित करें</value></data>
+  <data name="Pipeline.EnableAsrTextPolish_Hint" xml:space="preserve"><value>कच्चे ASR खंडों पर वैकल्पिक विराम चिह्न और व्याकरण सुधार। इसके लिए टेक्स्ट-रिफाइनेमेंट GenAI मॉडल की आवश्यकता है।</value></data>
+  <data name="Pipeline.TextRefinementAsrHint" xml:space="preserve"><value>रन में ASR पॉलिश शामिल करने के लिए रो टॉगल का उपयोग करें।</value></data>
+  <data name="Pipeline.DetectSpeakersOnImport" xml:space="preserve"><value>आयात पर स्पीकरों का पता लगाएँ</value></data>
+  <data name="Pipeline.DiarizationHint" xml:space="preserve"><value>पहचान ट्रांसक्रिप्शन के बाद ट्रांसक्रिप्ट खंडों को वक्ताओं से जोड़ती है।</value></data>
+  <data name="Pipeline.OverlapRescueHint" xml:space="preserve"><value>ओवरलैप स्पीच रेस्क्यू ओवरलैपिंग संवाद को स्रोत उम्मीदवारों (पुष्ट वक्ताओं नहीं) में विभाजित करता है। जब ओवरलैपिंग टर्न का पता चलता है, तो डायरीकरण के बाद चलाएँ।</value></data>
+  <data name="Pipeline.OverlapRescueModel" xml:space="preserve"><value>ओवरलैप रेस्क्यू मॉडल</value></data>
+  <data name="Pipeline.OverlapRescueExecutionProvider" xml:space="preserve"><value>ओवरलैप रेस्क्यू निष्पादन प्रदाता</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe" xml:space="preserve"><value>बचाने के बाद स्रोत उम्मीदवारों को पुनः प्रतिलिपि करें</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe_Hint" xml:space="preserve"><value>प्रत्येक पृथक उम्मीदवार पर ASR चलाता है और समीक्षा के लिए परिणाम चिह्नित करता है।</value></data>
+  <data name="Pipeline.RunOverlapRescue" xml:space="preserve"><value>ओवरलैप रेस्क्यू चलाएँ</value></data>
+  <data name="Pipeline.OverlapRescueReviewHeader" xml:space="preserve"><value>स्रोत उम्मीदवार</value></data>
+  <data name="Pipeline.OverlapRescueReviewBadge" xml:space="preserve"><value>समीक्षा</value></data>
+  <data name="Pipeline.TranslationConfiguredAbove" xml:space="preserve"><value>स्रोत और लक्ष्य ऊपर कॉन्फ़िगर किए गए हैं।</value></data>
+  <data name="Pipeline.ApplyTargetLanguage" xml:space="preserve"><value>चुनी हुई लक्ष्य भाषा लागू करें</value></data>
+  <data name="Pipeline.TtsHint" xml:space="preserve"><value>Voices पैनल में कोकोरो वॉयस असाइन करें, फिर टेक्स जनरेट करने के लिए डब चलाएँ।</value></data>
+  <data name="Pipeline.LipSyncHint" xml:space="preserve"><value>उपरोक्त चयनित फोर्स्ड-अलाइनमेंट मॉडल का उपयोग करके डब किए गए ऑडियो को होंठ-समय के अनुसार संरेखित और खींचें।</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesis" xml:space="preserve"><value>वीडियो होंठ सिंथेसिस चल रहा है…</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesisExperimental" xml:space="preserve"><value>वीडियो होंठ सिंथेसिस चलाना (प्रयोगात्मक)…</value></data>
+  <data name="Pipeline.LipSynthesisHint" xml:space="preserve"><value>वीडियो लिप रिपेयर (LatentSync ~6.7 GB + फेस मॉडल)। वीडियो, डब किए गए मिक्स और स्पीकर टर्न की आवश्यकता है। रन से पहले मॉडल डाउनलोड करें।</value></data>
+  <data name="Pipeline.ExportHint" xml:space="preserve"><value>टाइमलाइन के नीचे स्थित एक्सपोर्ट पैनल में मिक्स स्तरों और एक्सपोर्ट प्रारूप को कॉन्फ़िगर करें।</value></data>
+  <data name="Pipeline.OpenExportPanel" xml:space="preserve"><value>निर्यात पैनल खोलें</value></data>
+  <!--  RunConfig  -->
+  <data name="RunConfig.Header" xml:space="preserve"><value>रन कॉन्फ़िग</value></data>
+  <data name="RunConfig.Source" xml:space="preserve"><value>स्रोत</value></data>
+  <data name="RunConfig.TranslateTo" xml:space="preserve"><value>अनुवाद करें</value></data>
+  <data name="RunConfig.TargetLanguage_Placeholder" xml:space="preserve"><value>लक्षित भाषा</value></data>
+  <!--  Export  -->
+  <data name="Export.Header" xml:space="preserve"><value>निर्यात और मिश्रण</value></data>
+  <data name="Export.MixLabel" xml:space="preserve"><value>मिश्रण</value></data>
+  <data name="Export.Src" xml:space="preserve"><value>स्रोत</value></data>
+  <data name="Export.Src_Tip" xml:space="preserve"><value>स्रोत ऑडियो गेन (डीबी)</value></data>
+  <data name="Export.Dub" xml:space="preserve"><value>डब</value></data>
+  <data name="Export.Dub_Tip" xml:space="preserve"><value>डब्ड स्पीच गेन (डीबी)</value></data>
+  <data name="Export.Duck" xml:space="preserve"><value>बत्तख</value></data>
+  <data name="Export.Duck_Tip" xml:space="preserve"><value>स्रोत डकिंग (डीबी)</value></data>
+  <data name="Export.Timbre" xml:space="preserve"><value>स्वर-रंग</value></data>
+  <data name="Export.Timbre_Tip" xml:space="preserve"><value>डब किए गए भाषण में टिम्बर मिलान लागू करें।</value></data>
+  <data name="Export.Pan" xml:space="preserve"><value>तवा</value></data>
+  <data name="Export.Pan_Tip" xml:space="preserve"><value>मूल स्टीरियो पैन बहाल करें</value></data>
+  <data name="Export.ExportLabel" xml:space="preserve"><value>निर्यात</value></data>
+  <data name="Export.BurnIn" xml:space="preserve"><value>बर्न-इन</value></data>
+  <data name="Export.BurnIn_Tip" xml:space="preserve"><value>वीडियो स्ट्रीम में उपशीर्षक जलाएँ</value></data>
+  <data name="Export.SubtitleSource_Tip" xml:space="preserve"><value>उपशीर्षक पाठ स्रोत</value></data>
+  <data name="Export.Container_Tip" xml:space="preserve"><value>आउटपुट कंटेनर</value></data>
+  <data name="Export.Lufs_Tip" xml:space="preserve"><value>लक्षित ध्वनि तीव्रता (LUFS)</value></data>
+  <data name="Export.Match" xml:space="preserve"><value>मिलान</value></data>
+  <data name="Export.Match_Tip" xml:space="preserve"><value>मूल स्रोत के अनुरूप ध्वनि स्तर मिलाएँ</value></data>
+  <data name="Export.ExportButton" xml:space="preserve"><value>निर्यात</value></data>
+  <!--  Crash  -->
+  <data name="Crash.ExportDiagnostics" xml:space="preserve"><value>निदान निर्यात करें</value></data>
+  <!--  Dialog  -->
+  <data name="Dialog.VendorLicense_Title" xml:space="preserve"><value>विक्रेता लाइसेंस</value></data>
+  <data name="Dialog.VendorLicense_Acceptance" xml:space="preserve"><value>&apos;मैं स्वीकार करता हूँ&apos; पर क्लिक करके, आप पुष्टि करते हैं कि आपने इस इंस्टॉलेशन के उपयोग के लिए इन शर्तों की समीक्षा कर ली है और इन्हें स्वीकार करते हैं।</value></data>
+  <data name="Dialog.VendorLicense_Accept" xml:space="preserve"><value>मैं स्वीकार करता हूँ</value></data>
+  <data name="Dialog.SpeakerDetection_Title" xml:space="preserve"><value>वक्ता पहचान</value></data>
+  <data name="Dialog.SpeakerDetection_UseSingle" xml:space="preserve"><value>एक स्पीकर का उपयोग करें</value></data>
+  <data name="Dialog.SpeakerDetection_Download" xml:space="preserve"><value>अभी डाउनलोड करें</value></data>
+  <data name="Dialog.ModelNotReady_Title" xml:space="preserve"><value>मॉडल उपलब्ध नहीं है</value></data>
+  <data name="Dialog.ModelSetup_Title" xml:space="preserve"><value>मॉडल सेटअप</value></data>
+  <data name="Dialog.FallbackVoice_Title" xml:space="preserve"><value>फॉलबैक वॉयस का उपयोग करें?</value></data>
+  <data name="Dialog.FallbackVoice_Message" xml:space="preserve"><value>कुछ स्पीकरों के लिए कोई निर्धारित वॉयस नहीं है। ट्रैकडब इस पीढ़ी के लिए प्रत्येक अनअसाइन किए गए स्पीकर के लिए पहली संगत कोकोरो वॉयस का उपयोग करेगा।</value></data>
+  <data name="Dialog.FallbackVoice_Confirm" xml:space="preserve"><value>बैकअप आवाज़ों के साथ उत्पन्न करें</value></data>
+  <!--  Glossary  -->
+  <data name="Glossary.Header" xml:space="preserve"><value>शब्दावली</value></data>
+  <data name="Glossary.ProjectHeader" xml:space="preserve"><value>परियोजना शब्दावली</value></data>
+  <data name="Glossary.AddTerm" xml:space="preserve"><value>+ अवधि जोड़ें</value></data>
+  <data name="Glossary.TermCount" xml:space="preserve"><value>{0} शर्तें</value></data>
+  <data name="Glossary.Loading" xml:space="preserve"><value>लोड हो रहा है…</value></data>
+  <data name="Glossary.SourceTerm_Placeholder" xml:space="preserve"><value>स्रोत पद</value></data>
+  <data name="Glossary.TargetTerm_Placeholder" xml:space="preserve"><value>लक्षित अवधि</value></data>
+  <data name="Glossary.CaseSensitive" xml:space="preserve"><value>अक्षर-संवेदनशील</value></data>
+  <data name="Glossary.DeleteTerm_Tip" xml:space="preserve"><value>पैदल चलने का समय</value></data>
+  <data name="Glossary.Scope.Project" xml:space="preserve"><value>परियोजना</value></data>
+  <data name="Glossary.Scope.Global" xml:space="preserve"><value>वैश्विक</value></data>
+  <data name="Glossary.Scope.GlobalBadge" xml:space="preserve"><value>वैश्विक</value></data>
+  <data name="Glossary.NoteLine_GlobalCaseSensitive" xml:space="preserve"><value>वैश्विक · केस-संवेदी</value></data>
+  <data name="Glossary.ImportCsv" xml:space="preserve"><value>सीएसवी आयात करें</value></data>
+  <!--  MediaBin  -->
+  <data name="MediaBin.Header" xml:space="preserve"><value>मीडिया</value></data>
+  <data name="MediaBin.Context_ProjectWide" xml:space="preserve"><value>परियोजना संदर्भ</value></data>
+  <data name="MediaBin.Import" xml:space="preserve"><value>आयात</value></data>
+  <data name="MediaBin.Import_Tip" xml:space="preserve"><value>मीडिया फ़ाइलें आयात करें</value></data>
+  <data name="MediaBin.NewProjectImport" xml:space="preserve"><value>नया परियोजना आयात</value></data>
+  <data name="MediaBin.DetectSpeakers" xml:space="preserve"><value>वक्ताओं का पता लगाएँ</value></data>
+  <data name="MediaBin.SeparateVocals" xml:space="preserve"><value>वोकल्स और एम्बियंस को अलग करें</value></data>
+  <data name="MediaBin.ImportHint" xml:space="preserve"><value>इस ट्री को भरने के लिए मीडिया आयात करें या एक प्रोजेक्ट बनाएँ।</value></data>
+  <data name="MediaBin.EmptyTreeHint" xml:space="preserve"><value>अभी तक कोई डंठल नहीं</value></data>
+  <data name="Timeline.CollapsedEmptyHint" xml:space="preserve"><value>ट्रैक के लिए विस्तार करें · मीडिया डालें</value></data>
+  <data name="Inspector.EmptyShort" xml:space="preserve"><value>निरीक्षण के लिए एक खंड चुनें</value></data>
+  <data name="Transcript.EmptySegments" xml:space="preserve"><value>अभी तक कोई खंड नहीं हैं। इस सूची को भरने के लिए प्रतिलेखन चलाएँ।</value></data>
+  <data name="MediaBin.Tab_Source" xml:space="preserve"><value>स्रोत</value></data>
+  <data name="MediaBin.Tab_Generated" xml:space="preserve"><value>उत्पन्न</value></data>
+  <data name="Navigator.Section.SourceMedia" xml:space="preserve"><value>स्रोत मीडिया</value></data>
+  <data name="Navigator.Section.Transcript" xml:space="preserve"><value>प्रतिलिपि</value></data>
+  <data name="Navigator.Section.Speakers" xml:space="preserve"><value>वक्ता</value></data>
+  <data name="Navigator.Section.Voices" xml:space="preserve"><value>आवाज़ें</value></data>
+  <data name="Navigator.Section.GeneratedAudio" xml:space="preserve"><value>उत्पन्न ऑडियो</value></data>
+  <data name="Navigator.Section.Mixes" xml:space="preserve"><value>मिश्रण</value></data>
+  <data name="Navigator.Section.Exports" xml:space="preserve"><value>निर्यात</value></data>
+  <data name="Navigator.Empty.SourceMedia" xml:space="preserve"><value>इस अनुभाग को भरने के लिए स्रोत मीडिया आयात करें।</value></data>
+  <data name="Navigator.Empty.Transcript" xml:space="preserve"><value>ट्रांसक्रिप्शन चलाएँ ताकि ट्रांसक्रिप्ट खंड बनाए जा सकें।</value></data>
+  <data name="Navigator.Empty.Speakers" xml:space="preserve"><value>ट्रांसक्रिप्शन के बाद डायरीकरण चलाएँ या वक्ताओं को असाइन करें।</value></data>
+  <data name="Navigator.Empty.Voices" xml:space="preserve"><value>वॉयस पैनल में स्पीकरों को आवाज़ें असाइन करें।</value></data>
+  <data name="Navigator.Empty.GeneratedAudio" xml:space="preserve"><value>उत्पन्न TTS और प्रसंस्करण कलाकृतियाँ यहाँ दिखाई देती हैं।</value></data>
+  <data name="Navigator.Empty.Mixes" xml:space="preserve"><value>एक्सपोर्ट या मिक्स चरणों के बाद प्रीव्यू मिक्स यहाँ दिखाई देते हैं।</value></data>
+  <data name="Navigator.Empty.Exports" xml:space="preserve"><value>अंतिम निर्यातः निर्यात चरण के बाद यहाँ दिखाई देते हैं।</value></data>
+  <data name="FloatingMonitor.Title" xml:space="preserve"><value>वीडियो मॉनिटर</value></data>
+  <data name="FloatingMonitor.Hide" xml:space="preserve"><value>मॉनिटर छिपाएँ</value></data>
+  <data name="FloatingMonitor.NoVideo" xml:space="preserve"><value>अभी तक कोई वीडियो फ्रेम नहीं</value></data>
+  <data name="Transport.ToolTip_PipMonitor" xml:space="preserve"><value>चित्र-इन-चित्र वीडियो मॉनिटर टॉगल करें</value></data>
+  <!--  Segment  -->
+  <data name="Segment.Start" xml:space="preserve"><value>शुरू करें</value></data>
+  <data name="Segment.End" xml:space="preserve"><value>अंत</value></data>
+  <data name="Segment.Duration" xml:space="preserve"><value>अवधि</value></data>
+  <data name="Segment.Speaker" xml:space="preserve"><value>वक्ता</value></data>
+  <data name="Segment.Source" xml:space="preserve"><value>स्रोत</value></data>
+  <data name="Segment.VoiceCandidates" xml:space="preserve"><value>आवाज़ उम्मीदवार</value></data>
+  <data name="Segment.VoiceCandidates_Hint" xml:space="preserve"><value>A/B पूर्वावलोकन के लिए वॉयस उम्मीदवार बनाने हेतु जनरेट पर क्लिक करें।</value></data>
+  <data name="Segment.GenerateCandidates" xml:space="preserve"><value>उम्मीदवार उत्पन्न करें</value></data>
+  <data name="Segment.LipSyncAlign" xml:space="preserve"><value>समायोजित करें</value></data>
+  <data name="Segment.LipSynthesisRepair" xml:space="preserve"><value>मरम्मत</value></data>
+  <data name="Segment.Review" xml:space="preserve"><value>समीक्षा</value></data>
+  <data name="Segment.SaveSettings" xml:space="preserve"><value>सेटिंग्स सहेजें</value></data>
+  <data name="Segment.GenerateDub" xml:space="preserve"><value>डब उत्पन्न करें</value></data>
+  <data name="Segment.Regenerate" xml:space="preserve"><value>पुनर्जीवित करें</value></data>
+  <data name="Segment.MatchTiming" xml:space="preserve"><value>समय मिलाएँ</value></data>
+  <data name="Segment.Runtime.Dub" xml:space="preserve"><value>डब रनटाइम</value></data>
+  <data name="Segment.Runtime.Translation" xml:space="preserve"><value>अनुवाद रनटाइम</value></data>
+  <data name="Segment.Runtime.Transcription" xml:space="preserve"><value>प्रतिलेखन रनटाइम</value></data>
+  <data name="Segment.Runtime.Alignment" xml:space="preserve"><value>लिप-सिंक समय</value></data>
+  <data name="Segment.Runtime.Provider" xml:space="preserve"><value>प्रदाता</value></data>
+  <data name="Segment.Runtime.Model" xml:space="preserve"><value>मॉडल</value></data>
+  <data name="Segment.Runtime.Precision" xml:space="preserve"><value>सटीकता</value></data>
+  <!--  ApiKeys  -->
+  <data name="Window_Title_ApiKeys" xml:space="preserve"><value>एपीआई कुंजी</value></data>
+  <data name="Chrome_Minimize" xml:space="preserve"><value>न्यूनतम करें</value></data>
+  <data name="Chrome_MaximizeRestore" xml:space="preserve"><value>अधिकतम करें / पुनर्स्थापित करें</value></data>
+  <data name="Chrome_Close" xml:space="preserve"><value>बंद करें</value></data>
+  <data name="Api_Tooltip_ToggleReveal" xml:space="preserve"><value>कुंजी दिखाएँ / छिपाएँ</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>बचाएँ</value></data>
+  <data name="Common_Clear" xml:space="preserve"><value>स्पष्ट</value></data>
+  <data name="Api_Footer_MoreProviders" xml:space="preserve"><value>और प्रदाता जल्द ही आ रहे हैं</value></data>
+  <data name="Api_Footer_StorageSecurity" xml:space="preserve"><value>भंडारण और सुरक्षा</value></data>
+  <!--  Common  -->
+  <data name="Common.Save" xml:space="preserve"><value>बचाएँ</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>रद्द करें</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>बंद करें</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>जोड़ें</value></data>
+  <data name="Common.Segments" xml:space="preserve"><value>खंड</value></data>
+  <data name="Common.DownloadFfmpeg" xml:space="preserve"><value>एफएफएमपीईजी डाउनलोड करें</value></data>
+  <data name="Common.DropVideoPlaceholder" xml:space="preserve"><value>वीडियो ड्रॉप करें या मीडिया से शुरू करें</value></data>
+  <data name="Common.NewFromMedia" xml:space="preserve"><value>मीडिया से नया</value></data>
+  <data name="Common.OpenProject" xml:space="preserve"><value>परियोजना खोलें</value></data>
+  <data name="Common.Transcript" xml:space="preserve"><value>प्रतिलिपि</value></data>
+  <data name="Transcript.AllSegments" xml:space="preserve"><value>सभी खंड</value></data>
+  <data name="Common.CollapseRightPanel_Tip" xml:space="preserve"><value>दाएँ पैनल को संकुचित करें</value></data>
+  <data name="Common.ChannelStrip" xml:space="preserve"><value>चैनल स्ट्रिप</value></data>
+  <data name="Common.ExpandChannelStrip_Tip" xml:space="preserve"><value>चैनल स्ट्रिप का विस्तार करें</value></data>
+  <data name="Common.CollapseChannelStrip_Tip" xml:space="preserve"><value>चैनल स्ट्रिप को छिपाएँ</value></data>
+  <!--  LeftPanel stage tooltips  -->
+  <data name="Common.Stage_Separation" xml:space="preserve"><value>विच्छेद</value></data>
+  <data name="Common.Stage_Cleanup" xml:space="preserve"><value>सफ़ाई</value></data>
+  <data name="Common.Stage_Transcribe" xml:space="preserve"><value>प्रतिलिपि बनाएँ</value></data>
+  <data name="Common.Stage_Identify" xml:space="preserve"><value>पहचानें</value></data>
+  <data name="Common.Stage_Translate" xml:space="preserve"><value>अनुवाद करें</value></data>
+  <data name="Common.Stage_Dub" xml:space="preserve"><value>डब</value></data>
+  <data name="Common.Stage_Export" xml:space="preserve"><value>निर्यात</value></data>
+  <!--  MiniPreviewPlayer  -->
+  <data name="MiniPlayer.NoFileLoaded" xml:space="preserve"><value>कोई फ़ाइल लोड नहीं हुई</value></data>
+  <data name="MiniPlayer.CannotPlayFile" xml:space="preserve"><value>⚠ फ़ाइल नहीं चला सकता</value></data>
+  <data name="MiniPlayer.UnsupportedFormat" xml:space="preserve"><value>असमर्थित प्रारूप</value></data>
+  <data name="MiniPlayer.PlayPauseTip" xml:space="preserve"><value>चलाएँ/विराम</value></data>
+  <!--  Settings - General  -->
+  <data name="Settings.Title" xml:space="preserve"><value>सेटिंग्स</value></data>
+  <data name="Settings.Tab_General" xml:space="preserve"><value>सामान्य</value></data>
+  <data name="Settings.Heading_General" xml:space="preserve"><value>सामान्य सेटिंग्स</value></data>
+  <data name="Settings.Label_Theme" xml:space="preserve"><value>दृश्य — थीम</value></data>
+  <data name="Settings.Hint_Theme" xml:space="preserve"><value>थीम परिवर्तन तुरंत लागू होते हैं और पुनरारंभ करने पर भी बने रहते हैं।</value></data>
+  <!--  Update  -->
+  <data name="Update.BannerMessage" xml:space="preserve"><value>Trackdub {0} ({1}) उपलब्ध है।</value></data>
+  <data name="Update.Banner_Subtitle" xml:space="preserve"><value>ट्रैकडब का एक नया संस्करण डाउनलोड के लिए तैयार है।</value></data>
+  <data name="Update.Button_ReleaseNotes" xml:space="preserve"><value>रिलीज़ नोट्स</value></data>
+  <data name="Update.Download" xml:space="preserve"><value>डाउनलोड</value></data>
+  <data name="Settings.Label_UpdateChannel" xml:space="preserve"><value>चैनल अपडेट करें</value></data>
+  <data name="Settings.Hint_UpdateChannel" xml:space="preserve"><value>स्टेबल शाखा को परीक्षण किए गए रिलीज़ प्राप्त होते हैं। पूर्वावलोकन शाखा आगामी सुविधाओं तक प्रारंभिक पहुँच प्रदान करती है।</value></data>
+  <data name="Settings.Label_ModelTier" xml:space="preserve"><value>मॉडल स्तर</value></data>
+  <data name="Settings.Hint_CommercialOnly" xml:space="preserve"><value>Trackdub केवल वाणिज्यिक-सुरक्षित बंडल किए गए मॉडल ही शिप करता है। आयातित गैर-वाणिज्यिक मॉडल अवरुद्ध रहते हैं।</value></data>
+  <data name="Settings.Label_AsrEngine" xml:space="preserve"><value>एएसआर इंजन</value></data>
+  <data name="Settings.Label_TranslationEngine" xml:space="preserve"><value>अनुवाद इंजन</value></data>
+  <data name="Settings.Label_VoiceSynthesisEngine" xml:space="preserve"><value>स्वर संश्लेषण इंजन</value></data>
+  <data name="Settings.Label_StemSeparationEngine" xml:space="preserve"><value>स्टेम पृथक्करण इंजन</value></data>
+  <data name="Settings.Label_RubberbandStretch" xml:space="preserve"><value>टीटीएस टाइमिंग — रबरबैंड स्ट्रेच</value></data>
+  <data name="Settings.Label_ReduceMotion" xml:space="preserve"><value>गति कम करें</value></data>
+  <data name="Settings.Hint_ReduceMotion" xml:space="preserve"><value>चलते पाइपलाइन स्टेज पर एक्सेन्ट स्ट्राइप्स की साँस लेने वाली पल्स को अक्षम करता है।</value></data>
+  <data name="Settings.Label_StretchThreshold" xml:space="preserve"><value>खिंचाव सीमा</value></data>
+  <data name="Settings.Label_ExportFormat" xml:space="preserve"><value>निर्यात प्रारूप</value></data>
+  <data name="Settings.Label_ExportSubtitles" xml:space="preserve"><value>उपशीर्षक निर्यात करें</value></data>
+  <data name="Settings.Label_VideoEncoder" xml:space="preserve"><value>वीडियो एन्कोडर (बर्न-इन एक्सपोर्ट)</value></data>
+  <data name="Settings.Label_PreviewVideoDecode" xml:space="preserve"><value>प्रीव्यू वीडियो डीकोड</value></data>
+  <data name="Settings.Label_Subtitles" xml:space="preserve"><value>उपशीर्षक</value></data>
+  <data name="Settings.Label_SubtitleContentMode" xml:space="preserve"><value>उपशीर्षक सामग्री मोड</value></data>
+  <!--  Settings - Starter Packs  -->
+  <data name="Settings.Tab_StarterPacks" xml:space="preserve"><value>स्टार्टर पैक</value></data>
+  <data name="Settings.StarterPacks_Heading" xml:space="preserve"><value>स्टार्टर पैक</value></data>
+  <data name="Settings.StarterPacks_Hint" xml:space="preserve"><value>बंडल किए गए मॉडल सेट डाउनलोड करें, फिर स्टेज एलियास और रनटाइम डिफ़ॉल्ट्स कॉन्फ़िगर करने के लिए लागू करें। इंस्टॉल की गई गिनती चेकसम-वैध फ़ाइलों की है, न कि रनटाइम-तैयार।</value></data>
+  <data name="Settings.StarterPacks_RecommendedBadge" xml:space="preserve"><value>पहचाने गए स्तर के आधार पर अनुशंसित</value></data>
+  <data name="Settings.StarterPacks_AppliedBadge" xml:space="preserve"><value>लागू</value></data>
+  <data name="Settings.StarterPacks_Download" xml:space="preserve"><value>डाउनलोड</value></data>
+  <data name="Settings.StarterPacks_Apply" xml:space="preserve"><value>लागू करें</value></data>
+  <data name="Settings.StarterPacks_ProfileLabel" xml:space="preserve"><value>प्रोफ़ाइल</value></data>
+  <data name="Settings.StarterPacks_InstalledLabel" xml:space="preserve"><value>स्थापित मॉडल:</value></data>
+  <data name="Settings.StarterPacks_DownloadComplete" xml:space="preserve"><value>डाउनलोड पूरा हो गया। सेटिंग्स नहीं बदली गईं।</value></data>
+  <data name="Settings.StarterPacks_DownloadFailed" xml:space="preserve"><value>डाउनलोड विफल हो गया।</value></data>
+  <data name="Settings.StarterPacks_ApplyComplete" xml:space="preserve"><value>स्टार्टर पैक लागू किया गया।</value></data>
+  <data name="Settings.StarterPacks_ApplyFailed" xml:space="preserve"><value>आवेदन विफल हो गया।</value></data>
+  <data name="Settings.StarterPacks_ConsentRequired" xml:space="preserve"><value>इस पैक को लागू करने से पहले वॉइस क्लोनिंग की सहमति आवश्यक है।</value></data>
+  <data name="Settings.StarterPacks_CompatibleBadge" xml:space="preserve"><value>पूर्णतः संगत</value></data>
+  <data name="Settings.StarterPacks_FallbackBadge" xml:space="preserve"><value>बैकअप आवश्यक हैं</value></data>
+  <data name="Settings.StarterPacks_NotRunnableBadge" xml:space="preserve"><value>चलाने योग्य नहीं</value></data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve"><value>{0} के लिए GPU पथ उपलब्ध नहीं है। {2} पर {1} का उपयोग कर रहे हैं।</value></data>
+  <data name="Settings.StarterPacks_GpuSetupSummary" xml:space="preserve"><value>{0} इस पैक के मॉडल तब तक CPU पर चलेंगे, जब तक आपके हार्डवेयर के लिए GPU रनटाइम स्थापित नहीं हो जाता।</value></data>
+  <data name="Settings.StarterPacks_GpuVariantNudge" xml:space="preserve"><value>कुछ मॉडलों को GPU-अनुकूलित संस्करणों की भी आवश्यकता होती है। GPU रनटाइम तैयार होने के बाद Model Manager में Optimize का उपयोग करें।</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Nvidia" xml:space="preserve"><value>NVIDIA TensorRT RTX रनटाइम इंस्टॉल करें</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Amd" xml:space="preserve"><value>AMD MIGraphX रनटाइम इंस्टॉल करें</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Intel" xml:space="preserve"><value>इंटेल ओपनवीनो रनटाइम इंस्टॉल करें</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Qualcomm" xml:space="preserve"><value>क्वालकॉम QNN रनटाइम इंस्टॉल करें</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_AmdNpu" xml:space="preserve"><value>AMD VitisAI NPU रनटाइम इंस्टॉल करें</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Bundle" xml:space="preserve"><value>जीपीयू रनटाइम इंस्टॉल करें</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallComplete" xml:space="preserve"><value>GPU रनटाइम इंस्टॉलेशन पूरा हो गया।</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallFailed" xml:space="preserve"><value>GPU रनटाइम इंस्टॉलेशन विफल हो गया।</value></data>
+  <data name="Settings.StarterPacks_GpuSetupLicenseRequired" xml:space="preserve"><value>GPU रनटाइम इंस्टॉल करने के लिए विक्रेता लाइसेंस स्वीकार करें।</value></data>
+  <data name="Settings.StarterPacks_CloudReadyBadge" xml:space="preserve"><value>एपीआई कुंजी कॉन्फ़िगर की गईं</value></data>
+  <data name="Settings.StarterPacks_CloudKeysMissingBadge" xml:space="preserve"><value>एपीआई कुंजी अनुपस्थित हैं</value></data>
+  <data name="Settings.StarterPacks_CloudKeysButton" xml:space="preserve"><value>एपीआई कुंजियाँ कॉन्फ़िगर करें</value></data>
+  <data name="Settings.StarterPacks_ImportButton" xml:space="preserve"><value>आयात पैक…</value></data>
+  <data name="Settings.StarterPacks_ExportButton" xml:space="preserve"><value>निर्यात…</value></data>
+  <data name="Settings.StarterPacks_UserPacksHeader" xml:space="preserve"><value>आपके पैक</value></data>
+  <data name="Settings.StarterPacks_OpenLocalModelsLink" xml:space="preserve"><value>मॉडलों को अलग-अलग डाउनलोड करें</value></data>
+  <data name="Settings.StarterPacks_OptimizeNudge" xml:space="preserve"><value>{0} मॉडल(ओं) के लिए GPU-अनुकूलित संस्करण उपलब्ध हैं। सर्वोत्तम प्रदर्शन के लिए स्थानीय मॉडल में अनुकूलित करें।</value></data>
+  <data name="Settings.StarterPacks_ReviewOptimizations" xml:space="preserve"><value>समीक्षा अनुकूलन</value></data>
+  <data name="Settings.LocalModels_AppliedPackBadge" xml:space="preserve"><value>लागू पैक: {0}</value></data>
+  <data name="Settings.Label_PackTierFilter" xml:space="preserve"><value>पैक फ़िल्टर</value></data>
+  <data name="Settings.Button_Dismiss" xml:space="preserve"><value>अस्वीकार करें</value></data>
+  <!--  Onboarding - Starter Packs  -->
+  <data name="Onboarding.StarterPacks_Title" xml:space="preserve"><value>एक स्टार्टर पैक चुनें</value></data>
+  <data name="Onboarding.StarterPacks_Body" xml:space="preserve"><value>डाउनलोड और लागू करने के लिए एक बंडल मॉडल सेट चुनें, या Local Models में मॉडल को व्यक्तिगत रूप से कॉन्फ़िगर करें।</value></data>
+  <data name="Onboarding.StarterPacks_Skip" xml:space="preserve"><value>अभी छोड़ दें</value></data>
+  <data name="Onboarding.StarterPacks_ConfigureIndividually" xml:space="preserve"><value>अलग-अलग कॉन्फ़िगर करें</value></data>
+  <!--  Settings - Local Models  -->
+  <data name="Settings.Tab_LocalModels" xml:space="preserve"><value>स्थानीय मॉडल</value></data>
+  <data name="Settings.Hint_CommercialOnlyLane" xml:space="preserve"><value>केवल वाणिज्यिक मॉडल लेन। आयातित गैर-वाणिज्यिक मॉडल अवरुद्ध बने रहेंगे।</value></data>
+  <data name="Settings.Label_NonCommercial" xml:space="preserve"><value>गैर-व्यावसायिक</value></data>
+  <data name="Settings.Button_Download" xml:space="preserve"><value>डाउनलोड</value></data>
+  <data name="Settings.Button_Repair" xml:space="preserve"><value>मरम्मत</value></data>
+  <data name="Settings.Button_Uninstall" xml:space="preserve"><value>अनइंस्टॉल करें</value></data>
+  <data name="Settings.Label_Optimize" xml:space="preserve"><value>अनुकूलित करें:</value></data>
+  <data name="Settings.Tip_PrecisionHeader" xml:space="preserve"><value>अनुकूलित मॉडल वेरिएंट के लिए सटीकता (विकल्प प्रदाता पर निर्भर करते हैं):</value></data>
+  <data name="Settings.Tip_Fp32" xml:space="preserve"><value>fp32 — पूर्ण 32-बिट वेट्स। सर्वोत्तम सटीकता; सबसे बड़ी फ़ाइल। केवल सीपीयू।</value></data>
+  <data name="Settings.Tip_Fp16" xml:space="preserve"><value>fp16 — 16-बिट अर्ध-सटीकता। अच्छी सटीकता, fp32 के आकार का आधा। DirectML / CUDA / TensorRT।</value></data>
+  <data name="Settings.Tip_Int8" xml:space="preserve"><value>int8 — 8-बिट क्वांटिज़्ड। fp16 की तुलना में छोटा और तेज़; अधिकांश ऑडियो मॉडलों में सटीकता का मामूली समझौता। CPU / DirectML / CUDA।</value></data>
+  <data name="Settings.Tip_Int4" xml:space="preserve"><value>int4 — 4-बिट क्वांटिज़्ड। सबसे छोटा और सबसे तेज़; कुछ मॉडलों पर सटीकता में ध्यान देने योग्य कमी। केवल DirectML / CUDA।</value></data>
+  <data name="Settings.Button_Optimize" xml:space="preserve"><value>अनुकूलित करें</value></data>
+  <data name="Settings.Status_Optimizing" xml:space="preserve"><value>अनुकूलन…</value></data>
+  <data name="Settings.Button_Cancel" xml:space="preserve"><value>रद्द करें</value></data>
+  <data name="Settings.Button_Use" xml:space="preserve"><value>उपयोग करें</value></data>
+  <data name="Settings.Button_Clear" xml:space="preserve"><value>स्पष्ट</value></data>
+  <data name="Settings.Status_Loading" xml:space="preserve"><value>लोड हो रहा है…</value></data>
+  <!--  Settings - Cloud Models  -->
+  <data name="Settings.Tab_CloudModels" xml:space="preserve"><value>क्लाउड मॉडल</value></data>
+  <data name="Settings.Button_Save" xml:space="preserve"><value>बचाएँ</value></data>
+  <data name="Settings.Hint_MoreProviders" xml:space="preserve"><value>और क्लाउड प्रदाता जल्द ही आ रहे हैं।</value></data>
+  <!--  Settings - Hardware  -->
+  <data name="Settings.Tab_Hardware" xml:space="preserve"><value>हार्डवेयर</value></data>
+  <data name="Settings.Heading_Hardware" xml:space="preserve"><value>हार्डवेयर विन्यास</value></data>
+  <data name="Settings.Label_FfmpegEncoders" xml:space="preserve"><value>एफएफएमपीईजी वीडियो एन्कोडर</value></data>
+  <data name="Settings.Label_FfmpegHwDecode" xml:space="preserve"><value>एफएफएमपीईजी हार्डवेयर डीकोड</value></data>
+  <data name="Settings.Toggle_NativeCuda" xml:space="preserve"><value>Windows पर नेटिव CUDA / TensorRT की अनुमति दें (उन्नत)</value></data>
+  <data name="Settings.Hint_NativeCuda" xml:space="preserve"><value>डिफ़ॉल्ट रूप से बंद। जब सक्षम किया जाता है, तो स्पष्ट CUDA या TensorRT अनुरोधों में DirectML / TensorRT RTX (WinML) के बजाय मूल ONNX रनटाइम प्रदाताओं का उपयोग होता है। पाइपलाइन स्वचालित चयन अपरिवर्तित रहता है।</value></data>
+  <data name="Settings.Label_WinMlPolicy" xml:space="preserve"><value>Windows ML डिवाइस नीति (उन्नत)</value></data>
+  <data name="Settings.Hint_WinMlPolicy" xml:space="preserve"><value>प्रयोगात्मक। ONNX रनटाइम पंजीकृत Windows ML कैटलॉग प्रदाताओं के बीच स्वचालित EP/डिवाइस चयन का उपयोग करता है। स्टेज प्रदाता का चयन अपरिवर्तित है। इस सेटिंग को बदलने के बाद Trackdub को पुनः आरंभ करें।</value></data>
+  <data name="Settings.Label_GpuProviders" xml:space="preserve"><value>जीपीयू इंफरेंस प्रदाता</value></data>
+  <data name="Settings.Label_AllCertified" xml:space="preserve"><value>सभी प्रमाणित कैटलॉग प्रदाता</value></data>
+  <data name="Settings.Hint_AllCertified" xml:space="preserve"><value>यह इस मशीन पर सभी उपलब्ध Windows ML कैटलॉग प्रदाताओं को इंस्टॉल करता है। पात्र NVIDIA हार्डवेयर पर, यह TensorRT RTX प्लगइन (अलग NVIDIA लाइसेंस) भी प्रदान कर सकता है। यह कई पैकेज डाउनलोड कर सकता है और पहली बार चलाने पर कई मिनट लग सकते हैं। चाहे आप इसे चलाएं या नहीं, लक्षित इंस्टॉलों के लिए प्रत्येक प्रदाता के इंस्टॉल बटन उपलब्ध रहते हैं।</value></data>
+  <data name="Settings.Button_InstallAllCertified" xml:space="preserve"><value>सभी प्रमाणित प्रदाताओं को स्थापित करें</value></data>
+  <data name="Settings.Label_NvidiaTensorRt" xml:space="preserve"><value>एनवीडिया टेन्सरआरटी आरटीएक्स</value></data>
+  <data name="Settings.Button_Refresh" xml:space="preserve"><value>ताज़ा करें</value></data>
+  <data name="Settings.Button_InstallProvider" xml:space="preserve"><value>प्रदाता स्थापित करें</value></data>
+  <data name="Settings.Button_InstallTrtRtxPlugin" xml:space="preserve"><value>प्लगइन स्थापित करें</value></data>
+  <data name="Settings.Button_ViewLicense" xml:space="preserve"><value>लाइसेंस देखें</value></data>
+  <data name="Settings.Label_AmdMigraphx" xml:space="preserve"><value>एएमडी माईग्राफएक्स</value></data>
+  <data name="Settings.Label_IntelOpenVino" xml:space="preserve"><value>इंटेल ओपनवीनो (WinML कैटलॉग)</value></data>
+  <data name="Settings.Label_QualcommQnn" xml:space="preserve"><value>क्वालकॉम QNN (WinML कैटलॉग)</value></data>
+  <data name="Settings.Label_AmdVitisAi" xml:space="preserve"><value>एएमडी विटिसएआई (WinML कैटलॉग)</value></data>
+  <data name="Settings.Label_NativeOrtGpu" xml:space="preserve"><value>नेटिव ORT GPU (उन्नत)</value></data>
+  <data name="Settings.Label_ExecutionProviders" xml:space="preserve"><value>कार्यान्वयन प्रदाता</value></data>
+  <data name="Settings.Label_PerStageOverrides" xml:space="preserve"><value>प्रति-चरण प्रदाता ओवरराइड्स</value></data>
+  <!--  Settings - Profiler  -->
+  <data name="Settings.Tab_Profiler" xml:space="preserve"><value>प्रोफ़ाइलर</value></data>
+  <data name="Settings.Heading_Profiler" xml:space="preserve"><value>हार्डवेयर प्रोफाइलर</value></data>
+  <data name="Settings.Hint_Profiler" xml:space="preserve"><value>गुणवत्तापूर्ण प्रीसेट की सिफारिश करने के लिए VAD, ASR, ट्रांसलेशन और TTS बेंचमार्क चलाता है। इसके लिए बंडल किए गए ONNX मॉडल इंस्टॉल किए गए Windows की आवश्यकता है।</value></data>
+  <data name="Settings.Button_RunBenchmarks" xml:space="preserve"><value>स्टेज बेंचमार्क चलाएँ</value></data>
+  <data name="Settings.Label_QualityPreset" xml:space="preserve"><value>गुणवत्तापूर्ण प्रीसेट</value></data>
+  <data name="Settings.Hint_QualityPreset" xml:space="preserve"><value>उपयोग सिफारिश प्रोफाइलर परिणाम को मॉडल स्तर की योजना पर लागू करती है। ओवरराइड आपकी पसंद को तब तक बनाए रखता है जब तक आप इसे बदलते नहीं हैं।</value></data>
+  <!--  Settings - Recent Projects  -->
+  <data name="Settings.Tab_RecentProjects" xml:space="preserve"><value>हाल की परियोजनाएँ</value></data>
+  <data name="Settings.Heading_RecentProjects" xml:space="preserve"><value>हाल की परियोजनाएँ</value></data>
+  <!--  Settings - About  -->
+  <data name="Settings.Tab_About" xml:space="preserve"><value>बारे में</value></data>
+  <data name="Settings.Heading_About" xml:space="preserve"><value>ट्रैकडब के बारे में</value></data>
+  <data name="Settings.About_Tagline" xml:space="preserve"><value>ट्रैकडब — एआई-संचालित डबिंग वर्कस्टेशन</value></data>
+  <data name="Settings.About_Edition" xml:space="preserve"><value>क्रॉस-प्लेटफ़ॉर्म अवलोनिया संस्करण</value></data>
+  <!--  Settings - Developer  -->
+  <data name="Settings.Tab_Developer" xml:space="preserve"><value>डेवलपर</value></data>
+  <data name="Settings.Heading_Developer" xml:space="preserve"><value>डेवलपर विकल्प</value></data>
+  <data name="Settings.Hint_Developer" xml:space="preserve"><value>डेवलपर टूल्स और डायग्नोस्टिक्स डेवलपमेंट बिल्ड्स में उपलब्ध हैं।</value></data>
+  <!--  Settings - Footer  -->
+  <data name="Settings.Button_SaveAndClose" xml:space="preserve"><value>सहेजें और बंद करें</value></data>
+  <!--  Dialog - SourceLanguagePicker  -->
+  <data name="Dialog.SourceLanguage_Title" xml:space="preserve"><value>प्रतिलेख स्रोत</value></data>
+  <data name="Dialog.SourceLanguage_Hint" xml:space="preserve"><value>स्रोत भाषा बदलने से भविष्य के अनुवाद और वर्तनी जाँच पर प्रभाव पड़ता है।</value></data>
+  <data name="Dialog.SourceLanguage_Placeholder" xml:space="preserve"><value>स्रोत भाषा</value></data>
+  <!--  Dialog - UnsavedInlineEdit  -->
+  <data name="Dialog.UnsavedEdit_KeepEditing" xml:space="preserve"><value>संपादन करते रहें</value></data>
+  <data name="Dialog.UnsavedEdit_Discard" xml:space="preserve"><value>फेंको</value></data>
+  <!--  Dialog - VoiceCloneConsent  -->
+  <data name="Dialog.VoiceClone_Title" xml:space="preserve"><value>वॉयस क्लोन सहमति</value></data>
+  <data name="Dialog.VoiceClone_Body" xml:space="preserve"><value>यह सत्र आपके अपलोड किए गए संदर्भ ऑडियो क्लिप का उपयोग करके आवाज़ की विशेषताओं का संश्लेषण करेगा। &apos;मैं सहमत हूँ&apos; पर क्लिक करके, आप पुष्टि करते हैं कि इस परियोजना के लिए इन आवाज़ों की नकल करने का आपका कानूनी अधिकार है।</value></data>
+  <data name="Dialog.VoiceClone_SessionNote" xml:space="preserve"><value>यह सहमति केवल वर्तमान एप्लिकेशन सत्र पर लागू होती है और अगली बार जब आप एप्लिकेशन शुरू करेंगे तो इसे फिर से देना होगा।</value></data>
+  <data name="Dialog.VoiceClone_Agree" xml:space="preserve"><value>मैं सहमत हूँ</value></data>
+  <!--  Timeline - Waveform  -->
+  <data name="Timeline.WaveformNotAvailable" xml:space="preserve"><value>वेवफ़ॉर्म पूर्वावलोकन अभी उपलब्ध नहीं है</value></data>
+  <data name="Timeline.ComputingPeaks" xml:space="preserve"><value>तरंग रूप के शिखर की गणना…</value></data>
+  <!--  Timeline - ZoomLevel (non-localizable display but test flags it)  -->
+  <data name="Timeline.ZoomLevel" xml:space="preserve"><value>100 पीपीएस</value></data>
+  <!--  Inspector  -->
+  <data name="Inspector.Header" xml:space="preserve"><value>निरीक्षक</value></data>
+  <data name="Inspector.Empty" xml:space="preserve"><value>निरीक्षण करने के लिए एक खंड, वक्ता या स्रोत कलाकृति चुनें।</value></data>
+  <data name="Inspector.UnknownTarget" xml:space="preserve"><value>यह इंस्पेक्टर लक्ष्य अभी तक समर्थित नहीं है।</value></data>
+  <data name="Inspector.OpenInEditor" xml:space="preserve"><value>संपादक में खोलें</value></data>
+  <data name="Inspector.Tab_Content" xml:space="preserve"><value>सामग्री</value></data>
+  <data name="Inspector.Tab_Timing" xml:space="preserve"><value>समय</value></data>
+  <data name="Inspector.Tab_Voice" xml:space="preserve"><value>आवाज़</value></data>
+  <data name="Inspector.Tab_QC" xml:space="preserve"><value>गुणवत्ता नियंत्रण</value></data>
+  <data name="Inspector.SegmentDuration" xml:space="preserve"><value>खंड</value></data>
+  <data name="Inspector.GeneratedDuration" xml:space="preserve"><value>उत्पन्न</value></data>
+  <data name="Inspector.Overrun" xml:space="preserve"><value>अतिक्रमण</value></data>
+  <data name="Inspector.TimingAdjustment" xml:space="preserve"><value>समय</value></data>
+  <data name="Inspector.ConfidenceReview" xml:space="preserve"><value>समीक्षा की सिफारिश की गई</value></data>
+  <data name="Inspector.Artifact" xml:space="preserve"><value>पुरातात्विक अवशेष</value></data>
+  <data name="Inspector.ArtifactType" xml:space="preserve"><value>प्रकार</value></data>
+  <data name="Inspector.ArtifactDuration" xml:space="preserve"><value>अवधि</value></data>
+  <data name="Inspector.ArtifactSize" xml:space="preserve"><value>आकार</value></data>
+  <data name="Inspector.ArtifactPath" xml:space="preserve"><value>मार्ग</value></data>
+  <data name="Inspector.ArtifactType_Audio" xml:space="preserve"><value>ऑडियो</value></data>
+  <data name="Inspector.ArtifactType_Video" xml:space="preserve"><value>वीडियो</value></data>
+  <data name="Inspector.ArtifactType_Subtitle" xml:space="preserve"><value>उपशीर्षक</value></data>
+  <data name="Inspector.ArtifactType_Unknown" xml:space="preserve"><value>अज्ञात</value></data>
+  <data name="Attention.translation.stale" xml:space="preserve"><value>अनुवाद पुराना है।</value></data>
+  <data name="Attention.tts.failed" xml:space="preserve"><value>डबिंग पीढ़ी विफल हो गई।</value></data>
+  <data name="Attention.tts.stale" xml:space="preserve"><value>डब बेस्वाद है।</value></data>
+  <data name="Attention.tts.pending" xml:space="preserve"><value>डबिंग प्रक्रिया लंबित है।</value></data>
+  <data name="Attention.tts.duration-overrun" xml:space="preserve"><value>डब टाइमिंग सहनशीलता से अधिक है।</value></data>
+  <data name="Attention.tts.speed-limit" xml:space="preserve"><value>समय खिंचाव गुणवत्ता को कम कर सकता है।</value></data>
+  <data name="Attention.asr.low-confidence" xml:space="preserve"><value>ट्रांसक्रिप्ट की विश्वसनीयता की समीक्षा आवश्यक है।</value></data>
+  <data name="Attention.lipsync.error" xml:space="preserve"><value>लिप सिंक विफल हो गया।</value></data>
+  <data name="Attention.lipsync.warning" xml:space="preserve"><value>लिप सिंक की समीक्षा आवश्यक है।</value></data>
+  <data name="Attention.lipsynthesis.error" xml:space="preserve"><value>लिप रिपेयर विफल हो गया।</value></data>
+  <data name="Attention.lipsynthesis.warning" xml:space="preserve"><value>लिप रिपेयर की समीक्षा आवश्यक है।</value></data>
+  <data name="Attention.stage.failed" xml:space="preserve"><value>पाइपलाइन चरण विफल हो गया।</value></data>
+  <data name="Attention.stage.in-progress" xml:space="preserve"><value>पाइपलाइन चरण चल रहा है।</value></data>
+  <!--  License  -->
+  <data name="License.Tab" xml:space="preserve"><value>लाइसेंस</value></data>
+  <data name="License.Heading" xml:space="preserve"><value>लाइसेंस</value></data>
+  <data name="License.CurrentTier" xml:space="preserve"><value>वर्तमान स्तर:</value></data>
+  <data name="License.Tier_Free" xml:space="preserve"><value>नि:शुल्क</value></data>
+  <data name="License.Tier_Pro" xml:space="preserve"><value>पेशेवर</value></data>
+  <data name="License.KeyLabel" xml:space="preserve"><value>लाइसेंस कुंजी</value></data>
+  <data name="License.KeyPlaceholder" xml:space="preserve"><value>अपनी लाइसेंस कुंजी यहाँ पेस्ट करें</value></data>
+  <data name="License.Button_Activate" xml:space="preserve"><value>सक्रिय करें</value></data>
+  <data name="License.Button_Deactivate" xml:space="preserve"><value>निष्क्रिय करें</value></data>
+  <data name="License.Degraded" xml:space="preserve"><value>लाइसेंस अपग्रेड किया गया</value></data>
+  <data name="License.MachinesRegisteredUnlimited" xml:space="preserve"><value> पंजीकृत मशीनें (असीमित डेवलपर लाइसेंस)</value></data>
+</root>

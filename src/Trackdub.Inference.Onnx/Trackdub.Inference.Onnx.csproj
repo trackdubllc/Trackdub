@@ -1,0 +1,116 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+      <!-- Directory.Build.props sets TargetFramework=net10.0; clear it so multi-target restore/build includes both legs consistently. -->
+      <TargetFramework Condition="'$(TargetFrameworks)' != ''"/>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <!-- Inject LINUX / MACOS preprocessor symbols when building on those hosts -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <DefineConstants>$(DefineConstants);LINUX</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <DefineConstants>$(DefineConstants);MACOS</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackdub.Contracts\Trackdub.Contracts.csproj" />
+    <ProjectReference Include="..\Trackdub.Domain\Trackdub.Domain.csproj" />
+    <ProjectReference Include="..\Trackdub.Inference\Trackdub.Inference.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MathNet.Numerics" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" />
+  </ItemGroup>
+
+  <!-- DNNL flavor still needs managed ORT/WinML/GenAI compile references, but the runtime
+       payload comes from Trackdub.OnnxRuntime.Dnnl.Native instead of stock ORT packages. -->
+  <ItemGroup>
+    <PackageReference Update="Microsoft.WindowsAppSDK.ML"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+    <PackageReference Update="Microsoft.ML.OnnxRuntimeGenAI"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+    <PackageReference Update="Microsoft.WindowsAppSDK.Runtime"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+    <PackageReference Update="Microsoft.ML.OnnxRuntime.Gpu"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+    <PackageReference Update="Microsoft.ML.OnnxRuntimeGenAI.Cuda"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+    <PackageReference Update="Microsoft.ML.OnnxRuntime"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <!-- Windows: Windows ML owns the ORT environment and catalog EP registration. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <PackageReference Include="Microsoft.WindowsAppSDK.ML" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" />
+    <!-- Optional native CUDA/TensorRT ORT EPs when advanced setting is enabled (coexists with WinML resolver). -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" />
+  </ItemGroup>
+
+  <!-- Linux: OnnxRuntime.Gpu (CUDA + CPU) + GenAI.Cuda for Phi/Whisper genai engines. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'
+                        And $([MSBuild]::IsOSPlatform('Linux'))">
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" />
+  </ItemGroup>
+
+  <!-- macOS + portable fallback: standard OnnxRuntime (includes CoreML on macOS) + GenAI. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'
+                        And !$([MSBuild]::IsOSPlatform('Linux'))">
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+  </ItemGroup>
+
+  <!-- Non-Windows: exclude Windows-specific sources -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'">
+    <Compile Remove="ExecutionProviders\Windows\**" />
+    <Compile Remove="WindowsMl\**" />
+    <Compile Remove="Migraphx\WindowsMlMigraphxCatalogService.cs" />
+    <Compile Remove="Migraphx\WindowsMigraphxHardwareGate.cs" />
+    <Compile Remove="TensorRtRtx\WindowsNvidiaHardwareGate.cs" />
+    <Compile Remove="NativeCudaTensorRt\**" />
+    <Compile Remove="Runtime\WindowsDeviceEnumerator.cs" />
+    <Compile Remove="Runtime\WindowsVramMonitor.cs" />
+    <Compile Remove="OnnxModelBenchmarkRunner.cs" />
+  </ItemGroup>
+
+  <!-- Non-Linux: exclude Linux-specific sources -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'
+                        And !$([MSBuild]::IsOSPlatform('Linux'))">
+    <Compile Remove="ExecutionProviders\Linux\**" />
+    <Compile Remove="Runtime\LinuxDeviceEnumerator.cs" />
+    <Compile Remove="Runtime\LinuxPciDeviceScanner.cs" />
+    <Compile Remove="Runtime\ISysfsReader.cs" />
+    <Compile Remove="Runtime\PhysicalSysfsReader.cs" />
+  </ItemGroup>
+
+  <!-- Non-macOS: exclude Mac-specific sources -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'
+                        And !$([MSBuild]::IsOSPlatform('OSX'))">
+    <Compile Remove="ExecutionProviders\Mac\**" />
+    <Compile Remove="Runtime\MacDeviceEnumerator.cs" />
+  </ItemGroup>
+
+  <!-- Windows: remove the deferred WinML stub (compiled separately) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <Compile Remove="WindowsMl\WindowsMlExecutionProviderBootstrapper.Deferred.cs" />
+  </ItemGroup>
+
+</Project>

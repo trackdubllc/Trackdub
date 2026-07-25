@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute ref="xml:space" use="default">
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:NMTOKEN">
+                    <xsd:enumeration value="preserve" />
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Stage.VAD" xml:space="preserve"><value>Detektering av röstaktivitet</value></data>
+  <data name="Stage.ASR" xml:space="preserve"><value>Transkription</value></data>
+  <data name="Stage.Translation" xml:space="preserve"><value>Översättning</value></data>
+  <data name="Stage.TTS" xml:space="preserve"><value>Talsyntes</value></data>
+  <data name="Stage.Mixing" xml:space="preserve"><value>Ljudmixning</value></data>
+  <data name="Status.Idle" xml:space="preserve"><value>Inaktiv</value></data>
+  <data name="Status.Running" xml:space="preserve"><value>Springer…</value></data>
+  <data name="Status.Failed" xml:space="preserve"><value>Misslyckades</value></data>
+  <data name="Status.Completed" xml:space="preserve"><value>Avslutat</value></data>
+  <data name="Window_Title_Crash" xml:space="preserve"><value>Trackdub — Oväntat fel</value></data>
+  <data name="Crash_Header" xml:space="preserve"><value>Något gick fel</value></data>
+  <data name="Crash_Subtitle" xml:space="preserve"><value>Trackdub stötte på ett oväntat fel. Du kan kopiera uppgifterna nedan eller öppna loggmappen för att få support.</value></data>
+  <data name="Crash_Button_Copy" xml:space="preserve"><value>Kopiera uppgifter</value></data>
+  <data name="Crash_Button_OpenLogFolder" xml:space="preserve"><value>Öppna loggmappen</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>Stäng</value></data>
+  <data name="Settings.Label_Language" xml:space="preserve"><value>Språk</value></data>
+  <data name="Settings.Hint_LanguageRestart" xml:space="preserve"><value>Omstart krävs för att språkändringen ska träda i kraft</value></data>
+  <!--  Transport  -->
+  <data name="Transport.ToolTip_SkipPrevious" xml:space="preserve"><value>Hoppa över föregående</value></data>
+  <!--  Clippy Assistant  -->
+  <data name="Clippy_Tooltip_AskAssistant" xml:space="preserve"><value>Fråga Trackdub-assistenten</value></data>
+  <data name="Clippy_Text_AskAboutTrackdub" xml:space="preserve"><value>Fråga om Trackdub</value></data>
+  <data name="Clippy_Placeholder_WhatDoesStarterPackDo" xml:space="preserve"><value>Vad kan man göra med det här startpaketet?</value></data>
+  <data name="Clippy_Button_Ask" xml:space="preserve"><value>Fråga</value></data>
+  <data name="Transport.ToolTip_Play" xml:space="preserve"><value>Spela</value></data>
+  <data name="Transport.ToolTip_Pause" xml:space="preserve"><value>Paus</value></data>
+  <data name="Transport.ToolTip_SkipNext" xml:space="preserve"><value>Hoppa över Nästa</value></data>
+  <data name="Transport.ToolTip_Subtitles" xml:space="preserve"><value>Undertexter</value></data>
+  <data name="Transport.ToolTip_Karaoke" xml:space="preserve"><value>Karaoke</value></data>
+  <data name="Transport.ToolTip_Bilingual" xml:space="preserve"><value>Tvåspråkig</value></data>
+  <data name="Transport.ToolTip_Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Transport.ToolTip_Mute" xml:space="preserve"><value>Stäng av ljudet</value></data>
+  <data name="Transport.ToolTip_Fullscreen" xml:space="preserve"><value>Helskärm</value></data>
+  <data name="Transport.RetryPreview" xml:space="preserve"><value>Försök igen</value></data>
+  <data name="Transport.ToolTip_RetryPreview" xml:space="preserve"><value>Förhandsgranska nytt försök</value></data>
+  <!--  Titlebar  -->
+  <data name="Titlebar.ToolTip_Undo" xml:space="preserve"><value>Ångra</value></data>
+  <data name="Titlebar.ToolTip_Redo" xml:space="preserve"><value>Gör om</value></data>
+  <data name="Titlebar.ToolTip_NewProject" xml:space="preserve"><value>Nytt projekt</value></data>
+  <data name="Titlebar.Label_Recent" xml:space="preserve"><value>Senaste</value></data>
+  <data name="Titlebar.ToolTip_AIModels" xml:space="preserve"><value>AI-modeller</value></data>
+  <data name="Titlebar.ToolTip_Settings" xml:space="preserve"><value>Inställningar</value></data>
+  <data name="Titlebar.ToolTip_CheckForUpdates" xml:space="preserve"><value>Kontrollera om det finns uppdateringar</value></data>
+  <data name="Titlebar.ToolTip_DIAG" xml:space="preserve"><value>Diagnostik</value></data>
+  <data name="Titlebar.ToolTip_BENCH" xml:space="preserve"><value>Jämförelsetal</value></data>
+  <data name="Titlebar.Label_Update" xml:space="preserve"><value>UPD</value></data>
+  <data name="Titlebar.ToolTip_Minimize" xml:space="preserve"><value>Minimera</value></data>
+  <data name="Titlebar.ToolTip_Maximize" xml:space="preserve"><value>Maximera</value></data>
+  <data name="Titlebar.ToolTip_Close" xml:space="preserve"><value>Stäng</value></data>
+  <data name="StatusBar.Engine" xml:space="preserve"><value>Motor:</value></data>
+  <data name="StatusBar.Local" xml:space="preserve"><value>Lokalt</value></data>
+  <data name="StatusBar.Gpu" xml:space="preserve"><value>GPU:</value></data>
+  <data name="StatusBar.Settings" xml:space="preserve"><value>Inställningar</value></data>
+  <data name="StatusBar.StarterPacks" xml:space="preserve"><value>Startpaket</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>Fil</value></data>
+  <data name="Menu.Project" xml:space="preserve"><value>Projekt</value></data>
+  <data name="Menu.Media" xml:space="preserve"><value>Media</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>Visa</value></data>
+  <data name="Menu.Window" xml:space="preserve"><value>Fönster</value></data>
+  <data name="Menu.Help" xml:space="preserve"><value>Hjälp</value></data>
+  <data name="Menu.File.NewFromMedia" xml:space="preserve"><value>Nyheter från media…</value></data>
+  <data name="Menu.File.OpenProject" xml:space="preserve"><value>Öppna projektet…</value></data>
+  <data name="Menu.File.Save" xml:space="preserve"><value>Spara</value></data>
+  <data name="Menu.File.CloseProject" xml:space="preserve"><value>Stäng projektet</value></data>
+  <data name="Menu.File.Exit" xml:space="preserve"><value>Avsluta</value></data>
+  <data name="Menu.Project.AIModels" xml:space="preserve"><value>AI-modeller…</value></data>
+  <data name="Menu.Project.Settings" xml:space="preserve"><value>Inställningar…</value></data>
+  <data name="Menu.Media.Import" xml:space="preserve"><value>Importera media…</value></data>
+  <data name="MediaPicker.WindowRequired" xml:space="preserve"><value>Ett fönster måste vara öppet innan medievalaren kan öppnas.</value></data>
+  <data name="MediaPicker.LocalPathRequired" xml:space="preserve"><value>Det gick inte att tolka den lokala sökvägen till den valda filen. Kopiera mediefilen till en lokal mapp och försök igen.</value></data>
+  <data name="MediaPicker.ImportNoLocalPaths" xml:space="preserve"><value>Det gick inte att tolka de lokala sökvägarna för de valda filerna. Kopiera mediefilerna till en lokal mapp och försök igen.</value></data>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve"><value>{0} De valda filerna kunde inte importeras eftersom ingen lokal sökväg fanns tillgänglig.</value></data>
+  <data name="MediaPicker.ImportMediaFiles.Title" xml:space="preserve"><value>Importera mediefiler</value></data>
+  <data name="MediaPicker.ImportMediaFiles.MediaFilesFilter" xml:space="preserve"><value>Mediefiler</value></data>
+  <data name="MediaPicker.ImportMediaFiles.AllFilesFilter" xml:space="preserve"><value>Alla filer</value></data>
+  <data name="ProjectPicker.WindowRequired" xml:space="preserve"><value>Ett fönster måste vara öppet innan projektväljaren kan öppnas.</value></data>
+  <data name="Menu.View.ToggleLeftPanel" xml:space="preserve"><value>Växla till vänsterpanelen</value></data>
+  <data name="Menu.View.ToggleRightPanel" xml:space="preserve"><value>Växla till högerpanelen</value></data>
+  <data name="Menu.View.ToggleTimeline" xml:space="preserve"><value>Växla tidslinje</value></data>
+  <data name="Menu.View.ToggleExportPanel" xml:space="preserve"><value>Växla mellan exportpaneler</value></data>
+  <data name="Menu.View.ToggleSubtitles" xml:space="preserve"><value>Växla mellan undertexter</value></data>
+  <data name="Menu.Window.Minimize" xml:space="preserve"><value>Minimera</value></data>
+  <data name="Menu.Window.Maximize" xml:space="preserve"><value>Maximera / Återställ</value></data>
+  <data name="Menu.Help.CheckForUpdates" xml:space="preserve"><value>Kontrollera om det finns uppdateringar</value></data>
+  <data name="Menu.Help.Diagnostics" xml:space="preserve"><value>Exportera diagnostik…</value></data>
+  <data name="Menu.Help.Benchmarks" xml:space="preserve"><value>Jämförelsetal</value></data>
+  <data name="Menu.Help.StarterPacks" xml:space="preserve"><value>Startpaket…</value></data>
+  <data name="Menu.Help.About" xml:space="preserve"><value>Om…</value></data>
+  <!--  Speakers  -->
+  <data name="Speakers.Header" xml:space="preserve"><value>Röster och talare</value></data>
+  <data name="Speakers.EmptyState" xml:space="preserve"><value>Inga talare har upptäckts ännu. Kör först transkription och talaridentifiering.</value></data>
+  <data name="Speakers.GenerateAll" xml:space="preserve"><value>Skapa alla</value></data>
+  <data name="Speakers.Count" xml:space="preserve"><value>{0} talare</value></data>
+  <!--  Speaker  -->
+  <data name="Speaker.RenameTip" xml:space="preserve"><value>Byt namn på högtalaren</value></data>
+  <data name="Speaker.ConfirmRenameTip" xml:space="preserve"><value>Bekräfta namnändring</value></data>
+  <data name="Speaker.CancelRenameTip" xml:space="preserve"><value>Avbryt namnändring</value></data>
+  <data name="Speaker.NewNamePlaceholder" xml:space="preserve"><value>Nytt namn...</value></data>
+  <data name="Speaker.SyntheticVoice" xml:space="preserve"><value>Syntetisk röst</value></data>
+  <data name="Speaker.CloneVoice" xml:space="preserve"><value>Klonera den här rösten</value></data>
+  <data name="Speaker.SelectVoicePlaceholder" xml:space="preserve"><value>Välj röst...</value></data>
+  <data name="Speaker.AssignVoice" xml:space="preserve"><value>Tilldela röst</value></data>
+  <data name="Speaker.PreviewVoice" xml:space="preserve"><value>Förhandsgranska röst</value></data>
+  <data name="Speaker.NoReferenceClip" xml:space="preserve"><value>Inget referensklipp ännu</value></data>
+  <data name="Speaker.ExtractAutoClip" xml:space="preserve"><value>Extrahera automatisk klipp</value></data>
+  <data name="Speaker.ExtractAutoClipTip" xml:space="preserve"><value>Extrahera referensljud från dagboksantecknade turer</value></data>
+  <data name="Speaker.UploadReference" xml:space="preserve"><value>Ladda upp referens</value></data>
+  <data name="Speaker.UploadReferenceTip" xml:space="preserve"><value>Ladda upp referensljud för röstkloning</value></data>
+  <data name="Speaker.StaleTtsWarning" xml:space="preserve"><value>⚠ TTS är inaktuellt — generera om efter att rösten har tilldelats på nytt.</value></data>
+  <data name="Speaker.RegenerateStaleDub" xml:space="preserve"><value>Återställ föråldrad dub</value></data>
+  <data name="Speaker.Generating" xml:space="preserve"><value>Genererar...</value></data>
+  <data name="Speaker.PreviewDubTip" xml:space="preserve"><value>Förhandsgranska den första färdiga dubbningen för den här talaren</value></data>
+  <data name="Speaker.MergeInto" xml:space="preserve"><value>Kör in i:</value></data>
+  <data name="Speaker.SelectTargetPlaceholder" xml:space="preserve"><value>Välj mål...</value></data>
+  <data name="Speaker.Merge" xml:space="preserve"><value>Slå ihop</value></data>
+  <data name="Speaker.MergeTip" xml:space="preserve"><value>Slå samman den här talaren med det valda målet (den här talaren tas bort)</value></data>
+  <!--  Timeline  -->
+  <data name="Timeline.Title" xml:space="preserve"><value>Tidslinje</value></data>
+  <data name="Timeline.SplitTip" xml:space="preserve"><value>Dela vid spelhuvudet (S)</value></data>
+  <data name="Timeline.MergeTip" xml:space="preserve"><value>Slå ihop valda klipp</value></data>
+  <data name="Timeline.TrimTip" xml:space="preserve"><value>Klipp till markeringen</value></data>
+  <data name="Timeline.DeleteTip" xml:space="preserve"><value>Ta bort markerade (Del)</value></data>
+  <data name="Timeline.ZoomOutTip" xml:space="preserve"><value>Zooma ut</value></data>
+  <data name="Timeline.ZoomInTip" xml:space="preserve"><value>Zooma in</value></data>
+  <data name="Timeline.CollapseTip" xml:space="preserve"><value>Dölj tidslinjen</value></data>
+  <data name="Timeline.Reference" xml:space="preserve"><value>Referens</value></data>
+  <data name="Timeline.MuteTip" xml:space="preserve"><value>Ljud av (kommer snart)</value></data>
+  <data name="Timeline.SoloTip" xml:space="preserve"><value>Solo (kommer snart)</value></data>
+  <!--  Pipeline  -->
+  <data name="Pipeline.Header" xml:space="preserve"><value>Samordnare för pipeline</value></data>
+  <data name="Pipeline.Col_Job" xml:space="preserve"><value>Jobb</value></data>
+  <data name="Pipeline.Col_Stage" xml:space="preserve"><value>Scen</value></data>
+  <data name="Pipeline.Col_Progress" xml:space="preserve"><value>Framsteg</value></data>
+  <data name="Pipeline.Col_Detail" xml:space="preserve"><value>Detalj</value></data>
+  <data name="Pipeline.StarterPack" xml:space="preserve"><value>Startpaket</value></data>
+  <data name="Pipeline.StarterPack_Placeholder" xml:space="preserve"><value>Startpaket</value></data>
+  <data name="Pipeline.RunSelectedStages" xml:space="preserve"><value>Kör det markerade</value></data>
+  <data name="Pipeline.CommercialOnly" xml:space="preserve"><value>Endast för kommersiellt bruk</value></data>
+  <data name="Pipeline.ConfigHeader" xml:space="preserve"><value>RÖRLEDNINGSKONFIGURATION</value></data>
+  <data name="Pipeline.Config" xml:space="preserve"><value>Inställningar</value></data>
+  <data name="Pipeline.StemSeparation" xml:space="preserve"><value>Stjälkavskiljning</value></data>
+  <data name="Pipeline.StemSeparation_Tip" xml:space="preserve"><value>Separera sången från bakgrundsljudet innan transkriberingen</value></data>
+  <data name="Pipeline.AudioCleanup" xml:space="preserve"><value>Ljudrening</value></data>
+  <data name="Pipeline.AudioCleanup_Tip" xml:space="preserve"><value>Tillämpa brusreducering och ljudrensning (hoppas över automatiskt om separeringen lyckas)</value></data>
+  <data name="Pipeline.SpeakerDiarization" xml:space="preserve"><value>Diarisering av talare</value></data>
+  <data name="Pipeline.SpeakerDiarization_Tip" xml:space="preserve"><value>Identifiera olika talare i ljudfilen</value></data>
+  <data name="Pipeline.Voice" xml:space="preserve"><value>Röst</value></data>
+  <data name="Pipeline.Voice_Tip" xml:space="preserve"><value>Strategi för röstfördelning vid dubbning</value></data>
+  <data name="Pipeline.VoiceOption_Manual" xml:space="preserve"><value>Handbok</value></data>
+  <data name="Pipeline.VoiceOption_KokoroDefaults" xml:space="preserve"><value>Kokoro-standardinställningar</value></data>
+  <data name="Pipeline.VoiceOption_AutoClone" xml:space="preserve"><value>Automatisk kloning</value></data>
+  <data name="Pipeline.RunAllStages" xml:space="preserve"><value>Kör alla steg</value></data>
+  <data name="Pipeline.RunTranscriptToDub" xml:space="preserve"><value>Kör till dub</value></data>
+  <data name="Pipeline.Options" xml:space="preserve"><value>Alternativ</value></data>
+  <data name="Pipeline.Model" xml:space="preserve"><value>Modell</value></data>
+  <data name="Pipeline.NotDownloaded" xml:space="preserve"><value>⚠ Har inte laddats ner</value></data>
+  <data name="Pipeline.NoApiKey" xml:space="preserve"><value>⚠ Ingen API-nyckel</value></data>
+  <data name="Pipeline.ExecutionProvider" xml:space="preserve"><value>Utförandeleverantör</value></data>
+  <data name="Pipeline.SeparateOnImport" xml:space="preserve"><value>Separera sång och bakgrundsljud vid import</value></data>
+  <data name="Pipeline.SeparateOnImport_Hint" xml:space="preserve"><value>Vid en ny körning används den valda separationsmodellen.</value></data>
+  <data name="Pipeline.SeparationOptionalHint" xml:space="preserve"><value>Använd radknappen för att inkludera avstånd i serier.</value></data>
+  <data name="Pipeline.CleanupHint" xml:space="preserve"><value>Talförbättringen körs som en del av rensningsfasen när du klickar på ”Kör”.</value></data>
+  <data name="Pipeline.AsrHint" xml:space="preserve"><value>Läget ”Commercial Safe” högst upp i pipelinen begränsar modellvalen till standardinställningar som är licensierade och säkra.</value></data>
+  <data name="Pipeline.EnableAsrTextPolish" xml:space="preserve"><value>Polsk ASR-text efter transkription</value></data>
+  <data name="Pipeline.EnableAsrTextPolish_Hint" xml:space="preserve"><value>Valfri korrigering av skiljetecken och grammatik i obearbetade ASR-segment. Kräver GenAI-modellen för textförfining.</value></data>
+  <data name="Pipeline.TextRefinementAsrHint" xml:space="preserve"><value>Använd radknappen för att inkludera ASR-korrigeringar i körningarna.</value></data>
+  <data name="Pipeline.DetectSpeakersOnImport" xml:space="preserve"><value>Upptäcka högtalare vid import</value></data>
+  <data name="Pipeline.DiarizationHint" xml:space="preserve"><value>Funktionen ”Identifiera” tilldelar talare till olika segment i transkriptet efter att transkriberingen är klar.</value></data>
+  <data name="Pipeline.OverlapRescueHint" xml:space="preserve"><value>Funktionen ”Overlap Speech Rescue” delar upp överlappande dialog i möjliga källor (ej bekräftade talare). Körs efter diariseringsprocessen när överlappande talomgångar upptäcks.</value></data>
+  <data name="Pipeline.OverlapRescueModel" xml:space="preserve"><value>Räddningsmodell med överlappning</value></data>
+  <data name="Pipeline.OverlapRescueExecutionProvider" xml:space="preserve"><value>Leverantör av räddningsinsatser vid överlappning</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe" xml:space="preserve"><value>Skriv om källkandidaterna efter räddningen</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe_Hint" xml:space="preserve"><value>Kör ASR på varje enskild kandidat och markerar resultaten för granskning.</value></data>
+  <data name="Pipeline.RunOverlapRescue" xml:space="preserve"><value>Genomför räddning vid överlappning</value></data>
+  <data name="Pipeline.OverlapRescueReviewHeader" xml:space="preserve"><value>Potentiella kandidater</value></data>
+  <data name="Pipeline.OverlapRescueReviewBadge" xml:space="preserve"><value>Recension</value></data>
+  <data name="Pipeline.TranslationConfiguredAbove" xml:space="preserve"><value>Källan och målet har konfigurerats ovan.</value></data>
+  <data name="Pipeline.ApplyTargetLanguage" xml:space="preserve"><value>Använd det valda målspråket</value></data>
+  <data name="Pipeline.TtsHint" xml:space="preserve"><value>Tilldela Kokoro-röster i panelen ”Röster” och kör sedan Dub för att generera tagningar.</value></data>
+  <data name="Pipeline.LipSyncHint" xml:space="preserve"><value>Synkronisera och sträck ut det dubbade ljudet så att det stämmer överens med läpprörelserna med hjälp av den modell för tvingad synkronisering som valts ovan.</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesis" xml:space="preserve"><value>Kör videoläppsyntes…</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesisExperimental" xml:space="preserve"><value>Körning av videoläppsyntes (experimentellt)…</value></data>
+  <data name="Pipeline.LipSynthesisHint" xml:space="preserve"><value>Videoläppkorrigering (LatentSync ~6,7 GB + ansiktsmodeller). Kräver video, dubbad mix och talarnas repliker. Ladda ner modellerna innan du kör programmet.</value></data>
+  <data name="Pipeline.ExportHint" xml:space="preserve"><value>Ställ in mixnivåer och exportformat i panelen ”Export” under tidslinjen.</value></data>
+  <data name="Pipeline.OpenExportPanel" xml:space="preserve"><value>Öppna exportpanelen</value></data>
+  <!--  RunConfig  -->
+  <data name="RunConfig.Header" xml:space="preserve"><value>KÖR KONFIGURATION</value></data>
+  <data name="RunConfig.Source" xml:space="preserve"><value>Källa</value></data>
+  <data name="RunConfig.TranslateTo" xml:space="preserve"><value>Översätt till</value></data>
+  <data name="RunConfig.TargetLanguage_Placeholder" xml:space="preserve"><value>Målspråk</value></data>
+  <!--  Export  -->
+  <data name="Export.Header" xml:space="preserve"><value>Exportera och mixa</value></data>
+  <data name="Export.MixLabel" xml:space="preserve"><value>MIX</value></data>
+  <data name="Export.Src" xml:space="preserve"><value>Src</value></data>
+  <data name="Export.Src_Tip" xml:space="preserve"><value>Förstärkning för källsignalen (dB)</value></data>
+  <data name="Export.Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Export.Dub_Tip" xml:space="preserve"><value>Förstärkning av tal med dubbning (dB)</value></data>
+  <data name="Export.Duck" xml:space="preserve"><value>Anka</value></data>
+  <data name="Export.Duck_Tip" xml:space="preserve"><value>Källdämpning (dB)</value></data>
+  <data name="Export.Timbre" xml:space="preserve"><value>Klangfärg</value></data>
+  <data name="Export.Timbre_Tip" xml:space="preserve"><value>Tillämpa klangmatchning på dubbat tal</value></data>
+  <data name="Export.Pan" xml:space="preserve"><value>Panna</value></data>
+  <data name="Export.Pan_Tip" xml:space="preserve"><value>Återställ den ursprungliga stereopanoreringen</value></data>
+  <data name="Export.ExportLabel" xml:space="preserve"><value>EXPORT</value></data>
+  <data name="Export.BurnIn" xml:space="preserve"><value>Inbränning</value></data>
+  <data name="Export.BurnIn_Tip" xml:space="preserve"><value>Bränn in undertexter i videoströmmen</value></data>
+  <data name="Export.SubtitleSource_Tip" xml:space="preserve"><value>Källa till undertext</value></data>
+  <data name="Export.Container_Tip" xml:space="preserve"><value>Utmatningsbehållare</value></data>
+  <data name="Export.Lufs_Tip" xml:space="preserve"><value>Målvärde för ljudstyrka (LUFS)</value></data>
+  <data name="Export.Match" xml:space="preserve"><value>Match</value></data>
+  <data name="Export.Match_Tip" xml:space="preserve"><value>Anpassa ljudstyrkan till originalkällan</value></data>
+  <data name="Export.ExportButton" xml:space="preserve"><value>Export</value></data>
+  <!--  Crash  -->
+  <data name="Crash.ExportDiagnostics" xml:space="preserve"><value>Exportera diagnostik</value></data>
+  <!--  Dialog  -->
+  <data name="Dialog.VendorLicense_Title" xml:space="preserve"><value>Leverantörslicens</value></data>
+  <data name="Dialog.VendorLicense_Acceptance" xml:space="preserve"><value>Genom att klicka på ”Jag godkänner” bekräftar du att du har läst igenom och godkänner dessa användarvillkor för denna installation.</value></data>
+  <data name="Dialog.VendorLicense_Accept" xml:space="preserve"><value>Jag godkänner</value></data>
+  <data name="Dialog.SpeakerDetection_Title" xml:space="preserve"><value>Taligenkänning</value></data>
+  <data name="Dialog.SpeakerDetection_UseSingle" xml:space="preserve"><value>Använd en högtalare</value></data>
+  <data name="Dialog.SpeakerDetection_Download" xml:space="preserve"><value>Ladda ner nu</value></data>
+  <data name="Dialog.ModelNotReady_Title" xml:space="preserve"><value>Modellen finns inte tillgänglig</value></data>
+  <data name="Dialog.ModelSetup_Title" xml:space="preserve"><value>Modellinställningar</value></data>
+  <data name="Dialog.FallbackVoice_Title" xml:space="preserve"><value>Ska man använda reservröster?</value></data>
+  <data name="Dialog.FallbackVoice_Message" xml:space="preserve"><value>Vissa talare har ingen tilldelad röst. Trackdub kommer att använda den första kompatibla Kokoro-rösten för varje talare utan tilldelad röst, men endast för den här generationen.</value></data>
+  <data name="Dialog.FallbackVoice_Confirm" xml:space="preserve"><value>Skapa med reservröster</value></data>
+  <!--  Glossary  -->
+  <data name="Glossary.Header" xml:space="preserve"><value>Ordlista</value></data>
+  <data name="Glossary.ProjectHeader" xml:space="preserve"><value>Projektordlista</value></data>
+  <data name="Glossary.AddTerm" xml:space="preserve"><value>+ Lägg till begrepp</value></data>
+  <data name="Glossary.TermCount" xml:space="preserve"><value>{0} villkor</value></data>
+  <data name="Glossary.Loading" xml:space="preserve"><value>Laddar…</value></data>
+  <data name="Glossary.SourceTerm_Placeholder" xml:space="preserve"><value>Källterm</value></data>
+  <data name="Glossary.TargetTerm_Placeholder" xml:space="preserve"><value>Målterm</value></data>
+  <data name="Glossary.CaseSensitive" xml:space="preserve"><value>Skillnad mellan versaler och gemener</value></data>
+  <data name="Glossary.DeleteTerm_Tip" xml:space="preserve"><value>Ta bort begrepp</value></data>
+  <data name="Glossary.Scope.Project" xml:space="preserve"><value>Projekt</value></data>
+  <data name="Glossary.Scope.Global" xml:space="preserve"><value>Globalt</value></data>
+  <data name="Glossary.Scope.GlobalBadge" xml:space="preserve"><value>Globalt</value></data>
+  <data name="Glossary.NoteLine_GlobalCaseSensitive" xml:space="preserve"><value>Globalt · skiftlägeskänsligt</value></data>
+  <data name="Glossary.ImportCsv" xml:space="preserve"><value>Importera CSV</value></data>
+  <!--  MediaBin  -->
+  <data name="MediaBin.Header" xml:space="preserve"><value>Media</value></data>
+  <data name="MediaBin.Context_ProjectWide" xml:space="preserve"><value>Projektets bakgrund</value></data>
+  <data name="MediaBin.Import" xml:space="preserve"><value>Importera</value></data>
+  <data name="MediaBin.Import_Tip" xml:space="preserve"><value>Importera mediefiler</value></data>
+  <data name="MediaBin.NewProjectImport" xml:space="preserve"><value>Importera nytt projekt</value></data>
+  <data name="MediaBin.DetectSpeakers" xml:space="preserve"><value>Identifiera högtalare</value></data>
+  <data name="MediaBin.SeparateVocals" xml:space="preserve"><value>Separera sång och omgivningsljud</value></data>
+  <data name="MediaBin.ImportHint" xml:space="preserve"><value>Importera media eller skapa ett projekt för att fylla i den här strukturen.</value></data>
+  <data name="MediaBin.EmptyTreeHint" xml:space="preserve"><value>Inga stjälkar än</value></data>
+  <data name="Timeline.CollapsedEmptyHint" xml:space="preserve"><value>Klicka för att visa spår · dra och släpp media för att fylla i</value></data>
+  <data name="Inspector.EmptyShort" xml:space="preserve"><value>Välj ett segment att granska</value></data>
+  <data name="Transcript.EmptySegments" xml:space="preserve"><value>Inga segment ännu. Kör transkriberingen för att fylla i listan.</value></data>
+  <data name="MediaBin.Tab_Source" xml:space="preserve"><value>Källa</value></data>
+  <data name="MediaBin.Tab_Generated" xml:space="preserve"><value>Genererad</value></data>
+  <data name="Navigator.Section.SourceMedia" xml:space="preserve"><value>Källmedia</value></data>
+  <data name="Navigator.Section.Transcript" xml:space="preserve"><value>Transkript</value></data>
+  <data name="Navigator.Section.Speakers" xml:space="preserve"><value>Talare</value></data>
+  <data name="Navigator.Section.Voices" xml:space="preserve"><value>Röster</value></data>
+  <data name="Navigator.Section.GeneratedAudio" xml:space="preserve"><value>Genererat ljud</value></data>
+  <data name="Navigator.Section.Mixes" xml:space="preserve"><value>Mixar</value></data>
+  <data name="Navigator.Section.Exports" xml:space="preserve"><value>Export</value></data>
+  <data name="Navigator.Empty.SourceMedia" xml:space="preserve"><value>Importera källmaterial för att fylla i detta avsnitt.</value></data>
+  <data name="Navigator.Empty.Transcript" xml:space="preserve"><value>Kör transkriberingen för att skapa transkriptsegment.</value></data>
+  <data name="Navigator.Empty.Speakers" xml:space="preserve"><value>Kör diariseringsprocessen eller tilldela talare efter transkriberingen.</value></data>
+  <data name="Navigator.Empty.Voices" xml:space="preserve"><value>Tilldela röster till talarna i panelen ”Röst”.</value></data>
+  <data name="Navigator.Empty.GeneratedAudio" xml:space="preserve"><value>Här visas artefakter som uppstår vid TTS-generering och bearbetning.</value></data>
+  <data name="Navigator.Empty.Mixes" xml:space="preserve"><value>Förhandsgranskningsmixar visas här efter export eller mixning.</value></data>
+  <data name="Navigator.Empty.Exports" xml:space="preserve"><value>De slutliga exportfilerna visas här efter exporten.</value></data>
+  <data name="FloatingMonitor.Title" xml:space="preserve"><value>Videomonitor</value></data>
+  <data name="FloatingMonitor.Hide" xml:space="preserve"><value>Dölj skärmen</value></data>
+  <data name="FloatingMonitor.NoVideo" xml:space="preserve"><value>Ingen videoruta ännu</value></data>
+  <data name="Transport.ToolTip_PipMonitor" xml:space="preserve"><value>Växla mellan bild-i-bild-videomonitor</value></data>
+  <!--  Segment  -->
+  <data name="Segment.Start" xml:space="preserve"><value>Start</value></data>
+  <data name="Segment.End" xml:space="preserve"><value>Slut</value></data>
+  <data name="Segment.Duration" xml:space="preserve"><value>Varaktighet</value></data>
+  <data name="Segment.Speaker" xml:space="preserve"><value>Talare</value></data>
+  <data name="Segment.Source" xml:space="preserve"><value>Källa</value></data>
+  <data name="Segment.VoiceCandidates" xml:space="preserve"><value>Röstkandidater</value></data>
+  <data name="Segment.VoiceCandidates_Hint" xml:space="preserve"><value>Klicka på ”Generera” för att skapa röstalternativ för A/B-förhandsgranskning</value></data>
+  <data name="Segment.GenerateCandidates" xml:space="preserve"><value>Skapa kandidater</value></data>
+  <data name="Segment.LipSyncAlign" xml:space="preserve"><value>ALIGN</value></data>
+  <data name="Segment.LipSynthesisRepair" xml:space="preserve"><value>REPARATION</value></data>
+  <data name="Segment.Review" xml:space="preserve"><value>RECENSION</value></data>
+  <data name="Segment.SaveSettings" xml:space="preserve"><value>Spara inställningar</value></data>
+  <data name="Segment.GenerateDub" xml:space="preserve"><value>Skapa dub</value></data>
+  <data name="Segment.Regenerate" xml:space="preserve"><value>Återställ</value></data>
+  <data name="Segment.MatchTiming" xml:space="preserve"><value>Matchens tidsförlopp</value></data>
+  <data name="Segment.Runtime.Dub" xml:space="preserve"><value>Körningstid för dub</value></data>
+  <data name="Segment.Runtime.Translation" xml:space="preserve"><value>Översättningens körtid</value></data>
+  <data name="Segment.Runtime.Transcription" xml:space="preserve"><value>Transkriptionens körtid</value></data>
+  <data name="Segment.Runtime.Alignment" xml:space="preserve"><value>Körningstid för läppsynkronisering</value></data>
+  <data name="Segment.Runtime.Provider" xml:space="preserve"><value>Leverantör</value></data>
+  <data name="Segment.Runtime.Model" xml:space="preserve"><value>Modell</value></data>
+  <data name="Segment.Runtime.Precision" xml:space="preserve"><value>Precision</value></data>
+  <!--  ApiKeys  -->
+  <data name="Window_Title_ApiKeys" xml:space="preserve"><value>API-nycklar</value></data>
+  <data name="Chrome_Minimize" xml:space="preserve"><value>Minimera</value></data>
+  <data name="Chrome_MaximizeRestore" xml:space="preserve"><value>Maximera / Återställ</value></data>
+  <data name="Chrome_Close" xml:space="preserve"><value>Stäng</value></data>
+  <data name="Api_Tooltip_ToggleReveal" xml:space="preserve"><value>Visa/dölj nyckel</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>Spara</value></data>
+  <data name="Common_Clear" xml:space="preserve"><value>Rensa</value></data>
+  <data name="Api_Footer_MoreProviders" xml:space="preserve"><value>Fler leverantörer kommer snart</value></data>
+  <data name="Api_Footer_StorageSecurity" xml:space="preserve"><value>Lagring och säkerhet</value></data>
+  <!--  Common  -->
+  <data name="Common.Save" xml:space="preserve"><value>Spara</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>Avbryt</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>Stäng</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>Lägg till</value></data>
+  <data name="Common.Segments" xml:space="preserve"><value>segment</value></data>
+  <data name="Common.DownloadFfmpeg" xml:space="preserve"><value>Ladda ner FFmpeg</value></data>
+  <data name="Common.DropVideoPlaceholder" xml:space="preserve"><value>Lägg upp en video eller börja från media</value></data>
+  <data name="Common.NewFromMedia" xml:space="preserve"><value>Nyheter från media</value></data>
+  <data name="Common.OpenProject" xml:space="preserve"><value>Öppet projekt</value></data>
+  <data name="Common.Transcript" xml:space="preserve"><value>Transkription</value></data>
+  <data name="Transcript.AllSegments" xml:space="preserve"><value>Alla segment</value></data>
+  <data name="Common.CollapseRightPanel_Tip" xml:space="preserve"><value>Dölj högerpanelen</value></data>
+  <data name="Common.ChannelStrip" xml:space="preserve"><value>Kanalremsa</value></data>
+  <data name="Common.ExpandChannelStrip_Tip" xml:space="preserve"><value>Visa kanallinjen</value></data>
+  <data name="Common.CollapseChannelStrip_Tip" xml:space="preserve"><value>Dölj kanalraden</value></data>
+  <!--  LeftPanel stage tooltips  -->
+  <data name="Common.Stage_Separation" xml:space="preserve"><value>Separation</value></data>
+  <data name="Common.Stage_Cleanup" xml:space="preserve"><value>Uppstädning</value></data>
+  <data name="Common.Stage_Transcribe" xml:space="preserve"><value>Transkribera</value></data>
+  <data name="Common.Stage_Identify" xml:space="preserve"><value>Identifiera</value></data>
+  <data name="Common.Stage_Translate" xml:space="preserve"><value>Översätt</value></data>
+  <data name="Common.Stage_Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Common.Stage_Export" xml:space="preserve"><value>Export</value></data>
+  <!--  MiniPreviewPlayer  -->
+  <data name="MiniPlayer.NoFileLoaded" xml:space="preserve"><value>Ingen fil har laddats</value></data>
+  <data name="MiniPlayer.CannotPlayFile" xml:space="preserve"><value>⚠ Det går inte att spela upp filen</value></data>
+  <data name="MiniPlayer.UnsupportedFormat" xml:space="preserve"><value>Format som inte stöds</value></data>
+  <data name="MiniPlayer.PlayPauseTip" xml:space="preserve"><value>Spela upp/Paus</value></data>
+  <!--  Settings - General  -->
+  <data name="Settings.Title" xml:space="preserve"><value>Inställningar</value></data>
+  <data name="Settings.Tab_General" xml:space="preserve"><value>Allmänt</value></data>
+  <data name="Settings.Heading_General" xml:space="preserve"><value>Allmänna inställningar</value></data>
+  <data name="Settings.Label_Theme" xml:space="preserve"><value>Utseende — Tema</value></data>
+  <data name="Settings.Hint_Theme" xml:space="preserve"><value>Temaförändringar träder i kraft omedelbart och kvarstår även efter omstart.</value></data>
+  <!--  Update  -->
+  <data name="Update.BannerMessage" xml:space="preserve"><value>Trackdub {0} ({1}) finns tillgängligt</value></data>
+  <data name="Update.Banner_Subtitle" xml:space="preserve"><value>En ny version av Trackdub finns nu att ladda ner.</value></data>
+  <data name="Update.Button_ReleaseNotes" xml:space="preserve"><value>Versionsinformation</value></data>
+  <data name="Update.Download" xml:space="preserve"><value>Ladda ner</value></data>
+  <data name="Settings.Label_UpdateChannel" xml:space="preserve"><value>Uppdateringskanal</value></data>
+  <data name="Settings.Hint_UpdateChannel" xml:space="preserve"><value>I den stabila versionen släpps testade versioner. I förhandsversionen får man tidig tillgång till kommande funktioner.</value></data>
+  <data name="Settings.Label_ModelTier" xml:space="preserve"><value>Modellnivå</value></data>
+  <data name="Settings.Hint_CommercialOnly" xml:space="preserve"><value>Trackdub levererar endast modeller som är godkända för kommersiellt bruk. Importerade modeller som inte är godkända för kommersiellt bruk förblir blockerade.</value></data>
+  <data name="Settings.Label_AsrEngine" xml:space="preserve"><value>ASR-motor</value></data>
+  <data name="Settings.Label_TranslationEngine" xml:space="preserve"><value>Översättningsmotor</value></data>
+  <data name="Settings.Label_VoiceSynthesisEngine" xml:space="preserve"><value>Röstsyntesmotor</value></data>
+  <data name="Settings.Label_StemSeparationEngine" xml:space="preserve"><value>Stamseparationsmotor</value></data>
+  <data name="Settings.Label_RubberbandStretch" xml:space="preserve"><value>TTS Timing — Gummibandssträckning</value></data>
+  <data name="Settings.Label_ReduceMotion" xml:space="preserve"><value>Minska rörelsen</value></data>
+  <data name="Settings.Hint_ReduceMotion" xml:space="preserve"><value>Inaktiverar andningspulsen vid körning av accentstreck i pipeline-steget.</value></data>
+  <data name="Settings.Label_StretchThreshold" xml:space="preserve"><value>Sträckningsgräns</value></data>
+  <data name="Settings.Label_ExportFormat" xml:space="preserve"><value>Exportformat</value></data>
+  <data name="Settings.Label_ExportSubtitles" xml:space="preserve"><value>Exportera undertexter</value></data>
+  <data name="Settings.Label_VideoEncoder" xml:space="preserve"><value>Videokodare (Burn-in-export)</value></data>
+  <data name="Settings.Label_PreviewVideoDecode" xml:space="preserve"><value>Förhandsgranskning av videodekodning</value></data>
+  <data name="Settings.Label_Subtitles" xml:space="preserve"><value>Undertexter</value></data>
+  <data name="Settings.Label_SubtitleContentMode" xml:space="preserve"><value>Innehållsläge för undertexter</value></data>
+  <!--  Settings - Starter Packs  -->
+  <data name="Settings.Tab_StarterPacks" xml:space="preserve"><value>Startpaket</value></data>
+  <data name="Settings.StarterPacks_Heading" xml:space="preserve"><value>Startpaket</value></data>
+  <data name="Settings.StarterPacks_Hint" xml:space="preserve"><value>Ladda ner de medföljande modelluppsättningarna och använd dem sedan för att konfigurera alias för steg och standardvärden för körning. De installerade filerna är filer med giltig kontrollsumma, men de är inte redo för körning.</value></data>
+  <data name="Settings.StarterPacks_RecommendedBadge" xml:space="preserve"><value>Rekommenderas utifrån upptäckt nivå</value></data>
+  <data name="Settings.StarterPacks_AppliedBadge" xml:space="preserve"><value>Tillämpad</value></data>
+  <data name="Settings.StarterPacks_Download" xml:space="preserve"><value>Ladda ner</value></data>
+  <data name="Settings.StarterPacks_Apply" xml:space="preserve"><value>Ansök</value></data>
+  <data name="Settings.StarterPacks_ProfileLabel" xml:space="preserve"><value>Profil</value></data>
+  <data name="Settings.StarterPacks_InstalledLabel" xml:space="preserve"><value>Installerade modeller:</value></data>
+  <data name="Settings.StarterPacks_DownloadComplete" xml:space="preserve"><value>Nedladdningen är klar. Inställningarna har inte ändrats.</value></data>
+  <data name="Settings.StarterPacks_DownloadFailed" xml:space="preserve"><value>Nedladdningen misslyckades.</value></data>
+  <data name="Settings.StarterPacks_ApplyComplete" xml:space="preserve"><value>Startpaketet har aktiverats.</value></data>
+  <data name="Settings.StarterPacks_ApplyFailed" xml:space="preserve"><value>Ansökan misslyckades.</value></data>
+  <data name="Settings.StarterPacks_ConsentRequired" xml:space="preserve"><value>Samtycke till röstkloning krävs innan detta paket installeras.</value></data>
+  <data name="Settings.StarterPacks_CompatibleBadge" xml:space="preserve"><value>Fullt kompatibel</value></data>
+  <data name="Settings.StarterPacks_FallbackBadge" xml:space="preserve"><value>Reservlösningar krävs</value></data>
+  <data name="Settings.StarterPacks_NotRunnableBadge" xml:space="preserve"><value>Kan inte köras</value></data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve"><value>GPU-vägen är inte tillgänglig för {0}. Använder {1} på {2}.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupSummary" xml:space="preserve"><value>{0} Modellerna i det här paketet körs på CPU:n tills GPU-körmiljön för din hårdvara har installerats.</value></data>
+  <data name="Settings.StarterPacks_GpuVariantNudge" xml:space="preserve"><value>Vissa modeller kräver även GPU-optimerade varianter. Använd funktionen ”Optimize” i Model Manager när GPU-körmiljön är klar.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Nvidia" xml:space="preserve"><value>Installera NVIDIA TensorRT RTX-körmiljö</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Amd" xml:space="preserve"><value>Installera AMD MIGraphX-körmiljö</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Intel" xml:space="preserve"><value>Installera Intel OpenVINO-körmiljön</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Qualcomm" xml:space="preserve"><value>Installera Qualcomm QNN-runtime</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_AmdNpu" xml:space="preserve"><value>Installera AMD VitisAI NPU-körmiljö</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Bundle" xml:space="preserve"><value>Installera GPU-körmiljöer</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallComplete" xml:space="preserve"><value>Installationen av GPU-körmiljön är klar.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallFailed" xml:space="preserve"><value>Installationen av GPU-körmiljön misslyckades.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupLicenseRequired" xml:space="preserve"><value>Godkänn leverantörens licens för att installera GPU-runtime.</value></data>
+  <data name="Settings.StarterPacks_CloudReadyBadge" xml:space="preserve"><value>API-nycklar har konfigurerats</value></data>
+  <data name="Settings.StarterPacks_CloudKeysMissingBadge" xml:space="preserve"><value>API-nycklar saknas</value></data>
+  <data name="Settings.StarterPacks_CloudKeysButton" xml:space="preserve"><value>Konfigurera API-nycklar</value></data>
+  <data name="Settings.StarterPacks_ImportButton" xml:space="preserve"><value>Importera paket…</value></data>
+  <data name="Settings.StarterPacks_ExportButton" xml:space="preserve"><value>Exportera…</value></data>
+  <data name="Settings.StarterPacks_UserPacksHeader" xml:space="preserve"><value>Dina ryggsäckar</value></data>
+  <data name="Settings.StarterPacks_OpenLocalModelsLink" xml:space="preserve"><value>Ladda ner modellerna en och en</value></data>
+  <data name="Settings.StarterPacks_OptimizeNudge" xml:space="preserve"><value>GPU-optimerade varianter finns tillgängliga för en eller flera modeller i {0}. Optimera i ”Local Models” för bästa prestanda.</value></data>
+  <data name="Settings.StarterPacks_ReviewOptimizations" xml:space="preserve"><value>Granska optimeringar</value></data>
+  <data name="Settings.LocalModels_AppliedPackBadge" xml:space="preserve"><value>Tillämpat paket: {0}</value></data>
+  <data name="Settings.Label_PackTierFilter" xml:space="preserve"><value>Förpackningsfilter</value></data>
+  <data name="Settings.Button_Dismiss" xml:space="preserve"><value>Stäng</value></data>
+  <!--  Onboarding - Starter Packs  -->
+  <data name="Onboarding.StarterPacks_Title" xml:space="preserve"><value>Välj ett startpaket</value></data>
+  <data name="Onboarding.StarterPacks_Body" xml:space="preserve"><value>Välj en modellpaket att ladda ner och tillämpa, eller konfigurera modellerna enskilt under ”Lokala modeller”.</value></data>
+  <data name="Onboarding.StarterPacks_Skip" xml:space="preserve"><value>Hoppa över det här för tillfället</value></data>
+  <data name="Onboarding.StarterPacks_ConfigureIndividually" xml:space="preserve"><value>Konfigurera individuellt</value></data>
+  <!--  Settings - Local Models  -->
+  <data name="Settings.Tab_LocalModels" xml:space="preserve"><value>Lokala modeller</value></data>
+  <data name="Settings.Hint_CommercialOnlyLane" xml:space="preserve"><value>Körfält endast för kommersiella fordon. Importerade icke-kommersiella fordon har fortfarande tillträde förbjudet.</value></data>
+  <data name="Settings.Label_NonCommercial" xml:space="preserve"><value>icke-kommersiell</value></data>
+  <data name="Settings.Button_Download" xml:space="preserve"><value>Ladda ner</value></data>
+  <data name="Settings.Button_Repair" xml:space="preserve"><value>Reparation</value></data>
+  <data name="Settings.Button_Uninstall" xml:space="preserve"><value>Avinstallera</value></data>
+  <data name="Settings.Label_Optimize" xml:space="preserve"><value>Optimera:</value></data>
+  <data name="Settings.Tip_PrecisionHeader" xml:space="preserve"><value>Precision för den optimerade modellvarianten (alternativen beror på leverantören):</value></data>
+  <data name="Settings.Tip_Fp32" xml:space="preserve"><value>fp32 — fullständiga 32-bitars vikter. Bästa noggrannhet; största filstorlek. Endast CPU.</value></data>
+  <data name="Settings.Tip_Fp16" xml:space="preserve"><value>fp16 — 16-bitars halvprecision. God noggrannhet, hälften så stor som fp32. DirectML / CUDA / TensorRT.</value></data>
+  <data name="Settings.Tip_Int8" xml:space="preserve"><value>int8 — 8-bitars kvantiserad. Mindre och snabbare än fp16; en mindre avvägning i fråga om noggrannhet i de flesta ljudmodeller. CPU / DirectML / CUDA.</value></data>
+  <data name="Settings.Tip_Int4" xml:space="preserve"><value>int4 — 4-bitars kvantiserad. Minsta och snabbaste alternativet; märkbar noggrannhetsförlust på vissa modeller. Endast DirectML/CUDA.</value></data>
+  <data name="Settings.Button_Optimize" xml:space="preserve"><value>Optimera</value></data>
+  <data name="Settings.Status_Optimizing" xml:space="preserve"><value>Optimerar…</value></data>
+  <data name="Settings.Button_Cancel" xml:space="preserve"><value>Avbryt</value></data>
+  <data name="Settings.Button_Use" xml:space="preserve"><value>Användning</value></data>
+  <data name="Settings.Button_Clear" xml:space="preserve"><value>Rensa</value></data>
+  <data name="Settings.Status_Loading" xml:space="preserve"><value>Laddar…</value></data>
+  <!--  Settings - Cloud Models  -->
+  <data name="Settings.Tab_CloudModels" xml:space="preserve"><value>Molnmodeller</value></data>
+  <data name="Settings.Button_Save" xml:space="preserve"><value>Spara</value></data>
+  <data name="Settings.Hint_MoreProviders" xml:space="preserve"><value>Fler molntjänstleverantörer kommer snart.</value></data>
+  <!--  Settings - Hardware  -->
+  <data name="Settings.Tab_Hardware" xml:space="preserve"><value>Hårdvara</value></data>
+  <data name="Settings.Heading_Hardware" xml:space="preserve"><value>Hårdvarukonfiguration</value></data>
+  <data name="Settings.Label_FfmpegEncoders" xml:space="preserve"><value>FFmpeg-videokodare</value></data>
+  <data name="Settings.Label_FfmpegHwDecode" xml:space="preserve"><value>FFmpeg-hårdvaruavkodning</value></data>
+  <data name="Settings.Toggle_NativeCuda" xml:space="preserve"><value>Aktivera inbyggd CUDA/TensorRT på Windows (avancerat)</value></data>
+  <data name="Settings.Hint_NativeCuda" xml:space="preserve"><value>Avstängt som standard. När funktionen är aktiverad använder explicita CUDA- eller TensorRT-förfrågningar inbyggda ONNX Runtime-leverantörer istället för DirectML / TensorRT RTX (WinML). Det automatiska valet av pipeline förblir oförändrat.</value></data>
+  <data name="Settings.Label_WinMlPolicy" xml:space="preserve"><value>Enhetspolicy för Windows ML (avancerad)</value></data>
+  <data name="Settings.Hint_WinMlPolicy" xml:space="preserve"><value>Experimentellt. Använder ONNX Runtimes automatiska val av EP/enhet bland registrerade leverantörer i Windows ML-katalogen. Valet av leverantör för Stage förblir oförändrat. Starta om Trackdub efter att du har ändrat denna inställning.</value></data>
+  <data name="Settings.Label_GpuProviders" xml:space="preserve"><value>Leverantörer av GPU-baserad inferens</value></data>
+  <data name="Settings.Label_AllCertified" xml:space="preserve"><value>Alla certifierade katalogleverantörer</value></data>
+  <data name="Settings.Hint_AllCertified" xml:space="preserve"><value>Detta installerar alla tillgängliga Windows ML-katalogleverantörer på den här datorn. På kompatibel NVIDIA-hårdvara kan det även erbjuda TensorRT RTX-plugin (separat NVIDIA-licens). Det kan hämta flera paket och ta flera minuter vid första körningen. Installationsknapparna för enskilda leverantörer förblir tillgängliga för riktade installationer, oavsett om du kör detta eller inte.</value></data>
+  <data name="Settings.Button_InstallAllCertified" xml:space="preserve"><value>Installera alla certifierade leverantörer</value></data>
+  <data name="Settings.Label_NvidiaTensorRt" xml:space="preserve"><value>NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.Button_Refresh" xml:space="preserve"><value>Uppdatera</value></data>
+  <data name="Settings.Button_InstallProvider" xml:space="preserve"><value>Installera leverantör</value></data>
+  <data name="Settings.Button_InstallTrtRtxPlugin" xml:space="preserve"><value>Installera tillägg</value></data>
+  <data name="Settings.Button_ViewLicense" xml:space="preserve"><value>Visa licens</value></data>
+  <data name="Settings.Label_AmdMigraphx" xml:space="preserve"><value>AMD MIGraphX</value></data>
+  <data name="Settings.Label_IntelOpenVino" xml:space="preserve"><value>Intel OpenVINO (WinML-katalogen)</value></data>
+  <data name="Settings.Label_QualcommQnn" xml:space="preserve"><value>Qualcomm QNN (WinML-katalogen)</value></data>
+  <data name="Settings.Label_AmdVitisAi" xml:space="preserve"><value>AMD VitisAI (WinML-katalogen)</value></data>
+  <data name="Settings.Label_NativeOrtGpu" xml:space="preserve"><value>Inbyggd ORT-GPU (avancerad)</value></data>
+  <data name="Settings.Label_ExecutionProviders" xml:space="preserve"><value>Utförandeaktörer</value></data>
+  <data name="Settings.Label_PerStageOverrides" xml:space="preserve"><value>Överskrivningar av leverantör per steg</value></data>
+  <!--  Settings - Profiler  -->
+  <data name="Settings.Tab_Profiler" xml:space="preserve"><value>Profilerare</value></data>
+  <data name="Settings.Heading_Profiler" xml:space="preserve"><value>Hårdvaruprofilator</value></data>
+  <data name="Settings.Hint_Profiler" xml:space="preserve"><value>Kör korta VAD-, ASR-, översättnings- och TTS-prestandatester för att rekommendera en kvalitetsinställning. Kräver Windows med medföljande ONNX-modeller installerade.</value></data>
+  <data name="Settings.Button_RunBenchmarks" xml:space="preserve"><value>Kör prestandatester för olika steg</value></data>
+  <data name="Settings.Label_QualityPreset" xml:space="preserve"><value>Kvalitetsinställning</value></data>
+  <data name="Settings.Hint_QualityPreset" xml:space="preserve"><value>Med ”Använd rekommendation” tillämpas profileringsresultatet på planeringen av modellnivån. Med ”Åsidosätt” behålls ditt val tills du ändrar det.</value></data>
+  <!--  Settings - Recent Projects  -->
+  <data name="Settings.Tab_RecentProjects" xml:space="preserve"><value>Senaste projekt</value></data>
+  <data name="Settings.Heading_RecentProjects" xml:space="preserve"><value>Senaste projekt</value></data>
+  <!--  Settings - About  -->
+  <data name="Settings.Tab_About" xml:space="preserve"><value>Om</value></data>
+  <data name="Settings.Heading_About" xml:space="preserve"><value>Om Trackdub</value></data>
+  <data name="Settings.About_Tagline" xml:space="preserve"><value>Trackdub — AI-driven arbetsstation för dubbning</value></data>
+  <data name="Settings.About_Edition" xml:space="preserve"><value>Plattformsoberoende Avalonia-utgåva</value></data>
+  <!--  Settings - Developer  -->
+  <data name="Settings.Tab_Developer" xml:space="preserve"><value>Utvecklare</value></data>
+  <data name="Settings.Heading_Developer" xml:space="preserve"><value>Utvecklingsalternativ</value></data>
+  <data name="Settings.Hint_Developer" xml:space="preserve"><value>Utvecklingsverktyg och diagnostikfunktioner finns tillgängliga i utvecklingsversionerna.</value></data>
+  <!--  Settings - Footer  -->
+  <data name="Settings.Button_SaveAndClose" xml:space="preserve"><value>Spara och stäng</value></data>
+  <!--  Dialog - SourceLanguagePicker  -->
+  <data name="Dialog.SourceLanguage_Title" xml:space="preserve"><value>Källa till transkriptet</value></data>
+  <data name="Dialog.SourceLanguage_Hint" xml:space="preserve"><value>Om du ändrar källspråket påverkar det framtida översättningar och stavningskontrollen.</value></data>
+  <data name="Dialog.SourceLanguage_Placeholder" xml:space="preserve"><value>Källspråk</value></data>
+  <!--  Dialog - UnsavedInlineEdit  -->
+  <data name="Dialog.UnsavedEdit_KeepEditing" xml:space="preserve"><value>Fortsätt redigera</value></data>
+  <data name="Dialog.UnsavedEdit_Discard" xml:space="preserve"><value>Kasta</value></data>
+  <!--  Dialog - VoiceCloneConsent  -->
+  <data name="Dialog.VoiceClone_Title" xml:space="preserve"><value>Samtycke till röstkloning</value></data>
+  <data name="Dialog.VoiceClone_Body" xml:space="preserve"><value>Under det här steget kommer dina uppladdade referensljudklipp att användas för att syntetisera röstegenskaper. Genom att klicka på ”Jag godkänner” bekräftar du att du har laglig rätt att klona dessa röster för detta projekt.</value></data>
+  <data name="Dialog.VoiceClone_SessionNote" xml:space="preserve"><value>Detta samtycke gäller endast den aktuella sessionsomgången och måste beviljas på nytt nästa gång du startar applikationen.</value></data>
+  <data name="Dialog.VoiceClone_Agree" xml:space="preserve"><value>Jag håller med</value></data>
+  <!--  Timeline - Waveform  -->
+  <data name="Timeline.WaveformNotAvailable" xml:space="preserve"><value>Förhandsgranskning av vågformen är ännu inte tillgänglig</value></data>
+  <data name="Timeline.ComputingPeaks" xml:space="preserve"><value>Beräkning av vågformens toppvärden…</value></data>
+  <!--  Timeline - ZoomLevel (non-localizable display but test flags it)  -->
+  <data name="Timeline.ZoomLevel" xml:space="preserve"><value>100 pps</value></data>
+  <!--  Inspector  -->
+  <data name="Inspector.Header" xml:space="preserve"><value>Inspektör</value></data>
+  <data name="Inspector.Empty" xml:space="preserve"><value>Välj ett segment, en högtalare eller en källartefakt för att granska den.</value></data>
+  <data name="Inspector.UnknownTarget" xml:space="preserve"><value>Denna inspektionsmålfunktion stöds inte ännu.</value></data>
+  <data name="Inspector.OpenInEditor" xml:space="preserve"><value>Öppna i redigeraren</value></data>
+  <data name="Inspector.Tab_Content" xml:space="preserve"><value>Innehåll</value></data>
+  <data name="Inspector.Tab_Timing" xml:space="preserve"><value>Tidpunkt</value></data>
+  <data name="Inspector.Tab_Voice" xml:space="preserve"><value>Röst</value></data>
+  <data name="Inspector.Tab_QC" xml:space="preserve"><value>Kvalitetskontroll</value></data>
+  <data name="Inspector.SegmentDuration" xml:space="preserve"><value>Segment</value></data>
+  <data name="Inspector.GeneratedDuration" xml:space="preserve"><value>Genererad</value></data>
+  <data name="Inspector.Overrun" xml:space="preserve"><value>Överskridande</value></data>
+  <data name="Inspector.TimingAdjustment" xml:space="preserve"><value>Tidpunkt</value></data>
+  <data name="Inspector.ConfidenceReview" xml:space="preserve"><value>Granskning rekommenderas</value></data>
+  <data name="Inspector.Artifact" xml:space="preserve"><value>Artefakt</value></data>
+  <data name="Inspector.ArtifactType" xml:space="preserve"><value>Typ</value></data>
+  <data name="Inspector.ArtifactDuration" xml:space="preserve"><value>Varaktighet</value></data>
+  <data name="Inspector.ArtifactSize" xml:space="preserve"><value>Storlek</value></data>
+  <data name="Inspector.ArtifactPath" xml:space="preserve"><value>Sökväg</value></data>
+  <data name="Inspector.ArtifactType_Audio" xml:space="preserve"><value>Ljud</value></data>
+  <data name="Inspector.ArtifactType_Video" xml:space="preserve"><value>Video</value></data>
+  <data name="Inspector.ArtifactType_Subtitle" xml:space="preserve"><value>Underrubrik</value></data>
+  <data name="Inspector.ArtifactType_Unknown" xml:space="preserve"><value>Okänt</value></data>
+  <data name="Attention.translation.stale" xml:space="preserve"><value>Översättningen är föråldrad.</value></data>
+  <data name="Attention.tts.failed" xml:space="preserve"><value>Dub-genereringen misslyckades.</value></data>
+  <data name="Attention.tts.stale" xml:space="preserve"><value>Dub är uttjatat.</value></data>
+  <data name="Attention.tts.pending" xml:space="preserve"><value>Dub-generering pågår.</value></data>
+  <data name="Attention.tts.duration-overrun" xml:space="preserve"><value>Dub-tiden överskrider toleransgränsen.</value></data>
+  <data name="Attention.tts.speed-limit" xml:space="preserve"><value>Tidsförlängning kan försämra kvaliteten.</value></data>
+  <data name="Attention.asr.low-confidence" xml:space="preserve"><value>Transkriptets tillförlitlighet behöver granskas.</value></data>
+  <data name="Attention.lipsync.error" xml:space="preserve"><value>Läppsynkroniseringen misslyckades.</value></data>
+  <data name="Attention.lipsync.warning" xml:space="preserve"><value>Läppsynkroniseringen behöver ses över.</value></data>
+  <data name="Attention.lipsynthesis.error" xml:space="preserve"><value>Läppreparationen misslyckades.</value></data>
+  <data name="Attention.lipsynthesis.warning" xml:space="preserve"><value>Läppvården behöver ses över.</value></data>
+  <data name="Attention.stage.failed" xml:space="preserve"><value>Rörledningsfasen misslyckades.</value></data>
+  <data name="Attention.stage.in-progress" xml:space="preserve"><value>Rörledningsfasen pågår.</value></data>
+  <!--  License  -->
+  <data name="License.Tab" xml:space="preserve"><value>Licens</value></data>
+  <data name="License.Heading" xml:space="preserve"><value>Licens</value></data>
+  <data name="License.CurrentTier" xml:space="preserve"><value>Nuvarande nivå:</value></data>
+  <data name="License.Tier_Free" xml:space="preserve"><value>Gratis</value></data>
+  <data name="License.Tier_Pro" xml:space="preserve"><value>Fördelar</value></data>
+  <data name="License.KeyLabel" xml:space="preserve"><value>Licensnyckel</value></data>
+  <data name="License.KeyPlaceholder" xml:space="preserve"><value>Klistra in din licensnyckel här</value></data>
+  <data name="License.Button_Activate" xml:space="preserve"><value>Aktivera</value></data>
+  <data name="License.Button_Deactivate" xml:space="preserve"><value>Inaktivera</value></data>
+  <data name="License.Degraded" xml:space="preserve"><value>Licensen har nedgraderats</value></data>
+  <data name="License.MachinesRegisteredUnlimited" xml:space="preserve"><value> registrerade maskiner (obegränsad utvecklingslicens)</value></data>
+</root>

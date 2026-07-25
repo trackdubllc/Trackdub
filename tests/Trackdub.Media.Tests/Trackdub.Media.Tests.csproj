@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="FsCheck" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Trackdub.Contracts\Trackdub.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Media\Trackdub.Media.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Media.Playback\Trackdub.Media.Playback.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Trackdub.TestDoubles\FakeArtifactStore.cs" Link="TestDoubles\FakeArtifactStore.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakePlaybackBackend.cs" Link="TestDoubles\FakePlaybackBackend.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,229 @@
+using Trackdub.Application.Runtime;
+using Trackdub.Contracts;
+using Trackdub.Contracts.StarterPacks;
+
+namespace Trackdub.Composition.Runtime;
+
+public sealed class GpuRuntimeInstallOrchestrator(
+    ITrtRtxEpInstaller? trtRtxEpInstaller = null,
+    IMigraphxRuntimeReadinessService? migraphxReadiness = null,
+    IOpenVinoCatalogEpInstaller? openVinoInstaller = null,
+    IQnnCatalogEpInstaller? qnnInstaller = null,
+    IVitisAiCatalogEpInstaller? vitisAiInstaller = null,
+    IWindowsMlCertifiedCatalogInstaller? certifiedCatalogInstaller = null,
+    ITensorRtRtxRuntimeReadinessService? tensorRtRtxReadiness = null) : IGpuRuntimeInstallOrchestrator
+{
+    public async Task<GpuRuntimeInstallResult> InstallAsync(
+        StarterPackGpuRuntimeKind runtimeKind,
+        IProgress<string> progress,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: "GPU runtime install is only available on Windows.");
+        }
+
+        return runtimeKind switch
+        {
+            StarterPackGpuRuntimeKind.NvidiaTensorRtRtx => await InstallTensorRtRtxAsync(progress, cancellationToken)
+                .ConfigureAwait(false),
+            StarterPackGpuRuntimeKind.AmdMigraphx => await InstallMigraphxAsync(progress, cancellationToken)
+                .ConfigureAwait(false),
+            StarterPackGpuRuntimeKind.IntelOpenVino => await InstallOpenVinoAsync(progress, cancellationToken)
+                .ConfigureAwait(false),
+            StarterPackGpuRuntimeKind.QualcommQnn => await InstallQnnAsync(progress, cancellationToken)
+                .ConfigureAwait(false),
+            StarterPackGpuRuntimeKind.AmdVitisAi => await InstallVitisAiAsync(progress, cancellationToken)
+                .ConfigureAwait(false),
+            StarterPackGpuRuntimeKind.WindowsMlCatalogBundle => await InstallCertifiedCatalogBundleAsync(
+                progress,
+                cancellationToken).ConfigureAwait(false),
+            _ => new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: "No GPU runtime install action is available for this machine."),
+        };
+    }
+
+    private async Task<GpuRuntimeInstallResult> InstallTensorRtRtxAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        if (trtRtxEpInstaller is null)
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: "TensorRT RTX installer is unavailable in this build.");
+        }
+
+        progress.Report("Installing TensorRT RTX GPU runtime…");
+        TrtRtxEpInstallResult result = await trtRtxEpInstaller
+            .EnsureInstalledAsync(progress, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (result.Succeeded)
+        {
+            return new GpuRuntimeInstallResult(Succeeded: true, Detail: "TensorRT RTX GPU runtime is installed.");
+        }
+
+        return new GpuRuntimeInstallResult(
+            Succeeded: false,
+            FailureDetail: result.FailureDetail ?? "TensorRT RTX install failed.");
+    }
+
+    private async Task<GpuRuntimeInstallResult> InstallMigraphxAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        if (migraphxReadiness is null)
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: "AMD MIGraphX readiness service is unavailable in this build.");
+        }
+
+        progress.Report("Installing AMD MIGraphX GPU runtime…");
+        MigraphxRuntimeReadinessSnapshot snapshot = await migraphxReadiness
+            .ProbeAsync(allowProviderDownloads: true, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (snapshot.IsReady)
+        {
+            return new GpuRuntimeInstallResult(Succeeded: true, Detail: "AMD MIGraphX GPU runtime is ready.");
+        }
+
+        return new GpuRuntimeInstallResult(
+            Succeeded: false,
+            FailureDetail: snapshot.Detail);
+    }
+
+    private async Task<GpuRuntimeInstallResult> InstallOpenVinoAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        if (openVinoInstaller is null)
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: "Intel OpenVINO installer is unavailable in this build.");
+        }
+
+        progress.Report("Installing Intel OpenVINO GPU runtime…");
+        WinMlCatalogEpInstallResult result = await openVinoInstaller
+            .EnsureInstalledAsync(progress, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (result.Succeeded)
+        {
+            return new GpuRuntimeInstallResult(Succeeded: true, Detail: "Intel OpenVINO GPU runtime is installed.");
+        }
+
+        return new GpuRuntimeInstallResult(
+            Succeeded: false,
+            FailureDetail: result.FailureDetail ?? "Intel OpenVINO install failed.");
+    }
+
+    private async Task<GpuRuntimeInstallResult> InstallQnnAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        if (qnnInstaller is null)
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: "Qualcomm QNN installer is unavailable in this build.");
+        }
+
+        progress.Report("Installing Qualcomm QNN GPU runtime…");
+        WinMlCatalogEpInstallResult result = await qnnInstaller
+            .EnsureInstalledAsync(progress, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (result.Succeeded)
+        {
+            return new GpuRuntimeInstallResult(Succeeded: true, Detail: "Qualcomm QNN GPU runtime is installed.");
+        }
+
+        return new GpuRuntimeInstallResult(
+            Succeeded: false,
+            FailureDetail: result.FailureDetail ?? "Qualcomm QNN install failed.");
+    }
+
+    private async Task<GpuRuntimeInstallResult> InstallVitisAiAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        if (vitisAiInstaller is null)
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: "AMD VitisAI installer is unavailable in this build.");
+        }
+
+        progress.Report("Installing AMD VitisAI NPU runtime…");
+        WinMlCatalogEpInstallResult result = await vitisAiInstaller
+            .EnsureInstalledAsync(progress, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (result.Succeeded)
+        {
+            return new GpuRuntimeInstallResult(Succeeded: true, Detail: "AMD VitisAI NPU runtime is installed.");
+        }
+
+        return new GpuRuntimeInstallResult(
+            Succeeded: false,
+            FailureDetail: result.FailureDetail ?? "AMD VitisAI install failed.");
+    }
+
+    private async Task<GpuRuntimeInstallResult> InstallCertifiedCatalogBundleAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        if (certifiedCatalogInstaller is null)
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: "Windows ML catalog installer is unavailable in this build.");
+        }
+
+        progress.Report("Installing Windows ML certified GPU runtimes…");
+        WindowsMlCertifiedCatalogInstallResult catalogResult = await certifiedCatalogInstaller
+            .EnsureAllCertifiedAsync(progress, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!catalogResult.Succeeded)
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                FailureDetail: catalogResult.FailureDetail ?? catalogResult.Detail);
+        }
+
+        GpuRuntimeInstallResult? trtResult = null;
+        if (tensorRtRtxReadiness is not null && trtRtxEpInstaller is not null)
+        {
+            TensorRtRtxRuntimeReadinessSnapshot trtSnapshot = await tensorRtRtxReadiness
+                .ProbeAsync(allowProviderDownloads: false, cancellationToken)
+                .ConfigureAwait(false);
+            if (trtSnapshot.IsHardwareEligible && trtSnapshot.CanInstallWinMlProvider && !trtSnapshot.IsReady)
+            {
+                trtResult = await InstallTensorRtRtxAsync(progress, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        if (trtResult is { Succeeded: false })
+        {
+            return new GpuRuntimeInstallResult(
+                Succeeded: false,
+                Detail: catalogResult.Detail,
+                FailureDetail: trtResult.FailureDetail);
+        }
+
+        string detail = trtResult?.Detail is null
+            ? catalogResult.Detail
+            : $"{catalogResult.Detail} {trtResult.Detail}";
+        return new GpuRuntimeInstallResult(Succeeded: true, Detail: detail);
+    }
+}

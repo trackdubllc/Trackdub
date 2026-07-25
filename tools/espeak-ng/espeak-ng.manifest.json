@@ -1,0 +1,20 @@
+{
+  "tool": "espeak-ng",
+  "version": "1.51.1",
+  "license": "GPL-3.0-or-later",
+  "upstream": "https://github.com/espeak-ng/espeak-ng",
+  "release": "https://github.com/espeak-ng/espeak-ng/releases/tag/1.51.1",
+  "platform": "win-x64",
+  "files": {
+    "espeak-ng.exe": {
+      "sha256": "3080ec3822c1b266ef557c710bc79a97d20a7ab133a34bac308b81ab0afc733e",
+      "size": 27136
+    },
+    "libespeak-ng.dll": {
+      "sha256": "e737572df0a35a32b7bd444537c661c1c916b13b0b91351030c7f1d531307beb",
+      "size": 477184
+    }
+  },
+  "data_directory": "espeak-ng-data",
+  "notes": "Windows x64 build from upstream release. Data directory contains phoneme definitions and language dictionaries."
+}

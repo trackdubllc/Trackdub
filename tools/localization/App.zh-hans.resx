@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute ref="xml:space" use="default">
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:NMTOKEN">
+                    <xsd:enumeration value="preserve" />
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Stage.VAD" xml:space="preserve"><value>语音活动检测</value></data>
+  <data name="Stage.ASR" xml:space="preserve"><value>转录</value></data>
+  <data name="Stage.Translation" xml:space="preserve"><value>翻译</value></data>
+  <data name="Stage.TTS" xml:space="preserve"><value>语音合成</value></data>
+  <data name="Stage.Mixing" xml:space="preserve"><value>音频混音</value></data>
+  <data name="Status.Idle" xml:space="preserve"><value>空闲</value></data>
+  <data name="Status.Running" xml:space="preserve"><value>正在运行……</value></data>
+  <data name="Status.Failed" xml:space="preserve"><value>失败</value></data>
+  <data name="Status.Completed" xml:space="preserve"><value>已完成</value></data>
+  <data name="Window_Title_Crash" xml:space="preserve"><value>Trackdub — 意外错误</value></data>
+  <data name="Crash_Header" xml:space="preserve"><value>出现了一些问题</value></data>
+  <data name="Crash_Subtitle" xml:space="preserve"><value>Trackdub 遇到一个意外错误。您可以复制下方的详细信息，或打开日志文件夹以获取支持。</value></data>
+  <data name="Crash_Button_Copy" xml:space="preserve"><value>复制详细信息</value></data>
+  <data name="Crash_Button_OpenLogFolder" xml:space="preserve"><value>打开日志文件夹</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>关闭</value></data>
+  <data name="Settings.Label_Language" xml:space="preserve"><value>语言</value></data>
+  <data name="Settings.Hint_LanguageRestart" xml:space="preserve"><value>需要重启才能应用语言更改</value></data>
+  <!--  Transport  -->
+  <data name="Transport.ToolTip_SkipPrevious" xml:space="preserve"><value>跳过上一页</value></data>
+  <!--  Clippy Assistant  -->
+  <data name="Clippy_Tooltip_AskAssistant" xml:space="preserve"><value>咨询 Trackdub 助手</value></data>
+  <data name="Clippy_Text_AskAboutTrackdub" xml:space="preserve"><value>了解 Trackdub</value></data>
+  <data name="Clippy_Placeholder_WhatDoesStarterPackDo" xml:space="preserve"><value>这个入门套装有什么作用？</value></data>
+  <data name="Clippy_Button_Ask" xml:space="preserve"><value>询问</value></data>
+  <data name="Transport.ToolTip_Play" xml:space="preserve"><value>播放</value></data>
+  <data name="Transport.ToolTip_Pause" xml:space="preserve"><value>暂停</value></data>
+  <data name="Transport.ToolTip_SkipNext" xml:space="preserve"><value>跳过下一页</value></data>
+  <data name="Transport.ToolTip_Subtitles" xml:space="preserve"><value>字幕</value></data>
+  <data name="Transport.ToolTip_Karaoke" xml:space="preserve"><value>卡拉OK</value></data>
+  <data name="Transport.ToolTip_Bilingual" xml:space="preserve"><value>双语</value></data>
+  <data name="Transport.ToolTip_Dub" xml:space="preserve"><value>配音</value></data>
+  <data name="Transport.ToolTip_Mute" xml:space="preserve"><value>静音</value></data>
+  <data name="Transport.ToolTip_Fullscreen" xml:space="preserve"><value>全屏</value></data>
+  <data name="Transport.RetryPreview" xml:space="preserve"><value>重试</value></data>
+  <data name="Transport.ToolTip_RetryPreview" xml:space="preserve"><value>重新尝试预览</value></data>
+  <!--  Titlebar  -->
+  <data name="Titlebar.ToolTip_Undo" xml:space="preserve"><value>撤销</value></data>
+  <data name="Titlebar.ToolTip_Redo" xml:space="preserve"><value>重做</value></data>
+  <data name="Titlebar.ToolTip_NewProject" xml:space="preserve"><value>新项目</value></data>
+  <data name="Titlebar.Label_Recent" xml:space="preserve"><value>最近</value></data>
+  <data name="Titlebar.ToolTip_AIModels" xml:space="preserve"><value>AI 模型</value></data>
+  <data name="Titlebar.ToolTip_Settings" xml:space="preserve"><value>设置</value></data>
+  <data name="Titlebar.ToolTip_CheckForUpdates" xml:space="preserve"><value>检查是否有更新</value></data>
+  <data name="Titlebar.ToolTip_DIAG" xml:space="preserve"><value>诊断</value></data>
+  <data name="Titlebar.ToolTip_BENCH" xml:space="preserve"><value>基准测试</value></data>
+  <data name="Titlebar.Label_Update" xml:space="preserve"><value>UPD</value></data>
+  <data name="Titlebar.ToolTip_Minimize" xml:space="preserve"><value>最小化</value></data>
+  <data name="Titlebar.ToolTip_Maximize" xml:space="preserve"><value>最大化</value></data>
+  <data name="Titlebar.ToolTip_Close" xml:space="preserve"><value>关闭</value></data>
+  <data name="StatusBar.Engine" xml:space="preserve"><value>发动机：</value></data>
+  <data name="StatusBar.Local" xml:space="preserve"><value>本地</value></data>
+  <data name="StatusBar.Gpu" xml:space="preserve"><value>GPU：</value></data>
+  <data name="StatusBar.Settings" xml:space="preserve"><value>设置</value></data>
+  <data name="StatusBar.StarterPacks" xml:space="preserve"><value>入门套装</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>文件</value></data>
+  <data name="Menu.Project" xml:space="preserve"><value>项目</value></data>
+  <data name="Menu.Media" xml:space="preserve"><value>媒体</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>查看</value></data>
+  <data name="Menu.Window" xml:space="preserve"><value>窗口</value></data>
+  <data name="Menu.Help" xml:space="preserve"><value>帮助</value></data>
+  <data name="Menu.File.NewFromMedia" xml:space="preserve"><value>媒体最新消息……</value></data>
+  <data name="Menu.File.OpenProject" xml:space="preserve"><value>打开项目……</value></data>
+  <data name="Menu.File.Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Menu.File.CloseProject" xml:space="preserve"><value>关闭项目</value></data>
+  <data name="Menu.File.Exit" xml:space="preserve"><value>退出</value></data>
+  <data name="Menu.Project.AIModels" xml:space="preserve"><value>AI 模型……</value></data>
+  <data name="Menu.Project.Settings" xml:space="preserve"><value>设置…</value></data>
+  <data name="Menu.Media.Import" xml:space="preserve"><value>导入媒体……</value></data>
+  <data name="MediaPicker.WindowRequired" xml:space="preserve"><value>在打开媒体选择器之前，必须先打开一个窗口。</value></data>
+  <data name="MediaPicker.LocalPathRequired" xml:space="preserve"><value>无法解析所选文件的本地路径。请将媒体文件复制到本地文件夹，然后重试。</value></data>
+  <data name="MediaPicker.ImportNoLocalPaths" xml:space="preserve"><value>无法解析所选文件的本地路径。请将媒体文件复制到本地文件夹，然后重试。</value></data>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve"><value>{0} 无法导入所选文件，因为没有可用的本地路径。</value></data>
+  <data name="MediaPicker.ImportMediaFiles.Title" xml:space="preserve"><value>导入媒体文件</value></data>
+  <data name="MediaPicker.ImportMediaFiles.MediaFilesFilter" xml:space="preserve"><value>媒体文件</value></data>
+  <data name="MediaPicker.ImportMediaFiles.AllFilesFilter" xml:space="preserve"><value>所有文件</value></data>
+  <data name="ProjectPicker.WindowRequired" xml:space="preserve"><value>在打开项目选择器之前，必须先打开一个窗口。</value></data>
+  <data name="Menu.View.ToggleLeftPanel" xml:space="preserve"><value>切换左侧面板</value></data>
+  <data name="Menu.View.ToggleRightPanel" xml:space="preserve"><value>切换右侧面板</value></data>
+  <data name="Menu.View.ToggleTimeline" xml:space="preserve"><value>切换时间轴</value></data>
+  <data name="Menu.View.ToggleExportPanel" xml:space="preserve"><value>切换导出面板</value></data>
+  <data name="Menu.View.ToggleSubtitles" xml:space="preserve"><value>切换字幕</value></data>
+  <data name="Menu.Window.Minimize" xml:space="preserve"><value>最小化</value></data>
+  <data name="Menu.Window.Maximize" xml:space="preserve"><value>最大化 / 还原</value></data>
+  <data name="Menu.Help.CheckForUpdates" xml:space="preserve"><value>检查是否有更新</value></data>
+  <data name="Menu.Help.Diagnostics" xml:space="preserve"><value>导出诊断信息……</value></data>
+  <data name="Menu.Help.Benchmarks" xml:space="preserve"><value>基准测试</value></data>
+  <data name="Menu.Help.StarterPacks" xml:space="preserve"><value>入门套装……</value></data>
+  <data name="Menu.Help.About" xml:space="preserve"><value>关于……</value></data>
+  <!--  Speakers  -->
+  <data name="Speakers.Header" xml:space="preserve"><value>声音与演讲者</value></data>
+  <data name="Speakers.EmptyState" xml:space="preserve"><value>尚未检测到说话者。请先运行转录和说话者识别。</value></data>
+  <data name="Speakers.GenerateAll" xml:space="preserve"><value>生成全部</value></data>
+  <data name="Speakers.Count" xml:space="preserve"><value>{0} 演讲者</value></data>
+  <!--  Speaker  -->
+  <data name="Speaker.RenameTip" xml:space="preserve"><value>重命名扬声器</value></data>
+  <data name="Speaker.ConfirmRenameTip" xml:space="preserve"><value>确认重命名</value></data>
+  <data name="Speaker.CancelRenameTip" xml:space="preserve"><value>取消重命名</value></data>
+  <data name="Speaker.NewNamePlaceholder" xml:space="preserve"><value>新名称……</value></data>
+  <data name="Speaker.SyntheticVoice" xml:space="preserve"><value>合成语音</value></data>
+  <data name="Speaker.CloneVoice" xml:space="preserve"><value>克隆这种声音</value></data>
+  <data name="Speaker.SelectVoicePlaceholder" xml:space="preserve"><value>选择语音...</value></data>
+  <data name="Speaker.AssignVoice" xml:space="preserve"><value>分配语音</value></data>
+  <data name="Speaker.PreviewVoice" xml:space="preserve"><value>预览语音</value></data>
+  <data name="Speaker.NoReferenceClip" xml:space="preserve"><value>尚无参考视频</value></data>
+  <data name="Speaker.ExtractAutoClip" xml:space="preserve"><value>提取自动剪辑片段</value></data>
+  <data name="Speaker.ExtractAutoClipTip" xml:space="preserve"><value>从按日记记录的轮次中提取参考音频</value></data>
+  <data name="Speaker.UploadReference" xml:space="preserve"><value>上传参考资料</value></data>
+  <data name="Speaker.UploadReferenceTip" xml:space="preserve"><value>上传用于语音克隆的参考音频</value></data>
+  <data name="Speaker.StaleTtsWarning" xml:space="preserve"><value>⚠ TTS 已过期——重新分配语音后请重新生成。</value></data>
+  <data name="Speaker.RegenerateStaleDub" xml:space="preserve"><value>重新生成过期的dub</value></data>
+  <data name="Speaker.Generating" xml:space="preserve"><value>正在生成...</value></data>
+  <data name="Speaker.PreviewDubTip" xml:space="preserve"><value>预览该发言人的第一段已完成的配音录音</value></data>
+  <data name="Speaker.MergeInto" xml:space="preserve"><value>合并到：</value></data>
+  <data name="Speaker.SelectTargetPlaceholder" xml:space="preserve"><value>选择目标...</value></data>
+  <data name="Speaker.Merge" xml:space="preserve"><value>合并</value></data>
+  <data name="Speaker.MergeTip" xml:space="preserve"><value>将该发言者合并到所选目标中（该发言者将被移除）</value></data>
+  <!--  Timeline  -->
+  <data name="Timeline.Title" xml:space="preserve"><value>时间轴</value></data>
+  <data name="Timeline.SplitTip" xml:space="preserve"><value>在播放头处分割 (S)</value></data>
+  <data name="Timeline.MergeTip" xml:space="preserve"><value>合并选定的片段</value></data>
+  <data name="Timeline.TrimTip" xml:space="preserve"><value>裁剪至选定范围</value></data>
+  <data name="Timeline.DeleteTip" xml:space="preserve"><value>删除所选内容 (Del)</value></data>
+  <data name="Timeline.ZoomOutTip" xml:space="preserve"><value>缩小</value></data>
+  <data name="Timeline.ZoomInTip" xml:space="preserve"><value>放大</value></data>
+  <data name="Timeline.CollapseTip" xml:space="preserve"><value>折叠时间轴</value></data>
+  <data name="Timeline.Reference" xml:space="preserve"><value>参考文献</value></data>
+  <data name="Timeline.MuteTip" xml:space="preserve"><value>静音（即将推出）</value></data>
+  <data name="Timeline.SoloTip" xml:space="preserve"><value>《Solo》（即将上映）</value></data>
+  <!--  Pipeline  -->
+  <data name="Pipeline.Header" xml:space="preserve"><value>协调器管道</value></data>
+  <data name="Pipeline.Col_Job" xml:space="preserve"><value>约伯</value></data>
+  <data name="Pipeline.Col_Stage" xml:space="preserve"><value>舞台</value></data>
+  <data name="Pipeline.Col_Progress" xml:space="preserve"><value>进展</value></data>
+  <data name="Pipeline.Col_Detail" xml:space="preserve"><value>详情</value></data>
+  <data name="Pipeline.StarterPack" xml:space="preserve"><value>入门套装</value></data>
+  <data name="Pipeline.StarterPack_Placeholder" xml:space="preserve"><value>入门套装</value></data>
+  <data name="Pipeline.RunSelectedStages" xml:space="preserve"><value>运行所选项</value></data>
+  <data name="Pipeline.CommercialOnly" xml:space="preserve"><value>仅限商业用途</value></data>
+  <data name="Pipeline.ConfigHeader" xml:space="preserve"><value>管道配置</value></data>
+  <data name="Pipeline.Config" xml:space="preserve"><value>配置</value></data>
+  <data name="Pipeline.StemSeparation" xml:space="preserve"><value>茎的分离</value></data>
+  <data name="Pipeline.StemSeparation_Tip" xml:space="preserve"><value>在转录前将人声与背景音分离</value></data>
+  <data name="Pipeline.AudioCleanup" xml:space="preserve"><value>音频处理</value></data>
+  <data name="Pipeline.AudioCleanup_Tip" xml:space="preserve"><value>应用降噪和音频清理（若分离成功则自动跳过）</value></data>
+  <data name="Pipeline.SpeakerDiarization" xml:space="preserve"><value>说话者识别</value></data>
+  <data name="Pipeline.SpeakerDiarization_Tip" xml:space="preserve"><value>识别音频中的不同说话者</value></data>
+  <data name="Pipeline.Voice" xml:space="preserve"><value>语音</value></data>
+  <data name="Pipeline.Voice_Tip" xml:space="preserve"><value>配音演员的配音分配策略</value></data>
+  <data name="Pipeline.VoiceOption_Manual" xml:space="preserve"><value>手册</value></data>
+  <data name="Pipeline.VoiceOption_KokoroDefaults" xml:space="preserve"><value>Kokoro 的默认设置</value></data>
+  <data name="Pipeline.VoiceOption_AutoClone" xml:space="preserve"><value>自动克隆</value></data>
+  <data name="Pipeline.RunAllStages" xml:space="preserve"><value>运行所有阶段</value></data>
+  <data name="Pipeline.RunTranscriptToDub" xml:space="preserve"><value>奔向配音</value></data>
+  <data name="Pipeline.Options" xml:space="preserve"><value>选项</value></data>
+  <data name="Pipeline.Model" xml:space="preserve"><value>型号</value></data>
+  <data name="Pipeline.NotDownloaded" xml:space="preserve"><value>⚠ 未下载</value></data>
+  <data name="Pipeline.NoApiKey" xml:space="preserve"><value>⚠ 没有 API 密钥</value></data>
+  <data name="Pipeline.ExecutionProvider" xml:space="preserve"><value>执行提供商</value></data>
+  <data name="Pipeline.SeparateOnImport" xml:space="preserve"><value>导入时分离人声和环境音</value></data>
+  <data name="Pipeline.SeparateOnImport_Hint" xml:space="preserve"><value>“重新运行”将使用所选的分离模型。</value></data>
+  <data name="Pipeline.SeparationOptionalHint" xml:space="preserve"><value>使用行切换按钮可在连续行中插入分隔符。</value></data>
+  <data name="Pipeline.CleanupHint" xml:space="preserve"><value>当您单击“运行”时，语音增强功能将作为清理阶段的一部分运行。</value></data>
+  <data name="Pipeline.AsrHint" xml:space="preserve"><value>管道顶端的“商业安全模式”将模型选择限制为已获许可的安全默认选项。</value></data>
+  <data name="Pipeline.EnableAsrTextPolish" xml:space="preserve"><value>转录后的波兰语ASR文本</value></data>
+  <data name="Pipeline.EnableAsrTextPolish_Hint" xml:space="preserve"><value>对原始ASR片段进行可选的标点符号和语法润色。需要使用文本润色GenAI模型。</value></data>
+  <data name="Pipeline.TextRefinementAsrHint" xml:space="preserve"><value>使用行切换按钮，将ASR波兰语包含在运行中。</value></data>
+  <data name="Pipeline.DetectSpeakersOnImport" xml:space="preserve"><value>导入时检测扬声器</value></data>
+  <data name="Pipeline.DiarizationHint" xml:space="preserve"><value>“Identify”功能会在转录完成后，将发言者与转录文本的各个片段进行匹配。</value></data>
+  <data name="Pipeline.OverlapRescueHint" xml:space="preserve"><value>重叠语音恢复将重叠的对话拆分为源候选项（未确认的说话者）。在检测到重叠对话轮次后，在对话分割之后运行该过程。</value></data>
+  <data name="Pipeline.OverlapRescueModel" xml:space="preserve"><value>重叠救援模型</value></data>
+  <data name="Pipeline.OverlapRescueExecutionProvider" xml:space="preserve"><value>重叠救援执行提供者</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe" xml:space="preserve"><value>在救援后重新转录候选源</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe_Hint" xml:space="preserve"><value>对每个分离出的候选物运行ASR，并将结果标记以便审查。</value></data>
+  <data name="Pipeline.RunOverlapRescue" xml:space="preserve"><value>执行重叠救援</value></data>
+  <data name="Pipeline.OverlapRescueReviewHeader" xml:space="preserve"><value>候选人来源</value></data>
+  <data name="Pipeline.OverlapRescueReviewBadge" xml:space="preserve"><value>评论</value></data>
+  <data name="Pipeline.TranslationConfiguredAbove" xml:space="preserve"><value>源和目标已在上面配置完毕。</value></data>
+  <data name="Pipeline.ApplyTargetLanguage" xml:space="preserve"><value>应用所选目标语言</value></data>
+  <data name="Pipeline.TtsHint" xml:space="preserve"><value>在“声音”面板中为Kokoro分配声音，然后运行“配音”功能以生成录音片段。</value></data>
+  <data name="Pipeline.LipSyncHint" xml:space="preserve"><value>使用上面选择的强制对齐模型，将配音音频与口型同步并对齐。</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesis" xml:space="preserve"><value>正在运行视频唇形合成……</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesisExperimental" xml:space="preserve"><value>正在运行视频唇形合成（实验性）……</value></data>
+  <data name="Pipeline.LipSynthesisHint" xml:space="preserve"><value>视频嘴型修复（LatentSync ~6.7 GB + 面部模型）。需要视频、配音混音文件和发言片段。运行前请先下载模型。</value></data>
+  <data name="Pipeline.ExportHint" xml:space="preserve"><value>在时间轴下方的“导出”面板中配置混音电平和导出格式。</value></data>
+  <data name="Pipeline.OpenExportPanel" xml:space="preserve"><value>打开“导出”面板</value></data>
+  <!--  RunConfig  -->
+  <data name="RunConfig.Header" xml:space="preserve"><value>运行配置</value></data>
+  <data name="RunConfig.Source" xml:space="preserve"><value>来源</value></data>
+  <data name="RunConfig.TranslateTo" xml:space="preserve"><value>翻译为</value></data>
+  <data name="RunConfig.TargetLanguage_Placeholder" xml:space="preserve"><value>目标语言</value></data>
+  <!--  Export  -->
+  <data name="Export.Header" xml:space="preserve"><value>导出与混音</value></data>
+  <data name="Export.MixLabel" xml:space="preserve"><value>MIX</value></data>
+  <data name="Export.Src" xml:space="preserve"><value>Src</value></data>
+  <data name="Export.Src_Tip" xml:space="preserve"><value>源音频增益（dB）</value></data>
+  <data name="Export.Dub" xml:space="preserve"><value>配音</value></data>
+  <data name="Export.Dub_Tip" xml:space="preserve"><value>口齿不清的语音增益（dB）</value></data>
+  <data name="Export.Duck" xml:space="preserve"><value>鸭子</value></data>
+  <data name="Export.Duck_Tip" xml:space="preserve"><value>声源衰减（dB）</value></data>
+  <data name="Export.Timbre" xml:space="preserve"><value>音色</value></data>
+  <data name="Export.Timbre_Tip" xml:space="preserve"><value>对配音进行音色匹配</value></data>
+  <data name="Export.Pan" xml:space="preserve"><value>Pan</value></data>
+  <data name="Export.Pan_Tip" xml:space="preserve"><value>恢复原始立体声声像</value></data>
+  <data name="Export.ExportLabel" xml:space="preserve"><value>导出</value></data>
+  <data name="Export.BurnIn" xml:space="preserve"><value>灼烧</value></data>
+  <data name="Export.BurnIn_Tip" xml:space="preserve"><value>将字幕嵌入视频流中</value></data>
+  <data name="Export.SubtitleSource_Tip" xml:space="preserve"><value>字幕文本来源</value></data>
+  <data name="Export.Container_Tip" xml:space="preserve"><value>输出容器</value></data>
+  <data name="Export.Lufs_Tip" xml:space="preserve"><value>目标响度（LUFS）</value></data>
+  <data name="Export.Match" xml:space="preserve"><value>比赛</value></data>
+  <data name="Export.Match_Tip" xml:space="preserve"><value>将响度调整为与原始音源一致</value></data>
+  <data name="Export.ExportButton" xml:space="preserve"><value>导出</value></data>
+  <!--  Crash  -->
+  <data name="Crash.ExportDiagnostics" xml:space="preserve"><value>导出诊断信息</value></data>
+  <!--  Dialog  -->
+  <data name="Dialog.VendorLicense_Title" xml:space="preserve"><value>供应商许可证</value></data>
+  <data name="Dialog.VendorLicense_Acceptance" xml:space="preserve"><value>点击“我接受”，即表示您确认已阅读并接受本安装程序的使用条款。</value></data>
+  <data name="Dialog.VendorLicense_Accept" xml:space="preserve"><value>我接受</value></data>
+  <data name="Dialog.SpeakerDetection_Title" xml:space="preserve"><value>说话人检测</value></data>
+  <data name="Dialog.SpeakerDetection_UseSingle" xml:space="preserve"><value>使用一个扬声器</value></data>
+  <data name="Dialog.SpeakerDetection_Download" xml:space="preserve"><value>立即下载</value></data>
+  <data name="Dialog.ModelNotReady_Title" xml:space="preserve"><value>该型号暂无库存</value></data>
+  <data name="Dialog.ModelSetup_Title" xml:space="preserve"><value>模型设置</value></data>
+  <data name="Dialog.FallbackVoice_Title" xml:space="preserve"><value>使用备用语音吗？</value></data>
+  <data name="Dialog.FallbackVoice_Message" xml:space="preserve"><value>某些发言者没有被分配语音。Trackdub 仅针对本代，会为每个未分配语音的发言者使用第一个兼容的 Kokoro 语音。</value></data>
+  <data name="Dialog.FallbackVoice_Confirm" xml:space="preserve"><value>使用备用语音生成</value></data>
+  <!--  Glossary  -->
+  <data name="Glossary.Header" xml:space="preserve"><value>术语表</value></data>
+  <data name="Glossary.ProjectHeader" xml:space="preserve"><value>项目术语表</value></data>
+  <data name="Glossary.AddTerm" xml:space="preserve"><value>+ 添加术语</value></data>
+  <data name="Glossary.TermCount" xml:space="preserve"><value>{0} 术语</value></data>
+  <data name="Glossary.Loading" xml:space="preserve"><value>正在加载……</value></data>
+  <data name="Glossary.SourceTerm_Placeholder" xml:space="preserve"><value>源项</value></data>
+  <data name="Glossary.TargetTerm_Placeholder" xml:space="preserve"><value>目标术语</value></data>
+  <data name="Glossary.CaseSensitive" xml:space="preserve"><value>区分大小写</value></data>
+  <data name="Glossary.DeleteTerm_Tip" xml:space="preserve"><value>删除术语</value></data>
+  <data name="Glossary.Scope.Project" xml:space="preserve"><value>项目</value></data>
+  <data name="Glossary.Scope.Global" xml:space="preserve"><value>全球</value></data>
+  <data name="Glossary.Scope.GlobalBadge" xml:space="preserve"><value>全球</value></data>
+  <data name="Glossary.NoteLine_GlobalCaseSensitive" xml:space="preserve"><value>全局 · 区分大小写</value></data>
+  <data name="Glossary.ImportCsv" xml:space="preserve"><value>导入 CSV</value></data>
+  <!--  MediaBin  -->
+  <data name="MediaBin.Header" xml:space="preserve"><value>媒体</value></data>
+  <data name="MediaBin.Context_ProjectWide" xml:space="preserve"><value>项目背景</value></data>
+  <data name="MediaBin.Import" xml:space="preserve"><value>导入</value></data>
+  <data name="MediaBin.Import_Tip" xml:space="preserve"><value>导入媒体文件</value></data>
+  <data name="MediaBin.NewProjectImport" xml:space="preserve"><value>导入新项目</value></data>
+  <data name="MediaBin.DetectSpeakers" xml:space="preserve"><value>检测说话者</value></data>
+  <data name="MediaBin.SeparateVocals" xml:space="preserve"><value>分离人声和环境音</value></data>
+  <data name="MediaBin.ImportHint" xml:space="preserve"><value>导入媒体或创建一个项目以填充此树形结构。</value></data>
+  <data name="MediaBin.EmptyTreeHint" xml:space="preserve"><value>还没有茎</value></data>
+  <data name="Timeline.CollapsedEmptyHint" xml:space="preserve"><value>展开以查看曲目 · 将媒体文件拖放至此以填充内容简体中文（大陆）</value></data>
+  <data name="Inspector.EmptyShort" xml:space="preserve"><value>选择一个段进行检查</value></data>
+  <data name="Transcript.EmptySegments" xml:space="preserve"><value>目前尚无片段。请运行转录功能以填充此列表。</value></data>
+  <data name="MediaBin.Tab_Source" xml:space="preserve"><value>来源</value></data>
+  <data name="MediaBin.Tab_Generated" xml:space="preserve"><value>生成</value></data>
+  <data name="Navigator.Section.SourceMedia" xml:space="preserve"><value>来源媒体</value></data>
+  <data name="Navigator.Section.Transcript" xml:space="preserve"><value>文字记录</value></data>
+  <data name="Navigator.Section.Speakers" xml:space="preserve"><value>演讲嘉宾</value></data>
+  <data name="Navigator.Section.Voices" xml:space="preserve"><value>声音</value></data>
+  <data name="Navigator.Section.GeneratedAudio" xml:space="preserve"><value>生成的音频</value></data>
+  <data name="Navigator.Section.Mixes" xml:space="preserve"><value>混音</value></data>
+  <data name="Navigator.Section.Exports" xml:space="preserve"><value>出口</value></data>
+  <data name="Navigator.Empty.SourceMedia" xml:space="preserve"><value>请导入源媒体以填充本部分内容。</value></data>
+  <data name="Navigator.Empty.Transcript" xml:space="preserve"><value>运行转录以生成转录片段。</value></data>
+  <data name="Navigator.Empty.Speakers" xml:space="preserve"><value>在转录完成后，运行日记化处理或分配说话者。</value></data>
+  <data name="Navigator.Empty.Voices" xml:space="preserve"><value>在“语音”面板中为说话者分配语音。</value></data>
+  <data name="Navigator.Empty.GeneratedAudio" xml:space="preserve"><value>此处会显示生成的语音合成内容及处理痕迹。</value></data>
+  <data name="Navigator.Empty.Mixes" xml:space="preserve"><value>预览混音会在导出或混音阶段完成后显示在此处。</value></data>
+  <data name="Navigator.Empty.Exports" xml:space="preserve"><value>导出完成后，最终导出结果将显示在此处。</value></data>
+  <data name="FloatingMonitor.Title" xml:space="preserve"><value>视频监视器</value></data>
+  <data name="FloatingMonitor.Hide" xml:space="preserve"><value>隐藏显示器</value></data>
+  <data name="FloatingMonitor.NoVideo" xml:space="preserve"><value>尚无视频帧</value></data>
+  <data name="Transport.ToolTip_PipMonitor" xml:space="preserve"><value>切换画中画视频监视器</value></data>
+  <!--  Segment  -->
+  <data name="Segment.Start" xml:space="preserve"><value>开始</value></data>
+  <data name="Segment.End" xml:space="preserve"><value>结束</value></data>
+  <data name="Segment.Duration" xml:space="preserve"><value>时长</value></data>
+  <data name="Segment.Speaker" xml:space="preserve"><value>演讲者</value></data>
+  <data name="Segment.Source" xml:space="preserve"><value>来源</value></data>
+  <data name="Segment.VoiceCandidates" xml:space="preserve"><value>配音候选人</value></data>
+  <data name="Segment.VoiceCandidates_Hint" xml:space="preserve"><value>点击“生成”以创建用于 A/B 预览的语音候选项</value></data>
+  <data name="Segment.GenerateCandidates" xml:space="preserve"><value>生成候选方案</value></data>
+  <data name="Segment.LipSyncAlign" xml:space="preserve"><value>ALIGN</value></data>
+  <data name="Segment.LipSynthesisRepair" xml:space="preserve"><value>维修</value></data>
+  <data name="Segment.Review" xml:space="preserve"><value>评论</value></data>
+  <data name="Segment.SaveSettings" xml:space="preserve"><value>保存设置</value></data>
+  <data name="Segment.GenerateDub" xml:space="preserve"><value>生成配音</value></data>
+  <data name="Segment.Regenerate" xml:space="preserve"><value>再生</value></data>
+  <data name="Segment.MatchTiming" xml:space="preserve"><value>比赛时间</value></data>
+  <data name="Segment.Runtime.Dub" xml:space="preserve"><value>配音时长</value></data>
+  <data name="Segment.Runtime.Translation" xml:space="preserve"><value>翻译运行时</value></data>
+  <data name="Segment.Runtime.Transcription" xml:space="preserve"><value>转录运行时间</value></data>
+  <data name="Segment.Runtime.Alignment" xml:space="preserve"><value>口型同步运行时间</value></data>
+  <data name="Segment.Runtime.Provider" xml:space="preserve"><value>提供商</value></data>
+  <data name="Segment.Runtime.Model" xml:space="preserve"><value>型号</value></data>
+  <data name="Segment.Runtime.Precision" xml:space="preserve"><value>精度</value></data>
+  <!--  ApiKeys  -->
+  <data name="Window_Title_ApiKeys" xml:space="preserve"><value>API密钥</value></data>
+  <data name="Chrome_Minimize" xml:space="preserve"><value>最小化</value></data>
+  <data name="Chrome_MaximizeRestore" xml:space="preserve"><value>最大化 / 还原</value></data>
+  <data name="Chrome_Close" xml:space="preserve"><value>关闭</value></data>
+  <data name="Api_Tooltip_ToggleReveal" xml:space="preserve"><value>显示/隐藏键</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Common_Clear" xml:space="preserve"><value>清除</value></data>
+  <data name="Api_Footer_MoreProviders" xml:space="preserve"><value>更多服务提供商即将上线</value></data>
+  <data name="Api_Footer_StorageSecurity" xml:space="preserve"><value>存储与安全</value></data>
+  <!--  Common  -->
+  <data name="Common.Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>关闭</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>添加</value></data>
+  <data name="Common.Segments" xml:space="preserve"><value>细分市场</value></data>
+  <data name="Common.DownloadFfmpeg" xml:space="preserve"><value>下载 FFmpeg</value></data>
+  <data name="Common.DropVideoPlaceholder" xml:space="preserve"><value>拖放视频或从媒体库开始</value></data>
+  <data name="Common.NewFromMedia" xml:space="preserve"><value>媒体最新消息</value></data>
+  <data name="Common.OpenProject" xml:space="preserve"><value>打开项目</value></data>
+  <data name="Common.Transcript" xml:space="preserve"><value>文字记录</value></data>
+  <data name="Transcript.AllSegments" xml:space="preserve"><value>所有细分市场</value></data>
+  <data name="Common.CollapseRightPanel_Tip" xml:space="preserve"><value>折叠右侧面板</value></data>
+  <data name="Common.ChannelStrip" xml:space="preserve"><value>通道条</value></data>
+  <data name="Common.ExpandChannelStrip_Tip" xml:space="preserve"><value>展开通道条</value></data>
+  <data name="Common.CollapseChannelStrip_Tip" xml:space="preserve"><value>折叠通道条</value></data>
+  <!--  LeftPanel stage tooltips  -->
+  <data name="Common.Stage_Separation" xml:space="preserve"><value>分离</value></data>
+  <data name="Common.Stage_Cleanup" xml:space="preserve"><value>清理</value></data>
+  <data name="Common.Stage_Transcribe" xml:space="preserve"><value>转录</value></data>
+  <data name="Common.Stage_Identify" xml:space="preserve"><value>识别</value></data>
+  <data name="Common.Stage_Translate" xml:space="preserve"><value>翻译</value></data>
+  <data name="Common.Stage_Dub" xml:space="preserve"><value>配音</value></data>
+  <data name="Common.Stage_Export" xml:space="preserve"><value>导出</value></data>
+  <!--  MiniPreviewPlayer  -->
+  <data name="MiniPlayer.NoFileLoaded" xml:space="preserve"><value>未加载任何文件</value></data>
+  <data name="MiniPlayer.CannotPlayFile" xml:space="preserve"><value>⚠ 无法播放该文件</value></data>
+  <data name="MiniPlayer.UnsupportedFormat" xml:space="preserve"><value>不支持的格式</value></data>
+  <data name="MiniPlayer.PlayPauseTip" xml:space="preserve"><value>播放/暂停</value></data>
+  <!--  Settings - General  -->
+  <data name="Settings.Title" xml:space="preserve"><value>设置</value></data>
+  <data name="Settings.Tab_General" xml:space="preserve"><value>概述</value></data>
+  <data name="Settings.Heading_General" xml:space="preserve"><value>常规设置</value></data>
+  <data name="Settings.Label_Theme" xml:space="preserve"><value>外观 — 主题</value></data>
+  <data name="Settings.Hint_Theme" xml:space="preserve"><value>主题更改会立即生效，并在重启后保持不变。</value></data>
+  <!--  Update  -->
+  <data name="Update.BannerMessage" xml:space="preserve"><value>Trackdub {0} ({1}) 现已上线</value></data>
+  <data name="Update.Banner_Subtitle" xml:space="preserve"><value>Trackdub 的新版本现已可供下载。</value></data>
+  <data name="Update.Button_ReleaseNotes" xml:space="preserve"><value>版本说明</value></data>
+  <data name="Update.Download" xml:space="preserve"><value>下载</value></data>
+  <data name="Settings.Label_UpdateChannel" xml:space="preserve"><value>更新频道</value></data>
+  <data name="Settings.Hint_UpdateChannel" xml:space="preserve"><value>“稳定版”提供经过测试的版本。“预览版”则可提前体验即将推出的功能。</value></data>
+  <data name="Settings.Label_ModelTier" xml:space="preserve"><value>模型层级</value></data>
+  <data name="Settings.Hint_CommercialOnly" xml:space="preserve"><value>Trackdub 仅提供可商用捆绑模型。导入的非商用模型仍被屏蔽。</value></data>
+  <data name="Settings.Label_AsrEngine" xml:space="preserve"><value>ASR 引擎</value></data>
+  <data name="Settings.Label_TranslationEngine" xml:space="preserve"><value>翻译引擎</value></data>
+  <data name="Settings.Label_VoiceSynthesisEngine" xml:space="preserve"><value>语音合成引擎</value></data>
+  <data name="Settings.Label_StemSeparationEngine" xml:space="preserve"><value>茎部分离引擎</value></data>
+  <data name="Settings.Label_RubberbandStretch" xml:space="preserve"><value>TTS 计时 — 橡皮筋拉伸</value></data>
+  <data name="Settings.Label_ReduceMotion" xml:space="preserve"><value>减少运动</value></data>
+  <data name="Settings.Hint_ReduceMotion" xml:space="preserve"><value>在运行管道阶段的强调条纹上禁用呼吸脉冲效果。</value></data>
+  <data name="Settings.Label_StretchThreshold" xml:space="preserve"><value>拉伸阈值</value></data>
+  <data name="Settings.Label_ExportFormat" xml:space="preserve"><value>导出格式</value></data>
+  <data name="Settings.Label_ExportSubtitles" xml:space="preserve"><value>导出字幕</value></data>
+  <data name="Settings.Label_VideoEncoder" xml:space="preserve"><value>视频编码器（烧录导出）</value></data>
+  <data name="Settings.Label_PreviewVideoDecode" xml:space="preserve"><value>预览视频解码</value></data>
+  <data name="Settings.Label_Subtitles" xml:space="preserve"><value>字幕</value></data>
+  <data name="Settings.Label_SubtitleContentMode" xml:space="preserve"><value>字幕内容模式</value></data>
+  <!--  Settings - Starter Packs  -->
+  <data name="Settings.Tab_StarterPacks" xml:space="preserve"><value>入门套装</value></data>
+  <data name="Settings.StarterPacks_Heading" xml:space="preserve"><value>入门套装</value></data>
+  <data name="Settings.StarterPacks_Hint" xml:space="preserve"><value>下载捆绑的模型集，然后将其应用以配置阶段别名和运行时默认值。安装的文件数量指的是校验和有效的文件，而非可直接在运行时使用的文件。</value></data>
+  <data name="Settings.StarterPacks_RecommendedBadge" xml:space="preserve"><value>根据检测到的等级推荐</value></data>
+  <data name="Settings.StarterPacks_AppliedBadge" xml:space="preserve"><value>应用</value></data>
+  <data name="Settings.StarterPacks_Download" xml:space="preserve"><value>下载</value></data>
+  <data name="Settings.StarterPacks_Apply" xml:space="preserve"><value>申请</value></data>
+  <data name="Settings.StarterPacks_ProfileLabel" xml:space="preserve"><value>个人简介</value></data>
+  <data name="Settings.StarterPacks_InstalledLabel" xml:space="preserve"><value>已安装的型号：</value></data>
+  <data name="Settings.StarterPacks_DownloadComplete" xml:space="preserve"><value>下载完成。设置未作更改。</value></data>
+  <data name="Settings.StarterPacks_DownloadFailed" xml:space="preserve"><value>下载失败。</value></data>
+  <data name="Settings.StarterPacks_ApplyComplete" xml:space="preserve"><value>已应用入门套装。</value></data>
+  <data name="Settings.StarterPacks_ApplyFailed" xml:space="preserve"><value>申请失败。</value></data>
+  <data name="Settings.StarterPacks_ConsentRequired" xml:space="preserve"><value>应用此包前，需获得语音克隆的同意。</value></data>
+  <data name="Settings.StarterPacks_CompatibleBadge" xml:space="preserve"><value>完全兼容</value></data>
+  <data name="Settings.StarterPacks_FallbackBadge" xml:space="preserve"><value>需要备用方案</value></data>
+  <data name="Settings.StarterPacks_NotRunnableBadge" xml:space="preserve"><value>无法运行</value></data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve"><value>{0} 无法使用 GPU 路径。正在 {2} 上使用 {1}。</value></data>
+  <data name="Settings.StarterPacks_GpuSetupSummary" xml:space="preserve"><value>{0} 该包中的模型将使用 CPU 运行，直到安装了适用于您硬件的 GPU 运行时为止。</value></data>
+  <data name="Settings.StarterPacks_GpuVariantNudge" xml:space="preserve"><value>某些模型还需要针对 GPU 优化的变体。在 GPU 运行时准备就绪后，请在“模型管理器”中使用“优化”功能。</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Nvidia" xml:space="preserve"><value>安装 NVIDIA TensorRT RTX 运行时</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Amd" xml:space="preserve"><value>安装 AMD MIGraphX 运行时</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Intel" xml:space="preserve"><value>安装英特尔 OpenVINO 运行时</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Qualcomm" xml:space="preserve"><value>安装高通 QNN 运行时</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_AmdNpu" xml:space="preserve"><value>安装 AMD VitisAI NPU 运行时</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Bundle" xml:space="preserve"><value>安装 GPU 运行时</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallComplete" xml:space="preserve"><value>GPU 运行时安装已完成。</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallFailed" xml:space="preserve"><value>GPU 运行时安装失败。</value></data>
+  <data name="Settings.StarterPacks_GpuSetupLicenseRequired" xml:space="preserve"><value>接受供应商许可协议以安装 GPU 运行时。</value></data>
+  <data name="Settings.StarterPacks_CloudReadyBadge" xml:space="preserve"><value>API 密钥已配置</value></data>
+  <data name="Settings.StarterPacks_CloudKeysMissingBadge" xml:space="preserve"><value>缺少 API 密钥</value></data>
+  <data name="Settings.StarterPacks_CloudKeysButton" xml:space="preserve"><value>配置 API 密钥</value></data>
+  <data name="Settings.StarterPacks_ImportButton" xml:space="preserve"><value>导入包……</value></data>
+  <data name="Settings.StarterPacks_ExportButton" xml:space="preserve"><value>导出…</value></data>
+  <data name="Settings.StarterPacks_UserPacksHeader" xml:space="preserve"><value>您的包裹</value></data>
+  <data name="Settings.StarterPacks_OpenLocalModelsLink" xml:space="preserve"><value>单独下载模型</value></data>
+  <data name="Settings.StarterPacks_OptimizeNudge" xml:space="preserve"><value>{0} 模型提供 GPU 优化版本。请在“本地模型”中进行优化，以获得最佳性能。</value></data>
+  <data name="Settings.StarterPacks_ReviewOptimizations" xml:space="preserve"><value>审查优化措施</value></data>
+  <data name="Settings.LocalModels_AppliedPackBadge" xml:space="preserve"><value>应用包：{0}</value></data>
+  <data name="Settings.Label_PackTierFilter" xml:space="preserve"><value>填料过滤器</value></data>
+  <data name="Settings.Button_Dismiss" xml:space="preserve"><value>关闭</value></data>
+  <!--  Onboarding - Starter Packs  -->
+  <data name="Onboarding.StarterPacks_Title" xml:space="preserve"><value>选择入门套装</value></data>
+  <data name="Onboarding.StarterPacks_Body" xml:space="preserve"><value>选择一个捆绑的模型集进行下载并应用，或者在“本地模型”中单独配置模型。</value></data>
+  <data name="Onboarding.StarterPacks_Skip" xml:space="preserve"><value>暂时跳过</value></data>
+  <data name="Onboarding.StarterPacks_ConfigureIndividually" xml:space="preserve"><value>单独配置</value></data>
+  <!--  Settings - Local Models  -->
+  <data name="Settings.Tab_LocalModels" xml:space="preserve"><value>本地模型</value></data>
+  <data name="Settings.Hint_CommercialOnlyLane" xml:space="preserve"><value>仅限商用车型车道。进口的非商用车型仍被禁止通行。</value></data>
+  <data name="Settings.Label_NonCommercial" xml:space="preserve"><value>非商业性</value></data>
+  <data name="Settings.Button_Download" xml:space="preserve"><value>下载</value></data>
+  <data name="Settings.Button_Repair" xml:space="preserve"><value>维修</value></data>
+  <data name="Settings.Button_Uninstall" xml:space="preserve"><value>卸载</value></data>
+  <data name="Settings.Label_Optimize" xml:space="preserve"><value>优化：</value></data>
+  <data name="Settings.Tip_PrecisionHeader" xml:space="preserve"><value>优化模型变体的精度（具体选项取决于服务提供商）：</value></data>
+  <data name="Settings.Tip_Fp32" xml:space="preserve"><value>fp32 — 完整的 32 位权重。精度最高；文件最大。仅限 CPU 处理。</value></data>
+  <data name="Settings.Tip_Fp16" xml:space="preserve"><value>fp16 — 16 位半精度。精度较高，占用空间仅为 fp32 的二分之一。DirectML / CUDA / TensorRT。</value></data>
+  <data name="Settings.Tip_Int8" xml:space="preserve"><value>int8 — 8 位量化。比 fp16 更小、更快；在大多数音频模型上，精度会有轻微折衷。CPU / DirectML / CUDA。</value></data>
+  <data name="Settings.Tip_Int4" xml:space="preserve"><value>int4 — 4 位量化。体积最小、速度最快；但在某些模型上会出现明显的精度损失。仅支持 DirectML / CUDA。</value></data>
+  <data name="Settings.Button_Optimize" xml:space="preserve"><value>优化</value></data>
+  <data name="Settings.Status_Optimizing" xml:space="preserve"><value>正在优化……</value></data>
+  <data name="Settings.Button_Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="Settings.Button_Use" xml:space="preserve"><value>使用</value></data>
+  <data name="Settings.Button_Clear" xml:space="preserve"><value>清除</value></data>
+  <data name="Settings.Status_Loading" xml:space="preserve"><value>正在加载……</value></data>
+  <!--  Settings - Cloud Models  -->
+  <data name="Settings.Tab_CloudModels" xml:space="preserve"><value>云模型</value></data>
+  <data name="Settings.Button_Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Settings.Hint_MoreProviders" xml:space="preserve"><value>更多云服务提供商即将上线。</value></data>
+  <!--  Settings - Hardware  -->
+  <data name="Settings.Tab_Hardware" xml:space="preserve"><value>硬件</value></data>
+  <data name="Settings.Heading_Hardware" xml:space="preserve"><value>硬件配置</value></data>
+  <data name="Settings.Label_FfmpegEncoders" xml:space="preserve"><value>FFmpeg 视频编码器</value></data>
+  <data name="Settings.Label_FfmpegHwDecode" xml:space="preserve"><value>FFmpeg 硬件解码</value></data>
+  <data name="Settings.Toggle_NativeCuda" xml:space="preserve"><value>在 Windows 上启用原生 CUDA / TensorRT（高级）</value></data>
+  <data name="Settings.Hint_NativeCuda" xml:space="preserve"><value>默认处于关闭状态。启用后，显式的 CUDA 或 TensorRT 请求将使用原生 ONNX Runtime 提供程序，而非 DirectML / TensorRT RTX（WinML）。管道自动选择功能保持不变。</value></data>
+  <data name="Settings.Label_WinMlPolicy" xml:space="preserve"><value>Windows ML 设备策略（高级）</value></data>
+  <data name="Settings.Hint_WinMlPolicy" xml:space="preserve"><value>实验性功能。利用 ONNX Runtime 在已注册的 Windows ML 目录提供商中自动选择 EP/设备。Stage 提供商的选择保持不变。更改此设置后，请重新启动 Trackdub。</value></data>
+  <data name="Settings.Label_GpuProviders" xml:space="preserve"><value>GPU推理提供商</value></data>
+  <data name="Settings.Label_AllCertified" xml:space="preserve"><value>所有经过认证的目录提供商</value></data>
+  <data name="Settings.Hint_AllCertified" xml:space="preserve"><value>此操作将在此计算机上安装所有可用的 Windows ML 目录提供程序。在符合条件的 NVIDIA 硬件上，它还可能提供 TensorRT RTX 插件（需单独的 NVIDIA 许可证）。首次运行时，系统可能会下载多个软件包，并耗时几分钟。无论您是否运行此操作，各提供程序的“安装”按钮仍可用于有针对性的安装。</value></data>
+  <data name="Settings.Button_InstallAllCertified" xml:space="preserve"><value>安装所有经过认证的提供商</value></data>
+  <data name="Settings.Label_NvidiaTensorRt" xml:space="preserve"><value>NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.Button_Refresh" xml:space="preserve"><value>刷新</value></data>
+  <data name="Settings.Button_InstallProvider" xml:space="preserve"><value>安装提供程序</value></data>
+  <data name="Settings.Button_InstallTrtRtxPlugin" xml:space="preserve"><value>安装插件</value></data>
+  <data name="Settings.Button_ViewLicense" xml:space="preserve"><value>查看许可证</value></data>
+  <data name="Settings.Label_AmdMigraphx" xml:space="preserve"><value>AMD MIGraphX</value></data>
+  <data name="Settings.Label_IntelOpenVino" xml:space="preserve"><value>英特尔 OpenVINO（WinML 目录）</value></data>
+  <data name="Settings.Label_QualcommQnn" xml:space="preserve"><value>高通 QNN（WinML 目录）</value></data>
+  <data name="Settings.Label_AmdVitisAi" xml:space="preserve"><value>AMD VitisAI（WinML 目录）</value></data>
+  <data name="Settings.Label_NativeOrtGpu" xml:space="preserve"><value>原生 ORT GPU（高级）</value></data>
+  <data name="Settings.Label_ExecutionProviders" xml:space="preserve"><value>执行提供商</value></data>
+  <data name="Settings.Label_PerStageOverrides" xml:space="preserve"><value>各阶段提供商覆盖设置</value></data>
+  <!--  Settings - Profiler  -->
+  <data name="Settings.Tab_Profiler" xml:space="preserve"><value>分析器</value></data>
+  <data name="Settings.Heading_Profiler" xml:space="preserve"><value>硬件分析器</value></data>
+  <data name="Settings.Hint_Profiler" xml:space="preserve"><value>运行简短的VAD、ASR、翻译和TTS基准测试，以推荐高质量的预设。需要安装了捆绑ONNX模型的Windows系统。</value></data>
+  <data name="Settings.Button_RunBenchmarks" xml:space="preserve"><value>运行阶段基准测试</value></data>
+  <data name="Settings.Label_QualityPreset" xml:space="preserve"><value>质量预设</value></data>
+  <data name="Settings.Hint_QualityPreset" xml:space="preserve"><value>“使用建议”会将分析结果应用于模型层规划。“覆盖”选项将保留您的选择，直到您进行更改为止。</value></data>
+  <!--  Settings - Recent Projects  -->
+  <data name="Settings.Tab_RecentProjects" xml:space="preserve"><value>近期项目</value></data>
+  <data name="Settings.Heading_RecentProjects" xml:space="preserve"><value>近期项目</value></data>
+  <!--  Settings - About  -->
+  <data name="Settings.Tab_About" xml:space="preserve"><value>关于</value></data>
+  <data name="Settings.Heading_About" xml:space="preserve"><value>关于 Trackdub</value></data>
+  <data name="Settings.About_Tagline" xml:space="preserve"><value>Trackdub — 基于人工智能的配音工作站</value></data>
+  <data name="Settings.About_Edition" xml:space="preserve"><value>跨平台 Avalonia 版本</value></data>
+  <!--  Settings - Developer  -->
+  <data name="Settings.Tab_Developer" xml:space="preserve"><value>开发者</value></data>
+  <data name="Settings.Heading_Developer" xml:space="preserve"><value>开发者选项</value></data>
+  <data name="Settings.Hint_Developer" xml:space="preserve"><value>开发版本中提供了开发工具和诊断功能。</value></data>
+  <!--  Settings - Footer  -->
+  <data name="Settings.Button_SaveAndClose" xml:space="preserve"><value>保存并关闭</value></data>
+  <!--  Dialog - SourceLanguagePicker  -->
+  <data name="Dialog.SourceLanguage_Title" xml:space="preserve"><value>文字记录来源</value></data>
+  <data name="Dialog.SourceLanguage_Hint" xml:space="preserve"><value>更改源语言会影响今后的翻译和拼写检查。</value></data>
+  <data name="Dialog.SourceLanguage_Placeholder" xml:space="preserve"><value>源语言</value></data>
+  <!--  Dialog - UnsavedInlineEdit  -->
+  <data name="Dialog.UnsavedEdit_KeepEditing" xml:space="preserve"><value>继续编辑</value></data>
+  <data name="Dialog.UnsavedEdit_Discard" xml:space="preserve"><value>丢弃</value></data>
+  <!--  Dialog - VoiceCloneConsent  -->
+  <data name="Dialog.VoiceClone_Title" xml:space="preserve"><value>语音克隆同意书</value></data>
+  <data name="Dialog.VoiceClone_Body" xml:space="preserve"><value>本环节将使用您上传的参考音频片段来合成语音特征。点击“我同意”，即表示您确认自己拥有为本项目克隆这些语音的合法权利。</value></data>
+  <data name="Dialog.VoiceClone_SessionNote" xml:space="preserve"><value>此同意仅适用于当前的应用程序会话，下次启动应用程序时必须重新授予此同意。</value></data>
+  <data name="Dialog.VoiceClone_Agree" xml:space="preserve"><value>我同意</value></data>
+  <!--  Timeline - Waveform  -->
+  <data name="Timeline.WaveformNotAvailable" xml:space="preserve"><value>波形预览功能尚未提供</value></data>
+  <data name="Timeline.ComputingPeaks" xml:space="preserve"><value>计算波形峰值……</value></data>
+  <!--  Timeline - ZoomLevel (non-localizable display but test flags it)  -->
+  <data name="Timeline.ZoomLevel" xml:space="preserve"><value>100 pps</value></data>
+  <!--  Inspector  -->
+  <data name="Inspector.Header" xml:space="preserve"><value>督察</value></data>
+  <data name="Inspector.Empty" xml:space="preserve"><value>选择一个片段、发言者或源素材进行查看。</value></data>
+  <data name="Inspector.UnknownTarget" xml:space="preserve"><value>目前尚不支持此检查器目标。</value></data>
+  <data name="Inspector.OpenInEditor" xml:space="preserve"><value>在编辑器中打开</value></data>
+  <data name="Inspector.Tab_Content" xml:space="preserve"><value>内容</value></data>
+  <data name="Inspector.Tab_Timing" xml:space="preserve"><value>时间安排</value></data>
+  <data name="Inspector.Tab_Voice" xml:space="preserve"><value>语音</value></data>
+  <data name="Inspector.Tab_QC" xml:space="preserve"><value>QC</value></data>
+  <data name="Inspector.SegmentDuration" xml:space="preserve"><value>细分市场</value></data>
+  <data name="Inspector.GeneratedDuration" xml:space="preserve"><value>生成</value></data>
+  <data name="Inspector.Overrun" xml:space="preserve"><value>超限</value></data>
+  <data name="Inspector.TimingAdjustment" xml:space="preserve"><value>时间安排</value></data>
+  <data name="Inspector.ConfidenceReview" xml:space="preserve"><value>建议撰写评论</value></data>
+  <data name="Inspector.Artifact" xml:space="preserve"><value>文物</value></data>
+  <data name="Inspector.ArtifactType" xml:space="preserve"><value>类型</value></data>
+  <data name="Inspector.ArtifactDuration" xml:space="preserve"><value>时长</value></data>
+  <data name="Inspector.ArtifactSize" xml:space="preserve"><value>尺寸</value></data>
+  <data name="Inspector.ArtifactPath" xml:space="preserve"><value>路径</value></data>
+  <data name="Inspector.ArtifactType_Audio" xml:space="preserve"><value>音频</value></data>
+  <data name="Inspector.ArtifactType_Video" xml:space="preserve"><value>视频</value></data>
+  <data name="Inspector.ArtifactType_Subtitle" xml:space="preserve"><value>副标题</value></data>
+  <data name="Inspector.ArtifactType_Unknown" xml:space="preserve"><value>未知</value></data>
+  <data name="Attention.translation.stale" xml:space="preserve"><value>翻译内容已过时。</value></data>
+  <data name="Attention.tts.failed" xml:space="preserve"><value>配音生成失败。</value></data>
+  <data name="Attention.tts.stale" xml:space="preserve"><value>Dub 已经过时了。</value></data>
+  <data name="Attention.tts.pending" xml:space="preserve"><value>正在生成配音。</value></data>
+  <data name="Attention.tts.duration-overrun" xml:space="preserve"><value>配音时间超出容差范围。</value></data>
+  <data name="Attention.tts.speed-limit" xml:space="preserve"><value>时间拉伸可能会导致音质下降。</value></data>
+  <data name="Attention.asr.low-confidence" xml:space="preserve"><value>该转录文本的准确性需要审核。</value></data>
+  <data name="Attention.lipsync.error" xml:space="preserve"><value>口型对不上了。</value></data>
+  <data name="Attention.lipsync.warning" xml:space="preserve"><value>口型同步需要检查。</value></data>
+  <data name="Attention.lipsynthesis.error" xml:space="preserve"><value>唇部修复失败。</value></data>
+  <data name="Attention.lipsynthesis.warning" xml:space="preserve"><value>唇部修护产品需要重新评估。</value></data>
+  <data name="Attention.stage.failed" xml:space="preserve"><value>管道阶段失败。</value></data>
+  <data name="Attention.stage.in-progress" xml:space="preserve"><value>管道阶段正在运行。</value></data>
+  <!--  License  -->
+  <data name="License.Tab" xml:space="preserve"><value>许可协议</value></data>
+  <data name="License.Heading" xml:space="preserve"><value>许可协议</value></data>
+  <data name="License.CurrentTier" xml:space="preserve"><value>当前等级：</value></data>
+  <data name="License.Tier_Free" xml:space="preserve"><value>免费</value></data>
+  <data name="License.Tier_Pro" xml:space="preserve"><value>Pro</value></data>
+  <data name="License.KeyLabel" xml:space="preserve"><value>许可证密钥</value></data>
+  <data name="License.KeyPlaceholder" xml:space="preserve"><value>请将您的许可证密钥粘贴在此处</value></data>
+  <data name="License.Button_Activate" xml:space="preserve"><value>激活</value></data>
+  <data name="License.Button_Deactivate" xml:space="preserve"><value>停用</value></data>
+  <data name="License.Degraded" xml:space="preserve"><value>许可证状态降级</value></data>
+  <data name="License.MachinesRegisteredUnlimited" xml:space="preserve"><value> 已注册的设备（无限制开发者许可证）</value></data>
+</root>

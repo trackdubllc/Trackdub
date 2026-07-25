@@ -1,0 +1,26 @@
+# GitHub CODEOWNERS - Automatic PR review assignment
+
+# Default owners for all changes
+* @trackdubllc/maintainers
+
+# Core
+src/Trackdub.Application/** @trackdubllc/maintainers
+src/Trackdub.Infrastructure/** @trackdubllc/maintainers
+src/Trackdub.Composition/** @trackdubllc/maintainers
+
+# Inference & Models
+src/Trackdub.Inference/** @trackdubllc/maintainers
+src/Trackdub.Inference.Onnx/** @trackdubllc/maintainers
+
+# Media Processing
+src/Trackdub.Media/** @trackdubllc/maintainers
+src/Trackdub.Media.Playback/** @trackdubllc/maintainers
+
+# Domain & Contracts
+src/Trackdub.Domain/** @trackdubllc/maintainers
+src/Trackdub.Contracts/** @trackdubllc/maintainers
+
+# Build & Dependencies
+Directory.Build.* @trackdubllc/maintainers
+Directory.Packages.props @trackdubllc/maintainers
+.github/** @trackdubllc/maintainers

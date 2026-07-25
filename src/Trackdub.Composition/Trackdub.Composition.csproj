@@ -1,0 +1,197 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+      <!-- Directory.Build.props sets TargetFramework=net10.0; clear it so multi-target restore/build includes both legs consistently. -->
+      <TargetFramework Condition="'$(TargetFrameworks)' != ''"/>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TrackdubOrtRuntimeFlavor Condition="'$(TrackdubOrtRuntimeFlavor)' == ''">Default</TrackdubOrtRuntimeFlavor>
+    <TrackdubDnnlNativePackageRoot Condition="'$(TrackdubDnnlNativePackageRoot)' == ''">$(MSBuildThisFileDirectory)..\Trackdub.OnnxRuntime.Dnnl.Native</TrackdubDnnlNativePackageRoot>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <DefineConstants>$(DefineConstants);LINUX</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <DefineConstants>$(DefineConstants);MACOS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackdub.Application\Trackdub.Application.csproj" />
+    <ProjectReference Include="..\Trackdub.Licensing\Trackdub.Licensing.csproj" />
+    <ProjectReference Include="..\Trackdub.Inference\Trackdub.Inference.csproj" />
+    <ProjectReference Include="..\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj">
+      <SetTargetFramework>TargetFramework=$(TargetFramework)</SetTargetFramework>
+      <PrivateAssets>compile</PrivateAssets>
+    </ProjectReference>
+    <ProjectReference Include="..\Trackdub.Infrastructure\Trackdub.Infrastructure.csproj" />
+    <ProjectReference Include="..\Trackdub.Media\Trackdub.Media.csproj" />
+    <ProjectReference Include="..\Trackdub.Media.Playback\Trackdub.Media.Playback.csproj">
+      <SetTargetFramework>TargetFramework=$(TargetFramework)</SetTargetFramework>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <!-- Runtime composition owns the ONNX package closure so WinUI stays UI-only
+         while publish/restore still resolve the real runtime assemblies. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="nvidiaafx-runtime.manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\runtime\trt-rtx-ep.manifest.json" Link="trt-rtx-ep.manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="StarterPacks\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+  </ItemGroup>
+
+  <!-- macOS portable leg: Composition owns GenAI publish closure. Linux uses GenAI.Cuda via Inference.Onnx only. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0' And $([MSBuild]::IsOSPlatform('OSX'))">
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+    <!-- Pin to match Inference.Onnx requirement; OnnxRuntimeGenAI pulls 1.8.x transitively -->
+    <PackageReference Include="Microsoft.Windows.AI.MachineLearning" ExcludeAssets="native;build;buildMultitargeting;buildTransitive;contentFiles;analyzers" />
+  </ItemGroup>
+
+  <!-- Linux: reference OnnxRuntime.Gpu so its native CUDA assets land in output -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!-- DNNL flavor keeps compile-time ORT/WinML/GenAI APIs from the package refs above, but
+       strips their runtime payloads so Trackdub.OnnxRuntime.Dnnl.Native owns libonnxruntime.*
+       in output. Without this, the SDK's own RID-based asset selection still auto-copies each
+       package's runtimes\*\native assets regardless of the manual CopyXToOutput targets below
+       being skipped for Dnnl, so stock CPU/CUDA/WinML onnxruntime binaries could land in the
+       output alongside (or overwrite) the DNNL native assets and DnnlReadinessProbe would
+       report the provider unavailable. Mirrors the same gate in Trackdub.Inference.Onnx.csproj. -->
+  <ItemGroup>
+    <PackageReference Update="Microsoft.ML.OnnxRuntime.Gpu"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+    <PackageReference Update="Microsoft.ML.OnnxRuntimeGenAI"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+    <PackageReference Update="Microsoft.Windows.AI.MachineLearning"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <PackageReference Include="Microsoft.Windows.AI.MachineLearning" GeneratePathProperty="true">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <_WinMlRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</_WinMlRuntimeIdentifier>
+    <_WinMlRuntimeIdentifier Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_WinMlRuntimeIdentifier>
+    <!-- Managed WinML projection ships under lib/, not runtimes/*/native/. -->
+    <_WinMlProjectionLibTfm>net8.0-windows10.0.17763.0</_WinMlProjectionLibTfm>
+    <_WindowsAppSDKML>true</_WindowsAppSDKML>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <!-- WinML 2.x ships onnxruntime.dll and DirectML.dll under RID-specific runtimes/*/native paths.
+         This target force-overwrites to guarantee WinML's ORT wins over the CPU-only onnxruntime.dll
+         that Microsoft.ML.OnnxRuntime (pulled transitively by OnnxRuntimeGenAI) would otherwise copy. -->
+    <_WinMlAssets Include="$(PkgMicrosoft_Windows_AI_MachineLearning)\runtimes\$(_WinMlRuntimeIdentifier)\native\onnxruntime.dll" TargetPath="onnxruntime.dll" />
+    <_WinMlAssets Include="$(PkgMicrosoft_Windows_AI_MachineLearning)\runtimes\$(_WinMlRuntimeIdentifier)\native\DirectML.dll" TargetPath="DirectML.dll" />
+    <_WinMlAssets Include="$(PkgMicrosoft_Windows_AI_MachineLearning)\runtimes\$(_WinMlRuntimeIdentifier)\native\Microsoft.Windows.AI.MachineLearning.dll" TargetPath="Microsoft.Windows.AI.MachineLearning.dll" />
+    <_WinMlAssets Include="$(PkgMicrosoft_Windows_AI_MachineLearning)\lib\$(_WinMlProjectionLibTfm)\Microsoft.Windows.AI.MachineLearning.Projection.dll" TargetPath="Microsoft.Windows.AI.MachineLearning.Projection.dll" />
+  </ItemGroup>
+
+  <Target Name="CopyWinMlAssetsToOutput"
+          AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl' And '@(_WinMlAssets)' != ''">
+    <Copy SourceFiles="@(_WinMlAssets)"
+          DestinationFiles="@(_WinMlAssets->'$(TargetDir)%(TargetPath)')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false" />
+  </Target>
+
+  <Target Name="AddWinMlAssetsToOutputItems"
+          BeforeTargets="GetCopyToOutputDirectoryItems"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl' And '@(_WinMlAssets)' != ''">
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(_WinMlAssets)"
+                             CopyToOutputDirectory="Always"
+                             TargetPath="%(_WinMlAssets.TargetPath)"
+                             Visible="false" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Copy OnnxRuntime.Gpu native Linux assets to output (mirrors DirectML pattern for Windows) -->
+  <Target Name="CopyOrtGpuAssetsToOutput"
+          AfterTargets="CopyFilesToOutputDirectory"
+          Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl' And '$(PkgMicrosoft_ML_OnnxRuntime_Gpu)' != ''">
+    <ItemGroup>
+      <_OrtGpuAssets Include="$(PkgMicrosoft_ML_OnnxRuntime_Gpu)\runtimes\linux-x64\native\libonnxruntime.so" TargetPath="libonnxruntime.so" />
+      <_OrtGpuAssets Include="$(PkgMicrosoft_ML_OnnxRuntime_Gpu)\runtimes\linux-x64\native\libonnxruntime_providers_cuda.so" TargetPath="libonnxruntime_providers_cuda.so" />
+      <_OrtGpuAssets Include="$(PkgMicrosoft_ML_OnnxRuntime_Gpu)\runtimes\linux-x64\native\libonnxruntime_providers_shared.so" TargetPath="libonnxruntime_providers_shared.so" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_OrtGpuAssets)"
+          DestinationFiles="@(_OrtGpuAssets->'$(TargetDir)%(TargetPath)')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="true"
+          Condition="Exists('%(_OrtGpuAssets.Identity)')" />
+  </Target>
+
+  <PropertyGroup Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'">
+    <!-- DNNL native assets are only published for x64 RIDs today (win-x64, linux-x64, osx-x64).
+         Require an explicit RuntimeIdentifier rather than guessing one from host OS: guessing
+         would silently copy x64 binaries onto an arm64 host (e.g. osx-arm64, win-arm64,
+         linux-arm64), producing a BadImageFormatException far from this target. -->
+    <_TrackdubDnnlRuntimeIdentifier Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_TrackdubDnnlRuntimeIdentifier>
+    <_TrackdubDnnlNativeFileName Condition="$([System.String]::Copy('$(_TrackdubDnnlRuntimeIdentifier)').StartsWith('win-'))">onnxruntime.dll</_TrackdubDnnlNativeFileName>
+    <_TrackdubDnnlNativeFileName Condition="$([System.String]::Copy('$(_TrackdubDnnlRuntimeIdentifier)').StartsWith('linux-'))">libonnxruntime.so</_TrackdubDnnlNativeFileName>
+    <_TrackdubDnnlNativeFileName Condition="$([System.String]::Copy('$(_TrackdubDnnlRuntimeIdentifier)').StartsWith('osx-'))">libonnxruntime.dylib</_TrackdubDnnlNativeFileName>
+    <_TrackdubDnnlNativeDirectory>$(TrackdubDnnlNativePackageRoot)\runtimes\$(_TrackdubDnnlRuntimeIdentifier)\native</_TrackdubDnnlNativeDirectory>
+    <_TrackdubDnnlOrtAsset>$(_TrackdubDnnlNativeDirectory)\$(_TrackdubDnnlNativeFileName)</_TrackdubDnnlOrtAsset>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl' And '$(_TrackdubDnnlRuntimeIdentifier)' != ''">
+    <_TrackdubDnnlNativeAssets Include="$(_TrackdubDnnlNativeDirectory)\*.*" Exclude="$(_TrackdubDnnlNativeDirectory)\.gitkeep" />
+  </ItemGroup>
+
+  <Target Name="ValidateDnnlOrtAssets"
+          BeforeTargets="CopyFilesToOutputDirectory"
+          Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'">
+    <Error Condition="'$(_TrackdubDnnlRuntimeIdentifier)' == ''"
+           Text="TrackdubOrtRuntimeFlavor=Dnnl requested, but no DNNL runtime identifier could be resolved. Supported initial RIDs: win-x64, linux-x64, osx-x64." />
+    <Error Condition="'$(_TrackdubDnnlNativeFileName)' == ''"
+           Text="TrackdubOrtRuntimeFlavor=Dnnl requested for unsupported RID '$(_TrackdubDnnlRuntimeIdentifier)'. Supported initial RIDs: win-x64, linux-x64, osx-x64." />
+    <Error Condition="!Exists('$(_TrackdubDnnlOrtAsset)')"
+           Text="TrackdubOrtRuntimeFlavor=Dnnl requested, but DNNL ONNX Runtime native asset is missing: $(_TrackdubDnnlOrtAsset). Build Trackdub.OnnxRuntime.Dnnl.Native first." />
+  </Target>
+
+  <Target Name="CopyDnnlOrtAssetsToOutput"
+          AfterTargets="CopyFilesToOutputDirectory"
+          DependsOnTargets="ValidateDnnlOrtAssets"
+          Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl' And '@(_TrackdubDnnlNativeAssets)' != ''">
+    <Copy SourceFiles="@(_TrackdubDnnlNativeAssets)"
+          DestinationFiles="@(_TrackdubDnnlNativeAssets->'$(TargetDir)%(Filename)%(Extension)')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false" />
+  </Target>
+
+  <Target Name="AddDnnlOrtAssetsToOutputItems"
+          BeforeTargets="GetCopyToOutputDirectoryItems"
+          DependsOnTargets="ValidateDnnlOrtAssets"
+          Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl' And '@(_TrackdubDnnlNativeAssets)' != ''">
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(_TrackdubDnnlNativeAssets)"
+                             CopyToOutputDirectory="Always"
+                             TargetPath="%(_TrackdubDnnlNativeAssets.Filename)%(_TrackdubDnnlNativeAssets.Extension)"
+                             Visible="false" />
+    </ItemGroup>
+  </Target>
+
+</Project>

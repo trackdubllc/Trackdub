@@ -1,0 +1,103 @@
+name: Code Coverage
+
+# Disabled on push/PR: duplicates Linux CI test run (~6 min) and mostly repeats pass/fail
+# without blocking merges. Run manually via workflow_dispatch when you want a coverage
+# report, Code Quality upload, or PR comment refresh.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: code-coverage-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  code-quality: write
+  pull-requests: write
+
+jobs:
+  dotnet:
+    name: .NET coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore dependencies
+        run: dotnet restore Trackdub.slnx -m:1
+
+      - name: Build solution filter
+        run: dotnet build Trackdub.slnx -c Release --framework net10.0 --no-restore -m:1
+
+      - name: Run tests with coverage
+        run: |
+          dotnet test Trackdub.slnx -c Release --framework net10.0 --no-build -m:1 \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Cache ReportGenerator dotnet tool
+        uses: actions/cache@v4
+        with:
+          path: ~/.dotnet/tools
+          key: dotnet-tool-reportgenerator-5.4.4
+
+      - name: Merge Cobertura reports
+        run: |
+          dotnet tool update -g dotnet-reportgenerator-globaltool --version 5.4.4 || dotnet tool install -g dotnet-reportgenerator-globaltool --version 5.4.4
+          reportgenerator \
+            "-reports:./coverage/**/coverage.cobertura.xml" \
+            "-targetdir:./coverage-report" \
+            "-reporttypes:Cobertura;MarkdownSummaryGithub"
+
+      - name: Upload coverage to GitHub Code Quality
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: ./coverage-report/Cobertura.xml
+          language: CSharp
+          label: code-coverage/dotnet
+
+      - name: Publish coverage summary
+        uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
+        with:
+          filename: coverage-report/Cobertura.xml
+          badge: true
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: true
+          indicators: true
+          output: both
+
+      - name: Comment coverage on pull request
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
+        with:
+          header: code-coverage
+          recreate: true
+          path: code-coverage-results.md
+
+      - name: Write job summary
+        run: cat coverage-report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload merged coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-coverage
+          path: |
+            coverage-report/Cobertura.xml
+            coverage-report/SummaryGithub.md
+          if-no-files-found: ignore

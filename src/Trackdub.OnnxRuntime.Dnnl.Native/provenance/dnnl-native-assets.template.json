@@ -1,0 +1,25 @@
+{
+  "_comment": "Schema reference only. The build script (tools/onnxruntime-dnnl/Build-OnnxRuntimeDnnlNativePackage.ps1) generates per-RID files at provenance/<rid>.json with concrete values. Placeholders below are not substituted at build time.",
+  "package_id": "Trackdub.OnnxRuntime.Dnnl.Native",
+  "onnxruntime_version": "{{ONNXRUNTIME_VERSION}}",
+  "onnxruntime_git_tag": "v{{ONNXRUNTIME_VERSION}}",
+  "expected_runtime": "onnxruntime-dnnl",
+  "build_flags": [
+    "--build_shared_lib",
+    "--use_dnnl"
+  ],
+  "rids": {
+    "win-x64": {
+      "native_assets": [],
+      "sha256": {}
+    },
+    "linux-x64": {
+      "native_assets": [],
+      "sha256": {}
+    },
+    "osx-x64": {
+      "native_assets": [],
+      "sha256": {}
+    }
+  }
+}

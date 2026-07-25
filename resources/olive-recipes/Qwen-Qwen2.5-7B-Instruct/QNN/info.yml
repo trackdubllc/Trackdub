@@ -1,0 +1,8 @@
+keywords:
+    foundry-local
+    qnn
+recipes:
+    - name: qwen2.5-7b-instruct
+      file: config.json
+      ep: QNNExecutionProvider
+      device: npu

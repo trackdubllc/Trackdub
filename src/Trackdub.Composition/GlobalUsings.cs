@@ -1,0 +1,9 @@
+global using Trackdub.Application.LipSync;
+global using Trackdub.Application.LipSynthesis;
+global using Trackdub.Composition.LipSynthesis;
+global using Trackdub.Contracts.LipSynthesis;
+global using Trackdub.Application.Projects;
+global using Trackdub.Application.Transcripts;
+global using Trackdub.Contracts.Licensing;
+global using Trackdub.Contracts.Projects;
+global using Trackdub.Contracts.Transcripts;

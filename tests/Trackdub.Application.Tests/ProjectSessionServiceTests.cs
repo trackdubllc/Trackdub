@@ -1,0 +1,197 @@
+using Trackdub.Contracts;
+using Trackdub.Application.Projects;
+using Trackdub.Application.Transcripts;
+using Trackdub.Domain.Media;
+using Trackdub.Domain.Projects;
+using Trackdub.Domain.Speakers;
+
+namespace Trackdub.Application.Tests;
+
+public sealed class ProjectSessionServiceTests
+{
+    [Fact]
+    public void SetCurrentSession_disposes_previous_session_when_replaced()
+    {
+        var factory = new FakeWorkspaceSessionFactory();
+        var service = new ProjectSessionService(factory);
+        var first = new FakeWorkspaceSession("C:\\Projects\\first.trackdub");
+        var second = new FakeWorkspaceSession("C:\\Projects\\second.trackdub");
+
+        service.SetCurrentSession(first);
+        service.SetCurrentSession(second);
+        service.ClearCurrentSession();
+
+        Assert.Equal(1, first.DisposeCount);
+        Assert.Equal(1, second.DisposeCount);
+        Assert.Null(service.CurrentProjectRootPath);
+    }
+
+    [Fact]
+    public void CreatePendingSessionForMedia_allocates_available_project_root_and_uses_settings()
+    {
+        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDirectory);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(tempDirectory, "clip.trackdub"));
+            string mediaPath = Path.Combine(tempDirectory, "clip.mp4");
+            var settings = StudioSettings.Default;
+            var factory = new FakeWorkspaceSessionFactory();
+            var service = new ProjectSessionService(factory);
+
+            PendingProjectSession pending = service.CreatePendingSessionForMedia(mediaPath, "clip", settings);
+
+            Assert.Equal("clip #2", pending.ProjectRoot.ProjectName);
+            Assert.EndsWith("clip #2.trackdub", pending.ProjectRoot.ProjectRootPath, StringComparison.Ordinal);
+            Assert.Equal(pending.ProjectRoot.ProjectRootPath, pending.Session.ProjectRootPath);
+            Assert.Same(settings, factory.LastSettings);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void CreatePendingSessionForMedia_uses_local_projects_folder_for_cloud_synced_media()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string userDataRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string mediaPath = CreateCloudSyncedMediaPath("clip.mp4");
+        var settings = StudioSettings.Default;
+        var factory = new FakeWorkspaceSessionFactory();
+        var service = new ProjectSessionService(factory, new FakeStoragePaths(userDataRoot));
+
+        try
+        {
+            PendingProjectSession pending = service.CreatePendingSessionForMedia(mediaPath, "clip", settings);
+
+            Assert.Equal("clip", pending.ProjectRoot.ProjectName);
+            Assert.Equal(Path.Combine(userDataRoot, "projects", "clip.trackdub"), pending.ProjectRoot.ProjectRootPath);
+            Assert.Equal(pending.ProjectRoot.ProjectRootPath, pending.Session.ProjectRootPath);
+        }
+        finally
+        {
+            if (Directory.Exists(userDataRoot))
+            {
+                Directory.Delete(userDataRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void RecordHistoryTransition_moves_states_between_undo_and_redo_stacks()
+    {
+        var service = new ProjectSessionService(new FakeWorkspaceSessionFactory());
+        Guid projectId = Guid.NewGuid();
+        Guid speakerId = Guid.NewGuid();
+        TranscriptProjectState before = CreateState(projectId, speakerId, "Speaker 1");
+        TranscriptProjectState after = CreateState(projectId, speakerId, "Narrator");
+
+        service.RecordHistoryTransition(before, after, isRestoringHistory: false);
+
+        Assert.True(service.CanUndo);
+        Assert.False(service.CanRedo);
+        Assert.Same(before, service.PopUndoState());
+        Assert.False(service.CanUndo);
+        Assert.True(service.CanRedo);
+        Assert.Same(after, service.PopRedoState());
+        Assert.True(service.CanUndo);
+        Assert.False(service.CanRedo);
+    }
+
+    private static TranscriptProjectState CreateState(Guid projectId, Guid speakerId, string speakerName)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var project = new TrackdubProject(projectId, "Test Project", now, now);
+        var projectState = new OpenProjectResult(
+            project,
+            MediaAsset: null,
+            SourceReference: null,
+            SourceMediaStatus.Missing,
+            SourceStatusMessage: null,
+            Artifacts: [],
+            TranscriptLanguage: "en");
+        var speaker = new ProjectSpeaker(speakerId, projectId, speakerName, now);
+
+        return new TranscriptProjectState(
+            projectState,
+            CurrentTranscriptRevision: null,
+            TranscriptSegments: [],
+            Speakers: [speaker],
+            SpeakerTurns: [],
+            CurrentTranslationRevision: null,
+            TranslatedSegments: [],
+            IsTranslationStale: false,
+            TranscriptLanguage: "en",
+            StageRuns: [],
+            SupportedTargetLanguages: [],
+            SelectedTranslationTargetLanguage: null,
+            StaleTranslatedSegmentIndices: new HashSet<int>(),
+            WaveformSummary: null,
+            AvailableVoices: [],
+            VoiceAssignments: [],
+            TtsTakes: [],
+            TtsSegmentStates: [],
+            VoiceAssignmentWarnings: []);
+    }
+
+    private sealed class FakeWorkspaceSessionFactory : ITranscriptWorkspaceSessionFactory
+    {
+        public StudioSettings? LastSettings { get; private set; }
+
+        public ITranscriptWorkspaceSession Create(string projectRootPath, StudioSettings? settings = null)
+        {
+            LastSettings = settings;
+            return new FakeWorkspaceSession(projectRootPath);
+        }
+    }
+
+    private static string CreateCloudSyncedMediaPath(string fileName)
+    {
+        string mediaDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "Trackdub.Application.Tests",
+            Guid.NewGuid().ToString("N"),
+            "OneDrive",
+            "Videos");
+        Directory.CreateDirectory(mediaDirectory);
+        return Path.Combine(mediaDirectory, fileName);
+    }
+
+    private sealed class FakeStoragePaths(string userDataRoot) : IAppStoragePaths
+    {
+        public string RootDirectory { get; } = userDataRoot;
+        public string UserDataRoot { get; } = userDataRoot;
+        public string UserCacheRoot { get; } = Path.Combine(userDataRoot, "cache");
+        public string? SharedAssetRoot { get; } = null;
+        public bool IsPortable { get; } = false;
+        public string ModelCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "models");
+        public string ModelCacheIndexPath { get; } = Path.Combine(userDataRoot, "cache", "models", "index.json");
+        public string LogFilePath { get; } = Path.Combine(userDataRoot, "trackdub.log");
+        public string SettingsPath { get; } = Path.Combine(userDataRoot, "settings.json");
+        public string LayoutPath { get; } = Path.Combine(userDataRoot, "layout.json");
+        public string ToolCacheDirectory { get; } = Path.Combine(userDataRoot, "tools");
+        public string FfmpegToolCacheDirectory { get; } = Path.Combine(userDataRoot, "tools", "ffmpeg");
+        public string EngineCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "engines");
+        public string ComponentCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "components");
+    }
+
+    private sealed class FakeWorkspaceSession(string projectRootPath) : ITranscriptWorkspaceSession
+    {
+        public string ProjectRootPath { get; } = projectRootPath;
+
+        public TranscriptWorkspace Workspace => throw new NotSupportedException();
+
+        public int DisposeCount { get; private set; }
+
+        public void Dispose()
+        {
+            DisposeCount++;
+        }
+    }
+}

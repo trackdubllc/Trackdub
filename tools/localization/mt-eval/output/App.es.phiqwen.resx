@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve">
+    <value>Ningún archivo seleccionado pudo importarse porque no estaba disponible un camino local.</value>
+  </data>
+  <data name="Speakers.Count" xml:space="preserve">
+    <value>{} hablantes</value>
+  </data>
+  <data name="Glossary.TermCount" xml:space="preserve">
+    <value>{} términos</value>
+  </data>
+  <data name="Update.BannerMessage" xml:space="preserve">
+    <value>El trackdub [nombre del artista] #000 (edición) está disponible</value>
+  </data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve">
+    <value>ruta del GPU inalcanzable para {0}. Usando {1} en {2}.</value>
+  </data>
+</root>

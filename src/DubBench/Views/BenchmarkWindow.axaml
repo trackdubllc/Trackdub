@@ -1,0 +1,80 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:DubBench.ViewModels"
+        xmlns:views="clr-namespace:DubBench.Views"
+        mc:Ignorable="d"
+        d:DesignWidth="960" d:DesignHeight="720"
+        x:Class="DubBench.Views.BenchmarkWindow"
+        x:DataType="vm:BenchmarkWindowViewModel"
+        Title="DubBench"
+        Width="960" Height="720"
+        MinWidth="640" MinHeight="480"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource ThemeBackgroundBrush}">
+  <Grid ColumnDefinitions="50,*">
+    <!-- Sidebar title bar drag region -->
+    <Border Grid.Column="0"
+            Background="{DynamicResource SidebarBackgroundBrush}">
+      <StackPanel VerticalAlignment="Center"
+                  Spacing="4"
+                  Margin="0,8,0,0">
+        <Button x:Name="OnnxTabBtn"
+                Content="{DynamicResource OnnxModelIcon}"
+                FontSize="18" Width="36" Height="36" Padding="0"
+                Background="Transparent"
+                Foreground="{DynamicResource TabInactiveBrush}"
+                Command="{Binding SelectTabCommand}"
+                CommandParameter="0"
+                AutomationProperties.Name="ONNX Model"
+                ToolTip.Tip="ONNX Model" />
+        <Button x:Name="AudioTabBtn"
+                Content="{DynamicResource AudioPrepIcon}"
+                FontSize="18" Width="36" Height="36" Padding="0"
+                Background="Transparent"
+                Foreground="{DynamicResource TabInactiveBrush}"
+                Command="{Binding SelectTabCommand}"
+                CommandParameter="1"
+                AutomationProperties.Name="Audio-Prep"
+                ToolTip.Tip="Audio-Prep" />
+        <Button x:Name="DubTabBtn"
+                Content="{DynamicResource DubbingIcon}"
+                FontSize="18" Width="36" Height="36" Padding="0"
+                Background="Transparent"
+                Foreground="{DynamicResource TabInactiveBrush}"
+                Command="{Binding SelectTabCommand}"
+                CommandParameter="2"
+                AutomationProperties.Name="Dubbing"
+                ToolTip.Tip="Dubbing" />
+        <Button x:Name="PresetsTabBtn"
+                Content="{DynamicResource PresetsIcon}"
+                FontSize="18" Width="36" Height="36" Padding="0"
+                Background="Transparent"
+                Foreground="{DynamicResource TabInactiveBrush}"
+                Command="{Binding SelectTabCommand}"
+                CommandParameter="3"
+                AutomationProperties.Name="Presets"
+                ToolTip.Tip="Presets" />
+        <Button x:Name="LeaderTabBtn"
+                Content="{DynamicResource LeaderboardIcon}"
+                FontSize="18" Width="36" Height="36" Padding="0"
+                Background="Transparent"
+                Foreground="{DynamicResource TabInactiveBrush}"
+                Command="{Binding SelectTabCommand}"
+                CommandParameter="4"
+                AutomationProperties.Name="Leaderboard"
+                ToolTip.Tip="Leaderboard" />
+      </StackPanel>
+    </Border>
+
+    <!-- Content area with tab DataTemplates -->
+    <Border Grid.Column="1"
+            Background="{DynamicResource ContentBackgroundBrush}">
+      <ContentControl Content="{Binding CurrentTabView}"
+                      Margin="16"
+                      VerticalContentAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch" />
+    </Border>
+  </Grid>
+</Window>

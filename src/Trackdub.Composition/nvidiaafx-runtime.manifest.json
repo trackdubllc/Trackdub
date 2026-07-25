@@ -1,0 +1,65 @@
+{
+  "manifestVersion": "1.0.0",
+  "packages": [
+    {
+      "architecture": "turing",
+      "downloadUrl": "https://example.invalid/trackdub/nvidia-afx/turing/runtime.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sizeBytes": 0,
+      "runtimeVersion": "0.0.0",
+      "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+      "modelRelativePaths": [
+        "models/denoiser_48k.nvam",
+        "models/dereverb_48k.nvam",
+        "models/dereverb_denoiser_48k.nvam",
+        "models/superres_48k.nvam",
+        "models/aec_48k.nvam"
+      ]
+    },
+    {
+      "architecture": "ampere",
+      "downloadUrl": "https://example.invalid/trackdub/nvidia-afx/ampere/runtime.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sizeBytes": 0,
+      "runtimeVersion": "0.0.0",
+      "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+      "modelRelativePaths": [
+        "models/denoiser_48k.nvam",
+        "models/dereverb_48k.nvam",
+        "models/dereverb_denoiser_48k.nvam",
+        "models/superres_48k.nvam",
+        "models/aec_48k.nvam"
+      ]
+    },
+    {
+      "architecture": "ada",
+      "downloadUrl": "https://example.invalid/trackdub/nvidia-afx/ada/runtime.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sizeBytes": 0,
+      "runtimeVersion": "0.0.0",
+      "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+      "modelRelativePaths": [
+        "models/denoiser_48k.nvam",
+        "models/dereverb_48k.nvam",
+        "models/dereverb_denoiser_48k.nvam",
+        "models/superres_48k.nvam",
+        "models/aec_48k.nvam"
+      ]
+    },
+    {
+      "architecture": "blackwell",
+      "downloadUrl": "https://example.invalid/trackdub/nvidia-afx/blackwell/runtime.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sizeBytes": 0,
+      "runtimeVersion": "0.0.0",
+      "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+      "modelRelativePaths": [
+        "models/denoiser_48k.nvam",
+        "models/dereverb_48k.nvam",
+        "models/dereverb_denoiser_48k.nvam",
+        "models/superres_48k.nvam",
+        "models/aec_48k.nvam"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">WinExe</OutputType>
+    <OutputType Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'windows'">Exe</OutputType>
+    <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <!-- Directory.Build.props sets TargetFramework=net10.0; clear it so multi-target restore/build includes both legs -->
+    <TargetFramework Condition="'$(TargetFrameworks)' != ''"/>
+    <!-- Emit the apphost as DubBench(.exe) rather than Trackdub.DubBench(.exe) so the
+         sidecar launcher in Trackdub.App.Avalonia (which probes for "DubBench.exe" /
+         "DubBench") finds the build output in both the colocated publish layout and
+         the dev-time sibling-bin fallback. -->
+    <AssemblyName>DubBench</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Inject WINDOWS preprocessor symbol for the Windows TFM so #if WINDOWS-guarded
+       Windows implementations (BenchmarkRunnerService, RecordingFixtureSource) are
+       actually compiled on the Windows leg. Mirrors Trackdub.Inference.Onnx.csproj. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+    <!-- MVVMTK0045: field-based [ObservableProperty] not AOT-safe for WinRT; partial property migration pending -->
+    <NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackdub.Benchmarks\Trackdub.Benchmarks.csproj" />
+    <ProjectReference Include="..\Trackdub.Domain\Trackdub.Domain.csproj" />
+    <ProjectReference Include="..\Trackdub.Inference\Trackdub.Inference.csproj" />
+    <ProjectReference Include="..\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+{
+  "model_id": "onnx-community/silero-vad",
+  "revision": "e71cae966052b992a7eca6b17738916ce0eca4ec",
+  "download_file_hashes": {
+    "onnx/model_fp16.onnx": "7ed49c2c170aefe81e7e91b472a761d922ef3c064b6051068c2dc0ccc98bd53b",
+    "onnx/model_int8.onnx": "90b026c95f054d59d7bf79387b0ed93c8950f35a4d8b741cd78d4bb23a7d2776"
+  },
+  "mirror_repos": [
+    "tonythethompson/trackdub-silero-vad-fp16",
+    "tonythethompson/trackdub-silero-vad-int8"
+  ]
+}

@@ -1,0 +1,16 @@
+paths:
+  - src
+  - tests
+  - frontend
+  - tools
+  - .github
+
+paths-ignore:
+  - "**/bin/**"
+  - "**/obj/**"
+  - "**/node_modules/**"
+  - "**/packages/**"
+  - "**/*.md"
+  - "**/Fixtures/**"
+  - "**/screenshots/**"
+  - "**/.design/**"

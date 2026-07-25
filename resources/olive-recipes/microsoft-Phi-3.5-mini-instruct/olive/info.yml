@@ -1,0 +1,8 @@
+keywords:
+  - mixed-precision
+arch: phi3
+recipes:
+  - name: microsoft-Phi-3.5-mini-instruct
+    file: mixed.json
+    device: gpu
+    ep: CUDAExecutionProvider

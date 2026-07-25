@@ -1,0 +1,274 @@
+using Trackdub.Application.Projects;
+using Trackdub.Application.Transcripts;
+using Trackdub.Contracts.Pipeline;
+using Trackdub.Contracts.Projects;
+using Trackdub.Domain.Artifacts;
+using Trackdub.Domain.Media;
+using Trackdub.Domain.Projects;
+using Trackdub.Domain.Tts;
+
+namespace Trackdub.Application.Tests;
+
+public sealed class TranscriptWorkflowUtilitiesTests
+{
+    [Fact]
+    public void ResolveDetectedTranscriptLanguage_ignores_punctuation_only_detection()
+    {
+        RecognizedTranscriptSegment[] segments =
+        [
+            new(0, 0.0d, 2.0d, "。 。 。 。 。", DetectedLanguage: "zh")
+        ];
+
+        Assert.Null(TranscriptWorkflowUtilities.ResolveDetectedTranscriptLanguage(segments));
+    }
+
+    [Fact]
+    public void ResolveDetectedTranscriptLanguage_ignores_cjk_detection_for_mostly_latin_text()
+    {
+        RecognizedTranscriptSegment[] segments =
+        [
+            new(0, 0.0d, 3.0d, "拉斯, las veremos en cine, television y video.", DetectedLanguage: "zh")
+        ];
+
+        Assert.Null(TranscriptWorkflowUtilities.ResolveDetectedTranscriptLanguage(segments));
+    }
+
+    [Fact]
+    public void ResolveDetectedTranscriptLanguage_keeps_spanish_detection_for_latin_text()
+    {
+        RecognizedTranscriptSegment[] segments =
+        [
+            new(0, 0.0d, 3.0d, "Las veremos en cine, television y video.", DetectedLanguage: "es")
+        ];
+
+        Assert.Equal("es", TranscriptWorkflowUtilities.ResolveDetectedTranscriptLanguage(segments));
+    }
+
+    [Fact]
+    public void BuildStemAudioRoute_accepts_current_spleeter_stems_for_asr_and_mix()
+    {
+        MediaAsset mediaAsset = CreateMediaAsset();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        ProjectArtifact normalized = new(
+            Guid.NewGuid(),
+            mediaAsset.ProjectId,
+            mediaAsset.Id,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            "sha-normalized",
+            100,
+            mediaAsset.DurationSeconds,
+            44100,
+            2,
+            now);
+        ProjectArtifact vocals = new(
+            Guid.NewGuid(),
+            mediaAsset.ProjectId,
+            mediaAsset.Id,
+            ArtifactKind.Vocals,
+            "artifacts/stems/spleeter/vocals.wav",
+            "sha-vocals",
+            100,
+            mediaAsset.DurationSeconds,
+            44100,
+            1,
+            now.AddSeconds(1),
+            Provenance: "generated-spleeter-vocals;engine_family=spleeter;model=spleeter");
+        ProjectArtifact ambiance = new(
+            Guid.NewGuid(),
+            mediaAsset.ProjectId,
+            mediaAsset.Id,
+            ArtifactKind.Ambiance,
+            "artifacts/stems/spleeter/ambiance.wav",
+            "sha-ambiance",
+            100,
+            mediaAsset.DurationSeconds,
+            44100,
+            1,
+            now.AddSeconds(2),
+            Provenance: "generated-spleeter-ambiance;engine_family=spleeter;model=spleeter");
+
+        StemAudioRoute route = TranscriptWorkflowUtilities.BuildStemAudioRoute(
+            [normalized, vocals, ambiance]);
+
+        Assert.Equal(vocals.RelativePath, route.AsrAudioRelativePath);
+        Assert.Equal(ambiance.RelativePath, route.MixSourceAudioRelativePath);
+        Assert.Null(route.WarningMessage);
+    }
+
+    [Fact]
+    public void BuildStemAudioRoute_warns_when_only_legacy_demucs_stems_exist()
+    {
+        MediaAsset mediaAsset = CreateMediaAsset();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        ProjectArtifact vocals = new(
+            Guid.NewGuid(),
+            mediaAsset.ProjectId,
+            mediaAsset.Id,
+            ArtifactKind.Vocals,
+            "artifacts/stems/demucs-v4/vocals.wav",
+            "sha-vocals",
+            100,
+            mediaAsset.DurationSeconds,
+            44100,
+            1,
+            now,
+            Provenance: "generated-demucs-v4-vocals;engine_family=demucs-v4");
+
+        StemAudioRoute route = TranscriptWorkflowUtilities.BuildStemAudioRoute([vocals]);
+
+        Assert.Equal(ProjectArtifactPaths.NormalizedAudioRelativePath, route.AsrAudioRelativePath);
+        Assert.Equal(ProjectArtifactPaths.NormalizedAudioRelativePath, route.MixSourceAudioRelativePath);
+        Assert.Contains("older/non-current separator", route.WarningMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveLipSynthesisDriverAudioArtifact_returns_current_export_audio()
+    {
+        DateTimeOffset takeCreated = DateTimeOffset.UtcNow.AddMinutes(-10);
+        DateTimeOffset exportCreated = DateTimeOffset.UtcNow.AddMinutes(-5);
+        MediaAsset mediaAsset = CreateMediaAsset();
+        TtsTake completedTake = TtsTake.CreateStock(mediaAsset.ProjectId, Guid.NewGuid())
+            .Complete(Guid.NewGuid(), Guid.NewGuid(), 44_100, 44_100, "fake", "model", "voice", null)
+            with
+        { CreatedAtUtc = takeCreated };
+        ProjectArtifact exportAudio = CreateArtifact(
+            mediaAsset,
+            ArtifactKind.ExportAudio,
+            "artifacts/export/audio.wav",
+            exportCreated);
+        TranscriptProjectState state = CreateProjectState(mediaAsset, [exportAudio], [completedTake]);
+
+        ProjectArtifact? driver = TranscriptWorkflowUtilities.ResolveLipSynthesisDriverAudioArtifact(state);
+
+        Assert.NotNull(driver);
+        Assert.Equal(exportAudio.RelativePath, driver.RelativePath);
+    }
+
+    [Fact]
+    public void ResolveLipSynthesisDriverAudioArtifact_returns_null_when_export_predates_latest_take()
+    {
+        DateTimeOffset exportCreated = DateTimeOffset.UtcNow.AddMinutes(-10);
+        DateTimeOffset takeCreated = DateTimeOffset.UtcNow.AddMinutes(-5);
+        MediaAsset mediaAsset = CreateMediaAsset();
+        TtsTake completedTake = TtsTake.CreateStock(mediaAsset.ProjectId, Guid.NewGuid())
+            .Complete(Guid.NewGuid(), Guid.NewGuid(), 44_100, 44_100, "fake", "model", "voice", null)
+            with
+        { CreatedAtUtc = takeCreated };
+        ProjectArtifact exportAudio = CreateArtifact(
+            mediaAsset,
+            ArtifactKind.ExportAudio,
+            "artifacts/export/audio.wav",
+            exportCreated);
+        TranscriptProjectState state = CreateProjectState(mediaAsset, [exportAudio], [completedTake]);
+
+        Assert.Null(TranscriptWorkflowUtilities.ResolveLipSynthesisDriverAudioArtifact(state));
+    }
+
+    [Fact]
+    public void ResolveLipSynthesisDriverAudioArtifact_returns_null_when_any_take_is_stale()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        MediaAsset mediaAsset = CreateMediaAsset();
+        TtsTake staleTake = TtsTake.CreateStock(mediaAsset.ProjectId, Guid.NewGuid()).MarkStale();
+        ProjectArtifact exportAudio = CreateArtifact(
+            mediaAsset,
+            ArtifactKind.ExportAudio,
+            "artifacts/export/audio.wav",
+            now);
+        TranscriptProjectState state = CreateProjectState(mediaAsset, [exportAudio], [staleTake]);
+
+        Assert.Null(TranscriptWorkflowUtilities.ResolveLipSynthesisDriverAudioArtifact(state));
+    }
+
+    [Fact]
+    public void BuildLipSynthesisExportCompositingWarning_returns_message_when_take_artifacts_are_not_composable()
+    {
+        MediaAsset mediaAsset = CreateMediaAsset();
+        ProjectArtifact lipTake = CreateArtifact(
+            mediaAsset,
+            ArtifactKind.LipSynthesisTake,
+            "artifacts/lipsynthesis/turn.mp4",
+            DateTimeOffset.UtcNow);
+        TranscriptProjectState state = CreateProjectState(mediaAsset, [lipTake], []);
+
+        string? warning = TranscriptWorkflowUtilities.BuildLipSynthesisExportCompositingWarning(state);
+
+        Assert.NotNull(warning);
+        Assert.Contains("could not be composited", warning, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TranscriptProjectState CreateProjectState(
+        MediaAsset mediaAsset,
+        IReadOnlyList<ProjectArtifact> artifacts,
+        IReadOnlyList<TtsTake> ttsTakes)
+    {
+        var project = new TrackdubProject(mediaAsset.ProjectId, "Test", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        var projectState = new OpenProjectResult(
+            project,
+            mediaAsset,
+            null,
+            SourceMediaStatus.Available,
+            null,
+            artifacts,
+            "en");
+
+        return new TranscriptProjectState(
+            projectState,
+            CurrentTranscriptRevision: null,
+            TranscriptSegments: [],
+            Speakers: [],
+            SpeakerTurns: [],
+            CurrentTranslationRevision: null,
+            TranslatedSegments: [],
+            IsTranslationStale: false,
+            TranscriptLanguage: "en",
+            StageRuns: [],
+            SupportedTargetLanguages: [],
+            SelectedTranslationTargetLanguage: null,
+            StaleTranslatedSegmentIndices: new HashSet<int>(),
+            WaveformSummary: null,
+            AvailableVoices: [],
+            VoiceAssignments: [],
+            TtsTakes: ttsTakes,
+            TtsSegmentStates: [],
+            VoiceAssignmentWarnings: []);
+    }
+
+    private static ProjectArtifact CreateArtifact(
+        MediaAsset mediaAsset,
+        ArtifactKind kind,
+        string relativePath,
+        DateTimeOffset createdAtUtc) =>
+        new(
+            Guid.NewGuid(),
+            mediaAsset.ProjectId,
+            mediaAsset.Id,
+            kind,
+            relativePath,
+            "sha",
+            100,
+            mediaAsset.DurationSeconds,
+            44_100,
+            2,
+            createdAtUtc);
+
+    private static MediaAsset CreateMediaAsset()
+    {
+        Guid projectId = Guid.NewGuid();
+        Guid mediaAssetId = Guid.NewGuid();
+        return new MediaAsset(
+            mediaAssetId,
+            projectId,
+            @"C:\media\sample.mp4",
+            "sample.mp4",
+            "media-hash",
+            1024,
+            DateTimeOffset.UtcNow,
+            "mp4",
+            12d,
+            HasAudio: true,
+            HasVideo: true,
+            DateTimeOffset.UtcNow);
+    }
+}

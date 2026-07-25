@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Always multi-target both legs so Windows consumers (Benchmarks, Worker) can restore
+         net10.0-windows even when the host OS is non-Windows (CI cross-compile / solution filters). -->
+    <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <!-- Directory.Build.props supplies TargetFramework; clear it when multi-targeting. -->
+    <TargetFramework Condition="'$(TargetFrameworks)' != ''" />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trackdub.Cli" />
+    <InternalsVisibleTo Include="Trackdub.Sdk.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackdub.Composition\Trackdub.Composition.csproj">
+      <SetTargetFramework>TargetFramework=$(TargetFramework)</SetTargetFramework>
+    </ProjectReference>
+    <ProjectReference Include="..\Trackdub.Application\Trackdub.Application.csproj" />
+    <ProjectReference Include="..\Trackdub.Licensing\Trackdub.Licensing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" />
+  </ItemGroup>
+
+</Project>

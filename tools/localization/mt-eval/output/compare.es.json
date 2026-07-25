@@ -1,0 +1,37 @@
+[
+  {
+    "Key": "MediaPicker.ImportSkippedNoLocalPath",
+    "English": "{0} selected file(s) could not be imported because no local path was available.",
+    "Baseline": "{0} No se han podido importar los archivos seleccionados porque no se ha encontrado ninguna ruta local.",
+    "Phi": "Ning\u00FAn archivo seleccionado pudo importarse porque no estaba disponible un camino local.",
+    "PhiQwen": "Ning\u00FAn archivo seleccionado pudo importarse porque no estaba disponible un camino local."
+  },
+  {
+    "Key": "Speakers.Count",
+    "English": "{0} speakers",
+    "Baseline": "{0} ponentes",
+    "Phi": "{} hablantes",
+    "PhiQwen": "{} hablantes"
+  },
+  {
+    "Key": "Glossary.TermCount",
+    "English": "{0} terms",
+    "Baseline": "{0} t\u00E9rminos",
+    "Phi": "{} t\u00E9rminos",
+    "PhiQwen": "{} t\u00E9rminos"
+  },
+  {
+    "Key": "Update.BannerMessage",
+    "English": "Trackdub {0} ({1}) is available",
+    "Baseline": "Trackdub {0} ({1}) ya est\u00E1 disponible",
+    "Phi": "El trackdub [nombre del artista] #000 (edici\u00F3n) est\u00E1 disponible",
+    "PhiQwen": "El trackdub [nombre del artista] #000 (edici\u00F3n) est\u00E1 disponible"
+  },
+  {
+    "Key": "Settings.StarterPacks_FallbackWarning",
+    "English": "GPU path unavailable for {0}. Using {1} on {2}.",
+    "Baseline": "La ruta de la GPU no est\u00E1 disponible para {0}. Se est\u00E1 utilizando {1} en {2}.",
+    "Phi": "ruta del GPU inalcanzable para {0}. Usando {1} en {2}.",
+    "PhiQwen": "ruta del GPU inalcanzable para {0}. Usando {1} en {2}."
+  }
+]

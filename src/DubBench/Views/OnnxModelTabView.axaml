@@ -1,0 +1,111 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:DubBench.ViewModels"
+             xmlns:c="clr-namespace:DubBench.Converters"
+             mc:Ignorable="d"
+             d:DesignWidth="700" d:DesignHeight="500"
+             x:Class="DubBench.Views.OnnxModelTabView"
+             x:DataType="vm:OnnxModelTabViewModel">
+  <ScrollViewer>
+    <StackPanel Spacing="12" Margin="0,0,0,16">
+      <!-- Header -->
+      <TextBlock Text="ONNX Model Benchmark"
+                 FontSize="18" FontWeight="SemiBold"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+      <TextBlock Text="Benchmark inference performance across execution providers and device policies."
+                 TextWrapping="Wrap" Opacity="0.7"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+      <Separator Background="{DynamicResource BorderBrush}" Margin="0,4" />
+
+      <!-- Provider selection -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="Execution Provider" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding Providers}"
+                  SelectedItem="{Binding SelectedProvider}"
+                  Width="280" HorizontalAlignment="Left" />
+      </StackPanel>
+
+      <!-- Device policy selection -->
+      <StackPanel Spacing="4" IsVisible="{Binding IsDevicePolicyVisible}">
+        <TextBlock Text="Device Policy (Windows ML)" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding DevicePolicies}"
+                  SelectedItem="{Binding SelectedDevicePolicy}"
+                  Width="280" HorizontalAlignment="Left" />
+      </StackPanel>
+
+      <!-- Model path -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="Model Path" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <TextBox Text="{Binding ModelPath}"
+                   PlaceholderText="Path to .onnx model file..." />
+          <Button Grid.Column="1"
+                  Command="{Binding BrowseModelCommand}"
+                  Content="Browse..." />
+        </Grid>
+      </StackPanel>
+
+      <!-- Run count -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="Run Count" FontWeight="SemiBold" />
+        <NumericUpDown Value="{Binding RunCount}"
+                       Minimum="1" Maximum="100"
+                       Width="120" HorizontalAlignment="Left" />
+      </StackPanel>
+
+      <!-- Olive optimization -->
+      <Separator Background="{DynamicResource BorderBrush}" Margin="0,4"
+                 IsVisible="{Binding OliveAvailable}" />
+      <StackPanel Spacing="8"
+                  IsVisible="{Binding OliveAvailable}">
+        <TextBlock Text="Olive Optimization"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource ThemeForegroundBrush}" />
+        <TextBlock Text="Olive CLI detected — optimize model before benchmarking for realistic throughput."
+                   TextWrapping="Wrap" Opacity="0.7" />
+        <CheckBox IsChecked="{Binding EnableOliveOptimization}"
+                  Content="Optimize model before run" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Command="{Binding OptimizeModelCommand}"
+                  IsEnabled="{Binding IsOptimizing, Converter={x:Static c:BoolConverters.Not}}"
+                  Content="Optimize Now"
+                  Width="140" Height="32" />
+          <TextBlock Text="{Binding OptimizedModelPath}"
+                     FontSize="11" Opacity="0.6"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"
+                     MaxWidth="300" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Run button -->
+      <Button Command="{Binding RunBenchmarkCommand}"
+              IsEnabled="{Binding IsRunning, Converter={x:Static c:BoolConverters.Not}}"
+              Content="Run Benchmark"
+              Width="200" Height="36"
+              HorizontalAlignment="Left" />
+
+      <!-- Status -->
+      <TextBlock Text="{Binding StatusMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ThemeForegroundBrush}" />
+
+      <!-- Result -->
+      <Border BorderBrush="{DynamicResource BorderBrush}"
+              BorderThickness="1" CornerRadius="6"
+              Padding="12" Margin="0,8,0,0"
+              IsVisible="{Binding LastResult, Converter={x:Static c:BoolConverters.IsNotNull}}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Results"
+                     FontSize="14" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding LastResult.Status, StringFormat='Status: {0}'}" />
+          <TextBlock Text="{Binding LastResult.SelectedProvider, StringFormat='Provider: {0}'}" />
+          <TextBlock Text="{Binding LastResult.RequestedProvider, StringFormat='Requested: {0}'}" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute ref="xml:space" use="default">
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:NMTOKEN">
+                    <xsd:enumeration value="preserve" />
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Stage.VAD" xml:space="preserve"><value>Detección de actividad de voz</value></data>
+  <data name="Stage.ASR" xml:space="preserve"><value>Transcripción</value></data>
+  <data name="Stage.Translation" xml:space="preserve"><value>Traducción</value></data>
+  <data name="Stage.TTS" xml:space="preserve"><value>Síntesis de voz</value></data>
+  <data name="Stage.Mixing" xml:space="preserve"><value>Mezcla de audio</value></data>
+  <data name="Status.Idle" xml:space="preserve"><value>Inactivo</value></data>
+  <data name="Status.Running" xml:space="preserve"><value>Corriendo…</value></data>
+  <data name="Status.Failed" xml:space="preserve"><value>Fallido</value></data>
+  <data name="Status.Completed" xml:space="preserve"><value>Finalizado</value></data>
+  <data name="Window_Title_Crash" xml:space="preserve"><value>Trackdub — Error inesperado</value></data>
+  <data name="Crash_Header" xml:space="preserve"><value>Ha surgido un problema</value></data>
+  <data name="Crash_Subtitle" xml:space="preserve"><value>Trackdub ha detectado un error inesperado. Puede copiar los detalles que figuran a continuación o abrir la carpeta de registros para solicitar asistencia.</value></data>
+  <data name="Crash_Button_Copy" xml:space="preserve"><value>Copiar detalles</value></data>
+  <data name="Crash_Button_OpenLogFolder" xml:space="preserve"><value>Abrir la carpeta de registros</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>Cerrar</value></data>
+  <data name="Settings.Label_Language" xml:space="preserve"><value>Idioma</value></data>
+  <data name="Settings.Hint_LanguageRestart" xml:space="preserve"><value>Es necesario reiniciar el sistema para que se aplique el cambio de idioma</value></data>
+  <!--  Transport  -->
+  <data name="Transport.ToolTip_SkipPrevious" xml:space="preserve"><value>Saltar el anterior</value></data>
+  <!--  Clippy Assistant  -->
+  <data name="Clippy_Tooltip_AskAssistant" xml:space="preserve"><value>Pregunte al asistente de Trackdub</value></data>
+  <data name="Clippy_Text_AskAboutTrackdub" xml:space="preserve"><value>Pregunte por Trackdub</value></data>
+  <data name="Clippy_Placeholder_WhatDoesStarterPackDo" xml:space="preserve"><value>¿Para qué sirve este paquete de inicio?</value></data>
+  <data name="Clippy_Button_Ask" xml:space="preserve"><value>Pregunte</value></data>
+  <data name="Transport.ToolTip_Play" xml:space="preserve"><value>Reproducir</value></data>
+  <data name="Transport.ToolTip_Pause" xml:space="preserve"><value>Pausa</value></data>
+  <data name="Transport.ToolTip_SkipNext" xml:space="preserve"><value>Saltar al siguiente</value></data>
+  <data name="Transport.ToolTip_Subtitles" xml:space="preserve"><value>Subtítulos</value></data>
+  <data name="Transport.ToolTip_Karaoke" xml:space="preserve"><value>Karaoke</value></data>
+  <data name="Transport.ToolTip_Bilingual" xml:space="preserve"><value>Bilingüe</value></data>
+  <data name="Transport.ToolTip_Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Transport.ToolTip_Mute" xml:space="preserve"><value>Silenciar</value></data>
+  <data name="Transport.ToolTip_Fullscreen" xml:space="preserve"><value>Pantalla completa</value></data>
+  <data name="Transport.RetryPreview" xml:space="preserve"><value>Inténtelo de nuevo</value></data>
+  <data name="Transport.ToolTip_RetryPreview" xml:space="preserve"><value>Volver a intentar la vista previa</value></data>
+  <!--  Titlebar  -->
+  <data name="Titlebar.ToolTip_Undo" xml:space="preserve"><value>Deshacer</value></data>
+  <data name="Titlebar.ToolTip_Redo" xml:space="preserve"><value>Rehacer</value></data>
+  <data name="Titlebar.ToolTip_NewProject" xml:space="preserve"><value>Nuevo proyecto</value></data>
+  <data name="Titlebar.Label_Recent" xml:space="preserve"><value>Recientes</value></data>
+  <data name="Titlebar.ToolTip_AIModels" xml:space="preserve"><value>Modelos de IA</value></data>
+  <data name="Titlebar.ToolTip_Settings" xml:space="preserve"><value>Configuración</value></data>
+  <data name="Titlebar.ToolTip_CheckForUpdates" xml:space="preserve"><value>Compruebe si hay actualizaciones</value></data>
+  <data name="Titlebar.ToolTip_DIAG" xml:space="preserve"><value>Diagnóstico</value></data>
+  <data name="Titlebar.ToolTip_BENCH" xml:space="preserve"><value>Pruebas de rendimiento</value></data>
+  <data name="Titlebar.Label_Update" xml:space="preserve"><value>Actualización</value></data>
+  <data name="Titlebar.ToolTip_Minimize" xml:space="preserve"><value>Minimizar</value></data>
+  <data name="Titlebar.ToolTip_Maximize" xml:space="preserve"><value>Maximizar</value></data>
+  <data name="Titlebar.ToolTip_Close" xml:space="preserve"><value>Cerrar</value></data>
+  <data name="StatusBar.Engine" xml:space="preserve"><value>Motor:</value></data>
+  <data name="StatusBar.Local" xml:space="preserve"><value>Local</value></data>
+  <data name="StatusBar.Gpu" xml:space="preserve"><value>GPU:</value></data>
+  <data name="StatusBar.Settings" xml:space="preserve"><value>Configuración</value></data>
+  <data name="StatusBar.StarterPacks" xml:space="preserve"><value>Paquetes de inicio</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>Archivo</value></data>
+  <data name="Menu.Project" xml:space="preserve"><value>Proyecto</value></data>
+  <data name="Menu.Media" xml:space="preserve"><value>Medios de comunicación</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>Ver</value></data>
+  <data name="Menu.Window" xml:space="preserve"><value>Ventana</value></data>
+  <data name="Menu.Help" xml:space="preserve"><value>Ayuda</value></data>
+  <data name="Menu.File.NewFromMedia" xml:space="preserve"><value>Novedades en los medios de comunicación…</value></data>
+  <data name="Menu.File.OpenProject" xml:space="preserve"><value>Abrir proyecto…</value></data>
+  <data name="Menu.File.Save" xml:space="preserve"><value>Guardar</value></data>
+  <data name="Menu.File.CloseProject" xml:space="preserve"><value>Cerrar proyecto</value></data>
+  <data name="Menu.File.Exit" xml:space="preserve"><value>Salir</value></data>
+  <data name="Menu.Project.AIModels" xml:space="preserve"><value>Modelos de IA…</value></data>
+  <data name="Menu.Project.Settings" xml:space="preserve"><value>Configuración…</value></data>
+  <data name="Menu.Media.Import" xml:space="preserve"><value>Importar archivos multimedia…</value></data>
+  <data name="MediaPicker.WindowRequired" xml:space="preserve"><value>Es necesario que haya una ventana abierta antes de abrir el selector de archivos multimedia.</value></data>
+  <data name="MediaPicker.LocalPathRequired" xml:space="preserve"><value>No se ha podido resolver la ruta local del archivo seleccionado. Copie el archivo multimedia en una carpeta local e inténtelo de nuevo.</value></data>
+  <data name="MediaPicker.ImportNoLocalPaths" xml:space="preserve"><value>No se han podido resolver las rutas locales de los archivos seleccionados. Copie los archivos multimedia en una carpeta local e inténtelo de nuevo.</value></data>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve"><value>{0} No se han podido importar los archivos seleccionados porque no se ha encontrado ninguna ruta local.</value></data>
+  <data name="MediaPicker.ImportMediaFiles.Title" xml:space="preserve"><value>Importar archivos multimedia</value></data>
+  <data name="MediaPicker.ImportMediaFiles.MediaFilesFilter" xml:space="preserve"><value>Archivos multimedia</value></data>
+  <data name="MediaPicker.ImportMediaFiles.AllFilesFilter" xml:space="preserve"><value>Todos los archivos</value></data>
+  <data name="ProjectPicker.WindowRequired" xml:space="preserve"><value>Es necesario que haya una ventana abierta antes de abrir el selector de proyectos.</value></data>
+  <data name="Menu.View.ToggleLeftPanel" xml:space="preserve"><value>Mostrar/ocultar el panel de la izquierda</value></data>
+  <data name="Menu.View.ToggleRightPanel" xml:space="preserve"><value>Mostrar/ocultar el panel de la derecha</value></data>
+  <data name="Menu.View.ToggleTimeline" xml:space="preserve"><value>Mostrar/ocultar la línea de tiempo</value></data>
+  <data name="Menu.View.ToggleExportPanel" xml:space="preserve"><value>Mostrar o ocultar el panel de exportación</value></data>
+  <data name="Menu.View.ToggleSubtitles" xml:space="preserve"><value>Activar o desactivar los subtítulos</value></data>
+  <data name="Menu.Window.Minimize" xml:space="preserve"><value>Minimizar</value></data>
+  <data name="Menu.Window.Maximize" xml:space="preserve"><value>Maximizar / Restaurar</value></data>
+  <data name="Menu.Help.CheckForUpdates" xml:space="preserve"><value>Compruebe si hay actualizaciones</value></data>
+  <data name="Menu.Help.Diagnostics" xml:space="preserve"><value>Exportar diagnósticos…</value></data>
+  <data name="Menu.Help.Benchmarks" xml:space="preserve"><value>Pruebas de rendimiento</value></data>
+  <data name="Menu.Help.StarterPacks" xml:space="preserve"><value>Paquetes de inicio…</value></data>
+  <data name="Menu.Help.About" xml:space="preserve"><value>Acerca de…</value></data>
+  <!--  Speakers  -->
+  <data name="Speakers.Header" xml:space="preserve"><value>Voces y ponentes</value></data>
+  <data name="Speakers.EmptyState" xml:space="preserve"><value>Aún no se han detectado hablantes. Ejecute primero la transcripción y la identificación de hablantes.</value></data>
+  <data name="Speakers.GenerateAll" xml:space="preserve"><value>Generar todo</value></data>
+  <data name="Speakers.Count" xml:space="preserve"><value>{0} ponentes</value></data>
+  <!--  Speaker  -->
+  <data name="Speaker.RenameTip" xml:space="preserve"><value>Cambiar el nombre del altavoz</value></data>
+  <data name="Speaker.ConfirmRenameTip" xml:space="preserve"><value>Confirmar cambio de nombre</value></data>
+  <data name="Speaker.CancelRenameTip" xml:space="preserve"><value>Cancelar cambio de nombre</value></data>
+  <data name="Speaker.NewNamePlaceholder" xml:space="preserve"><value>Nuevo nombre...</value></data>
+  <data name="Speaker.SyntheticVoice" xml:space="preserve"><value>Voz sintética</value></data>
+  <data name="Speaker.CloneVoice" xml:space="preserve"><value>Clone esta voz</value></data>
+  <data name="Speaker.SelectVoicePlaceholder" xml:space="preserve"><value>Seleccione una voz...</value></data>
+  <data name="Speaker.AssignVoice" xml:space="preserve"><value>Asignar voz</value></data>
+  <data name="Speaker.PreviewVoice" xml:space="preserve"><value>Escuchar muestra de voz</value></data>
+  <data name="Speaker.NoReferenceClip" xml:space="preserve"><value>Aún no hay ningún vídeo de referencia</value></data>
+  <data name="Speaker.ExtractAutoClip" xml:space="preserve"><value>Extraer clip automático</value></data>
+  <data name="Speaker.ExtractAutoClipTip" xml:space="preserve"><value>Extraer el audio de referencia de los turnos registrados en el diario</value></data>
+  <data name="Speaker.UploadReference" xml:space="preserve"><value>Subir referencia</value></data>
+  <data name="Speaker.UploadReferenceTip" xml:space="preserve"><value>Subir un audio de referencia para la clonación de voz</value></data>
+  <data name="Speaker.StaleTtsWarning" xml:space="preserve"><value>⚠ El TTS está desactualizado: vuelva a generarlo tras reasignar la voz.</value></data>
+  <data name="Speaker.RegenerateStaleDub" xml:space="preserve"><value>Regenerar el dub obsoleto</value></data>
+  <data name="Speaker.Generating" xml:space="preserve"><value>Generando...</value></data>
+  <data name="Speaker.PreviewDubTip" xml:space="preserve"><value>Escuche un avance de la primera toma de doblaje finalizada de este locutor</value></data>
+  <data name="Speaker.MergeInto" xml:space="preserve"><value>Incorporarse a:</value></data>
+  <data name="Speaker.SelectTargetPlaceholder" xml:space="preserve"><value>Seleccione el destino...</value></data>
+  <data name="Speaker.Merge" xml:space="preserve"><value>Combinar</value></data>
+  <data name="Speaker.MergeTip" xml:space="preserve"><value>Fusionar este altavoz con el destino seleccionado (este altavoz se eliminará)</value></data>
+  <!--  Timeline  -->
+  <data name="Timeline.Title" xml:space="preserve"><value>Cronología</value></data>
+  <data name="Timeline.SplitTip" xml:space="preserve"><value>División en el indicador de reproducción (S)</value></data>
+  <data name="Timeline.MergeTip" xml:space="preserve"><value>Combinar los clips seleccionados</value></data>
+  <data name="Timeline.TrimTip" xml:space="preserve"><value>Recortar a la selección</value></data>
+  <data name="Timeline.DeleteTip" xml:space="preserve"><value>Eliminar selección (Supr)</value></data>
+  <data name="Timeline.ZoomOutTip" xml:space="preserve"><value>Alejar la imagen</value></data>
+  <data name="Timeline.ZoomInTip" xml:space="preserve"><value>Aumentar el zoom</value></data>
+  <data name="Timeline.CollapseTip" xml:space="preserve"><value>Ocultar la línea de tiempo</value></data>
+  <data name="Timeline.Reference" xml:space="preserve"><value>Referencia</value></data>
+  <data name="Timeline.MuteTip" xml:space="preserve"><value>Silenciar (próximamente)</value></data>
+  <data name="Timeline.SoloTip" xml:space="preserve"><value>Solo (próximamente)</value></data>
+  <!--  Pipeline  -->
+  <data name="Pipeline.Header" xml:space="preserve"><value>Proceso de selección de coordinadores</value></data>
+  <data name="Pipeline.Col_Job" xml:space="preserve"><value>Empleo</value></data>
+  <data name="Pipeline.Col_Stage" xml:space="preserve"><value>Escenario</value></data>
+  <data name="Pipeline.Col_Progress" xml:space="preserve"><value>Avances</value></data>
+  <data name="Pipeline.Col_Detail" xml:space="preserve"><value>Detalle</value></data>
+  <data name="Pipeline.StarterPack" xml:space="preserve"><value>Paquete de inicio</value></data>
+  <data name="Pipeline.StarterPack_Placeholder" xml:space="preserve"><value>Paquete de inicio</value></data>
+  <data name="Pipeline.RunSelectedStages" xml:space="preserve"><value>Ejecutar selección</value></data>
+  <data name="Pipeline.CommercialOnly" xml:space="preserve"><value>Solo para uso comercial</value></data>
+  <data name="Pipeline.ConfigHeader" xml:space="preserve"><value>CONFIGURACIÓN DEL FLUJO DE TRABAJO</value></data>
+  <data name="Pipeline.Config" xml:space="preserve"><value>Configuración</value></data>
+  <data name="Pipeline.StemSeparation" xml:space="preserve"><value>Separación del tallo</value></data>
+  <data name="Pipeline.StemSeparation_Tip" xml:space="preserve"><value>Separe las voces del audio de fondo antes de la transcripción</value></data>
+  <data name="Pipeline.AudioCleanup" xml:space="preserve"><value>Limpieza de audio</value></data>
+  <data name="Pipeline.AudioCleanup_Tip" xml:space="preserve"><value>Aplicar la eliminación de ruido y la limpieza de audio (se omite automáticamente si la separación se realiza correctamente)</value></data>
+  <data name="Pipeline.SpeakerDiarization" xml:space="preserve"><value>Identificación de hablantes</value></data>
+  <data name="Pipeline.SpeakerDiarization_Tip" xml:space="preserve"><value>Identificar a los distintos interlocutores del audio</value></data>
+  <data name="Pipeline.Voice" xml:space="preserve"><value>Voz</value></data>
+  <data name="Pipeline.Voice_Tip" xml:space="preserve"><value>Estrategia de asignación de voces para los locutores doblados</value></data>
+  <data name="Pipeline.VoiceOption_Manual" xml:space="preserve"><value>Manual</value></data>
+  <data name="Pipeline.VoiceOption_KokoroDefaults" xml:space="preserve"><value>Kokoro no cumple con sus obligaciones</value></data>
+  <data name="Pipeline.VoiceOption_AutoClone" xml:space="preserve"><value>Clonación automática</value></data>
+  <data name="Pipeline.RunAllStages" xml:space="preserve"><value>Ejecute todas las etapas</value></data>
+  <data name="Pipeline.RunTranscriptToDub" xml:space="preserve"><value>Correr para doblar</value></data>
+  <data name="Pipeline.Options" xml:space="preserve"><value>Opciones</value></data>
+  <data name="Pipeline.Model" xml:space="preserve"><value>Modelo</value></data>
+  <data name="Pipeline.NotDownloaded" xml:space="preserve"><value>⚠ No se ha descargado</value></data>
+  <data name="Pipeline.NoApiKey" xml:space="preserve"><value>⚠ No hay clave de API</value></data>
+  <data name="Pipeline.ExecutionProvider" xml:space="preserve"><value>Proveedor de ejecución</value></data>
+  <data name="Pipeline.SeparateOnImport" xml:space="preserve"><value>Separar las voces y el ambiente al importar</value></data>
+  <data name="Pipeline.SeparateOnImport_Hint" xml:space="preserve"><value>La opción «Volver a ejecutar» utiliza el modelo de separación seleccionado.</value></data>
+  <data name="Pipeline.SeparationOptionalHint" xml:space="preserve"><value>Utilice el botón de alternancia de filas para incluir separaciones en las series.</value></data>
+  <data name="Pipeline.CleanupHint" xml:space="preserve"><value>La optimización del habla se ejecuta como parte de la fase de limpieza al hacer clic en «Ejecutar».</value></data>
+  <data name="Pipeline.AsrHint" xml:space="preserve"><value>El modo «Commercial Safe», situado en la parte superior del proceso, limita las opciones de modelos a los valores predeterminados seguros y con licencia.</value></data>
+  <data name="Pipeline.EnableAsrTextPolish" xml:space="preserve"><value>Texto de ASR en polaco tras la transcripción</value></data>
+  <data name="Pipeline.EnableAsrTextPolish_Hint" xml:space="preserve"><value>Pulido opcional de la puntuación y la gramática en segmentos de reconocimiento de voz (ASR) sin procesar. Requiere el modelo GenAI de refinamiento de texto.</value></data>
+  <data name="Pipeline.TextRefinementAsrHint" xml:space="preserve"><value>Utilice el botón de activación de la fila para incluir el pulido ASR en las ejecuciones.</value></data>
+  <data name="Pipeline.DetectSpeakersOnImport" xml:space="preserve"><value>Detectar altavoces al importar</value></data>
+  <data name="Pipeline.DiarizationHint" xml:space="preserve"><value>La función «Identificar» asigna los interlocutores a los segmentos de la transcripción una vez realizada esta.</value></data>
+  <data name="Pipeline.OverlapRescueHint" xml:space="preserve"><value>La recuperación de voz con superposición separa los diálogos superpuestos en candidatos de origen (locutores no confirmados). Se ejecuta tras la diarización cuando se detectan turnos de palabra superpuestos.</value></data>
+  <data name="Pipeline.OverlapRescueModel" xml:space="preserve"><value>Modelo de rescate por solapamiento</value></data>
+  <data name="Pipeline.OverlapRescueExecutionProvider" xml:space="preserve"><value>Proveedor de ejecución de rescates superpuestos</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe" xml:space="preserve"><value>Vuelva a transcribir los candidatos de origen tras el rescate</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe_Hint" xml:space="preserve"><value>Ejecuta ASR en cada candidato seleccionado y marca los resultados para su revisión.</value></data>
+  <data name="Pipeline.RunOverlapRescue" xml:space="preserve"><value>Rescate con solapamiento de carreras</value></data>
+  <data name="Pipeline.OverlapRescueReviewHeader" xml:space="preserve"><value>Candidatos potenciales</value></data>
+  <data name="Pipeline.OverlapRescueReviewBadge" xml:space="preserve"><value>Reseña</value></data>
+  <data name="Pipeline.TranslationConfiguredAbove" xml:space="preserve"><value>La configuración de origen y destino se ha establecido anteriormente.</value></data>
+  <data name="Pipeline.ApplyTargetLanguage" xml:space="preserve"><value>Aplicar el idioma de destino seleccionado</value></data>
+  <data name="Pipeline.TtsHint" xml:space="preserve"><value>Asigne las voces de Kokoro en el panel «Voces» y, a continuación, ejecute «Dub» para generar las tomas.</value></data>
+  <data name="Pipeline.LipSyncHint" xml:space="preserve"><value>Sincronice y ajuste la duración del audio doblado con el movimiento de los labios utilizando el modelo de alineación forzada seleccionado anteriormente.</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesis" xml:space="preserve"><value>Se está ejecutando la síntesis de labios en vídeo…</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesisExperimental" xml:space="preserve"><value>Ejecutando la síntesis de labios en vídeo (experimental)…</value></data>
+  <data name="Pipeline.LipSynthesisHint" xml:space="preserve"><value>Reparación de sincronización labial en vídeo (LatentSync ~6,7 GB + modelos faciales). Se requiere el vídeo, la mezcla doblada y las intervenciones de los interlocutores. Descargue los modelos antes de ejecutar el programa.</value></data>
+  <data name="Pipeline.ExportHint" xml:space="preserve"><value>Configure los niveles de mezcla y el formato de exportación en el panel «Exportar», situado debajo de la línea de tiempo.</value></data>
+  <data name="Pipeline.OpenExportPanel" xml:space="preserve"><value>Abrir el panel de exportación</value></data>
+  <!--  RunConfig  -->
+  <data name="RunConfig.Header" xml:space="preserve"><value>EJECUTAR CONFIGURACIÓN</value></data>
+  <data name="RunConfig.Source" xml:space="preserve"><value>Fuente</value></data>
+  <data name="RunConfig.TranslateTo" xml:space="preserve"><value>Traducir a</value></data>
+  <data name="RunConfig.TargetLanguage_Placeholder" xml:space="preserve"><value>Idioma de destino</value></data>
+  <!--  Export  -->
+  <data name="Export.Header" xml:space="preserve"><value>Exportar y mezclar</value></data>
+  <data name="Export.MixLabel" xml:space="preserve"><value>MIX</value></data>
+  <data name="Export.Src" xml:space="preserve"><value>Fuente</value></data>
+  <data name="Export.Src_Tip" xml:space="preserve"><value>Ganancia de audio de la fuente (dB)</value></data>
+  <data name="Export.Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Export.Dub_Tip" xml:space="preserve"><value>Ganancia en el habla con acento (dB)</value></data>
+  <data name="Export.Duck" xml:space="preserve"><value>Pato</value></data>
+  <data name="Export.Duck_Tip" xml:space="preserve"><value>Reducción de volumen de la fuente (dB)</value></data>
+  <data name="Export.Timbre" xml:space="preserve"><value>Timbre</value></data>
+  <data name="Export.Timbre_Tip" xml:space="preserve"><value>Aplicar la adaptación del timbre al habla doblada</value></data>
+  <data name="Export.Pan" xml:space="preserve"><value>Sartén</value></data>
+  <data name="Export.Pan_Tip" xml:space="preserve"><value>Restaurar la panoramización estéreo original</value></data>
+  <data name="Export.ExportLabel" xml:space="preserve"><value>EXPORTACIÓN</value></data>
+  <data name="Export.BurnIn" xml:space="preserve"><value>Cicla</value></data>
+  <data name="Export.BurnIn_Tip" xml:space="preserve"><value>Grabar los subtítulos en la secuencia de vídeo</value></data>
+  <data name="Export.SubtitleSource_Tip" xml:space="preserve"><value>Fuente del texto de los subtítulos</value></data>
+  <data name="Export.Container_Tip" xml:space="preserve"><value>Contenedor de salida</value></data>
+  <data name="Export.Lufs_Tip" xml:space="preserve"><value>Nivel de sonido objetivo (LUFS)</value></data>
+  <data name="Export.Match" xml:space="preserve"><value>Partido</value></data>
+  <data name="Export.Match_Tip" xml:space="preserve"><value>Adapte el volumen al de la fuente original</value></data>
+  <data name="Export.ExportButton" xml:space="preserve"><value>Exportar</value></data>
+  <!--  Crash  -->
+  <data name="Crash.ExportDiagnostics" xml:space="preserve"><value>Diagnóstico de exportaciones</value></data>
+  <!--  Dialog  -->
+  <data name="Dialog.VendorLicense_Title" xml:space="preserve"><value>Licencia de proveedor</value></data>
+  <data name="Dialog.VendorLicense_Acceptance" xml:space="preserve"><value>Al hacer clic en «Acepto», confirma que ha leído y acepta estas condiciones de uso para esta instalación.</value></data>
+  <data name="Dialog.VendorLicense_Accept" xml:space="preserve"><value>Acepto</value></data>
+  <data name="Dialog.SpeakerDetection_Title" xml:space="preserve"><value>Detección de hablantes</value></data>
+  <data name="Dialog.SpeakerDetection_UseSingle" xml:space="preserve"><value>Utilice un altavoz</value></data>
+  <data name="Dialog.SpeakerDetection_Download" xml:space="preserve"><value>Descargar ahora</value></data>
+  <data name="Dialog.ModelNotReady_Title" xml:space="preserve"><value>Modelo no disponible</value></data>
+  <data name="Dialog.ModelSetup_Title" xml:space="preserve"><value>Configuración del modelo</value></data>
+  <data name="Dialog.FallbackVoice_Title" xml:space="preserve"><value>¿Utilizar voces alternativas?</value></data>
+  <data name="Dialog.FallbackVoice_Message" xml:space="preserve"><value>Algunos interlocutores no tienen una voz asignada. Trackdub utilizará la primera voz de Kokoro compatible para cada interlocutor sin asignar, únicamente en esta generación.</value></data>
+  <data name="Dialog.FallbackVoice_Confirm" xml:space="preserve"><value>Generar con voces alternativas</value></data>
+  <!--  Glossary  -->
+  <data name="Glossary.Header" xml:space="preserve"><value>Glosario</value></data>
+  <data name="Glossary.ProjectHeader" xml:space="preserve"><value>Glosario del proyecto</value></data>
+  <data name="Glossary.AddTerm" xml:space="preserve"><value>+ Añadir término</value></data>
+  <data name="Glossary.TermCount" xml:space="preserve"><value>{0} términos</value></data>
+  <data name="Glossary.Loading" xml:space="preserve"><value>Cargando…</value></data>
+  <data name="Glossary.SourceTerm_Placeholder" xml:space="preserve"><value>Término de origen</value></data>
+  <data name="Glossary.TargetTerm_Placeholder" xml:space="preserve"><value>Término de destino</value></data>
+  <data name="Glossary.CaseSensitive" xml:space="preserve"><value>Distingue entre mayúsculas y minúsculas</value></data>
+  <data name="Glossary.DeleteTerm_Tip" xml:space="preserve"><value>Eliminar término</value></data>
+  <data name="Glossary.Scope.Project" xml:space="preserve"><value>Proyecto</value></data>
+  <data name="Glossary.Scope.Global" xml:space="preserve"><value>Global</value></data>
+  <data name="Glossary.Scope.GlobalBadge" xml:space="preserve"><value>Global</value></data>
+  <data name="Glossary.NoteLine_GlobalCaseSensitive" xml:space="preserve"><value>Global · distingue entre mayúsculas y minúsculas</value></data>
+  <data name="Glossary.ImportCsv" xml:space="preserve"><value>Importar CSV</value></data>
+  <!--  MediaBin  -->
+  <data name="MediaBin.Header" xml:space="preserve"><value>Medios de comunicación</value></data>
+  <data name="MediaBin.Context_ProjectWide" xml:space="preserve"><value>Contexto del proyecto</value></data>
+  <data name="MediaBin.Import" xml:space="preserve"><value>Importar</value></data>
+  <data name="MediaBin.Import_Tip" xml:space="preserve"><value>Importar archivos multimedia</value></data>
+  <data name="MediaBin.NewProjectImport" xml:space="preserve"><value>Importación de un nuevo proyecto</value></data>
+  <data name="MediaBin.DetectSpeakers" xml:space="preserve"><value>Detectar altavoces</value></data>
+  <data name="MediaBin.SeparateVocals" xml:space="preserve"><value>Separar las voces y el sonido ambiental</value></data>
+  <data name="MediaBin.ImportHint" xml:space="preserve"><value>Importe archivos multimedia o cree un proyecto para completar este árbol.</value></data>
+  <data name="MediaBin.EmptyTreeHint" xml:space="preserve"><value>Todavía no hay tallos</value></data>
+  <data name="Timeline.CollapsedEmptyHint" xml:space="preserve"><value>Haga clic para ver las pistas · arrastre archivos multimedia para rellenar</value></data>
+  <data name="Inspector.EmptyShort" xml:space="preserve"><value>Seleccione un segmento para inspeccionarlo</value></data>
+  <data name="Transcript.EmptySegments" xml:space="preserve"><value>Aún no hay segmentos. Ejecute la transcripción para completar esta lista.</value></data>
+  <data name="MediaBin.Tab_Source" xml:space="preserve"><value>Fuente</value></data>
+  <data name="MediaBin.Tab_Generated" xml:space="preserve"><value>Generado</value></data>
+  <data name="Navigator.Section.SourceMedia" xml:space="preserve"><value>Fuente: Media</value></data>
+  <data name="Navigator.Section.Transcript" xml:space="preserve"><value>Transcripción</value></data>
+  <data name="Navigator.Section.Speakers" xml:space="preserve"><value>Ponentes</value></data>
+  <data name="Navigator.Section.Voices" xml:space="preserve"><value>Voces</value></data>
+  <data name="Navigator.Section.GeneratedAudio" xml:space="preserve"><value>Audio generado</value></data>
+  <data name="Navigator.Section.Mixes" xml:space="preserve"><value>Mezclas</value></data>
+  <data name="Navigator.Section.Exports" xml:space="preserve"><value>Exportaciones</value></data>
+  <data name="Navigator.Empty.SourceMedia" xml:space="preserve"><value>Importe material multimedia de origen para completar esta sección.</value></data>
+  <data name="Navigator.Empty.Transcript" xml:space="preserve"><value>Ejecute la transcripción para crear segmentos de transcripción.</value></data>
+  <data name="Navigator.Empty.Speakers" xml:space="preserve"><value>Ejecute la diarización o asigne los hablantes tras la transcripción.</value></data>
+  <data name="Navigator.Empty.Voices" xml:space="preserve"><value>Asigne voces a los interlocutores en el panel «Voz».</value></data>
+  <data name="Navigator.Empty.GeneratedAudio" xml:space="preserve"><value>Aquí aparecen los artefactos generados por la síntesis de voz y el procesamiento.</value></data>
+  <data name="Navigator.Empty.Mixes" xml:space="preserve"><value>Las mezclas de vista previa aparecen aquí tras las fases de exportación o mezcla.</value></data>
+  <data name="Navigator.Empty.Exports" xml:space="preserve"><value>Las exportaciones finales aparecen aquí una vez finalizada la fase de exportación.</value></data>
+  <data name="FloatingMonitor.Title" xml:space="preserve"><value>Monitor de vídeo</value></data>
+  <data name="FloatingMonitor.Hide" xml:space="preserve"><value>Ocultar el monitor</value></data>
+  <data name="FloatingMonitor.NoVideo" xml:space="preserve"><value>Aún no hay fotograma de vídeo</value></data>
+  <data name="Transport.ToolTip_PipMonitor" xml:space="preserve"><value>Activar o desactivar el monitor de vídeo «imagen en imagen»</value></data>
+  <!--  Segment  -->
+  <data name="Segment.Start" xml:space="preserve"><value>Inicio</value></data>
+  <data name="Segment.End" xml:space="preserve"><value>Fin</value></data>
+  <data name="Segment.Duration" xml:space="preserve"><value>Duración</value></data>
+  <data name="Segment.Speaker" xml:space="preserve"><value>Ponente</value></data>
+  <data name="Segment.Source" xml:space="preserve"><value>Fuente</value></data>
+  <data name="Segment.VoiceCandidates" xml:space="preserve"><value>Candidatos a la presidencia</value></data>
+  <data name="Segment.VoiceCandidates_Hint" xml:space="preserve"><value>Haga clic en «Generar» para crear opciones de voz para la vista previa A/B</value></data>
+  <data name="Segment.GenerateCandidates" xml:space="preserve"><value>Generar candidatos</value></data>
+  <data name="Segment.LipSyncAlign" xml:space="preserve"><value>ALINEAR</value></data>
+  <data name="Segment.LipSynthesisRepair" xml:space="preserve"><value>REPARACIÓN</value></data>
+  <data name="Segment.Review" xml:space="preserve"><value>Reseña</value></data>
+  <data name="Segment.SaveSettings" xml:space="preserve"><value>Guardar configuración</value></data>
+  <data name="Segment.GenerateDub" xml:space="preserve"><value>Generar doblaje</value></data>
+  <data name="Segment.Regenerate" xml:space="preserve"><value>Regenerar</value></data>
+  <data name="Segment.MatchTiming" xml:space="preserve"><value>Duración del partido</value></data>
+  <data name="Segment.Runtime.Dub" xml:space="preserve"><value>Tiempo de ejecución de la versión doblada</value></data>
+  <data name="Segment.Runtime.Translation" xml:space="preserve"><value>Tiempo de ejecución de la traducción</value></data>
+  <data name="Segment.Runtime.Transcription" xml:space="preserve"><value>Tiempo de ejecución de la transcripción</value></data>
+  <data name="Segment.Runtime.Alignment" xml:space="preserve"><value>Tiempo de ejecución de la sincronización labial</value></data>
+  <data name="Segment.Runtime.Provider" xml:space="preserve"><value>Proveedor</value></data>
+  <data name="Segment.Runtime.Model" xml:space="preserve"><value>Modelo</value></data>
+  <data name="Segment.Runtime.Precision" xml:space="preserve"><value>Precisión</value></data>
+  <!--  ApiKeys  -->
+  <data name="Window_Title_ApiKeys" xml:space="preserve"><value>Claves de API</value></data>
+  <data name="Chrome_Minimize" xml:space="preserve"><value>Minimizar</value></data>
+  <data name="Chrome_MaximizeRestore" xml:space="preserve"><value>Maximizar / Restaurar</value></data>
+  <data name="Chrome_Close" xml:space="preserve"><value>Cerrar</value></data>
+  <data name="Api_Tooltip_ToggleReveal" xml:space="preserve"><value>Mostrar / ocultar clave</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>Guardar</value></data>
+  <data name="Common_Clear" xml:space="preserve"><value>Borrar</value></data>
+  <data name="Api_Footer_MoreProviders" xml:space="preserve"><value>Próximamente se incorporarán más proveedores</value></data>
+  <data name="Api_Footer_StorageSecurity" xml:space="preserve"><value>Almacenamiento y seguridad</value></data>
+  <!--  Common  -->
+  <data name="Common.Save" xml:space="preserve"><value>Guardar</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>Cerrar</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>Añadir</value></data>
+  <data name="Common.Segments" xml:space="preserve"><value>segmentos</value></data>
+  <data name="Common.DownloadFfmpeg" xml:space="preserve"><value>Descargar FFmpeg</value></data>
+  <data name="Common.DropVideoPlaceholder" xml:space="preserve"><value>Suelte un vídeo o comience a partir de un archivo multimedia</value></data>
+  <data name="Common.NewFromMedia" xml:space="preserve"><value>Novedades en los medios de comunicación</value></data>
+  <data name="Common.OpenProject" xml:space="preserve"><value>Abrir proyecto</value></data>
+  <data name="Common.Transcript" xml:space="preserve"><value>Transcripción</value></data>
+  <data name="Transcript.AllSegments" xml:space="preserve"><value>Todos los segmentos</value></data>
+  <data name="Common.CollapseRightPanel_Tip" xml:space="preserve"><value>Ocultar el panel de la derecha</value></data>
+  <data name="Common.ChannelStrip" xml:space="preserve"><value>Canal de audio</value></data>
+  <data name="Common.ExpandChannelStrip_Tip" xml:space="preserve"><value>Despliegue la banda de canal</value></data>
+  <data name="Common.CollapseChannelStrip_Tip" xml:space="preserve"><value>Ocultar la banda de canal</value></data>
+  <!--  LeftPanel stage tooltips  -->
+  <data name="Common.Stage_Separation" xml:space="preserve"><value>Separación</value></data>
+  <data name="Common.Stage_Cleanup" xml:space="preserve"><value>Limpieza</value></data>
+  <data name="Common.Stage_Transcribe" xml:space="preserve"><value>Transcribir</value></data>
+  <data name="Common.Stage_Identify" xml:space="preserve"><value>Identificar</value></data>
+  <data name="Common.Stage_Translate" xml:space="preserve"><value>Traducir</value></data>
+  <data name="Common.Stage_Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Common.Stage_Export" xml:space="preserve"><value>Exportar</value></data>
+  <!--  MiniPreviewPlayer  -->
+  <data name="MiniPlayer.NoFileLoaded" xml:space="preserve"><value>No se ha cargado ningún archivo</value></data>
+  <data name="MiniPlayer.CannotPlayFile" xml:space="preserve"><value>⚠ No se puede reproducir el archivo</value></data>
+  <data name="MiniPlayer.UnsupportedFormat" xml:space="preserve"><value>Formato no compatible</value></data>
+  <data name="MiniPlayer.PlayPauseTip" xml:space="preserve"><value>Reproducir/Pausar</value></data>
+  <!--  Settings - General  -->
+  <data name="Settings.Title" xml:space="preserve"><value>Configuración</value></data>
+  <data name="Settings.Tab_General" xml:space="preserve"><value>General</value></data>
+  <data name="Settings.Heading_General" xml:space="preserve"><value>Configuración general</value></data>
+  <data name="Settings.Label_Theme" xml:space="preserve"><value>Apariencia — Tema</value></data>
+  <data name="Settings.Hint_Theme" xml:space="preserve"><value>Los cambios en el tema se aplican de forma inmediata y se mantienen tras cada reinicio.</value></data>
+  <!--  Update  -->
+  <data name="Update.BannerMessage" xml:space="preserve"><value>Trackdub {0} ({1}) ya está disponible</value></data>
+  <data name="Update.Banner_Subtitle" xml:space="preserve"><value>Ya está disponible para su descarga una nueva versión de Trackdub.</value></data>
+  <data name="Update.Button_ReleaseNotes" xml:space="preserve"><value>Notas de la versión</value></data>
+  <data name="Update.Download" xml:space="preserve"><value>Descargar</value></data>
+  <data name="Settings.Label_UpdateChannel" xml:space="preserve"><value>Canal de actualizaciones</value></data>
+  <data name="Settings.Hint_UpdateChannel" xml:space="preserve"><value>La versión «Stable» incluye versiones probadas. La versión «Preview» ofrece acceso anticipado a las próximas funciones.</value></data>
+  <data name="Settings.Label_ModelTier" xml:space="preserve"><value>Nivel del modelo</value></data>
+  <data name="Settings.Hint_CommercialOnly" xml:space="preserve"><value>Trackdub solo distribuye modelos empaquetados aptos para uso comercial. Los modelos importados no destinados a uso comercial siguen bloqueados.</value></data>
+  <data name="Settings.Label_AsrEngine" xml:space="preserve"><value>Motor ASR</value></data>
+  <data name="Settings.Label_TranslationEngine" xml:space="preserve"><value>Motor de traducción</value></data>
+  <data name="Settings.Label_VoiceSynthesisEngine" xml:space="preserve"><value>Motor de síntesis de voz</value></data>
+  <data name="Settings.Label_StemSeparationEngine" xml:space="preserve"><value>Motor de separación de tallos</value></data>
+  <data name="Settings.Label_RubberbandStretch" xml:space="preserve"><value>TTS Timing — Estiramiento de la banda elástica</value></data>
+  <data name="Settings.Label_ReduceMotion" xml:space="preserve"><value>Reducir el movimiento</value></data>
+  <data name="Settings.Hint_ReduceMotion" xml:space="preserve"><value>Desactiva el efecto de pulso intermitente al ejecutar las franjas de acento de la etapa de la tubería.</value></data>
+  <data name="Settings.Label_StretchThreshold" xml:space="preserve"><value>Umbral de elasticidad</value></data>
+  <data name="Settings.Label_ExportFormat" xml:space="preserve"><value>Formato de exportación</value></data>
+  <data name="Settings.Label_ExportSubtitles" xml:space="preserve"><value>Exportar subtítulos</value></data>
+  <data name="Settings.Label_VideoEncoder" xml:space="preserve"><value>Codificador de vídeo (exportación «Burn-in»)</value></data>
+  <data name="Settings.Label_PreviewVideoDecode" xml:space="preserve"><value>Decodificación de vídeo de vista previa</value></data>
+  <data name="Settings.Label_Subtitles" xml:space="preserve"><value>Subtítulos</value></data>
+  <data name="Settings.Label_SubtitleContentMode" xml:space="preserve"><value>Modo de contenido de los subtítulos</value></data>
+  <!--  Settings - Starter Packs  -->
+  <data name="Settings.Tab_StarterPacks" xml:space="preserve"><value>Paquetes de inicio</value></data>
+  <data name="Settings.StarterPacks_Heading" xml:space="preserve"><value>Paquetes de inicio</value></data>
+  <data name="Settings.StarterPacks_Hint" xml:space="preserve"><value>Descargue los conjuntos de modelos agrupados y, a continuación, aplíquelos para configurar los alias de etapa y los valores predeterminados de ejecución. Los archivos instalados son archivos con suma de comprobación válida, pero no están listos para su ejecución.</value></data>
+  <data name="Settings.StarterPacks_RecommendedBadge" xml:space="preserve"><value>Recomendado en función del nivel detectado</value></data>
+  <data name="Settings.StarterPacks_AppliedBadge" xml:space="preserve"><value>Aplicado</value></data>
+  <data name="Settings.StarterPacks_Download" xml:space="preserve"><value>Descargar</value></data>
+  <data name="Settings.StarterPacks_Apply" xml:space="preserve"><value>Solicitar</value></data>
+  <data name="Settings.StarterPacks_ProfileLabel" xml:space="preserve"><value>Perfil</value></data>
+  <data name="Settings.StarterPacks_InstalledLabel" xml:space="preserve"><value>Modelos instalados:</value></data>
+  <data name="Settings.StarterPacks_DownloadComplete" xml:space="preserve"><value>La descarga ha finalizado. No se han modificado los ajustes.</value></data>
+  <data name="Settings.StarterPacks_DownloadFailed" xml:space="preserve"><value>La descarga ha fallado.</value></data>
+  <data name="Settings.StarterPacks_ApplyComplete" xml:space="preserve"><value>Se ha aplicado el paquete de inicio.</value></data>
+  <data name="Settings.StarterPacks_ApplyFailed" xml:space="preserve"><value>La solicitud ha fallado.</value></data>
+  <data name="Settings.StarterPacks_ConsentRequired" xml:space="preserve"><value>Es necesario dar su consentimiento para la clonación de voz antes de aplicar este paquete.</value></data>
+  <data name="Settings.StarterPacks_CompatibleBadge" xml:space="preserve"><value>Totalmente compatible</value></data>
+  <data name="Settings.StarterPacks_FallbackBadge" xml:space="preserve"><value>Se requieren soluciones alternativas</value></data>
+  <data name="Settings.StarterPacks_NotRunnableBadge" xml:space="preserve"><value>No se puede ejecutar</value></data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve"><value>La ruta de la GPU no está disponible para {0}. Se está utilizando {1} en {2}.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupSummary" xml:space="preserve"><value>{0} Los modelos de este paquete se ejecutarán en la CPU hasta que se instale el entorno de ejecución de la GPU correspondiente a su hardware.</value></data>
+  <data name="Settings.StarterPacks_GpuVariantNudge" xml:space="preserve"><value>Algunos modelos también requieren variantes optimizadas para la GPU. Utilice la opción «Optimizar» en el Gestor de modelos una vez que el entorno de ejecución de la GPU esté listo.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Nvidia" xml:space="preserve"><value>Instalar el entorno de ejecución NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Amd" xml:space="preserve"><value>Instalar el entorno de ejecución de AMD MIGraphX</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Intel" xml:space="preserve"><value>Instalar el entorno de ejecución de Intel OpenVINO</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Qualcomm" xml:space="preserve"><value>Instalar el entorno de ejecución de Qualcomm QNN</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_AmdNpu" xml:space="preserve"><value>Instalar el entorno de ejecución de la NPU AMD VitisAI</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Bundle" xml:space="preserve"><value>Instalar los entornos de ejecución de la GPU</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallComplete" xml:space="preserve"><value>Se ha completado la instalación del entorno de ejecución de la GPU.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallFailed" xml:space="preserve"><value>Se ha producido un error al instalar el entorno de ejecución de la GPU.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupLicenseRequired" xml:space="preserve"><value>Acepte la licencia del proveedor para instalar el entorno de ejecución de la GPU.</value></data>
+  <data name="Settings.StarterPacks_CloudReadyBadge" xml:space="preserve"><value>Claves de API configuradas</value></data>
+  <data name="Settings.StarterPacks_CloudKeysMissingBadge" xml:space="preserve"><value>Faltan claves API</value></data>
+  <data name="Settings.StarterPacks_CloudKeysButton" xml:space="preserve"><value>Configurar claves de API</value></data>
+  <data name="Settings.StarterPacks_ImportButton" xml:space="preserve"><value>Importar paquete…</value></data>
+  <data name="Settings.StarterPacks_ExportButton" xml:space="preserve"><value>Exportar…</value></data>
+  <data name="Settings.StarterPacks_UserPacksHeader" xml:space="preserve"><value>Sus paquetes</value></data>
+  <data name="Settings.StarterPacks_OpenLocalModelsLink" xml:space="preserve"><value>Descargar modelos por separado</value></data>
+  <data name="Settings.StarterPacks_OptimizeNudge" xml:space="preserve"><value>Existen variantes optimizadas para GPU para los modelos de{0}. Optimice en «Modelos locales» para obtener el mejor rendimiento.</value></data>
+  <data name="Settings.StarterPacks_ReviewOptimizations" xml:space="preserve"><value>Revisar las optimizaciones</value></data>
+  <data name="Settings.LocalModels_AppliedPackBadge" xml:space="preserve"><value>Paquete «Applied»: {0}</value></data>
+  <data name="Settings.Label_PackTierFilter" xml:space="preserve"><value>Filtro de paquete</value></data>
+  <data name="Settings.Button_Dismiss" xml:space="preserve"><value>Descartar</value></data>
+  <!--  Onboarding - Starter Packs  -->
+  <data name="Onboarding.StarterPacks_Title" xml:space="preserve"><value>Elija un paquete de inicio</value></data>
+  <data name="Onboarding.StarterPacks_Body" xml:space="preserve"><value>Elija un conjunto de modelos preconfigurado para descargarlo y aplicarlo, o configure los modelos de forma individual en «Modelos locales».</value></data>
+  <data name="Onboarding.StarterPacks_Skip" xml:space="preserve"><value>Por ahora, omítalo</value></data>
+  <data name="Onboarding.StarterPacks_ConfigureIndividually" xml:space="preserve"><value>Configurar de forma individual</value></data>
+  <!--  Settings - Local Models  -->
+  <data name="Settings.Tab_LocalModels" xml:space="preserve"><value>Modelos locales</value></data>
+  <data name="Settings.Hint_CommercialOnlyLane" xml:space="preserve"><value>Carril reservado exclusivamente para modelos comerciales. Los modelos importados no comerciales siguen sin poder circular por él.</value></data>
+  <data name="Settings.Label_NonCommercial" xml:space="preserve"><value>sin ánimo de lucro</value></data>
+  <data name="Settings.Button_Download" xml:space="preserve"><value>Descargar</value></data>
+  <data name="Settings.Button_Repair" xml:space="preserve"><value>Reparación</value></data>
+  <data name="Settings.Button_Uninstall" xml:space="preserve"><value>Desinstalar</value></data>
+  <data name="Settings.Label_Optimize" xml:space="preserve"><value>Optimizar:</value></data>
+  <data name="Settings.Tip_PrecisionHeader" xml:space="preserve"><value>Precisión de la variante optimizada del modelo (las opciones dependen del proveedor):</value></data>
+  <data name="Settings.Tip_Fp32" xml:space="preserve"><value>fp32 — pesos completos de 32 bits. Máxima precisión; archivo de mayor tamaño. Solo CPU.</value></data>
+  <data name="Settings.Tip_Fp16" xml:space="preserve"><value>fp16 — Precisión media de 16 bits. Buena precisión, con la mitad del tamaño de fp32. DirectML / CUDA / TensorRT.</value></data>
+  <data name="Settings.Tip_Int8" xml:space="preserve"><value>int8 — Cuantificado a 8 bits. Más pequeño y rápido que fp16; supone una ligera pérdida de precisión en la mayoría de los modelos de audio. CPU / DirectML / CUDA.</value></data>
+  <data name="Settings.Tip_Int4" xml:space="preserve"><value>int4 — Cuantificado a 4 bits. El más pequeño y rápido; se aprecia una pérdida de precisión en algunos modelos. Solo DirectML / CUDA.</value></data>
+  <data name="Settings.Button_Optimize" xml:space="preserve"><value>Optimizar</value></data>
+  <data name="Settings.Status_Optimizing" xml:space="preserve"><value>Optimizando…</value></data>
+  <data name="Settings.Button_Cancel" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="Settings.Button_Use" xml:space="preserve"><value>Uso</value></data>
+  <data name="Settings.Button_Clear" xml:space="preserve"><value>Borrar</value></data>
+  <data name="Settings.Status_Loading" xml:space="preserve"><value>Cargando…</value></data>
+  <!--  Settings - Cloud Models  -->
+  <data name="Settings.Tab_CloudModels" xml:space="preserve"><value>Modelos en la nube</value></data>
+  <data name="Settings.Button_Save" xml:space="preserve"><value>Guardar</value></data>
+  <data name="Settings.Hint_MoreProviders" xml:space="preserve"><value>Próximamente se incorporarán más proveedores de servicios en la nube.</value></data>
+  <!--  Settings - Hardware  -->
+  <data name="Settings.Tab_Hardware" xml:space="preserve"><value>Hardware</value></data>
+  <data name="Settings.Heading_Hardware" xml:space="preserve"><value>Configuración del hardware</value></data>
+  <data name="Settings.Label_FfmpegEncoders" xml:space="preserve"><value>Codificadores de vídeo FFmpeg</value></data>
+  <data name="Settings.Label_FfmpegHwDecode" xml:space="preserve"><value>Decodificación por hardware con FFmpeg</value></data>
+  <data name="Settings.Toggle_NativeCuda" xml:space="preserve"><value>Habilitar CUDA / TensorRT nativo en Windows (avanzado)</value></data>
+  <data name="Settings.Hint_NativeCuda" xml:space="preserve"><value>Desactivado por defecto. Cuando está activado, las solicitudes explícitas de CUDA o TensorRT utilizan proveedores nativos de ONNX Runtime en lugar de DirectML / TensorRT RTX (WinML). La selección automática de canalizaciones no se ve afectada.</value></data>
+  <data name="Settings.Label_WinMlPolicy" xml:space="preserve"><value>Política de dispositivos de Windows ML (avanzada)</value></data>
+  <data name="Settings.Hint_WinMlPolicy" xml:space="preserve"><value>Experimental. Utiliza la selección automática de EP/dispositivo de ONNX Runtime entre los proveedores registrados del catálogo de aprendizaje automático de Windows. La elección del proveedor de Stage no se ve afectada. Reinicie Trackdub tras modificar esta configuración.</value></data>
+  <data name="Settings.Label_GpuProviders" xml:space="preserve"><value>Proveedores de inferencia por GPU</value></data>
+  <data name="Settings.Label_AllCertified" xml:space="preserve"><value>Todos los proveedores de catálogos certificados</value></data>
+  <data name="Settings.Hint_AllCertified" xml:space="preserve"><value>Esto instala todos los proveedores de catálogos de Windows ML disponibles en este equipo. En equipos NVIDIA compatibles, también puede ofrecer el complemento TensorRT RTX (licencia de NVIDIA independiente). Es posible que se descarguen varios paquetes y que el proceso tarde varios minutos la primera vez que se ejecute. Los botones de instalación por proveedor seguirán estando disponibles para realizar instalaciones específicas, independientemente de si ejecuta esta opción o no.</value></data>
+  <data name="Settings.Button_InstallAllCertified" xml:space="preserve"><value>Instale todos los proveedores certificados</value></data>
+  <data name="Settings.Label_NvidiaTensorRt" xml:space="preserve"><value>NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.Button_Refresh" xml:space="preserve"><value>Actualizar</value></data>
+  <data name="Settings.Button_InstallProvider" xml:space="preserve"><value>Instalar el proveedor</value></data>
+  <data name="Settings.Button_InstallTrtRtxPlugin" xml:space="preserve"><value>Instalar el complemento</value></data>
+  <data name="Settings.Button_ViewLicense" xml:space="preserve"><value>Ver licencia</value></data>
+  <data name="Settings.Label_AmdMigraphx" xml:space="preserve"><value>AMD MIGraphX</value></data>
+  <data name="Settings.Label_IntelOpenVino" xml:space="preserve"><value>Intel OpenVINO (catálogo de WinML)</value></data>
+  <data name="Settings.Label_QualcommQnn" xml:space="preserve"><value>Qualcomm QNN (catálogo de WinML)</value></data>
+  <data name="Settings.Label_AmdVitisAi" xml:space="preserve"><value>AMD VitisAI (catálogo de WinML)</value></data>
+  <data name="Settings.Label_NativeOrtGpu" xml:space="preserve"><value>GPU ORT nativa (avanzada)</value></data>
+  <data name="Settings.Label_ExecutionProviders" xml:space="preserve"><value>Proveedores de ejecución</value></data>
+  <data name="Settings.Label_PerStageOverrides" xml:space="preserve"><value>Modificaciones del proveedor por etapa</value></data>
+  <!--  Settings - Profiler  -->
+  <data name="Settings.Tab_Profiler" xml:space="preserve"><value>Analizador de rendimiento</value></data>
+  <data name="Settings.Heading_Profiler" xml:space="preserve"><value>Analizador de hardware</value></data>
+  <data name="Settings.Hint_Profiler" xml:space="preserve"><value>Ejecuta pruebas de rendimiento breves de VAD, ASR, traducción y TTS para recomendar un ajuste preestablecido de calidad. Requiere Windows con los modelos ONNX incluidos ya instalados.</value></data>
+  <data name="Settings.Button_RunBenchmarks" xml:space="preserve"><value>Ejecutar pruebas de rendimiento por etapas</value></data>
+  <data name="Settings.Label_QualityPreset" xml:space="preserve"><value>Preajuste de calidad</value></data>
+  <data name="Settings.Hint_QualityPreset" xml:space="preserve"><value>La opción «Recomendación de uso» aplica el resultado del analizador de rendimiento a la planificación del nivel de modelo. La opción «Anular» mantiene su elección hasta que la modifique.</value></data>
+  <!--  Settings - Recent Projects  -->
+  <data name="Settings.Tab_RecentProjects" xml:space="preserve"><value>Proyectos recientes</value></data>
+  <data name="Settings.Heading_RecentProjects" xml:space="preserve"><value>Proyectos recientes</value></data>
+  <!--  Settings - About  -->
+  <data name="Settings.Tab_About" xml:space="preserve"><value>Acerca de</value></data>
+  <data name="Settings.Heading_About" xml:space="preserve"><value>Acerca de Trackdub</value></data>
+  <data name="Settings.About_Tagline" xml:space="preserve"><value>Trackdub — Estación de trabajo de doblaje basada en inteligencia artificial</value></data>
+  <data name="Settings.About_Edition" xml:space="preserve"><value>Edición multiplataforma de Avalonia</value></data>
+  <!--  Settings - Developer  -->
+  <data name="Settings.Tab_Developer" xml:space="preserve"><value>Desarrollador</value></data>
+  <data name="Settings.Heading_Developer" xml:space="preserve"><value>Opciones de desarrollador</value></data>
+  <data name="Settings.Hint_Developer" xml:space="preserve"><value>Las herramientas para desarrolladores y las funciones de diagnóstico están disponibles en las versiones de desarrollo.</value></data>
+  <!--  Settings - Footer  -->
+  <data name="Settings.Button_SaveAndClose" xml:space="preserve"><value>Guardar y cerrar</value></data>
+  <!--  Dialog - SourceLanguagePicker  -->
+  <data name="Dialog.SourceLanguage_Title" xml:space="preserve"><value>Fuente de la transcripción</value></data>
+  <data name="Dialog.SourceLanguage_Hint" xml:space="preserve"><value>Cambiar el idioma de origen afecta a las futuras traducciones y a la corrección ortográfica.</value></data>
+  <data name="Dialog.SourceLanguage_Placeholder" xml:space="preserve"><value>Idioma de origen</value></data>
+  <!--  Dialog - UnsavedInlineEdit  -->
+  <data name="Dialog.UnsavedEdit_KeepEditing" xml:space="preserve"><value>Siga editando</value></data>
+  <data name="Dialog.UnsavedEdit_Discard" xml:space="preserve"><value>Descartar</value></data>
+  <!--  Dialog - VoiceCloneConsent  -->
+  <data name="Dialog.VoiceClone_Title" xml:space="preserve"><value>Consentimiento para la clonación de la voz</value></data>
+  <data name="Dialog.VoiceClone_Body" xml:space="preserve"><value>En esta sesión se utilizarán los fragmentos de audio de referencia que haya subido para sintetizar las características de la voz. Al hacer clic en «Acepto», confirma que dispone de los derechos legales para clonar estas voces en el marco de este proyecto.</value></data>
+  <data name="Dialog.VoiceClone_SessionNote" xml:space="preserve"><value>Este consentimiento se aplica únicamente a la sesión actual de la aplicación y deberá volver a concederse la próxima vez que inicie la aplicación.</value></data>
+  <data name="Dialog.VoiceClone_Agree" xml:space="preserve"><value>Estoy de acuerdo</value></data>
+  <!--  Timeline - Waveform  -->
+  <data name="Timeline.WaveformNotAvailable" xml:space="preserve"><value>La vista previa de la forma de onda aún no está disponible</value></data>
+  <data name="Timeline.ComputingPeaks" xml:space="preserve"><value>Cálculo de los picos de las formas de onda…</value></data>
+  <!--  Timeline - ZoomLevel (non-localizable display but test flags it)  -->
+  <data name="Timeline.ZoomLevel" xml:space="preserve"><value>100 pps</value></data>
+  <!--  Inspector  -->
+  <data name="Inspector.Header" xml:space="preserve"><value>Inspector</value></data>
+  <data name="Inspector.Empty" xml:space="preserve"><value>Seleccione un segmento, un altavoz o un artefacto de origen para examinarlo.</value></data>
+  <data name="Inspector.UnknownTarget" xml:space="preserve"><value>Este objetivo de inspección aún no es compatible.</value></data>
+  <data name="Inspector.OpenInEditor" xml:space="preserve"><value>Abrir en el editor</value></data>
+  <data name="Inspector.Tab_Content" xml:space="preserve"><value>Contenido</value></data>
+  <data name="Inspector.Tab_Timing" xml:space="preserve"><value>Calendario</value></data>
+  <data name="Inspector.Tab_Voice" xml:space="preserve"><value>Voz</value></data>
+  <data name="Inspector.Tab_QC" xml:space="preserve"><value>Control de calidad</value></data>
+  <data name="Inspector.SegmentDuration" xml:space="preserve"><value>Segmento</value></data>
+  <data name="Inspector.GeneratedDuration" xml:space="preserve"><value>Generado</value></data>
+  <data name="Inspector.Overrun" xml:space="preserve"><value>Exceso</value></data>
+  <data name="Inspector.TimingAdjustment" xml:space="preserve"><value>Calendario</value></data>
+  <data name="Inspector.ConfidenceReview" xml:space="preserve"><value>Se recomienda leer la reseña</value></data>
+  <data name="Inspector.Artifact" xml:space="preserve"><value>Artefacto</value></data>
+  <data name="Inspector.ArtifactType" xml:space="preserve"><value>Tipo</value></data>
+  <data name="Inspector.ArtifactDuration" xml:space="preserve"><value>Duración</value></data>
+  <data name="Inspector.ArtifactSize" xml:space="preserve"><value>Tamaño</value></data>
+  <data name="Inspector.ArtifactPath" xml:space="preserve"><value>Ruta</value></data>
+  <data name="Inspector.ArtifactType_Audio" xml:space="preserve"><value>Audio</value></data>
+  <data name="Inspector.ArtifactType_Video" xml:space="preserve"><value>Vídeo</value></data>
+  <data name="Inspector.ArtifactType_Subtitle" xml:space="preserve"><value>Subtítulo</value></data>
+  <data name="Inspector.ArtifactType_Unknown" xml:space="preserve"><value>Desconocido</value></data>
+  <data name="Attention.translation.stale" xml:space="preserve"><value>La traducción está desactualizada.</value></data>
+  <data name="Attention.tts.failed" xml:space="preserve"><value>La generación de la copia se ha fallado.</value></data>
+  <data name="Attention.tts.stale" xml:space="preserve"><value>El dub está pasado de moda.</value></data>
+  <data name="Attention.tts.pending" xml:space="preserve"><value>Generación de doblaje pendiente.</value></data>
+  <data name="Attention.tts.duration-overrun" xml:space="preserve"><value>La sincronización del doblaje supera el margen de tolerancia.</value></data>
+  <data name="Attention.tts.speed-limit" xml:space="preserve"><value>La dilatación temporal puede reducir la calidad.</value></data>
+  <data name="Attention.asr.low-confidence" xml:space="preserve"><value>Es necesario revisar la fiabilidad de la transcripción.</value></data>
+  <data name="Attention.lipsync.error" xml:space="preserve"><value>La sincronización labial ha fallado.</value></data>
+  <data name="Attention.lipsync.warning" xml:space="preserve"><value>Es necesario revisar la sincronización labial.</value></data>
+  <data name="Attention.lipsynthesis.error" xml:space="preserve"><value>La reparación del labio ha fallado.</value></data>
+  <data name="Attention.lipsynthesis.warning" xml:space="preserve"><value>Es necesario revisar el tratamiento reparador de labios.</value></data>
+  <data name="Attention.stage.failed" xml:space="preserve"><value>La etapa del proceso ha fallado.</value></data>
+  <data name="Attention.stage.in-progress" xml:space="preserve"><value>Fase de desarrollo del proyecto en curso.</value></data>
+  <!--  License  -->
+  <data name="License.Tab" xml:space="preserve"><value>Licencia</value></data>
+  <data name="License.Heading" xml:space="preserve"><value>Licencia</value></data>
+  <data name="License.CurrentTier" xml:space="preserve"><value>Nivel actual:</value></data>
+  <data name="License.Tier_Free" xml:space="preserve"><value>Gratis</value></data>
+  <data name="License.Tier_Pro" xml:space="preserve"><value>A favor</value></data>
+  <data name="License.KeyLabel" xml:space="preserve"><value>Clave de licencia</value></data>
+  <data name="License.KeyPlaceholder" xml:space="preserve"><value>Pegue aquí su clave de licencia</value></data>
+  <data name="License.Button_Activate" xml:space="preserve"><value>Activar</value></data>
+  <data name="License.Button_Deactivate" xml:space="preserve"><value>Desactivar</value></data>
+  <data name="License.Degraded" xml:space="preserve"><value>Licencia desactivada</value></data>
+  <data name="License.MachinesRegisteredUnlimited" xml:space="preserve"><value> equipos registrados (licencia de desarrollo ilimitada)</value></data>
+</root>

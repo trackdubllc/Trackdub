@@ -1,0 +1,8 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <x:String x:Key="OnnxModelIcon">🔬</x:String>
+  <x:String x:Key="AudioPrepIcon">🎤</x:String>
+  <x:String x:Key="DubbingIcon">🎬</x:String>
+  <x:String x:Key="PresetsIcon">⚙️</x:String>
+  <x:String x:Key="LeaderboardIcon">🏆</x:String>
+</ResourceDictionary>

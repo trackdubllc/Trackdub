@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute ref="xml:space" use="default">
+                <xsd:simpleType>
+                  <xsd:restriction base="xsd:NMTOKEN">
+                    <xsd:enumeration value="preserve" />
+                  </xsd:restriction>
+                </xsd:simpleType>
+              </xsd:attribute>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Stage.VAD" xml:space="preserve"><value>Ses Etkinliği Algılama</value></data>
+  <data name="Stage.ASR" xml:space="preserve"><value>Transkripsiyon</value></data>
+  <data name="Stage.Translation" xml:space="preserve"><value>Çeviri</value></data>
+  <data name="Stage.TTS" xml:space="preserve"><value>Konuşma Sentezi</value></data>
+  <data name="Stage.Mixing" xml:space="preserve"><value>Ses Miksajı</value></data>
+  <data name="Status.Idle" xml:space="preserve"><value>Boşta</value></data>
+  <data name="Status.Running" xml:space="preserve"><value>Koşmak…</value></data>
+  <data name="Status.Failed" xml:space="preserve"><value>Başarısız</value></data>
+  <data name="Status.Completed" xml:space="preserve"><value>Tamamlandı</value></data>
+  <data name="Window_Title_Crash" xml:space="preserve"><value>Trackdub — Beklenmedik Hata</value></data>
+  <data name="Crash_Header" xml:space="preserve"><value>Bir sorun oluştu</value></data>
+  <data name="Crash_Subtitle" xml:space="preserve"><value>Trackdub&apos;da beklenmedik bir hata oluştu. Destek almak için aşağıdaki ayrıntıları kopyalayabilir veya günlük klasörünü açabilirsiniz.</value></data>
+  <data name="Crash_Button_Copy" xml:space="preserve"><value>Ayrıntıları kopyala</value></data>
+  <data name="Crash_Button_OpenLogFolder" xml:space="preserve"><value>Günlük klasörünü aç</value></data>
+  <data name="Common_Close" xml:space="preserve"><value>Kapat</value></data>
+  <data name="Settings.Label_Language" xml:space="preserve"><value>Dil</value></data>
+  <data name="Settings.Hint_LanguageRestart" xml:space="preserve"><value>Dil değişikliğinin geçerli olması için yeniden başlatma gerekiyor</value></data>
+  <!--  Transport  -->
+  <data name="Transport.ToolTip_SkipPrevious" xml:space="preserve"><value>Önceki Sayfayı Atla</value></data>
+  <!--  Clippy Assistant  -->
+  <data name="Clippy_Tooltip_AskAssistant" xml:space="preserve"><value>Trackdub asistanına sor</value></data>
+  <data name="Clippy_Text_AskAboutTrackdub" xml:space="preserve"><value>Trackdub hakkında bilgi alın</value></data>
+  <data name="Clippy_Placeholder_WhatDoesStarterPackDo" xml:space="preserve"><value>Bu başlangıç paketi ne işe yarar?</value></data>
+  <data name="Clippy_Button_Ask" xml:space="preserve"><value>Sor</value></data>
+  <data name="Transport.ToolTip_Play" xml:space="preserve"><value>Oyna</value></data>
+  <data name="Transport.ToolTip_Pause" xml:space="preserve"><value>Duraklat</value></data>
+  <data name="Transport.ToolTip_SkipNext" xml:space="preserve"><value>Atla Sonraki</value></data>
+  <data name="Transport.ToolTip_Subtitles" xml:space="preserve"><value>Altyazılar</value></data>
+  <data name="Transport.ToolTip_Karaoke" xml:space="preserve"><value>Karaoke</value></data>
+  <data name="Transport.ToolTip_Bilingual" xml:space="preserve"><value>İki dilli</value></data>
+  <data name="Transport.ToolTip_Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Transport.ToolTip_Mute" xml:space="preserve"><value>Sessize al</value></data>
+  <data name="Transport.ToolTip_Fullscreen" xml:space="preserve"><value>Tam ekran</value></data>
+  <data name="Transport.RetryPreview" xml:space="preserve"><value>Tekrar dene</value></data>
+  <data name="Transport.ToolTip_RetryPreview" xml:space="preserve"><value>Önizlemeyi yeniden dene</value></data>
+  <!--  Titlebar  -->
+  <data name="Titlebar.ToolTip_Undo" xml:space="preserve"><value>Geri Al</value></data>
+  <data name="Titlebar.ToolTip_Redo" xml:space="preserve"><value>Tekrarla</value></data>
+  <data name="Titlebar.ToolTip_NewProject" xml:space="preserve"><value>Yeni proje</value></data>
+  <data name="Titlebar.Label_Recent" xml:space="preserve"><value>Son zamanlarda</value></data>
+  <data name="Titlebar.ToolTip_AIModels" xml:space="preserve"><value>Yapay Zeka Modelleri</value></data>
+  <data name="Titlebar.ToolTip_Settings" xml:space="preserve"><value>Ayarlar</value></data>
+  <data name="Titlebar.ToolTip_CheckForUpdates" xml:space="preserve"><value>Güncellemeleri kontrol edin</value></data>
+  <data name="Titlebar.ToolTip_DIAG" xml:space="preserve"><value>Teşhis</value></data>
+  <data name="Titlebar.ToolTip_BENCH" xml:space="preserve"><value>Karşılaştırma Testleri</value></data>
+  <data name="Titlebar.Label_Update" xml:space="preserve"><value>UPD</value></data>
+  <data name="Titlebar.ToolTip_Minimize" xml:space="preserve"><value>Küçült</value></data>
+  <data name="Titlebar.ToolTip_Maximize" xml:space="preserve"><value>Maksimize et</value></data>
+  <data name="Titlebar.ToolTip_Close" xml:space="preserve"><value>Kapat</value></data>
+  <data name="StatusBar.Engine" xml:space="preserve"><value>Motor:</value></data>
+  <data name="StatusBar.Local" xml:space="preserve"><value>Yerel</value></data>
+  <data name="StatusBar.Gpu" xml:space="preserve"><value>GPU:</value></data>
+  <data name="StatusBar.Settings" xml:space="preserve"><value>Ayarlar</value></data>
+  <data name="StatusBar.StarterPacks" xml:space="preserve"><value>Başlangıç paketleri</value></data>
+  <data name="Menu.File" xml:space="preserve"><value>Dosya</value></data>
+  <data name="Menu.Project" xml:space="preserve"><value>Proje</value></data>
+  <data name="Menu.Media" xml:space="preserve"><value>Medya</value></data>
+  <data name="Menu.View" xml:space="preserve"><value>Görüntüle</value></data>
+  <data name="Menu.Window" xml:space="preserve"><value>Pencere</value></data>
+  <data name="Menu.Help" xml:space="preserve"><value>Yardım</value></data>
+  <data name="Menu.File.NewFromMedia" xml:space="preserve"><value>Medyadan son haberler…</value></data>
+  <data name="Menu.File.OpenProject" xml:space="preserve"><value>Projeyi aç…</value></data>
+  <data name="Menu.File.Save" xml:space="preserve"><value>Kaydet</value></data>
+  <data name="Menu.File.CloseProject" xml:space="preserve"><value>Projeyi kapat</value></data>
+  <data name="Menu.File.Exit" xml:space="preserve"><value>Çıkış</value></data>
+  <data name="Menu.Project.AIModels" xml:space="preserve"><value>Yapay Zeka Modelleri…</value></data>
+  <data name="Menu.Project.Settings" xml:space="preserve"><value>Ayarlar…</value></data>
+  <data name="Menu.Media.Import" xml:space="preserve"><value>Medya dosyasını içe aktar…</value></data>
+  <data name="MediaPicker.WindowRequired" xml:space="preserve"><value>Medya seçiciyi açmadan önce bir pencere açılması gerekir.</value></data>
+  <data name="MediaPicker.LocalPathRequired" xml:space="preserve"><value>Seçilen dosyanın yerel yolu çözümlenemedi. Medya dosyasını yerel bir klasöre kopyalayın ve tekrar deneyin.</value></data>
+  <data name="MediaPicker.ImportNoLocalPaths" xml:space="preserve"><value>Seçilen dosyaların yerel yolları çözümlenemedi. Medya dosyalarını yerel bir klasöre kopyalayın ve tekrar deneyin.</value></data>
+  <data name="MediaPicker.ImportSkippedNoLocalPath" xml:space="preserve"><value>{0} Seçilen dosya(lar), yerel yol bulunmadığı için içe aktarılamadı.</value></data>
+  <data name="MediaPicker.ImportMediaFiles.Title" xml:space="preserve"><value>Medya Dosyalarını İçe Aktar</value></data>
+  <data name="MediaPicker.ImportMediaFiles.MediaFilesFilter" xml:space="preserve"><value>Medya Dosyaları</value></data>
+  <data name="MediaPicker.ImportMediaFiles.AllFilesFilter" xml:space="preserve"><value>Tüm Dosyalar</value></data>
+  <data name="ProjectPicker.WindowRequired" xml:space="preserve"><value>Proje seçiciyi açmadan önce bir pencere açılması gerekmektedir.</value></data>
+  <data name="Menu.View.ToggleLeftPanel" xml:space="preserve"><value>Sol paneli aç/kapat</value></data>
+  <data name="Menu.View.ToggleRightPanel" xml:space="preserve"><value>Sağ paneli aç/kapat</value></data>
+  <data name="Menu.View.ToggleTimeline" xml:space="preserve"><value>Zaman çizelgesini aç/kapat</value></data>
+  <data name="Menu.View.ToggleExportPanel" xml:space="preserve"><value>Dışa aktarma panelini aç/kapat</value></data>
+  <data name="Menu.View.ToggleSubtitles" xml:space="preserve"><value>Altyazıları aç/kapat</value></data>
+  <data name="Menu.Window.Minimize" xml:space="preserve"><value>Küçült</value></data>
+  <data name="Menu.Window.Maximize" xml:space="preserve"><value>Maksimize Et / Eski Hali&apos;ne Dön</value></data>
+  <data name="Menu.Help.CheckForUpdates" xml:space="preserve"><value>Güncellemeleri kontrol edin</value></data>
+  <data name="Menu.Help.Diagnostics" xml:space="preserve"><value>Teşhis bilgilerini dışa aktar…</value></data>
+  <data name="Menu.Help.Benchmarks" xml:space="preserve"><value>Karşılaştırma Testleri</value></data>
+  <data name="Menu.Help.StarterPacks" xml:space="preserve"><value>Başlangıç paketleri…</value></data>
+  <data name="Menu.Help.About" xml:space="preserve"><value>Hakkında…</value></data>
+  <!--  Speakers  -->
+  <data name="Speakers.Header" xml:space="preserve"><value>Sesler ve Konuşmacılar</value></data>
+  <data name="Speakers.EmptyState" xml:space="preserve"><value>Henüz konuşmacı algılanmadı. Öncelikle transkripsiyon ve konuşmacı tanımlama işlemlerini çalıştırın.</value></data>
+  <data name="Speakers.GenerateAll" xml:space="preserve"><value>Hepsini oluştur</value></data>
+  <data name="Speakers.Count" xml:space="preserve"><value>{0} konuşmacılar</value></data>
+  <!--  Speaker  -->
+  <data name="Speaker.RenameTip" xml:space="preserve"><value>Hoparlörün adını değiştir</value></data>
+  <data name="Speaker.ConfirmRenameTip" xml:space="preserve"><value>Ad değişikliğini onayla</value></data>
+  <data name="Speaker.CancelRenameTip" xml:space="preserve"><value>Adı değiştirme işlemini iptal et</value></data>
+  <data name="Speaker.NewNamePlaceholder" xml:space="preserve"><value>Yeni isim...</value></data>
+  <data name="Speaker.SyntheticVoice" xml:space="preserve"><value>Sentetik ses</value></data>
+  <data name="Speaker.CloneVoice" xml:space="preserve"><value>Bu sesi kopyala</value></data>
+  <data name="Speaker.SelectVoicePlaceholder" xml:space="preserve"><value>Ses seçin...</value></data>
+  <data name="Speaker.AssignVoice" xml:space="preserve"><value>Ses atama</value></data>
+  <data name="Speaker.PreviewVoice" xml:space="preserve"><value>Ses önizlemesi</value></data>
+  <data name="Speaker.NoReferenceClip" xml:space="preserve"><value>Henüz bir referans klip yok</value></data>
+  <data name="Speaker.ExtractAutoClip" xml:space="preserve"><value>Otomatik klibi ayıkla</value></data>
+  <data name="Speaker.ExtractAutoClipTip" xml:space="preserve"><value>Günlüğe kaydedilmiş turlardan referans sesini ayıklama</value></data>
+  <data name="Speaker.UploadReference" xml:space="preserve"><value>Referansı yükle</value></data>
+  <data name="Speaker.UploadReferenceTip" xml:space="preserve"><value>Ses klonlama için referans ses dosyasını yükleyin</value></data>
+  <data name="Speaker.StaleTtsWarning" xml:space="preserve"><value>⚠ TTS verileri güncel değil — sesi yeniden atadıktan sonra yeniden oluşturun.</value></data>
+  <data name="Speaker.RegenerateStaleDub" xml:space="preserve"><value>Eski dub&apos;ı yeniden oluştur</value></data>
+  <data name="Speaker.Generating" xml:space="preserve"><value>Oluşturuluyor...</value></data>
+  <data name="Speaker.PreviewDubTip" xml:space="preserve"><value>Bu konuşmacı için tamamlanan ilk dublaj kaydını önizleyin</value></data>
+  <data name="Speaker.MergeInto" xml:space="preserve"><value>Şuraya birleştir:</value></data>
+  <data name="Speaker.SelectTargetPlaceholder" xml:space="preserve"><value>Hedef seçin...</value></data>
+  <data name="Speaker.Merge" xml:space="preserve"><value>Birleştir</value></data>
+  <data name="Speaker.MergeTip" xml:space="preserve"><value>Bu konuşmacıyı seçilen hedefe birleştir (bu konuşmacı kaldırılır)</value></data>
+  <!--  Timeline  -->
+  <data name="Timeline.Title" xml:space="preserve"><value>Zaman Çizelgesi</value></data>
+  <data name="Timeline.SplitTip" xml:space="preserve"><value>Oynatma İşaretinde Böl (S)</value></data>
+  <data name="Timeline.MergeTip" xml:space="preserve"><value>Seçili Klipleri Birleştir</value></data>
+  <data name="Timeline.TrimTip" xml:space="preserve"><value>Seçili Kısma</value></data>
+  <data name="Timeline.DeleteTip" xml:space="preserve"><value>Seçilenleri Sil (Del)</value></data>
+  <data name="Timeline.ZoomOutTip" xml:space="preserve"><value>Uzaklaştır</value></data>
+  <data name="Timeline.ZoomInTip" xml:space="preserve"><value>Yakınlaştır</value></data>
+  <data name="Timeline.CollapseTip" xml:space="preserve"><value>Zaman Çizelgesini Daralt</value></data>
+  <data name="Timeline.Reference" xml:space="preserve"><value>Kaynak</value></data>
+  <data name="Timeline.MuteTip" xml:space="preserve"><value>Sessize Al (yakında)</value></data>
+  <data name="Timeline.SoloTip" xml:space="preserve"><value>Solo (yakında)</value></data>
+  <!--  Pipeline  -->
+  <data name="Pipeline.Header" xml:space="preserve"><value>Koordinatör iş akışı</value></data>
+  <data name="Pipeline.Col_Job" xml:space="preserve"><value>İş</value></data>
+  <data name="Pipeline.Col_Stage" xml:space="preserve"><value>Sahne</value></data>
+  <data name="Pipeline.Col_Progress" xml:space="preserve"><value>İlerleme</value></data>
+  <data name="Pipeline.Col_Detail" xml:space="preserve"><value>Ayrıntılar</value></data>
+  <data name="Pipeline.StarterPack" xml:space="preserve"><value>Başlangıç paketi</value></data>
+  <data name="Pipeline.StarterPack_Placeholder" xml:space="preserve"><value>Başlangıç paketi</value></data>
+  <data name="Pipeline.RunSelectedStages" xml:space="preserve"><value>Seçilenleri çalıştır</value></data>
+  <data name="Pipeline.CommercialOnly" xml:space="preserve"><value>Yalnızca ticari kullanım</value></data>
+  <data name="Pipeline.ConfigHeader" xml:space="preserve"><value>BORU HATTI YAPILANDIRMASI</value></data>
+  <data name="Pipeline.Config" xml:space="preserve"><value>Yapılandırma</value></data>
+  <data name="Pipeline.StemSeparation" xml:space="preserve"><value>Gövde ayrılması</value></data>
+  <data name="Pipeline.StemSeparation_Tip" xml:space="preserve"><value>Transkripsiyondan önce vokalleri arka plan sesinden ayırın</value></data>
+  <data name="Pipeline.AudioCleanup" xml:space="preserve"><value>Ses temizleme</value></data>
+  <data name="Pipeline.AudioCleanup_Tip" xml:space="preserve"><value>Gürültü giderme ve ses temizleme işlemini uygula (ayırma işlemi başarılı olduğunda otomatik olarak atlanır)</value></data>
+  <data name="Pipeline.SpeakerDiarization" xml:space="preserve"><value>Konuşmacı Günlüğü Oluşturma</value></data>
+  <data name="Pipeline.SpeakerDiarization_Tip" xml:space="preserve"><value>Ses kaydındaki farklı konuşmacıları belirleyin</value></data>
+  <data name="Pipeline.Voice" xml:space="preserve"><value>Ses</value></data>
+  <data name="Pipeline.Voice_Tip" xml:space="preserve"><value>Dublaj seslendirmecileri için seslendirme stratejisi</value></data>
+  <data name="Pipeline.VoiceOption_Manual" xml:space="preserve"><value>Kılavuz</value></data>
+  <data name="Pipeline.VoiceOption_KokoroDefaults" xml:space="preserve"><value>Kokoro&apos;nun varsayılan ayarları</value></data>
+  <data name="Pipeline.VoiceOption_AutoClone" xml:space="preserve"><value>Otomatik klonlama</value></data>
+  <data name="Pipeline.RunAllStages" xml:space="preserve"><value>Tüm aşamaları çalıştır</value></data>
+  <data name="Pipeline.RunTranscriptToDub" xml:space="preserve"><value>Dublaj için çalıştır</value></data>
+  <data name="Pipeline.Options" xml:space="preserve"><value>Seçenekler</value></data>
+  <data name="Pipeline.Model" xml:space="preserve"><value>Model</value></data>
+  <data name="Pipeline.NotDownloaded" xml:space="preserve"><value>⚠ İndirilmedi</value></data>
+  <data name="Pipeline.NoApiKey" xml:space="preserve"><value>⚠ API anahtarı yok</value></data>
+  <data name="Pipeline.ExecutionProvider" xml:space="preserve"><value>Yürütme sağlayıcısı</value></data>
+  <data name="Pipeline.SeparateOnImport" xml:space="preserve"><value>İçe aktarma sırasında vokal ve ortam seslerini ayırma</value></data>
+  <data name="Pipeline.SeparateOnImport_Hint" xml:space="preserve"><value>Yeniden çalıştırma işlemi, seçilen ayırma modelini kullanır.</value></data>
+  <data name="Pipeline.SeparationOptionalHint" xml:space="preserve"><value>Sıra açma/kapama düğmesini kullanarak serilere ayırma ekleyin.</value></data>
+  <data name="Pipeline.CleanupHint" xml:space="preserve"><value>“Çalıştır” düğmesine tıkladığınızda, konuşma iyileştirme işlemi temizleme aşamasının bir parçası olarak yürütülür.</value></data>
+  <data name="Pipeline.AsrHint" xml:space="preserve"><value>İş akışının en üstünde yer alan Ticari Güvenli Mod, model seçeneklerini lisanslı ve güvenli varsayılan ayarlarla sınırlar.</value></data>
+  <data name="Pipeline.EnableAsrTextPolish" xml:space="preserve"><value>Transkripsiyon sonrası Lehçe ASR metni</value></data>
+  <data name="Pipeline.EnableAsrTextPolish_Hint" xml:space="preserve"><value>İşlenmemiş ASR segmentlerinde isteğe bağlı noktalama ve dilbilgisi düzeltmesi. Metin iyileştirme GenAI modeli gereklidir.</value></data>
+  <data name="Pipeline.TextRefinementAsrHint" xml:space="preserve"><value>Çalışmalara ASR düzeltmelerini dahil etmek için satır açma/kapama düğmesini kullanın.</value></data>
+  <data name="Pipeline.DetectSpeakersOnImport" xml:space="preserve"><value>İçe aktarma sırasında hoparlörleri algıla</value></data>
+  <data name="Pipeline.DiarizationHint" xml:space="preserve"><value>Identify, transkripsiyon işleminin ardından konuşmacıları transkript bölümlerine atar.</value></data>
+  <data name="Pipeline.OverlapRescueHint" xml:space="preserve"><value>“Overlap Speech Rescue” yöntemi, üst üste binen diyalogları kaynak adaylarına (henüz doğrulanmamış konuşmacılar) ayırır. Üst üste binen konuşma sıraları tespit edildiğinde, bu işlem “Diarization” aşamasından sonra gerçekleştirilir.</value></data>
+  <data name="Pipeline.OverlapRescueModel" xml:space="preserve"><value>Örtüşmeli kurtarma modeli</value></data>
+  <data name="Pipeline.OverlapRescueExecutionProvider" xml:space="preserve"><value>Örtüşme kurtarma yürütme sağlayıcısı</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe" xml:space="preserve"><value>Kurtarma işleminden sonra kaynak adaylarını yeniden transkribe edin</value></data>
+  <data name="Pipeline.OverlapRescueRetranscribe_Hint" xml:space="preserve"><value>Her bir ayrılmış aday üzerinde ASR&apos;yi çalıştırır ve sonuçları inceleme için işaretler.</value></data>
+  <data name="Pipeline.RunOverlapRescue" xml:space="preserve"><value>Çakışmalı kurtarma işlemi gerçekleştir</value></data>
+  <data name="Pipeline.OverlapRescueReviewHeader" xml:space="preserve"><value>Kaynak adayları</value></data>
+  <data name="Pipeline.OverlapRescueReviewBadge" xml:space="preserve"><value>İnceleme</value></data>
+  <data name="Pipeline.TranslationConfiguredAbove" xml:space="preserve"><value>Kaynak ve hedef yukarıda yapılandırılmıştır.</value></data>
+  <data name="Pipeline.ApplyTargetLanguage" xml:space="preserve"><value>Seçilen hedef dili uygula</value></data>
+  <data name="Pipeline.TtsHint" xml:space="preserve"><value>“Sesler” panelinde Kokoro seslerini atayın, ardından “Dub” işlevini çalıştırarak kayıtlar oluşturun.</value></data>
+  <data name="Pipeline.LipSyncHint" xml:space="preserve"><value>Yukarıda seçilen zorla hizalama modelini kullanarak, dublajlı sesi dudak hareketleriyle senkronize edin ve uzatın.</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesis" xml:space="preserve"><value>Video dudak senkronizasyonu gerçekleştiriliyor…</value></data>
+  <data name="Pipeline.Status_RunningLipSynthesisExperimental" xml:space="preserve"><value>Video dudak senkronizasyonu çalıştırılıyor (deneysel)…</value></data>
+  <data name="Pipeline.LipSynthesisHint" xml:space="preserve"><value>Video dudak senkronizasyonu (LatentSync ~6,7 GB + yüz modelleri). Video, dublajlı miks ve konuşmacı sıraları gereklidir. Çalıştırmadan önce modelleri indirin.</value></data>
+  <data name="Pipeline.ExportHint" xml:space="preserve"><value>Zaman çizelgesinin altındaki Dışa Aktar panelinde miks seviyelerini ve dışa aktarma biçimini ayarlayın.</value></data>
+  <data name="Pipeline.OpenExportPanel" xml:space="preserve"><value>İhracat panelini aç</value></data>
+  <!--  RunConfig  -->
+  <data name="RunConfig.Header" xml:space="preserve"><value>ÇALIŞTIRMA AYARLARI</value></data>
+  <data name="RunConfig.Source" xml:space="preserve"><value>Kaynak</value></data>
+  <data name="RunConfig.TranslateTo" xml:space="preserve"><value>Şuna çevir:</value></data>
+  <data name="RunConfig.TargetLanguage_Placeholder" xml:space="preserve"><value>Hedef dil</value></data>
+  <!--  Export  -->
+  <data name="Export.Header" xml:space="preserve"><value>Dışa Aktar ve Karıştır</value></data>
+  <data name="Export.MixLabel" xml:space="preserve"><value>MIX</value></data>
+  <data name="Export.Src" xml:space="preserve"><value>Src</value></data>
+  <data name="Export.Src_Tip" xml:space="preserve"><value>Kaynak ses kazancı (dB)</value></data>
+  <data name="Export.Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Export.Dub_Tip" xml:space="preserve"><value>Ses yükseltme (dB)</value></data>
+  <data name="Export.Duck" xml:space="preserve"><value>Ördek</value></data>
+  <data name="Export.Duck_Tip" xml:space="preserve"><value>Kaynak ses seviyesinin düşürülmesi (dB)</value></data>
+  <data name="Export.Timbre" xml:space="preserve"><value>Tını</value></data>
+  <data name="Export.Timbre_Tip" xml:space="preserve"><value>Dublajlı konuşmaya tını eşleştirme uygulayın</value></data>
+  <data name="Export.Pan" xml:space="preserve"><value>Tava</value></data>
+  <data name="Export.Pan_Tip" xml:space="preserve"><value>Orijinal stereo panlamayı geri yükle</value></data>
+  <data name="Export.ExportLabel" xml:space="preserve"><value>İHRACAT</value></data>
+  <data name="Export.BurnIn" xml:space="preserve"><value>Yanma süresi</value></data>
+  <data name="Export.BurnIn_Tip" xml:space="preserve"><value>Altyazıları video akışına kazımak</value></data>
+  <data name="Export.SubtitleSource_Tip" xml:space="preserve"><value>Altyazı metni kaynağı</value></data>
+  <data name="Export.Container_Tip" xml:space="preserve"><value>Çıktı kabı</value></data>
+  <data name="Export.Lufs_Tip" xml:space="preserve"><value>Hedef ses yüksekliği (LUFS)</value></data>
+  <data name="Export.Match" xml:space="preserve"><value>Maç</value></data>
+  <data name="Export.Match_Tip" xml:space="preserve"><value>Ses seviyesini orijinal kaynağa uyarlayın</value></data>
+  <data name="Export.ExportButton" xml:space="preserve"><value>Dışa Aktar</value></data>
+  <!--  Crash  -->
+  <data name="Crash.ExportDiagnostics" xml:space="preserve"><value>Teşhis verilerini dışa aktar</value></data>
+  <!--  Dialog  -->
+  <data name="Dialog.VendorLicense_Title" xml:space="preserve"><value>Satıcı Lisansı</value></data>
+  <data name="Dialog.VendorLicense_Acceptance" xml:space="preserve"><value>“Kabul ediyorum” seçeneğine tıklayarak, bu kurulumla ilgili kullanım koşullarını incelediğinizi ve kabul ettiğinizi teyit etmiş olursunuz.</value></data>
+  <data name="Dialog.VendorLicense_Accept" xml:space="preserve"><value>Kabul ediyorum</value></data>
+  <data name="Dialog.SpeakerDetection_Title" xml:space="preserve"><value>Konuşmacı Algılama</value></data>
+  <data name="Dialog.SpeakerDetection_UseSingle" xml:space="preserve"><value>Tek bir hoparlör kullanın</value></data>
+  <data name="Dialog.SpeakerDetection_Download" xml:space="preserve"><value>Şimdi indirin</value></data>
+  <data name="Dialog.ModelNotReady_Title" xml:space="preserve"><value>Model mevcut değil</value></data>
+  <data name="Dialog.ModelSetup_Title" xml:space="preserve"><value>Model Kurulumu</value></data>
+  <data name="Dialog.FallbackVoice_Title" xml:space="preserve"><value>Yedek sesler kullanılmalı mı?</value></data>
+  <data name="Dialog.FallbackVoice_Message" xml:space="preserve"><value>Bazı konuşmacılara bir ses atanmamıştır. Trackdub, yalnızca bu nesil için, atanmamış her konuşmacıya ilk uyumlu Kokoro sesini kullanacaktır.</value></data>
+  <data name="Dialog.FallbackVoice_Confirm" xml:space="preserve"><value>Yedek seslerle oluştur</value></data>
+  <!--  Glossary  -->
+  <data name="Glossary.Header" xml:space="preserve"><value>Terimler Sözlüğü</value></data>
+  <data name="Glossary.ProjectHeader" xml:space="preserve"><value>Proje sözlüğü</value></data>
+  <data name="Glossary.AddTerm" xml:space="preserve"><value>+ Terim ekle</value></data>
+  <data name="Glossary.TermCount" xml:space="preserve"><value>{0} terimler</value></data>
+  <data name="Glossary.Loading" xml:space="preserve"><value>Yükleniyor…</value></data>
+  <data name="Glossary.SourceTerm_Placeholder" xml:space="preserve"><value>Kaynak terimi</value></data>
+  <data name="Glossary.TargetTerm_Placeholder" xml:space="preserve"><value>Hedef terim</value></data>
+  <data name="Glossary.CaseSensitive" xml:space="preserve"><value>Büyük/küçük harf duyarlı</value></data>
+  <data name="Glossary.DeleteTerm_Tip" xml:space="preserve"><value>Terimi sil</value></data>
+  <data name="Glossary.Scope.Project" xml:space="preserve"><value>Proje</value></data>
+  <data name="Glossary.Scope.Global" xml:space="preserve"><value>Küresel</value></data>
+  <data name="Glossary.Scope.GlobalBadge" xml:space="preserve"><value>Küresel</value></data>
+  <data name="Glossary.NoteLine_GlobalCaseSensitive" xml:space="preserve"><value>Global · büyük/küçük harf duyarlı</value></data>
+  <data name="Glossary.ImportCsv" xml:space="preserve"><value>CSV&apos;yi İçe Aktar</value></data>
+  <!--  MediaBin  -->
+  <data name="MediaBin.Header" xml:space="preserve"><value>Medya</value></data>
+  <data name="MediaBin.Context_ProjectWide" xml:space="preserve"><value>Proje bağlamı</value></data>
+  <data name="MediaBin.Import" xml:space="preserve"><value>İthalat</value></data>
+  <data name="MediaBin.Import_Tip" xml:space="preserve"><value>Medya dosyalarını içe aktar</value></data>
+  <data name="MediaBin.NewProjectImport" xml:space="preserve"><value>Yeni proje içe aktarma</value></data>
+  <data name="MediaBin.DetectSpeakers" xml:space="preserve"><value>Hoparlörleri algıla</value></data>
+  <data name="MediaBin.SeparateVocals" xml:space="preserve"><value>Vokalleri ve ortam seslerini ayırma</value></data>
+  <data name="MediaBin.ImportHint" xml:space="preserve"><value>Bu ağacı doldurmak için medya dosyalarını içe aktarın veya bir proje oluşturun.</value></data>
+  <data name="MediaBin.EmptyTreeHint" xml:space="preserve"><value>Henüz sap yok</value></data>
+  <data name="Timeline.CollapsedEmptyHint" xml:space="preserve"><value>Parçaları görmek için genişletin · içeriği doldurmak için medya dosyasını buraya sürükleyin</value></data>
+  <data name="Inspector.EmptyShort" xml:space="preserve"><value>İncelenecek bir segment seçin</value></data>
+  <data name="Transcript.EmptySegments" xml:space="preserve"><value>Henüz bölüm yok. Bu listeyi doldurmak için transkripsiyon işlemini çalıştırın.</value></data>
+  <data name="MediaBin.Tab_Source" xml:space="preserve"><value>Kaynak</value></data>
+  <data name="MediaBin.Tab_Generated" xml:space="preserve"><value>Oluşturuldu</value></data>
+  <data name="Navigator.Section.SourceMedia" xml:space="preserve"><value>Kaynak Medya</value></data>
+  <data name="Navigator.Section.Transcript" xml:space="preserve"><value>Transkript</value></data>
+  <data name="Navigator.Section.Speakers" xml:space="preserve"><value>Konuşmacılar</value></data>
+  <data name="Navigator.Section.Voices" xml:space="preserve"><value>Sesler</value></data>
+  <data name="Navigator.Section.GeneratedAudio" xml:space="preserve"><value>Oluşturulmuş Ses</value></data>
+  <data name="Navigator.Section.Mixes" xml:space="preserve"><value>Karışımlar</value></data>
+  <data name="Navigator.Section.Exports" xml:space="preserve"><value>İhracat</value></data>
+  <data name="Navigator.Empty.SourceMedia" xml:space="preserve"><value>Bu bölümü doldurmak için kaynak medyayı içe aktarın.</value></data>
+  <data name="Navigator.Empty.Transcript" xml:space="preserve"><value>Transkripsiyon işlemini çalıştırarak transkript segmentleri oluşturun.</value></data>
+  <data name="Navigator.Empty.Speakers" xml:space="preserve"><value>Transkripsiyonun ardından Diarization işlemini çalıştırın veya konuşmacıları belirleyin.</value></data>
+  <data name="Navigator.Empty.Voices" xml:space="preserve"><value>Ses paneli&apos;nde hoparlörlere sesler atayın.</value></data>
+  <data name="Navigator.Empty.GeneratedAudio" xml:space="preserve"><value>Burada, TTS ile oluşturulan ve işleme sırasında ortaya çıkan kusurlar görüntülenir.</value></data>
+  <data name="Navigator.Empty.Mixes" xml:space="preserve"><value>Önizleme miksleri, dışa aktarma veya miksleme aşamalarının ardından burada görüntülenir.</value></data>
+  <data name="Navigator.Empty.Exports" xml:space="preserve"><value>Son ihracat verileri, ihracat aşamasının ardından burada görüntülenir.</value></data>
+  <data name="FloatingMonitor.Title" xml:space="preserve"><value>Video monitörü</value></data>
+  <data name="FloatingMonitor.Hide" xml:space="preserve"><value>Monitörü gizle</value></data>
+  <data name="FloatingMonitor.NoVideo" xml:space="preserve"><value>Henüz video karesi yok</value></data>
+  <data name="Transport.ToolTip_PipMonitor" xml:space="preserve"><value>Resim içinde resim video monitörünü aç/kapat</value></data>
+  <!--  Segment  -->
+  <data name="Segment.Start" xml:space="preserve"><value>Başlangıç</value></data>
+  <data name="Segment.End" xml:space="preserve"><value>Son</value></data>
+  <data name="Segment.Duration" xml:space="preserve"><value>Süre</value></data>
+  <data name="Segment.Speaker" xml:space="preserve"><value>Konuşmacı</value></data>
+  <data name="Segment.Source" xml:space="preserve"><value>Kaynak</value></data>
+  <data name="Segment.VoiceCandidates" xml:space="preserve"><value>Ses Adayları</value></data>
+  <data name="Segment.VoiceCandidates_Hint" xml:space="preserve"><value>A/B önizlemesi için ses seçenekleri oluşturmak üzere “Oluştur” düğmesine tıklayın</value></data>
+  <data name="Segment.GenerateCandidates" xml:space="preserve"><value>Adaylar Oluştur</value></data>
+  <data name="Segment.LipSyncAlign" xml:space="preserve"><value>HİZALA</value></data>
+  <data name="Segment.LipSynthesisRepair" xml:space="preserve"><value>ONARIM</value></data>
+  <data name="Segment.Review" xml:space="preserve"><value>İNCELEME</value></data>
+  <data name="Segment.SaveSettings" xml:space="preserve"><value>Ayarları kaydet</value></data>
+  <data name="Segment.GenerateDub" xml:space="preserve"><value>Dub oluştur</value></data>
+  <data name="Segment.Regenerate" xml:space="preserve"><value>Yeniden Oluştur</value></data>
+  <data name="Segment.MatchTiming" xml:space="preserve"><value>Maç süresi</value></data>
+  <data name="Segment.Runtime.Dub" xml:space="preserve"><value>Dub çalışma süresi</value></data>
+  <data name="Segment.Runtime.Translation" xml:space="preserve"><value>Çeviri çalışma zamanı</value></data>
+  <data name="Segment.Runtime.Transcription" xml:space="preserve"><value>Transkripsiyon süresi</value></data>
+  <data name="Segment.Runtime.Alignment" xml:space="preserve"><value>Dudak senkronizasyonu çalışma süresi</value></data>
+  <data name="Segment.Runtime.Provider" xml:space="preserve"><value>Sağlayıcı</value></data>
+  <data name="Segment.Runtime.Model" xml:space="preserve"><value>Model</value></data>
+  <data name="Segment.Runtime.Precision" xml:space="preserve"><value>Hassasiyet</value></data>
+  <!--  ApiKeys  -->
+  <data name="Window_Title_ApiKeys" xml:space="preserve"><value>API Anahtarları</value></data>
+  <data name="Chrome_Minimize" xml:space="preserve"><value>Küçült</value></data>
+  <data name="Chrome_MaximizeRestore" xml:space="preserve"><value>Maksimize Et / Eski Hali&apos;ne Dön</value></data>
+  <data name="Chrome_Close" xml:space="preserve"><value>Kapat</value></data>
+  <data name="Api_Tooltip_ToggleReveal" xml:space="preserve"><value>Anahtarı göster / gizle</value></data>
+  <data name="Common_Save" xml:space="preserve"><value>Kaydet</value></data>
+  <data name="Common_Clear" xml:space="preserve"><value>Temizle</value></data>
+  <data name="Api_Footer_MoreProviders" xml:space="preserve"><value>Yakında daha fazla hizmet sağlayıcı eklenecek</value></data>
+  <data name="Api_Footer_StorageSecurity" xml:space="preserve"><value>Depolama ve Güvenlik</value></data>
+  <!--  Common  -->
+  <data name="Common.Save" xml:space="preserve"><value>Kaydet</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>İptal et</value></data>
+  <data name="Common.Close" xml:space="preserve"><value>Kapat</value></data>
+  <data name="Common.Add" xml:space="preserve"><value>Ekle</value></data>
+  <data name="Common.Segments" xml:space="preserve"><value>segmentler</value></data>
+  <data name="Common.DownloadFfmpeg" xml:space="preserve"><value>FFmpeg&apos;i indir</value></data>
+  <data name="Common.DropVideoPlaceholder" xml:space="preserve"><value>Bir video ekleyin veya medyadan başlayın</value></data>
+  <data name="Common.NewFromMedia" xml:space="preserve"><value>Medyadan son haberler</value></data>
+  <data name="Common.OpenProject" xml:space="preserve"><value>Projeyi aç</value></data>
+  <data name="Common.Transcript" xml:space="preserve"><value>Transkript</value></data>
+  <data name="Transcript.AllSegments" xml:space="preserve"><value>Tüm segmentler</value></data>
+  <data name="Common.CollapseRightPanel_Tip" xml:space="preserve"><value>Sağ paneli daralt</value></data>
+  <data name="Common.ChannelStrip" xml:space="preserve"><value>Kanal şeridi</value></data>
+  <data name="Common.ExpandChannelStrip_Tip" xml:space="preserve"><value>Kanal şeridini genişlet</value></data>
+  <data name="Common.CollapseChannelStrip_Tip" xml:space="preserve"><value>Kanal şeridini daralt</value></data>
+  <!--  LeftPanel stage tooltips  -->
+  <data name="Common.Stage_Separation" xml:space="preserve"><value>Ayrılık</value></data>
+  <data name="Common.Stage_Cleanup" xml:space="preserve"><value>Temizlik</value></data>
+  <data name="Common.Stage_Transcribe" xml:space="preserve"><value>Transkripsiyon</value></data>
+  <data name="Common.Stage_Identify" xml:space="preserve"><value>Belirlemek</value></data>
+  <data name="Common.Stage_Translate" xml:space="preserve"><value>Çevir</value></data>
+  <data name="Common.Stage_Dub" xml:space="preserve"><value>Dub</value></data>
+  <data name="Common.Stage_Export" xml:space="preserve"><value>Dışa Aktar</value></data>
+  <!--  MiniPreviewPlayer  -->
+  <data name="MiniPlayer.NoFileLoaded" xml:space="preserve"><value>Dosya yüklenmedi</value></data>
+  <data name="MiniPlayer.CannotPlayFile" xml:space="preserve"><value>⚠ Dosya oynatılamıyor</value></data>
+  <data name="MiniPlayer.UnsupportedFormat" xml:space="preserve"><value>Desteklenmeyen biçim</value></data>
+  <data name="MiniPlayer.PlayPauseTip" xml:space="preserve"><value>Oynat/Duraklat</value></data>
+  <!--  Settings - General  -->
+  <data name="Settings.Title" xml:space="preserve"><value>Ayarlar</value></data>
+  <data name="Settings.Tab_General" xml:space="preserve"><value>Genel</value></data>
+  <data name="Settings.Heading_General" xml:space="preserve"><value>Genel Ayarlar</value></data>
+  <data name="Settings.Label_Theme" xml:space="preserve"><value>Görünüm — Tema</value></data>
+  <data name="Settings.Hint_Theme" xml:space="preserve"><value>Tema değişiklikleri anında geçerli olur ve sistem yeniden başlatıldığında da korunur.</value></data>
+  <!--  Update  -->
+  <data name="Update.BannerMessage" xml:space="preserve"><value>Trackdub {0} ({1}) kullanıma hazırdır</value></data>
+  <data name="Update.Banner_Subtitle" xml:space="preserve"><value>Trackdub&apos;ın yeni sürümü indirilmeye hazır.</value></data>
+  <data name="Update.Button_ReleaseNotes" xml:space="preserve"><value>Sürüm Notları</value></data>
+  <data name="Update.Download" xml:space="preserve"><value>İndir</value></data>
+  <data name="Settings.Label_UpdateChannel" xml:space="preserve"><value>Güncelleme kanalı</value></data>
+  <data name="Settings.Hint_UpdateChannel" xml:space="preserve"><value>Stable sürümü, test edilmiş sürümleri içerir. Preview sürümü ise yakında çıkacak özelliklere erken erişim imkânı sunar.</value></data>
+  <data name="Settings.Label_ModelTier" xml:space="preserve"><value>Model Seviyesi</value></data>
+  <data name="Settings.Hint_CommercialOnly" xml:space="preserve"><value>Trackdub, yalnızca ticari kullanım için uygun paketlenmiş modelleri sunmaktadır. İthal edilen ticari olmayan modeller ise engelli durumdadır.</value></data>
+  <data name="Settings.Label_AsrEngine" xml:space="preserve"><value>ASR Motoru</value></data>
+  <data name="Settings.Label_TranslationEngine" xml:space="preserve"><value>Çeviri Motoru</value></data>
+  <data name="Settings.Label_VoiceSynthesisEngine" xml:space="preserve"><value>Ses Sentez Motoru</value></data>
+  <data name="Settings.Label_StemSeparationEngine" xml:space="preserve"><value>Sap Ayırma Motoru</value></data>
+  <data name="Settings.Label_RubberbandStretch" xml:space="preserve"><value>TTS Zamanlama — Lastik Bandı Germe</value></data>
+  <data name="Settings.Label_ReduceMotion" xml:space="preserve"><value>Hareketi azaltın</value></data>
+  <data name="Settings.Hint_ReduceMotion" xml:space="preserve"><value>Pipeline aşamasındaki vurgu şeritlerinin hareketli nefes nabzını devre dışı bırakır.</value></data>
+  <data name="Settings.Label_StretchThreshold" xml:space="preserve"><value>Esneme Eşiği</value></data>
+  <data name="Settings.Label_ExportFormat" xml:space="preserve"><value>Dışa Aktarım Biçimi</value></data>
+  <data name="Settings.Label_ExportSubtitles" xml:space="preserve"><value>Altyazıları dışa aktar</value></data>
+  <data name="Settings.Label_VideoEncoder" xml:space="preserve"><value>Video kodlayıcı (Burn-in dışa aktarma)</value></data>
+  <data name="Settings.Label_PreviewVideoDecode" xml:space="preserve"><value>Önizleme videosunun kodunun çözülmesi</value></data>
+  <data name="Settings.Label_Subtitles" xml:space="preserve"><value>Altyazılar</value></data>
+  <data name="Settings.Label_SubtitleContentMode" xml:space="preserve"><value>Altyazı İçerik Modu</value></data>
+  <!--  Settings - Starter Packs  -->
+  <data name="Settings.Tab_StarterPacks" xml:space="preserve"><value>Başlangıç Paketleri</value></data>
+  <data name="Settings.StarterPacks_Heading" xml:space="preserve"><value>Başlangıç Paketleri</value></data>
+  <data name="Settings.StarterPacks_Hint" xml:space="preserve"><value>Paket halinde sunulan model setlerini indirin, ardından bunları uygulayarak yapılandırma aşaması takma adlarını ve çalışma zamanı varsayılan ayarlarını belirleyin. Yüklenen dosyalar, çalışma zamanına hazır değil, sağlama toplamı doğrulanmış dosyalardır.</value></data>
+  <data name="Settings.StarterPacks_RecommendedBadge" xml:space="preserve"><value>Tespit edilen seviyeye göre önerildi</value></data>
+  <data name="Settings.StarterPacks_AppliedBadge" xml:space="preserve"><value>Uygulamalı</value></data>
+  <data name="Settings.StarterPacks_Download" xml:space="preserve"><value>İndir</value></data>
+  <data name="Settings.StarterPacks_Apply" xml:space="preserve"><value>Başvur</value></data>
+  <data name="Settings.StarterPacks_ProfileLabel" xml:space="preserve"><value>Profil</value></data>
+  <data name="Settings.StarterPacks_InstalledLabel" xml:space="preserve"><value>Kurulmuş modeller:</value></data>
+  <data name="Settings.StarterPacks_DownloadComplete" xml:space="preserve"><value>İndirme işlemi tamamlandı. Ayarlar değiştirilmedi.</value></data>
+  <data name="Settings.StarterPacks_DownloadFailed" xml:space="preserve"><value>İndirme işlemi başarısız oldu.</value></data>
+  <data name="Settings.StarterPacks_ApplyComplete" xml:space="preserve"><value>Başlangıç paketi uygulandı.</value></data>
+  <data name="Settings.StarterPacks_ApplyFailed" xml:space="preserve"><value>Uygulama başarısız oldu.</value></data>
+  <data name="Settings.StarterPacks_ConsentRequired" xml:space="preserve"><value>Bu paketi uygulamadan önce ses klonlama izni gereklidir.</value></data>
+  <data name="Settings.StarterPacks_CompatibleBadge" xml:space="preserve"><value>Tamamen uyumlu</value></data>
+  <data name="Settings.StarterPacks_FallbackBadge" xml:space="preserve"><value>Yedek çözümler gereklidir</value></data>
+  <data name="Settings.StarterPacks_NotRunnableBadge" xml:space="preserve"><value>Çalıştırılamaz</value></data>
+  <data name="Settings.StarterPacks_FallbackWarning" xml:space="preserve"><value>{0} için GPU yolu kullanılamıyor. {2} adresinde {1} kullanılıyor.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupSummary" xml:space="preserve"><value>{0} Bu paketteki modeller, donanımınız için GPU çalışma zamanı yüklenene kadar CPU üzerinde çalışacaktır.</value></data>
+  <data name="Settings.StarterPacks_GpuVariantNudge" xml:space="preserve"><value>Bazı modeller için GPU’ya optimize edilmiş sürümler de gereklidir. GPU çalışma zamanı hazır olduktan sonra Model Yöneticisi’nde “Optimize” seçeneğini kullanın.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Nvidia" xml:space="preserve"><value>NVIDIA TensorRT RTX çalışma zamanını yükleyin</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Amd" xml:space="preserve"><value>AMD MIGraphX çalışma zamanını yükleyin</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Intel" xml:space="preserve"><value>Intel OpenVINO çalışma zamanını yükleyin</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Qualcomm" xml:space="preserve"><value>Qualcomm QNN çalışma zamanını yükleyin</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_AmdNpu" xml:space="preserve"><value>AMD VitisAI NPU çalışma zamanını yükleyin</value></data>
+  <data name="Settings.StarterPacks_GpuSetupAction_Bundle" xml:space="preserve"><value>GPU çalışma zamanlarını yükleyin</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallComplete" xml:space="preserve"><value>GPU çalışma zamanı yüklemesi tamamlandı.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupInstallFailed" xml:space="preserve"><value>GPU çalışma zamanı yüklemesi başarısız oldu.</value></data>
+  <data name="Settings.StarterPacks_GpuSetupLicenseRequired" xml:space="preserve"><value>GPU çalışma zamanını yüklemek için satıcı lisansını kabul edin.</value></data>
+  <data name="Settings.StarterPacks_CloudReadyBadge" xml:space="preserve"><value>API anahtarları yapılandırıldı</value></data>
+  <data name="Settings.StarterPacks_CloudKeysMissingBadge" xml:space="preserve"><value>API anahtarları eksik</value></data>
+  <data name="Settings.StarterPacks_CloudKeysButton" xml:space="preserve"><value>API anahtarlarını yapılandırın</value></data>
+  <data name="Settings.StarterPacks_ImportButton" xml:space="preserve"><value>Paketi içe aktar…</value></data>
+  <data name="Settings.StarterPacks_ExportButton" xml:space="preserve"><value>Dışa aktar…</value></data>
+  <data name="Settings.StarterPacks_UserPacksHeader" xml:space="preserve"><value>Paketleriniz</value></data>
+  <data name="Settings.StarterPacks_OpenLocalModelsLink" xml:space="preserve"><value>Modelleri tek tek indirin</value></data>
+  <data name="Settings.StarterPacks_OptimizeNudge" xml:space="preserve"><value>{0} modeli için GPU’ya optimize edilmiş varyantlar mevcuttur. En iyi performans için “Yerel Modeller” bölümünden optimizasyon yapın.</value></data>
+  <data name="Settings.StarterPacks_ReviewOptimizations" xml:space="preserve"><value>Optimizasyonları gözden geçirin</value></data>
+  <data name="Settings.LocalModels_AppliedPackBadge" xml:space="preserve"><value>Uygulanan paket: {0}</value></data>
+  <data name="Settings.Label_PackTierFilter" xml:space="preserve"><value>Paket filtresi</value></data>
+  <data name="Settings.Button_Dismiss" xml:space="preserve"><value>Kapat</value></data>
+  <!--  Onboarding - Starter Packs  -->
+  <data name="Onboarding.StarterPacks_Title" xml:space="preserve"><value>Bir başlangıç paketi seçin</value></data>
+  <data name="Onboarding.StarterPacks_Body" xml:space="preserve"><value>İndirip uygulamak için bir paket model seti seçin ya da Yerel Modeller bölümünde modelleri tek tek yapılandırın.</value></data>
+  <data name="Onboarding.StarterPacks_Skip" xml:space="preserve"><value>Şimdilik atla</value></data>
+  <data name="Onboarding.StarterPacks_ConfigureIndividually" xml:space="preserve"><value>Ayrı ayrı yapılandırın</value></data>
+  <!--  Settings - Local Models  -->
+  <data name="Settings.Tab_LocalModels" xml:space="preserve"><value>Yerel Modeller</value></data>
+  <data name="Settings.Hint_CommercialOnlyLane" xml:space="preserve"><value>Yalnızca ticari model araçlara ayrılmış şerit. İthal edilen ticari olmayan modellerin geçişi hâlâ engellenmiştir.</value></data>
+  <data name="Settings.Label_NonCommercial" xml:space="preserve"><value>ticari olmayan</value></data>
+  <data name="Settings.Button_Download" xml:space="preserve"><value>İndir</value></data>
+  <data name="Settings.Button_Repair" xml:space="preserve"><value>Onarım</value></data>
+  <data name="Settings.Button_Uninstall" xml:space="preserve"><value>Kaldır</value></data>
+  <data name="Settings.Label_Optimize" xml:space="preserve"><value>Optimize et:</value></data>
+  <data name="Settings.Tip_PrecisionHeader" xml:space="preserve"><value>Optimize edilmiş model varyantı için hassasiyet (seçenekler sağlayıcıya göre değişir):</value></data>
+  <data name="Settings.Tip_Fp32" xml:space="preserve"><value>fp32 — tam 32 bit ağırlıklar. En yüksek doğruluk; en büyük dosya boyutu. Yalnızca CPU ile çalışır.</value></data>
+  <data name="Settings.Tip_Fp16" xml:space="preserve"><value>fp16 — 16 bit yarı hassasiyet. İyi doğruluk, fp32’nin yarısı kadar boyut. DirectML / CUDA / TensorRT.</value></data>
+  <data name="Settings.Tip_Int8" xml:space="preserve"><value>int8 — 8 bitlik niceleme. fp16’dan daha küçük ve daha hızlıdır; çoğu ses modelinde küçük bir doğruluk kaybı söz konusudur. CPU / DirectML / CUDA.</value></data>
+  <data name="Settings.Tip_Int4" xml:space="preserve"><value>int4 — 4 bitlik niceleme. En küçük ve en hızlı; bazı modellerde fark edilebilir bir doğruluk kaybı yaşanır. Yalnızca DirectML / CUDA.</value></data>
+  <data name="Settings.Button_Optimize" xml:space="preserve"><value>Optimize et</value></data>
+  <data name="Settings.Status_Optimizing" xml:space="preserve"><value>Optimize ediliyor…</value></data>
+  <data name="Settings.Button_Cancel" xml:space="preserve"><value>İptal et</value></data>
+  <data name="Settings.Button_Use" xml:space="preserve"><value>Kullanım</value></data>
+  <data name="Settings.Button_Clear" xml:space="preserve"><value>Temizle</value></data>
+  <data name="Settings.Status_Loading" xml:space="preserve"><value>Yükleniyor…</value></data>
+  <!--  Settings - Cloud Models  -->
+  <data name="Settings.Tab_CloudModels" xml:space="preserve"><value>Bulut Modelleri</value></data>
+  <data name="Settings.Button_Save" xml:space="preserve"><value>Kaydet</value></data>
+  <data name="Settings.Hint_MoreProviders" xml:space="preserve"><value>Yakında daha fazla bulut hizmeti sağlayıcısı eklenecek.</value></data>
+  <!--  Settings - Hardware  -->
+  <data name="Settings.Tab_Hardware" xml:space="preserve"><value>Donanım</value></data>
+  <data name="Settings.Heading_Hardware" xml:space="preserve"><value>Donanım Yapılandırması</value></data>
+  <data name="Settings.Label_FfmpegEncoders" xml:space="preserve"><value>FFmpeg video kodlayıcıları</value></data>
+  <data name="Settings.Label_FfmpegHwDecode" xml:space="preserve"><value>FFmpeg donanım tabanlı kod çözme</value></data>
+  <data name="Settings.Toggle_NativeCuda" xml:space="preserve"><value>Windows&apos;ta yerel CUDA / TensorRT&apos;yi etkinleştir (gelişmiş)</value></data>
+  <data name="Settings.Hint_NativeCuda" xml:space="preserve"><value>Varsayılan olarak kapalıdır. Etkinleştirildiğinde, açıkça belirtilen CUDA veya TensorRT istekleri, DirectML / TensorRT RTX (WinML) yerine yerel ONNX Runtime sağlayıcılarını kullanır. İş akışı otomatik seçimi değişmez.</value></data>
+  <data name="Settings.Label_WinMlPolicy" xml:space="preserve"><value>Windows ML cihaz ilkesi (gelişmiş)</value></data>
+  <data name="Settings.Hint_WinMlPolicy" xml:space="preserve"><value>Deneysel. Kayıtlı Windows ML katalog sağlayıcıları arasında ONNX Runtime’ın otomatik EP/cihaz seçimini kullanır. Aşama sağlayıcı seçimi değişmez. Bu ayarı değiştirdikten sonra Trackdub’ı yeniden başlatın.</value></data>
+  <data name="Settings.Label_GpuProviders" xml:space="preserve"><value>GPU Tabanlı Çıkarım Sağlayıcıları</value></data>
+  <data name="Settings.Label_AllCertified" xml:space="preserve"><value>Tüm sertifikalı katalog sağlayıcıları</value></data>
+  <data name="Settings.Hint_AllCertified" xml:space="preserve"><value>Bu işlem, bu bilgisayarda mevcut tüm Windows ML katalog sağlayıcılarını yükler. Uygun NVIDIA donanımlarında, TensorRT RTX eklentisini de sunabilir (ayrı bir NVIDIA lisansı gereklidir). İlk çalıştırmada birden fazla paket indirilebilir ve işlem birkaç dakika sürebilir. Bu işlemi çalıştırsanız da çalıştırmasanız da, hedefli yüklemeler için sağlayıcı başına “Yükle” düğmeleri kullanılmaya devam eder.</value></data>
+  <data name="Settings.Button_InstallAllCertified" xml:space="preserve"><value>Tüm sertifikalı sağlayıcıları yükle</value></data>
+  <data name="Settings.Label_NvidiaTensorRt" xml:space="preserve"><value>NVIDIA TensorRT RTX</value></data>
+  <data name="Settings.Button_Refresh" xml:space="preserve"><value>Yenile</value></data>
+  <data name="Settings.Button_InstallProvider" xml:space="preserve"><value>Sağlayıcıyı yükle</value></data>
+  <data name="Settings.Button_InstallTrtRtxPlugin" xml:space="preserve"><value>Eklentiyi yükle</value></data>
+  <data name="Settings.Button_ViewLicense" xml:space="preserve"><value>Lisansı görüntüle</value></data>
+  <data name="Settings.Label_AmdMigraphx" xml:space="preserve"><value>AMD MIGraphX</value></data>
+  <data name="Settings.Label_IntelOpenVino" xml:space="preserve"><value>Intel OpenVINO (WinML kataloğu)</value></data>
+  <data name="Settings.Label_QualcommQnn" xml:space="preserve"><value>Qualcomm QNN (WinML kataloğu)</value></data>
+  <data name="Settings.Label_AmdVitisAi" xml:space="preserve"><value>AMD VitisAI (WinML kataloğu)</value></data>
+  <data name="Settings.Label_NativeOrtGpu" xml:space="preserve"><value>Yerel ORT GPU (gelişmiş)</value></data>
+  <data name="Settings.Label_ExecutionProviders" xml:space="preserve"><value>Yürütme Sağlayıcıları</value></data>
+  <data name="Settings.Label_PerStageOverrides" xml:space="preserve"><value>Aşama Bazında Sağlayıcı Geçersiz Kılmaları</value></data>
+  <!--  Settings - Profiler  -->
+  <data name="Settings.Tab_Profiler" xml:space="preserve"><value>Profiler</value></data>
+  <data name="Settings.Heading_Profiler" xml:space="preserve"><value>Donanım Profilleyici</value></data>
+  <data name="Settings.Hint_Profiler" xml:space="preserve"><value>Kaliteli bir ön ayar önermek için kısa VAD, ASR, çeviri ve TTS performans testlerini çalıştırır. Paket içinde bulunan ONNX modellerinin yüklü olduğu bir Windows sistemi gerektirir.</value></data>
+  <data name="Settings.Button_RunBenchmarks" xml:space="preserve"><value>Aşama performans testlerini çalıştır</value></data>
+  <data name="Settings.Label_QualityPreset" xml:space="preserve"><value>Kalite ön ayarı</value></data>
+  <data name="Settings.Hint_QualityPreset" xml:space="preserve"><value>&quot;Kullan&quot; önerisi, profiler sonucunu model katmanı planlamasına uygular. &quot;Geçersiz kıl&quot; seçeneği, siz değiştirene kadar seçiminizi korur.</value></data>
+  <!--  Settings - Recent Projects  -->
+  <data name="Settings.Tab_RecentProjects" xml:space="preserve"><value>Son Projeler</value></data>
+  <data name="Settings.Heading_RecentProjects" xml:space="preserve"><value>Son Projeler</value></data>
+  <!--  Settings - About  -->
+  <data name="Settings.Tab_About" xml:space="preserve"><value>Hakkında</value></data>
+  <data name="Settings.Heading_About" xml:space="preserve"><value>Trackdub Hakkında</value></data>
+  <data name="Settings.About_Tagline" xml:space="preserve"><value>Trackdub — Yapay zeka destekli seslendirme çalışma istasyonu</value></data>
+  <data name="Settings.About_Edition" xml:space="preserve"><value>Çapraz platform Avalonia sürümü</value></data>
+  <!--  Settings - Developer  -->
+  <data name="Settings.Tab_Developer" xml:space="preserve"><value>Geliştirici</value></data>
+  <data name="Settings.Heading_Developer" xml:space="preserve"><value>Geliştirici Seçenekleri</value></data>
+  <data name="Settings.Hint_Developer" xml:space="preserve"><value>Geliştirme sürümlerinde geliştirici araçları ve tanılama özellikleri mevcuttur.</value></data>
+  <!--  Settings - Footer  -->
+  <data name="Settings.Button_SaveAndClose" xml:space="preserve"><value>Kaydet ve Kapat</value></data>
+  <!--  Dialog - SourceLanguagePicker  -->
+  <data name="Dialog.SourceLanguage_Title" xml:space="preserve"><value>Transkript kaynağı</value></data>
+  <data name="Dialog.SourceLanguage_Hint" xml:space="preserve"><value>Kaynak dilin değiştirilmesi, gelecekteki çeviri ve yazım denetimi işlemlerini etkiler.</value></data>
+  <data name="Dialog.SourceLanguage_Placeholder" xml:space="preserve"><value>Kaynak dil</value></data>
+  <!--  Dialog - UnsavedInlineEdit  -->
+  <data name="Dialog.UnsavedEdit_KeepEditing" xml:space="preserve"><value>Düzenlemeye devam et</value></data>
+  <data name="Dialog.UnsavedEdit_Discard" xml:space="preserve"><value>Sil</value></data>
+  <!--  Dialog - VoiceCloneConsent  -->
+  <data name="Dialog.VoiceClone_Title" xml:space="preserve"><value>Ses Klonlama Onayı</value></data>
+  <data name="Dialog.VoiceClone_Body" xml:space="preserve"><value>Bu oturumda, ses özelliklerini sentezlemek için yüklediğiniz referans ses klipleri kullanılacaktır. “Kabul Ediyorum” seçeneğine tıklayarak, bu proje kapsamında bu sesleri kopyalamak için yasal hakka sahip olduğunuzu teyit etmiş olursunuz.</value></data>
+  <data name="Dialog.VoiceClone_SessionNote" xml:space="preserve"><value>Bu onay yalnızca mevcut uygulama oturumu için geçerlidir ve uygulamayı bir sonraki sefer başlattığınızda yeniden verilmesi gerekir.</value></data>
+  <data name="Dialog.VoiceClone_Agree" xml:space="preserve"><value>Kabul Ediyorum</value></data>
+  <!--  Timeline - Waveform  -->
+  <data name="Timeline.WaveformNotAvailable" xml:space="preserve"><value>Dalga formu önizlemesi henüz kullanılamıyor</value></data>
+  <data name="Timeline.ComputingPeaks" xml:space="preserve"><value>Dalga formu tepe noktalarının hesaplanması…</value></data>
+  <!--  Timeline - ZoomLevel (non-localizable display but test flags it)  -->
+  <data name="Timeline.ZoomLevel" xml:space="preserve"><value>100 pps</value></data>
+  <!--  Inspector  -->
+  <data name="Inspector.Header" xml:space="preserve"><value>Müfettiş</value></data>
+  <data name="Inspector.Empty" xml:space="preserve"><value>İncelemek istediğiniz bir segmenti, hoparlörü veya kaynak öğesini seçin.</value></data>
+  <data name="Inspector.UnknownTarget" xml:space="preserve"><value>Bu denetleyici hedefi henüz desteklenmemektedir.</value></data>
+  <data name="Inspector.OpenInEditor" xml:space="preserve"><value>Düzenleyicide aç</value></data>
+  <data name="Inspector.Tab_Content" xml:space="preserve"><value>İçerik</value></data>
+  <data name="Inspector.Tab_Timing" xml:space="preserve"><value>Zamanlama</value></data>
+  <data name="Inspector.Tab_Voice" xml:space="preserve"><value>Ses</value></data>
+  <data name="Inspector.Tab_QC" xml:space="preserve"><value>Kalite Kontrol</value></data>
+  <data name="Inspector.SegmentDuration" xml:space="preserve"><value>Segment</value></data>
+  <data name="Inspector.GeneratedDuration" xml:space="preserve"><value>Oluşturuldu</value></data>
+  <data name="Inspector.Overrun" xml:space="preserve"><value>Aşım</value></data>
+  <data name="Inspector.TimingAdjustment" xml:space="preserve"><value>Zamanlama</value></data>
+  <data name="Inspector.ConfidenceReview" xml:space="preserve"><value>İnceleme önerilir</value></data>
+  <data name="Inspector.Artifact" xml:space="preserve"><value>Eser</value></data>
+  <data name="Inspector.ArtifactType" xml:space="preserve"><value>Tür</value></data>
+  <data name="Inspector.ArtifactDuration" xml:space="preserve"><value>Süre</value></data>
+  <data name="Inspector.ArtifactSize" xml:space="preserve"><value>Boyut</value></data>
+  <data name="Inspector.ArtifactPath" xml:space="preserve"><value>Yol</value></data>
+  <data name="Inspector.ArtifactType_Audio" xml:space="preserve"><value>Ses</value></data>
+  <data name="Inspector.ArtifactType_Video" xml:space="preserve"><value>Video</value></data>
+  <data name="Inspector.ArtifactType_Subtitle" xml:space="preserve"><value>Altyazı</value></data>
+  <data name="Inspector.ArtifactType_Unknown" xml:space="preserve"><value>Bilinmiyor</value></data>
+  <data name="Attention.translation.stale" xml:space="preserve"><value>Çeviri güncelliğini yitirmiş.</value></data>
+  <data name="Attention.tts.failed" xml:space="preserve"><value>Dub oluşturma işlemi başarısız oldu.</value></data>
+  <data name="Attention.tts.stale" xml:space="preserve"><value>Dub artık modası geçmiş.</value></data>
+  <data name="Attention.tts.pending" xml:space="preserve"><value>Dub oluşturma işlemi beklemede.</value></data>
+  <data name="Attention.tts.duration-overrun" xml:space="preserve"><value>Dub zamanlaması tolerans sınırını aşıyor.</value></data>
+  <data name="Attention.tts.speed-limit" xml:space="preserve"><value>Zaman uzatması, kaliteyi düşürebilir.</value></data>
+  <data name="Attention.asr.low-confidence" xml:space="preserve"><value>Transkript güvenilirliğinin gözden geçirilmesi gerekiyor.</value></data>
+  <data name="Attention.lipsync.error" xml:space="preserve"><value>Dudak senkronizasyonu başarısız oldu.</value></data>
+  <data name="Attention.lipsync.warning" xml:space="preserve"><value>Dudak senkronizasyonu gözden geçirilmeli.</value></data>
+  <data name="Attention.lipsynthesis.error" xml:space="preserve"><value>Dudak onarımı başarısız oldu.</value></data>
+  <data name="Attention.lipsynthesis.warning" xml:space="preserve"><value>Dudak onarımı konusunun gözden geçirilmesi gerekiyor.</value></data>
+  <data name="Attention.stage.failed" xml:space="preserve"><value>İşlem aşaması başarısız oldu.</value></data>
+  <data name="Attention.stage.in-progress" xml:space="preserve"><value>Boru hattı aşaması devam ediyor.</value></data>
+  <!--  License  -->
+  <data name="License.Tab" xml:space="preserve"><value>Lisans</value></data>
+  <data name="License.Heading" xml:space="preserve"><value>Lisans</value></data>
+  <data name="License.CurrentTier" xml:space="preserve"><value>Mevcut Seviye:</value></data>
+  <data name="License.Tier_Free" xml:space="preserve"><value>Ücretsiz</value></data>
+  <data name="License.Tier_Pro" xml:space="preserve"><value>Artıları</value></data>
+  <data name="License.KeyLabel" xml:space="preserve"><value>Lisans Anahtarı</value></data>
+  <data name="License.KeyPlaceholder" xml:space="preserve"><value>Lisans anahtarınızı buraya yapıştırın</value></data>
+  <data name="License.Button_Activate" xml:space="preserve"><value>Etkinleştir</value></data>
+  <data name="License.Button_Deactivate" xml:space="preserve"><value>Devre dışı bırak</value></data>
+  <data name="License.Degraded" xml:space="preserve"><value>Lisans Durumu Düşürüldü</value></data>
+  <data name="License.MachinesRegisteredUnlimited" xml:space="preserve"><value> kayıtlı makineler (sınırsız geliştirici lisansı)</value></data>
+</root>

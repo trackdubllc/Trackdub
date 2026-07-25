@@ -1,0 +1,30 @@
+# Trackdub.Analyzers.editorconfig
+#
+# Scope: applies only to files within src/Trackdub.Analyzers/ (Roslyn analyzer project).
+# EditorConfig hierarchy reads from the closest .editorconfig walking up the directory tree.
+#
+# Why: RS2008 ("Enable analyzer release tracking") can still surface on Roslyn 4.14.0 even after
+# setting <AnalyzerReleaseTracking>true</AnalyzerReleaseTracking>, threading HelpLinkUri into the
+# DiagnosticDescriptor ctor, and pulling Microsoft.CodeAnalysis.Analyzers 4.14.0. The release
+# tracking surface is itself evolving between minor Roslyn versions, and the canonical fix is
+# to add a project-scoped .editorconfig that explicitly silences the rule. Per AGENTS.md
+# "Touch waves, not ripples" — narrow blast radius (analyzer project only, never the consumers).
+#
+# See docs/adr/ADR-0012-wave-pcm16-loudness-policy.md and the Trackdub.Analyzers/Trackdub.Analyzers.csproj
+# for the analyzer project context. Re-evaluate after the next Roslyn major (5.0).
+
+[*.cs]
+# RS2008: "Enable analyzer release tracking" — silenced after AnalyzerReleaseTracking=true +
+# helpLinkUri on the DiagnosticDescriptor + Microsoft.CodeAnalysis.Analyzers package still
+# fire on Roslyn 4.14.0. Re-evaluate after Roslyn 5.0.
+dotnet_diagnostic.RS2008.severity = none
+# RS1038: "Compiler extension should not be implemented in an assembly containing a reference
+# to Microsoft.CodeAnalysis.Workspaces". Reappears whenever Workspaces is pulled into an
+# analyzer project. We accept the warning because Workspaces is the single transitive-anchor
+# for Microsoft.CodeAnalysis.dll 4.14.0 across the analyzer + its in-tree test project. See
+# docs/adr/ADR-0012-wave-pcm16-loudness-policy.md for the version-coherence rationale.
+dotnet_diagnostic.RS1038.severity = none
+# RS1041: "Compiler extensions should be marked with the ICompilerExtensionMarkerAttribute".
+# Pure metadata hint; the analyzer does not need the marker for build correctness. Silenced
+# to keep the analyzer-emitting surface clean.
+dotnet_diagnostic.RS1041.severity = none

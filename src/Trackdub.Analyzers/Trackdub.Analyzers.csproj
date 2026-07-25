@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- Default TargetFramework from Directory.Build.props is net10.0; analyzer must be netstandard2.0
+         so it can load into any of the consuming projects regardless of their TFM. -->
+    <EnableWindowsTargeting>false</EnableWindowsTargeting>
+    <!-- RS2008: opt in to analyzer release tracking so the analyzer DLL is properly tagged with
+         the diagnostic ID and supported version metadata. See
+         docs/adr/ADR-0012-wave-pcm16-loudness-policy.md. -->
+    <AnalyzerReleaseTracking>true</AnalyzerReleaseTracking>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.CodeAnalysis.CSharp.Workspaces is intentionally pulled even though only CSharp surface
+         is used by the analyzer + the manual verifier. Workspaces brings a single co-versioned
+         Microsoft.CodeAnalysis.dll transitively, preventing MSB3277 version conflicts when the test
+         project also resolves CSharp. RS1038 / RS1041 (Workspaces-brings-compiler-extension warnings)
+         are silenced via the project-local .editorconfig below. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" />
+  </ItemGroup>
+
+</Project>

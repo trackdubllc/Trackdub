@@ -1,0 +1,37 @@
+[
+  {
+    "Key": "MediaPicker.ImportSkippedNoLocalPath",
+    "English": "{0} selected file(s) could not be imported because no local path was available.",
+    "Baseline": "{0} \u30ED\u30FC\u30AB\u30EB\u30D1\u30B9\u304C\u6307\u5B9A\u3055\u308C\u3066\u3044\u306A\u3044\u305F\u3081\u3001\u9078\u629E\u3057\u305F\u30D5\u30A1\u30A4\u30EB\u3092\u30A4\u30F3\u30DD\u30FC\u30C8\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
+    "Phi": "Local\u30D1\u30B9\u304C\u5229\u7528\u3067\u304D\u306A\u3044\u305F\u3081\u3001 {0} \u3064\u306E\u30D5\u30A1\u30A4\u30EB\u3092\u30A4\u30F3\u30DD\u30FC\u30C8\u3059\u308B\u3053\u3068\u304C\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002",
+    "PhiQwen": "-local path is unavailable, so I was unable to import {0} files."
+  },
+  {
+    "Key": "Speakers.Count",
+    "English": "{0} speakers",
+    "Baseline": "{0} \u767B\u58C7\u8005",
+    "Phi": "\u30BC\u30ED\u8A9E\u8A71\u8005",
+    "PhiQwen": "\u30BC\u30ED\u8A9E\u8A71\u8005"
+  },
+  {
+    "Key": "Glossary.TermCount",
+    "English": "{0} terms",
+    "Baseline": "{0} \u7528\u8A9E",
+    "Phi": "{} \u9805\u76EE\n\n\n(Note: In mathematical notation and LaTeX display settings in English documents, curly braces \u0060{}\u0060 are commonly used for grouping or denoting sets of elements (e.g., \u0060\\set\u0060 commands). However, when simply translating a word like \u0022terms\u0022 into Japanese while keeping it clean from context-specific formatting such as LaTeX symbols would just be \u201C\u9805\u76EE\u201D. If you meant something else by \u0022{0}\u0022 you\u0027d need more information.)",
+    "PhiQwen": "{} \u9805\u76EE\n\n\n(Note: In mathematical notation and LaTeX display settings in English documents, curly braces \u0060{}\u0060 are commonly used for grouping or denoting sets of elements (e.g., \u0060\\set\u0060 commands). However, when simply translating a word like \u0022terms\u0022 into Japanese while keeping it clean from context-specific formatting such as LaTeX symbols would just be \u201C\u9805\u76EE\u201D. If you meant something else by \u0022{0}\u0022 you\u0027d need more information.)"
+  },
+  {
+    "Key": "Update.BannerMessage",
+    "English": "Trackdub {0} ({1}) is available",
+    "Baseline": "Trackdub {0} ({1}) \u304C\u5229\u7528\u53EF\u80FD\u3067\u3059",
+    "Phi": "\u30C8\u30E9\u30C3\u30AF\u30C0\u30D6 (0) ((1)) \u306F\u5229\u7528\u53EF\u80FD\u3067\u3059\u3002",
+    "PhiQwen": "\u30C8\u30E9\u30C3\u30AF\u30C0\u30D6 (0) ((1)) \u306F\u5229\u7528\u53EF\u80FD\u3067\u3059\u3002"
+  },
+  {
+    "Key": "Settings.StarterPacks_FallbackWarning",
+    "English": "GPU path unavailable for {0}. Using {1} on {2}.",
+    "Baseline": "{0} \u3067\u306F GPU \u30D1\u30B9\u304C\u5229\u7528\u3067\u304D\u307E\u305B\u3093\u3002{2} \u3067\u306F {1} \u3092\u4F7F\u7528\u3057\u3066\u3044\u307E\u3059\u3002",
+    "Phi": "GPUPATH UNAVAILABLE FOR {0}. USING {1} ON {2}.",
+    "PhiQwen": "GPU \u304C {0} \u306B\u30A2\u30AF\u30BB\u30B9\u3067\u304D\u307E\u305B\u3093\u3002 {1} \u3092 {2} \u306B\u4F7F\u7528\u3057\u307E\u3059\u3002"
+  }
+]

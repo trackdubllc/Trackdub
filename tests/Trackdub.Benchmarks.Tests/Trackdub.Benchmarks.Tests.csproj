@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Legacy benchmark tests still have many setup/helper calls with omitted optional CancellationToken parameters. -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <WindowsPackageType>None</WindowsPackageType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Trackdub.Contracts\Trackdub.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Benchmarks\Trackdub.Benchmarks.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Domain\Trackdub.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Inference\Trackdub.Inference.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Tools\Trackdub.Tools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <ProjectReference Update="..\..\src\Trackdub.Benchmarks\Trackdub.Benchmarks.csproj"
+                      SetTargetFramework="TargetFramework=net10.0-windows10.0.19041.0" />
+    <ProjectReference Update="..\..\src\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj"
+                      SetTargetFramework="TargetFramework=net10.0-windows10.0.19041.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Trackdub.TestDoubles\RequiresBundledModelFactAttribute.cs" Link="TestDoubles\RequiresBundledModelFactAttribute.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,948 @@
+using Trackdub.Contracts;
+using Trackdub.Application.Mixing;
+using Trackdub.Application.Projects;
+using Trackdub.Application.Transcripts;
+using Trackdub.Contracts.Pipeline;
+using Trackdub.Domain;
+using Trackdub.Domain.Artifacts;
+using Trackdub.Domain.Media;
+using Trackdub.Domain.Mixing;
+using Trackdub.Domain.Projects;
+using Trackdub.Domain.Transcript;
+using Trackdub.Domain.Translation;
+using Trackdub.Domain.Tts;
+using Trackdub.TestDoubles;
+
+namespace Trackdub.Application.Tests;
+
+public sealed class MixPlanBuilderTests
+{
+    [Fact]
+    public void Build_prefers_ambiance_and_places_fresh_takes_at_segment_start()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment first = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 1.0d, 2.5d, "Hello", context.SpeakerId);
+        TranscriptSegment second = TranscriptSegment.Create(context.TranscriptRevisionId, 1, 3.0d, 4.0d, "Again", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact ambiance = CreateArtifact(context, ArtifactKind.Ambiance, "artifacts/stems/run/ambiance.wav", createdOffsetSeconds: 1);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take-0001.wav", createdOffsetSeconds: 2, durationSeconds: 2.25d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: first.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 60000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, ambiance, takeArtifact],
+            [first, second],
+            [],
+            [take]));
+
+        Assert.Equal(ArtifactKind.Ambiance, plan.SourceAudioKind);
+        Assert.Equal(ambiance.RelativePath, plan.SourceAudioRelativePath);
+        Assert.Equal(2, plan.SpeechClips.Count);
+        Assert.Equal(first.StartSeconds, plan.SpeechClips[0].StartSeconds);
+        Assert.Equal(takeArtifact.RelativePath, plan.SpeechClips[0].TakeRelativePath);
+        Assert.False(plan.SpeechClips[0].IsSilentGap);
+        Assert.True(plan.SpeechClips[1].IsSilentGap);
+        Assert.Single(plan.Warnings);
+        Assert.Contains("Missing", plan.Warnings[0].Message);
+        MixDuckRegion duckRegion = Assert.Single(plan.DuckingRegions);
+        Assert.Equal(first.SegmentIndex, duckRegion.SegmentIndex);
+        Assert.True(duckRegion.StartSeconds < first.StartSeconds);
+        Assert.True(duckRegion.EndSeconds > first.EndSeconds);
+        Assert.Equal(first.StartSeconds + takeArtifact.DurationSeconds!.Value + 0.18d, duckRegion.EndSeconds, precision: 3);
+        Assert.Equal(0d, plan.DuckingGainDb);
+        Assert.Equal(0d, duckRegion.GainDb);
+    }
+
+    [Fact]
+    public void Build_uses_normalized_audio_for_original_pan_reference_when_ambiance_is_source_lane()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 1.0d, 2.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            createdOffsetSeconds: 0,
+            channelCount: 2);
+        ProjectArtifact ambiance = CreateArtifact(
+            context,
+            ArtifactKind.Ambiance,
+            "artifacts/stems/run/ambiance.wav",
+            createdOffsetSeconds: 1,
+            channelCount: 1);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 2, durationSeconds: 1d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, ambiance, takeArtifact],
+            [segment],
+            [],
+            [take],
+            RestoreOriginalPan: true));
+
+        Assert.Equal(ArtifactKind.Ambiance, plan.SourceAudioKind);
+        Assert.Equal(ambiance.RelativePath, plan.SourceAudioRelativePath);
+        Assert.Equal(ProjectArtifactPaths.NormalizedAudioRelativePath, plan.OriginalMixAudioRelativePath);
+        Assert.Equal(2, plan.OutputChannelCount);
+        Assert.True(plan.RestoreOriginalPan);
+    }
+
+    [Fact]
+    public void Build_filters_original_pan_reference_to_current_media_asset()
+    {
+        TestProjectContext context = CreateContext();
+        Guid otherMediaAssetId = Guid.NewGuid();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 1.0d, 2.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            createdOffsetSeconds: 0,
+            channelCount: 2);
+        ProjectArtifact newerOtherMediaNormalized = normalized with
+        {
+            Id = Guid.NewGuid(),
+            MediaAssetId = otherMediaAssetId,
+            RelativePath = "media/other-normalized.wav",
+            CreatedAtUtc = normalized.CreatedAtUtc.AddMinutes(5)
+        };
+        ProjectArtifact ambiance = CreateArtifact(
+            context,
+            ArtifactKind.Ambiance,
+            "artifacts/stems/run/ambiance.wav",
+            createdOffsetSeconds: 1,
+            channelCount: 1);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 2, durationSeconds: 1d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [newerOtherMediaNormalized, normalized, ambiance, takeArtifact],
+            [segment],
+            [],
+            [take],
+            RestoreOriginalPan: true));
+
+        Assert.Equal(ProjectArtifactPaths.NormalizedAudioRelativePath, plan.OriginalMixAudioRelativePath);
+    }
+
+    [Fact]
+    public void Build_defaults_to_original_mix_ducking_when_ambiance_is_unavailable()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 1.0d, 2.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take-0001.wav", createdOffsetSeconds: 1, durationSeconds: 1.2d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 57600, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [],
+            [take]));
+
+        Assert.Equal(ArtifactKind.NormalizedAudio, plan.SourceAudioKind);
+        Assert.Equal(-13d, plan.DuckingGainDb);
+        Assert.Equal(-13d, Assert.Single(plan.DuckingRegions).GainDb);
+    }
+
+    [Fact]
+    public void Build_ignores_legacy_ambiance_and_uses_original_mix_ducking()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 1.0d, 2.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact legacyAmbiance = CreateArtifact(
+            context,
+            ArtifactKind.Ambiance,
+            "artifacts/stems/hush/ambiance.wav",
+            createdOffsetSeconds: 1,
+            provenance: "generated-hush-dialogue-ambiance;model=hush-dialogue");
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take-0001.wav", createdOffsetSeconds: 2, durationSeconds: 1.2d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 57600, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, legacyAmbiance, takeArtifact],
+            [segment],
+            [],
+            [take]));
+
+        Assert.Equal(ArtifactKind.NormalizedAudio, plan.SourceAudioKind);
+        Assert.Equal(ProjectArtifactPaths.NormalizedAudioRelativePath, plan.SourceAudioRelativePath);
+        Assert.Equal(-13d, plan.DuckingGainDb);
+    }
+
+    [Fact]
+    public void Build_preserves_explicit_ducking_gain_for_ambiance_source()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 0.0d, 1.0d, "Hello", context.SpeakerId);
+        ProjectArtifact ambiance = CreateArtifact(context, ArtifactKind.Ambiance, "artifacts/stems/run/ambiance.wav", createdOffsetSeconds: 0);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 1, durationSeconds: 1d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [ambiance, takeArtifact],
+            [segment],
+            [],
+            [take],
+            DuckingGainDb: -6d));
+
+        Assert.Equal(-6d, plan.DuckingGainDb);
+        Assert.Equal(-6d, Assert.Single(plan.DuckingRegions).GainDb);
+    }
+
+    [Fact]
+    public void Build_replaces_stale_take_with_silent_gap_warning()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 0.0d, 1.0d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 1, durationSeconds: 1d);
+        TtsTake staleTake = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake")
+            .MarkStale();
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [],
+            [staleTake]));
+
+        MixSpeechClip clip = Assert.Single(plan.SpeechClips);
+        Assert.True(clip.IsSilentGap);
+        Assert.Null(clip.TakeRelativePath);
+        Assert.Empty(plan.DuckingRegions);
+        MixPlanWarning warning = Assert.Single(plan.Warnings);
+        Assert.Contains("stale", warning.Message);
+        Assert.Equal("Segment 1", warning.SegmentReference);
+    }
+
+    [Fact]
+    public void Build_uses_newest_fresh_take_when_absolute_latest_take_is_stale()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 0.0d, 1.0d, "Hello", context.SpeakerId);
+        TranslatedSegment translatedSegment = TranslatedSegment.Create(context.TranslationRevisionId, 0, 0.0d, 1.0d, "Hola");
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact freshArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/fresh.wav", createdOffsetSeconds: 1, durationSeconds: 1d);
+        ProjectArtifact staleArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/stale.wav", createdOffsetSeconds: 2, durationSeconds: 1d);
+        TtsTake freshTake = TtsTake.Create(
+                context.ProjectId,
+                context.VoiceAssignmentId,
+                translatedSegment.Id,
+                segment.SegmentIndex,
+                ComputeTtsTextHash(segment.SegmentIndex, translatedSegment.Text))
+            .Complete(freshArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+        TtsTake staleTake = TtsTake.Create(
+                context.ProjectId,
+                context.VoiceAssignmentId,
+                translatedSegment.Id,
+                segment.SegmentIndex,
+                ComputeTtsTextHash(segment.SegmentIndex, "Old text"))
+            .Complete(staleArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, freshArtifact, staleArtifact],
+            [segment],
+            [translatedSegment],
+            [freshTake, staleTake]));
+
+        MixSpeechClip clip = Assert.Single(plan.SpeechClips);
+        Assert.False(clip.IsSilentGap);
+        Assert.Equal(freshTake.Id, clip.TakeId);
+        Assert.Equal(freshArtifact.RelativePath, clip.TakeRelativePath);
+        Assert.Empty(plan.Warnings);
+    }
+
+    [Fact]
+    public void Build_replaces_hashed_take_without_current_translation_with_silent_gap_warning()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 0.0d, 1.0d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 1, durationSeconds: 1d);
+        TtsTake orphanedTake = TtsTake.Create(
+                context.ProjectId,
+                context.VoiceAssignmentId,
+                translatedSegmentId: Guid.NewGuid(),
+                segmentIndex: segment.SegmentIndex,
+                translatedTextHash: ComputeTtsTextHash(segment.SegmentIndex, "Hola"))
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            TranslatedSegments: [],
+            [orphanedTake]));
+
+        MixSpeechClip clip = Assert.Single(plan.SpeechClips);
+        Assert.True(clip.IsSilentGap);
+        MixPlanWarning warning = Assert.Single(plan.Warnings);
+        Assert.Contains("stale", warning.Message);
+    }
+
+    [Fact]
+    public void Build_replaces_hashless_take_without_current_translation_with_silent_gap_warning()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 0.0d, 1.0d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 1, durationSeconds: 1d);
+        TtsTake orphanedTake = TtsTake.Create(
+                context.ProjectId,
+                context.VoiceAssignmentId,
+                translatedSegmentId: Guid.NewGuid(),
+                segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            TranslatedSegments: [],
+            [orphanedTake]));
+
+        MixSpeechClip clip = Assert.Single(plan.SpeechClips);
+        Assert.True(clip.IsSilentGap);
+        MixPlanWarning warning = Assert.Single(plan.Warnings);
+        Assert.Contains("stale", warning.Message);
+    }
+
+    [Fact]
+    public void Build_keeps_hashed_take_when_translated_segment_id_changed_but_text_matches()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 0.0d, 1.0d, "Hello", context.SpeakerId);
+        TranslatedSegment translatedSegment = TranslatedSegment.Create(context.TranslationRevisionId, 0, 0.0d, 1.0d, "Hola");
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 1, durationSeconds: 1d);
+        TtsTake take = TtsTake.Create(
+                context.ProjectId,
+                context.VoiceAssignmentId,
+                translatedSegmentId: Guid.NewGuid(),
+                segmentIndex: segment.SegmentIndex,
+                translatedTextHash: ComputeTtsTextHash(segment.SegmentIndex, translatedSegment.Text))
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [translatedSegment],
+            [take]));
+
+        MixSpeechClip clip = Assert.Single(plan.SpeechClips);
+        Assert.False(clip.IsSilentGap);
+        Assert.Empty(plan.Warnings);
+    }
+
+    [Fact]
+    public void Build_keeps_hashless_take_when_translated_segment_id_changed()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 0.0d, 1.0d, "Hello", context.SpeakerId);
+        TranslatedSegment translatedSegment = TranslatedSegment.Create(context.TranslationRevisionId, 0, 0.0d, 1.0d, "Hola");
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 1, durationSeconds: 1d);
+        TtsTake take = TtsTake.Create(
+                context.ProjectId,
+                context.VoiceAssignmentId,
+                translatedSegmentId: Guid.NewGuid(),
+                segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [translatedSegment],
+            [take]));
+
+        MixSpeechClip clip = Assert.Single(plan.SpeechClips);
+        Assert.False(clip.IsSilentGap);
+        Assert.Empty(plan.Warnings);
+    }
+
+    [Fact]
+    public void Build_keeps_segment_index_only_legacy_take_when_translation_exists()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 0.0d, 1.0d, "Hello", context.SpeakerId);
+        TranslatedSegment translatedSegment = TranslatedSegment.Create(context.TranslationRevisionId, 0, 0.0d, 1.0d, "Hola");
+        ProjectArtifact normalized = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", createdOffsetSeconds: 1, durationSeconds: 1d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [translatedSegment],
+            [take]));
+
+        MixSpeechClip clip = Assert.Single(plan.SpeechClips);
+        Assert.False(clip.IsSilentGap);
+        Assert.Empty(plan.Warnings);
+    }
+
+    [Fact]
+    public async Task MixPlanStore_round_trips_plan_as_project_json()
+    {
+        TestProjectContext context = CreateContext();
+        var store = new FakeArtifactStore();
+        var mixPlanStore = new MixPlanStore(store);
+        var plan = new MixPlan(
+            context.ProjectId,
+            context.MediaAssetId,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            SourceGainDb: -3d,
+            DubbedSpeechGainDb: 2d,
+            DuckingGainDb: -12d,
+            DuckingLeadSeconds: 0.05d,
+            DuckingTailSeconds: 0.18d,
+            DateTimeOffset.UtcNow,
+            SpeechClips:
+            [
+                new MixSpeechClip(0, Guid.NewGuid(), 1d, 2d, Guid.NewGuid(), Guid.NewGuid(), "artifacts/tts/take.wav", 1d, IsSilentGap: false, WarningMessage: null)
+            ],
+            DuckingRegions:
+            [
+                new MixDuckRegion(0, Guid.NewGuid(), 0.95d, 2.18d, -12d)
+            ],
+            Warnings: [],
+            OriginalMixAudioRelativePath: ProjectArtifactPaths.NormalizedAudioRelativePath,
+            OutputChannelCount: 2,
+            RestoreOriginalPan: true);
+
+        await mixPlanStore.SaveAsync(plan, TestContext.Current.CancellationToken);
+        MixPlan? reloaded = await mixPlanStore.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(reloaded);
+        Assert.Equal(plan.ProjectId, reloaded!.ProjectId);
+        Assert.Equal(plan.SourceAudioRelativePath, reloaded.SourceAudioRelativePath);
+        Assert.Equal(plan.SourceGainDb, reloaded.SourceGainDb);
+        Assert.Equal(plan.SpeechClips[0].TakeRelativePath, reloaded.SpeechClips[0].TakeRelativePath);
+        Assert.Equal(plan.DuckingRegions[0].EndSeconds, reloaded.DuckingRegions[0].EndSeconds);
+        Assert.Equal(plan.OriginalMixAudioRelativePath, reloaded.OriginalMixAudioRelativePath);
+        Assert.Equal(2, reloaded.OutputChannelCount);
+        Assert.True(reloaded.RestoreOriginalPan);
+    }
+
+    [Fact]
+    public async Task MixPlanStore_loads_legacy_plan_without_channel_metadata()
+    {
+        var store = new FakeArtifactStore();
+        var mixPlanStore = new MixPlanStore(store);
+        Guid projectId = Guid.NewGuid();
+        string legacyJson = $$"""
+            {
+              "ProjectId": "{{projectId}}",
+              "MediaAssetId": null,
+              "SourceAudioKind": 1,
+              "SourceAudioRelativePath": "media/normalized_audio.wav",
+              "SourceGainDb": 0,
+              "DubbedSpeechGainDb": 0,
+              "DuckingGainDb": -13,
+              "DuckingLeadSeconds": 0.05,
+              "DuckingTailSeconds": 0.18,
+              "CreatedAtUtc": "2026-05-07T00:00:00+00:00",
+              "SpeechClips": [],
+              "DuckingRegions": [],
+              "Warnings": []
+            }
+            """;
+        store.Seed(ProjectArtifactPaths.MixPlanRelativePath, System.Text.Encoding.UTF8.GetBytes(legacyJson));
+
+        MixPlan? reloaded = await mixPlanStore.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(reloaded);
+        Assert.Equal(projectId, reloaded!.ProjectId);
+        Assert.Equal("media/normalized_audio.wav", reloaded.OriginalMixAudioRelativePath);
+        Assert.Equal(1, reloaded.OutputChannelCount);
+        Assert.False(reloaded.RestoreOriginalPan);
+    }
+
+    [Fact]
+    public async Task PreviewMixWorkflow_persists_plan_and_records_renderer_output()
+    {
+        TestProjectContext context = CreateContext();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var project = new TrackdubProject(context.ProjectId, "Preview", now, now);
+        var mediaAsset = new MediaAsset(
+            context.MediaAssetId,
+            context.ProjectId,
+            "source.mp4",
+            "source.mp4",
+            "source-hash",
+            100,
+            now,
+            "mp4",
+            8.0d,
+            HasAudio: true,
+            HasVideo: true,
+            now);
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 1.0d, 2.0d, "Hello", context.SpeakerId);
+        TranslatedSegment translatedSegment = TranslatedSegment.Create(context.TranslationRevisionId, 0, 1.0d, 2.0d, "Hola");
+        ProjectArtifact sourceArtifact = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, 0, durationSeconds: 8d);
+        ProjectArtifact takeArtifact = CreateArtifact(context, ArtifactKind.TtsTake, "artifacts/tts/take.wav", 1, durationSeconds: 1d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, translatedSegment.Id, segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 48000, provider: "fake");
+        var artifactStore = new FakeArtifactStore();
+        var renderer = new FakeMixRenderer();
+        var mediaAssetRepository = new FakeMediaAssetRepository();
+        TranscriptProjectState state = CreateState(project, mediaAsset, [sourceArtifact, takeArtifact], [segment], [translatedSegment], [take]);
+        var workflow = new PreviewMixWorkflow(
+            new MixPlanBuilder(),
+            new MixPlanStore(artifactStore),
+            renderer,
+            artifactStore,
+            new FakeFileFingerprintService(new FileFingerprint("preview-hash", 44, now)),
+            mediaAssetRepository,
+            new FakeProjectStageRunStore());
+
+        PreviewMixStageResult result = await workflow.GeneratePreviewAsync(
+            state,
+            new PreviewMixStageRequest(context.ProjectId, 1.0d, 3.0d, SourceGainDb: -4d, DubbedSpeechGainDb: 1d, DuckingGainDb: -10d),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2.0d, result.DurationSeconds);
+        Assert.Equal(StageRunStatus.Completed, result.StageRun.Status);
+        Assert.Single(renderer.Calls);
+        Assert.Equal(-4d, renderer.LastMixPlan!.SourceGainDb);
+        Assert.True(artifactStore.Exists(ProjectArtifactPaths.MixPlanRelativePath));
+        ProjectArtifact previewArtifact = Assert.Single(mediaAssetRepository.Artifacts, artifact => artifact.Kind == ArtifactKind.PreviewMix);
+        Assert.Equal(result.PreviewAudioRelativePath, previewArtifact.RelativePath);
+    }
+
+    [Fact]
+    public async Task PreviewMixWorkflow_marks_stage_canceled_when_render_is_canceled()
+    {
+        TestProjectContext context = CreateContext();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var project = new TrackdubProject(context.ProjectId, "Preview", now, now);
+        var mediaAsset = new MediaAsset(
+            context.MediaAssetId,
+            context.ProjectId,
+            "source.mp4",
+            "source.mp4",
+            "source-hash",
+            100,
+            now,
+            "mp4",
+            8.0d,
+            HasAudio: true,
+            HasVideo: true,
+            now);
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 1.0d, 2.0d, "Hello", context.SpeakerId);
+        ProjectArtifact sourceArtifact = CreateArtifact(context, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath, 0, durationSeconds: 8d);
+        var artifactStore = new FakeArtifactStore();
+        var stageRunStore = new FakeProjectStageRunStore();
+        TranscriptProjectState state = CreateState(project, mediaAsset, [sourceArtifact], [segment], [], []);
+        var workflow = new PreviewMixWorkflow(
+            new MixPlanBuilder(),
+            new MixPlanStore(artifactStore),
+            new CancelingMixRenderer(),
+            artifactStore,
+            new FakeFileFingerprintService(new FileFingerprint("preview-hash", 44, now)),
+            new FakeMediaAssetRepository(),
+            stageRunStore);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            workflow.GeneratePreviewAsync(
+                state,
+                new PreviewMixStageRequest(context.ProjectId, 1.0d, 3.0d),
+                TestContext.Current.CancellationToken));
+
+        StageRunRecord stageRun = Assert.Single(stageRunStore.All);
+        Assert.Equal(StageRunStatus.Canceled, stageRun.Status);
+        Assert.Contains("canceled", stageRun.FailureReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FakeMixRenderer_rejects_invalid_ranges_like_real_renderer()
+    {
+        var renderer = new FakeMixRenderer();
+        var plan = new MixPlan(
+            Guid.NewGuid(),
+            MediaAssetId: null,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            SourceGainDb: 0d,
+            DubbedSpeechGainDb: 0d,
+            DuckingGainDb: -12d,
+            DuckingLeadSeconds: 0.05d,
+            DuckingTailSeconds: 0.18d,
+            DateTimeOffset.UtcNow,
+            SpeechClips: [],
+            DuckingRegions: [],
+            Warnings: []);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            renderer.RenderAsync(
+                new PreviewRangeRenderRequest(plan, StartSeconds: 3d, EndSeconds: 2d, Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.wav")),
+                TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task FakeMixRenderer_can_promote_output_to_stereo_from_source_channel_metadata()
+    {
+        var renderer = new FakeMixRenderer();
+        renderer.SeedSourceChannelCount(ProjectArtifactPaths.NormalizedAudioRelativePath, 6);
+        var plan = new MixPlan(
+            Guid.NewGuid(),
+            MediaAssetId: null,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            SourceGainDb: 0d,
+            DubbedSpeechGainDb: 0d,
+            DuckingGainDb: -12d,
+            DuckingLeadSeconds: 0.05d,
+            DuckingTailSeconds: 0.18d,
+            DateTimeOffset.UtcNow,
+            SpeechClips: [],
+            DuckingRegions: [],
+            Warnings: [],
+            OutputChannelCount: 1);
+        string outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.wav");
+
+        try
+        {
+            PreviewRangeRenderResult result = await renderer.RenderAsync(
+                new PreviewRangeRenderRequest(plan, StartSeconds: 0d, EndSeconds: 1d, outputPath),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, result.ChannelCount);
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Fact]
+    public void FakeMixRenderer_rejects_non_positive_source_channel_metadata()
+    {
+        var renderer = new FakeMixRenderer();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            renderer.SeedSourceChannelCount(ProjectArtifactPaths.NormalizedAudioRelativePath, 0));
+    }
+
+    private static TranscriptProjectState CreateState(
+        TrackdubProject project,
+        MediaAsset mediaAsset,
+        IReadOnlyList<ProjectArtifact> artifacts,
+        IReadOnlyList<TranscriptSegment> transcriptSegments,
+        IReadOnlyList<TranslatedSegment> translatedSegments,
+        IReadOnlyList<TtsTake> ttsTakes)
+    {
+        var sourceReference = new SourceMediaReference(
+            mediaAsset.SourceFilePath,
+            mediaAsset.SourceFileName,
+            new FileFingerprint(mediaAsset.FingerprintSha256, mediaAsset.SourceSizeBytes, mediaAsset.SourceLastWriteTimeUtc),
+            new MediaProbeSnapshot(
+                "mp4",
+                "MP4",
+                mediaAsset.DurationSeconds,
+                mediaAsset.SourceSizeBytes,
+                [new MediaAudioStream(0, "aac", 2, 48000, mediaAsset.DurationSeconds)],
+                [new MediaVideoStream(1, "h264", 1920, 1080, 24.0d, mediaAsset.DurationSeconds)]),
+            DateTimeOffset.UtcNow);
+        var openResult = new OpenProjectResult(
+            project,
+            mediaAsset,
+            sourceReference,
+            SourceMediaStatus.Available,
+            SourceStatusMessage: null,
+            artifacts,
+            TranscriptLanguage: "en");
+        TranscriptRevision transcriptRevision = TranscriptRevision.Create(
+            project.Id,
+            stageRunId: null,
+            revisionNumber: 1,
+            DateTimeOffset.UtcNow);
+        TranslationRevision translationRevision = TranslationRevision.Create(
+            project.Id,
+            stageRunId: null,
+            transcriptRevision.Id,
+            "es",
+            revisionNumber: 1,
+            DateTimeOffset.UtcNow);
+        return new TranscriptProjectState(
+            openResult,
+            transcriptRevision,
+            transcriptSegments,
+            Speakers: [],
+            SpeakerTurns: [],
+            translationRevision,
+            translatedSegments,
+            IsTranslationStale: false,
+            TranscriptLanguage: "en",
+            StageRuns: [],
+            SupportedTargetLanguages: [],
+            SelectedTranslationTargetLanguage: "es",
+            StaleTranslatedSegmentIndices: new HashSet<int>(),
+            WaveformSummary: null,
+            AvailableVoices: [],
+            VoiceAssignments: [],
+            ttsTakes,
+            TtsSegmentStates: [],
+            VoiceAssignmentWarnings: []);
+    }
+
+    private static ProjectArtifact CreateArtifact(
+        TestProjectContext context,
+        ArtifactKind kind,
+        string relativePath,
+        int createdOffsetSeconds,
+        double? durationSeconds = null,
+        string? provenance = null,
+        int channelCount = 1)
+    {
+        DateTimeOffset createdAtUtc = DateTimeOffset.UtcNow.AddSeconds(createdOffsetSeconds);
+        provenance ??= kind switch
+        {
+            ArtifactKind.Vocals => "generated-spleeter-vocals;engine_family=spleeter;model=spleeter",
+            ArtifactKind.Ambiance => "generated-spleeter-ambiance;engine_family=spleeter;model=spleeter",
+            _ => null
+        };
+
+        return new ProjectArtifact(
+            Guid.NewGuid(),
+            context.ProjectId,
+            context.MediaAssetId,
+            kind,
+            relativePath,
+            $"{kind.ToString().ToLowerInvariant()}-hash",
+            100,
+            durationSeconds,
+            48000,
+            channelCount,
+            createdAtUtc,
+            Provenance: provenance);
+    }
+
+    private static TestProjectContext CreateContext() =>
+        new(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid());
+
+    private static string ComputeTtsTextHash(int segmentIndex, string text)
+    {
+        string payload = string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"{segmentIndex}|{text.Trim()}");
+        byte[] hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    // ---------------------------------------------------------------------------
+    // LipSync artifact preference
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public void Build_prefers_lipsync_artifact_over_tts_take_when_file_exists_on_disk()
+    {
+        // Arrange
+        string directory = Path.Combine(Path.GetTempPath(), $"mix-lipsync-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            TestProjectContext context = CreateContext();
+            var artifactStore = new FakeArtifactStore(directory);
+
+            TranscriptSegment segment = TranscriptSegment.Create(
+                context.TranscriptRevisionId, 0, 1.0d, 2.5d, "Hello", context.SpeakerId);
+            ProjectArtifact normalized = CreateArtifact(
+                context, ArtifactKind.NormalizedAudio,
+                ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+
+            var ttsRelPath = $"artifacts/tts/{Guid.NewGuid():N}.wav";
+            artifactStore.Seed(ttsRelPath);
+            ProjectArtifact ttsArtifact = CreateArtifact(
+                context, ArtifactKind.TtsTake, ttsRelPath,
+                createdOffsetSeconds: 1, durationSeconds: 2.0d);
+
+            TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+                .Complete(ttsArtifact.Id, durationSamples: 96000, sampleRate: 48000, provider: "fake");
+
+            // Register a LipSync artifact pointing to the same take.
+            var lipSyncRelPath = $"artifacts/lip-sync/{Guid.NewGuid():N}/{take.TranslatedSegmentId ?? Guid.NewGuid():N}.wav";
+            artifactStore.Seed(lipSyncRelPath);
+            ProjectArtifact lipSyncArtifact = CreateArtifact(
+                context, ArtifactKind.LipSyncTake, lipSyncRelPath,
+                createdOffsetSeconds: 2, durationSeconds: 1.85d,
+                provenance: $"lipsync:take:{take.Id:N}");
+
+            // Act — pass artifactStore so file-existence check runs.
+            MixPlan plan = new MixPlanBuilder(artifactStore).Build(new MixPlanBuildRequest(
+                context.ProjectId,
+                context.MediaAssetId,
+                [normalized, ttsArtifact, lipSyncArtifact],
+                [segment],
+                [],
+                [take]));
+
+            // Assert — speech clip should use the LipSync path.
+            Assert.Single(plan.SpeechClips);
+            MixSpeechClip clip = plan.SpeechClips[0];
+            Assert.False(clip.IsSilentGap);
+            Assert.Equal(lipSyncRelPath, clip.TakeRelativePath);
+            Assert.Equal(lipSyncArtifact.Id, clip.ArtifactId);
+            Assert.Equal(1.85d, clip.TakeDurationSeconds);
+            Assert.Empty(plan.Warnings);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_falls_back_to_tts_take_when_lipsync_file_missing_on_disk()
+    {
+        // Arrange
+        string directory = Path.Combine(Path.GetTempPath(), $"mix-lipsync-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            TestProjectContext context = CreateContext();
+            var artifactStore = new FakeArtifactStore(directory);
+
+            TranscriptSegment segment = TranscriptSegment.Create(
+                context.TranscriptRevisionId, 0, 1.0d, 2.5d, "Hello", context.SpeakerId);
+            ProjectArtifact normalized = CreateArtifact(
+                context, ArtifactKind.NormalizedAudio,
+                ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+
+            var ttsRelPath = $"artifacts/tts/{Guid.NewGuid():N}.wav";
+            artifactStore.Seed(ttsRelPath);
+            ProjectArtifact ttsArtifact = CreateArtifact(
+                context, ArtifactKind.TtsTake, ttsRelPath,
+                createdOffsetSeconds: 1, durationSeconds: 2.0d);
+
+            TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+                .Complete(ttsArtifact.Id, durationSamples: 96000, sampleRate: 48000, provider: "fake");
+
+            // LipSync artifact registered in DB but NOT seeded on disk.
+            var lipSyncRelPath = $"artifacts/lip-sync/{Guid.NewGuid():N}/{Guid.NewGuid():N}.wav";
+            ProjectArtifact lipSyncArtifact = CreateArtifact(
+                context, ArtifactKind.LipSyncTake, lipSyncRelPath,
+                createdOffsetSeconds: 2, durationSeconds: 1.85d,
+                provenance: $"lipsync:take:{take.Id:N}");
+
+            // Act
+            MixPlan plan = new MixPlanBuilder(artifactStore).Build(new MixPlanBuildRequest(
+                context.ProjectId,
+                context.MediaAssetId,
+                [normalized, ttsArtifact, lipSyncArtifact],
+                [segment],
+                [],
+                [take]));
+
+            // Assert — should fall back to TTS take and emit a warning.
+            Assert.Single(plan.SpeechClips);
+            MixSpeechClip clip = plan.SpeechClips[0];
+            Assert.False(clip.IsSilentGap);
+            Assert.Equal(ttsRelPath, clip.TakeRelativePath);
+            Assert.Equal(ttsArtifact.Id, clip.ArtifactId);
+
+            MixPlanWarning warning = Assert.Single(plan.Warnings);
+            Assert.Equal(MixPlanWarningCode.LipSyncArtifactMissing, warning.Code);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_falls_back_to_tts_take_when_no_artifact_store_provided()
+    {
+        // Arrange — no artifactStore, so file-existence check is skipped.
+        TestProjectContext context = CreateContext();
+
+        TranscriptSegment segment = TranscriptSegment.Create(
+            context.TranscriptRevisionId, 0, 1.0d, 2.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context, ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0);
+
+        var ttsRelPath = $"artifacts/tts/{Guid.NewGuid():N}.wav";
+        ProjectArtifact ttsArtifact = CreateArtifact(
+            context, ArtifactKind.TtsTake, ttsRelPath,
+            createdOffsetSeconds: 1, durationSeconds: 2.0d);
+
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(ttsArtifact.Id, durationSamples: 96000, sampleRate: 48000, provider: "fake");
+
+        var lipSyncRelPath = $"artifacts/lip-sync/{Guid.NewGuid():N}/{Guid.NewGuid():N}.wav";
+        ProjectArtifact lipSyncArtifact = CreateArtifact(
+            context, ArtifactKind.LipSyncTake, lipSyncRelPath,
+            createdOffsetSeconds: 2, durationSeconds: 1.85d,
+            provenance: $"lipsync:take:{take.Id:N}");
+
+        // Act — no artifactStore passed to MixPlanBuilder.
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, ttsArtifact, lipSyncArtifact],
+            [segment],
+            [],
+            [take]));
+
+        // Assert — falls through to TTS take because store is null (no file check, no warning).
+        Assert.Single(plan.SpeechClips);
+        MixSpeechClip clip = plan.SpeechClips[0];
+        Assert.False(clip.IsSilentGap);
+        Assert.Equal(ttsRelPath, clip.TakeRelativePath);
+        Assert.Equal(ttsArtifact.Id, clip.ArtifactId);
+        Assert.Empty(plan.Warnings);
+    }
+
+    private sealed record TestProjectContext(
+        Guid ProjectId,
+        Guid MediaAssetId,
+        Guid TranscriptRevisionId,
+        Guid TranslationRevisionId,
+        Guid SpeakerId,
+        Guid VoiceAssignmentId);
+
+    private sealed class CancelingMixRenderer : IPreviewRangeRenderer
+    {
+        public Task<PreviewRangeRenderResult> RenderAsync(
+            PreviewRangeRenderRequest request,
+            CancellationToken cancellationToken) =>
+            throw new OperationCanceledException(cancellationToken);
+    }
+}
