@@ -35,7 +35,7 @@ LICENSE_CLAIM_PATTERNS = [
     # Same exclusion for the prose form: "GNU Lesser/Affero General Public
     # License" are distinct, permissive-enough-to-be-legitimate licenses.
     re.compile(r"(?<!Lesser )(?<!Affero )General Public License", re.IGNORECASE),
-    re.compile(r"[Dd]ual[- ]licens"),
+    re.compile(r"dual[- ]licens", re.IGNORECASE),
 ]
 LICENSE_CLAIM_EXCLUDE_DIRS = [
     "docs/plans/",
