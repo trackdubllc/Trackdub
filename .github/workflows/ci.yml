@@ -49,13 +49,10 @@ jobs:
         include:
           - name: Windows
             runner: windows-latest
-            framework_flag: ''
           - name: Linux
             runner: ubuntu-latest
-            framework_flag: '--framework net10.0'
           - name: macOS
             runner: macos-14
-            framework_flag: '--framework net10.0'
 
     steps:
       - name: Checkout Source
@@ -74,7 +71,7 @@ jobs:
         run: dotnet restore Trackdub.slnx -m:1
 
       - name: Compile
-        run: dotnet build Trackdub.slnx -c Release ${{ matrix.framework_flag }} --no-restore -m:1
+        run: dotnet build Trackdub.slnx -c Release --no-restore -m:1
 
       - name: Test
-        run: dotnet test Trackdub.slnx -c Release ${{ matrix.framework_flag }} --no-build -m:1
+        run: dotnet test Trackdub.slnx -c Release --no-build -m:1
