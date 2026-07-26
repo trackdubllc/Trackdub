@@ -115,3 +115,17 @@ Imperative title: `Add ...`, `Remove ...`, `Fix ...`, `Revise ...`
 ## Repository Policy
 
 See [docs/repository-policy.md](docs/repository-policy.md) for organization and governance details.
+
+## Cursor Cloud specific instructions
+
+No long-running services. The product entrypoint is the headless CLI (`src/Trackdub.Cli`). Standard build/test/run commands are in [AGENTS.md Commands](#commands) and README.
+
+### Cloud agent gotchas
+
+- Always pass `-m:1` to `dotnet restore`, `dotnet build`, and `dotnet test` (matches CI and avoids restore/build races).
+- NuGet restore needs network access to both `nuget.org` and the Azure Artifacts `dotnet-libraries` feed (see `NuGet.config`) for `Microsoft.ML.Tokenizers` 3.x.
+- `dotnet format Trackdub.slnx --verify-no-changes` is the lint/format gate (CI `format` job).
+- FFmpeg/ffprobe are required for media stages; playback natives (libmpv/LibVLC) are optional for CLI pipeline runs. `trackdub doctor` reports readiness.
+- Full `dub` / ASR / TTS / translation need ONNX models downloaded into the model cache (`trackdub models bundle-needed`, then `trackdub models download <id>`). Tests that need models skip cleanly when missing.
+- Prefer `dotnet run --project src/Trackdub.Cli -- <args>` over a global tool install. Use `--no-build` after a fresh Debug build.
+- Default data/cache roots land under `~/.local/share/Trackdub` (override with `TRACKDUB_DATA_ROOT` / `TRACKDUB_CACHE_ROOT` if needed).
