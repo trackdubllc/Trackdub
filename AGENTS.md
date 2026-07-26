@@ -50,12 +50,12 @@ dotnet test Trackdub.slnx -m:1
 dotnet test tests/Trackdub.<Area>.Tests --no-restore -m:1
 
 # Single test
-dotnet test tests/Trackdub.Application.Tests --filter "FullyQualifiedName~<TestName>"
+dotnet test tests/Trackdub.Application.Tests --filter "FullyQualifiedName~<TestName>" -m:1
 
 # CI build (Release, warnings as errors)
-dotnet restore Trackdub.slnx
+dotnet restore Trackdub.slnx -m:1
 dotnet build Trackdub.slnx --configuration Release --no-restore -m:1 -warnaserror
-dotnet test Trackdub.slnx --configuration Release --no-build
+dotnet test Trackdub.slnx --configuration Release --no-build -m:1
 
 # Run headless CLI
 dotnet run --project src/Trackdub.Cli -- --help
