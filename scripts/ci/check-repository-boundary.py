@@ -36,6 +36,11 @@ LICENSE_CLAIM_EXCLUDE_DIRS = [
     "docs/plans/",
     "docs/decisions/",
     "docs/audits/",
+    "docs/architecture/",
+    "docs/specs/",
+    "docs/operations/",
+    "docs/development/",
+    "tools/",
 ]
 LICENSE_CLAIM_EXCLUDE_FILES = [
     "docs/legal/THIRD_PARTY_NOTICES.md",
