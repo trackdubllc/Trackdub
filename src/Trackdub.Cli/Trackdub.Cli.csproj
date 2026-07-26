@@ -6,6 +6,11 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>trackdub</ToolCommandName>
     <PackageId>Trackdub.Cli</PackageId>
+    <Authors>Trackdub</Authors>
+    <Description>Trackdub command-line interface for the local-first AI dubbing pipeline.</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/trackdubllc/Trackdub</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/trackdubllc/Trackdub</PackageProjectUrl>
   </PropertyGroup>
 
   <ItemGroup>

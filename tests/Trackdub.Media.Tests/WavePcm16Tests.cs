@@ -399,7 +399,7 @@ public sealed class WavePcm16Tests : IDisposable
 
         using (var destinationLock = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
         {
-            Exception ex = await Assert.ThrowsAsync<Exception>(() =>
+            Exception ex = await Assert.ThrowsAnyAsync<Exception>(() =>
                 WavePcm16.WriteSamplesAsync(
                     path,
                     [0.9f, -0.9f, 0.9f, -0.9f],

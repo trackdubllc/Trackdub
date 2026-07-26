@@ -39,6 +39,17 @@ jobs:
       - name: Verify Format Style Limits
         run: dotnet format Trackdub.slnx --verify-no-changes
 
+  repository-boundary:
+    name: Verify Repository Boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Scan for stale license/desktop-boundary claims
+        run: python3 scripts/ci/check-repository-boundary.py
+
   build:
     name: Build & Test (${{ matrix.name }})
     timeout-minutes: 45

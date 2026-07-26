@@ -8,6 +8,8 @@
     <Authors>Trackdub</Authors>
     <Description>DNNL-enabled ONNX Runtime native assets for Trackdub.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/trackdubllc/Trackdub</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/trackdubllc/Trackdub</PackageProjectUrl>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
