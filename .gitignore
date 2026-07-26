@@ -33,6 +33,7 @@ _site/
 # --- Models and large runtime assets ---
 models/
 !tools/models/
+!src/DubBench/Models/
 !tools/models/*.ps1
 model-cache/
 native/win-x64/
