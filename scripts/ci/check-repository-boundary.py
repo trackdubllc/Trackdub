@@ -57,11 +57,11 @@ LICENSE_CLAIM_EXCLUDE_FILES = [
 # appear as if they were part of this public core's legal/policy/contract
 # surface.
 BOUNDARY_PATTERNS = [
-    re.compile(r"Trackdub\.App\.Avalonia"),
-    re.compile(r"Trackdub\.Api\b"),
-    re.compile(r"Trackdub\.Worker\b"),
-    re.compile(r"Trackdub\.WebhookDelivery"),
-    re.compile(r"activation-service"),
+    re.compile(r"Trackdub\.App\.Avalonia", re.IGNORECASE),
+    re.compile(r"Trackdub\.Api\b", re.IGNORECASE),
+    re.compile(r"Trackdub\.Worker\b", re.IGNORECASE),
+    re.compile(r"Trackdub\.WebhookDelivery", re.IGNORECASE),
+    re.compile(r"activation-service", re.IGNORECASE),
 ]
 BOUNDARY_SCAN_PATHS = [
     "LICENSE",
