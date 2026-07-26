@@ -18,7 +18,7 @@ permissions:
 jobs:
   format:
     name: Verify Code Format
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 15
     steps:
       - name: Checkout Source
@@ -41,7 +41,7 @@ jobs:
 
   repository-boundary:
     name: Verify Repository Boundary
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     steps:
       - name: Checkout Source
@@ -59,11 +59,9 @@ jobs:
       matrix:
         include:
           - name: Windows
-            runner: windows-latest
+            runner: self-hosted
           - name: Linux
-            runner: ubuntu-latest
-          - name: macOS
-            runner: macos-14
+            runner: self-hosted
 
     steps:
       - name: Checkout Source
