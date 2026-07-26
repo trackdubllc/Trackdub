@@ -29,7 +29,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # (excluding historical planning/audit records and third-party notices,
 # which may legitimately discuss or quote other licenses).
 LICENSE_CLAIM_PATTERNS = [
-    re.compile(r"GPLv3"),
+    # Matches GPL/GPLv3/GPL-3.0-only/"GPL 3.0" etc., case-insensitively,
+    # while excluding LGPL/AGPL (a letter immediately before "GPL").
+    re.compile(r"(?<![A-Za-z])GPL", re.IGNORECASE),
+    re.compile(r"General Public License", re.IGNORECASE),
     re.compile(r"[Dd]ual[- ]licens"),
 ]
 LICENSE_CLAIM_EXCLUDE_DIRS = [
