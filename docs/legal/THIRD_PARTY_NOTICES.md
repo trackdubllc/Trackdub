@@ -28,17 +28,6 @@ Each entry should include:
 - attribution required?
 - notes
 
-## Inter
-
-- name: Inter
-- version / revision: 4.1
-- source URL: https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
-- license: SIL Open Font License 1.1
-- commercial use allowed? yes
-- redistribution allowed? yes
-- attribution required? license notice retained in `src/Trackdub.App/Assets/Fonts/Inter-LICENSE.txt`
-- notes: Packaged as `InterVariable.ttf` and `InterVariable-Italic.ttf` for Trackdub UI typography.
-
 ## FFmpeg / ffprobe Windows x64 binaries
 
 - name: FFmpeg / ffprobe Windows x64 binaries (BtbN FFmpeg-Builds, `lgpl-shared`)
@@ -70,40 +59,7 @@ Each entry should include:
 - commercial use allowed? yes
 - redistribution allowed? yes, provided LGPL-2.1 obligations are met (dynamic linking, no source modifications)
 - attribution required? yes
-- notes: .NET bindings for the LibVLC media framework. The application links to LibVLC dynamically (LGPL compliance). No modifications are made to the LibVLC or LibVLCSharp source. Used in `Trackdub.Media.Playback` and `Trackdub.App.Avalonia`.
-
-## LibVLCSharp.Avalonia
-
-- name: LibVLCSharp.Avalonia
-- version / revision: centrally pinned in Directory.Packages.props
-- source URL: https://www.nuget.org/packages/LibVLCSharp.Avalonia
-- license: LGPL-2.1-or-later
-- commercial use allowed? yes
-- redistribution allowed? yes, same terms as LibVLCSharp
-- attribution required? yes
-- notes: Avalonia-specific VideoView control for rendering LibVLC video output. Used in `Trackdub.App.Avalonia` only.
-
-## VideoLAN.LibVLC.Windows (LibVLC native runtime — Windows)
-
-- name: VideoLAN.LibVLC.Windows
-- version / revision: centrally pinned in Directory.Packages.props
-- source URL: https://www.nuget.org/packages/VideoLAN.LibVLC.Windows
-- license: LGPL-2.1-or-later
-- commercial use allowed? yes
-- redistribution allowed? yes, provided LGPL-2.1 notice and dynamic-linking obligations are met
-- attribution required? yes
-- notes: Bundled LibVLC native runtime for Windows (~100 MB). Extracted at build time into the application output directory. The application links dynamically — no static linking or source modification. Scoped to the Avalonia app project.
-
-## VideoLAN.LibVLC.Mac (LibVLC native runtime — macOS)
-
-- name: VideoLAN.LibVLC.Mac
-- version / revision: centrally pinned in Directory.Packages.props
-- source URL: https://www.nuget.org/packages/VideoLAN.LibVLC.Mac
-- license: LGPL-2.1-or-later
-- commercial use allowed? yes
-- redistribution allowed? yes, same terms as the Windows runtime package
-- attribution required? yes
-- notes: Bundled LibVLC native runtime for macOS. Extracted at build time into the application output directory. The application links dynamically — no static linking or source modification. Scoped to the Avalonia app project.
+- notes: .NET bindings for the LibVLC media framework. Trackdub links to LibVLC dynamically (LGPL compliance). No modifications are made to the LibVLC or LibVLCSharp source. Used in `Trackdub.Media.Playback` as one of two composited playback backends (libmpv is the primary compositor; LibVLC is the fallback). Bundling the native LibVLC runtime and any Avalonia-specific video-rendering control is a packaging concern of the consuming desktop product, not the public core, and is documented in that product's own third-party notices.
 
 ## LibVLC on Linux (system-installed)
 
@@ -114,7 +70,7 @@ Each entry should include:
 - commercial use allowed? yes
 - redistribution allowed? n/a — not bundled; users install via their system package manager
 - attribution required? yes (license notice in documentation)
-- notes: On Linux, no NuGet runtime package is available. The application uses the system-installed `libvlc.so` located by `LibVlcRuntimeLocator`. Users must install VLC (e.g., `sudo apt install vlc` or equivalent) for playback to function.
+- notes: On Linux, no NuGet runtime package is available. `Trackdub.Media.Playback`'s `LibVlcRuntimeLocator` falls back to the system-installed `libvlc.so`. End users must install VLC (e.g., `sudo apt install vlc` or equivalent) for the LibVLC playback backend to function.
 
 ## Trackdub.OnnxRuntime.Dnnl.Native (generated package)
 
