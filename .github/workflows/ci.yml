@@ -20,20 +20,21 @@ jobs:
     name: Verify Code Format
     runs-on: [self-hosted, Linux]
     timeout-minutes: 15
-    env:
-      # actions/setup-dotnet's install script defaults to a system-wide
-      # location (e.g. C:\Program Files\dotnet) that self-hosted runner
-      # service accounts often can't write to. Redirect installs into the
-      # per-job runner temp directory, which is always writable regardless
-      # of runner OS or account. (The `runner` context is only available
-      # inside a job, not at the workflow-level `env:`.)
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
+        # actions/setup-dotnet's install script defaults to a system-wide
+        # location (e.g. C:\Program Files\dotnet) that self-hosted runner
+        # service accounts often can't write to. Redirect installs into the
+        # per-step runner temp directory, which is always writable
+        # regardless of runner OS or account. (The `runner` context is
+        # only available inside a step, not at the job- or workflow-level
+        # `env:` -- confirmed via GitHub's own workflow validation error.)
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
         with:
           dotnet-version: '10.0.x'
           cache: true
@@ -65,14 +66,14 @@ jobs:
     name: Build & Test (Windows)
     timeout-minutes: 45
     runs-on: [self-hosted, Windows]
-    env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
         with:
           dotnet-version: '10.0.x'
           cache: true
@@ -96,14 +97,14 @@ jobs:
     name: Build & Test (Linux)
     timeout-minutes: 45
     runs-on: [self-hosted, Linux]
-    env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
         with:
           dotnet-version: '10.0.x'
           cache: true
@@ -127,14 +128,14 @@ jobs:
     name: Build & Test (macOS)
     timeout-minutes: 45
     runs-on: [self-hosted, macOS]
-    env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
         with:
           dotnet-version: '10.0.x'
           cache: true
