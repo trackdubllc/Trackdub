@@ -63,17 +63,17 @@ jobs:
   build:
     name: Build & Test (${{ matrix.name }})
     timeout-minutes: 45
-    runs-on: ${{ matrix.runner }}
+    runs-on: [self-hosted, "${{ matrix.os }}"]
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Windows
-            runner: [self-hosted, Windows]
+            os: Windows
           - name: Linux
-            runner: [self-hosted, Linux]
+            os: Linux
           - name: macOS
-            runner: [self-hosted, macOS]
+            os: macOS
 
     steps:
       - name: Checkout Source
