@@ -9,4 +9,5 @@ internal sealed record LicenseTokenClaims(
     IReadOnlyList<string> Machines,
     long Iat,
     long? Exp,
-    bool DevUnlimited = false);
+    bool DevUnlimited = false,
+    string? KeyId = null);
