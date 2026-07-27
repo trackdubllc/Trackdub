@@ -115,3 +115,8 @@ Imperative title: `Add ...`, `Remove ...`, `Fix ...`, `Revise ...`
 ## Repository Policy
 
 See [docs/repository-policy.md](docs/repository-policy.md) for organization and governance details.
+
+
+## Documentation
+
+See [docs/index.md](docs/index.md) for the categorized documentation index (ADRs, architecture, specs, audits, operations, and more).
