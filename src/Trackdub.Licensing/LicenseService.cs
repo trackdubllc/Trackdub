@@ -17,13 +17,22 @@ public sealed class LicenseService : ILicenseInitializer, ILicenseTierProvider
 
     private LicenseValidationResult _validationResult;
 
+    /// <param name="trustStore">
+    /// Optional signature trust policy. When omitted, tokens are verified against the
+    /// single embedded development public key, matching prior behavior. A consuming
+    /// product that needs multi-key rotation or revocation supplies its own
+    /// <see cref="ILicenseSignatureTrustStore"/> implementation here.
+    /// </param>
     public LicenseService(
         IHardwareFingerprintProvider fingerprintProvider,
-        ILogger<LicenseService> logger)
+        ILogger<LicenseService> logger,
+        ILicenseSignatureTrustStore? trustStore = null)
     {
         _fileStore = new LicenseFileStore();
         _parser = new LicenseTokenParser();
-        _validator = new LicenseTokenValidator();
+        _validator = trustStore is not null
+            ? new LicenseTokenValidator(trustStore)
+            : new LicenseTokenValidator();
         _fingerprintProvider = fingerprintProvider;
         _logger = logger;
         _validationResult = new LicenseValidationResult(LicenseTier.Free, null, 0, 0, null, null);
@@ -75,7 +84,7 @@ public sealed class LicenseService : ILicenseInitializer, ILicenseTierProvider
 
             // 3. Verify signature
             var sigParts = _parser.GetSignatureParts(token);
-            if (sigParts is null || !_validator.VerifySignature(sigParts.Value.SigningInput, sigParts.Value.Signature))
+            if (sigParts is null || !_validator.VerifySignature(claims.KeyId, sigParts.Value.SigningInput, sigParts.Value.Signature))
             {
                 _logger.LogWarning("License token signature verification failed.");
                 _validationResult = new LicenseValidationResult(LicenseTier.Free, claims.Sub, 0, 0, null, "Invalid signature");
