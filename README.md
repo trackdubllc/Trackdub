@@ -25,6 +25,8 @@ inference runs locally via ONNX models with no mandatory cloud dependency.
 | `Trackdub.Benchmarks` | Performance benchmarks |
 | `Trackdub.Tools` | Development utilities |
 | `Trackdub.Analyzers` | Roslyn analyzers |
+| `Trackdub.DubBench` | Benchmark harness and Avalonia sidecar launcher |
+| `Trackdub.OnnxRuntime.Dnnl.Native` | Native oneDNN/DNNL execution provider for ONNX Runtime |
 
 ## Requirements
 
@@ -66,17 +68,20 @@ Strict layered dependency direction. Domain depends on nothing:
 ```
 Application → Contracts, Domain, Licensing
 Infrastructure → Application, Contracts, Domain
-Media → Application, Contracts, Domain
+Media → Application, Analyzers, Contracts, Domain
 Media.Playback → Application, Domain
 Inference → Contracts, Domain
 Inference.Onnx → Inference, Contracts, Domain
 Composition → Application, Inference, Inference.Onnx, Infrastructure, Licensing, Media, Media.Playback
 Sdk → Application, Composition, Licensing
 Cli → Sdk
+DubBench → Benchmarks, Domain, Inference, Inference.Onnx
 Benchmarks → Application, Composition, Domain, Inference, Inference.Onnx, Infrastructure
 Tools → Application, Domain, Infrastructure, Media
 Contracts → Domain
 Licensing → (nothing)
+Analyzers → (nothing)
+OnnxRuntime.Dnnl.Native → (nothing)
 Domain → (nothing)
 ```
 
@@ -85,6 +90,11 @@ Domain → (nothing)
 Only ONNX models with verified commercial licenses are supported. The bundled
 model manifest (`src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.manifest.json`)
 is the single source of truth for model inventory.
+
+## Documentation
+
+See [docs/index.md](docs/index.md) for the categorized documentation index (ADRs, architecture, specs, audits, operations, and more).
+Governance and contribution guidelines are in [docs/repository-policy.md](docs/repository-policy.md).
 
 ## License
 

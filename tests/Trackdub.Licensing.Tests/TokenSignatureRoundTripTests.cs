@@ -42,7 +42,7 @@ public sealed class TokenSignatureRoundTripTests
                 return false.Label("Parse returned null");
 
             // Assert: signature is valid
-            var signatureValid = validator.VerifySignature(sigParts.Value.SigningInput, sigParts.Value.Signature);
+            var signatureValid = validator.VerifySignature(claims.KeyId, sigParts.Value.SigningInput, sigParts.Value.Signature);
             if (!signatureValid)
                 return false.Label("Signature validation failed");
 
@@ -88,7 +88,9 @@ internal static class TestTokenBuilder
         IReadOnlyList<string> machines,
         long iat,
         long? exp,
-        bool devUnlimited = false)
+        bool devUnlimited = false,
+        string? keyId = null,
+        ECDsa? signingKey = null)
     {
         var header = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(new { alg = "ES256", typ = "JWT" }));
         var payloadObj = new Dictionary<string, object?>
@@ -103,10 +105,14 @@ internal static class TestTokenBuilder
         {
             payloadObj["dev_unlimited"] = true;
         }
+        if (keyId is not null)
+        {
+            payloadObj["kid"] = keyId;
+        }
         var payload = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payloadObj));
         var signingInput = $"{header}.{payload}";
 
-        var signatureBytes = Ecdsa.SignData(Encoding.UTF8.GetBytes(signingInput), HashAlgorithmName.SHA256);
+        var signatureBytes = (signingKey ?? Ecdsa).SignData(Encoding.UTF8.GetBytes(signingInput), HashAlgorithmName.SHA256);
         var signature = Base64UrlEncode(signatureBytes);
 
         return $"{header}.{payload}.{signature}";

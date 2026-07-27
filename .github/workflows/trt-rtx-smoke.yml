@@ -14,7 +14,7 @@ jobs:
   trt-rtx-smoke:
     name: TensorRT RTX benchmark smoke
     if: vars.TRACKDUB_TRT_RTX_SMOKE == 'true'
-    runs-on: windows-latest
+    runs-on: self-hosted
     timeout-minutes: 45
     # Remove continue-on-error once the self-hosted GPU runner completes ≥3 consecutive green runs.
     continue-on-error: true

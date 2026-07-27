@@ -18,7 +18,8 @@ internal sealed class LicenseTokenValidator
         -----END PUBLIC KEY-----
         """;
 
-    private readonly ECDsa _ecdsa;
+    private readonly ECDsa? _ecdsa;
+    private readonly ILicenseSignatureTrustStore? _trustStore;
 
     /// <summary>
     /// Creates a validator using the embedded production public key.
@@ -39,15 +40,48 @@ internal sealed class LicenseTokenValidator
     }
 
     /// <summary>
+    /// Creates a validator that resolves the trusted key per-token via
+    /// <paramref name="trustStore"/> instead of the embedded key.
+    /// </summary>
+    internal LicenseTokenValidator(ILicenseSignatureTrustStore trustStore)
+    {
+        _trustStore = trustStore;
+    }
+
+    /// <summary>
     /// Verifies the ES256 signature over the signing input bytes.
     /// Returns true if the signature is valid, false otherwise.
     /// Never throws.
     /// </summary>
-    public bool VerifySignature(byte[] signingInput, byte[] signature)
+    /// <param name="keyId">
+    /// The unverified key id from the token's claims. Ignored when this validator
+    /// was constructed without a trust store; the embedded key is used in that case.
+    /// </param>
+    public bool VerifySignature(string? keyId, byte[] signingInput, byte[] signature)
     {
+        if (_trustStore is not null)
+        {
+            var publicKeyPem = _trustStore.ResolvePublicKeyPem(keyId);
+            if (publicKeyPem is null)
+            {
+                return false;
+            }
+
+            try
+            {
+                using var ecdsa = ECDsa.Create();
+                ecdsa.ImportFromPem(publicKeyPem);
+                return ecdsa.VerifyData(signingInput, signature, HashAlgorithmName.SHA256);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         try
         {
-            return _ecdsa.VerifyData(signingInput, signature, HashAlgorithmName.SHA256);
+            return _ecdsa!.VerifyData(signingInput, signature, HashAlgorithmName.SHA256);
         }
         catch
         {
