@@ -31,9 +31,11 @@ public sealed class LicenseSignatureTrustStoreTests
 
             var trustStore = new FakeTrustStore(("ring-key-1", publicKeyPem));
             var service = new LicenseService(
+                store,
+                new LicenseTokenParser(),
+                new LicenseTokenValidator(trustStore),
                 new StaticFingerprintProvider("sha256:current"),
-                NullLogger<LicenseService>.Instance,
-                trustStore);
+                NullLogger<LicenseService>.Instance);
 
             var result = await service.InitializeAsync();
 
@@ -73,9 +75,11 @@ public sealed class LicenseSignatureTrustStoreTests
             // closed, not fall back to any other key.
             var trustStore = new FakeTrustStore();
             var service = new LicenseService(
+                store,
+                new LicenseTokenParser(),
+                new LicenseTokenValidator(trustStore),
                 new StaticFingerprintProvider("sha256:current"),
-                NullLogger<LicenseService>.Instance,
-                trustStore);
+                NullLogger<LicenseService>.Instance);
 
             var result = await service.InitializeAsync();
 
@@ -113,9 +117,11 @@ public sealed class LicenseSignatureTrustStoreTests
             // that actually signed the token.
             var trustStore = new FakeTrustStore(("ring-key-1", differentKey.ExportSubjectPublicKeyInfoPem()));
             var service = new LicenseService(
+                store,
+                new LicenseTokenParser(),
+                new LicenseTokenValidator(trustStore),
                 new StaticFingerprintProvider("sha256:current"),
-                NullLogger<LicenseService>.Instance,
-                trustStore);
+                NullLogger<LicenseService>.Instance);
 
             var result = await service.InitializeAsync();
 
