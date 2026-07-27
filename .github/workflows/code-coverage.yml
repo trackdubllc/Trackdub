@@ -18,7 +18,7 @@ permissions:
 jobs:
   dotnet:
     name: .NET coverage
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - name: Checkout repository

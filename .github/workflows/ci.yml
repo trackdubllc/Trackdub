@@ -18,7 +18,7 @@ permissions:
 jobs:
   format:
     name: Verify Code Format
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout Source
@@ -52,7 +52,7 @@ jobs:
 
   repository-boundary:
     name: Verify Repository Boundary
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Checkout Source
@@ -65,7 +65,7 @@ jobs:
   build-windows:
     name: Build & Test (Windows)
     timeout-minutes: 45
-    runs-on: [self-hosted, Windows]
+    runs-on: windows-latest
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
@@ -96,7 +96,7 @@ jobs:
   build-linux:
     name: Build & Test (Linux)
     timeout-minutes: 45
-    runs-on: [self-hosted, Linux]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
@@ -127,7 +127,7 @@ jobs:
   build-macos:
     name: Build & Test (macOS)
     timeout-minutes: 45
-    runs-on: [self-hosted, macOS]
+    runs-on: macos-latest
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
