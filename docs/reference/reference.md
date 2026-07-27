@@ -1,4 +1,502 @@
-# Implementation Plan — G3: Cloud Egress Visibility & Consent
+# Design Standards
+
+This document collects the visual design tokens and patterns used by Trackdub. It combines evidence from the marketing site (`trackdub.com`) and the Avalonia/CLI UI code in this repository.
+
+## 1. Design Principles
+
+Trackdub's product voice is built around a small set of principles. These appear repeatedly in the marketing copy and should guide UI decisions:
+
+- **Local by default**: media, transcripts, and generated audio stay on the user's disk.
+- **Deterministic runs**: the same manifest plus the same models produces the same output.
+- **Cross-platform**: Windows, macOS, and Linux share the same project format.
+- **Open manifest**: every bundled model is itemized with source, checksum, and license.
+- **No account required**: the tool does not depend on cloud identity.
+- **Per-line regen**: a single line, speaker, or stage can be regenerated without redoing everything.
+- **Resumable jobs**: checkpoints let the app close and continue from the last completed stage.
+- **CPU fallback, always**: every stage can run without an accelerator.
+- **Your disk, your files**: the user owns and controls project output.
+
+Source: `trackdub.com/` landing page, value-pillar copy, 2026-07-26.
+
+## 2. Brand & Voice
+
+- **Tagline**: "Dub videos into other languages without giving up control."
+- **Meta description**: "Trackdub is a local-first desktop workstation for dubbing video into other languages. Editable stages, deterministic runs, your media stays on your machine."
+- **Open Graph image**: `https://trackdub.com/og.png`, 1200 x 630.
+- **Site structure** (navigation): Pipeline, Try it, Resume, Control, Performance, Local-first, Manifest, Pricing, FAQ, Launch list.
+- **Page narrative**: "A desktop workstation", "Built for control at every stage", "Edit a line. Watch what invalidates.", "Pause anything. Edit one stage. Resume only what changed.", "Runs on the hardware you already have.", "Your media is yours. Here is the whole map."
+
+Source: `trackdub.com/src/routes/index.tsx` and `__root.tsx` head meta, 2026-07-26.
+
+## 3. Color
+
+### Marketing site palette
+
+The site uses **Tailwind CSS v4** with `@theme inline` and CSS custom properties. The default light theme is described in `styles.css` as the warm-cream "Autumn Harvest" persona. A `.dark` class provides a dark blue theme. Individual page sections also override these with "chapter" utilities.
+
+#### Brand anchors
+
+| Token | oklch | Approximate hex | Role |
+|---|---|---|---|
+| `--paper` | `oklch(0.955 0.024 78)` | `#f5ede0` | warm cream background |
+| `--paper-2` | `oklch(0.915 0.032 74)` | | deeper cream |
+| `--ink-raw` | `oklch(0.14 0.028 45)` | | charred brown-black |
+| `--ash` | `oklch(0.215 0.028 46)` | | warm graphite |
+| `--burgundy` | `oklch(0.32 0.115 32)` | | deep wine |
+| `--rust` | `oklch(0.44 0.14 42)` | | mid rust |
+| `--amber` | `oklch(0.74 0.17 62)` | | warm amber accent |
+| `--gold` | `oklch(0.86 0.15 82)` | | soft gold accent |
+| `--cream` | `oklch(0.965 0.024 78)` | | text on dark chapters |
+
+#### Default (paper) semantic tokens
+
+| Token | Value | Role |
+|---|---|---|
+| `--background` | `var(--paper)` | page background |
+| `--foreground` / `--ink` | `var(--ink-raw)` | body text |
+| `--surface` | `var(--paper-2)` | elevated surface |
+| `--surface-2` | `var(--ash)` | dark surface / accent block |
+| `--card` | `color-mix(in oklch, var(--paper) 92%, var(--ink-raw) 8%)` | card background |
+| `--card-foreground` | `var(--ink-raw)` | card text |
+| `--popover` | `var(--paper)` | popover background |
+| `--primary` | `var(--ink-raw)` | primary button / link |
+| `--primary-foreground` | `var(--paper)` | text on primary |
+| `--secondary` | `var(--paper-2)` | secondary background |
+| `--muted` | `var(--paper-2)` | muted background |
+| `--muted-foreground` | `color-mix(in oklch, var(--ink-raw) 72%, var(--paper) 28%)` | secondary text |
+| `--accent` | `var(--amber)` | accent color |
+| `--accent-foreground` | `var(--ink-raw)` | text on accent |
+| `--destructive` | `oklch(0.55 0.2 27)` | error / destructive |
+| `--border` / `--hairline` | `color-mix(in oklch, var(--ink-raw) 28%, var(--paper) 72%)` | borders |
+| `--input` | `color-mix(in oklch, var(--ink-raw) 22%, var(--paper) 78%)` | input borders |
+| `--ring` | `var(--amber)` | focus rings |
+| `--radius` | `0.25rem` (4 px) | corner radius |
+
+#### Dark semantic tokens
+
+The `.dark` class uses a slate-blue base (`oklch(0.129 0.042 264.695)` background, `oklch(0.984 0.003 247.858)` foreground) with the same Tailwind semantic map (`--background`, `--foreground`, `--primary`, `--secondary`, `--muted`, `--accent`, `--destructive`, `--border`, `--input`, `--ring`, etc.).
+
+#### Chapter themes
+
+`styles.css` defines six chapter utilities that override semantic tokens per section. They are applied to section IDs on the home page.
+
+| Utility | Background | Surface 2 | Foreground | Accent | Sections |
+|---|---|---|---|---|---|
+| `chapter-paper` | `var(--paper)` | `var(--ash)` | `var(--ink-raw)` | `var(--amber)` | `#top`, `#pipeline`, `#architecture` |
+| `chapter-cream` | paper + gold mix | paper + gold mix | `var(--ink-raw)` | `var(--burgundy)` | `#control`, `#pricing` |
+| `chapter-ash` | `var(--ash)` | `var(--ink-raw)` | `var(--cream)` | `var(--gold)` | (fallback for alternate sections) |
+| `chapter-ink` | `var(--ink-raw)` | ink + gold mix | `var(--cream)` | `var(--gold)` | `#walkthrough`, `#performance`, `#faq` |
+| `chapter-burgundy` | `var(--burgundy)` | `var(--ink-raw)` | `var(--cream)` | `var(--gold)` | `#resume`, `#privacy` |
+| `chapter-rust` | ash + rust mix | `var(--ink-raw)` | `var(--cream)` | `var(--gold)` | `#requirements` |
+
+Selection is tinted with the current accent: `background: color-mix(in oklch, var(--accent) 40%, transparent)`.
+
+#### Waveform accents
+
+SVG waveform graphics on the landing page use these `oklch()` values (they predate or coexist with the CSS chapter system):
+
+| Token | oklch | Suggested role |
+|---|---|---|
+| `--wave-muted` | `oklch(0.48 0.02 245)` | quiet / background waveform |
+| `--wave-base` | `oklch(0.55 0.03 240)` | dark waveform base |
+| `--accent-blue` | `oklch(0.72 0.15 258)` | primary accent |
+| `--accent-amber` | `oklch(0.72 0.15 50)` | secondary / warning accent |
+| `--accent-gold` | `oklch(0.78 0.17 62)` | highlight / active accent |
+
+Source: `trackdub.com/src/styles.css`, `trackdub.com/src/routes/index.tsx`, 2026-07-26.
+
+### Application palette (Avalonia)
+
+The `DubBench` Avalonia app ships two theme dictionaries. These are the canonical application color tokens.
+
+Dark theme (`src/DubBench/Resources/DubBenchTheme.axaml`):
+
+| Brush | Hex | Usage |
+|---|---|---|
+| `ThemeBackgroundBrush` | `#1A1A1A` | window / app background |
+| `ThemeSurfaceBrush` | `#2D2D2D` | elevated surfaces |
+| `ThemeAccentBrush` | `#00BFA5` | primary accent |
+| `ThemeTextPrimaryBrush` | `#E8E8E8` | body text |
+| `ThemeTextSecondaryBrush` | `#9E9E9E` | muted text |
+| `ThemeBorderBrush` / `BorderBrush` | `#3D3D3D` | borders |
+| `ThemeErrorBrush` | `#FF5252` | errors |
+| `TabActiveBrush` | `#00BFA5` | active tab |
+| `TabInactiveBrush` | `#6B6B6B` | inactive tab |
+| `ThemeForegroundBrush` | `#E8E8E8` | foreground |
+| `SidebarBackgroundBrush` | `#1E1E1E` | sidebar background |
+| `ContentBackgroundBrush` | `#252525` | content area |
+| `ButtonPrimaryBackground` | `#00BFA5` | primary button |
+| `ButtonPrimaryText` | `#1A1A1A` | primary button text |
+| `SuccessGreenBrush` | `#4CAF50` | success |
+| `WarningOrangeBrush` | `#FF9800` | warning |
+
+Light theme (`src/DubBench/Resources/DubBenchThemeLight.axaml`) maps the same keys to lighter equivalents; the accent becomes `#009688` and backgrounds flip to off-white / white.
+
+Source: `src/DubBench/Resources/DubBenchTheme.axaml`, `src/DubBench/Resources/DubBenchThemeLight.axaml`.
+
+### Hardcoded UI accents
+
+A few views use colors that are not yet in the theme dictionaries:
+
+| Color | Location | Usage |
+|---|---|---|
+| `#3A5535` | `LeaderboardTabView.axaml` | disclaimer banner background |
+| `#2D5A27` | `LeaderboardTabView.axaml` | score badge background |
+| `#CCFFCC` | `LeaderboardTabView.axaml` | score badge foreground |
+
+These should be migrated to theme brushes if they become part of the shipping UI.
+
+Source: `src/DubBench/Views/LeaderboardTabView.axaml`.
+
+### Terminal UI colors
+
+The CLI TUI uses Spectre.Console's default named colors:
+
+- `Color.Blue`: main header border (`Trackdub`)
+- `Color.Grey`: footer and placeholder panels
+- `Color.Cyan1`: inline picker border
+
+These are not currently tied to the Avalonia theme.
+
+Source: `src/Trackdub.Cli/Tui/TrackdubTuiApp.cs`, `src/Trackdub.Cli/Tui/TuiInlinePicker.cs`.
+
+### Known palette tension
+
+The application accent is teal (`#00BFA5`), while the website accent is chapter-dependent (`var(--amber)` or `var(--gold)` in most chapters, with `var(--burgundy)` buttons on paper/cream chapters). If a single brand palette is required, reconcile the marketing site `oklch()` accents with the Avalonia `ThemeAccentBrush`.
+
+## 4. Typography
+
+### Marketing site
+
+The site self-hosts three font families in `public/fonts/`:
+
+| Family | Weights | Usage |
+|---|---|---|
+| **IBM Plex Sans** | 400, 500, 600, 700 (plus 400 italic) | body, headings, UI labels |
+| **Instrument Serif** | 400 (plus 400 italic) | display headings, logo wordmark, numerals |
+| **JetBrains Mono** | 400, 500 | code, timecode, captions, data |
+
+The two display weights are preloaded in `__root.tsx`:
+
+- `/fonts/instrument-serif-400.woff2`
+- `/fonts/ibm-plex-sans-400.woff2`
+
+CSS custom properties in `styles.css`:
+
+```css
+--font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+--font-serif: "Instrument Serif", "IBM Plex Serif", Georgia, ui-serif, serif;
+--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+```
+
+`body` sets:
+
+- `font-family: var(--font-sans)`
+- `font-feature-settings: "ss01"`
+- `-webkit-font-smoothing: antialiased`
+- `text-rendering: optimizeLegibility`
+
+Custom `@utility` helpers:
+
+- `.font-serif`: family, `font-weight: 400`, `letter-spacing: -0.01em`, `font-feature-settings: normal`
+- `.font-mono`: family only
+
+#### Type scale (from `index.tsx`)
+
+| Element | Classes | Notes |
+|---|---|---|
+| H1 (hero) | `font-serif text-5xl leading-[0.98] tracking-tight sm:text-6xl lg:text-[68px] xl:text-[76px]` | max-width container |
+| H2 (section) | `font-serif text-4xl leading-[1.05] tracking-tight sm:text-5xl` | section headings |
+| H3 | `font-serif text-3xl leading-[1.1] tracking-tight sm:text-4xl` | stage sub-headings |
+| Logo wordmark | `font-serif text-2xl leading-none tracking-tight sm:text-[38px]` | masthead |
+| Section number | `font-mono text-2xl leading-none tracking-tight text-accent sm:text-3xl` | chapter index |
+| Section label | `font-serif text-[20px] leading-tight tracking-tight sm:text-[24px]` | chapter title |
+| Body | `text-[17px] leading-relaxed` or `text-lg leading-relaxed` | paragraphs |
+| Small body | `text-[16px] leading-relaxed`, `text-[15px]`, `text-[14px]` | cards, captions |
+| Micro label | `font-mono text-[10px] uppercase tracking-[0.18em]` / `[0.22em]` / `[0.14em]` | chapter tags, metadata |
+| Mono data | `font-mono text-[11px]`, `text-[12px]`, `text-[13px]` | job logs, UI lists |
+| Price | `font-serif text-5xl tracking-tight` | pricing cards |
+
+`tabular-nums` is used for timecode and numeric data.
+
+Source: `trackdub.com/src/styles.css`, `trackdub.com/src/routes/index.tsx`, `trackdub.com/src/routes/__root.tsx`, `trackdub.com/public/fonts/`, 2026-07-26.
+
+### Application
+
+The Avalonia theme does not set a custom `FontFamily`; it relies on the system font. The theme defines the following type scale in `DubBenchTheme.axaml` and `DubBenchThemeLight.axaml`:
+
+| Token | Size | Typical use |
+|---|---|---|
+| `FontSizeMicro` | 10 | micro labels |
+| `CaptionFontSize` | 12 | captions |
+| `MonospaceFontSize` | 13 | monospace / data |
+| `BodyFontSize` | 14 | body text |
+| `HeadingFontSize` | 18 | section headings |
+| `FontSizeTitle` | 20 | page title |
+
+In views, headings use `FontSize="18"` and `FontWeight="SemiBold"`.
+
+Source: `src/DubBench/Resources/DubBenchTheme.axaml`, `src/DubBench/Views/*.axaml`.
+
+## 5. Spacing & Sizing
+
+### Marketing site
+
+| Token / Pattern | Value | Usage |
+|---|---|---|
+| Section max-width | `max-w-[1600px]` | hero, full-bleed sections |
+| Content max-width | `max-w-6xl` | `Container` component |
+| Page padding | `px-6 sm:px-10` | horizontal page gutters |
+| Section padding | `py-12 sm:py-9` (hero), `py-20 sm:py-28` (content) | vertical rhythm |
+| Masthead height | `h-16 sm:h-[88px]` | site header |
+| Masthead gap | `gap-6` | nav / actions spacing |
+| Primary nav gap | `gap-x-7` | desktop nav links |
+| Hero grid | `lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]` | text + waveform |
+| Content grid | `lg:grid-cols-12` with `lg:gap-16` | two-column sections |
+| Content gap | `gap-10`, `gap-12`, `gap-14` | between text and media |
+| Card padding | `p-8` | pricing cards |
+| Button padding | `px-6 py-3` | primary CTA |
+| Corner radius | `--radius: 0.25rem` (4 px) | cards, buttons, inputs |
+| Focus ring | `ring-2 ring-accent ring-offset-2 ring-offset-background` | focus-visible state |
+
+### Application
+
+Common values from the Avalonia views:
+
+| Token | Value | Usage |
+|---|---|---|
+| Small padding | 6, 8, 10, 12 | cards, list items, buttons |
+| Section margin | `0,0,0,16` | bottom margin on scroll panels |
+| Separator margin | `0,4` | horizontal separators |
+| Corner radius | 4, 6 | cards, badges, banners |
+| Border thickness | 1 | cards, sidebars |
+| Button heights | 28, 32, 36 | secondary / primary actions |
+| Button widths | 100, 120, 160, 200 | fixed-width action buttons |
+| Sidebar width | 50 px | `BenchmarkWindow` left rail |
+| ContentControl margin | 16 | main content area |
+| Window size | 960 x 720 | `BenchmarkWindow` default |
+| Window min size | 640 x 480 | `BenchmarkWindow` minimum |
+
+Source: `trackdub.com/src/routes/index.tsx`, `trackdub.com/src/styles.css`, `src/DubBench/Views/BenchmarkWindow.axaml`, `src/DubBench/Views/*.axaml`.
+
+## 6. Layout
+
+### Application shell
+
+- A 50 px left sidebar holds tab buttons (emoji icons, 36 x 36).
+- The main content area is a `ContentControl` with 16 px margin.
+- Each tab is a `ScrollViewer` wrapping a vertical `StackPanel` with `Spacing="12"`.
+- Common vertical rhythm: heading (18, SemiBold), description text (Opacity 0.7), separator, input groups (`Spacing="4"`), action button, result card.
+
+Source: `src/DubBench/Views/BenchmarkWindow.axaml`, `src/DubBench/Views/AudioPrepTabView.axaml`, etc.
+
+### Marketing site layout
+
+The landing page is a long-scrolling page with numbered chapters:
+
+1. Hero + tagline
+2. Pipeline (six editable stages)
+3. Try it / interactive transcript demo
+4. Resume / checkpoint explanation
+5. Control / invalidation
+6. Performance / hardware lanes
+7. Local-first / data ownership
+8. Manifest
+9. Pricing (Personal / Pro / Teams)
+10. FAQ
+11. Waitlist / launch list
+
+**Global components:**
+
+- `Container`: `mx-auto w-full max-w-6xl px-6 sm:px-10`
+- `SectionNumber`: chapter index, label, and underline tick
+- `Rule`: `h-px w-full bg-border` horizontal separator
+- `Masthead`: `border-b border-border bg-background`, `max-w-[1600px]`, `h-16 sm:h-[88px]`
+- `SectionRail`: kinetic scroll progress rail on the left side (desktop)
+- `Colophon`: 4-column footer with product, developers, company, and status links
+
+**Grid conventions:**
+
+- Hero: two-column `minmax` text / waveform grid.
+- Content sections: `grid-cols-1 lg:grid-cols-12` with text in `lg:col-span-4` and content/media in `lg:col-span-8`.
+- Pricing: `md:grid-cols-3` with `divide-x divide-border`.
+- FAQ: `md:grid-cols-[220px_1fr]` for question / answer pairs.
+
+Source: `trackdub.com/src/routes/index.tsx`, 2026-07-26.
+
+## 7. Components
+
+### Marketing site components
+
+**`InkButton`**
+
+- Base: `btn-sheen inline-flex items-center gap-2 px-6 py-3 text-[14px] font-medium` with sheen sweep on hover/focus.
+- Primary: `bg-[var(--burgundy)] text-[var(--cream)] border-[var(--burgundy)] hover:bg-[var(--rust)]`.
+- Ghost: `text-[var(--burgundy)] border-[var(--rust)] hover:bg-[var(--rust)] hover:text-[var(--cream)]`.
+
+**`TextLink`**
+
+- `inline-flex items-baseline gap-1 border-b border-foreground/30 pb-0.5 text-foreground hover:border-accent hover:text-accent`
+
+**`MotionToggle`**
+
+- Stores motion preference in `localStorage` under `trackdub:motion`.
+- Respects `prefers-reduced-motion`.
+- Adds `html.reduce-motion` class, which disables animations site-wide.
+
+**`WaitlistForm`**
+
+- Email input with client-side Zod validation.
+- Cloudflare Turnstile rendered explicitly to avoid SSR race conditions.
+- Posts to `/api/waitlist`, with cross-origin fallback to `https://trackdub.com` for `trackdub.dev`.
+
+**Utility classes:**
+
+- `.btn-sheen`: hover lift `translateY(-1px)`, sheen sweep animation `900ms cubic-bezier(0.22, 1, 0.36, 1)`.
+- `.card-lift`: hover `translateY(-2px)`, top `border-top-color` transitions to `--accent`.
+- `.shadow-panel`: `0 1px 0 oklch(1 0 0 / 0.03) inset, 0 24px 60px -30px oklch(0 0 0 / 0.45)`.
+- `.hairline`: `border-color: var(--hairline)`.
+
+### Avalonia components
+
+#### Buttons
+
+- Primary action: fixed width/height, `ButtonPrimaryBackground` / `ButtonPrimaryText`.
+- Icon tab buttons: transparent background, `Foreground` bound to `TabActiveBrush` / `TabInactiveBrush`.
+
+#### Cards
+
+- Border: `BorderBrush`, thickness 1, `CornerRadius="6"`.
+- Padding: 12.
+- Background defaults to `ThemeSurfaceBrush` / `ContentBackgroundBrush`.
+- Result/status cards use `Spacing="4"` for stacked labels.
+
+#### Lists
+
+- List items: `CornerRadius="4"`, `Padding="10"`, bottom `Margin="0,0,0,4"`.
+- Background: `SidebarBackgroundBrush`.
+
+#### Badges
+
+- Score badge: background `#2D5A27`, foreground `#CCFFCC`, `CornerRadius="4"`, `Padding="8,4"`.
+
+#### Banners
+
+- Disclaimer banner: background `#3A5535`, `CornerRadius="6"`, `Padding="12"`.
+
+#### Separators
+
+- `Separator` with `Background="{DynamicResource BorderBrush}"` and `Margin="0,4"`.
+
+#### Form groups
+
+- `StackPanel Spacing="4"` with a `TextBlock FontWeight="SemiBold"` label and an input control (`TextBox`, `ComboBox`, `NumericUpDown`).
+
+#### CLI panels
+
+- `Panel` with `BorderColor` from Spectre.Console (`Blue`, `Grey`, `Cyan1`), 1 padding unit.
+
+Source: `trackdub.com/src/styles.css`, `trackdub.com/src/routes/index.tsx`, `src/DubBench/Views/*.axaml`, `src/Trackdub.Cli/Tui/*.cs`.
+
+## 8. Icons
+
+- The Avalonia app uses emoji strings stored in `BenchmarkIcons.axaml`:
+  - `OnnxModelIcon`: 🔬
+  - `AudioPrepIcon`: 🎤
+  - `DubbingIcon`: 🎬
+  - `PresetsIcon`: ⚙️
+  - `LeaderboardIcon`: 🏆
+- The marketing site uses **Lucide** icons (`lucide-react`) and inline SVG waveforms.
+
+Source: `src/DubBench/Resources/BenchmarkIcons.axaml`, `trackdub.com/src/routes/index.tsx`, `trackdub.com/package.json`.
+
+## 9. Animation & Motion
+
+### Marketing site
+
+`styles.css` defines a focused, reduced-motion-aware kinetic layer.
+
+| Animation | Duration / Easing | Usage |
+|---|---|---|
+| `fade-up` | `0.6s ease-out` | generic fade-up entrance |
+| `reveal` | `320ms cubic-bezier(0.22, 1, 0.36, 1)` | section entrance |
+| `reveal-child` | `300ms` same easing, delay `calc(40ms + var(--reveal-i, 0) * 30ms)` | staggered children |
+| `wave-drift` | `3.6s ease-in-out infinite` | waveform bars |
+| `ticker-scroll` | `38s linear infinite` | trust ticker tape |
+| `stamp-thunk` | `460ms cubic-bezier(0.34, 1.2, 0.5, 1) 480ms backwards` | rubber-stamp entrance |
+| `playhead-sweep` | `14s linear infinite` | rail playhead |
+| Button sheen | `900ms cubic-bezier(0.22, 1, 0.36, 1)` | hover/focus sweep |
+| Card lift | `260ms cubic-bezier(0.22, 1, 0.36, 1)` | hover translateY |
+| Chapter h2 intro | `520ms` | per-palette heading flourish |
+| Chapter children | `320-460ms` | `snap-in`, `margin-slide`, `tilt-in`, `drop-settle`, `wobble-in`, `ink-wipe`, `letter-rise` |
+
+**Accessibility:**
+
+- Respects `@media (prefers-reduced-motion: reduce)`.
+- `html.reduce-motion` class forces `animation-duration` and `transition-duration` to `0.01ms`, disables `ticker-track`, `wave-bar`, and sheen.
+
+Source: `trackdub.com/src/styles.css`, `trackdub.com/src/routes/index.tsx`.
+
+## 10. Themes
+
+### Website
+
+- Default `:root` is the warm-cream "Autumn Harvest" light theme.
+- `.dark` enables a slate-blue dark theme.
+- Sections override the default with `chapter-paper`, `chapter-cream`, `chapter-ash`, `chapter-ink`, `chapter-burgundy`, `chapter-rust` utilities assigned by section ID.
+- `shadcn/ui` base color is `slate` (`components.json`).
+
+### Application
+
+The application supports four persisted theme identifiers (`Trackdub.Contracts.AppThemeNames`):
+
+- `dark`
+- `light`
+- `amber`
+- `green`
+
+Only `Dark` and `Light` resource dictionaries are currently present in the repository:
+
+- `src/DubBench/Resources/DubBenchTheme.axaml` (Dark)
+- `src/DubBench/Resources/DubBenchThemeLight.axaml` (Light)
+
+`App.axaml` sets `RequestedThemeVariant="Dark"` and merges the icon dictionary plus the theme dictionaries via `ResourceDictionary.ThemeDictionaries`. It also applies the `FluentTheme` base style.
+
+Source: `src/DubBench/App.axaml`, `src/Trackdub.Contracts/IStudioSettingsService.cs`, `trackdub.com/src/styles.css`, `trackdub.com/components.json`.
+
+## 11. Implementation Notes
+
+- The `DubBench` project in this repository is a benchmark harness, not the final Trackdub application shell. It does, however, define the current theme tokens and view patterns.
+- The main app shell is shown on the marketing site (`app-shell-early-build.png`) but is not present in this public core repository.
+- The website palette and application palette are not yet unified. Treat the values above as a baseline for reconciliation.
+- The site uses Tailwind CSS v4 (`@import "tailwindcss"`, `@theme inline`, `@utility`) with `tw-animate-css`, not a traditional `tailwind.config.ts`.
+- Custom self-hosted fonts replace Google Fonts to eliminate extra DNS/TLS/CSS round trips before text paints.
+
+## 12. Sources
+
+- `src/DubBench/App.axaml`
+- `src/DubBench/Resources/BenchmarkIcons.axaml`
+- `src/DubBench/Resources/DubBenchTheme.axaml`
+- `src/DubBench/Resources/DubBenchThemeLight.axaml`
+- `src/DubBench/Views/AudioPrepTabView.axaml`
+- `src/DubBench/Views/BenchmarkWindow.axaml`
+- `src/DubBench/Views/DubbingTabView.axaml`
+- `src/DubBench/Views/LeaderboardTabView.axaml`
+- `src/DubBench/Views/OnnxModelTabView.axaml`
+- `src/DubBench/Views/PresetsTabView.axaml`
+- `src/Trackdub.Cli/Tui/TrackdubTuiApp.cs`
+- `src/Trackdub.Cli/Tui/TuiInlinePicker.cs`
+- `src/Trackdub.Contracts/IStudioSettingsService.cs`
+- `trackdub.com/components.json`
+- `trackdub.com/package.json`
+- `trackdub.com/public/fonts/`
+- `trackdub.com/src/components/ui/button.tsx`
+- `trackdub.com/src/routes/__root.tsx`
+- `trackdub.com/src/routes/index.tsx`
+- `trackdub.com/src/styles.css`
+- `trackdub.com/` landing page, accessed 2026-07-26.
+
+# Implementation Plan  -  G3: Cloud Egress Visibility & Consent
 
 **Source:** [design-g3-cloud-egress-visibility.md](design-g3-cloud-egress-visibility.md)
 
@@ -6,7 +504,7 @@
 
 ---
 
-## Phase 1: Contracts — Cloud consent model (1 day)
+## Phase 1: Contracts  -  Cloud consent model (1 day)
 
 Add consent tracking + exceptions.
 
@@ -24,7 +522,7 @@ Add consent tracking + exceptions.
 
 ---
 
-## Phase 2: Application — Consent service (2 days)
+## Phase 2: Application  -  Consent service (2 days)
 
 Track and query consent state.
 
@@ -40,7 +538,7 @@ Track and query consent state.
 
 ---
 
-## Phase 3: Composition — Registration (1 day)
+## Phase 3: Composition  -  Registration (1 day)
 
 Wire consent service into app + SDK.
 
@@ -54,7 +552,7 @@ Wire consent service into app + SDK.
 
 ---
 
-## Phase 4: Application — Readiness integration (2 days)
+## Phase 4: Application  -  Readiness integration (2 days)
 
 Extend G5's readiness to check consent.
 
@@ -69,7 +567,7 @@ Extend G5's readiness to check consent.
 
 ---
 
-## Phase 5: App — Consent dialog (2 days)
+## Phase 5: App  -  Consent dialog (2 days)
 
 Proactive consent prompt on model selection + pre-run backstop.
 
@@ -86,7 +584,7 @@ Proactive consent prompt on model selection + pre-run backstop.
 
 ---
 
-## Phase 6: Infrastructure — Defense-in-depth (1 day)
+## Phase 6: Infrastructure  -  Defense-in-depth (1 day)
 
 Assert guards in cloud engines.
 
@@ -111,13 +609,13 @@ Assert guards in cloud engines.
 - ConsentDialog persists consent to StudioSettings
 - Engine assert throws CloudEgressConsentException when consent absent
 
-# Implementation Plan — G4: Run Progress & ETA
+# Implementation Plan  -  G4: Run Progress & ETA
 
 **Source:** [design-g4-run-progress-eta.md](design-g4-run-progress-eta.md)
 
 ---
 
-## Phase 1: Contracts — Progress model (1 day)
+## Phase 1: Contracts  -  Progress model (1 day)
 
 Add per-stage progress record.
 
@@ -130,7 +628,7 @@ Add per-stage progress record.
 
 ---
 
-## Phase 2: Application — ETA + Context (2 days)
+## Phase 2: Application  -  ETA + Context (2 days)
 
 Throughput tracker + extend context.
 
@@ -145,7 +643,7 @@ Throughput tracker + extend context.
 
 ---
 
-## Phase 3: Application — Stage progress wiring (3 days)
+## Phase 3: Application  -  Stage progress wiring (3 days)
 
 Add per-segment/region progress to handlers.
 
@@ -162,7 +660,7 @@ Add per-segment/region progress to handlers.
 
 ---
 
-## Phase 4: SDK — Progress bridging (2 days)
+## Phase 4: SDK  -  Progress bridging (2 days)
 
 Connect stage progress to pipeline events.
 
@@ -177,7 +675,7 @@ Connect stage progress to pipeline events.
 
 ---
 
-## Phase 5: App — VM progress fields (2 days)
+## Phase 5: App  -  VM progress fields (2 days)
 
 Add progress bindings to view models.
 
@@ -192,7 +690,7 @@ Add progress bindings to view models.
 
 ---
 
-## Phase 6: App — AXAML bindings (2 days)
+## Phase 6: App  -  AXAML bindings (2 days)
 
 Add progress bars + ETA display to UI.
 
@@ -207,7 +705,7 @@ Add progress bars + ETA display to UI.
 
 ---
 
-## Phase 7: CLI — Progress rendering (1 day)
+## Phase 7: CLI  -  Progress rendering (1 day)
 
 Update CliProgressReporter for Progress kind.
 
@@ -231,7 +729,7 @@ Update CliProgressReporter for Progress kind.
 - VAD/Diar/Sep emit at least one Progress event (PercentComplete=null)
 - PipelineRunViewModel.StagesComplete increments on Completed/Skipped
 
-# Implementation Plan — G5: Consolidated Pipeline Readiness Gate
+# Implementation Plan  -  G5: Consolidated Pipeline Readiness Gate
 
 **Source:** [design-g5-readiness-gate.md](design-g5-readiness-gate.md)
 
@@ -248,37 +746,37 @@ Establish the read-only types and service interface. Map ReadinessState enum dir
 
 ---
 
-## Phase 2: Application layer — Evaluate (3 days)
+## Phase 2: Application layer  -  Evaluate (3 days)
 
 Build PipelineReadinessService. Evaluate per stage: artifact resumability, download/import/blocked status, cloud-key presence, voice-clone consent. Cache by (stage, selection-hash, artifact-fingerprint).
 
 ---
 
-## Phase 3: Application layer — Provision (2 days)
+## Phase 3: Application layer  -  Provision (2 days)
 
 Extend RuntimeModelSetupCoordinator. Batch DownloadRequired/ImportRequired stages by (ProviderKey, ModelId). Call RuntimeModelSetupWorkflow once. Demote per-stage Ensure* to non-interactive assert.
 
 ---
 
-## Phase 4: SDK — pre-flight + Provision front-load (3 days)
+## Phase 4: SDK  -  pre-flight + Provision front-load (3 days)
 
 Move provisioning fully up front in TrackdubDubbingEngine.RunPreFlightChecksAsync. Auto-download eligible stages. Fail fast with aggregated error listing all unmet stages. Delete stageProvisionedDuringExecution branch.
 
 ---
 
-## Phase 5: App — readiness panel + live re-validation (4 days)
+## Phase 5: App  -  readiness panel + live re-validation (4 days)
 
 Build RunConfigPanelViewModel. Bind to draft selections. Debounce tier/lang/voice changes (300ms). Re-evaluate only affected stages (cache). Update per-stage badges live. Pre-run backstop: refuse Run while any stage is blocking.
 
 ---
 
-## Phase 6: App — demote per-stage Ensure* (1 day)
+## Phase 6: App  -  demote per-stage Ensure* (1 day)
 
 Remove dialog calls from stage runners. Replace with non-interactive assert. Gate prevents reaching this assert path.
 
 ---
 
-## Phase 7: Cleanup — diarization mismatch (1 day)
+## Phase 7: Cleanup  -  diarization mismatch (1 day)
 
 Verify SpeakerDiarizationStage calls CreateRuntimeSelections(snapshot), not CreateDefaultRuntimeSelections(). Both provision and execute see same snapshot.
 
@@ -290,7 +788,7 @@ Verify SpeakerDiarizationStage calls CreateRuntimeSelections(snapshot), not Crea
 - SDK behavior change (longer pre-flight, fail-fast): confirm with CLI/API consumers.
 - Cloud key validity: default to "present"; validate on explicit user action only.
 
-# Implementation Plan — G7: Export Provenance & Attribution
+# Implementation Plan  -  G7: Export Provenance & Attribution
 
 **Source:** [design-g6-g7-attribution-provenance.md](design-g6-g7-attribution-provenance.md)
 
@@ -312,7 +810,7 @@ Attribution types + extend StageRunRecord.
 
 ---
 
-## Phase 2: Application — Catalog (2 days)
+## Phase 2: Application  -  Catalog (2 days)
 
 Build attribution lookup from manifest.
 
@@ -327,7 +825,7 @@ Build attribution lookup from manifest.
 
 ---
 
-## Phase 3: Application — Manifest extension (2 days)
+## Phase 3: Application  -  Manifest extension (2 days)
 
 Extend ExportManifest + builder.
 
@@ -341,7 +839,7 @@ Extend ExportManifest + builder.
 
 ---
 
-## Phase 4: Composition — Registration (1 day)
+## Phase 4: Composition  -  Registration (1 day)
 
 Wire catalog into app.
 
@@ -354,7 +852,7 @@ Wire catalog into app.
 
 ---
 
-## Phase 5: Infrastructure — Stage run persistence (1 day)
+## Phase 5: Infrastructure  -  Stage run persistence (1 day)
 
 SQLite migration + write ModelAlias.
 
@@ -368,7 +866,7 @@ SQLite migration + write ModelAlias.
 
 ---
 
-## Phase 6: Composition — Stage handler wiring (1 day)
+## Phase 6: Composition  -  Stage handler wiring (1 day)
 
 Pass ModelAlias on stage completion.
 
@@ -384,7 +882,7 @@ Pass ModelAlias on stage completion.
 
 ---
 
-## Phase 7: App — Attribution surface (2 days)
+## Phase 7: App  -  Attribution surface (2 days)
 
 Show in export success view.
 
@@ -411,16 +909,16 @@ Show in export success view.
 - Export no attribution models → AttributionRequired empty; UI section hidden
 - SQLite migration: null ModelAlias → manifest omits entry (no crash)
 
-# MIGraphX phase 0 — extension points
+# MIGraphX phase 0  -  extension points
 
 | Area | Location |
 |------|----------|
-| Provider enum | `src/Trackdub.Domain/Common/RuntimePlanning.cs` — `ExecutionProviderKind` |
-| Milestone provider order | `src/Trackdub.Inference/Runtime/Planning/StageRuntimeRequirements.cs` — `Milestone5PlanningPolicy`, `StageRuntimeRequirementsCatalog` |
+| Provider enum | `src/Trackdub.Domain/Common/RuntimePlanning.cs`  -  `ExecutionProviderKind` |
+| Milestone provider order | `src/Trackdub.Inference/Runtime/Planning/StageRuntimeRequirements.cs`  -  `Milestone5PlanningPolicy`, `StageRuntimeRequirementsCatalog` |
 | Discovery | `src/Trackdub.Inference.Onnx/Runtime/Planning/OnnxExecutionProviderDiscovery.cs` |
 | Bootstrap (platform) | `WindowsExecutionProviderBootstrapper`, `LinuxExecutionProviderBootstrapper` |
 | WinML catalog | `WindowsMlExecutionProviderBootstrapper.Windows.cs`, `WindowsMlProviderRegistrationPolicy.cs` |
-| Session options | `src/Trackdub.Inference.Onnx/OnnxExecutionSessionFactory.cs` — `CreateSessionOptions` |
+| Session options | `src/Trackdub.Inference.Onnx/OnnxExecutionSessionFactory.cs`  -  `CreateSessionOptions` |
 | Smoke tests | `OnnxExecutionProviderSmokeTester.cs` |
 | Devices | `WindowsDeviceEnumerator.cs`, `LinuxDeviceEnumerator.cs` |
 | Studio hardware overrides | `HardwareOverrideCatalog.cs`, `IStudioSettingsService.HardwareOverrides` |
@@ -481,7 +979,7 @@ When no recipe is selected and the model has multiple ONNX components in GenAI b
 
 # Trackdub performance profiling report
 
-> **Status:** DRAFT — scaffold (M20 PR4). Numbers marked *pending local run* are placeholders until measured on a reference machine.
+> **Status:** DRAFT  -  scaffold (M20 PR4). Numbers marked *pending local run* are placeholders until measured on a reference machine.
 > **Last updated:** 2026-06-13
 > **Branch evidence:** `agent/cursor/m20-profiling-report`
 
@@ -521,7 +1019,7 @@ Measured from process launch to first interactive shell frame (no project open).
 | Shell + empty project open | TBD | *pending local run* | Includes SQLite migrate/open |
 | Model Manager gate (bundled ONNX) | TBD | *pending local run* | Separate from shell; do not collapse readiness states |
 
-### Example row format (illustrative only — not measured)
+### Example row format (illustrative only  -  not measured)
 
 Replace these example values after a reference-machine run. They exist only to show how completed tables should read.
 
@@ -569,7 +1067,7 @@ Hot paths audited in `tests/Trackdub.Infrastructure.Tests/SqliteExplainQueryPlan
 **Notes:**
 
 - Audit uses `EXPLAIN QUERY PLAN` on a migrated project DB with representative seed rows.
-- EXPLAIN verifies indexed `SEARCH` plan shape; it does not assert wall-clock latency. Stale stats or poor selectivity can still make an indexed query slow — see follow-up item 6.
+- EXPLAIN verifies indexed `SEARCH` plan shape; it does not assert wall-clock latency. Stale stats or poor selectivity can still make an indexed query slow  -  see follow-up item 6.
 - Empty-table cases still assert indexed `SEARCH` for the hot-path predicates used in production queries.
 - Full project-scale soak (10k+ segments) remains a follow-up measurement pass, not a CI budget gate yet.
 
@@ -577,7 +1075,7 @@ Hot paths audited in `tests/Trackdub.Infrastructure.Tests/SqliteExplainQueryPlan
 
 | Source | Location | Status |
 |---|---|---|
-| DubBench / `Trackdub.Benchmarks` harness | `src/Trackdub.Benchmarks` | *pending local run* — capture baseline JSON or log excerpt |
+| DubBench / `Trackdub.Benchmarks` harness | `src/Trackdub.Benchmarks` | *pending local run*  -  capture baseline JSON or log excerpt |
 | Inference session pool tests | `tests/` (session pooling) | present in repo; link results in follow-up |
 | User benchmark SQLite (`BenchmarkRuns` table) | per-user DB | wired on `main` via M19; link results in follow-up |
 | Hardware profiler history recorder | `src/Trackdub.Composition/HardwareProfiler` | present on `main`; capture history path in follow-up |
@@ -824,9 +1322,9 @@ For explicit session testing, inspect the selected provider in benchmark output.
 
 Readiness paths (pick one):
 
-1. **Model Manager** — Install after `NvidiaTensorRtRtxLicenseAccepted` in studio settings.
-2. **Dev/CI fetch** — `tools/dev/Fetch-TrtRtxEp.ps1` (sets `TRACKDUB_TRT_RTX_EP_DIR`).
-3. **Auto-download (opt-in)** — when `NvidiaTensorRtRtxLicenseAccepted` is true in `%LOCALAPPDATA%\Trackdub\settings.json` and benchmark/bootstrap allows provider downloads.
+1. **Model Manager**  -  Install after `NvidiaTensorRtRtxLicenseAccepted` in studio settings.
+2. **Dev/CI fetch**  -  `tools/dev/Fetch-TrtRtxEp.ps1` (sets `TRACKDUB_TRT_RTX_EP_DIR`).
+3. **Auto-download (opt-in)**  -  when `NvidiaTensorRtRtxLicenseAccepted` is true in `%LOCALAPPDATA%\Trackdub\settings.json` and benchmark/bootstrap allows provider downloads.
 
 Headless operators:
 
@@ -895,10 +1393,10 @@ Mapping: `WindowsMlExecutionDevicePolicyMapper` in `Trackdub.Inference.Onnx` (`#
 
 ## Rules
 
-1. **Mutual exclusion:** Per session, either policy mode **or** explicit append — never both.
-2. **Catalog only:** Policy applies to Windows ML catalog routes (`DirectMl`, `MIGraphX`). It does **not** select TensorRT RTX — TRT RTX uses the standalone EP ABI plugin (`trackdub providers trt-rtx`, Model Manager Install, or `Fetch-TrtRtxEp.ps1`).
+1. **Mutual exclusion:** Per session, either policy mode **or** explicit append  -  never both.
+2. **Catalog only:** Policy applies to Windows ML catalog routes (`DirectMl`, `MIGraphX`). It does **not** select TensorRT RTX  -  TRT RTX uses the standalone EP ABI plugin (`trackdub providers trt-rtx`, Model Manager Install, or `Fetch-TrtRtxEp.ps1`).
 3. **CPU / Kokoro:** CPU sessions never set policy; Kokoro CPU-only override unchanged.
-4. **Planner / smoke:** Unchanged — `RuntimePlanFactory` and `OnnxExecutionProviderSmokeTester` still gate readiness.
+4. **Planner / smoke:** Unchanged  -  `RuntimePlanFactory` and `OnnxExecutionProviderSmokeTester` still gate readiness.
 5. **Fingerprint:** `BuildSessionOptionsFingerprint` includes policy key so pooled sessions do not mix explicit vs policy options.
 
 ## Seams
@@ -912,9 +1410,9 @@ Mapping: `WindowsMlExecutionDevicePolicyMapper` in `Trackdub.Inference.Onnx` (`#
 
 After explicit matrix baseline on hardware:
 
-1. `Explicit` — no regression vs Phase 2.
-2. `MaxPerformance` — one VAD or ASR run on a **catalog** EP (`dml` / `migraphx`); log actual EP from benchmark or session metadata. Do not use this step to validate TRT RTX (see TRT RTX plugin smoke table in the stage matrix).
-3. `PreferNpu` / `MaxEfficiency` — on Copilot+ PC if available; else N/A in matrix.
+1. `Explicit`  -  no regression vs Phase 2.
+2. `MaxPerformance`  -  one VAD or ASR run on a **catalog** EP (`dml` / `migraphx`); log actual EP from benchmark or session metadata. Do not use this step to validate TRT RTX (see TRT RTX plugin smoke table in the stage matrix).
+3. `PreferNpu` / `MaxEfficiency`  -  on Copilot+ PC if available; else N/A in matrix.
 4. Change policy → restart → confirm new fingerprint / sessions.
 
 **Benchmark harness:** `Trackdub.Benchmarks --windows-ml-device-policy <name>` configures `OnnxModelBenchmarkRunner`. For Windows ML catalog/device-policy routes (`dml`, `migraphx`, `auto`), non-`Explicit` policies use `SetEpSelectionPolicy` only (no explicit catalog-device append). `trt-rtx` uses the standalone EP ABI plugin and ignores Windows ML device policy. CPU and native CUDA/TensorRT benchmark routes also never apply device policy.
@@ -930,7 +1428,7 @@ Production closeout for Windows ML device policies (Phase 3) and ONNX runtime al
 
 **Status:** Implementation complete in repo; hardware matrix rows remain manual on Tony PC where noted.
 
-## Workstream A0 — Phase 3 review fixes (pre-merge)
+## Workstream A0  -  Phase 3 review fixes (pre-merge)
 
 | ID | Item | Status |
 |----|------|--------|
@@ -942,13 +1440,13 @@ Production closeout for Windows ML device policies (Phase 3) and ONNX runtime al
 | A0.6 | Corrupt settings: log, timestamped `.corrupt` backup, defaults | Done |
 | A0.7 | Thread-safe `OnnxExecutionSessionFactory.Initialize` (first call wins) | Done |
 
-## Workstream A — Land Phase 3
+## Workstream A  -  Land Phase 3
 
 - Build: `dotnet build Trackdub.sln`
 - Tests: `dotnet test tests/Trackdub.Infrastructure.Tests tests/Trackdub.Inference.Tests`
 - Windows TFM (local): `dotnet build Trackdub.sln -f net10.0-windows10.0.19041.0`
 
-## Workstream F — ORT native alignment (P0)
+## Workstream F  -  ORT native alignment (P0)
 
 **Problem:** Managed ORT 1.24.x vs WinML-bundled native 1.17.x caused API version 24 errors.
 
@@ -960,11 +1458,11 @@ Production closeout for Windows ML device policies (Phase 3) and ONNX runtime al
 dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <path> --provider trt-rtx --runs 1 --format console
 ```
 
-## Workstream C — Pool eviction + policy cache
+## Workstream C  -  Pool eviction + policy cache
 
 `InferenceSessionPool.EvictAllIdleAsync`, `IInferenceSessionPoolEvictor`, settings-save eviction + cache invalidation.
 
-## Workstream D — Benchmark CLI
+## Workstream D  -  Benchmark CLI
 
 `--windows-ml-device-policy explicit|max-performance|prefer-npu|max-efficiency|min-overall-power`
 
@@ -972,11 +1470,11 @@ dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- -
 
 Windows ML catalog/device-policy benchmark routes (`dml`, `migraphx`, `auto`) follow the same mutual-exclusion rule as the studio session factory: non-`Explicit` policies call `SetEpSelectionPolicy` only; explicit append runs only when policy is `Explicit`. `trt-rtx` uses the standalone EP ABI plugin and ignores Windows ML device policy. CPU and native CUDA/TensorRT routes ignore device policy.
 
-## Workstream B — Hardware matrix (manual)
+## Workstream B  -  Hardware matrix (manual)
 
 Update [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md) after F passes on hardware.
 
-## Workstream E — ADR
+## Workstream E  -  ADR
 
 [ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md) Phase 4 section.
 
@@ -1004,9 +1502,9 @@ Do not duplicate “GPU ready” semantics between standalone OpenVINO install s
 |---------|----------|
 | Catalog provider name constants | `Trackdub.Inference.Onnx/WindowsMl/WindowsMlCatalogProviderIds.cs` |
 | Registration / bootstrap | `WindowsMlProviderRegistrationPolicy.cs`, `WindowsMlExecutionProviderBootstrapper.Windows.cs` |
-| Discovery | `OnnxExecutionProviderDiscovery.cs` — stub kinds return **unavailable** |
-| Session append | `OnnxExecutionSessionFactory.cs` — `NotSupportedException` until smoke path exists |
-| Milestone probe order | `StageRuntimeRequirements.cs` — **unchanged in 5c** |
+| Discovery | `OnnxExecutionProviderDiscovery.cs`  -  stub kinds return **unavailable** |
+| Session append | `OnnxExecutionSessionFactory.cs`  -  `NotSupportedException` until smoke path exists |
+| Milestone probe order | `StageRuntimeRequirements.cs`  -  **unchanged in 5c** |
 
 Stub marker: `#TODO(phase-5-catalog-ep)` in code; reference this doc and [ADR-0002 Phase 5](../adr/ADR-0002-windows-ml-provider-strategy.md).
 
@@ -1029,7 +1527,7 @@ When QNN / catalog OpenVINO CLI aliases exist, add matrix rows here. For TRT RTX
 | Intel GPU box | VAD / ASR | OpenVINO catalog | Distinct from standalone OpenVINO row |
 | Snapdragon / Copilot+ PC | VAD / ASR | QNN | Pair with `PreferNpu` policy smoke; mark N/A if no NPU |
 
-Update [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md) with pass/fail and **actual EP** from console — never infer from policy name alone.
+Update [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md) with pass/fail and **actual EP** from console  -  never infer from policy name alone.
 
 ## Enablement order (post-5c)
 
@@ -1064,16 +1562,16 @@ Milestone probe order (2026-06): `TensorRTRtx` → `Migraphx` → `OpenVinoCatal
 
 |Stage|Default allow-list|Engine-family overrides|
 |-|-|-|
-|VAD|Milestone default|—|
+|VAD|Milestone default| - |
 |ASR|Milestone default|`whisper-genai` keeps GenAI-oriented list|
 |Translation|Milestone default|`madlad`, `phi-genai`|
-|Diarization|Milestone default|—|
+|Diarization|Milestone default| - |
 |Separation|Milestone default|`spleeter`|
 |OverlapRescue|Milestone default|`sepformer`|
 |SpeechEnhancement|Milestone default|`deepfilternet3`|
 |LipSync|Milestone default|`onnx-ctc-phoneme-aligner`|
 |LipSynthesis|Milestone default|`latentsync-diffusion`|
-|TextRefinement|Milestone default|—|
+|TextRefinement|Milestone default| - |
 |TTS|Milestone default|**`kokoro` → CPU only** (ConvTranspose / DirectML incompatible)|
 
 ## Windows manual smoke checklist
@@ -1082,9 +1580,9 @@ Run on a machine with the relevant catalog EP installed before claiming GPU read
 
 |Stage|Representative model|Catalog EP to exercise|Kokoro / CPU guard|
 |-|-|-|-|
-|VAD|`silero-vad`|TensorRT RTX (NVIDIA) or MIGraphX (AMD)|—|
-|Diarization|Sortformer 4spk v2.1|Same|—|
-|Translation|Any bundled `opus-*` ONNX pair|Same|—|
+|VAD|`silero-vad`|TensorRT RTX (NVIDIA) or MIGraphX (AMD)| - |
+|Diarization|Sortformer 4spk v2.1|Same| - |
+|Translation|Any bundled `opus-*` ONNX pair|Same| - |
 |TTS|`chatterbox-*`|Same|**Kokoro plan must stay CPU**|
 |ASR|`whisper-tiny-onnx`|CUDA / DirectML / catalog per discovery|GenAI path separate|
 
@@ -1138,9 +1636,9 @@ TRT RTX is **not** a Windows ML catalog EP and is **not** selected by `WindowsMl
 | Stage | Representative model | Command / surface | Pass/fail | Actual EP | Notes |
 |-------|---------------------|-------------------|-----------|-----------|-------|
 | VAD | `onnx-community/silero-vad` | `Trackdub.Benchmarks --provider trt-rtx` | pending | *pending local GPU run* | Requires NVIDIA GPU + plugin bundle |
-| Headless status | — | `trackdub providers trt-rtx status` | pending | JSON `isOrtProviderListed` | Probe-only; no download |
-| Headless install | — | `trackdub providers trt-rtx install --accept-license` | pending | — | License-gated bundle download |
-| DubBench | same as benchmark | DubBench ONNX run after shared bootstrap | pending | — | Uses `BenchmarkOnnxExecutionBootstrap` |
+| Headless status |  -  | `trackdub providers trt-rtx status` | pending | JSON `isOrtProviderListed` | Probe-only; no download |
+| Headless install |  -  | `trackdub providers trt-rtx install --accept-license` | pending |  -  | License-gated bundle download |
+| DubBench | same as benchmark | DubBench ONNX run after shared bootstrap | pending |  -  | Uses `BenchmarkOnnxExecutionBootstrap` |
 
 Prerequisites: [tensorrt-rtx-ep-abi-plugin.md](tensorrt-rtx-ep-abi-plugin.md) (Model Manager, `Fetch-TrtRtxEp.ps1`, or license-accepted auto-download). Optional CI: `.github/workflows/trt-rtx-smoke.yml` when repository variable `TRACKDUB_TRT_RTX_SMOKE=true`.
 
