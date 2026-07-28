@@ -9,6 +9,7 @@
 - [operations/](operations/) — Operational procedures
 - [development/](development/) — Developer procedures and guides
 - [reference/](reference/) — Technical reference material
+  - [reference/design-standards.md](reference/design-standards.md) — Canonical visual design tokens; Figma Design System + Qodo Design Review
 - [legal/](legal/) — Legal and attribution material
 - [strategy/](strategy/) — Roadmap and strategic direction
 - [plans/](plans/) — Active cross-cutting implementation plans
