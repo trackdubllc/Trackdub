@@ -10,23 +10,27 @@ This document collects the visual design tokens and patterns used by Trackdub. I
 |---|---|
 | [trackdub.com](https://trackdub.com) + `trackdub.com/src/styles.css` | Living implementation of the brand |
 | [Figma: Trackdub Design System](https://www.figma.com/design/vUAGF65aDO1a83u5COYWBG/Untitled) (`vUAGF65aDO1a83u5COYWBG`) | Design tokens, components, and annotated requirements for review |
+| [Notion: Trackdub Specs](https://www.notion.so/Trackdub-Specs-d76b5426aae5450cb29404212a7ffe79) | Qodo Spec Agent requirements (MUST / MUST NOT / acceptance criteria) |
 | This document | Written inventory and migration notes |
 
 Rename the Figma file to `Trackdub — Design System` in the Figma UI if it still shows as Untitled (plugin API cannot rename the file).
 
-### Qodo Design Review
+### Qodo Spec Agent + Design Review
 
-Qodo can compare frontend PRs to linked Figma requirements and surface **UX deviation** findings.
+Qodo can compare PRs to linked Notion specs (**Requirement gaps**) and Figma designs (**UX deviations**).
 
-1. Qodo Portal → **Integrations → Documentation & Design → Connect Figma**
-2. **Configuration → code review → Advanced → enable Design Review**
-3. Include **exactly one** Figma URL in the PR body (first Figma URL wins), for example:
+1. Qodo Portal → **Integrations → Documentation & Design** → Connect **Notion** and **Figma**
+2. **Configuration → code review → Advanced** → enable **Spec agents** and **Design Review**
+3. Include **one Notion URL** and optionally **one Figma URL** in the PR body (first of each type wins):
 
 ```text
+Spec: https://www.notion.so/SPEC-Design-System-Canonical-3ab7dab3dbf481b7a84de4c73519fc60
 Design: https://www.figma.com/design/vUAGF65aDO1a83u5COYWBG/Untitled
 ```
 
-Prefer linking a specific requirements frame on page `03 Requirements` when the PR is scoped (Hero, Pipeline, Pricing).
+Notion Spec Index: [Trackdub Specs / Spec Index — Qodo](https://www.notion.so/Spec-Index-Qodo-3ab7dab3dbf4819088eec5a15ed08088)
+
+Prefer the most specific Notion SPEC page for the PR. Prefer a specific Figma requirements frame on page `03 Requirements` when the change is visual-scoped (Hero, Pipeline, Pricing).
 
 ## 1. Design Principles
 
