@@ -1,0 +1,19 @@
+REVIEW.md
+  s_15c7daa0f2b7d0::t_52a723ca17d523 1-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "872b0df1755747f34efbbf13eb5f287830119150",
+  "prompts": {},
+  "sessions": {
+    "s_15c7daa0f2b7d0": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "eac2105c-e82e-450c-980f-e982b19bb87a",
+        "model": "default"
+      },
+      "human_author": "tonythethompson <github@trackdub.com>"
+    }
+  }
+}
