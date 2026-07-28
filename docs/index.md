@@ -7,6 +7,7 @@
 - [specs/](specs/) — Technical specifications and requirements
 - [audits/](audits/) — Completed investigations and reports
 - [operations/](operations/) — Operational procedures
+  - [operations/linear-workflow.md](operations/linear-workflow.md) — Linear source-of-truth + agent update loop (GitHub / Notion / Figma)
 - [development/](development/) — Developer procedures and guides
 - [reference/](reference/) — Technical reference material
   - [reference/design-standards.md](reference/design-standards.md) — Canonical visual design tokens; Figma Design System + Qodo Design Review
