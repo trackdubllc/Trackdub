@@ -1,0 +1,19 @@
+.github/workflows/ci.yml
+  s_3d30f811294a26::t_18374ca93590c9 157-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4e1611408890a8c997f54319c5d99c7fb45dcb0a",
+  "prompts": {},
+  "sessions": {
+    "s_3d30f811294a26": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "dc23de5a-03f9-4ea2-9af3-c74635a62eaa",
+        "model": "default"
+      },
+      "human_author": "tonythethompson <github@trackdub.com>"
+    }
+  }
+}
