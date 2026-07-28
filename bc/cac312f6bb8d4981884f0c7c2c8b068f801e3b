@@ -1,0 +1,21 @@
+docs/reference/design-standards.md
+  s_3d30f811294a26::t_f909e29b16af05 189-191,193
+  s_3d30f811294a26::t_287066ad083d6d 499
+  s_3d30f811294a26::t_2573a43a6ee67b 5-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bccac312f6bb8d4981884f0c7c2c8b068f801e3b",
+  "prompts": {},
+  "sessions": {
+    "s_3d30f811294a26": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "dc23de5a-03f9-4ea2-9af3-c74635a62eaa",
+        "model": "default"
+      },
+      "human_author": "tonythethompson <github@trackdub.com>"
+    }
+  }
+}
