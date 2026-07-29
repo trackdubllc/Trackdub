@@ -139,7 +139,11 @@ No long-running services. The product entrypoint is the headless CLI (`src/Track
 - Always pass `-m:1` to `dotnet restore`, `dotnet build`, and `dotnet test` (matches CI and avoids restore/build races).
 - NuGet restore needs network access to both `nuget.org` and the Azure Artifacts `dotnet-libraries` feed (see `NuGet.config`) for `Microsoft.ML.Tokenizers` 3.x.
 - `dotnet format Trackdub.slnx --verify-no-changes` is the lint/format gate (CI `format` job).
-- FFmpeg/ffprobe are required for media stages; playback natives (libmpv/LibVLC) are optional for CLI pipeline runs. `trackdub doctor` reports readiness.
-- Full `dub` / ASR / TTS / translation need ONNX models downloaded into the model cache (`trackdub models bundle-needed`, then `trackdub models download <id>`). Tests that need models skip cleanly when missing.
+- FFmpeg/ffprobe are required for media stages; playback natives (libmpv/LibVLC) are optional for CLI pipeline runs. Readiness: `dotnet run --project src/Trackdub.Cli -- doctor`.
+- Full `dub` / ASR / TTS / translation need ONNX models downloaded into the model cache (`dotnet run --project src/Trackdub.Cli -- models bundle-needed`, then `dotnet run --project src/Trackdub.Cli -- models download <id>`). Tests that need models skip cleanly when missing.
 - Prefer `dotnet run --project src/Trackdub.Cli -- <args>` over a global tool install. Use `--no-build` after a fresh Debug build.
 - Default data/cache roots land under `~/.local/share/Trackdub` (override with `TRACKDUB_DATA_ROOT` / `TRACKDUB_CACHE_ROOT` if needed).
+
+## Documentation
+
+See [docs/index.md](docs/index.md) for the categorized documentation index (ADRs, architecture, specs, audits, operations, and more).
