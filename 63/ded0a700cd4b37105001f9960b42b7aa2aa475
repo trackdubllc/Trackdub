@@ -1,0 +1,19 @@
+Directory.Build.targets
+  s_986b029e0719e7::t_9f50491be73b6f 2,4-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "63ded0a700cd4b37105001f9960b42b7aa2aa475",
+  "prompts": {},
+  "sessions": {
+    "s_986b029e0719e7": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "684eae5e-d1f1-479a-a37e-bde212ad80e7",
+        "model": "default"
+      },
+      "human_author": "tonythethompson <github@trackdub.com>"
+    }
+  }
+}
