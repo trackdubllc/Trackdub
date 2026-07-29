@@ -304,3 +304,4 @@ smoke-output.txt
 /.codex-plugins
 __pycache__/
 *.py[cod]
+/.dirac-cache

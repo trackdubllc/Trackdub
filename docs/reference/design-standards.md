@@ -2,6 +2,36 @@
 
 This document collects the visual design tokens and patterns used by Trackdub. It combines evidence from the marketing site (`trackdub.com`) and the Avalonia/CLI UI code in this repository.
 
+## Canonical source
+
+**trackdub.com** (Autumn Harvest palette, Instrument Serif / IBM Plex Sans / JetBrains Mono) is the canonical brand language for all Trackdub designs: marketing, portal, desktop, and future surfaces.
+
+| Source | Role |
+|---|---|
+| [trackdub.com](https://trackdub.com) + `trackdub.com/src/styles.css` | Living implementation of the brand |
+| [Figma: Trackdub Design System](https://www.figma.com/design/vUAGF65aDO1a83u5COYWBG/Untitled) (`vUAGF65aDO1a83u5COYWBG`) | Design tokens, components, and annotated requirements for review |
+| [Notion: Trackdub Specs](https://www.notion.so/Trackdub-Specs-d76b5426aae5450cb29404212a7ffe79) | Qodo Spec Agent requirements (MUST / MUST NOT / acceptance criteria) |
+| This document | Written inventory and migration notes |
+
+Rename the Figma file to `Trackdub — Design System` in the Figma UI if it still shows as Untitled (plugin API cannot rename the file).
+
+### Qodo Spec Agent + Design Review
+
+Qodo can compare PRs to linked Notion specs (**Requirement gaps**) and Figma designs (**UX deviations**).
+
+1. Qodo Portal → **Integrations → Documentation & Design** → Connect **Notion** and **Figma**
+2. **Configuration → code review → Advanced** → enable **Spec agents** and **Design Review**
+3. Include **one Notion URL** and optionally **one Figma URL** in the PR body (first of each type wins):
+
+```text
+Spec: https://www.notion.so/SPEC-Design-System-Canonical-3ab7dab3dbf481b7a84de4c73519fc60
+Design: https://www.figma.com/design/vUAGF65aDO1a83u5COYWBG/Untitled
+```
+
+Notion Spec Index: [Trackdub Specs / Spec Index — Qodo](https://www.notion.so/Spec-Index-Qodo-3ab7dab3dbf4819088eec5a15ed08088)
+
+Prefer the most specific Notion SPEC page for the PR. Prefer a specific Figma requirements frame on page `03 Requirements` when the change is visual-scoped (Hero, Pipeline, Pricing).
+
 ## 1. Design Principles
 
 Trackdub's product voice is built around a small set of principles. These appear repeatedly in the marketing copy and should guide UI decisions:
@@ -160,9 +190,11 @@ These are not currently tied to the Avalonia theme.
 
 Source: `src/Trackdub.Cli/Tui/TrackdubTuiApp.cs`, `src/Trackdub.Cli/Tui/TuiInlinePicker.cs`.
 
-### Known palette tension
+### Palette migration (canonical = marketing)
 
-The application accent is teal (`#00BFA5`), while the website accent is chapter-dependent (`var(--amber)` or `var(--gold)` in most chapters, with `var(--burgundy)` buttons on paper/cream chapters). If a single brand palette is required, reconcile the marketing site `oklch()` accents with the Avalonia `ThemeAccentBrush`.
+**Canonical brand accents** come from trackdub.com: chapter-dependent `var(--amber)` / `var(--gold)`, with `var(--burgundy)` primary buttons on paper/cream chapters.
+
+The Avalonia / DubBench accent teal (`#00BFA5` / `#009688`) is **legacy migration debt**. New UI (web, portal, Figma, and eventual app shell theming) must not introduce teal as a brand accent. Existing Avalonia theme brushes remain until an explicit theme migration lands; treat them as temporary, not as the design system source of truth.
 
 ## 4. Typography
 
@@ -468,7 +500,7 @@ Source: `src/DubBench/App.axaml`, `src/Trackdub.Contracts/IStudioSettingsService
 
 - The `DubBench` project in this repository is a benchmark harness, not the final Trackdub application shell. It does, however, define the current theme tokens and view patterns.
 - The main app shell is shown on the marketing site (`app-shell-early-build.png`) but is not present in this public core repository.
-- The website palette and application palette are not yet unified. Treat the values above as a baseline for reconciliation.
+- **Canonical palette = trackdub.com.** Avalonia teal is migration debt (see Palette migration above). Figma Design System file `vUAGF65aDO1a83u5COYWBG` is the design review source of truth for Qodo.
 - The site uses Tailwind CSS v4 (`@import "tailwindcss"`, `@theme inline`, `@utility`) with `tw-animate-css`, not a traditional `tailwind.config.ts`.
 - Custom self-hosted fonts replace Google Fonts to eliminate extra DNS/TLS/CSS round trips before text paints.
 
