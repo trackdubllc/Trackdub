@@ -1,4 +1,4 @@
-# Contributing
+# CONTRIBUTING
 
 Trackdub (this repository) is the Apache-2.0 public core: the SDK, CLI,
 pipeline, inference, media processing, infrastructure, and neutral licensing
