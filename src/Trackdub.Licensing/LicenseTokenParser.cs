@@ -42,7 +42,8 @@ internal sealed class LicenseTokenParser
                 Machines: payload.Machines ?? [],
                 Iat: payload.Iat,
                 Exp: payload.Exp,
-                DevUnlimited: payload.DevUnlimited ?? false);
+                DevUnlimited: payload.DevUnlimited ?? false,
+                KeyId: payload.KeyId);
         }
         catch (FormatException)
         {
@@ -105,5 +106,8 @@ internal sealed class LicenseTokenParser
 
         [System.Text.Json.Serialization.JsonPropertyName("dev_unlimited")]
         public bool? DevUnlimited { get; init; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("kid")]
+        public string? KeyId { get; init; }
     }
 }

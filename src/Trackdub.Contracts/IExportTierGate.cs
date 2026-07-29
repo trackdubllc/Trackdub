@@ -1,7 +1,8 @@
 namespace Trackdub.Contracts;
 
 /// <summary>
-/// Checks tier gates before export begins. Implemented in Application layer.
+/// Checks tier gates before export begins. The public core ships no concrete
+/// implementation; a consuming product supplies its own tier policy.
 /// </summary>
 public interface IExportTierGate
 {

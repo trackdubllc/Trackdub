@@ -1,7 +1,6 @@
 paths:
   - src
   - tests
-  - frontend
   - tools
   - .github
 

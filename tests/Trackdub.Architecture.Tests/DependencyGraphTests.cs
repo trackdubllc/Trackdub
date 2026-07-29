@@ -314,6 +314,10 @@ public sealed class DependencyGraphTests
     [Fact]
     public void OnnxLockFilePreservesPortableRuntimeIdentifierGraphs()
     {
+        // Windows TFM lock entries only exist when restored on Windows (non-Windows strips the TFM)
+        if (!OperatingSystem.IsWindows())
+            return;
+
         var repoRoot = FindRepoRoot();
         string[] portableRuntimeIdentifiers =
         [

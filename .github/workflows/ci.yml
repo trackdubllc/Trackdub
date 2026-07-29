@@ -22,10 +22,19 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
+        # actions/setup-dotnet's install script defaults to a system-wide
+        # location (e.g. C:\Program Files\dotnet) that self-hosted runner
+        # service accounts often can't write to. Redirect installs into the
+        # per-step runner temp directory, which is always writable
+        # regardless of runner OS or account. (The `runner` context is
+        # only available inside a step, not at the job- or workflow-level
+        # `env:` -- confirmed via GitHub's own workflow validation error.)
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
         with:
           dotnet-version: '10.0.x'
           cache: true
@@ -34,35 +43,37 @@ jobs:
             NuGet.config
 
       - name: Restore Dependencies
+        shell: bash
         run: dotnet restore Trackdub.slnx -m:1
 
       - name: Verify Format Style Limits
+        shell: bash
         run: dotnet format Trackdub.slnx --verify-no-changes
 
-  build:
-    name: Build & Test (${{ matrix.name }})
-    timeout-minutes: 45
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows
-            runner: windows-latest
-            framework_flag: ''
-          - name: Linux
-            runner: ubuntu-latest
-            framework_flag: '--framework net10.0'
-          - name: macOS
-            runner: macos-14
-            framework_flag: '--framework net10.0'
-
+  repository-boundary:
+    name: Verify Repository Boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Scan for stale license/desktop-boundary claims
+        shell: bash
+        run: python3 scripts/ci/check-repository-boundary.py
+
+  build-windows:
+    name: Build & Test (Windows)
+    timeout-minutes: 45
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
         with:
           dotnet-version: '10.0.x'
           cache: true
@@ -71,10 +82,92 @@ jobs:
             NuGet.config
 
       - name: Restore Dependencies
+        shell: bash
         run: dotnet restore Trackdub.slnx -m:1
 
       - name: Compile
-        run: dotnet build Trackdub.slnx -c Release ${{ matrix.framework_flag }} --no-restore -m:1
+        shell: bash
+        run: dotnet build Trackdub.slnx -c Release --no-restore -m:1
 
       - name: Test
-        run: dotnet test Trackdub.slnx -c Release ${{ matrix.framework_flag }} --no-build -m:1
+        shell: bash
+        run: dotnet test Trackdub.slnx -c Release --no-build -m:1
+
+  build-linux:
+    name: Build & Test (Linux)
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore Dependencies
+        shell: bash
+        run: dotnet restore Trackdub.slnx -m:1
+
+      - name: Compile
+        shell: bash
+        run: dotnet build Trackdub.slnx -c Release --no-restore -m:1
+
+      - name: Test
+        shell: bash
+        run: dotnet test Trackdub.slnx -c Release --no-build -m:1
+
+  build-macos:
+    name: Build & Test (macOS)
+    timeout-minutes: 45
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore Dependencies
+        shell: bash
+        run: dotnet restore Trackdub.slnx -m:1
+
+      - name: Compile
+        shell: bash
+        run: dotnet build Trackdub.slnx -c Release --no-restore -m:1
+
+      - name: Test
+        shell: bash
+        run: dotnet test Trackdub.slnx -c Release --no-build -m:1
+
+  linear-release:
+    name: Linear Release
+    needs: [format, repository-boundary, build-windows, build-linux, build-macos]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Linear Release
+        uses: linear/linear-release-action@v0.15.0
+        with:
+          access_key: ${{ secrets.LINEAR_ACCESS_KEY }}
