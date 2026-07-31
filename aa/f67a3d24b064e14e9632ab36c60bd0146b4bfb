@@ -1,0 +1,19 @@
+tests/Trackdub.Infrastructure.Tests/ModelDownloaderAdapterTests.cs
+  s_2d56a22d058290::t_24b1d8e32dc310 693-703,713-715
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "aaf67a3d24b064e14e9632ab36c60bd0146b4bfb",
+  "prompts": {},
+  "sessions": {
+    "s_2d56a22d058290": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "aae42b67-0ab6-46a3-ad27-8fb734d5c288",
+        "model": "default"
+      },
+      "human_author": "tonythethompson <github@trackdub.com>"
+    }
+  }
+}
