@@ -142,7 +142,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             try
             {
                 DownloadArchive(tempArchivePath);
-                VerifyArchiveHash(tempArchivePath);
+                string? tofuHash = VerifyArchiveHash(tempArchivePath, package.Sha256, package.AssetFileName, installRoot);
 
                 Directory.CreateDirectory(tempExtractDirectory);
                 ZipFile.ExtractToDirectory(tempArchivePath, tempExtractDirectory);
@@ -153,6 +153,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
                 }
 
                 Directory.Move(tempExtractDirectory, payloadRoot);
+                PersistTofuBaselineIfNeeded(installRoot, tofuHash);
 
                 string? downloaded = FindExecutable(payloadRoot, fallbacks);
                 if (!string.IsNullOrWhiteSpace(downloaded))
@@ -230,11 +231,13 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
                 await fileStream.FlushAsync(ct).ConfigureAwait(false);
             }
 
-            // No-op today (linuxPackage.Sha256 is null — see FfmpegDownloadPackage's doc
-            // comment, both Linux packages track BtbN's "latest" tag). Wired up so this
-            // path isn't silently unverifiable forever if a future distributor supports
-            // pinning, and so it matches the Windows path's behavior instead of diverging.
-            VerifyArchiveHash(tempArchivePath, linuxPackage.Sha256);
+            // TOFU today (linuxPackage.Sha256 is null — see FfmpegDownloadPackage's doc
+            // comment, both Linux packages track BtbN's "latest" tag). Passing
+            // linuxPackage's own identity (not this.package, which on Linux is whatever
+            // Windows-arch default GetDefaultPackage resolved to and has nothing to do
+            // with what's actually being downloaded here) keeps the TOFU cache file and
+            // log message tied to the archive actually being verified.
+            string? tofuHash = VerifyArchiveHash(tempArchivePath, linuxPackage.Sha256, linuxPackage.AssetFileName, installRoot);
 
             Directory.CreateDirectory(tempExtractDirectory);
 
@@ -265,6 +268,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             }
 
             Directory.Move(tempExtractDirectory, payloadRoot);
+            PersistTofuBaselineIfNeeded(installRoot, tofuHash);
 
             SetUnixExecutableBits(payloadRoot);
 
@@ -365,16 +369,26 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
         networkStream.CopyTo(fileStream);
     }
 
-    private void VerifyArchiveHash(string archivePath) => VerifyArchiveHash(archivePath, package.Sha256);
-
     /// <summary>
-    /// Verifies <paramref name="archivePath"/> against <paramref name="expectedSha256"/>.
-    /// Rolling releases use TOFU: the first downloaded hash is persisted in the package
-    /// cache and every subsequent download must match it. This does not claim to provide
-    /// authenticity on first use, but prevents a mutable release from silently changing
-    /// underneath an existing installation.
+    /// Verifies <paramref name="archivePath"/> against <paramref name="expectedSha256"/>
+    /// (an immutable, versioned release) or, if that's <c>null</c> (a rolling release —
+    /// see <see cref="FfmpegDownloadPackage"/>'s doc comment), against a previously
+    /// recorded first-seen hash for <paramref name="installRoot"/>, if one exists.
+    /// <paramref name="assetFileName"/> and <paramref name="installRoot"/> must identify
+    /// the actual package being verified — not necessarily <c>this.package</c>, which on
+    /// a non-Windows OS is whatever Windows-arch default <see cref="GetDefaultPackage"/>
+    /// resolved to and has no relation to what's actually being downloaded.
     /// </summary>
-    private void VerifyArchiveHash(string archivePath, string? expectedSha256)
+    /// <returns>
+    /// The computed hash, if it's a new TOFU baseline that should be persisted once the
+    /// install fully succeeds via <see cref="PersistTofuBaselineIfNeeded"/> — or
+    /// <c>null</c> if nothing needs persisting (either <paramref name="expectedSha256"/>
+    /// was provided and matched, or an existing TOFU record already matched). Never
+    /// writes anything itself: persisting a baseline before the archive is actually
+    /// extracted and installed would let a failed extraction leave a baseline recorded
+    /// for content that was never actually installed.
+    /// </returns>
+    private static string? VerifyArchiveHash(string archivePath, string? expectedSha256, string assetFileName, string installRoot)
     {
         using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize);
         string hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
@@ -387,10 +401,10 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
                     $"FFmpeg download hash mismatch. Expected {expectedSha256}, got {hash}.");
             }
 
-            return;
+            return null;
         }
 
-        string hashPath = Path.Combine(GetInstallRoot(), "archive.sha256");
+        string hashPath = Path.Combine(installRoot, "archive.sha256");
         if (File.Exists(hashPath))
         {
             string trustedHash = File.ReadAllText(hashPath).Trim();
@@ -400,13 +414,47 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
                     $"FFmpeg rolling-release hash changed. Expected {trustedHash}, got {hash}.");
             }
 
+            return null;
+        }
+
+        Console.Error.WriteLine(
+            $"FFmpeg package '{assetFileName}' has no published hash; recording first-seen hash (TOFU) once install succeeds: {hash}.");
+        return hash;
+    }
+
+    /// <summary>
+    /// Persists <paramref name="hashToPersist"/> (from <see cref="VerifyArchiveHash"/>) as
+    /// the new TOFU baseline for <paramref name="installRoot"/>, if non-null. Must only be
+    /// called after the archive has been fully extracted and installed — see
+    /// <see cref="VerifyArchiveHash"/>'s doc comment for why.
+    /// </summary>
+    private static void PersistTofuBaselineIfNeeded(string installRoot, string? hashToPersist)
+    {
+        if (hashToPersist is null)
+        {
             return;
         }
 
-        Console.Error.WriteLine($"FFmpeg package '{package.AssetFileName}' has no published hash; recording first-seen hash (TOFU): {hash}.");
+        string hashPath = Path.Combine(installRoot, "archive.sha256");
         string temporaryHashPath = $"{hashPath}.{Guid.NewGuid():N}.tmp";
-        File.WriteAllText(temporaryHashPath, hash + Environment.NewLine);
-        File.Move(temporaryHashPath, hashPath);
+        File.WriteAllText(temporaryHashPath, hashToPersist + Environment.NewLine);
+        try
+        {
+            File.Move(temporaryHashPath, hashPath);
+        }
+        catch (IOException)
+        {
+            // Lost a benign race with a concurrent install of the same package (the
+            // explicit/Linux install path runs outside SyncRoot's lock). Whichever write
+            // landed first is authoritative; if its content actually differs from what we
+            // computed, the next VerifyArchiveHash call catches that as a real mismatch
+            // rather than us silently overwriting a possibly-legitimate concurrent baseline.
+            DeleteFileIfExists(temporaryHashPath);
+            if (!File.Exists(hashPath))
+            {
+                throw;
+            }
+        }
     }
 
     internal static string? FindExecutable(string root, IReadOnlyList<string> fallbacks)

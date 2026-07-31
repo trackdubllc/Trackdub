@@ -50,12 +50,11 @@ public sealed class FfmpegAutoDownloaderTests
     }
 
     [Fact]
-    public void TryEnsureExecutable_skips_hash_verification_when_package_has_no_pinned_hash()
+    public void TryEnsureExecutable_records_tofu_baseline_when_package_has_no_pinned_hash()
     {
         // Mirrors the real arm64/Linux packages: Sha256 is null because the source is a
-        // mutable "latest" tag. The archive bytes below intentionally do NOT match any
-        // particular hash — if VerifyArchiveHash ever stopped skipping a null expected
-        // hash, this would start throwing "hash mismatch" and catch the regression.
+        // mutable "latest" tag. First install has no prior baseline to compare against,
+        // so it must succeed and record one — not silently skip verification forever.
         string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
 
@@ -75,6 +74,50 @@ public sealed class FfmpegAutoDownloaderTests
 
             Assert.NotNull(ffmpegPath);
             Assert.True(File.Exists(ffmpegPath));
+
+            string hashPath = Path.Combine(downloader.GetInstallRoot(), "archive.sha256");
+            Assert.True(File.Exists(hashPath));
+            string expectedHash = Convert.ToHexString(SHA256.HashData(archiveBytes)).ToLowerInvariant();
+            Assert.Equal(expectedHash, File.ReadAllText(hashPath).Trim(), ignoreCase: true);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryEnsureExecutable_rejects_reinstall_when_rolling_release_content_changed()
+    {
+        // Simulates a second install attempt (e.g. after the extracted payload was
+        // deleted but the TOFU baseline survived) where the "latest" tag has since been
+        // republished with different bytes — must fail loudly, not silently re-trust.
+        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            var package = new FfmpegDownloadPackage(
+                "test-build-unverified",
+                "ffmpeg-test.zip",
+                "https://example.invalid/ffmpeg-test.zip",
+                Sha256: null);
+
+            using (var firstClient = new HttpClient(new StaticArchiveHandler(CreateArchiveBytes())))
+            {
+                var firstDownloader = new FfmpegAutoDownloader(tempRoot, firstClient, package);
+                Assert.NotNull(firstDownloader.TryEnsureExecutable(["ffmpeg.exe"]));
+            }
+
+            string installRoot = new FfmpegAutoDownloader(tempRoot, package: package).GetInstallRoot();
+            Directory.Delete(Path.Combine(installRoot, "payload"), recursive: true);
+
+            byte[] differentArchiveBytes = CreateArchiveBytes("ffmpeg-v2", "ffprobe-v2");
+            using var secondClient = new HttpClient(new StaticArchiveHandler(differentArchiveBytes));
+            var secondDownloader = new FfmpegAutoDownloader(tempRoot, secondClient, package);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => secondDownloader.TryEnsureExecutable(["ffmpeg.exe"]));
+            Assert.Contains("rolling-release hash changed", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -184,13 +227,13 @@ public sealed class FfmpegAutoDownloaderTests
         }
     }
 
-    private static byte[] CreateArchiveBytes()
+    private static byte[] CreateArchiveBytes(string ffmpegContent = "ffmpeg", string ffprobeContent = "ffprobe")
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/bin/ffmpeg.exe", "ffmpeg");
-            AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/bin/ffprobe.exe", "ffprobe");
+            AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/bin/ffmpeg.exe", ffmpegContent);
+            AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/bin/ffprobe.exe", ffprobeContent);
             AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/LICENSE.txt", "LGPL");
         }
 
