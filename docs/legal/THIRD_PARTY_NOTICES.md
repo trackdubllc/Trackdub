@@ -28,16 +28,25 @@ Each entry should include:
 - attribution required?
 - notes
 
-## FFmpeg / ffprobe Windows x64 binaries
+## FFmpeg / ffprobe binaries
 
-- name: FFmpeg / ffprobe Windows x64 binaries (BtbN FFmpeg-Builds, `lgpl-shared`)
-- version / revision: FFmpeg autobuild-2026-05-05-13-19, asset `ffmpeg-master-latest-win64-lgpl-shared.zip`
-- source URL: https://github.com/BtbN/FFmpeg-Builds/releases
-- license: LGPL-2.1-or-later for the selected `lgpl-shared` build variant
+- name: FFmpeg / ffprobe Windows x64 binaries (GyanD `codexffmpeg`, `essentials_build`)
+- version / revision: FFmpeg 8.1.2, asset `ffmpeg-8.1.2-essentials_build.zip`
+- source URL: https://github.com/GyanD/codexffmpeg/releases
+- license: GNU General Public License, version 3 (GPLv3) — confirmed directly against the shipped `LICENSE` file and `ffmpeg -version`'s own `--enable-gpl --enable-version3` build configuration, not assumed from the filename
 - commercial use allowed? yes
-- redistribution allowed? yes, provided LGPL notice and corresponding-source obligations are met when Trackdub redistributes the binary
+- redistribution allowed? yes, provided the corresponding-source obligation is met when the binary is conveyed — see notes; Trackdub itself does not convey this binary
 - attribution required? yes
-- notes: Used only for the automatic FFmpeg bootstrap path. The downloader is pinned to the exact asset URL and SHA-256 and preserves the extracted shared-build layout, including adjacent DLLs and license files.
+- notes: Used only for the automatic FFmpeg bootstrap path (`FfmpegAutoDownloader`). The downloader fetches this at runtime on the end user's own machine; Trackdub does not bundle, ship, or otherwise convey the binary itself, so the GPLv3 source-conveyance obligation stays with GyanD as the actual distributor, not with Trackdub. Pinned to the exact asset URL and a locally-computed SHA-256 (GyanD does not publish its own checksums). GyanD (gyan.dev) is an immutable-per-version distributor — this specific `8.1.2` release will not be silently replaced under the same URL, unlike a rolling/"latest" tag. Chosen specifically because this build variant includes `libx264` (verified: extracted the binary, ran `-encoders`), which the software H.264 encoder fallback in `Trackdub.Media` depends on.
+
+- name: FFmpeg / ffprobe Windows arm64, Linux x64, and Linux arm64 binaries (BtbN FFmpeg-Builds, `gpl-shared`)
+- version / revision: BtbN's literal `latest` tag (their continuously-republished current-pointer release, distinct from their dated `autobuild-*` tags), assets `ffmpeg-master-latest-winarm64-gpl-shared.zip`, `ffmpeg-master-latest-linux64-gpl-shared.tar.xz`, `ffmpeg-master-latest-linuxarm64-gpl-shared.tar.xz`
+- source URL: https://github.com/BtbN/FFmpeg-Builds/releases
+- license: GPLv3 for the selected `gpl-shared` build variant (BtbN does not publish a `-buildconf` per asset ahead of download the way this notice would ideally cite; treat as GPLv3 pending a build-time `-buildconf` capture, consistent with the Windows x64 entry above)
+- commercial use allowed? yes
+- redistribution allowed? yes, same corresponding-source reasoning as the Windows x64 entry — Trackdub does not convey this binary, it is fetched by the end user's own machine
+- attribution required? yes
+- notes: GyanD (used for Windows x64 above) does not publish arm64 or Linux builds, so these three RIDs use BtbN's `gpl-shared` variant of the rolling `latest` tag instead. Because `latest` is a moving target with no fixed content, `FfmpegAutoDownloader` does not pin a SHA-256 for these three packages (`Sha256` is `null`, a deliberate, typed "unverifiable, tracks upstream" state — see the doc comment on `FfmpegDownloadPackage`) — this is a real integrity-verification gap relative to the Windows x64 entry, accepted specifically because BtbN's dated tags were found to be unreliably retained (see the PR that introduced this notice, and issue #23) and GyanD does not cover these platforms.
 
 ## Lucene.NET analyzer package family
 
