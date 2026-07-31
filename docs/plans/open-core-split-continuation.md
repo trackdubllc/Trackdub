@@ -245,15 +245,17 @@ Gate: a clean clone of the fresh gated repository builds through the pinned core
 Step 5 (make `Trackdub` public, keep `Trackdub-gated` private) was already
 done independent of this checklist. Steps 1–3 (dependency direction,
 boundary scan, package metadata) were run this round — see
-`docs/plans/phase-3-validation-report.md` for the full detail; all three
-passed with caveats noted there (package metadata is source-only, no
-`dotnet` SDK available to inspect built artifacts). Step 4 (branch
+`docs/plans/phase-3-validation-report.md` for the full detail; Step 1 is
+partially verified (reverse dependency direction not independently rerun
+against fresh Trackdub-gated clone), Steps 2–3 passed with caveats noted
+there (package metadata is source-only, no `dotnet` SDK available to inspect
+built artifacts). Step 4 (branch
 protection) could not be verified or configured for **either** repository —
 no branch-protection/ruleset tool was available in the session that ran this
-check. Private visibility does not by itself mean branch protection is
-unavailable (Team/Enterprise plans support it on private repos; only GitHub
-Free excludes it) — this session doesn't know `trackdubllc`'s plan, so
-`Trackdub-gated`'s gap is recorded as unverified, not accepted. Needs a human
+check. Private repositories support branch protection and repository rulesets
+on GitHub Pro, Team, and Enterprise plans, while GitHub Free excludes these
+features for private repositories — this session doesn't know `trackdubllc`'s
+plan, so `Trackdub-gated`'s gap is recorded as unverified, not accepted. Needs a human
 to check `Settings → Branches` on both `Trackdub` and `Trackdub-gated`
 directly. **Step 7 itself (recreating relevant historical issues from the
 archive in their new canonical repositories) was not attempted this round —

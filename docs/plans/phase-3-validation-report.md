@@ -117,11 +117,11 @@ tools (checked via broad keyword search across its full tool surface). This
 earlier version of this report additionally claimed that `Trackdub-gated`
 being private meant branch protection/rulesets weren't available "on
 GitHub's private-repo tier" — that claim was wrong and has been removed.
-Protected branches and rulesets on private repositories are a GitHub Team/
-Enterprise feature, not something private visibility alone rules out; GitHub
-Free is the tier that excludes them for private repos. This session doesn't
-know which plan `trackdubllc` is on, so neither repo's branch-protection
-status is recorded as an accepted gap — both are simply unverified.
+Private repositories support branch protection and repository rulesets on
+GitHub Pro, Team, and Enterprise plans, while GitHub Free excludes these
+features for private repositories. This session doesn't know which plan
+`trackdubllc` is on, so neither repo's branch-protection status is recorded
+as an accepted gap — both are simply unverified.
 
 Action needed from you: check `Settings → Branches` (or `Settings → Rules →
 Rulesets`) directly on **both** `trackdubllc/Trackdub` and
