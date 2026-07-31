@@ -6,11 +6,21 @@ using System.Security.Cryptography;
 
 namespace Trackdub.Media.Process;
 
+/// <summary>
+/// A resolved ffmpeg download target. <see cref="Sha256"/> is <c>null</c> when the
+/// source is a mutable/rolling release (e.g. a "latest" tag that gets republished with
+/// new assets over time) — there is no fixed content to publish a hash for ahead of time.
+/// <see cref="FfmpegAutoDownloader"/> falls back to trust-on-first-use for those: the
+/// first download's hash is persisted and compared against on any later re-download,
+/// which doesn't authenticate the first download but does catch a rolling release
+/// silently changing underneath an already-trusted install. A non-null value means the
+/// source is an immutable, versioned release with a real hash checked every time.
+/// </summary>
 internal sealed record FfmpegDownloadPackage(
     string VersionTag,
     string AssetFileName,
     string DownloadUrl,
-    string Sha256);
+    string? Sha256);
 
 internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
 {
@@ -24,27 +34,41 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
     private static readonly Lock SyncRoot = new();
     private static readonly HttpClient SharedHttpClient = CreateHttpClient();
 
+    // Windows x64: GyanD (gyan.dev), an immutable-per-version distributor (100+ retained
+    // releases going back to 2025-10, no observed pruning, unlike BtbN's dated
+    // autobuild-* tags — see #23). "essentials_build" is a real GPLv3 build with
+    // libx264 present (verified directly: extracted the binary, ran `-encoders`, saw
+    // libx264/libx264rgb; `-version` reports --enable-gpl --enable-version3
+    // --enable-libx264 — see #24). Hash computed by downloading the exact asset and
+    // running sha256sum; GyanD doesn't publish its own checksums.
     private static readonly FfmpegDownloadPackage DefaultX64Package = new(
-        "autobuild-2026-05-05-13-19-win64-lgpl-shared",
-        "ffmpeg-N-124399-g5c44245878-win64-lgpl-shared.zip",
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-05-13-19/ffmpeg-N-124399-g5c44245878-win64-lgpl-shared.zip",
-        "1d3d11f341c9c895d41b1a7e6e295d9a34d112996c7782e3eca9013d35b251e9");
+        "gyan-8.1.2-win64-gpl-essentials",
+        "ffmpeg-8.1.2-essentials_build.zip",
+        "https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip",
+        "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec");
+
+    // GyanD doesn't publish arm64/Linux builds. BtbN's literal "latest" tag (not a dated
+    // autobuild-* tag) is their continuously-republished current-pointer — confirmed live,
+    // never observed to 404, unlike the dated tags this used to pin to. Sha256 is
+    // intentionally null: there's no fixed asset to hash against a moving target (see
+    // FfmpegDownloadPackage's doc comment). "gpl-shared" (not "lgpl-shared") so libx264
+    // is present here too — see #24.
     private static readonly FfmpegDownloadPackage DefaultArm64Package = new(
-        "autobuild-2026-05-05-13-19-winarm64-lgpl-shared",
-        "ffmpeg-N-124399-g5c44245878-winarm64-lgpl-shared.zip",
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-05-13-19/ffmpeg-N-124399-g5c44245878-winarm64-lgpl-shared.zip",
-        "f05fda85b8897b16d1b55e1fd71529bb37de84e595e1a317b0cf14162a541dbf");
+        "btbn-latest-winarm64-gpl-shared",
+        "ffmpeg-master-latest-winarm64-gpl-shared.zip",
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-gpl-shared.zip",
+        null);
 
     private static readonly FfmpegDownloadPackage ExplicitLinuxX64Package = new(
-        "explicit-ffmpeg-linux64-lgpl-shared-latest",
-        "ffmpeg-master-latest-linux64-lgpl-shared.tar.xz",
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-lgpl-shared.tar.xz",
-        "");
+        "explicit-ffmpeg-linux64-gpl-shared-latest",
+        "ffmpeg-master-latest-linux64-gpl-shared.tar.xz",
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl-shared.tar.xz",
+        null);
     private static readonly FfmpegDownloadPackage ExplicitLinuxArm64Package = new(
-        "explicit-ffmpeg-linuxarm64-lgpl-shared-latest",
-        "ffmpeg-master-latest-linuxarm64-lgpl-shared.tar.xz",
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-lgpl-shared.tar.xz",
-        "");
+        "explicit-ffmpeg-linuxarm64-gpl-shared-latest",
+        "ffmpeg-master-latest-linuxarm64-gpl-shared.tar.xz",
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl-shared.tar.xz",
+        null);
 
     internal static FfmpegDownloadPackage DefaultPackage => GetDefaultPackage(RuntimeInformation.OSArchitecture);
 
@@ -118,7 +142,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             try
             {
                 DownloadArchive(tempArchivePath);
-                VerifyArchiveHash(tempArchivePath);
+                string? tofuHash = VerifyArchiveHash(tempArchivePath, package.Sha256, package.AssetFileName, installRoot);
 
                 Directory.CreateDirectory(tempExtractDirectory);
                 ZipFile.ExtractToDirectory(tempArchivePath, tempExtractDirectory);
@@ -133,6 +157,13 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
                 string? downloaded = FindExecutable(payloadRoot, fallbacks);
                 if (!string.IsNullOrWhiteSpace(downloaded))
                 {
+                    // Only now — a working executable was actually located — is this
+                    // download considered a fully successful install. Persisting any
+                    // earlier (e.g. right after Directory.Move) would record a TOFU
+                    // baseline for an archive that extracted but didn't contain what
+                    // this call needed, reproducing the exact premature-write failure
+                    // mode already fixed for extraction errors, just one step later.
+                    PersistTofuBaselineIfNeeded(installRoot, tofuHash);
                     return downloaded;
                 }
 
@@ -200,9 +231,19 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             response.EnsureSuccessStatusCode();
 
             using Stream networkStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            using var fileStream = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize);
-            await networkStream.CopyToAsync(fileStream, ct).ConfigureAwait(false);
-            await fileStream.FlushAsync(ct).ConfigureAwait(false);
+            using (var fileStream = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize))
+            {
+                await networkStream.CopyToAsync(fileStream, ct).ConfigureAwait(false);
+                await fileStream.FlushAsync(ct).ConfigureAwait(false);
+            }
+
+            // TOFU today (linuxPackage.Sha256 is null — see FfmpegDownloadPackage's doc
+            // comment, both Linux packages track BtbN's "latest" tag). Passing
+            // linuxPackage's own identity (not this.package, which on Linux is whatever
+            // Windows-arch default GetDefaultPackage resolved to and has nothing to do
+            // with what's actually being downloaded here) keeps the TOFU cache file and
+            // log message tied to the archive actually being verified.
+            string? tofuHash = VerifyArchiveHash(tempArchivePath, linuxPackage.Sha256, linuxPackage.AssetFileName, installRoot);
 
             Directory.CreateDirectory(tempExtractDirectory);
 
@@ -236,7 +277,18 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
 
             SetUnixExecutableBits(payloadRoot);
 
-            return FindExecutable(payloadRoot, GetPlatformExecutableNames("ffmpeg")) is not null;
+            bool found = FindExecutable(payloadRoot, GetPlatformExecutableNames("ffmpeg")) is not null;
+            if (found)
+            {
+                // Same reasoning as the Windows path: only persist once a working
+                // executable was actually located in the extracted payload, not right
+                // after the archive extracted — an archive that extracts cleanly but
+                // doesn't contain ffmpeg would otherwise poison the TOFU baseline for
+                // content that was never actually installed.
+                PersistTofuBaselineIfNeeded(installRoot, tofuHash);
+            }
+
+            return found;
         }
         catch (OperationCanceledException)
         {
@@ -333,14 +385,91 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
         networkStream.CopyTo(fileStream);
     }
 
-    private void VerifyArchiveHash(string archivePath)
+    /// <summary>
+    /// Verifies <paramref name="archivePath"/> against <paramref name="expectedSha256"/>
+    /// (an immutable, versioned release) or, if that's <c>null</c> (a rolling release —
+    /// see <see cref="FfmpegDownloadPackage"/>'s doc comment), against a previously
+    /// recorded first-seen hash for <paramref name="installRoot"/>, if one exists.
+    /// <paramref name="assetFileName"/> and <paramref name="installRoot"/> must identify
+    /// the actual package being verified — not necessarily <c>this.package</c>, which on
+    /// a non-Windows OS is whatever Windows-arch default <see cref="GetDefaultPackage"/>
+    /// resolved to and has no relation to what's actually being downloaded.
+    /// </summary>
+    /// <returns>
+    /// The computed hash, if it's a new TOFU baseline that should be persisted once the
+    /// install fully succeeds via <see cref="PersistTofuBaselineIfNeeded"/> — or
+    /// <c>null</c> if nothing needs persisting (either <paramref name="expectedSha256"/>
+    /// was provided and matched, or an existing TOFU record already matched). Never
+    /// writes anything itself: persisting a baseline before the archive is actually
+    /// extracted and installed would let a failed extraction leave a baseline recorded
+    /// for content that was never actually installed.
+    /// </returns>
+    private static string? VerifyArchiveHash(string archivePath, string? expectedSha256, string assetFileName, string installRoot)
     {
         using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize);
         string hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        if (!string.Equals(hash, package.Sha256, StringComparison.OrdinalIgnoreCase))
+
+        if (expectedSha256 is not null)
         {
-            throw new InvalidOperationException(
-                $"FFmpeg download hash mismatch. Expected {package.Sha256}, got {hash}.");
+            if (!string.Equals(hash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"FFmpeg download hash mismatch. Expected {expectedSha256}, got {hash}.");
+            }
+
+            return null;
+        }
+
+        string hashPath = Path.Combine(installRoot, "archive.sha256");
+        if (File.Exists(hashPath))
+        {
+            string trustedHash = File.ReadAllText(hashPath).Trim();
+            if (!string.Equals(hash, trustedHash, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"FFmpeg rolling-release hash changed. Expected {trustedHash}, got {hash}.");
+            }
+
+            return null;
+        }
+
+        Console.Error.WriteLine(
+            $"FFmpeg package '{assetFileName}' has no published hash; recording first-seen hash (TOFU) once install succeeds: {hash}.");
+        return hash;
+    }
+
+    /// <summary>
+    /// Persists <paramref name="hashToPersist"/> (from <see cref="VerifyArchiveHash"/>) as
+    /// the new TOFU baseline for <paramref name="installRoot"/>, if non-null. Must only be
+    /// called after the archive has been fully extracted and installed — see
+    /// <see cref="VerifyArchiveHash"/>'s doc comment for why.
+    /// </summary>
+    private static void PersistTofuBaselineIfNeeded(string installRoot, string? hashToPersist)
+    {
+        if (hashToPersist is null)
+        {
+            return;
+        }
+
+        string hashPath = Path.Combine(installRoot, "archive.sha256");
+        string temporaryHashPath = $"{hashPath}.{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(temporaryHashPath, hashToPersist + Environment.NewLine);
+        try
+        {
+            File.Move(temporaryHashPath, hashPath);
+        }
+        catch (IOException)
+        {
+            // Lost a benign race with a concurrent install of the same package (the
+            // explicit/Linux install path runs outside SyncRoot's lock). Whichever write
+            // landed first is authoritative; if its content actually differs from what we
+            // computed, the next VerifyArchiveHash call catches that as a real mismatch
+            // rather than us silently overwriting a possibly-legitimate concurrent baseline.
+            DeleteFileIfExists(temporaryHashPath);
+            if (!File.Exists(hashPath))
+            {
+                throw;
+            }
         }
     }
 

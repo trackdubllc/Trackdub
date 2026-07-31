@@ -51,6 +51,14 @@ LICENSE_CLAIM_EXCLUDE_FILES = [
     "docs/legal/THIRD_PARTY_NOTICES.md",
     "docs/legal/LICENSE-HISTORY.md",
     "scripts/ci/check-repository-boundary.py",
+    # Per docs/repository-policy.md's "Native Dependencies" section, downloaded
+    # native binaries aren't tracked here — the acquisition scripts, URLs, and
+    # hashes are. This file's whole job is describing which third-party (GPL,
+    # in this case) ffmpeg binary variant gets fetched and why — that's the
+    # same legitimate "discuss another license" case as the notices file
+    # above, just in the acquisition script itself rather than in docs/legal/.
+    "src/Trackdub.Media/Process/FfmpegAutoDownloader.cs",
+    "tests/Trackdub.Media.Tests/FfmpegAutoDownloaderTests.cs",
 ]
 
 # Repository-boundary patterns: desktop/cloud project names that must not
