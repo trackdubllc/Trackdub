@@ -690,6 +690,18 @@ public sealed class ModelDownloaderAdapterTests
             int count,
             CancellationToken cancellationToken)
         {
+            return Task.FromResult(ReadCore(buffer.AsSpan(offset, count), cancellationToken));
+        }
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            return new ValueTask<int>(ReadCore(buffer.Span, cancellationToken));
+        }
+
+        private int ReadCore(Span<byte> destination, CancellationToken cancellationToken)
+        {
             cancellationToken.ThrowIfCancellationRequested();
             if (!hasThrown && Position >= failAfterBytes)
             {
@@ -698,9 +710,9 @@ public sealed class ModelDownloaderAdapterTests
             }
 
             int safeCount = hasThrown
-                ? count
-                : Math.Min(count, Math.Max(0, failAfterBytes - (int)Position));
-            return Task.FromResult(base.Read(buffer, offset, safeCount));
+                ? destination.Length
+                : Math.Min(destination.Length, Math.Max(0, failAfterBytes - (int)Position));
+            return Read(destination[..safeCount]);
         }
     }
 
