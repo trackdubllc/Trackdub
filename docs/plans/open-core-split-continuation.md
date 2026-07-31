@@ -24,7 +24,7 @@ This plan preserves the actual technical boundary. It is not a license-text-only
 
 ### Public core
 
-`trackdubllc/Trackdub` is private, unarchived, and has a fresh-root history. Its root commit was `8bac38a8fa3e0343c5d10c558b64d269d15e7828`; follow-up commits have added CI and cross-platform fixes. The current inspected head is `d590533b3220edf5211ce773b7620487c29eb1e7`.
+`trackdubllc/Trackdub` **is public** (made public since this section was last written; Phase 1's release gates passed) and has a fresh-root history. Its root commit was `8bac38a8fa3e0343c5d10c558b64d269d15e7828`; follow-up commits have added CI and cross-platform fixes. See "STATUS: Phase 3 partly complete" under Phase 3 below for current validated state.
 
 The core contains:
 
@@ -239,6 +239,24 @@ Initially consume `Trackdub` through a Git submodule at `external/Trackdub`, pin
 Gate: a clean clone of the fresh gated repository builds through the pinned core submodule, runs desktop tests, and preserves end-user product behavior.
 
 ## Phase 3: Cross-Repository Validation and Publication
+
+## STATUS: Phase 3 partly complete (2026-07-31) — validation steps run, ownership/protection steps need you
+
+Step 5 (make `Trackdub` public, keep `Trackdub-gated` private) was already
+done independent of this checklist. Steps 1–3 (dependency direction,
+boundary scan, package metadata) were run this round — see
+`docs/plans/phase-3-validation-report.md` for the full detail; all three
+passed. Step 4 (branch protection) could not be verified or configured — no
+branch-protection/ruleset tool was available in the session that ran this
+check; needs a human to check `Settings → Branches` on `Trackdub` directly.
+`Trackdub-gated` is private, so branch protection isn't available there on
+GitHub's private-repo tier — its compensating controls (PR-merge convention,
+`REVIEW.md` checklist, green-CI-before-merge) are recorded as an accepted
+gap in that repo's own docs, not unfinished work. Step 7 (issue hygiene) was
+addressed separately: the public core's issue tracker had accumulated
+unrelated cross-project issues (a different project's Nushell plugin-registry
+backlog); the genuinely-Trackdub ones were kept, the rest closed
+`not_planned`.
 
 1. Verify the dependency direction from independent clean clones:
    ```text
