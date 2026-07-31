@@ -240,7 +240,7 @@ Gate: a clean clone of the fresh gated repository builds through the pinned core
 
 ## Phase 3: Cross-Repository Validation and Publication
 
-## STATUS: Phase 3 partly complete (2026-07-31) — validation steps run, ownership/protection steps need you
+### STATUS: Phase 3 partly complete (2026-07-31) — validation steps run, ownership/protection steps need you
 
 Step 5 (make `Trackdub` public, keep `Trackdub-gated` private) was already
 done independent of this checklist. Steps 1–3 (dependency direction,
