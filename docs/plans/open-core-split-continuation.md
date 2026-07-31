@@ -255,11 +255,15 @@ unavailable (Team/Enterprise plans support it on private repos; only GitHub
 Free excludes it) — this session doesn't know `trackdubllc`'s plan, so
 `Trackdub-gated`'s gap is recorded as unverified, not accepted. Needs a human
 to check `Settings → Branches` on both `Trackdub` and `Trackdub-gated`
-directly. Step 7 (issue hygiene) was addressed separately: the public core's
-issue tracker had accumulated unrelated cross-project issues (a different
-project's Nushell plugin-registry
-backlog); the genuinely-Trackdub ones were kept, the rest closed
-`not_planned`.
+directly. **Step 7 itself (recreating relevant historical issues from the
+archive in their new canonical repositories) was not attempted this round —
+don't read it as done.** What actually happened alongside this validation
+work was unrelated general hygiene: the public core's issue tracker had
+accumulated unrelated cross-project issues (a different project's Nushell
+plugin-registry backlog, nothing to do with the open-core split or the
+archive migration); the genuinely-Trackdub ones were kept, the rest closed
+`not_planned`. That's noise removal, not the archive-to-new-repo issue
+migration Step 7 describes.
 
 1. Verify the dependency direction from independent clean clones:
    ```text

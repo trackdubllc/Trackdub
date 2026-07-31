@@ -84,10 +84,11 @@ so `dotnet pack` could not be run for either project and the resulting
 follows is a source-only check, not artifact validation — flagging that
 distinction explicitly rather than overclaiming.
 
-Only two projects are packable (`IsPackable=true`, with `PackageId` and
-license metadata set) in this repo: `Trackdub.Cli` and
-`Trackdub.OnnxRuntime.Dnnl.Native`. Several test projects also declare
-`IsPackable` — explicitly `false` (e.g.
+Only two projects are packable (with `PackageId` and license metadata set)
+in this repo: `Trackdub.Cli` (via `PackAsTool=true`, which implicitly
+enables packing — it doesn't itself set `IsPackable`) and
+`Trackdub.OnnxRuntime.Dnnl.Native` (via explicit `IsPackable=true`). Several
+test projects also declare `IsPackable` — explicitly `false` (e.g.
 `tests/Trackdub.Application.Tests/Trackdub.Application.Tests.csproj:7`) —
 which correctly excludes them from packing; they aren't a metadata gap.
 
