@@ -1,0 +1,1 @@
+Plain Markdown (.md) with one PDF artifact (`trackdub-ml-pipeline.pdf`); no documentation framework, static site generator, or build pipeline — content is intended to be read directly from the repository.
