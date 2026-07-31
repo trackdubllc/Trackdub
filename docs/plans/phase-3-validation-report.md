@@ -13,8 +13,9 @@ this report fulfills.
 
 ```
 grep -rEln "Trackdub-gated|App\.Avalonia|DesktopExportTierGate|DesktopLicensingComposition" \
-  --include="*.cs" --include="*.md" --include="*.props" --include="*.targets" --include="*.slnx" \
-  src/ docs/ *.props *.targets *.slnx
+  --include="*.cs" --include="*.md" --include="*.props" --include="*.targets" \
+  --include="*.csproj" --include="*.sln" --include="*.slnx" \
+  src/ docs/ *.props *.targets *.csproj *.sln *.slnx
 ```
 
 Two source-code hits, both deliberate seams, not violations:
