@@ -153,11 +153,17 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
                 }
 
                 Directory.Move(tempExtractDirectory, payloadRoot);
-                PersistTofuBaselineIfNeeded(installRoot, tofuHash);
 
                 string? downloaded = FindExecutable(payloadRoot, fallbacks);
                 if (!string.IsNullOrWhiteSpace(downloaded))
                 {
+                    // Only now — a working executable was actually located — is this
+                    // download considered a fully successful install. Persisting any
+                    // earlier (e.g. right after Directory.Move) would record a TOFU
+                    // baseline for an archive that extracted but didn't contain what
+                    // this call needed, reproducing the exact premature-write failure
+                    // mode already fixed for extraction errors, just one step later.
+                    PersistTofuBaselineIfNeeded(installRoot, tofuHash);
                     return downloaded;
                 }
 
@@ -268,11 +274,21 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             }
 
             Directory.Move(tempExtractDirectory, payloadRoot);
-            PersistTofuBaselineIfNeeded(installRoot, tofuHash);
 
             SetUnixExecutableBits(payloadRoot);
 
-            return FindExecutable(payloadRoot, GetPlatformExecutableNames("ffmpeg")) is not null;
+            bool found = FindExecutable(payloadRoot, GetPlatformExecutableNames("ffmpeg")) is not null;
+            if (found)
+            {
+                // Same reasoning as the Windows path: only persist once a working
+                // executable was actually located in the extracted payload, not right
+                // after the archive extracted — an archive that extracts cleanly but
+                // doesn't contain ffmpeg would otherwise poison the TOFU baseline for
+                // content that was never actually installed.
+                PersistTofuBaselineIfNeeded(installRoot, tofuHash);
+            }
+
+            return found;
         }
         catch (OperationCanceledException)
         {
