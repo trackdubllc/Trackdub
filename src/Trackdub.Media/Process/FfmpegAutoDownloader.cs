@@ -367,25 +367,44 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
 
     /// <summary>
     /// Verifies <paramref name="archivePath"/> against <paramref name="expectedSha256"/>.
-    /// A <c>null</c> expected hash means the source is a mutable/rolling release with no
-    /// fixed content to verify against (see <see cref="FfmpegDownloadPackage"/>'s doc
-    /// comment) — deliberately skipped, not silently treated as a pass against a stale
-    /// or empty value.
+    /// Rolling releases use TOFU: the first downloaded hash is persisted in the package
+    /// cache and every subsequent download must match it. This does not claim to provide
+    /// authenticity on first use, but prevents a mutable release from silently changing
+    /// underneath an existing installation.
     /// </summary>
-    private static void VerifyArchiveHash(string archivePath, string? expectedSha256)
+    private void VerifyArchiveHash(string archivePath, string? expectedSha256)
     {
-        if (expectedSha256 is null)
+        using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize);
+        string hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+
+        if (expectedSha256 is not null)
         {
+            if (!string.Equals(hash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"FFmpeg download hash mismatch. Expected {expectedSha256}, got {hash}.");
+            }
+
             return;
         }
 
-        using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize);
-        string hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        if (!string.Equals(hash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+        string hashPath = Path.Combine(GetInstallRoot(), "archive.sha256");
+        if (File.Exists(hashPath))
         {
-            throw new InvalidOperationException(
-                $"FFmpeg download hash mismatch. Expected {expectedSha256}, got {hash}.");
+            string trustedHash = File.ReadAllText(hashPath).Trim();
+            if (!string.Equals(hash, trustedHash, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"FFmpeg rolling-release hash changed. Expected {trustedHash}, got {hash}.");
+            }
+
+            return;
         }
+
+        Console.Error.WriteLine($"FFmpeg package '{package.AssetFileName}' has no published hash; recording first-seen hash (TOFU): {hash}.");
+        string temporaryHashPath = $"{hashPath}.{Guid.NewGuid():N}.tmp";
+        File.WriteAllText(temporaryHashPath, hash + Environment.NewLine);
+        File.Move(temporaryHashPath, hashPath);
     }
 
     internal static string? FindExecutable(string root, IReadOnlyList<string> fallbacks)
