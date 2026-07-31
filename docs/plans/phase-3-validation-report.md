@@ -11,7 +11,7 @@ this report fulfills.
 
 **Verified: `Trackdub` has no reference to `Trackdub-gated`.**
 
-```
+```shell
 grep -rEln "Trackdub-gated|App\.Avalonia|DesktopExportTierGate|DesktopLicensingComposition" \
   --include="*.cs" --include="*.md" --include="*.props" --include="*.targets" \
   --include="*.csproj" --include="*.sln" --include="*.slnx" \
@@ -39,14 +39,27 @@ documents that legitimately predate or describe the split. Per
 not binding implementation truth, and are explicitly out of scope for the
 project's own boundary scanner (see below).
 
-**Confirmed direction: `Trackdub-gated → Trackdub` (via pinned submodule),
-never the reverse in buildable code.**
+Separately checked every `<ProjectReference>` in every `*.csproj` under
+`src/`, `tests/`, and `tools/` (48 entries across 15 files): all resolve to
+relative paths inside this repo's own tree (`..\..\src\...`,
+`..\..\..\src\...`), none point outside it. No `.gitmodules` file or git
+submodule/gitlink exists in this repo — expected, since `Trackdub` is the
+consumed side of the pin, not the consumer.
+
+**Confirmed direction from this repo's side: `Trackdub` has no reference to
+`Trackdub-gated`, in source, docs, or project files.** The other half of the
+direction — that `Trackdub-gated`'s project references genuinely resolve
+into `external/Trackdub` and nowhere else — was not independently re-verified
+in this session against a fresh clean clone of `Trackdub-gated`; it's known
+from `Trackdub-gated/AGENTS.md`'s explicit dependency-direction diagram and
+this session's own submodule-pin work on PR #10, not from a repeated grep
+here.
 
 ## 2. Boundary scan
 
 **Ran the repo's existing scanner rather than writing a new one:**
 
-```
+```console
 $ python3 scripts/ci/check-repository-boundary.py
 Repository-boundary scan passed.
 ```
@@ -62,14 +75,23 @@ already special-cases `src/Trackdub.Media/Process/FfmpegAutoDownloader.cs`
 No stale `Trackdub-Monorepo-Archive`, `BSL`, or `Business Source License`
 references found anywhere in `docs/legal/`, `src/`, or root `.props` files.
 
-## 3. Package metadata
+## 3. Package metadata (source-only — no `dotnet` SDK available)
 
-**Verified: both publishable packages carry correct, distinct license
-metadata.**
+**Source declarations verified; generated artifacts not inspected.** No
+`dotnet` SDK was available in this session (`which dotnet` found nothing),
+so `dotnet pack` could not be run for either project and the resulting
+`.nupkg`/`.nuspec` license metadata was never actually inspected. What
+follows is a source-only check, not artifact validation — flagging that
+distinction explicitly rather than overclaiming.
 
-Only two projects declare `PackageId`/`IsPackable` in this repo:
+Only two projects are packable (`IsPackable=true`, with `PackageId` and
+license metadata set) in this repo: `Trackdub.Cli` and
+`Trackdub.OnnxRuntime.Dnnl.Native`. Several test projects also declare
+`IsPackable` — explicitly `false` (e.g.
+`tests/Trackdub.Application.Tests/Trackdub.Application.Tests.csproj:7`) —
+which correctly excludes them from packing; they aren't a metadata gap.
 
-| Project | License | Why |
+| Project | Declared license | Why |
 |---|---|---|
 | `Trackdub.Cli` | `Apache-2.0` | Trackdub-owned, matches root `LICENSE` |
 | `Trackdub.OnnxRuntime.Dnnl.Native` | `MIT` | Third-party-derived native package; kept distinct per Phase 1.4's requirement to preserve real upstream metadata rather than blanket-applying Apache-2.0 |
@@ -79,27 +101,40 @@ Only two projects declare `PackageId`/`IsPackable` in this repo:
 would incorrectly apply to `Trackdub.OnnxRuntime.Dnnl.Native`'s MIT license
 if it did. Each packable project sets its own metadata explicitly instead.
 
-No other project in `src/` is packable, so no other metadata gap exists.
+**Follow-up:** run `dotnet pack` for both projects on a machine with the .NET
+10 SDK and confirm the emitted `.nuspec`/`.nupkg` actually carries the
+license expression declared in source — MSBuild property evaluation or a
+packaging-target override could in principle diverge from what the
+`.csproj` states, and that hasn't been checked.
 
 ## 4. Branch protection
 
-**Not verified — no tool available.** The GitHub MCP server this session had
-access to exposes no branch-protection or repository-ruleset read/write
-tools (checked via broad keyword search across its full tool surface).
-Recording this as unverified rather than guessing at either repo's actual
-settings.
+**Unverified for both repositories — no tool available, and no assumption
+made about what plan tier would allow.** The GitHub MCP server this session
+had access to exposes no branch-protection or repository-ruleset read/write
+tools (checked via broad keyword search across its full tool surface). This
+earlier version of this report additionally claimed that `Trackdub-gated`
+being private meant branch protection/rulesets weren't available "on
+GitHub's private-repo tier" — that claim was wrong and has been removed.
+Protected branches and rulesets on private repositories are a GitHub Team/
+Enterprise feature, not something private visibility alone rules out; GitHub
+Free is the tier that excludes them for private repos. This session doesn't
+know which plan `trackdubllc` is on, so neither repo's branch-protection
+status is recorded as an accepted gap — both are simply unverified.
 
 Action needed from you: check `Settings → Branches` (or `Settings → Rules →
-Rulesets`) directly on `trackdubllc/Trackdub`, and decide/record whatever you
-find. `Trackdub-gated` is private — per your note, branch protection rules
-aren't available for it on GitHub's private-repo tier; the compensating
-controls already in place are the PR-merge convention in gated's `AGENTS.md`,
-the `REVIEW.md` reviewer checklist, and green-CI-before-merge, all recorded
-as an accepted gap, not unfinished work.
+Rulesets`) directly on **both** `trackdubllc/Trackdub` and
+`trackdubllc/Trackdub-gated`, record the org's actual GitHub plan and each
+repo's actual settings, and decide from there whether the existing
+compensating controls in `Trackdub-gated` (PR-merge convention in its
+`AGENTS.md`, `REVIEW.md` checklist, green-CI-before-merge) are sufficient on
+their own or should be supplemented with real branch protection.
 
 ## Gaps / follow-ups
 
-- **Branch protection state on `Trackdub`** — needs a human check, see above.
+- **Branch protection state on both `Trackdub` and `Trackdub-gated`** —
+  needs a human check with actual repo-settings access, see above. Do not
+  assume either is or isn't possible based on visibility alone.
 - **Stale GitHub labels on `Trackdub`** — `repo:quickshell`,
   `repo:numan-plugins`, `repo:numan-registry`, `repo:olive-studio` still
   exist on the label set (confirmed via `get_label`) from when this repo's

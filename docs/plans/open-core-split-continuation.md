@@ -246,15 +246,18 @@ Step 5 (make `Trackdub` public, keep `Trackdub-gated` private) was already
 done independent of this checklist. Steps 1–3 (dependency direction,
 boundary scan, package metadata) were run this round — see
 `docs/plans/phase-3-validation-report.md` for the full detail; all three
-passed. Step 4 (branch protection) could not be verified or configured — no
-branch-protection/ruleset tool was available in the session that ran this
-check; needs a human to check `Settings → Branches` on `Trackdub` directly.
-`Trackdub-gated` is private, so branch protection isn't available there on
-GitHub's private-repo tier — its compensating controls (PR-merge convention,
-`REVIEW.md` checklist, green-CI-before-merge) are recorded as an accepted
-gap in that repo's own docs, not unfinished work. Step 7 (issue hygiene) was
-addressed separately: the public core's issue tracker had accumulated
-unrelated cross-project issues (a different project's Nushell plugin-registry
+passed with caveats noted there (package metadata is source-only, no
+`dotnet` SDK available to inspect built artifacts). Step 4 (branch
+protection) could not be verified or configured for **either** repository —
+no branch-protection/ruleset tool was available in the session that ran this
+check. Private visibility does not by itself mean branch protection is
+unavailable (Team/Enterprise plans support it on private repos; only GitHub
+Free excludes it) — this session doesn't know `trackdubllc`'s plan, so
+`Trackdub-gated`'s gap is recorded as unverified, not accepted. Needs a human
+to check `Settings → Branches` on both `Trackdub` and `Trackdub-gated`
+directly. Step 7 (issue hygiene) was addressed separately: the public core's
+issue tracker had accumulated unrelated cross-project issues (a different
+project's Nushell plugin-registry
 backlog); the genuinely-Trackdub ones were kept, the rest closed
 `not_planned`.
 
