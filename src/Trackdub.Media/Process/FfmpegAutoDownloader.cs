@@ -9,10 +9,12 @@ namespace Trackdub.Media.Process;
 /// <summary>
 /// A resolved ffmpeg download target. <see cref="Sha256"/> is <c>null</c> when the
 /// source is a mutable/rolling release (e.g. a "latest" tag that gets republished with
-/// new assets over time) — there is no fixed content to pin a hash against, so
-/// <see cref="FfmpegAutoDownloader"/> skips verification for those rather than pretending
-/// a hash exists for a moving target. A non-null value means the source is an immutable,
-/// versioned release and the hash is checked.
+/// new assets over time) — there is no fixed content to publish a hash for ahead of time.
+/// <see cref="FfmpegAutoDownloader"/> falls back to trust-on-first-use for those: the
+/// first download's hash is persisted and compared against on any later re-download,
+/// which doesn't authenticate the first download but does catch a rolling release
+/// silently changing underneath an already-trusted install. A non-null value means the
+/// source is an immutable, versioned release with a real hash checked every time.
 /// </summary>
 internal sealed record FfmpegDownloadPackage(
     string VersionTag,
