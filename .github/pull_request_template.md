@@ -11,8 +11,8 @@
 
 ## Testing
 
-- [ ] `dotnet build Trackdub.slnx -m:1 -p:Platform=x64`
-- [ ] `dotnet test Trackdub.slnx -m:1 -p:Platform=x64`
+- [ ] `dotnet build Trackdub.slnx -m:1`
+- [ ] `dotnet test Trackdub.slnx -m:1`
 - [ ] Targeted tests only
 - [ ] Not run, with justification below
 

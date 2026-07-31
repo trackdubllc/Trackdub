@@ -62,7 +62,9 @@ function Test-YoloEnabled {
         return -not [bool](Select-String -LiteralPath $Constitution -Pattern 'YOLO Mode.*DISABLED' -Quiet)
     }
 
-    return $true
+    # Fail closed: no constitution = no YOLO. Prevents unguarded auto-push loops.
+    Write-Warning "Constitution not found at '$Constitution'; defaulting YOLO to DISABLED."
+    return $false
 }
 
 function Invoke-RalphLoop {

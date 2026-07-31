@@ -2,6 +2,26 @@ name: Model manifest audit
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/Trackdub.Inference/Runtime/ModelManifest/**"
+      - "tools/ci/**"
+      - ".github/workflows/model-audit.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/Trackdub.Inference/Runtime/ModelManifest/**"
+      - "tools/ci/**"
+      - ".github/workflows/model-audit.yml"
+  # Weekly run so the expensive verify-hf-hashes job (gated on schedule/dispatch
+  # below) actually executes; the cheap structural audit also re-validates main.
+  schedule:
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: model-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
