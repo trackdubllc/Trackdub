@@ -65,7 +65,7 @@ public sealed record DubbingBatchOptions(
                     break;
 
                 case "--languages":
-                    if (i + 1 >= args.Length || args[i + 1].StartsWith("-", StringComparison.Ordinal))
+                    if (i + 1 >= args.Length || args[i + 1].StartsWith('-'))
                     {
                         error.WriteLine("Error: --languages requires a value.");
                         return false;

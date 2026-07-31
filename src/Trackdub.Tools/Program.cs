@@ -50,7 +50,7 @@ public static class Program
         {
             return await ModelLabCommand.RunAsync(args[1..], output, error, cancellationToken).ConfigureAwait(false);
         }
-        else if (args[0].StartsWith("-", StringComparison.Ordinal))
+        else if (args[0].StartsWith('-'))
         {
             effectiveArgs = args;
         }

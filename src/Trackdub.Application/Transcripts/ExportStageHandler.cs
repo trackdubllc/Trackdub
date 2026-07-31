@@ -1202,7 +1202,7 @@ public sealed class ExportStageHandler(
             foreach (string candidate in Directory.EnumerateFiles(directory, ".*.bak", SearchOption.TopDirectoryOnly))
             {
                 string candidateName = Path.GetFileName(candidate);
-                if (!candidateName.StartsWith(".", StringComparison.Ordinal) ||
+                if (!candidateName.StartsWith('.') ||
                     !candidateName.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;

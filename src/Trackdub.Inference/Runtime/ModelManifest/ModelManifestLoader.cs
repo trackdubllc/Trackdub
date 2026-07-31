@@ -952,8 +952,8 @@ public static class ModelManifestLoader
 
     private static bool IsRootedLikePath(string path) =>
         Path.IsPathRooted(path) ||
-        path.StartsWith("/", StringComparison.Ordinal) ||
-        path.StartsWith("\\", StringComparison.Ordinal) ||
+        path.StartsWith('/') ||
+        path.StartsWith('\\') ||
         (path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':');
 
     private static IReadOnlyList<OliveOptimizationProvider> ReadOliveProviders(
