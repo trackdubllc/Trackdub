@@ -24,7 +24,7 @@ This plan preserves the actual technical boundary. It is not a license-text-only
 
 ### Public core
 
-`trackdubllc/Trackdub` is private, unarchived, and has a fresh-root history. Its root commit was `8bac38a8fa3e0343c5d10c558b64d269d15e7828`; follow-up commits have added CI and cross-platform fixes. The current inspected head is `d590533b3220edf5211ce773b7620487c29eb1e7`.
+`trackdubllc/Trackdub` **is public** (made public since this section was last written; Phase 1's release gates passed) and has a fresh-root history. Its root commit was `8bac38a8fa3e0343c5d10c558b64d269d15e7828`; follow-up commits have added CI and cross-platform fixes. See "STATUS: Phase 3 partly complete" under Phase 3 below for current validated state.
 
 The core contains:
 
@@ -239,6 +239,33 @@ Initially consume `Trackdub` through a Git submodule at `external/Trackdub`, pin
 Gate: a clean clone of the fresh gated repository builds through the pinned core submodule, runs desktop tests, and preserves end-user product behavior.
 
 ## Phase 3: Cross-Repository Validation and Publication
+
+### STATUS: Phase 3 partly complete (2026-07-31) — validation steps run, ownership/protection steps need you
+
+Step 5 (make `Trackdub` public, keep `Trackdub-gated` private) was already
+done independent of this checklist. Steps 1–3 (dependency direction,
+boundary scan, package metadata) were run this round — see
+`docs/plans/phase-3-validation-report.md` for the full detail; Step 1 is
+partially verified (reverse dependency direction not independently rerun
+against fresh Trackdub-gated clone), Steps 2–3 passed with caveats noted
+there (package metadata is source-only, no `dotnet` SDK available to inspect
+built artifacts). Step 4 (branch
+protection) could not be verified or configured for **either** repository —
+no branch-protection/ruleset tool was available in the session that ran this
+check. Private repositories support branch protection and repository rulesets
+on GitHub Pro, Team, and Enterprise plans, while GitHub Free excludes these
+features for private repositories — this session doesn't know `trackdubllc`'s
+plan, so `Trackdub-gated`'s gap is recorded as unverified, not accepted. Needs a human
+to check `Settings → Branches` on both `Trackdub` and `Trackdub-gated`
+directly. **Step 7 itself (recreating relevant historical issues from the
+archive in their new canonical repositories) was not attempted this round —
+don't read it as done.** What actually happened alongside this validation
+work was unrelated general hygiene: the public core's issue tracker had
+accumulated unrelated cross-project issues (a different project's Nushell
+plugin-registry backlog, nothing to do with the open-core split or the
+archive migration); the genuinely-Trackdub ones were kept, the rest closed
+`not_planned`. That's noise removal, not the archive-to-new-repo issue
+migration Step 7 describes.
 
 1. Verify the dependency direction from independent clean clones:
    ```text
