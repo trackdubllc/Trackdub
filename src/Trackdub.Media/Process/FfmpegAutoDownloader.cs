@@ -6,11 +6,19 @@ using System.Security.Cryptography;
 
 namespace Trackdub.Media.Process;
 
+/// <summary>
+/// A resolved ffmpeg download target. <see cref="Sha256"/> is <c>null</c> when the
+/// source is a mutable/rolling release (e.g. a "latest" tag that gets republished with
+/// new assets over time) — there is no fixed content to pin a hash against, so
+/// <see cref="FfmpegAutoDownloader"/> skips verification for those rather than pretending
+/// a hash exists for a moving target. A non-null value means the source is an immutable,
+/// versioned release and the hash is checked.
+/// </summary>
 internal sealed record FfmpegDownloadPackage(
     string VersionTag,
     string AssetFileName,
     string DownloadUrl,
-    string Sha256);
+    string? Sha256);
 
 internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
 {
@@ -24,27 +32,41 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
     private static readonly Lock SyncRoot = new();
     private static readonly HttpClient SharedHttpClient = CreateHttpClient();
 
+    // Windows x64: GyanD (gyan.dev), an immutable-per-version distributor (100+ retained
+    // releases going back to 2025-10, no observed pruning, unlike BtbN's dated
+    // autobuild-* tags — see #23). "essentials_build" is a real GPLv3 build with
+    // libx264 present (verified directly: extracted the binary, ran `-encoders`, saw
+    // libx264/libx264rgb; `-version` reports --enable-gpl --enable-version3
+    // --enable-libx264 — see #24). Hash computed by downloading the exact asset and
+    // running sha256sum; GyanD doesn't publish its own checksums.
     private static readonly FfmpegDownloadPackage DefaultX64Package = new(
-        "autobuild-2026-05-05-13-19-win64-lgpl-shared",
-        "ffmpeg-N-124399-g5c44245878-win64-lgpl-shared.zip",
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-05-13-19/ffmpeg-N-124399-g5c44245878-win64-lgpl-shared.zip",
-        "1d3d11f341c9c895d41b1a7e6e295d9a34d112996c7782e3eca9013d35b251e9");
+        "gyan-8.1.2-win64-gpl-essentials",
+        "ffmpeg-8.1.2-essentials_build.zip",
+        "https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip",
+        "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec");
+
+    // GyanD doesn't publish arm64/Linux builds. BtbN's literal "latest" tag (not a dated
+    // autobuild-* tag) is their continuously-republished current-pointer — confirmed live,
+    // never observed to 404, unlike the dated tags this used to pin to. Sha256 is
+    // intentionally null: there's no fixed asset to hash against a moving target (see
+    // FfmpegDownloadPackage's doc comment). "gpl-shared" (not "lgpl-shared") so libx264
+    // is present here too — see #24.
     private static readonly FfmpegDownloadPackage DefaultArm64Package = new(
-        "autobuild-2026-05-05-13-19-winarm64-lgpl-shared",
-        "ffmpeg-N-124399-g5c44245878-winarm64-lgpl-shared.zip",
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-05-05-13-19/ffmpeg-N-124399-g5c44245878-winarm64-lgpl-shared.zip",
-        "f05fda85b8897b16d1b55e1fd71529bb37de84e595e1a317b0cf14162a541dbf");
+        "btbn-latest-winarm64-gpl-shared",
+        "ffmpeg-master-latest-winarm64-gpl-shared.zip",
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-gpl-shared.zip",
+        null);
 
     private static readonly FfmpegDownloadPackage ExplicitLinuxX64Package = new(
-        "explicit-ffmpeg-linux64-lgpl-shared-latest",
-        "ffmpeg-master-latest-linux64-lgpl-shared.tar.xz",
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-lgpl-shared.tar.xz",
-        "");
+        "explicit-ffmpeg-linux64-gpl-shared-latest",
+        "ffmpeg-master-latest-linux64-gpl-shared.tar.xz",
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl-shared.tar.xz",
+        null);
     private static readonly FfmpegDownloadPackage ExplicitLinuxArm64Package = new(
-        "explicit-ffmpeg-linuxarm64-lgpl-shared-latest",
-        "ffmpeg-master-latest-linuxarm64-lgpl-shared.tar.xz",
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-lgpl-shared.tar.xz",
-        "");
+        "explicit-ffmpeg-linuxarm64-gpl-shared-latest",
+        "ffmpeg-master-latest-linuxarm64-gpl-shared.tar.xz",
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl-shared.tar.xz",
+        null);
 
     internal static FfmpegDownloadPackage DefaultPackage => GetDefaultPackage(RuntimeInformation.OSArchitecture);
 
@@ -200,9 +222,17 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             response.EnsureSuccessStatusCode();
 
             using Stream networkStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            using var fileStream = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize);
-            await networkStream.CopyToAsync(fileStream, ct).ConfigureAwait(false);
-            await fileStream.FlushAsync(ct).ConfigureAwait(false);
+            using (var fileStream = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize))
+            {
+                await networkStream.CopyToAsync(fileStream, ct).ConfigureAwait(false);
+                await fileStream.FlushAsync(ct).ConfigureAwait(false);
+            }
+
+            // No-op today (linuxPackage.Sha256 is null — see FfmpegDownloadPackage's doc
+            // comment, both Linux packages track BtbN's "latest" tag). Wired up so this
+            // path isn't silently unverifiable forever if a future distributor supports
+            // pinning, and so it matches the Windows path's behavior instead of diverging.
+            VerifyArchiveHash(tempArchivePath, linuxPackage.Sha256);
 
             Directory.CreateDirectory(tempExtractDirectory);
 
@@ -333,14 +363,28 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
         networkStream.CopyTo(fileStream);
     }
 
-    private void VerifyArchiveHash(string archivePath)
+    private void VerifyArchiveHash(string archivePath) => VerifyArchiveHash(archivePath, package.Sha256);
+
+    /// <summary>
+    /// Verifies <paramref name="archivePath"/> against <paramref name="expectedSha256"/>.
+    /// A <c>null</c> expected hash means the source is a mutable/rolling release with no
+    /// fixed content to verify against (see <see cref="FfmpegDownloadPackage"/>'s doc
+    /// comment) — deliberately skipped, not silently treated as a pass against a stale
+    /// or empty value.
+    /// </summary>
+    private static void VerifyArchiveHash(string archivePath, string? expectedSha256)
     {
+        if (expectedSha256 is null)
+        {
+            return;
+        }
+
         using var stream = new FileStream(archivePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize);
         string hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-        if (!string.Equals(hash, package.Sha256, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(hash, expectedSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"FFmpeg download hash mismatch. Expected {package.Sha256}, got {hash}.");
+                $"FFmpeg download hash mismatch. Expected {expectedSha256}, got {hash}.");
         }
     }
 
