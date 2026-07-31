@@ -40,7 +40,7 @@ not binding implementation truth, and are explicitly out of scope for the
 project's own boundary scanner (see below).
 
 Separately checked every `<ProjectReference>` in every `*.csproj` under
-`src/`, `tests/`, and `tools/` (48 entries across 15 files): all resolve to
+`src/`, `tests/`, and `tools/` (94 entries across 25 files): all resolve to
 relative paths inside this repo's own tree (`..\..\src\...`,
 `..\..\..\src\...`), none point outside it. No `.gitmodules` file or git
 submodule/gitlink exists in this repo — expected, since `Trackdub` is the
