@@ -32,7 +32,7 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
     <!--
       SentencePieceTokenizer (used by MadladTokenizerDecoder and OpusTokenizerDecoder) was
       introduced in the 3.x preview line and is not available in the 2.0.0 stable release.
