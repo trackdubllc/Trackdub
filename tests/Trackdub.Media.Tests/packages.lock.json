@@ -10,11 +10,11 @@
       },
       "FsCheck": {
         "type": "Direct",
-        "requested": "[2.16.6, )",
-        "resolved": "2.16.6",
-        "contentHash": "8yQlt7HgoigIXIoe7ZouNh551rypxp4WtQnqBlpB9a7gf4IkpdMSnEzsnJS/gFmeNtIf9hEJ37celeCq/6FuHA==",
+        "requested": "[3.3.4, )",
+        "resolved": "3.3.4",
+        "contentHash": "Gintz/p4eTVb3EW3P8tg5wZB66sHbUBO42kHwuDZJ9BRHurOuC3+JF5YPq4rfeURMxuGs5YgzW/DDneIUsTNqA==",
         "dependencies": {
-          "FSharp.Core": "4.2.3"
+          "FSharp.Core": "5.0.2"
         }
       },
       "Microsoft.NET.Test.Sdk": {
@@ -44,8 +44,8 @@
       },
       "FSharp.Core": {
         "type": "Transitive",
-        "resolved": "4.2.3",
-        "contentHash": "PthzJd0cY9L7+mPHoMB0B9Z9moR4oO1rU5RDrVW44cfMm0R9AYFf+F3BsuTvP9clr9w/Wa0wbSfEwbJV8sV80A=="
+        "resolved": "5.0.2",
+        "contentHash": "DpcajqENgb3VXaHw1FKfVS+TWwEzck1PCajqLwBAVrtd1lfxd7T8JISVZBdV1mX9+2g48+tIgpNaVJWObdMrBw=="
       },
       "Microsoft.ApplicationInsights": {
         "type": "Transitive",
@@ -220,16 +220,16 @@
       "trackdub.media.playback": {
         "type": "Project",
         "dependencies": {
-          "LibVLCSharp": "[3.9.7.1, )",
+          "LibVLCSharp": "[3.10.0, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )"
         }
       },
       "LibVLCSharp": {
         "type": "CentralTransitive",
-        "requested": "[3.9.7.1, )",
-        "resolved": "3.9.7.1",
-        "contentHash": "pkntybICe0d8d6QUksQxRoqEUaIItyVe36CY+L5vrj5XD4aAcb0e8gHe5BLNMZH+uIsSgaeiki5DdNmhjvLo9Q=="
+        "requested": "[3.10.0, )",
+        "resolved": "3.10.0",
+        "contentHash": "VHuOfq8Xtb/lNz0asvCm5qDjgTmfB3m3lC40Dz9iH9oL3DM0fSXHjZaLxdtYVr5nsldJoh5BTeG8MtODprhC9Q=="
       },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "CentralTransitive",
