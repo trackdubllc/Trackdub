@@ -44,7 +44,7 @@
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI" Version="0.15.0" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.13.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.Managed" Version="0.15.0" />
-    <PackageVersion Include="Microsoft.ML.Tokenizers" Version="3.0.0-preview.26160.2" />
+    <PackageVersion Include="Microsoft.ML.Tokenizers" Version="3.0.0-preview.26372.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="$(OnnxRuntimeVersion)" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime.Gpu" Version="$(OnnxRuntimeVersion)" />
 
