@@ -1,5 +1,5 @@
 #if WINDOWS
-using Microsoft.UI.Xaml.Controls;
+using System.Reflection;
 using Windows.Media.Core;
 using Windows.Media.Playback;
 
@@ -13,21 +13,29 @@ public sealed class MediaFoundationPlaybackBackend :
     IDisposable
 {
     private MediaPlayer? mediaPlayer;
-    private MediaPlayerElement? mediaPlayerElement;
+    // Optional WinUI MediaPlayerElement (or compatible host). Resolved by SetMediaPlayer(MediaPlayer)
+    // reflection so this Apache core project does not take a Microsoft.WindowsAppSDK / WinUI package
+    // reference. Avalonia uses libmpv/LibVLC; any remaining WinUI shell can still attach a host.
+    private object? mediaPlayerHost;
+    private MethodInfo? setMediaPlayerMethod;
     private bool isLoaded;
     private string? runtimeWarningMessage;
 
     public bool TryAttachHost(object host)
     {
-        if (host is not MediaPlayerElement element)
+        ArgumentNullException.ThrowIfNull(host);
+
+        MethodInfo? setMediaPlayer = ResolveSetMediaPlayer(host.GetType());
+        if (setMediaPlayer is null)
         {
             return false;
         }
 
-        mediaPlayerElement = element;
+        mediaPlayerHost = host;
+        setMediaPlayerMethod = setMediaPlayer;
         if (mediaPlayer is not null)
         {
-            mediaPlayerElement.SetMediaPlayer(mediaPlayer);
+            AttachPlayerToHost(mediaPlayer);
         }
 
         return true;
@@ -159,9 +167,11 @@ public sealed class MediaFoundationPlaybackBackend :
             mediaPlayer.MediaFailed -= MediaPlayer_MediaFailed;
         }
 
-        mediaPlayerElement?.SetMediaPlayer(null);
+        AttachPlayerToHost(null);
         mediaPlayer?.Dispose();
         mediaPlayer = null;
+        mediaPlayerHost = null;
+        setMediaPlayerMethod = null;
         isLoaded = false;
         runtimeWarningMessage = null;
     }
@@ -181,12 +191,55 @@ public sealed class MediaFoundationPlaybackBackend :
         mediaPlayer.MediaOpened += MediaPlayer_MediaOpened;
         mediaPlayer.MediaFailed += MediaPlayer_MediaFailed;
 
-        if (mediaPlayerElement is not null)
-        {
-            mediaPlayerElement.SetMediaPlayer(mediaPlayer);
-        }
+        AttachPlayerToHost(mediaPlayer);
 
         return mediaPlayer;
+    }
+
+    private void AttachPlayerToHost(MediaPlayer? player)
+    {
+        if (mediaPlayerHost is null || setMediaPlayerMethod is null)
+        {
+            return;
+        }
+
+        setMediaPlayerMethod.Invoke(mediaPlayerHost, [player]);
+    }
+
+    private static MethodInfo? ResolveSetMediaPlayer(Type hostType)
+    {
+        foreach (MethodInfo method in hostType.GetMethods(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (!string.Equals(method.Name, "SetMediaPlayer", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            ParameterInfo[] parameters = method.GetParameters();
+            if (parameters.Length != 1)
+            {
+                continue;
+            }
+
+            Type parameterType = parameters[0].ParameterType;
+            if (parameterType == typeof(MediaPlayer) ||
+                parameterType == typeof(MediaPlayer).MakeByRefType() ||
+                (!parameterType.IsValueType && parameterType.IsAssignableFrom(typeof(MediaPlayer))))
+            {
+                return method;
+            }
+
+            // WinUI MediaPlayerElement.SetMediaPlayer(MediaPlayer) may bind against a projection
+            // type that is assignment-compatible at runtime even when the compile-time identity
+            // differs across WinRT interop assemblies.
+            if (!parameterType.IsValueType &&
+                string.Equals(parameterType.Name, nameof(MediaPlayer), StringComparison.Ordinal))
+            {
+                return method;
+            }
+        }
+
+        return null;
     }
 
     private void MediaPlayer_MediaOpened(MediaPlayer sender, object args)
