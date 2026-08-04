@@ -20,12 +20,12 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI": {
         "type": "Direct",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "Q1XwsHQX8J76qV5U1aqd6NmCDATsUxUQnkZEbV4A8zw1qk8hI0jiiQwc3Yq3CerqzPxRmDEJJ5g8u5vbYreOQw==",
+        "requested": "[0.15.0, )",
+        "resolved": "0.15.0",
+        "contentHash": "ucxuT4VVJAa/WCopGtakrBkc4RiL0ns04cSFmyZ0G03HEiZO9kKgHhhdeBAUHLyRb1jSE3d4X9fuutJ91Acxdw==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime": "1.24.4",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.13.1"
+          "Microsoft.ML.OnnxRuntime": "1.28.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.15.0"
         }
       },
       "Microsoft.NET.Test.Sdk": {
@@ -250,8 +250,8 @@
       },
       "Microsoft.ML.OnnxRuntime.Managed": {
         "type": "Transitive",
-        "resolved": "1.24.4",
-        "contentHash": "e5jsEo0HcCKDMkuRsMSievKoMv10Odv4MGmxbCin8SEm4Pto1qTpwti47xRwMtk9I/zVvfAiFIWquOq/0+22DA==",
+        "resolved": "1.28.0",
+        "contentHash": "4ecKjwASHhAZXczK/xm5KU6MdvoIGfMd23UAwDbM9vfcfgqZgNqvFWPZPT0Elc1wu5vXWs2Kij1ZBmHCcv1UlA==",
         "dependencies": {
           "System.Numerics.Tensors": "9.0.0"
         }
@@ -562,10 +562,10 @@
       "Microsoft.ML.OnnxRuntime": {
         "type": "CentralTransitive",
         "requested": "[1.24.4, )",
-        "resolved": "1.24.4",
-        "contentHash": "895huFBVrZkZEGjlsxBSZD3p6D32Cdz6q8DM9UcUps2YKFYdFR8TefaTggFBUTYlvcSyfNTpmOOU/ZkeL69izw==",
+        "resolved": "1.28.0",
+        "contentHash": "xpguSCrXBe5E1l1088S7UqnI36EHaTL6CJMHEhwfGBoSwyPH5Q/IkbkBBk/GwXWzsVyEXpQm42ZimSAQs0/zKA==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Managed": "1.24.4"
+          "Microsoft.ML.OnnxRuntime.Managed": "1.28.0"
         }
       },
       "Microsoft.ML.OnnxRuntime.Gpu": {
@@ -591,9 +591,9 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Managed": {
         "type": "CentralTransitive",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "OC+BCtpZFmqk5XSKvv1/k3zpZ+v7riKVSJgVN/LAiQCZmQCwzH34QE6ZNFk7VpCghGDjrkb5E5i7IpKixBSTIw==",
+        "requested": "[0.15.0, )",
+        "resolved": "0.15.0",
+        "contentHash": "5g6pshq+NxmMIiby+OxlrVAJdiTjS18rliJK3xwfnG17TycIe1NlIrHW8pYfz9zY4JbDZEre04gie3VXWTQtIQ==",
         "dependencies": {
           "Microsoft.Extensions.AI.Abstractions": "9.8.0"
         }
