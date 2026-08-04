@@ -111,10 +111,19 @@
   <Target Name="CopyWinMlAssetsToOutput"
           AfterTargets="CopyFilesToOutputDirectory"
           Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl' And '@(_WinMlAssets)' != ''">
+    <!-- Root: load next to Trackdub.Composition.dll at runtime. -->
     <Copy SourceFiles="@(_WinMlAssets)"
           DestinationFiles="@(_WinMlAssets->'$(TargetDir)%(TargetPath)')"
           OverwriteReadOnlyFiles="true"
           SkipUnchangedFiles="false" />
+    <!-- Library-layout folder: referencing projects (Sdk, Benchmarks) with
+         GenerateLibraryLayout=true resolve ContentWithTargetPath under
+         $(TargetDir)$(TargetName)\ and fail MSB3030 if that copy is missing. -->
+    <Copy SourceFiles="@(_WinMlAssets)"
+          DestinationFiles="@(_WinMlAssets->'$(TargetDir)$(TargetName)\%(TargetPath)')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false"
+          Condition="'$(GenerateLibraryLayout)' == 'true'" />
   </Target>
 
   <Target Name="AddWinMlAssetsToOutputItems"
@@ -180,6 +189,12 @@
           DestinationFiles="@(_TrackdubDnnlNativeAssets->'$(TargetDir)%(Filename)%(Extension)')"
           OverwriteReadOnlyFiles="true"
           SkipUnchangedFiles="false" />
+    <!-- Mirror WinML: GenerateLibraryLayout consumers copy from $(TargetDir)$(TargetName)\. -->
+    <Copy SourceFiles="@(_TrackdubDnnlNativeAssets)"
+          DestinationFiles="@(_TrackdubDnnlNativeAssets->'$(TargetDir)$(TargetName)\%(Filename)%(Extension)')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false"
+          Condition="'$(GenerateLibraryLayout)' == 'true'" />
   </Target>
 
   <Target Name="AddDnnlOrtAssetsToOutputItems"
