@@ -233,7 +233,8 @@ public sealed class MediaFoundationPlaybackBackend :
             // type that is assignment-compatible at runtime even when the compile-time identity
             // differs across WinRT interop assemblies.
             if (!parameterType.IsValueType &&
-                string.Equals(parameterType.Name, nameof(MediaPlayer), StringComparison.Ordinal))
+                string.Equals(parameterType.Name, nameof(MediaPlayer), StringComparison.Ordinal) &&
+                parameterType.IsAssignableFrom(typeof(MediaPlayer)))
             {
                 return method;
             }
