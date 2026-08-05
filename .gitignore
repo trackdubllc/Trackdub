@@ -317,3 +317,4 @@ smoke-output.txt
 __pycache__/
 *.py[cod]
 /.dirac-cache
+/.magicpath-work
