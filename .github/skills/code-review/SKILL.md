@@ -76,7 +76,7 @@ Treat these as request-changes findings (not nits):
 - New packages are centrally versioned in `Directory.Packages.props`
 - New models update `src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.manifest.json`
 - Unknown license is unsafe; commercial-safe impact must be explicit
-- Update `THIRD_PARTY_NOTICES.md` when `requires_attribution: true`
+- Update `docs/legal/THIRD_PARTY_NOTICES.md` (or equivalent) when `requires_attribution: true`
 
 ### Tests
 
