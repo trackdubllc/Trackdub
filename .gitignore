@@ -234,7 +234,9 @@ output/unused-code-audit/
 .bob/DO NOT USE mcp.json
 
 # Local agent skill overlays (committed skills under these trees are tracked explicitly)
-/.github/skills
+/.github/skills/*
+!/.github/skills/code-review/
+!/.github/skills/code-review/**
 /.bob/skills
 /.autohand/skills
 /.openhands/skills
