@@ -24,8 +24,13 @@ Before commenting, read and apply:
 2. `AGENTS.md` (dependency direction, model governance, testing)
 3. `.github/pull_request_template.md` (expected PR body shape)
 
-When the PR mentions a `TS-*` issue, use configured MCP tools (GitHub / Linear)
-to load that issue context before judging scope or completeness.
+When the PR mentions a `TS-*` issue, load that context before judging scope:
+
+1. Prefer available MCP tools (GitHub issue links, Linear if configured).
+2. If Linear (or other) MCP is unavailable, fall back to the PR body, linked
+   GitHub issues/PRs, and any Linear URL already in the description. Do not
+   invent Linear status. Note when `TS-*` context could not be verified, then
+   continue using the supplied PR evidence.
 
 ## Review priorities
 
@@ -46,7 +51,8 @@ Treat these as request-changes findings (not nits):
 - Violates Domain-depends-on-nothing or other dependency-direction rules in `AGENTS.md`
 - Adds provider or model routing outside `IRuntimePlanner` / router paths
 - Adds translation behavior based on model-name aliases instead of manifest metadata
-  (`engine_family`, `capabilities`, `language_coverage`)
+  (`engine_family`, `capabilities`, `language_coverage`), except where the current
+  planner or router already treats aliases as soft hints (see `REVIEW.md`)
 - Uses a model before manifest, license, and commercial-safe handling exist
 - Treats provider registration, download, stage run, skip, or success as the same
   readiness state (never fake readiness)
