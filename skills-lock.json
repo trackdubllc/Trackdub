@@ -6,6 +6,12 @@
       "sourceType": "github",
       "skillPath": "skills/linear-release-setup/SKILL.md",
       "computedHash": "f6e1b7c9779323210fd4800a10049b30c87bc34bf254acbae606d6dea3f4478d"
+    },
+    "magicpath": {
+      "source": "magicpathai/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/magicpath/SKILL.md",
+      "computedHash": "195d63c0373104676de40485b020e5a8f9aae8443f78a7c59f433281bbbad0dc"
     }
   }
 }
