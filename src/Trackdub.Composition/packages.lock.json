@@ -103,10 +103,10 @@
       },
       "Microsoft.Data.Sqlite.Core": {
         "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "TPCs0ldm7AWqcKmp6f/Xr+14sat7hx4rHfRlS4RgCURBH2thEWbAKEyX7cCWr63zVJVOJIJZTg2cBiUXa8ys6g==",
+        "resolved": "10.0.11",
+        "contentHash": "hubA20AGenQ4Sx0ElWaPpB8DISjXpdx463+1zOGRslsT0e/t/06ITv+pHsop8CcJ0d8PZLfgnT7juCDVD79Dkw==",
         "dependencies": {
-          "SQLitePCLRaw.core": "2.1.11"
+          "SQLitePCLRaw.core": "2.1.12"
         }
       },
       "Microsoft.Extensions.AI.Abstractions": {
@@ -290,7 +290,7 @@
         "dependencies": {
           "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.28.0, )",
-          "Microsoft.ML.OnnxRuntimeGenAI.Cuda": "[0.13.1, )",
+          "Microsoft.ML.OnnxRuntimeGenAI.Cuda": "[0.15.2, )",
           "Microsoft.ML.Tokenizers": "[3.0.0-preview.26160.2, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
@@ -304,7 +304,7 @@
           "Lucene.Net.Analysis.Common": "[4.8.0-beta00018, )",
           "Lucene.Net.Analysis.Kuromoji": "[4.8.0-beta00018, )",
           "Lucene.Net.Analysis.SmartCn": "[4.8.0-beta00018, )",
-          "Microsoft.Data.Sqlite": "[10.0.10, )",
+          "Microsoft.Data.Sqlite": "[10.0.11, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.3, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Contracts": "[1.0.0, )",
@@ -387,13 +387,13 @@
       },
       "Microsoft.Data.Sqlite": {
         "type": "CentralTransitive",
-        "requested": "[10.0.10, )",
-        "resolved": "10.0.10",
-        "contentHash": "58JwZ39lCvRXHfV5O6RQfbHEDu8ZsXI7weRoVRR4jrGRxxkS+qyeuGrN2xD+9VYEICApYr0iTSL6PuU+DdsvPg==",
+        "requested": "[10.0.11, )",
+        "resolved": "10.0.11",
+        "contentHash": "7je7UELzm131GiLYc4PpZvfKXIgIyzPM+v+tjcd/nbnuWRfgcONYKzDTqJlURxwVCFsVnlpmq6y6yn4qvR8QXQ==",
         "dependencies": {
-          "Microsoft.Data.Sqlite.Core": "10.0.10",
-          "SQLitePCLRaw.bundle_e_sqlite3": "2.1.11",
-          "SQLitePCLRaw.core": "2.1.11"
+          "Microsoft.Data.Sqlite.Core": "10.0.11",
+          "SQLitePCLRaw.bundle_e_sqlite3": "2.1.12",
+          "SQLitePCLRaw.core": "2.1.12"
         }
       },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
@@ -426,19 +426,19 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "CentralTransitive",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "RWO2+PKANIyQXHpozbHhQW9aySaBAoi1tIX27SMQA+/AXXpX4jP1k5Ws/2kJZsmxclCzx5zLUeywe5+JhN6EXQ==",
+        "requested": "[0.15.2, )",
+        "resolved": "0.15.2",
+        "contentHash": "13bSxY6CpBNuaTFY6hDfXefz4okwigGEDq1E7bSMf3FaNOnXE2YzBTYYoyBkkduBHdC7Yyl3IYFO1NzyJp00dA==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Gpu": "1.24.4",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.13.1"
+          "Microsoft.ML.OnnxRuntime.Gpu": "1.28.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.15.2"
         }
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Managed": {
         "type": "CentralTransitive",
         "requested": "[0.15.2, )",
-        "resolved": "0.13.1",
-        "contentHash": "OC+BCtpZFmqk5XSKvv1/k3zpZ+v7riKVSJgVN/LAiQCZmQCwzH34QE6ZNFk7VpCghGDjrkb5E5i7IpKixBSTIw==",
+        "resolved": "0.15.2",
+        "contentHash": "qILyIlkcecRZb1S+CW76hcV8UxFussgbC7BrD89hP7M+ZiUPoT8NDFCmvxWEhUBWvYfKF2sflQDI0eCBFgjfFQ==",
         "dependencies": {
           "Microsoft.Extensions.AI.Abstractions": "9.8.0"
         }
@@ -484,12 +484,12 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "CentralTransitive",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "RWO2+PKANIyQXHpozbHhQW9aySaBAoi1tIX27SMQA+/AXXpX4jP1k5Ws/2kJZsmxclCzx5zLUeywe5+JhN6EXQ==",
+        "requested": "[0.15.2, )",
+        "resolved": "0.15.2",
+        "contentHash": "13bSxY6CpBNuaTFY6hDfXefz4okwigGEDq1E7bSMf3FaNOnXE2YzBTYYoyBkkduBHdC7Yyl3IYFO1NzyJp00dA==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Gpu": "1.24.4",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.13.1"
+          "Microsoft.ML.OnnxRuntime.Gpu": "1.28.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.15.2"
         }
       }
     },
@@ -517,12 +517,12 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "CentralTransitive",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "RWO2+PKANIyQXHpozbHhQW9aySaBAoi1tIX27SMQA+/AXXpX4jP1k5Ws/2kJZsmxclCzx5zLUeywe5+JhN6EXQ==",
+        "requested": "[0.15.2, )",
+        "resolved": "0.15.2",
+        "contentHash": "13bSxY6CpBNuaTFY6hDfXefz4okwigGEDq1E7bSMf3FaNOnXE2YzBTYYoyBkkduBHdC7Yyl3IYFO1NzyJp00dA==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Gpu": "1.24.4",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.13.1"
+          "Microsoft.ML.OnnxRuntime.Gpu": "1.28.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.15.2"
         }
       }
     },
@@ -550,12 +550,12 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "CentralTransitive",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "RWO2+PKANIyQXHpozbHhQW9aySaBAoi1tIX27SMQA+/AXXpX4jP1k5Ws/2kJZsmxclCzx5zLUeywe5+JhN6EXQ==",
+        "requested": "[0.15.2, )",
+        "resolved": "0.15.2",
+        "contentHash": "13bSxY6CpBNuaTFY6hDfXefz4okwigGEDq1E7bSMf3FaNOnXE2YzBTYYoyBkkduBHdC7Yyl3IYFO1NzyJp00dA==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Gpu": "1.24.4",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.13.1"
+          "Microsoft.ML.OnnxRuntime.Gpu": "1.28.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.15.2"
         }
       }
     },
@@ -583,12 +583,12 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "CentralTransitive",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "RWO2+PKANIyQXHpozbHhQW9aySaBAoi1tIX27SMQA+/AXXpX4jP1k5Ws/2kJZsmxclCzx5zLUeywe5+JhN6EXQ==",
+        "requested": "[0.15.2, )",
+        "resolved": "0.15.2",
+        "contentHash": "13bSxY6CpBNuaTFY6hDfXefz4okwigGEDq1E7bSMf3FaNOnXE2YzBTYYoyBkkduBHdC7Yyl3IYFO1NzyJp00dA==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Gpu": "1.24.4",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.13.1"
+          "Microsoft.ML.OnnxRuntime.Gpu": "1.28.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.15.2"
         }
       }
     },
@@ -616,12 +616,12 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "CentralTransitive",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "RWO2+PKANIyQXHpozbHhQW9aySaBAoi1tIX27SMQA+/AXXpX4jP1k5Ws/2kJZsmxclCzx5zLUeywe5+JhN6EXQ==",
+        "requested": "[0.15.2, )",
+        "resolved": "0.15.2",
+        "contentHash": "13bSxY6CpBNuaTFY6hDfXefz4okwigGEDq1E7bSMf3FaNOnXE2YzBTYYoyBkkduBHdC7Yyl3IYFO1NzyJp00dA==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Gpu": "1.24.4",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.13.1"
+          "Microsoft.ML.OnnxRuntime.Gpu": "1.28.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.15.2"
         }
       }
     },
@@ -649,12 +649,12 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "CentralTransitive",
-        "requested": "[0.13.1, )",
-        "resolved": "0.13.1",
-        "contentHash": "RWO2+PKANIyQXHpozbHhQW9aySaBAoi1tIX27SMQA+/AXXpX4jP1k5Ws/2kJZsmxclCzx5zLUeywe5+JhN6EXQ==",
+        "requested": "[0.15.2, )",
+        "resolved": "0.15.2",
+        "contentHash": "13bSxY6CpBNuaTFY6hDfXefz4okwigGEDq1E7bSMf3FaNOnXE2YzBTYYoyBkkduBHdC7Yyl3IYFO1NzyJp00dA==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Gpu": "1.24.4",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.13.1"
+          "Microsoft.ML.OnnxRuntime.Gpu": "1.28.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.15.2"
         }
       }
     }
