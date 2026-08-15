@@ -168,6 +168,6 @@ jobs:
           fetch-depth: 0
 
       - name: Linear Release
-        uses: linear/linear-release-action@v0.15.0
+        uses: linear/linear-release-action@v0.15.1
         with:
           access_key: ${{ secrets.LINEAR_ACCESS_KEY }}
