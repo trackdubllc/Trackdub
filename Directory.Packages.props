@@ -58,7 +58,7 @@
          FsCheck 3.x has hard C# API breaks (Gen static class renamed, Prop class removed, LINQ comprehension changed).
          Remove once those projects are updated to FsCheck 3.x API. -->
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="FsCheck" Version="2.16.6" />
     <PackageVersion Include="FsCheck.Xunit" Version="2.16.6" />
     <PackageVersion Include="FsCheck.Xunit.v3" Version="3.3.3" />
