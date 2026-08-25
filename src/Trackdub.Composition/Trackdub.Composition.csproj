@@ -116,14 +116,12 @@
           DestinationFiles="@(_WinMlAssets->'$(TargetDir)%(TargetPath)')"
           OverwriteReadOnlyFiles="true"
           SkipUnchangedFiles="false" />
-    <!-- Library-layout folder: referencing projects (Sdk, Benchmarks) with
-         GenerateLibraryLayout=true resolve ContentWithTargetPath under
-         $(TargetDir)$(TargetName)\ and fail MSB3030 if that copy is missing. -->
+    <!-- Library-layout folder: referencing projects (Sdk, Benchmarks)
+         resolve ContentWithTargetPath under $(TargetDir)$(TargetName)\. -->
     <Copy SourceFiles="@(_WinMlAssets)"
           DestinationFiles="@(_WinMlAssets->'$(TargetDir)$(TargetName)\%(TargetPath)')"
           OverwriteReadOnlyFiles="true"
-          SkipUnchangedFiles="false"
-          Condition="'$(GenerateLibraryLayout)' == 'true'" />
+          SkipUnchangedFiles="false" />
   </Target>
 
   <Target Name="AddWinMlAssetsToOutputItems"
@@ -189,12 +187,10 @@
           DestinationFiles="@(_TrackdubDnnlNativeAssets->'$(TargetDir)%(Filename)%(Extension)')"
           OverwriteReadOnlyFiles="true"
           SkipUnchangedFiles="false" />
-    <!-- Mirror WinML: GenerateLibraryLayout consumers copy from $(TargetDir)$(TargetName)\. -->
     <Copy SourceFiles="@(_TrackdubDnnlNativeAssets)"
           DestinationFiles="@(_TrackdubDnnlNativeAssets->'$(TargetDir)$(TargetName)\%(Filename)%(Extension)')"
           OverwriteReadOnlyFiles="true"
-          SkipUnchangedFiles="false"
-          Condition="'$(GenerateLibraryLayout)' == 'true'" />
+          SkipUnchangedFiles="false" />
   </Target>
 
   <Target Name="AddDnnlOrtAssetsToOutputItems"
