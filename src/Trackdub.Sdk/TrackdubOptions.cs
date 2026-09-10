@@ -1,5 +1,6 @@
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Domain;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trackdub.Sdk;
@@ -13,7 +14,34 @@ public sealed record TrackdubOptions
     public string? ModelDirectory { get; init; }
     public string? ModelCacheDirectory { get; init; }
     public string? LogDirectory { get; init; }
-    public ExecutionProviderPreference ExecutionProvider { get; init; } = ExecutionProviderPreference.Auto;
+
+    /// <summary>
+    /// Preferred execution provider pin. <c>null</c> means auto (planner probe order).
+    /// </summary>
+    public ExecutionProviderKind? PreferredExecutionProvider { get; init; }
+
+    /// <summary>
+    /// When true and <see cref="PreferredExecutionProvider"/> is set, stages that allow the
+    /// provider must use it (no silent soft preference). Headless CLI/SDK pins set this.
+    /// </summary>
+    public bool RequirePreferredExecutionProvider { get; init; }
+
+    /// <summary>
+    /// Legacy four-value preference. Prefer <see cref="PreferredExecutionProvider"/>.
+    /// </summary>
+    public ExecutionProviderPreference ExecutionProvider
+    {
+        get => PreferredExecutionProvider switch
+        {
+            null => ExecutionProviderPreference.Auto,
+            ExecutionProviderKind.Cpu => ExecutionProviderPreference.Cpu,
+            ExecutionProviderKind.DirectMl => ExecutionProviderPreference.DirectML,
+            ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRTRtx => ExecutionProviderPreference.Cuda,
+            _ => ExecutionProviderPreference.Auto,
+        };
+        init => PreferredExecutionProvider = ExecutionProviderPreferenceMapping.ToPreferredKind(value);
+    }
+
     public WindowsMlExecutionDevicePolicy WindowsMlExecutionDevicePolicy { get; init; } = WindowsMlExecutionDevicePolicy.Explicit;
     public string? FfmpegPath { get; init; }
     public string? FfprobePath { get; init; }

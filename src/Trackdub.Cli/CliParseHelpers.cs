@@ -3,25 +3,17 @@ using System.CommandLine.Parsing;
 
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Domain;
 using Trackdub.Sdk;
 
 namespace Trackdub.Cli;
 
 internal static class CliParseHelpers
 {
-    internal static readonly string[] SupportedExecutionProviderKeys = ["auto", "cpu", "directml", "cuda"];
+    internal static IReadOnlyList<string> SupportedExecutionProviderKeys => ExecutionProviderTokens.CliTags;
 
     internal static string FormatSupportedExecutionProviders() =>
-        string.Join(", ", SupportedExecutionProviderKeys);
-
-    private static readonly IReadOnlyDictionary<string, ExecutionProviderPreference> ExecutionProviderKeyMap =
-        new Dictionary<string, ExecutionProviderPreference>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["auto"] = ExecutionProviderPreference.Auto,
-            ["cpu"] = ExecutionProviderPreference.Cpu,
-            ["directml"] = ExecutionProviderPreference.DirectML,
-            ["cuda"] = ExecutionProviderPreference.Cuda,
-        };
+        ExecutionProviderTokens.FormatSupportedCliTags();
 
     internal static T? GetGlobalOptionValue<T>(ParseResult parseResult, string optionName)
     {
@@ -149,7 +141,7 @@ internal static class CliParseHelpers
     {
         exitCode = Program.ExitSuccess;
 
-        if (!TryParseExecutionProvider(executionProvider, out ExecutionProviderPreference providerPreference))
+        if (!TryParseExecutionProvider(executionProvider, out ExecutionProviderKind? providerKind, out string? parseWarning))
         {
             CliErrorReporter.ReportValidationError(
                 ErrorCode.InvalidArgument,
@@ -157,6 +149,11 @@ internal static class CliParseHelpers
                 "--execution-provider");
             exitCode = Program.ExitArgumentError;
             return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(parseWarning))
+        {
+            Console.Error.WriteLine(parseWarning);
         }
 
         if (!TryParseDevicePolicy(devicePolicy, out WindowsMlExecutionDevicePolicy resolvedDevicePolicy))
@@ -171,10 +168,15 @@ internal static class CliParseHelpers
 
         try
         {
-            TrackdubSessionFactory factory = ApplyModelDirectory(new TrackdubBuilder(), modelDirectory)
-                .WithExecutionProvider(providerPreference)
-                .WithWindowsMlExecutionDevicePolicy(resolvedDevicePolicy)
-                .Build();
+            TrackdubBuilder builder = ApplyModelDirectory(new TrackdubBuilder(), modelDirectory)
+                .WithWindowsMlExecutionDevicePolicy(resolvedDevicePolicy);
+
+            if (providerKind is ExecutionProviderKind kind)
+            {
+                builder = builder.WithExecutionProvider(kind);
+            }
+
+            TrackdubSessionFactory factory = builder.Build();
             CliLoggingBootstrap.EnsureReady(factory);
             return factory;
         }
@@ -200,15 +202,56 @@ internal static class CliParseHelpers
         return WindowsMlExecutionDevicePolicySettings.TryParseKey(value, out policy);
     }
 
-    internal static bool TryParseExecutionProvider(string? value, out ExecutionProviderPreference preference)
+    /// <summary>
+    /// Parses a CLI/preset execution-provider token. Empty or auto yields <c>null</c> kind.
+    /// On Windows, <c>cuda</c> maps to <see cref="ExecutionProviderKind.TensorRTRtx"/> with a warning.
+    /// </summary>
+    internal static bool TryParseExecutionProvider(
+        string? value,
+        out ExecutionProviderKind? kind,
+        out string? warning)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        warning = null;
+        kind = null;
+
+        if (!ExecutionProviderTokens.TryParseCli(value, out kind))
         {
-            preference = ExecutionProviderPreference.Auto;
-            return true;
+            return false;
         }
 
-        return ExecutionProviderKeyMap.TryGetValue(value.Trim(), out preference);
+        if (kind is ExecutionProviderKind.Cuda && OperatingSystem.IsWindows())
+        {
+            kind = ExecutionProviderKind.TensorRTRtx;
+            warning =
+                "Warning: --execution-provider cuda on Windows maps to TensorRT RTX (trt-rtx). "
+                + "Use --execution-provider trt-rtx explicitly, or run on Linux for native CUDA.";
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Legacy overload used by preset validation that only needs accept/reject.
+    /// </summary>
+    internal static bool TryParseExecutionProvider(string? value, out ExecutionProviderPreference preference)
+    {
+        if (!TryParseExecutionProvider(value, out ExecutionProviderKind? kind, out _))
+        {
+            preference = ExecutionProviderPreference.Auto;
+            return false;
+        }
+
+        preference = kind switch
+        {
+            null => ExecutionProviderPreference.Auto,
+            ExecutionProviderKind.Cpu => ExecutionProviderPreference.Cpu,
+            ExecutionProviderKind.DirectMl => ExecutionProviderPreference.DirectML,
+            ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRTRtx => ExecutionProviderPreference.Cuda,
+            _ => ExecutionProviderPreference.Auto,
+        };
+
+        // Non-legacy kinds still count as valid tokens for presets.
+        return true;
     }
 
     private static Command GetRootCommand(ParseResult parseResult)

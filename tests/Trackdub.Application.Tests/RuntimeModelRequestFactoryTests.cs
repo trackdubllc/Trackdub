@@ -53,6 +53,26 @@ public sealed class RuntimeModelRequestFactoryTests
     }
 
     [Fact]
+    public void CreateModelPreferences_requires_provider_overrides_when_headless_pin_flag_set()
+    {
+        var options = new RuntimeModelRequestOptions(
+            AsrModelOverride: AsrModelOverride.Auto,
+            IsDevBuild: false,
+            HardwareOverrides: new Dictionary<string, ExecutionProviderKind>
+            {
+                ["Asr"] = ExecutionProviderKind.Qnn,
+                ["Tts"] = ExecutionProviderKind.TensorRTRtx
+            },
+            RequirePreferredExecutionProviders: true);
+
+        InferenceModelPreferences preferences = RuntimeModelRequestFactory.CreateModelPreferences(options);
+
+        Assert.True(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Asr));
+        Assert.True(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Tts));
+        Assert.Equal(ExecutionProviderKind.Qnn, preferences.GetPreferredExecutionProvider(RuntimeStage.Asr));
+    }
+
+    [Fact]
     public void CreateSelectionsFromPreferences_maps_model_aliases()
     {
         var preferences = new InferenceModelPreferences(
