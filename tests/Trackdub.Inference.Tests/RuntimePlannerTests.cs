@@ -395,13 +395,13 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_RequiredProviderNotAllowedForEngineFamily_ReturnsBlocked()
+    public async Task PlanAsync_RequiredProviderNotAllowedForEngineFamily_PlansAllowedProviderWithSkipWarning()
     {
         BundledModelManifestRegistry registry = LoadBundledRegistry();
         RuntimePlanner planner = CreatePlanner(
             registry,
             [],
-            [new(ExecutionProviderKind.TensorRTRtx, true)],
+            [new(ExecutionProviderKind.TensorRTRtx, true), new(ExecutionProviderKind.Cpu, true)],
             _ => throw new InvalidOperationException("Disallowed required providers should not smoke test."));
 
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
@@ -411,10 +411,15 @@ public sealed class RuntimePlannerTests
             PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
             RequirePreferredExecutionProvider: true));
 
-        Assert.Equal(StageRuntimePlanStatus.Blocked, plan.Status);
-        Assert.NotNull(plan.Fallback);
-        Assert.Equal(RuntimePlanFallbackCode.NoCompatibleVariant, plan.Fallback!.Code);
-        Assert.Contains("TensorRTRtx", plan.Fallback.Detail, StringComparison.Ordinal);
+        Assert.Equal(StageRuntimePlanStatus.DownloadRequired, plan.Status);
+        Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
+        Assert.Equal("kokoro", plan.EngineFamily);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1219,6 +1224,45 @@ public sealed class RuntimePlannerTests
         Assert.Equal("kokoro", plan.EngineFamily);
         Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
         Assert.Equal("q4", plan.Variant);
+    }
+
+    [Fact]
+    public async Task PlanAsync_RequiredGpuPin_OnKokoro_PlansCpuWithExactSkipReason()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = LoadBundledRegistry();
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/Kokoro-82M-v1.0-ONNX");
+        WriteBundledCacheFiles(workspace, registry, "kokoro-onnx", cacheRoot, "q4");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [CreateCacheRecord(registry, "onnx-community/Kokoro-82M-v1.0-ONNX", cacheRoot)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true),
+                new(ExecutionProviderKind.Qnn, true),
+                new(ExecutionProviderKind.Cpu, true)
+            ],
+            _ => throw new InvalidOperationException("Kokoro TTS must remain CPU-only."));
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Tts,
+            PreferredModelAlias: "kokoro-onnx",
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
+        Assert.Equal("kokoro", plan.EngineFamily);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal)
+                && warning.Detail.Contains("kokoro", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

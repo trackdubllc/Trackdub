@@ -22,7 +22,8 @@ public sealed record RuntimeModelRequestOptions(
     TranslationModelOverride TranslationModelOverride = TranslationModelOverride.Auto,
     TtsModelOverride TtsModelOverride = TtsModelOverride.Auto,
     SeparationModelOverride SeparationModelOverride = SeparationModelOverride.Auto,
-    IReadOnlyDictionary<string, string>? ModelVariantOverrides = null);
+    IReadOnlyDictionary<string, string>? ModelVariantOverrides = null,
+    bool RequirePreferredExecutionProviders = false);
 
 public sealed record RuntimeModelSelections(
     AsrModelOverride AsrModelOverride,
@@ -41,7 +42,8 @@ public sealed record RuntimeModelSelections(
     TranslationModelOverride TranslationModelOverride = TranslationModelOverride.Auto,
     TtsModelOverride TtsModelOverride = TtsModelOverride.Auto,
     SeparationModelOverride SeparationModelOverride = SeparationModelOverride.Auto,
-    IReadOnlyDictionary<string, string>? ModelVariantOverrides = null);
+    IReadOnlyDictionary<string, string>? ModelVariantOverrides = null,
+    bool RequirePreferredExecutionProviders = false);
 
 public static class RuntimeModelRequestFactory
 {
@@ -93,7 +95,8 @@ public static class RuntimeModelRequestFactory
             TranslationModelOverride: settings.TranslationModelOverride,
             TtsModelOverride: settings.TtsModelOverride,
             SeparationModelOverride: settings.SeparationModelOverride,
-            ModelVariantOverrides: settings.ModelVariantOverrides);
+            ModelVariantOverrides: settings.ModelVariantOverrides,
+            RequirePreferredExecutionProviders: settings.RequirePreferredExecutionProviders);
     }
 
     private static string? ResolveAsrAlias(StudioSettings settings, InferenceModelPreferences? explicitPreferences)
@@ -270,7 +273,8 @@ public static class RuntimeModelRequestFactory
             selections.TranslationModelOverride,
             selections.TtsModelOverride,
             selections.SeparationModelOverride,
-            selections.ModelVariantOverrides);
+            selections.ModelVariantOverrides,
+            selections.RequirePreferredExecutionProviders);
     }
 
     public static InferenceModelPreferences CreateModelPreferences(RuntimeModelSelections selections) =>
@@ -658,7 +662,8 @@ public static class RuntimeModelRequestFactory
     private static bool IsPreferredExecutionProviderRequired(
         RuntimeModelRequestOptions options,
         RuntimeStage stage) =>
-        options.IsDevBuild && ResolvePreferredExecutionProvider(options, stage) is not null;
+        ResolvePreferredExecutionProvider(options, stage) is not null
+        && (options.IsDevBuild || options.RequirePreferredExecutionProviders);
 
     private static bool RequiresExplicitAsrModelAlias(RuntimeModelRequestOptions options) =>
         !string.IsNullOrWhiteSpace(options.AsrModelAlias) ||

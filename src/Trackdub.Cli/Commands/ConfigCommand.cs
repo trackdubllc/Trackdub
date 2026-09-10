@@ -138,12 +138,13 @@ internal static class ConfigCommand
 
         var executionProviderOption = new Option<string?>("--execution-provider")
         {
-            Description = "ONNX execution provider (e.g., auto, directml, cpu)",
+            Description = "ONNX execution provider pin (e.g., auto, cpu, directml, trt-rtx, qnn, migraphx)",
         };
 
         var devicePolicyOption = new Option<string?>("--device-policy")
         {
-            Description = $"Device selection policy (e.g., {WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys()})",
+            Description =
+                $"Windows ML catalog device policy only (e.g., {WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys()}); ignored for cpu/trt-rtx/cuda/tensorrt",
         };
 
         var enableAsrTextRefinementOption = new Option<bool?>("--enable-asr-text-refinement")
@@ -156,7 +157,7 @@ internal static class ConfigCommand
 
             Examples:
               trackdub config preset save my-preset --target-language es
-              trackdub config preset save gpu-fast --target-language fr --execution-provider directml --device-policy max-performance
+              trackdub config preset save gpu-fast --target-language fr --execution-provider trt-rtx --device-policy max-performance
               trackdub config preset save custom --target-language de --model asr:whisper-large-v3 --model tts:kokoro-onnx
             """)
         {

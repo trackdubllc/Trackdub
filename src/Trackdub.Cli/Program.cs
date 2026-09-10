@@ -2,6 +2,7 @@ using System.CommandLine;
 
 using Trackdub.Cli.Commands;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Domain;
 
 namespace Trackdub.Cli;
 
@@ -87,19 +88,22 @@ internal static class Program
 
         var executionProviderOption = new Option<string>("--execution-provider")
         {
-            Description = "Preferred ONNX Runtime execution provider for inference (auto, cpu, directml, cuda). "
-                + "Auto lets the runtime planner choose the best available provider.",
+            Description = "Preferred ONNX Runtime execution provider pin ("
+                + ExecutionProviderTokens.FormatSupportedCliTags()
+                + "). Auto lets the runtime planner choose. On Windows, use trt-rtx for NVIDIA TensorRT RTX "
+                + "(cuda is accepted as a compatibility alias for trt-rtx).",
             Recursive = true,
             DefaultValueFactory = _ => "auto"
         };
-        executionProviderOption.AcceptOnlyFromAmong("auto", "cpu", "directml", "cuda");
+        executionProviderOption.AcceptOnlyFromAmong(ExecutionProviderTokens.CliAcceptedTokens.ToArray());
 
         var devicePolicyOption = new Option<string>("--device-policy")
         {
-            Description = "Windows ML execution-provider device policy (advanced, Windows-only): "
+            Description = "Windows ML catalog device policy (advanced, Windows-only; ignored for cpu, trt-rtx, cuda, tensorrt): "
                 + $"{WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys()}. "
                 + "Explicit (default) keeps Trackdub's own catalog device selection; other values "
-                + "delegate device choice to ONNX Runtime's SetEpSelectionPolicy. Ignored on non-Windows platforms.",
+                + "delegate device choice to ONNX Runtime's SetEpSelectionPolicy. Applies to catalog GPU routes "
+                + "(directml, migraphx, qnn, vitisai, openvino-catalog).",
             Recursive = true,
             DefaultValueFactory = _ => WindowsMlExecutionDevicePolicySettings.ExplicitKey
         };
