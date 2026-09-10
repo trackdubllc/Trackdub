@@ -34,6 +34,7 @@ internal static class DoctorHandler
 
         IFfmpegHealthCheck ffmpegHealthCheck = factory.GetRequiredService<IFfmpegHealthCheck>();
         checks.Add(CheckFfmpeg(ffmpegHealthCheck));
+        checks.Add(CheckEspeakNg(factory.GetRequiredService<IEspeakNgHealthCheck>()));
 
         checks.Add(CheckLogPath(storagePaths));
         checks.Add(CheckEngineCache(factory));
@@ -253,6 +254,29 @@ internal static class DoctorHandler
             Status = "fail",
             Message = status.ErrorMessage ?? "ffmpeg or ffprobe is not available.",
             Remediation = "Install FFmpeg on PATH or allow the app bootstrap to download tools on first media run.",
+        };
+    }
+
+    private static DoctorCheckRow CheckEspeakNg(IEspeakNgHealthCheck espeakHealthCheck)
+    {
+        EspeakNgHealthStatus status = espeakHealthCheck.CheckAvailability();
+        if (status.Available)
+        {
+            return new DoctorCheckRow
+            {
+                Id = "espeak-ng",
+                Status = "pass",
+                Message = $"eSpeak-NG is available ({status.ExecutablePath}).",
+            };
+        }
+
+        return new DoctorCheckRow
+        {
+            Id = "espeak-ng",
+            Status = "fail",
+            Message = status.ErrorMessage ?? "eSpeak-NG is not available.",
+            Remediation =
+                "Kokoro TTS needs eSpeak-NG. Run tools/espeak-ng/Fetch-EspeakNg.ps1, set TRACKDUB_ESPEAK_NG_PATH to espeak-ng.exe, or install eSpeak-NG on PATH.",
         };
     }
 

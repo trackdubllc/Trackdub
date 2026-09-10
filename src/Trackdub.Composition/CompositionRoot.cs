@@ -289,6 +289,7 @@ public static class CompositionRoot
 
         services.TryAddSingleton<IAppHealthMonitor, AppHealthMonitor>();
         services.TryAddSingleton<IFfmpegHealthCheck>(_ => new FfmpegHealthCheck());
+        services.TryAddSingleton<IEspeakNgHealthCheck, EspeakNgHealthCheck>();
         services.TryAddSingleton<IExplicitFfmpegInstaller>(_ => new FfmpegExplicitInstaller());
         services.TryAddSingleton<IDiagnosticsCollector>(sp =>
             new DiagnosticsCollector(

@@ -143,8 +143,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
             }
 
             // Sub-100ms audio cannot produce a transcription: TranscribeRegionAsync skips
-            // all chunks whose duration is below the 0.1 s threshold, returning empty text
-            // that downstream segment creation rejects with ArgumentException.
+            // all chunks whose duration is below the 0.1 s threshold, returning empty text.
             if (durationSeconds < 0.1)
             {
                 LastExecutionSummary = CreateExecutionSummary(plan,
@@ -181,6 +180,11 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
                     languageTokensById,
                     requestTempDirectory,
                     cancellationToken).ConfigureAwait(false);
+
+                if (string.IsNullOrWhiteSpace(transcription.Text))
+                {
+                    continue;
+                }
 
                 segments.Add(new RecognizedTranscriptSegment(
                     region.Index,

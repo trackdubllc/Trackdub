@@ -59,6 +59,12 @@ internal static class DubCommand
             Description = "Run optional Qwen ASR text polish after transcription",
         };
 
+        var voiceCloneOption = new Option<bool>("--voice-clone")
+        {
+            Description = "Clone each speaker from source audio instead of a stock voicepack. Grants session voice-cloning consent for this run.",
+            DefaultValueFactory = _ => false,
+        };
+
         var presetOption = new Option<string?>("--preset")
         {
             Description = "Named preset to load pipeline settings from",
@@ -93,6 +99,7 @@ internal static class DubCommand
               trackdub dub --media ./video.mp4 --target-language es
               trackdub dub --media ./video.mp4 --target-language fr --export-format mkv
               trackdub dub --media ./video.mp4 --target-language de --model asr:whisper-small --model tts:kokoro-onnx
+              trackdub dub --media ./video.mp4 --target-language en --voice-clone
               trackdub dub --preset my-preset --input-dir ./videos
               trackdub dub --preset my-preset --input-glob "**/*.mp4"
             """)
@@ -104,6 +111,7 @@ internal static class DubCommand
             modelOption,
             exportFormatOption,
             enableAsrTextRefinementOption,
+            voiceCloneOption,
             presetOption,
             inputDirOption,
             inputGlobOption,
@@ -120,6 +128,7 @@ internal static class DubCommand
             string[] modelOverrides = parseResult.GetValue(modelOption) ?? [];
             string? exportFormat = parseResult.GetValue(exportFormatOption);
             bool? enableAsrTextRefinement = parseResult.GetValue(enableAsrTextRefinementOption);
+            bool voiceClone = parseResult.GetValue(voiceCloneOption);
             string? presetName = parseResult.GetValue(presetOption);
             string? inputDir = parseResult.GetValue(inputDirOption);
             string? inputGlob = parseResult.GetValue(inputGlobOption);
@@ -209,6 +218,7 @@ internal static class DubCommand
                     ModelPreferences = modelPreferences.Count > 0 ? modelPreferences : null,
                     ExportFormat = exportFormat,
                     EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
+                    UseVoiceCloning = voiceClone,
                 };
 
                 // Build BatchOptions
@@ -331,6 +341,7 @@ internal static class DubCommand
                             ModelPreferences = singleModelPreferences.Count > 0 ? singleModelPreferences : null,
                             ExportFormat = exportFormat,
                             EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
+                            UseVoiceCloning = voiceClone,
                         },
                         progress,
                         Console.Out,

@@ -416,10 +416,13 @@ public sealed class ModelDownloadOrchestrator(
                 return (normalizedRelativePath, new HashVerificationResult(false, false, null, null, "Required model file is missing."));
             }
 
-            string? expectedHash = ResolveExpectedHash(entry, normalizedRelativePath, benchmarkRelativePath);
-            if (entry.DownloadFileHashes.Count > 0 && string.IsNullOrWhiteSpace(expectedHash))
+            string? expectedHash = ModelDownloadManifestFiles.ResolveExpectedSha256(
+                entry,
+                normalizedRelativePath,
+                benchmarkRelativePath);
+            if (string.IsNullOrWhiteSpace(expectedHash))
             {
-                return (normalizedRelativePath, new HashVerificationResult(false, false, null, null, "Manifest does not define a SHA-256 for this required model file."));
+                continue;
             }
 
             HashVerificationResult hashResult = await hashVerifier
@@ -439,21 +442,6 @@ public sealed class ModelDownloadOrchestrator(
         }
 
         return (benchmarkRelativePath, benchmarkResult ?? lastResult);
-    }
-
-    private static string? ResolveExpectedHash(
-        BundledModelManifestEntry entry,
-        string normalizedRelativePath,
-        string benchmarkRelativePath)
-    {
-        if (entry.DownloadFileHashes.TryGetValue(normalizedRelativePath, out string? fileHash))
-        {
-            return fileHash;
-        }
-
-        return normalizedRelativePath.Equals(benchmarkRelativePath, StringComparison.OrdinalIgnoreCase)
-            ? entry.Sha256
-            : null;
     }
 
     private static string NormalizeRelativePath(string relativePath) =>

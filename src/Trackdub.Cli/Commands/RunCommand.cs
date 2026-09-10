@@ -163,6 +163,12 @@ internal static class RunCommand
             Description = "Run optional Qwen ASR text polish after transcription",
         };
 
+        var voiceCloneOption = new Option<bool>("--voice-clone")
+        {
+            Description = "Clone each speaker from source audio instead of a stock voicepack. Grants session voice-cloning consent for this run.",
+            DefaultValueFactory = _ => false,
+        };
+
         var presetOption = new Option<string?>("--preset")
         {
             Description = "Named preset to load pipeline settings from",
@@ -197,6 +203,7 @@ internal static class RunCommand
               trackdub run pipeline --media ./video.mp4 --target-language es
               trackdub run pipeline --media ./video.mp4 --target-language fr --from-stage translation
               trackdub run pipeline --media ./video.mp4 --target-language de --only vad --only asr --force-rerun
+              trackdub run pipeline --media ./video.mp4 --target-language en --voice-clone
               trackdub run pipeline --input-dir ./videos --target-language es --continue-on-error
               trackdub run pipeline --preset my-preset --input-glob "**/*.mp4"
             """)
@@ -211,6 +218,7 @@ internal static class RunCommand
             onlyOption,
             forceRerunOption,
             enableAsrTextRefinementOption,
+            voiceCloneOption,
             presetOption,
             inputDirOption,
             inputGlobOption,
@@ -230,6 +238,7 @@ internal static class RunCommand
             string[] onlyStages = parseResult.GetValue(onlyOption) ?? [];
             bool forceRerun = parseResult.GetValue(forceRerunOption);
             bool? enableAsrTextRefinement = parseResult.GetValue(enableAsrTextRefinementOption);
+            bool voiceClone = parseResult.GetValue(voiceCloneOption);
             string? presetName = parseResult.GetValue(presetOption);
             string? inputDir = parseResult.GetValue(inputDirOption);
             string? inputGlob = parseResult.GetValue(inputGlobOption);
@@ -349,6 +358,7 @@ internal static class RunCommand
                         StageFilter = batchStageFilter,
                         ForceRerun = forceRerun,
                         EnableAsrTextRefinement = resolvedEnableAsrTextRefinement,
+                        UseVoiceCloning = voiceClone,
                     };
 
                     // Build BatchOptions
@@ -579,6 +589,7 @@ internal static class RunCommand
                             StageFilter = stageFilter,
                             ForceRerun = forceRerun,
                             EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
+                            UseVoiceCloning = voiceClone,
                         },
                         progress,
                         Console.Out,

@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Inference.Onnx.Kokoro;
 
@@ -373,6 +374,38 @@ public sealed class KokoroHelperComponentTests : IDisposable
     }
 
     [Fact]
+    public void EspeakNgHealthCheck_WhenExecutableAndDataPresent_ReportsAvailable()
+    {
+        string dir = CreateTempDir();
+        string executablePath = Path.Combine(dir, EspeakExecutableName);
+        File.WriteAllBytes(executablePath, []);
+        Directory.CreateDirectory(Path.Combine(dir, "espeak-ng-data"));
+
+        using IDisposable env = SetEnvironmentVariable(EspeakNgPathResolver.EnvironmentVariableName, executablePath);
+        using IDisposable dataEnv = SetEnvironmentVariable("ESPEAK_DATA_PATH", null);
+        EspeakNgHealthStatus status = new EspeakNgHealthCheck().CheckAvailability();
+
+        Assert.True(status.Available);
+        Assert.Equal(executablePath, status.ExecutablePath);
+        Assert.Null(status.ErrorMessage);
+    }
+
+    [Fact]
+    public void EspeakNgHealthCheck_WhenDataFolderMissing_ReportsUnavailable()
+    {
+        string dir = CreateTempDir();
+        string executablePath = Path.Combine(dir, EspeakExecutableName);
+        File.WriteAllBytes(executablePath, []);
+
+        using IDisposable env = SetEnvironmentVariable(EspeakNgPathResolver.EnvironmentVariableName, executablePath);
+        using IDisposable dataEnv = SetEnvironmentVariable("ESPEAK_DATA_PATH", null);
+        EspeakNgHealthStatus status = new EspeakNgHealthCheck().CheckAvailability();
+
+        Assert.False(status.Available);
+        Assert.Contains("espeak-ng-data", status.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EspeakNgPhonemizer_Phonemize_WrapsStartupFailureWithActionableError()
     {
         string dir = CreateTempDir();
@@ -432,4 +465,24 @@ public sealed class KokoroHelperComponentTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "tokenizer.json"), json, Encoding.UTF8);
     }
 
+    private static IDisposable SetEnvironmentVariable(string name, string? value) =>
+        new EnvironmentVariableScope(name, value);
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string name;
+        private readonly string? previousValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            this.name = name;
+            previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(name, previousValue);
+        }
+    }
 }

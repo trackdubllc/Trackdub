@@ -63,4 +63,11 @@ public sealed record DubbingSessionOptions
     /// Defaults to false.
     /// </summary>
     public bool ForceRerun { get; init; }
+
+    /// <summary>
+    /// When true, TTS clones each speaker from source audio instead of assigning a stock voicepack.
+    /// Headless runs treat this flag as session voice-cloning consent.
+    /// Defaults to false.
+    /// </summary>
+    public bool UseVoiceCloning { get; init; }
 }

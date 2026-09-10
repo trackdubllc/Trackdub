@@ -85,20 +85,35 @@ public sealed class SpeakerAssignmentAndPersistenceStage(
         TranscriptRevision revision = TranscriptRevision.Create(projectId, revisionStageRunId, revisionNumber, DateTimeOffset.UtcNow);
         string activeProvenance = TextRefinementSegmentResolution.ResolveActiveTranscriptProvenance(context.TextRefinementResult);
 
+        int droppedEmptyCount = asrResult.Segments.Count(static segment =>
+            string.IsNullOrWhiteSpace(segment.Text));
         TranscriptSegment[] segments = asrResult.Segments
             .OrderBy(segment => segment.Index)
-            .Select(segment => TranscriptSegment.Create(
+            .Select(segment => (
+                Segment: segment,
+                Text: TextRefinementSegmentResolution.ResolveDisplayedText(segment, context.TextRefinementResult)))
+            .Where(item => !string.IsNullOrWhiteSpace(item.Text))
+            .Select(item => TranscriptSegment.Create(
                 revision.Id,
-                segment.Index,
-                segment.StartSeconds,
-                segment.EndSeconds,
-                TextRefinementSegmentResolution.ResolveDisplayedText(segment, context.TextRefinementResult),
-                speakerAssignment.SegmentSpeakerIdsByIndex.TryGetValue(segment.Index, out Guid speakerId)
+                item.Segment.Index,
+                item.Segment.StartSeconds,
+                item.Segment.EndSeconds,
+                item.Text,
+                speakerAssignment.SegmentSpeakerIdsByIndex.TryGetValue(item.Segment.Index, out Guid speakerId)
                     ? speakerId
                     : null,
-                segment.DetectedLanguage,
-                TranscriptWorkflowUtilities.CreateTranscriptWords(segment.Words)))
+                item.Segment.DetectedLanguage,
+                TranscriptWorkflowUtilities.CreateTranscriptWords(item.Segment.Words)))
             .ToArray();
+
+        if (droppedEmptyCount > 0)
+        {
+            PipelineProgressReporter.Phase(
+                progress,
+                StageName,
+                "Assigning speakers",
+                $"Dropped {droppedEmptyCount} empty ASR region(s).");
+        }
 
         PipelineProgressReporter.Phase(progress, StageName, "Persisting transcript", $"Saving {segments.Length} transcript segment(s).");
         await transcriptRepository.SaveRevisionAsync(revision, segments, cancellationToken).ConfigureAwait(false);
