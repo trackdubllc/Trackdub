@@ -1089,14 +1089,9 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             return options;
         }
 
-        var preferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (options.ModelPreferences is not null)
-        {
-            foreach ((string stage, string model) in options.ModelPreferences)
-            {
-                preferences[stage] = model;
-            }
-        }
+        var preferences = options.ModelPreferences is not null
+            ? new Dictionary<string, string>(options.ModelPreferences, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
         return options with { ModelPreferences = preferences };

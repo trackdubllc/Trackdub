@@ -31,14 +31,7 @@ public sealed record TrackdubOptions
     /// </summary>
     public ExecutionProviderPreference ExecutionProvider
     {
-        get => PreferredExecutionProvider switch
-        {
-            null => ExecutionProviderPreference.Auto,
-            ExecutionProviderKind.Cpu => ExecutionProviderPreference.Cpu,
-            ExecutionProviderKind.DirectMl => ExecutionProviderPreference.DirectML,
-            ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRTRtx => ExecutionProviderPreference.Cuda,
-            _ => ExecutionProviderPreference.Auto,
-        };
+        get => ExecutionProviderPreferenceMapping.ToLegacyPreference(PreferredExecutionProvider);
         init => PreferredExecutionProvider = ExecutionProviderPreferenceMapping.ToPreferredKind(value);
     }
 

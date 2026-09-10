@@ -113,6 +113,7 @@ public sealed class TensorRtRtxPluginLocatorTests
 
         TensorRtRtxPluginResolution resolution = TensorRtRtxPluginLocator.Resolve(
             defaultInstallDirectory: installDirectory,
+            getEnvironmentVariable: _ => null,
             directoryExists: path => IsSameDirectory(installDirectory, path),
             fileExists: path => TensorRtRtxPluginLocator.RequiredFileNames
                 .Any(fileName => path.EndsWith(fileName, StringComparison.OrdinalIgnoreCase)));
