@@ -61,7 +61,6 @@ public static class HeadlessCompositionRoot
                 key => key,
                 _ => provider,
                 StringComparer.Ordinal);
-            requirePreferred = true;
         }
 
         return new HeadlessTrackdubOptions

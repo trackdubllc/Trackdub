@@ -56,9 +56,28 @@ public static class ExecutionProviderTokens
 
     public static string FormatSupportedCliTags() => string.Join(", ", CliTags);
 
-    /// <summary>
-    /// Parses a provider token into a kind. Does not accept <c>auto</c>.
-    /// </summary>
+    private static readonly Dictionary<string, ExecutionProviderKind> ParseMap =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["cpu"] = ExecutionProviderKind.Cpu,
+            ["dnnl"] = ExecutionProviderKind.Dnnl,
+            ["onednn"] = ExecutionProviderKind.Dnnl,
+            ["onnxruntime-dnnl"] = ExecutionProviderKind.Dnnl,
+            ["dml"] = ExecutionProviderKind.DirectMl,
+            ["directml"] = ExecutionProviderKind.DirectMl,
+            ["cuda"] = ExecutionProviderKind.Cuda,
+            ["tensorrt"] = ExecutionProviderKind.TensorRt,
+            ["trt-rtx"] = ExecutionProviderKind.TensorRTRtx,
+            ["tensorrt-rtx"] = ExecutionProviderKind.TensorRTRtx,
+            ["migraphx"] = ExecutionProviderKind.Migraphx,
+            ["rocm"] = ExecutionProviderKind.Migraphx,
+            ["openvino"] = ExecutionProviderKind.OpenVino,
+            ["openvino-catalog"] = ExecutionProviderKind.OpenVinoCatalog,
+            ["qnn"] = ExecutionProviderKind.Qnn,
+            ["vitisai"] = ExecutionProviderKind.VitisAi,
+            ["coreml"] = ExecutionProviderKind.CoreMl,
+        };
+
     public static bool TryParse(string? token, out ExecutionProviderKind kind)
     {
         kind = default;
@@ -67,24 +86,7 @@ public static class ExecutionProviderTokens
             return false;
         }
 
-        kind = token.Trim().ToLowerInvariant() switch
-        {
-            "cpu" => ExecutionProviderKind.Cpu,
-            "dnnl" or "onednn" or "onnxruntime-dnnl" => ExecutionProviderKind.Dnnl,
-            "dml" or "directml" => ExecutionProviderKind.DirectMl,
-            "cuda" => ExecutionProviderKind.Cuda,
-            "tensorrt" => ExecutionProviderKind.TensorRt,
-            "trt-rtx" or "tensorrt-rtx" => ExecutionProviderKind.TensorRTRtx,
-            "migraphx" or "rocm" => ExecutionProviderKind.Migraphx,
-            "openvino" => ExecutionProviderKind.OpenVino,
-            "openvino-catalog" => ExecutionProviderKind.OpenVinoCatalog,
-            "qnn" => ExecutionProviderKind.Qnn,
-            "vitisai" => ExecutionProviderKind.VitisAi,
-            "coreml" => ExecutionProviderKind.CoreMl,
-            _ => default
-        };
-
-        return kind != default;
+        return ParseMap.TryGetValue(token.Trim(), out kind);
     }
 
     /// <summary>

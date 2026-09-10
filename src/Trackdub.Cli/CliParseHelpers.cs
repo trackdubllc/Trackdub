@@ -241,14 +241,7 @@ internal static class CliParseHelpers
             return false;
         }
 
-        preference = kind switch
-        {
-            null => ExecutionProviderPreference.Auto,
-            ExecutionProviderKind.Cpu => ExecutionProviderPreference.Cpu,
-            ExecutionProviderKind.DirectMl => ExecutionProviderPreference.DirectML,
-            ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRTRtx => ExecutionProviderPreference.Cuda,
-            _ => ExecutionProviderPreference.Auto,
-        };
+        preference = ExecutionProviderPreferenceMapping.ToLegacyPreference(kind);
 
         // Non-legacy kinds still count as valid tokens for presets.
         return true;

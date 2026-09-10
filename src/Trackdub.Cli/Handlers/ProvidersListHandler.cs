@@ -81,13 +81,27 @@ internal static class ProvidersListHandler
         TrackdubSessionFactory factory,
         CancellationToken cancellationToken)
     {
+        Task<TensorRtRtxRuntimeReadinessSnapshot> trtTask = factory
+            .GetRequiredService<ITensorRtRtxRuntimeReadinessService>()
+            .ProbeAsync(allowProviderDownloads: false, cancellationToken);
+        Task<MigraphxRuntimeReadinessSnapshot> migraphxTask = factory
+            .GetRequiredService<IMigraphxRuntimeReadinessService>()
+            .ProbeAsync(allowProviderDownloads: false, cancellationToken);
+        Task<WinMlCatalogRuntimeReadinessSnapshot> openVinoTask = factory
+            .GetRequiredService<IOpenVinoCatalogRuntimeReadinessService>()
+            .ProbeAsync(allowProviderDownloads: false, cancellationToken);
+        Task<WinMlCatalogRuntimeReadinessSnapshot> qnnTask = factory
+            .GetRequiredService<IQnnCatalogRuntimeReadinessService>()
+            .ProbeAsync(allowProviderDownloads: false, cancellationToken);
+        Task<WinMlCatalogRuntimeReadinessSnapshot> vitisTask = factory
+            .GetRequiredService<IVitisAiCatalogRuntimeReadinessService>()
+            .ProbeAsync(allowProviderDownloads: false, cancellationToken);
+
+        await Task.WhenAll(trtTask, migraphxTask, openVinoTask, qnnTask, vitisTask).ConfigureAwait(false);
+
         var remediations = new Dictionary<ExecutionProviderKind, string>();
 
-        ITensorRtRtxRuntimeReadinessService trt =
-            factory.GetRequiredService<ITensorRtRtxRuntimeReadinessService>();
-        TensorRtRtxRuntimeReadinessSnapshot trtSnapshot = await trt
-            .ProbeAsync(allowProviderDownloads: false, cancellationToken)
-            .ConfigureAwait(false);
+        TensorRtRtxRuntimeReadinessSnapshot trtSnapshot = await trtTask.ConfigureAwait(false);
         if (!trtSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.TensorRTRtx] =
@@ -95,11 +109,7 @@ internal static class ProvidersListHandler
                 ?? "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license.";
         }
 
-        IMigraphxRuntimeReadinessService migraphx =
-            factory.GetRequiredService<IMigraphxRuntimeReadinessService>();
-        MigraphxRuntimeReadinessSnapshot migraphxSnapshot = await migraphx
-            .ProbeAsync(allowProviderDownloads: false, cancellationToken)
-            .ConfigureAwait(false);
+        MigraphxRuntimeReadinessSnapshot migraphxSnapshot = await migraphxTask.ConfigureAwait(false);
         if (!migraphxSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.Migraphx] =
@@ -107,11 +117,7 @@ internal static class ProvidersListHandler
                 ?? "Install the Windows ML MIGraphX catalog package or a ROCm ONNX Runtime build on Linux.";
         }
 
-        IOpenVinoCatalogRuntimeReadinessService openVinoCatalog =
-            factory.GetRequiredService<IOpenVinoCatalogRuntimeReadinessService>();
-        WinMlCatalogRuntimeReadinessSnapshot openVinoSnapshot = await openVinoCatalog
-            .ProbeAsync(allowProviderDownloads: false, cancellationToken)
-            .ConfigureAwait(false);
+        WinMlCatalogRuntimeReadinessSnapshot openVinoSnapshot = await openVinoTask.ConfigureAwait(false);
         if (!openVinoSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.OpenVinoCatalog] =
@@ -119,11 +125,7 @@ internal static class ProvidersListHandler
                 ?? "Accept the Intel OpenVINO license in settings and install the Windows ML OpenVINO catalog EP.";
         }
 
-        IQnnCatalogRuntimeReadinessService qnn =
-            factory.GetRequiredService<IQnnCatalogRuntimeReadinessService>();
-        WinMlCatalogRuntimeReadinessSnapshot qnnSnapshot = await qnn
-            .ProbeAsync(allowProviderDownloads: false, cancellationToken)
-            .ConfigureAwait(false);
+        WinMlCatalogRuntimeReadinessSnapshot qnnSnapshot = await qnnTask.ConfigureAwait(false);
         if (!qnnSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.Qnn] =
@@ -131,11 +133,7 @@ internal static class ProvidersListHandler
                 ?? "Accept the Qualcomm QNN license in settings and install the Windows ML QNN catalog EP.";
         }
 
-        IVitisAiCatalogRuntimeReadinessService vitisAi =
-            factory.GetRequiredService<IVitisAiCatalogRuntimeReadinessService>();
-        WinMlCatalogRuntimeReadinessSnapshot vitisSnapshot = await vitisAi
-            .ProbeAsync(allowProviderDownloads: false, cancellationToken)
-            .ConfigureAwait(false);
+        WinMlCatalogRuntimeReadinessSnapshot vitisSnapshot = await vitisTask.ConfigureAwait(false);
         if (!vitisSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.VitisAi] =

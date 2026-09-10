@@ -425,28 +425,23 @@ internal static class DoctorHandler
         TrackdubSessionFactory factory,
         CancellationToken cancellationToken)
     {
-        var rows = new List<DoctorCheckRow>
-        {
-            await ProbeMigraphxAsync(factory, cancellationToken).ConfigureAwait(false),
-            await ProbeWinMlCatalogAsync(
-                    "execution-provider-qnn",
-                    "qnn",
-                    factory.GetRequiredService<IQnnCatalogRuntimeReadinessService>(),
-                    cancellationToken)
-                .ConfigureAwait(false),
-            await ProbeWinMlCatalogAsync(
-                    "execution-provider-vitisai",
-                    "vitisai",
-                    factory.GetRequiredService<IVitisAiCatalogRuntimeReadinessService>(),
-                    cancellationToken)
-                .ConfigureAwait(false),
-            await ProbeWinMlCatalogAsync(
-                    "execution-provider-openvino-catalog",
-                    "openvino-catalog",
-                    factory.GetRequiredService<IOpenVinoCatalogRuntimeReadinessService>(),
-                    cancellationToken)
-                .ConfigureAwait(false),
-        };
+        DoctorCheckRow[] rows = await Task.WhenAll(
+            ProbeMigraphxAsync(factory, cancellationToken),
+            ProbeWinMlCatalogAsync(
+                "execution-provider-qnn",
+                "qnn",
+                factory.GetRequiredService<IQnnCatalogRuntimeReadinessService>(),
+                cancellationToken),
+            ProbeWinMlCatalogAsync(
+                "execution-provider-vitisai",
+                "vitisai",
+                factory.GetRequiredService<IVitisAiCatalogRuntimeReadinessService>(),
+                cancellationToken),
+            ProbeWinMlCatalogAsync(
+                "execution-provider-openvino-catalog",
+                "openvino-catalog",
+                factory.GetRequiredService<IOpenVinoCatalogRuntimeReadinessService>(),
+                cancellationToken)).ConfigureAwait(false);
 
         return rows;
     }

@@ -41,4 +41,14 @@ internal static class ExecutionProviderPreferenceMapping
                 preference,
                 "Unknown execution provider preference."),
         };
+
+    public static ExecutionProviderPreference ToLegacyPreference(ExecutionProviderKind? kind) =>
+        kind switch
+        {
+            null => ExecutionProviderPreference.Auto,
+            ExecutionProviderKind.Cpu => ExecutionProviderPreference.Cpu,
+            ExecutionProviderKind.DirectMl => ExecutionProviderPreference.DirectML,
+            ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRTRtx => ExecutionProviderPreference.Cuda,
+            _ => ExecutionProviderPreference.Auto,
+        };
 }
