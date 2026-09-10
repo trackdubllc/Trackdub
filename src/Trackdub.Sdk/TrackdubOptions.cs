@@ -29,11 +29,8 @@ public sealed record TrackdubOptions
     /// <summary>
     /// Legacy four-value preference. Prefer <see cref="PreferredExecutionProvider"/>.
     /// </summary>
-    public ExecutionProviderPreference ExecutionProvider
-    {
-        get => ExecutionProviderPreferenceMapping.ToLegacyPreference(PreferredExecutionProvider);
-        init => PreferredExecutionProvider = ExecutionProviderPreferenceMapping.ToPreferredKind(value);
-    }
+    public ExecutionProviderPreference ExecutionProvider =>
+        ExecutionProviderPreferenceMapping.ToLegacyPreference(PreferredExecutionProvider);
 
     public WindowsMlExecutionDevicePolicy WindowsMlExecutionDevicePolicy { get; init; } = WindowsMlExecutionDevicePolicy.Explicit;
     public string? FfmpegPath { get; init; }

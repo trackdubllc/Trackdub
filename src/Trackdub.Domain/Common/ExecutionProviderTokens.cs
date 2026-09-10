@@ -6,51 +6,10 @@ namespace Trackdub.Domain;
 /// </summary>
 public static class ExecutionProviderTokens
 {
-    /// <summary>Primary CLI tags including <c>auto</c>.</summary>
-    public static IReadOnlyList<string> CliTags { get; } =
-    [
-        "auto",
-        "cpu",
-        "dnnl",
-        "directml",
-        "trt-rtx",
-        "cuda",
-        "tensorrt",
-        "migraphx",
-        "qnn",
-        "vitisai",
-        "openvino",
-        "openvino-catalog",
-        "coreml",
-    ];
+    public static IReadOnlyList<string> CliTags { get; } = BuildCliTags();
 
-    /// <summary>
-    /// All tokens accepted by CLI parsers (primary tags + aliases), excluding <c>auto</c>.
-    /// </summary>
-    public static IReadOnlyList<string> AcceptedProviderTokens { get; } =
-    [
-        "cpu",
-        "dnnl",
-        "onednn",
-        "onnxruntime-dnnl",
-        "directml",
-        "dml",
-        "trt-rtx",
-        "tensorrt-rtx",
-        "cuda",
-        "tensorrt",
-        "migraphx",
-        "rocm",
-        "qnn",
-        "vitisai",
-        "openvino",
-        "openvino-catalog",
-        "coreml",
-    ];
+    public static IReadOnlyList<string> AcceptedProviderTokens { get; } = BuildAcceptedTokens();
 
-    /// <summary>
-    /// Tokens accepted by <c>--execution-provider</c> including <c>auto</c> and aliases.
-    /// </summary>
     public static IReadOnlyList<string> CliAcceptedTokens { get; } =
         ["auto", .. AcceptedProviderTokens];
 
@@ -167,4 +126,27 @@ public static class ExecutionProviderTokens
             ExecutionProviderKind.Migraphx => ["rocm"],
             _ => []
         };
+
+    private static IReadOnlyList<string> BuildCliTags()
+    {
+        var tags = new List<string> { "auto" };
+        foreach (ExecutionProviderKind kind in Enum.GetValues<ExecutionProviderKind>())
+        {
+            if (kind == default) continue;
+            tags.Add(ToCanonicalTag(kind));
+        }
+        return tags;
+    }
+
+    private static IReadOnlyList<string> BuildAcceptedTokens()
+    {
+        var tokens = new List<string>();
+        foreach (ExecutionProviderKind kind in Enum.GetValues<ExecutionProviderKind>())
+        {
+            if (kind == default) continue;
+            tokens.Add(ToCanonicalTag(kind));
+            tokens.AddRange(GetAliases(kind));
+        }
+        return tokens;
+    }
 }
