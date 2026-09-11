@@ -592,7 +592,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             CreateRegistryWithKnownSha256("0000000000000000000000000000000000000000000000000000000000000000");
         var store = new LocalModelCacheRecordStore(storagePaths);
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string cachedBenchmarkPath = Path.Combine(Path.Combine(cacheRoot, "onnx"), "model.onnx");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
         await File.WriteAllTextAsync(cachedBenchmarkPath, "wrong-content", TestContext.Current.CancellationToken);
 
@@ -660,7 +660,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             CreateRegistryWithKnownSha256(expectedSha);
         var store = new LocalModelCacheRecordStore(storagePaths);
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string cachedBenchmarkPath = Path.Combine(Path.Combine(cacheRoot, "onnx"), "model.onnx");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
         await File.WriteAllTextAsync(cachedBenchmarkPath, "hello", TestContext.Current.CancellationToken);
         // tokenizer.json is also a required download file in the manifest; must exist for verification.
@@ -695,7 +695,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             CreateRegistryWithOptionalVariantHashes(expectedSha, fp16Hash);
         var store = new LocalModelCacheRecordStore(storagePaths);
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string cachedBenchmarkPath = Path.Combine(Path.Combine(cacheRoot, "onnx"), "model.onnx");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
         await File.WriteAllTextAsync(cachedBenchmarkPath, "hello", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(Path.Join(cacheRoot, "tokenizer.json"), "{}", TestContext.Current.CancellationToken);
