@@ -329,6 +329,109 @@ public sealed class TrackdubTuiTests : IDisposable
         Assert.Equal(mediaPath, detail.SourceMediaPath);
     }
 
+    [Fact]
+    public async Task ProjectHandler_TryCreateAsync_AcceptsQuotedMediaPath()
+    {
+        string tempDir = CreateTempProjectDir();
+        string mediaPath = Path.Join(tempDir, "video.mp4");
+        await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
+        string quotedMediaPath = $"\"{mediaPath}\"";
+        string outputDirectory = Path.Join(tempDir, "quoted.trackdub");
+
+        using TrackdubSessionFactory factory = CreateFactory();
+        (int exitCode, ProjectHandler.ProjectCreateResult? result) = await ProjectHandler.TryCreateAsync(
+            factory,
+            quotedMediaPath,
+            projectName: null,
+            $"'{outputDirectory}'",
+            CancellationToken.None);
+
+        Assert.Equal(Program.ExitSuccess, exitCode);
+        Assert.NotNull(result);
+        Assert.Equal(outputDirectory, result!.ProjectPath);
+        Assert.True(File.Exists(result.SourceMediaPath));
+        Assert.Equal(Path.GetFullPath(mediaPath), Path.GetFullPath(result.SourceMediaPath!));
+    }
+
+    [Fact]
+    public async Task ProjectHandler_TryLoadDetail_AcceptsQuotedProjectPath()
+    {
+        string tempDir = CreateTempProjectDir();
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
+        Directory.CreateDirectory(projectDir);
+        string mediaPath = Path.Join(tempDir, "video.mp4");
+        await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
+
+        using TrackdubSessionFactory factory = CreateFactory();
+        await using (TrackdubSession session = factory.CreateSession(projectDir))
+        {
+            await session.Workspace.CreateMediaSpineAsync(
+                new CreateTranscriptProjectRequest("sample", mediaPath),
+                CancellationToken.None);
+        }
+
+        ProjectHandler.ProjectDetailSnapshot? detail = await ProjectHandler.TryLoadDetailAsync(
+            factory,
+            $"\"{projectDir}\"",
+            CancellationToken.None);
+
+        Assert.NotNull(detail);
+        Assert.Equal("sample", detail!.ProjectName);
+        Assert.Equal(Path.GetFullPath(projectDir), Path.GetFullPath(detail.ProjectPath!));
+    }
+
+    [Fact]
+    public async Task HomeTuiScreen_CreateProject_AcceptsQuotedMediaPath()
+    {
+        string tempDir = CreateTempProjectDir();
+        string mediaPath = Path.Join(tempDir, "video.mp4");
+        await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
+
+        using TrackdubSessionFactory factory = CreateFactory();
+        var console = new TestConsole();
+        console.Profile.Capabilities.Interactive = true;
+        console.Input.PushTextWithEnter($"\"{mediaPath}\"");
+        console.Input.PushTextWithEnter(string.Empty);
+
+        var context = new TrackdubTuiContext(factory, console, CancellationToken.None);
+        var screen = new HomeTuiScreen();
+
+        bool handled = await screen.HandleKeyAsync(
+            new ConsoleKeyInfo('n', ConsoleKey.N, shift: false, alt: false, control: false),
+            context);
+
+        Assert.True(handled);
+        Assert.False(string.IsNullOrWhiteSpace(context.ProjectPath));
+        Assert.Contains("Created and opened", context.StatusMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain('"', context.ProjectPath);
+    }
+
+    [Fact]
+    public async Task TryRenderScreenAsync_InvalidOperationException_SetsStatusWithoutThrowing()
+    {
+        using TrackdubSessionFactory factory = CreateFactory();
+        var console = new TestConsole();
+        var context = new TrackdubTuiContext(factory, console, CancellationToken.None);
+
+        await TrackdubTuiApp.TryRenderScreenAsync(new ThrowingTuiScreen(), context);
+
+        Assert.Equal("pack schema is invalid", context.StatusMessage);
+        Assert.Contains("pack schema is invalid", console.Output);
+    }
+
+    private sealed class ThrowingTuiScreen : ITuiScreen
+    {
+        public TuiScreenId Id => TuiScreenId.Models;
+
+        public string Title => "Throw";
+
+        public Task RenderAsync(TrackdubTuiContext context) =>
+            throw new InvalidOperationException("pack schema is invalid");
+
+        public Task<bool> HandleKeyAsync(ConsoleKeyInfo key, TrackdubTuiContext context) =>
+            Task.FromResult(false);
+    }
+
     private sealed class FakeModelInventoryService : IModelInventoryService
     {
         public Task<IReadOnlyList<ModelInventoryEntry>> GetAllAsync(

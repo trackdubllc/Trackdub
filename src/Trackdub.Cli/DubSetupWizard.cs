@@ -39,13 +39,14 @@ internal static class DubSetupWizard
             cancellationToken).ConfigureAwait(false);
         await prompts.WriteLineAsync(string.Empty, cancellationToken).ConfigureAwait(false);
 
-        string? mediaPath = request.MediaPath;
+        string? mediaPath = UserPathText.NormalizeOptional(request.MediaPath);
         if (string.IsNullOrWhiteSpace(mediaPath))
         {
-            mediaPath = await prompts.PromptRequiredAsync(
-                "Setup stage 1/5 - Source media",
-                "Source media path",
-                cancellationToken).ConfigureAwait(false);
+            mediaPath = UserPathText.NormalizeOptional(
+                await prompts.PromptRequiredAsync(
+                    "Setup stage 1/5 - Source media",
+                    "Source media path",
+                    cancellationToken).ConfigureAwait(false));
 
             if (mediaPath is null)
             {
@@ -77,14 +78,15 @@ internal static class DubSetupWizard
                 cancellationToken).ConfigureAwait(false);
         }
 
-        string? outputDirectory = request.OutputDirectory;
+        string? outputDirectory = UserPathText.NormalizeOptional(request.OutputDirectory);
         if (string.IsNullOrWhiteSpace(outputDirectory))
         {
-            outputDirectory = await prompts.PromptOptionalAsync(
-                "Setup stage 4/5 - Project output",
-                "Output directory",
-                "next to media as <media-stem>.trackdub",
-                cancellationToken).ConfigureAwait(false);
+            outputDirectory = UserPathText.NormalizeOptional(
+                await prompts.PromptOptionalAsync(
+                    "Setup stage 4/5 - Project output",
+                    "Output directory",
+                    "next to media as <media-stem>.trackdub",
+                    cancellationToken).ConfigureAwait(false));
         }
 
         string[] modelOverrides = request.ModelOverrides.Length > 0

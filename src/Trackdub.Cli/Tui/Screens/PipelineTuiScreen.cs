@@ -177,10 +177,10 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 
     private static async Task<bool> OpenProjectAsync(TrackdubTuiContext context)
     {
-        string path = context.Console.Prompt(
-            new TextPrompt<string>("Project directory:")
-                .DefaultValue(context.ProjectPath ?? string.Empty)
-                .AllowEmpty());
+        string path = TuiPathPrompt.Ask(
+            context.Console,
+            "Project directory:",
+            context.ProjectPath ?? string.Empty);
 
         if (string.IsNullOrWhiteSpace(path))
         {

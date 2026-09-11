@@ -28,7 +28,7 @@ internal static class RunStageHandler
         TextWriter output,
         CancellationToken cancellationToken)
     {
-        string resolvedProjectPath = Path.GetFullPath(projectPath);
+        string resolvedProjectPath = Path.GetFullPath(UserPathText.Normalize(projectPath));
         if (!Directory.Exists(resolvedProjectPath))
         {
             CliErrorReporter.ReportValidationError(

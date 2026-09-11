@@ -105,7 +105,7 @@ internal static class CliParseHelpers
             return builder;
         }
 
-        string resolvedDirectory = Path.GetFullPath(modelDirectory);
+        string resolvedDirectory = Path.GetFullPath(UserPathText.Normalize(modelDirectory));
         try
         {
             Directory.CreateDirectory(resolvedDirectory);
