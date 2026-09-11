@@ -65,6 +65,66 @@ internal static class DubCommand
             DefaultValueFactory = _ => false,
         };
 
+        var timbrePolishOption = new Option<bool?>("--timbre-polish")
+        {
+            Description = "Apply room-tone convolution to dubbed speech to match the acoustic environment (default: true)",
+        };
+
+        var noTimbrePolishOption = new Option<bool>("--no-timbre-polish")
+        {
+            Description = "Disable room-tone convolution (negates the default-on --timbre-polish)",
+        };
+
+        var restorePanOption = new Option<bool?>("--restore-pan")
+        {
+            Description = "Restore the original stereo pan position of each speaker in the dubbed mix (default: false)",
+        };
+
+        var matchLoudnessOption = new Option<bool?>("--match-loudness")
+        {
+            Description = "Measure source loudness and normalize the dubbed mix to match it (default: false)",
+        };
+
+        var voiceOption = new Option<string[]>("--voice")
+        {
+            Description = "Assign a specific voice to a speaker in format SPEAKER_ID:voice_id (repeatable, e.g., --voice SPEAKER_00:af_bella)",
+            AllowMultipleArgumentsPerToken = true,
+        };
+        voiceOption.Arity = ArgumentArity.ZeroOrMore;
+
+        var subtitleFormatOption = new Option<string[]>("--subtitle-format")
+        {
+            Description = "Subtitle format(s) to include: srt, vtt, ass, or none (repeatable; default: srt)",
+            AllowMultipleArgumentsPerToken = true,
+        };
+        subtitleFormatOption.Arity = ArgumentArity.ZeroOrMore;
+        subtitleFormatOption.AcceptOnlyFromAmong("srt", "vtt", "ass", "none");
+
+        var subtitleSourceOption = new Option<string?>("--subtitle-source")
+        {
+            Description = "Which transcript to use for subtitles: translated (default), transcript, bilingual",
+        };
+        subtitleSourceOption.AcceptOnlyFromAmong("translated", "transcript", "bilingual");
+
+        var burnInSubtitlesOption = new Option<bool>("--burn-in")
+        {
+            Description = "Burn subtitles into the exported video (default: false)",
+            DefaultValueFactory = _ => false,
+        };
+
+        var videoEncoderOption = new Option<string?>("--video-encoder")
+        {
+            Description = $"Video encoder preference: {string.Join(", ", VideoEncoderPreferenceSettings.AutoKey, VideoEncoderPreferenceSettings.SoftwareKey, VideoEncoderPreferenceSettings.NvencKey, VideoEncoderPreferenceSettings.QsvKey, VideoEncoderPreferenceSettings.AmfKey, VideoEncoderPreferenceSettings.VideoToolboxKey, VideoEncoderPreferenceSettings.VaapiKey)} (default: auto)",
+        };
+        videoEncoderOption.AcceptOnlyFromAmong(
+            VideoEncoderPreferenceSettings.AutoKey,
+            VideoEncoderPreferenceSettings.SoftwareKey,
+            VideoEncoderPreferenceSettings.NvencKey,
+            VideoEncoderPreferenceSettings.QsvKey,
+            VideoEncoderPreferenceSettings.AmfKey,
+            VideoEncoderPreferenceSettings.VideoToolboxKey,
+            VideoEncoderPreferenceSettings.VaapiKey);
+
         var presetOption = new Option<string?>("--preset")
         {
             Description = "Named preset to load pipeline settings from",
@@ -112,6 +172,15 @@ internal static class DubCommand
             exportFormatOption,
             enableAsrTextRefinementOption,
             voiceCloneOption,
+            timbrePolishOption,
+            noTimbrePolishOption,
+            restorePanOption,
+            matchLoudnessOption,
+            voiceOption,
+            subtitleFormatOption,
+            subtitleSourceOption,
+            burnInSubtitlesOption,
+            videoEncoderOption,
             presetOption,
             inputDirOption,
             inputGlobOption,
@@ -129,11 +198,31 @@ internal static class DubCommand
             string? exportFormat = parseResult.GetValue(exportFormatOption);
             bool? enableAsrTextRefinement = parseResult.GetValue(enableAsrTextRefinementOption);
             bool voiceClone = parseResult.GetValue(voiceCloneOption);
+            bool timbrePolish = !parseResult.GetValue(noTimbrePolishOption) && (parseResult.GetValue(timbrePolishOption) ?? true);
+            bool restorePan = parseResult.GetValue(restorePanOption) ?? false;
+            bool matchLoudness = parseResult.GetValue(matchLoudnessOption) ?? false;
+            string[] voiceOverrideTokens = parseResult.GetValue(voiceOption) ?? [];
+            string[] subtitleFormatTokens = parseResult.GetValue(subtitleFormatOption) ?? [];
+            string? subtitleSource = parseResult.GetValue(subtitleSourceOption);
+            bool burnInSubtitles = parseResult.GetValue(burnInSubtitlesOption);
+            string? videoEncoderKey = parseResult.GetValue(videoEncoderOption);
             string? presetName = parseResult.GetValue(presetOption);
             string? inputDir = parseResult.GetValue(inputDirOption);
             string? inputGlob = parseResult.GetValue(inputGlobOption);
             bool recursive = parseResult.GetValue(recursiveOption);
             bool continueOnError = parseResult.GetValue(continueOnErrorOption);
+
+            Dictionary<string, string>? voiceOverrides = CliModelOverrides.ParseVoiceOverrides(voiceOverrideTokens);
+            if (voiceOverrides is null)
+            {
+                return Program.ExitArgumentError;
+            }
+
+            IReadOnlyList<string>? subtitleFormats = subtitleFormatTokens.Length == 0
+                ? null
+                : subtitleFormatTokens.Any(f => f.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    ? (IReadOnlyList<string>)[]
+                    : subtitleFormatTokens;
 
             bool isBatchMode = inputDir is not null || inputGlob is not null;
 
@@ -219,6 +308,14 @@ internal static class DubCommand
                     ExportFormat = exportFormat,
                     EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
                     UseVoiceCloning = voiceClone,
+                    ApplyTimbrePolish = timbrePolish,
+                    RestoreOriginalPan = restorePan,
+                    MatchOriginalLoudness = matchLoudness,
+                    VoiceAssignmentOverrides = voiceOverrides.Count > 0 ? voiceOverrides : null,
+                    SubtitleFormats = subtitleFormats,
+                    SubtitleSource = subtitleSource,
+                    BurnInSubtitles = burnInSubtitles,
+                    VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
                 };
 
                 // Build BatchOptions
@@ -342,6 +439,14 @@ internal static class DubCommand
                             ExportFormat = exportFormat,
                             EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
                             UseVoiceCloning = voiceClone,
+                            ApplyTimbrePolish = timbrePolish,
+                            RestoreOriginalPan = restorePan,
+                            MatchOriginalLoudness = matchLoudness,
+                            VoiceAssignmentOverrides = voiceOverrides.Count > 0 ? voiceOverrides : null,
+                            SubtitleFormats = subtitleFormats,
+                            SubtitleSource = subtitleSource,
+                            BurnInSubtitles = burnInSubtitles,
+                            VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
                         },
                         progress,
                         Console.Out,

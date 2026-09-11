@@ -37,4 +37,38 @@ internal static class CliModelOverrides
 
         return result;
     }
+
+    internal static Dictionary<string, string>? ParseVoiceOverrides(string[] voiceOverrides)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (string entry in voiceOverrides)
+        {
+            int colonIndex = entry.IndexOf(':');
+            if (colonIndex <= 0 || colonIndex >= entry.Length - 1)
+            {
+                CliErrorReporter.ReportValidationError(
+                    ErrorCode.InvalidArgument,
+                    $"Invalid --voice format: '{entry}'. Expected format: SPEAKER_ID:voice_id (e.g., SPEAKER_00:af_bella)",
+                    "--voice");
+                return null;
+            }
+
+            string speakerId = entry[..colonIndex].Trim();
+            string voiceId = entry[(colonIndex + 1)..].Trim();
+
+            if (string.IsNullOrEmpty(speakerId) || string.IsNullOrEmpty(voiceId))
+            {
+                CliErrorReporter.ReportValidationError(
+                    ErrorCode.InvalidArgument,
+                    $"Invalid --voice format: '{entry}'. Both speaker ID and voice ID must be non-empty.",
+                    "--voice");
+                return null;
+            }
+
+            result[speakerId] = voiceId;
+        }
+
+        return result;
+    }
 }
