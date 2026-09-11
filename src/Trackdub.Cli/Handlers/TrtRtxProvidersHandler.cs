@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using Trackdub.Application.Runtime;
-using Trackdub.Composition.Headless;
 using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
@@ -88,9 +87,8 @@ internal static class TrtRtxProvidersHandler
                 await settingsService.SaveAsync(settings, cancellationToken).ConfigureAwait(false);
             }
 
-            IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
-            await HeadlessPersistedEpLicenses
-                .PersistNvidiaTensorRtRtxAcceptanceAsync(storagePaths, cancellationToken)
+            await factory
+                .PersistNvidiaTensorRtRtxLicenseAsync(cancellationToken)
                 .ConfigureAwait(false);
             await progressOutput.WriteLineAsync(
                 $"Accepted NVIDIA TensorRT RTX license flag in studio settings. Reference: {LicenseReference}")

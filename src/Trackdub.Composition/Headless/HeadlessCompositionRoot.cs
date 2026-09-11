@@ -48,12 +48,10 @@ public static class HeadlessCompositionRoot
         {
             string userDataRoot = options.LogDirectory
                 ?? options.ModelDirectory
-                ?? options.ModelCacheDirectory
-                ?? throw new InvalidOperationException("At least one storage directory must be provided.");
+                ?? options.ModelCacheDirectory!;
             string userCacheRoot = options.ModelDirectory
                 ?? options.ModelCacheDirectory
-                ?? options.LogDirectory
-                ?? throw new InvalidOperationException("At least one storage directory must be provided.");
+                ?? options.LogDirectory!;
 
             var storageOptions = new TrackdubStorageOptions(
                 UserDataRoot: userDataRoot,
@@ -86,9 +84,12 @@ public static class HeadlessCompositionRoot
         // Step 4: Replace settings service with in-memory headless variant.
         // Hardware pins stay process-local. Vendor EP license flags seed from disk
         // so CLI `providers trt-rtx install --accept-license` survives to the next dub.
-        StudioSettings persistedSettings = HeadlessPersistedEpLicenses.Load(options);
-        services.Replace(ServiceDescriptor.Singleton<IStudioSettingsService>(
-            new InMemoryStudioSettingsService(options, persistedSettings)));
+        services.Replace(ServiceDescriptor.Singleton<IStudioSettingsService>(sp =>
+        {
+            IAppStoragePaths storagePaths = sp.GetRequiredService<IAppStoragePaths>();
+            StudioSettings persisted = HeadlessPersistedEpLicenses.Load(storagePaths);
+            return new InMemoryStudioSettingsService(options, persisted);
+        }));
 
         // Step 5: Wire explicit FFmpeg/FFprobe paths into media services when configured.
         // AddTrackdub() registers these with null paths (PATH/cache discovery). Headless hosts

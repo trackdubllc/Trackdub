@@ -6,7 +6,7 @@ namespace Trackdub.Composition.Tests.Headless;
 
 public sealed class HeadlessPersistedEpLicensesTests : IDisposable
 {
-    private readonly string _root = Path.Combine(
+    private readonly string _root = Path.Join(
         Path.GetTempPath(),
         "TrackdubTests",
         "ep-license-" + Guid.NewGuid().ToString("N"));
@@ -25,7 +25,11 @@ public sealed class HeadlessPersistedEpLicensesTests : IDisposable
                 Directory.Delete(_root, recursive: true);
             }
         }
-        catch
+        catch (IOException)
+        {
+            // Best-effort temp cleanup.
+        }
+        catch (UnauthorizedAccessException)
         {
             // Best-effort temp cleanup.
         }

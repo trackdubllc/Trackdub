@@ -23,12 +23,10 @@ public static class HeadlessPersistedEpLicenses
 
         string userDataRoot = options.LogDirectory
             ?? options.ModelDirectory
-            ?? options.ModelCacheDirectory
-            ?? throw new InvalidOperationException("At least one storage directory must be provided.");
+            ?? options.ModelCacheDirectory!;
         string userCacheRoot = options.ModelDirectory
             ?? options.ModelCacheDirectory
-            ?? options.LogDirectory
-            ?? throw new InvalidOperationException("At least one storage directory must be provided.");
+            ?? options.LogDirectory!;
 
         return new TrackdubStoragePaths(
             new TrackdubStorageOptions(
@@ -46,7 +44,7 @@ public static class HeadlessPersistedEpLicenses
     {
         ArgumentNullException.ThrowIfNull(storagePaths);
         JsonStudioSettingsService disk = CreateDiskStore(storagePaths);
-        return disk.LoadAsync(CancellationToken.None).GetAwaiter().GetResult();
+        return disk.LoadAsync(CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
     }
 
     public static async Task PersistNvidiaTensorRtRtxAcceptanceAsync(
@@ -68,15 +66,5 @@ public static class HeadlessPersistedEpLicenses
     }
 
     private static JsonStudioSettingsService CreateDiskStore(IAppStoragePaths storagePaths) =>
-        new(ToTrackdubStoragePaths(storagePaths));
-
-    private static TrackdubStoragePaths ToTrackdubStoragePaths(IAppStoragePaths storagePaths) =>
-        storagePaths as TrackdubStoragePaths
-        ?? new TrackdubStoragePaths(
-            new TrackdubStorageOptions(
-                storagePaths.UserDataRoot,
-                storagePaths.UserCacheRoot,
-                storagePaths.SharedAssetRoot,
-                storagePaths.IsPortable,
-                storagePaths.ModelCacheDirectory));
+        new(storagePaths);
 }
