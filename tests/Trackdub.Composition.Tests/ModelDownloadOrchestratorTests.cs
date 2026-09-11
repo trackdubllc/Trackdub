@@ -248,6 +248,40 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task VerifyAsync_does_not_bump_CachedAtUtc_when_identity_sha_already_matches()
+    {
+        const string expectedSha = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        DateTimeOffset cachedAt = new(2024, 1, 2, 3, 4, 5, TimeSpan.Zero);
+        (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
+            CreateRegistryWithKnownSha256(expectedSha);
+        var store = new LocalModelCacheRecordStore(storagePaths);
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
+        await File.WriteAllTextAsync(cachedBenchmarkPath, "hello", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Join(cacheRoot, "tokenizer.json"), "{}", TestContext.Current.CancellationToken);
+        await store.SaveAsync(
+            [
+                new LocalModelCacheRecord(
+                    "example/model",
+                    cacheRoot,
+                    "main",
+                    expectedSha,
+                    cachedAt)
+            ],
+            TestContext.Current.CancellationToken);
+
+        var orchestrator = new ModelDownloadOrchestrator(registry, store, new StubDownloader(), storagePaths);
+        ModelVerificationResult verification = await orchestrator.VerifyAsync("example/model", TestContext.Current.CancellationToken);
+
+        Assert.True(verification.HashMatch, verification.FailureReason);
+        LocalModelCacheRecord record = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(expectedSha, record.Sha256);
+        Assert.Equal(cachedAt, record.CachedAtUtc);
+        Assert.False(record.IntegrityFailed);
+    }
+
+    [Fact]
     public async Task DownloadAsync_marks_corrupt_when_sidecar_hash_fails()
     {
         string entryHash = Sha256Hex("downloaded:example/model:onnx/model.onnx");

@@ -608,7 +608,9 @@ public sealed class ModelDownloadOrchestrator(
                     {
                         Revision = string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
                         Sha256 = identitySha256,
-                        CachedAtUtc = DateTimeOffset.UtcNow,
+                        CachedAtUtc = string.Equals(existing.Sha256, identitySha256, StringComparison.OrdinalIgnoreCase)
+                            ? existing.CachedAtUtc
+                            : DateTimeOffset.UtcNow,
                         IntegrityFailed = false
                     });
                 return updated;
