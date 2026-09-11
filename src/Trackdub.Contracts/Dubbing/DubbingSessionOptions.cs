@@ -88,4 +88,28 @@ public sealed record DubbingSessionOptions
     /// Defaults to false.
     /// </summary>
     public bool MatchOriginalLoudness { get; init; }
+
+    /// <summary>
+    /// Subtitle formats to include in the export. Null uses the pipeline default (SRT).
+    /// Pass an empty list to suppress all subtitles.
+    /// Accepted values: "srt", "vtt", "ass".
+    /// </summary>
+    public IReadOnlyList<string>? SubtitleFormats { get; init; }
+
+    /// <summary>
+    /// Which transcript to use for subtitle text.
+    /// Accepted values: "translated" (default), "transcript", "bilingual".
+    /// </summary>
+    public string? SubtitleSource { get; init; }
+
+    /// <summary>
+    /// When true, burns subtitles into the exported video.
+    /// Defaults to false.
+    /// </summary>
+    public bool BurnInSubtitles { get; init; }
+
+    /// <summary>
+    /// Preferred video encoder for the export. Defaults to Auto.
+    /// </summary>
+    public VideoEncoderPreference VideoEncoder { get; init; }
 }
