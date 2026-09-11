@@ -427,7 +427,7 @@ public sealed class BundledModelManifestRegistry
         return variants.Values.ToArray();
     }
 
-    private static string AppendSourceTreeToolHint(string manifestPath, string message)
+    internal static string AppendSourceTreeToolHint(string manifestPath, string message)
     {
         string normalized = manifestPath.Replace('\\', '/');
         if (!normalized.Contains("/src/Trackdub.Inference/Runtime/ModelManifest/", StringComparison.OrdinalIgnoreCase))
