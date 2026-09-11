@@ -106,7 +106,7 @@ internal static class DubCommand
         };
         subtitleSourceOption.AcceptOnlyFromAmong("translated", "transcript", "bilingual");
 
-        var burnInSubtitlesOption = new Option<bool>(new[] { "--burn-in-subtitles", "--burn-in" })
+        var burnInSubtitlesOption = new Option<bool>("--burn-in")
         {
             Description = "Burn subtitles into the exported video (default: false)",
             DefaultValueFactory = _ => false,
