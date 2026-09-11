@@ -57,28 +57,28 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
         if (!string.IsNullOrWhiteSpace(cudaPath))
         {
             yield return cudaPath;
-            yield return Path.Combine(cudaPath, "bin");
-            yield return Path.Combine(cudaPath, "bin", "x64");
+            yield return Path.Join(cudaPath, "bin");
+            yield return Path.Join(cudaPath, "bin", "x64");
         }
 
         if (OperatingSystem.IsWindows())
         {
             string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string cudaRoot = Path.Combine(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA");
+            string cudaRoot = Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA");
             if (Directory.Exists(cudaRoot))
             {
                 foreach (string versionDirectory in Directory.EnumerateDirectories(cudaRoot))
                 {
-                    yield return Path.Combine(versionDirectory, "bin");
-                    yield return Path.Combine(versionDirectory, "bin", "x64");
+                    yield return Path.Join(versionDirectory, "bin");
+                    yield return Path.Join(versionDirectory, "bin", "x64");
                 }
             }
 
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             foreach (string pythonRoot in new[]
                      {
-                         Path.Combine(appData, "Python"),
-                         Path.Combine(appData, "Local", "Programs", "Python"),
+                         Path.Join(appData, "Python"),
+                         Path.Join(appData, "Local", "Programs", "Python"),
                      })
             {
                 if (!Directory.Exists(pythonRoot))
@@ -89,9 +89,9 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
                 foreach (string pythonVersionDir in Directory.EnumerateDirectories(pythonRoot))
                 {
                     // System/venv layout: Python\Python3X\Lib\site-packages
-                    yield return Path.Combine(pythonVersionDir, "Lib", "site-packages", "nvidia", "cuda_runtime", "bin");
+                    yield return Path.Join(pythonVersionDir, "Lib", "site-packages", "nvidia", "cuda_runtime", "bin");
                     // pip --user layout: %APPDATA%\Python\Python3X\site-packages (no Lib prefix)
-                    yield return Path.Combine(pythonVersionDir, "site-packages", "nvidia", "cuda_runtime", "bin");
+                    yield return Path.Join(pythonVersionDir, "site-packages", "nvidia", "cuda_runtime", "bin");
                 }
             }
         }
