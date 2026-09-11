@@ -8,11 +8,50 @@ using Trackdub.Domain.StageRuns;
 
 namespace Trackdub.Cli.Tui.Screens;
 
-internal sealed class PipelineTuiScreen : ITuiScreen
+internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 {
+    private const string BackChoice      = "__back__";
+    private const string RunChoice       = "__run__";
+    private const string ConfigureChoice = "__configure__";
+    private const string DefaultsChoice  = "__run_defaults__";
+    private const string YesChoice       = "__yes__";
+    private const string NoChoice        = "__no__";
+    private const string VideoChoice     = "__video__";
+    private const string EnterAliasChoice = "__enter_alias__";
+
     public TuiScreenId Id => TuiScreenId.Pipeline;
 
     public string Title => "Pipeline";
+
+    public bool HasOverlay => _picker is not null;
+
+    public void ClearOverlay()
+    {
+        _picker = null;
+        _pickerHandler = null;
+    }
+
+    private TuiInlinePicker? _picker;
+    private Func<string, Task<bool>>? _pickerHandler;
+
+    // Wizard accumulation state (reset at start of each wizard flow)
+    private bool _wVoiceClone;
+    private bool _wTimbrePolish = true;
+    private bool _wRestorePan;
+    private bool _wMatchLoudness;
+    private bool _wAsrRefinement;
+    private bool _wBurnIn;
+    private bool _wForceRerun;
+    private string? _wExportFormat;
+    private string? _wSubtitleSource;
+    private IReadOnlyList<string>? _wSubtitleFormats;
+    private string? _wVideoEncoder;
+    private string? _wTargetLanguageOverride;
+    private string? _wStageName;
+    private string? _wModelAlias;
+
+    // Snapshot cached for use by wizard handlers that need target-language state
+    private PipelineHandler.PipelineSnapshot? _cachedSnapshot;
 
     public async Task RenderAsync(TrackdubTuiContext context)
     {
@@ -28,6 +67,8 @@ internal sealed class PipelineTuiScreen : ITuiScreen
         PipelineHandler.PipelineSnapshot? snapshot = await PipelineHandler
             .TryLoadSnapshotAsync(context.Factory, context.ProjectPath, context.CancellationToken)
             .ConfigureAwait(false);
+
+        _cachedSnapshot = snapshot;
 
         if (snapshot is null)
         {
@@ -70,19 +111,69 @@ internal sealed class PipelineTuiScreen : ITuiScreen
 
         context.Console.Write(table);
         context.Console.MarkupLine(
-            "[grey]Pipeline actions:[/] [white]o[/] open  [white]s[/] run stage  [white]g[/] run all");
+            "[grey]Pipeline actions:[/] [white]o[/] open  [white]s[/] run stage  [white]g[/] run all (configurable)");
+
+        _picker?.Render(context.Console);
     }
 
     public async Task<bool> HandleKeyAsync(ConsoleKeyInfo key, TrackdubTuiContext context)
     {
+        if (_picker is not null)
+        {
+            return await TryHandlePickerKeyAsync(key, context).ConfigureAwait(false);
+        }
+
         return key.Key switch
         {
             ConsoleKey.O => await OpenProjectAsync(context).ConfigureAwait(false),
-            ConsoleKey.S => await RunSelectedStageAsync(context).ConfigureAwait(false),
-            ConsoleKey.G => await RunFullPipelineAsync(context).ConfigureAwait(false),
+            ConsoleKey.S => await BeginStagePickerAsync(context).ConfigureAwait(false),
+            ConsoleKey.G => await BeginRunAllMenuAsync(context).ConfigureAwait(false),
             _ => false,
         };
     }
+
+    private async Task<bool> TryHandlePickerKeyAsync(ConsoleKeyInfo key, TrackdubTuiContext context)
+    {
+        if (_picker is null)
+        {
+            return false;
+        }
+
+        switch (key.Key)
+        {
+            case ConsoleKey.UpArrow:
+                _picker.MoveUp();
+                return true;
+            case ConsoleKey.DownArrow:
+                _picker.MoveDown();
+                return true;
+            case ConsoleKey.Escape:
+                ClearOverlay();
+                return true;
+            case ConsoleKey.C:
+                ClearOverlay();
+                return true;
+            case ConsoleKey.Enter:
+            {
+                TuiInlinePicker picker = _picker;
+                Func<string, Task<bool>>? handler = _pickerHandler;
+                ClearOverlay();
+                if (handler is not null)
+                {
+                    return await handler(picker.SelectedValue).ConfigureAwait(false);
+                }
+
+                return true;
+            }
+
+            default:
+                return true;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Open project
+    // -------------------------------------------------------------------------
 
     private static async Task<bool> OpenProjectAsync(TrackdubTuiContext context)
     {
@@ -115,23 +206,79 @@ internal sealed class PipelineTuiScreen : ITuiScreen
         return true;
     }
 
-    private static async Task<bool> RunSelectedStageAsync(TrackdubTuiContext context)
+    // -------------------------------------------------------------------------
+    // Stage run wizard: stage picker → model alias picker → fire
+    // -------------------------------------------------------------------------
+
+    private Task<bool> BeginStagePickerAsync(TrackdubTuiContext context)
     {
         if (!EnsureProjectOpen(context))
         {
-            return true;
+            return Task.FromResult(true);
         }
 
-        string stageName = context.Console.Prompt(
-            new SelectionPrompt<string>()
-                .Title("Run which stage?")
-                .PageSize(10)
-                .AddChoices(PipelineHandler.UiStages.Select(stage => stage.StageName))
-                .UseConverter(name =>
-                    PipelineHandler.UiStages.First(stage => stage.StageName == name).DisplayName));
+        var choices = new List<(string Value, string Label)> { (BackChoice, "Cancel") };
+        choices.AddRange(PipelineHandler.UiStages.Select(s => (s.StageName, s.DisplayName)));
+
+        _picker = new TuiInlinePicker("Run which stage?", choices);
+        _pickerHandler = choice => HandleStageChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private Task<bool> HandleStageChoiceAsync(TrackdubTuiContext context, string stageName)
+    {
+        if (stageName == BackChoice)
+        {
+            return Task.FromResult(true);
+        }
+
+        _wStageName = stageName;
+        _wModelAlias = null;
+        return BeginStageModelPickerAsync(context);
+    }
+
+    private Task<bool> BeginStageModelPickerAsync(TrackdubTuiContext context)
+    {
+        _picker = new TuiInlinePicker(
+            "Model alias override?",
+            [
+                (BackChoice,       "Back"),
+                ("__default__",    "Default model"),
+                (EnterAliasChoice, "Enter alias…"),
+            ]);
+        _pickerHandler = choice => HandleStageModelChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleStageModelChoiceAsync(TrackdubTuiContext context, string choice)
+    {
+        switch (choice)
+        {
+            case BackChoice:
+                return await BeginStagePickerAsync(context).ConfigureAwait(false);
+
+            case "__default__":
+                _wModelAlias = null;
+                break;
+
+            case EnterAliasChoice:
+                string alias = context.Console.Prompt(
+                    new TextPrompt<string>("Model alias (e.g. whisper-small):")
+                        .AllowEmpty());
+                _wModelAlias = string.IsNullOrWhiteSpace(alias) ? null : alias;
+                break;
+        }
+
+        return await FireStageRunAsync(context).ConfigureAwait(false);
+    }
+
+    private async Task<bool> FireStageRunAsync(TrackdubTuiContext context)
+    {
+        string stageName = _wStageName!;
+        string? modelAlias = _wModelAlias;
 
         int exitCode = await PipelineHandler
-            .RunStageAsync(context.Factory, context.ProjectPath!, stageName, context.CancellationToken)
+            .RunStageAsync(context.Factory, context.ProjectPath!, stageName, modelAlias, context.CancellationToken)
             .ConfigureAwait(false);
 
         context.SetStatus(exitCode == Program.ExitSuccess
@@ -140,20 +287,268 @@ internal sealed class PipelineTuiScreen : ITuiScreen
         return true;
     }
 
-    private static async Task<bool> RunFullPipelineAsync(TrackdubTuiContext context)
+    // -------------------------------------------------------------------------
+    // Full pipeline wizard: top menu → voice clone → export format →
+    //   subtitle format → subtitle source → advanced options → fire
+    // -------------------------------------------------------------------------
+
+    private Task<bool> BeginRunAllMenuAsync(TrackdubTuiContext context)
     {
         if (!EnsureProjectOpen(context))
         {
-            return true;
+            return Task.FromResult(true);
         }
 
-        if (!context.Console.Confirm("Run all pipeline stages for the open project?"))
+        _picker = new TuiInlinePicker(
+            "Run all — pipeline options",
+            [
+                (DefaultsChoice,  "Run now — all defaults"),
+                (ConfigureChoice, "Configure options first…"),
+                (BackChoice,      "Cancel"),
+            ]);
+        _pickerHandler = choice => HandleRunAllMenuChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleRunAllMenuChoiceAsync(TrackdubTuiContext context, string choice)
+    {
+        switch (choice)
         {
-            return true;
+            case BackChoice:
+                return true;
+
+            case DefaultsChoice:
+                return await FireFullPipelineAsync(context, new PipelineHandler.TuiPipelineRunOptions())
+                    .ConfigureAwait(false);
+
+            case ConfigureChoice:
+                ResetWizardState();
+
+                // If target language is unset, prompt before the wizard starts
+                if (string.IsNullOrWhiteSpace(_cachedSnapshot?.TargetLanguage))
+                {
+                    string lang = context.Console.Prompt(
+                        new TextPrompt<string>("Target language BCP-47 (e.g. es, fr, de):")
+                            .AllowEmpty());
+                    _wTargetLanguageOverride = string.IsNullOrWhiteSpace(lang) ? null : lang;
+                    if (_wTargetLanguageOverride is null)
+                    {
+                        context.SetStatus("Target language is required to run the pipeline.");
+                        return true;
+                    }
+                }
+
+                return await BeginVoiceClonePickerAsync(context).ConfigureAwait(false);
+
+            default:
+                return true;
+        }
+    }
+
+    private Task<bool> BeginVoiceClonePickerAsync(TrackdubTuiContext context)
+    {
+        _picker = new TuiInlinePicker(
+            "Clone speaker voices from source audio?",
+            [
+                (NoChoice,   "No — use stock voice packs (default)"),
+                (YesChoice,  "Yes — clone speaker voices"),
+                (BackChoice, "Back"),
+            ]);
+        _pickerHandler = choice => HandleVoiceCloneChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleVoiceCloneChoiceAsync(TrackdubTuiContext context, string choice)
+    {
+        if (choice == BackChoice)
+        {
+            return await BeginRunAllMenuAsync(context).ConfigureAwait(false);
         }
 
+        _wVoiceClone = choice == YesChoice;
+        return await BeginExportFormatPickerAsync(context).ConfigureAwait(false);
+    }
+
+    private Task<bool> BeginExportFormatPickerAsync(TrackdubTuiContext context)
+    {
+        _picker = new TuiInlinePicker(
+            "Export container format",
+            [
+                ("__auto__", "Auto — project default"),
+                ("mp4",      "MP4"),
+                ("mkv",      "MKV"),
+                (BackChoice, "Back"),
+            ]);
+        _pickerHandler = choice => HandleExportFormatChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleExportFormatChoiceAsync(TrackdubTuiContext context, string choice)
+    {
+        if (choice == BackChoice)
+        {
+            return await BeginVoiceClonePickerAsync(context).ConfigureAwait(false);
+        }
+
+        _wExportFormat = choice == "__auto__" ? null : choice;
+        return await BeginSubtitleFormatPickerAsync(context).ConfigureAwait(false);
+    }
+
+    private Task<bool> BeginSubtitleFormatPickerAsync(TrackdubTuiContext context)
+    {
+        _picker = new TuiInlinePicker(
+            "Subtitle format",
+            [
+                ("srt",      "SRT (default)"),
+                ("vtt",      "VTT"),
+                ("ass",      "ASS"),
+                ("__none__", "None — no subtitle file"),
+                ("__skip__", "Skip — keep project default"),
+                (BackChoice, "Back"),
+            ]);
+        _pickerHandler = choice => HandleSubtitleFormatChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleSubtitleFormatChoiceAsync(TrackdubTuiContext context, string choice)
+    {
+        if (choice == BackChoice)
+        {
+            return await BeginExportFormatPickerAsync(context).ConfigureAwait(false);
+        }
+
+        _wSubtitleFormats = choice switch
+        {
+            "__none__" => [],
+            "__skip__" => null,
+            _ => [choice],
+        };
+
+        return await BeginSubtitleSourcePickerAsync(context).ConfigureAwait(false);
+    }
+
+    private Task<bool> BeginSubtitleSourcePickerAsync(TrackdubTuiContext context)
+    {
+        _picker = new TuiInlinePicker(
+            "Subtitle transcript source",
+            [
+                ("translated", "Translated (default)"),
+                ("transcript", "Original transcript"),
+                ("bilingual",  "Bilingual (both)"),
+                (BackChoice,   "Back"),
+            ]);
+        _pickerHandler = choice => HandleSubtitleSourceChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleSubtitleSourceChoiceAsync(TrackdubTuiContext context, string choice)
+    {
+        if (choice == BackChoice)
+        {
+            return await BeginSubtitleFormatPickerAsync(context).ConfigureAwait(false);
+        }
+
+        _wSubtitleSource = choice == "translated" ? null : choice;
+        return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
+    }
+
+    private Task<bool> BeginAdvancedPickerAsync(TrackdubTuiContext context)
+    {
+        static string Toggle(bool on) => on ? "[green]on[/]" : "[grey]off[/]";
+
+        _picker = new TuiInlinePicker(
+            "Advanced options",
+            [
+                (RunChoice,        "Run now — use selected settings"),
+                ("__timbre__",     $"Timbre polish: {Toggle(_wTimbrePolish)}"),
+                ("__pan__",        $"Restore pan: {Toggle(_wRestorePan)}"),
+                ("__loudness__",   $"Match loudness: {Toggle(_wMatchLoudness)}"),
+                ("__asr__",        $"ASR text refinement: {Toggle(_wAsrRefinement)}"),
+                ("__burnin__",     $"Burn-in subtitles: {Toggle(_wBurnIn)}"),
+                ("__forcererun__", $"Force rerun: {Toggle(_wForceRerun)}"),
+                (VideoChoice,      $"Video encoder: {_wVideoEncoder ?? "auto"}"),
+                (BackChoice,       "Back"),
+            ]);
+        _pickerHandler = choice => HandleAdvancedChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleAdvancedChoiceAsync(TrackdubTuiContext context, string choice)
+    {
+        switch (choice)
+        {
+            case BackChoice:
+                return await BeginSubtitleSourcePickerAsync(context).ConfigureAwait(false);
+
+            case RunChoice:
+                return await FireFullPipelineAsync(
+                    context,
+                    new PipelineHandler.TuiPipelineRunOptions
+                    {
+                        UseVoiceCloning         = _wVoiceClone,
+                        ApplyTimbrePolish       = _wTimbrePolish,
+                        RestoreOriginalPan      = _wRestorePan,
+                        MatchOriginalLoudness   = _wMatchLoudness,
+                        EnableAsrTextRefinement = _wAsrRefinement,
+                        BurnInSubtitles         = _wBurnIn,
+                        ForceRerun              = _wForceRerun,
+                        ExportFormat            = _wExportFormat,
+                        SubtitleFormats         = _wSubtitleFormats,
+                        SubtitleSource          = _wSubtitleSource,
+                        VideoEncoderKey         = _wVideoEncoder,
+                        TargetLanguageOverride  = _wTargetLanguageOverride,
+                    }).ConfigureAwait(false);
+
+            case VideoChoice:
+                return await BeginVideoEncoderPickerAsync(context).ConfigureAwait(false);
+
+            // Toggles — flip state and re-open advanced picker
+            case "__timbre__":      _wTimbrePolish    = !_wTimbrePolish;    break;
+            case "__pan__":         _wRestorePan      = !_wRestorePan;      break;
+            case "__loudness__":    _wMatchLoudness   = !_wMatchLoudness;   break;
+            case "__asr__":         _wAsrRefinement   = !_wAsrRefinement;   break;
+            case "__burnin__":      _wBurnIn          = !_wBurnIn;          break;
+            case "__forcererun__":  _wForceRerun      = !_wForceRerun;      break;
+        }
+
+        return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
+    }
+
+    private Task<bool> BeginVideoEncoderPickerAsync(TrackdubTuiContext context)
+    {
+        _picker = new TuiInlinePicker(
+            "Video encoder",
+            [
+                ("auto",         "Auto (default)"),
+                ("nvenc",        "NVENC (NVIDIA)"),
+                ("qsv",          "QSV (Intel)"),
+                ("amf",          "AMF (AMD)"),
+                ("software",     "Software (CPU)"),
+                ("videotoolbox", "VideoToolbox (Apple)"),
+                ("vaapi",        "VAAPI (Linux GPU)"),
+                (BackChoice,     "Back"),
+            ]);
+        _pickerHandler = choice => HandleVideoEncoderChoiceAsync(context, choice);
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> HandleVideoEncoderChoiceAsync(TrackdubTuiContext context, string choice)
+    {
+        if (choice == BackChoice)
+        {
+            return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
+        }
+
+        _wVideoEncoder = choice == "auto" ? null : choice;
+        return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
+    }
+
+    private async Task<bool> FireFullPipelineAsync(
+        TrackdubTuiContext context,
+        PipelineHandler.TuiPipelineRunOptions options)
+    {
         int exitCode = await PipelineHandler
-            .RunFullPipelineAsync(context.Factory, context.ProjectPath!, context.CancellationToken)
+            .RunFullPipelineAsync(context.Factory, context.ProjectPath!, options, context.CancellationToken)
             .ConfigureAwait(false);
 
         context.SetStatus(exitCode == Program.ExitSuccess
@@ -161,6 +556,10 @@ internal sealed class PipelineTuiScreen : ITuiScreen
             : $"Pipeline run failed (exit {exitCode}).");
         return true;
     }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
 
     private static bool EnsureProjectOpen(TrackdubTuiContext context)
     {
@@ -171,6 +570,22 @@ internal sealed class PipelineTuiScreen : ITuiScreen
 
         context.SetStatus("Open a project first (press o).");
         return false;
+    }
+
+    private void ResetWizardState()
+    {
+        _wVoiceClone            = false;
+        _wTimbrePolish          = true;
+        _wRestorePan            = false;
+        _wMatchLoudness         = false;
+        _wAsrRefinement         = false;
+        _wBurnIn                = false;
+        _wForceRerun            = false;
+        _wExportFormat          = null;
+        _wSubtitleSource        = null;
+        _wSubtitleFormats       = null;
+        _wVideoEncoder          = null;
+        _wTargetLanguageOverride = null;
     }
 
     private static string FormatLastRun(

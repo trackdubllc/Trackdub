@@ -137,7 +137,7 @@ internal static class TrackdubTuiApp
         {
             TuiScreenId.Home => "  [white]o[/] open  [white]n[/] new project",
             TuiScreenId.Models => "  [white]p[/] packs  [white]d[/] ad-hoc download  [white]a[/] all missing  [white]v[/] verify",
-            TuiScreenId.Pipeline => "  [white]o[/] open  [white]s[/] run stage  [white]g[/] run all",
+            TuiScreenId.Pipeline => "  [white]o[/] open  [white]s[/] run stage  [white]g[/] run all (configurable)",
             _ => string.Empty,
         };
 
@@ -173,8 +173,11 @@ internal static class TrackdubTuiApp
 
                 Pipeline screen
                   o  Open a .trackdub project directory
-                  s  Run one stage (user-triggered)
-                  g  Run all stages for the open project
+                  s  Run one stage — optionally override model alias
+                  g  Run all — "defaults" fires immediately;
+                     "configure" walks voice clone, export format, subtitle
+                     format/source, and advanced toggles (timbre, pan,
+                     loudness, ASR refinement, burn-in, video encoder)
 
                 Project screen
                   Read-only spine, artifacts, and SQLite stage runs for open project
