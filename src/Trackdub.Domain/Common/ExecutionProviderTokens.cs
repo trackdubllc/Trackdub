@@ -88,6 +88,47 @@ public static class ExecutionProviderTokens
         return TryParse(token, out _);
     }
 
+    /// <summary>
+    /// Warning emitted when a user-facing <c>cuda</c> pin is remapped on Windows.
+    /// </summary>
+    public const string WindowsCudaRemapWarning =
+        "Warning: execution provider cuda on Windows maps to TensorRT RTX (trt-rtx). "
+        + "Use trt-rtx explicitly, or run on Linux for native CUDA.";
+
+    /// <summary>
+    /// Applies platform policy to a parsed execution-provider pin.
+    /// On Windows, <see cref="ExecutionProviderKind.Cuda"/> maps to
+    /// <see cref="ExecutionProviderKind.TensorRTRtx"/> (NVIDIA compatibility alias).
+    /// </summary>
+    public static ExecutionProviderKind ResolvePlatformPin(ExecutionProviderKind kind) =>
+        kind is ExecutionProviderKind.Cuda && OperatingSystem.IsWindows()
+            ? ExecutionProviderKind.TensorRTRtx
+            : kind;
+
+    /// <summary>
+    /// Resolves <paramref name="kind"/> via <see cref="ResolvePlatformPin"/> and reports when
+    /// a Windows <c>cuda</c> remap occurred.
+    /// </summary>
+    public static ExecutionProviderKind ResolvePlatformPin(
+        ExecutionProviderKind kind,
+        out string? platformRemapWarning)
+    {
+        ExecutionProviderKind resolved = ResolvePlatformPin(kind);
+        platformRemapWarning = kind is ExecutionProviderKind.Cuda &&
+            resolved is ExecutionProviderKind.TensorRTRtx
+                ? WindowsCudaRemapWarning
+                : null;
+        return resolved;
+    }
+
+    /// <summary>
+    /// Returns whether two pins are equivalent after <see cref="ResolvePlatformPin"/>.
+    /// </summary>
+    public static bool PlatformPinsEquivalent(
+        ExecutionProviderKind left,
+        ExecutionProviderKind right) =>
+        ResolvePlatformPin(left) == ResolvePlatformPin(right);
+
     /// <summary>Primary CLI / discoverability tag for a kind.</summary>
     public static string ToCanonicalTag(ExecutionProviderKind kind) =>
         kind switch

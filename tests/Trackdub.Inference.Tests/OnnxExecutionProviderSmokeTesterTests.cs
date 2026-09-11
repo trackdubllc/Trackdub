@@ -1,4 +1,5 @@
 using Trackdub.Domain;
+using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Onnx.Runtime.Planning;
 using Trackdub.Inference.Runtime.Planning;
 using Microsoft.ML.OnnxRuntime;
@@ -312,4 +313,32 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
         Assert.Contains("effective provider 'dml'", inner.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ResolveChatterboxDecoderSmokeDimensions_uses_istft_safe_speech_token_length()
+    {
+        int[] speechTokens = OnnxExecutionProviderSmokeTester.ResolveChatterboxDecoderSmokeDimensionsForTesting(
+            "speech_tokens",
+            [-1, -1]);
+        int[] speakerFeatures = OnnxExecutionProviderSmokeTester.ResolveChatterboxDecoderSmokeDimensionsForTesting(
+            "speaker_features",
+            [-1, -1, 80]);
+        int[] speakerEmbeddings = OnnxExecutionProviderSmokeTester.ResolveChatterboxDecoderSmokeDimensionsForTesting(
+            "speaker_embeddings",
+            [-1, 192]);
+
+        Assert.Equal([1, 8], speechTokens);
+        Assert.Equal([1, 8, 80], speakerFeatures);
+        Assert.Equal([1, 192], speakerEmbeddings);
+    }
+
+    [Theory]
+    [InlineData(ExecutionProviderKind.TensorRTRtx, "NvTensorRtRtx")]
+    [InlineData(ExecutionProviderKind.DirectMl, "dml")]
+    [InlineData(ExecutionProviderKind.Cpu, "cpu")]
+    public void GenAiExecutionProviderNames_maps_trackdub_pins_to_ort_genai_names(
+        ExecutionProviderKind provider,
+        string expectedName)
+    {
+        Assert.Equal(expectedName, GenAiExecutionProviderNames.Resolve(provider));
+    }
 }

@@ -33,9 +33,8 @@ internal static class ExecutionProviderPreferenceMapping
             ExecutionProviderPreference.Auto => null,
             ExecutionProviderPreference.Cpu => ExecutionProviderKind.Cpu,
             ExecutionProviderPreference.DirectML => ExecutionProviderKind.DirectMl,
-            ExecutionProviderPreference.Cuda => OperatingSystem.IsWindows()
-                ? ExecutionProviderKind.TensorRTRtx
-                : ExecutionProviderKind.Cuda,
+            ExecutionProviderPreference.Cuda => ExecutionProviderTokens.ResolvePlatformPin(
+                ExecutionProviderKind.Cuda),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(preference),
                 preference,

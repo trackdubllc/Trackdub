@@ -19,8 +19,8 @@
       "alias": "silero-vad",
       "runtime_defaults": {
         "cpu_safe": { "variant": "int8", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "fp16", "execution_provider": "cpu" },
-        "turbo_gpu": { "variant": "fp16", "execution_provider": "cpu" }
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "auto" }
       }
     },
     {
@@ -30,8 +30,8 @@
       "alias": "sortformer-4spk",
       "runtime_defaults": {
         "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
-        "turbo_gpu": { "variant": "default", "execution_provider": "cuda" }
+        "balanced_gpu": { "variant": "default", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "auto" }
       }
     },
     {
@@ -41,8 +41,8 @@
       "alias": "whisper-medium-genai",
       "runtime_defaults": {
         "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
-        "turbo_gpu": { "variant": "default", "execution_provider": "trt-rtx" }
+        "balanced_gpu": { "variant": "default", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "auto" }
       }
     },
     {
@@ -52,8 +52,8 @@
       "alias": "qwen3-asr-1.7b",
       "runtime_defaults": {
         "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
-        "turbo_gpu": { "variant": "default", "execution_provider": "cuda" }
+        "balanced_gpu": { "variant": "default", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "auto" }
       }
     },
     {
@@ -63,8 +63,8 @@
       "alias": "chatterbox-turbo-onnx",
       "runtime_defaults": {
         "cpu_safe": { "variant": "q4", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "fp16", "execution_provider": "directml" },
-        "turbo_gpu": { "variant": "fp16", "execution_provider": "trt-rtx" }
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "auto" }
       }
     },
     {
@@ -74,8 +74,8 @@
       "alias": "madlad400",
       "runtime_defaults": {
         "cpu_safe": { "variant": "quantized", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "quantized", "execution_provider": "directml" },
-        "turbo_gpu": { "variant": "quantized", "execution_provider": "trt-rtx" }
+        "balanced_gpu": { "variant": "quantized", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "quantized", "execution_provider": "auto" }
       }
     }
   ],

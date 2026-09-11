@@ -45,6 +45,10 @@ public sealed record StudioSettings(
     /// When true, the first-run starter pack onboarding modal has been shown or dismissed.
     /// </summary>
     bool StarterPackOnboardingCompleted = false,
+    /// <summary>
+    /// Advanced native ORT CUDA/TensorRT on Windows. Default off. Not exposed in Settings UI;
+    /// kept so JSON / <c>INativeCudaTensorRtWindowsPolicy</c> wiring still functions.
+    /// </summary>
     bool AllowNativeCudaTensorRtOnWindows = false,
     WindowsMlExecutionDevicePolicy WindowsMlExecutionDevicePolicy = WindowsMlExecutionDevicePolicy.Explicit,
     string? HardwareQualityPresetOverrideKey = null,

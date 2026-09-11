@@ -1,3 +1,4 @@
+using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
@@ -83,6 +84,12 @@ public static class Program
             }
 
             var resolver = BenchmarkModelPathResolver.CreateDefault();
+
+            if (string.Equals(options.Scope, TrtRtxSmokeCatalog.ScopeName, StringComparison.OrdinalIgnoreCase))
+            {
+                return await RunTrtRtxSmokeScopeAsync(options, resolver, runner, output, error, cancellationToken);
+            }
+
             var defaultsStore = BenchmarkSelectionDefaultsStore.LoadDefault();
 
             if (options.AllVariants)
@@ -493,6 +500,111 @@ public static class Program
         }
 
         return discovery.Candidates[selectedIndex - 1];
+    }
+
+    private static async Task<int> RunTrtRtxSmokeScopeAsync(
+        BenchmarkOptions options,
+        BenchmarkModelPathResolver resolver,
+        IModelBenchmarkRunner runner,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        BenchmarkProviderPreference providerPreference = options.ProviderPreference is BenchmarkProviderPreference.Cpu or BenchmarkProviderPreference.Auto
+            ? BenchmarkProviderPreference.TensorRtRtx
+            : options.ProviderPreference;
+
+        int passed = 0;
+        int failed = 0;
+        int skipped = 0;
+        var reports = new List<BenchmarkReport>(TrtRtxSmokeCatalog.StarterPackTurboGpu.Count);
+
+        await output.WriteLineAsync($"TRT RTX smoke scope ({TrtRtxSmokeCatalog.StarterPackTurboGpu.Count} targets).").ConfigureAwait(false);
+
+        foreach (TrtRtxSmokeCatalog.Target target in TrtRtxSmokeCatalog.StarterPackTurboGpu)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            BenchmarkModelCandidate candidate;
+            try
+            {
+                candidate = resolver.ResolveSingle(target.ModelReference, target.Variant);
+            }
+            catch (FileNotFoundException ex)
+            {
+                skipped++;
+                await output.WriteLineAsync($"SKIP {target.Label}: {ex.Message}").ConfigureAwait(false);
+                continue;
+            }
+
+            string reportPath = DeriveVariantReportPath(options.OutputPath, candidate with
+            {
+                VariantAlias = target.Label
+            });
+
+            var request = new BenchmarkRequest(
+                candidate.ModelPath,
+                reportPath,
+                providerPreference,
+                options.RunCount,
+                options.WindowsMlDevicePolicyKey);
+
+            BenchmarkReport report;
+            try
+            {
+                report = await runner.RunAsync(request, cancellationToken).ConfigureAwait(false);
+                report = AddResolutionNote(report, candidate);
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                await error.WriteLineAsync($"FAIL {target.Label}: {ex.Message}").ConfigureAwait(false);
+                continue;
+            }
+
+            reports.Add(report);
+            await BenchmarkReportWriter.WriteAsync(report, options.ReportFormat, cancellationToken).ConfigureAwait(false);
+
+            if (options.ReportFormat is ReportFormat.Console or ReportFormat.Both)
+            {
+                await output.WriteLineAsync($"--- {target.Label} ({target.ModelReference}) ---").ConfigureAwait(false);
+                BenchmarkConsole.WriteSummary(report, output);
+            }
+
+            if (report.Status is BenchmarkStatus.Failed)
+            {
+                failed++;
+                await error.WriteLineAsync($"FAIL {target.Label}: benchmark status {report.Status}.").ConfigureAwait(false);
+            }
+            else
+            {
+                passed++;
+            }
+        }
+
+        var batchReport = new BenchmarkBatchReport(
+            RequestedReference: TrtRtxSmokeCatalog.ScopeName,
+            ReportPath: options.OutputPath,
+            Results: reports,
+            GeneratedAtUtc: DateTimeOffset.UtcNow);
+
+        await BenchmarkReportWriter.WriteAsync(batchReport, options.ReportFormat, cancellationToken).ConfigureAwait(false);
+
+        if (options.ReportFormat is ReportFormat.Console or ReportFormat.Both)
+        {
+            BenchmarkConsole.WriteBatchSummary(batchReport, output);
+            await output.WriteLineAsync(
+                    $"TRT RTX smoke summary: passed={passed}, failed={failed}, skipped={skipped}.")
+                .ConfigureAwait(false);
+        }
+
+        if (passed == 0 && failed == 0)
+        {
+            await error.WriteLineAsync("TRT RTX smoke did not run any targets (all skipped). Download starter-pack models first.").ConfigureAwait(false);
+            return 1;
+        }
+
+        return failed > 0 ? 1 : 0;
     }
 
     private static BenchmarkReport AddResolutionNote(BenchmarkReport report, BenchmarkModelCandidate candidate)

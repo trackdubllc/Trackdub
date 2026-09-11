@@ -1,3 +1,4 @@
+using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
 
@@ -19,6 +20,7 @@ public static class BenchmarkConsole
         writer.WriteLine("  Trackdub.Benchmarks dubbing --help");
         writer.WriteLine("  Trackdub.Benchmarks --help");
         writer.WriteLine($"  Trackdub.Benchmarks --model <path-or-scope> [--variant <name> | --all-variants] [--output <path>] [--provider cpu|auto|dml|migraphx|trt-rtx] [--windows-ml-device-policy {WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys("|")}] [--runs <n>] [--format console|json|both]");
+        writer.WriteLine($"  Trackdub.Benchmarks --scope {TrtRtxSmokeCatalog.ScopeName} [--output <path>] [--provider trt-rtx] [--runs <n>] [--format console|json|both]");
         writer.WriteLine();
         writer.WriteLine("Ingest command:");
         writer.WriteLine("  --project <path>    Required project root, typically ending in .trackdub.");
@@ -29,7 +31,8 @@ public static class BenchmarkConsole
         writer.WriteLine("  --ffprobe <path>    Optional explicit ffprobe executable path.");
         writer.WriteLine();
         writer.WriteLine("Options:");
-        writer.WriteLine("  --model <path-or-scope>  Required ONNX model path or scoped model reference under ./models.");
+        writer.WriteLine("  --model <path-or-scope>  ONNX model path or scoped model reference under ./models.");
+        writer.WriteLine($"  --scope {TrtRtxSmokeCatalog.ScopeName}  Run bundled starter-pack TRT RTX smoke targets (skips models not cached locally).");
         writer.WriteLine("  --output <path>     Output report path. Defaults to benchmark-report.json in the current directory.");
         writer.WriteLine("  --provider <name>   Provider preference: cpu, auto, dml, migraphx, or trt-rtx. Defaults to cpu.");
         writer.WriteLine("  --windows-ml-device-policy <name>  Windows ML EP device policy for catalog GPU runs. Defaults to explicit when omitted.");

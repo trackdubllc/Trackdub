@@ -112,6 +112,18 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
                 resolution.Detail);
         }
 
+        string? cudaRuntimePath = TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoaded();
+        if (cudaRuntimePath is null)
+        {
+            return new TensorRtRtxBootstrapResult(
+                false,
+                TensorRtRtxProviderIds.PluginEpAbi,
+                TensorRtRtxReadinessBlocker.EpRegisterFailed,
+                "CUDA 12 runtime (cudart64_12.dll / libcudart.so.12) was not found. "
+                + "Install CUDA Toolkit 12.x, run `pip install nvidia-cuda-runtime-cu12`, "
+                + "or set TRACKDUB_CUDA12_BIN_DIR to the directory containing the CUDA 12 runtime.");
+        }
+
         try
         {
             await RegistrationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
