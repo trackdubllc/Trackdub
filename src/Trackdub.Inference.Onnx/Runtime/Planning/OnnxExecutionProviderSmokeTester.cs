@@ -3,6 +3,7 @@ using Trackdub.Domain;
 using Trackdub.Inference.Runtime.Planning;
 using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Onnx.Qwen3Asr;
+using Trackdub.Inference.Onnx.NemotronAsr;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -51,6 +52,13 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                         request.ModelRootPath,
                         request.ExecutionProvider,
                         cancellationToken).ConfigureAwait(false);
+                    break;
+                case RuntimeStage.SpeechEnhancement:
+                case RuntimeStage.OverlapRescue:
+                case RuntimeStage.LipSync:
+                case RuntimeStage.LipSynthesis:
+                    await SmokeTestGenericSessionAsync(request.EntryPath, request.ExecutionProvider, cancellationToken)
+                        .ConfigureAwait(false);
                     break;
                 default:
                     return new ExecutionProviderSmokeTestResult(
@@ -174,6 +182,12 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             return;
         }
 
+        if (engineFamily.Equals("whisper-onnx", StringComparison.OrdinalIgnoreCase))
+        {
+            await SmokeTestWhisperAsync(request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         await SmokeTestGenericSessionAsync(request.EntryPath, request.ExecutionProvider, cancellationToken)
             .ConfigureAwait(false);
     }
@@ -229,7 +243,13 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     {
         string decoderJointPath = ResolveNemotronDecoderJointPath(encoderModelPath);
         using OnnxExecutionSessionFactory.NemotronAsrSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreatePooledNemotronAsrAsync("nemotron-asr", encoderModelPath, decoderJointPath, provider, cancellationToken)
+            .CreatePooledNemotronAsrAsync(
+                "nemotron-asr",
+                encoderModelPath,
+                decoderJointPath,
+                provider,
+                cancellationToken,
+                additionalTrtEncoderOptions: NemotronAsrEncoderTrtProfiles.BuildOptions(encoderModelPath))
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 

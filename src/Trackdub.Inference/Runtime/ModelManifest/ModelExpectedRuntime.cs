@@ -16,4 +16,10 @@ public static class ModelExpectedRuntime
 
     /// <summary>Canonical Windows ONNX governance token (catalog-first narrative).</summary>
     public const string WindowsMlCatalogOrMigraphxOrDirectMl = "windows-ml|onnxruntime-migraphx|onnxruntime-directml";
+
+    /// <summary>
+    /// Canonical Windows ONNX token when TensorRT RTX plugin smoke has passed for the model.
+    /// </summary>
+    public const string TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMl =
+        "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml";
 }

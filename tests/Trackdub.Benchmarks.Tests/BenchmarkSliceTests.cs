@@ -77,6 +77,23 @@ public sealed class BenchmarkOptionsTests
     }
 
     [Fact]
+    public void TrtRtxSmokeCatalog_remaining_includes_untested_onnx_gpu_models()
+    {
+        Assert.Contains(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("nemotron", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("LatentSync", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("silero", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("Kokoro", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void TryParse_ParsesTensorRtRtxProviderAlias()
     {
         var args = new[] { "--model", ".\\model.onnx", "--provider", "trt-rtx" };

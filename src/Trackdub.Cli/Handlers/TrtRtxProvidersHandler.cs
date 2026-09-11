@@ -179,7 +179,10 @@ internal static class TrtRtxProvidersHandler
         try
         {
             report = await TrtRtxStarterPackSmokeRunner
-                .RunAsync(storagePaths.ModelCacheDirectory, cancellationToken)
+                .RunAsync(
+                    storagePaths.ModelCacheDirectory,
+                    TrtRtxSmokeCatalog.RemainingOnnxGpu,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)

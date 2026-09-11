@@ -42,14 +42,37 @@ public static class TrtRtxStarterPackSmokeRunner
         RunAsync(
             modelCacheDirectory,
             new OnnxExecutionProviderSmokeTester(),
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            cancellationToken);
+
+    public static Task<TrtRtxStarterPackSmokeReport> RunAsync(
+        string? modelCacheDirectory,
+        IReadOnlyList<TrtRtxSmokeCatalog.Target> targets,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(
+            modelCacheDirectory,
+            new OnnxExecutionProviderSmokeTester(),
+            targets,
+            cancellationToken);
+
+    public static Task<TrtRtxStarterPackSmokeReport> RunAsync(
+        string? modelCacheDirectory,
+        IExecutionProviderSmokeTester smokeTester,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(
+            modelCacheDirectory,
+            smokeTester,
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
             cancellationToken);
 
     public static async Task<TrtRtxStarterPackSmokeReport> RunAsync(
         string? modelCacheDirectory,
         IExecutionProviderSmokeTester smokeTester,
+        IReadOnlyList<TrtRtxSmokeCatalog.Target> targets,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(smokeTester);
+        ArgumentNullException.ThrowIfNull(targets);
 
         if (!BundledModelManifestRegistry.TryLoadDefault(out BundledModelManifestRegistry? registry, out string? manifestError))
         {
@@ -57,13 +80,13 @@ public static class TrtRtxStarterPackSmokeRunner
         }
 
         var resolver = new BenchmarkModelPathResolver(registry, modelCacheDirectory);
-        var results = new List<TrtRtxStarterPackSmokeTargetResult>(TrtRtxSmokeCatalog.StarterPackTurboGpu.Count);
+        var results = new List<TrtRtxStarterPackSmokeTargetResult>(targets.Count);
         int attempted = 0;
         int passed = 0;
         int failed = 0;
         int skipped = 0;
 
-        foreach (TrtRtxSmokeCatalog.Target target in TrtRtxSmokeCatalog.StarterPackTurboGpu)
+        foreach (TrtRtxSmokeCatalog.Target target in targets)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -105,7 +128,7 @@ public static class TrtRtxStarterPackSmokeRunner
             RuntimeStage stage;
             try
             {
-                stage = ResolveStage(target.Label);
+                stage = ResolveStage(entry);
             }
             catch (ArgumentOutOfRangeException ex)
             {
@@ -155,18 +178,31 @@ public static class TrtRtxStarterPackSmokeRunner
         return new TrtRtxStarterPackSmokeReport(attempted, passed, failed, skipped, results);
     }
 
-    private static RuntimeStage ResolveStage(string label) =>
-        label switch
+    private static RuntimeStage ResolveStage(BundledModelManifestEntry entry)
+    {
+        if (entry.EngineFamily.Equals("phi-genai", StringComparison.OrdinalIgnoreCase)
+            || entry.EngineFamily.Equals("qwen-instruct", StringComparison.OrdinalIgnoreCase))
+        {
+            return RuntimeStage.TextRefinement;
+        }
+
+        return entry.Task.Trim().ToLowerInvariant() switch
         {
             "vad" => RuntimeStage.Vad,
+            "asr" => RuntimeStage.Asr,
+            "translation" => RuntimeStage.Translation,
+            "tts" => RuntimeStage.Tts,
             "diarization" => RuntimeStage.Diarization,
-            "asr-whisper-small" or "asr-whisper-medium"
-                or "asr-qwen-0.6b" or "asr-qwen-1.7b" => RuntimeStage.Asr,
-            "translation-phi" => RuntimeStage.TextRefinement,
-            "translation-madlad" => RuntimeStage.Translation,
-            "tts-chatterbox" => RuntimeStage.Tts,
-            _ => throw new ArgumentOutOfRangeException(nameof(label), label, "Unknown TRT RTX smoke label."),
+            "separation" => RuntimeStage.Separation,
+            "speech-enhancement" => RuntimeStage.SpeechEnhancement,
+            "forced-alignment" => RuntimeStage.LipSync,
+            "text-refinement" => RuntimeStage.TextRefinement,
+            "overlap-rescue" => RuntimeStage.OverlapRescue,
+            "lip-synthesis" => RuntimeStage.LipSynthesis,
+            "face-detection" or "face-landmarks" => RuntimeStage.LipSynthesis,
+            _ => throw new ArgumentOutOfRangeException(nameof(entry), entry.Task, "Unknown TRT RTX smoke task."),
         };
+    }
 
     private static string ResolveSmokeModelRootPath(BenchmarkModelCandidate candidate)
     {

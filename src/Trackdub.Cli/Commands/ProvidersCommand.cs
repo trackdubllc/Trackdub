@@ -140,8 +140,8 @@ internal static class ProvidersCommand
     private static Command CreateSmokeCommand()
     {
         var command = new Command("smoke", """
-            Run planner-style ONNX smoke tests for starter-pack turbo TRT RTX targets.
-            Skips models that are not cached locally.
+            Run planner-style ONNX smoke tests for bundled models not in the turbo starter-pack catalog.
+            Skips Silero, Kokoro, python-musetalk, and models that are not cached locally.
 
             Examples:
               trackdub providers trt-rtx smoke

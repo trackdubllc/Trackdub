@@ -798,11 +798,12 @@
             "cpu",
             "dml",
             "cuda",
-            "tensorrt"
+            "tensorrt",
+            "trt-rtx"
           ]
         }
       },
-      "expected_runtime": "windows-ml|onnxruntime-migraphx|onnxruntime-directml",
+      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml",
       "provider_id": "tonythethompson/qwen3-asr-0.6b-onnx",
       "variants": [],
       "download_file_hashes": {
@@ -1078,11 +1079,12 @@
             "cpu",
             "dml",
             "cuda",
-            "tensorrt"
+            "tensorrt",
+            "trt-rtx"
           ]
         }
       },
-      "expected_runtime": "windows-ml|onnxruntime-migraphx|onnxruntime-directml",
+      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml",
       "provider_id": "tonythethompson/qwen3-asr-1.7b-onnx",
       "variants": [],
       "download_file_hashes": {
