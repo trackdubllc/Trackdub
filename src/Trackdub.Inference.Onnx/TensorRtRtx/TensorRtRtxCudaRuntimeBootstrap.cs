@@ -84,12 +84,9 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
                     continue;
                 }
 
-                foreach (string sitePackages in Directory.EnumerateDirectories(
-                             pythonRoot,
-                             "site-packages",
-                             SearchOption.AllDirectories))
+                foreach (string pythonVersionDir in Directory.EnumerateDirectories(pythonRoot))
                 {
-                    yield return Path.Combine(sitePackages, "nvidia", "cuda_runtime", "bin");
+                    yield return Path.Combine(pythonVersionDir, "Lib", "site-packages", "nvidia", "cuda_runtime", "bin");
                 }
             }
         }
