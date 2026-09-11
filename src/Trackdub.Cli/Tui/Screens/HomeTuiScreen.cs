@@ -1,5 +1,6 @@
 using Spectre.Console;
 
+using Trackdub.Cli;
 using Trackdub.Cli.Handlers;
 using Trackdub.Cli.Tui;
 using Trackdub.Contracts;
@@ -97,11 +98,8 @@ internal sealed class HomeTuiScreen : ITuiScreen
                 }));
 
         string projectPath = selected == "__path__"
-            ? context.Console.Prompt(
-                new TextPrompt<string>("Project directory:")
-                    .DefaultValue(context.ProjectPath ?? string.Empty)
-                    .AllowEmpty())
-            : selected;
+            ? TuiPathPrompt.Ask(context.Console, "Project directory:", context.ProjectPath ?? string.Empty)
+            : UserPathText.Normalize(selected);
 
         if (string.IsNullOrWhiteSpace(projectPath))
         {
@@ -129,9 +127,7 @@ internal sealed class HomeTuiScreen : ITuiScreen
 
     private static async Task<bool> CreateProjectAsync(TrackdubTuiContext context)
     {
-        string mediaPath = context.Console.Prompt(
-            new TextPrompt<string>("Source media file:")
-                .AllowEmpty());
+        string mediaPath = TuiPathPrompt.Ask(context.Console, "Source media file:");
 
         if (string.IsNullOrWhiteSpace(mediaPath))
         {
@@ -139,15 +135,14 @@ internal sealed class HomeTuiScreen : ITuiScreen
             return true;
         }
 
-        string? outputDirectory = context.Console.Prompt(
-            new TextPrompt<string>("Output project directory (optional):")
-                .AllowEmpty());
+        string? outputDirectory = UserPathText.NormalizeOptional(
+            TuiPathPrompt.Ask(context.Console, "Output project directory (optional):"));
 
         (int exitCode, ProjectHandler.ProjectCreateResult? result) = await ProjectHandler.TryCreateAsync(
             context.Factory,
             mediaPath,
             projectName: null,
-            string.IsNullOrWhiteSpace(outputDirectory) ? null : outputDirectory,
+            outputDirectory,
             context.CancellationToken).ConfigureAwait(false);
 
         if (result is null || exitCode != Program.ExitSuccess)

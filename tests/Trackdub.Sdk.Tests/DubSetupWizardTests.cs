@@ -77,6 +77,38 @@ public sealed class DubSetupWizardTests
     }
 
     [Fact]
+    public async Task CompleteAsync_UnwrapsQuotedMediaAndOutputPaths()
+    {
+        using var input = new StringReader(
+            string.Join(
+                Environment.NewLine,
+                [
+                    "\"source.mp4\"",
+                    "es",
+                    "",
+                    "'out.trackdub'",
+                    "",
+                    "",
+                ]));
+        using var output = new StringWriter();
+
+        var request = new DubSetupRequest(
+            MediaPath: null,
+            TargetLanguage: null,
+            SourceLanguage: null,
+            OutputDirectory: null,
+            ModelOverrides: [],
+            ExportFormat: null);
+
+        DubSetupRequest? result = await DubSetupWizard.CompleteAsync(request, input, output, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("source.mp4", result.MediaPath);
+        Assert.Equal("es", result.TargetLanguage);
+        Assert.Equal("out.trackdub", result.OutputDirectory);
+    }
+
+    [Fact]
     public async Task CompleteAsync_RePromptsMalformedModelOverride()
     {
         using var input = new StringReader(
