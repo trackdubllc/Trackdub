@@ -32,6 +32,24 @@ internal static class PlannedRuntimeModelResolver
         return modelPathResolver.ResolveSingle(plan.ModelAlias!, plan.Variant);
     }
 
+    public static string ResolveGenAiModelRoot(string modelRootPath, string? entryPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelRootPath);
+
+        if (!string.IsNullOrWhiteSpace(entryPath))
+        {
+            string fullEntry = Path.GetFullPath(entryPath);
+            if (string.Equals(Path.GetFileName(fullEntry), GenAiConfigFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Path.GetDirectoryName(fullEntry)
+                    ?? throw new InvalidOperationException(
+                        "Cannot resolve GenAI model root directory from entry path.");
+            }
+        }
+
+        return Path.GetFullPath(modelRootPath);
+    }
+
     public static string ResolveModelRootPath(
         StageRuntimePlan plan,
         BenchmarkModelPathResolver modelPathResolver)
@@ -42,9 +60,10 @@ internal static class PlannedRuntimeModelResolver
             if (File.Exists(entryPath) &&
                 string.Equals(Path.GetFileName(entryPath), GenAiConfigFileName, StringComparison.OrdinalIgnoreCase))
             {
-                return Path.GetDirectoryName(entryPath)
-                    ?? throw new InvalidOperationException(
-                        $"Cannot resolve GenAI model root directory for alias '{plan.ModelAlias}'.");
+                string fallbackRoot = !string.IsNullOrWhiteSpace(plan.ModelRootPath)
+                    ? plan.ModelRootPath
+                    : Path.GetDirectoryName(entryPath) ?? entryPath;
+                return ResolveGenAiModelRoot(fallbackRoot, entryPath);
             }
         }
 

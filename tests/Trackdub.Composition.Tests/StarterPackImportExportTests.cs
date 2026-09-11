@@ -232,7 +232,8 @@ public sealed class StarterPackImportExportTests : IDisposable
             string packId,
             string profileId,
             StarterPackHardwareProfile? hardwareProfile = null,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            bool skipProviderSmokeTest = false) =>
             Task.FromResult(new StarterPackCompatibilityReport(
                 packId,
                 profileId,

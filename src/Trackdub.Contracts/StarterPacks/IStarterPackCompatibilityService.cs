@@ -6,7 +6,8 @@ public interface IStarterPackCompatibilityService
         string packId,
         string profileId,
         StarterPackHardwareProfile? hardwareProfile = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool skipProviderSmokeTest = false);
 }
 
 public sealed record StageCompatibilityEntry(
