@@ -58,7 +58,7 @@ internal static class SpectralEnvelopeMatcher
         float dry = 1f - wet;
         var result = new float[ttsSamples.Length];
         for (int i = 0; i < result.Length; i++)
-            result[i] = ttsSamples[i] * dry + paddedMatched[pad + i] * wet;
+            result[i] = (ttsSamples[i] * dry) + (paddedMatched[pad + i] * wet);
         return result;
     }
 
@@ -73,10 +73,10 @@ internal static class SpectralEnvelopeMatcher
         float lsd = (float)Math.Sqrt(sumSq / ttsEnv.Length);
 
         float t = Math.Clamp((lsd - LsdLow) / (LsdHigh - LsdLow), 0f, 1f);
-        float wet = MinWet + t * (MaxWet - MinWet);
+        float wet = MinWet + (t * (MaxWet - MinWet));
 
         if (refVoicedRatio < MinConfidentVoicedRatio)
-            wet = Math.Min(wet, MinWet + (MaxWet - MinWet) * (refVoicedRatio / MinConfidentVoicedRatio));
+            wet = Math.Min(wet, MinWet + ((MaxWet - MinWet) * (refVoicedRatio / MinConfidentVoicedRatio)));
 
         return wet;
     }
