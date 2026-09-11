@@ -70,6 +70,11 @@ internal static class DubCommand
             Description = "Apply room-tone convolution to dubbed speech to match the acoustic environment (default: true)",
         };
 
+        var noTimbrePolishOption = new Option<bool>("--no-timbre-polish")
+        {
+            Description = "Disable room-tone convolution (negates the default-on --timbre-polish)",
+        };
+
         var restorePanOption = new Option<bool?>("--restore-pan")
         {
             Description = "Restore the original stereo pan position of each speaker in the dubbed mix (default: false)",
@@ -101,7 +106,7 @@ internal static class DubCommand
         };
         subtitleSourceOption.AcceptOnlyFromAmong("translated", "transcript", "bilingual");
 
-        var burnInSubtitlesOption = new Option<bool>("--burn-in-subtitles")
+        var burnInSubtitlesOption = new Option<bool>(["--burn-in-subtitles", "--burn-in"])
         {
             Description = "Burn subtitles into the exported video (default: false)",
             DefaultValueFactory = _ => false,
@@ -168,6 +173,7 @@ internal static class DubCommand
             enableAsrTextRefinementOption,
             voiceCloneOption,
             timbrePolishOption,
+            noTimbrePolishOption,
             restorePanOption,
             matchLoudnessOption,
             voiceOption,
@@ -192,7 +198,7 @@ internal static class DubCommand
             string? exportFormat = parseResult.GetValue(exportFormatOption);
             bool? enableAsrTextRefinement = parseResult.GetValue(enableAsrTextRefinementOption);
             bool voiceClone = parseResult.GetValue(voiceCloneOption);
-            bool timbrePolish = parseResult.GetValue(timbrePolishOption) ?? true;
+            bool timbrePolish = parseResult.GetValue(noTimbrePolishOption) ? false : parseResult.GetValue(timbrePolishOption) ?? true;
             bool restorePan = parseResult.GetValue(restorePanOption) ?? false;
             bool matchLoudness = parseResult.GetValue(matchLoudnessOption) ?? false;
             string[] voiceOverrideTokens = parseResult.GetValue(voiceOption) ?? [];
