@@ -1,0 +1,105 @@
+using System.Numerics;
+using MathNet.Numerics.IntegralTransforms;
+
+namespace Trackdub.Media.Mixing;
+
+internal readonly record struct SpectralEnvelope(float[] Bins, float VoicedFrameRatio);
+
+internal static class SpectralEnvelopeAnalyzer
+{
+    private const float MinVoicedRms = 0.001f;
+    private const float Epsilon = 1e-8f;
+
+    public static SpectralEnvelope? Extract(ReadOnlySpan<float> samples, StftProcessor stft, int lifterOrder = 32)
+    {
+        if (samples.Length < stft.FftSize)
+            return null;
+        Complex[][] frames = stft.Forward(samples);
+        return ExtractFromFrames(frames, samples, stft.HopSize, lifterOrder);
+    }
+
+    // Accepts pre-computed frames so callers can avoid a redundant Forward pass.
+    // samples must be the same signal that was fed to stft.Forward to produce frames.
+    public static SpectralEnvelope? ExtractFromFrames(
+        Complex[][] frames,
+        ReadOnlySpan<float> samples,
+        int hopSize,
+        int lifterOrder = 32)
+    {
+        if (frames.Length == 0)
+            return null;
+
+        int binCount = frames[0].Length;
+        var envelopeAccum = new double[binCount];
+        int voicedFrames = 0;
+
+        for (int frameIndex = 0; frameIndex < frames.Length; frameIndex++)
+        {
+            // Gate on time-domain RMS so the threshold is in sample-amplitude space.
+            int sampleStart = frameIndex * hopSize;
+            int sampleCount = Math.Min((binCount * 2) - 2, samples.Length - sampleStart);
+            if (sampleCount <= 0)
+                continue;
+
+            double tdRmsSum = 0d;
+            for (int i = 0; i < sampleCount; i++)
+            {
+                double s = samples[sampleStart + i];
+                tdRmsSum += s * s;
+            }
+            if (Math.Sqrt(tdRmsSum / sampleCount) < MinVoicedRms)
+                continue;
+
+            float[] logMag = new float[binCount];
+            Complex[] frame = frames[frameIndex];
+            for (int k = 0; k < binCount; k++)
+                logMag[k] = (float)Math.Log(frame[k].Magnitude + Epsilon);
+
+            float[]? envelope = CepstralSmooth(logMag, lifterOrder);
+            if (envelope is null)
+                continue;
+
+            for (int k = 0; k < binCount; k++)
+                envelopeAccum[k] += envelope[k];
+            voicedFrames++;
+        }
+
+        if (voicedFrames == 0)
+            return null;
+
+        var bins = new float[binCount];
+        for (int k = 0; k < binCount; k++)
+            bins[k] = (float)(envelopeAccum[k] / voicedFrames);
+
+        return new SpectralEnvelope(bins, (float)voicedFrames / frames.Length);
+    }
+
+    private static float[]? CepstralSmooth(float[] logMag, int lifterOrder)
+    {
+        int binCount = logMag.Length;
+        int cepSize = (binCount - 1) * 2;
+        if (cepSize <= 0)
+            return null;
+
+        var buffer = new Complex[cepSize];
+        buffer[0] = new Complex(logMag[0], 0d);
+        for (int k = 1; k < binCount - 1; k++)
+        {
+            buffer[k] = new Complex(logMag[k], 0d);
+            buffer[cepSize - k] = new Complex(logMag[k], 0d);
+        }
+        buffer[binCount - 1] = new Complex(logMag[binCount - 1], 0d);
+
+        Fourier.Inverse(buffer, FourierOptions.Matlab);
+
+        for (int n = lifterOrder + 1; n < cepSize - lifterOrder; n++)
+            buffer[n] = Complex.Zero;
+
+        Fourier.Forward(buffer, FourierOptions.Matlab);
+
+        var envelope = new float[binCount];
+        for (int k = 0; k < binCount; k++)
+            envelope[k] = (float)Math.Exp(buffer[k].Real);
+        return envelope;
+    }
+}
