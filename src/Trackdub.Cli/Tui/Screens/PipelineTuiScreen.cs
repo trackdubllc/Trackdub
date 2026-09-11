@@ -10,13 +10,13 @@ namespace Trackdub.Cli.Tui.Screens;
 
 internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 {
-    private const string BackChoice      = "__back__";
-    private const string RunChoice       = "__run__";
+    private const string BackChoice = "__back__";
+    private const string RunChoice = "__run__";
     private const string ConfigureChoice = "__configure__";
-    private const string DefaultsChoice  = "__run_defaults__";
-    private const string YesChoice       = "__yes__";
-    private const string NoChoice        = "__no__";
-    private const string VideoChoice     = "__video__";
+    private const string DefaultsChoice = "__run_defaults__";
+    private const string YesChoice = "__yes__";
+    private const string NoChoice = "__no__";
+    private const string VideoChoice = "__video__";
     private const string EnterAliasChoice = "__enter_alias__";
 
     public TuiScreenId Id => TuiScreenId.Pipeline;
@@ -154,17 +154,17 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
                 ClearOverlay();
                 return true;
             case ConsoleKey.Enter:
-            {
-                TuiInlinePicker picker = _picker;
-                Func<string, Task<bool>>? handler = _pickerHandler;
-                ClearOverlay();
-                if (handler is not null)
                 {
-                    return await handler(picker.SelectedValue).ConfigureAwait(false);
-                }
+                    TuiInlinePicker picker = _picker;
+                    Func<string, Task<bool>>? handler = _pickerHandler;
+                    ClearOverlay();
+                    if (handler is not null)
+                    {
+                        return await handler(picker.SelectedValue).ConfigureAwait(false);
+                    }
 
-                return true;
-            }
+                    return true;
+                }
 
             default:
                 return true;
@@ -374,7 +374,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
         _picker = new TuiInlinePicker(
             "Export container format",
             [
-                ("__auto__", "Auto — project default"),
+                ("__auto__", "Pipeline default (MP4)"),
                 ("mp4",      "MP4"),
                 ("mkv",      "MKV"),
                 (BackChoice, "Back"),
@@ -403,7 +403,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
                 ("vtt",      "VTT"),
                 ("ass",      "ASS"),
                 ("__none__", "None — no subtitle file"),
-                ("__skip__", "Skip — keep project default"),
+                ("__skip__", "Pipeline default (SRT)"),
                 (BackChoice, "Back"),
             ]);
         _pickerHandler = choice => HandleSubtitleFormatChoiceAsync(context, choice);
@@ -454,7 +454,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 
     private Task<bool> BeginAdvancedPickerAsync(TrackdubTuiContext context)
     {
-        static string Toggle(bool on) => on ? "[green]on[/]" : "[grey]off[/]";
+        static string Toggle(bool on) => on ? "on" : "off";
 
         _picker = new TuiInlinePicker(
             "Advanced options",
@@ -485,30 +485,30 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
                     context,
                     new PipelineHandler.TuiPipelineRunOptions
                     {
-                        UseVoiceCloning         = _wVoiceClone,
-                        ApplyTimbrePolish       = _wTimbrePolish,
-                        RestoreOriginalPan      = _wRestorePan,
-                        MatchOriginalLoudness   = _wMatchLoudness,
+                        UseVoiceCloning = _wVoiceClone,
+                        ApplyTimbrePolish = _wTimbrePolish,
+                        RestoreOriginalPan = _wRestorePan,
+                        MatchOriginalLoudness = _wMatchLoudness,
                         EnableAsrTextRefinement = _wAsrRefinement,
-                        BurnInSubtitles         = _wBurnIn,
-                        ForceRerun              = _wForceRerun,
-                        ExportFormat            = _wExportFormat,
-                        SubtitleFormats         = _wSubtitleFormats,
-                        SubtitleSource          = _wSubtitleSource,
-                        VideoEncoderKey         = _wVideoEncoder,
-                        TargetLanguageOverride  = _wTargetLanguageOverride,
+                        BurnInSubtitles = _wBurnIn,
+                        ForceRerun = _wForceRerun,
+                        ExportFormat = _wExportFormat,
+                        SubtitleFormats = _wSubtitleFormats,
+                        SubtitleSource = _wSubtitleSource,
+                        VideoEncoderKey = _wVideoEncoder,
+                        TargetLanguageOverride = _wTargetLanguageOverride,
                     }).ConfigureAwait(false);
 
             case VideoChoice:
                 return await BeginVideoEncoderPickerAsync(context).ConfigureAwait(false);
 
             // Toggles — flip state and re-open advanced picker
-            case "__timbre__":      _wTimbrePolish    = !_wTimbrePolish;    break;
-            case "__pan__":         _wRestorePan      = !_wRestorePan;      break;
-            case "__loudness__":    _wMatchLoudness   = !_wMatchLoudness;   break;
-            case "__asr__":         _wAsrRefinement   = !_wAsrRefinement;   break;
-            case "__burnin__":      _wBurnIn          = !_wBurnIn;          break;
-            case "__forcererun__":  _wForceRerun      = !_wForceRerun;      break;
+            case "__timbre__": _wTimbrePolish = !_wTimbrePolish; break;
+            case "__pan__": _wRestorePan = !_wRestorePan; break;
+            case "__loudness__": _wMatchLoudness = !_wMatchLoudness; break;
+            case "__asr__": _wAsrRefinement = !_wAsrRefinement; break;
+            case "__burnin__": _wBurnIn = !_wBurnIn; break;
+            case "__forcererun__": _wForceRerun = !_wForceRerun; break;
         }
 
         return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
@@ -574,17 +574,17 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 
     private void ResetWizardState()
     {
-        _wVoiceClone            = false;
-        _wTimbrePolish          = true;
-        _wRestorePan            = false;
-        _wMatchLoudness         = false;
-        _wAsrRefinement         = false;
-        _wBurnIn                = false;
-        _wForceRerun            = false;
-        _wExportFormat          = null;
-        _wSubtitleSource        = null;
-        _wSubtitleFormats       = null;
-        _wVideoEncoder          = null;
+        _wVoiceClone = false;
+        _wTimbrePolish = true;
+        _wRestorePan = false;
+        _wMatchLoudness = false;
+        _wAsrRefinement = false;
+        _wBurnIn = false;
+        _wForceRerun = false;
+        _wExportFormat = null;
+        _wSubtitleSource = null;
+        _wSubtitleFormats = null;
+        _wVideoEncoder = null;
         _wTargetLanguageOverride = null;
     }
 
