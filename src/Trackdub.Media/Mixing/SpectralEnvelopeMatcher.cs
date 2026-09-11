@@ -58,7 +58,7 @@ internal static class SpectralEnvelopeMatcher
 
         var result = new float[ttsSamples.Length];
         for (int i = 0; i < result.Length; i++)
-            result[i] = ttsSamples[i] * dry + matched[i] * wet;
+            result[i] = (ttsSamples[i] * dry) + (matched[i] * wet);
         return result;
     }
 
@@ -75,11 +75,11 @@ internal static class SpectralEnvelopeMatcher
 
         // Linear ramp: LsdLow → MinWet, LsdHigh → MaxWet
         float t = Math.Clamp((lsd - LsdLow) / (LsdHigh - LsdLow), 0f, 1f);
-        float wet = MinWet + t * (MaxWet - MinWet);
+        float wet = MinWet + (t * (MaxWet - MinWet));
 
         // Cap when reference envelope estimate is unreliable (too few voiced frames)
         if (refVoicedRatio < MinConfidentVoicedRatio)
-            wet = Math.Min(wet, MinWet + (MaxWet - MinWet) * (refVoicedRatio / MinConfidentVoicedRatio));
+            wet = Math.Min(wet, MinWet + ((MaxWet - MinWet) * (refVoicedRatio / MinConfidentVoicedRatio)));
 
         return wet;
     }
