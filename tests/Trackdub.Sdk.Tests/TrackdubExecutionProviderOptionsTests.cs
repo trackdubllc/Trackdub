@@ -151,7 +151,10 @@ public sealed class TrackdubExecutionProviderOptionsTests
 
             Assert.Equal(WindowsMlExecutionDevicePolicy.PreferNpu, settings.WindowsMlExecutionDevicePolicy);
             Assert.NotEmpty(settings.HardwareOverrides!);
-            Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.TensorRTRtx, v));
+            ExecutionProviderKind expectedEp = OperatingSystem.IsWindows()
+                ? ExecutionProviderKind.TensorRTRtx
+                : ExecutionProviderKind.Cuda;
+            Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expectedEp, v));
         }
     }
 
