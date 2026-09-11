@@ -477,7 +477,7 @@ public sealed class OnnxExecutionSessionFactoryTests
 
 
     [Fact]
-    public void BuildSessionOptionsFingerprint_includes_policy_for_catalog_gpu_only()
+    public void BuildSessionOptionsFingerprint_includes_policy_only_for_catalog_providers_that_apply_it()
     {
         MethodInfo method = typeof(OnnxExecutionSessionFactory)
             .GetMethod("BuildSessionOptionsFingerprint", BindingFlags.NonPublic | BindingFlags.Static)
