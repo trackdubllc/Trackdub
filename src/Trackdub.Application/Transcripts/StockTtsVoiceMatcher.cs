@@ -14,6 +14,11 @@ public static class StockTtsVoiceMatcher
         return normalized is "en" or "es";
     }
 
+    public static string ResolveFallbackModelAlias(string? languageCode) =>
+        SupportsKokoro(languageCode)
+            ? StockTtsDefaults.KokoroPrimaryAlias
+            : Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null);
+
     public static VoiceCatalogEntry? PickClosest(
         IReadOnlyList<VoiceCatalogEntry> voices,
         string? targetLanguageCode,

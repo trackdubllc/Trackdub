@@ -482,10 +482,8 @@ public sealed class TtsOrchestrationService(
                     cancellationToken).ConfigureAwait(false);
                 projectArtifacts = currentState.ProjectState.Artifacts;
                 useReferenceClipForVoiceCloning = false;
-                if (StockTtsVoiceMatcher.SupportsKokoro(translationRevision.TargetLanguage))
-                {
-                    preferredModelAlias = StockTtsDefaults.KokoroPrimaryAlias;
-                }
+                preferredModelAlias = StockTtsVoiceMatcher.ResolveFallbackModelAlias(
+                    translationRevision.TargetLanguage);
 
                 PipelineProgressReporter.Phase(
                     progress,
@@ -1071,6 +1069,8 @@ public sealed class TtsOrchestrationService(
         {
             VoiceAssignment stockAssignment = currentAssignment with
             {
+                VoiceModelId = StockTtsVoiceMatcher.ResolveFallbackModelAlias(targetLanguage),
+                VoiceVariant = null,
                 RequiresConsent = false,
                 IsFallback = true,
                 ReferenceClipArtifactId = null

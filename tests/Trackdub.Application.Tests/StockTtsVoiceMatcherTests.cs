@@ -107,4 +107,13 @@ public sealed class StockTtsVoiceMatcherTests
         Assert.True(StockTtsVoiceMatcher.SupportsKokoro("es"));
         Assert.False(StockTtsVoiceMatcher.SupportsKokoro("ja"));
     }
+
+    [Fact]
+    public void ResolveFallbackModelAlias_uses_kokoro_for_en_and_es_and_qwen3_otherwise()
+    {
+        Assert.Equal(StockTtsDefaults.KokoroPrimaryAlias, StockTtsVoiceMatcher.ResolveFallbackModelAlias("en-us"));
+        Assert.Equal(StockTtsDefaults.KokoroPrimaryAlias, StockTtsVoiceMatcher.ResolveFallbackModelAlias("es"));
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, StockTtsVoiceMatcher.ResolveFallbackModelAlias("ja"));
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, StockTtsVoiceMatcher.ResolveFallbackModelAlias("fr"));
+    }
 }
