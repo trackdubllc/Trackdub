@@ -35,7 +35,7 @@ New-Item -ItemType Directory -Path $extractDir | Out-Null
 
 $extension = [System.IO.Path]::GetExtension($assetName).ToLowerInvariant()
 if ($extension -eq '.msi') {
-    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/a', $assetPath, '/qn', "TARGETDIR=$extractDir") -Wait -PassThru
+    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/a', "`"$assetPath`"", '/qn', "`"TARGETDIR=$extractDir`"") -Wait -PassThru
     if ($process.ExitCode -ne 0) {
         throw "msiexec administrative extract failed with exit code $($process.ExitCode)."
     }
