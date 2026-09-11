@@ -309,16 +309,10 @@ public sealed class ModelDownloadOrchestrator(
 
         if (hashResult.IsValid)
         {
-            if (record is null)
-            {
-                await RegisterCacheRecordAsync(entry, modelRootDirectory, hashResult, cancellationToken).ConfigureAwait(false);
-                EmitStateChange(modelId, ModelCacheState.Missing, ModelCacheState.Installed);
-                return new ModelVerificationResult(modelId, ModelCacheState.Missing, ModelCacheState.Installed, true, null);
-            }
-
-            await SetModelIntegrityStateAsync(modelId, integrityFailed: false, entry, modelRootDirectory, cancellationToken)
-                .ConfigureAwait(false);
-            ModelCacheState newState = currentState is ModelCacheState.Corrupt ? ModelCacheState.Installed : currentState;
+            await RegisterCacheRecordAsync(entry, modelRootDirectory, hashResult, cancellationToken).ConfigureAwait(false);
+            ModelCacheState newState = record is null || currentState is ModelCacheState.Corrupt
+                ? ModelCacheState.Installed
+                : currentState;
             if (newState != currentState)
             {
                 EmitStateChange(modelId, currentState, newState);
@@ -594,6 +588,9 @@ public sealed class ModelDownloadOrchestrator(
                 LocalModelCacheRecord? existing = records.FirstOrDefault(r =>
                     r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase) &&
                     r.RootPath.Equals(modelRootDirectory, StringComparison.OrdinalIgnoreCase));
+                string identitySha256 = ModelDownloadManifestFiles.ResolveCacheIdentitySha256(
+                    entry,
+                    hashResult.ActualSha256);
                 var updated = records
                     .Where(r =>
                         !(r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase) &&
@@ -604,13 +601,13 @@ public sealed class ModelDownloadOrchestrator(
                         entry.ModelId,
                         modelRootDirectory,
                         string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
-                        hashResult.ActualSha256 ?? entry.Sha256,
+                        identitySha256,
                         DateTimeOffset.UtcNow,
                         IntegrityFailed: false)
                     : existing with
                     {
                         Revision = string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
-                        Sha256 = hashResult.ActualSha256 ?? entry.Sha256,
+                        Sha256 = identitySha256,
                         CachedAtUtc = DateTimeOffset.UtcNow,
                         IntegrityFailed = false
                     });
