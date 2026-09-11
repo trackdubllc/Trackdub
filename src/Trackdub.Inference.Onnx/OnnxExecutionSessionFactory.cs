@@ -1069,7 +1069,9 @@ internal static class OnnxExecutionSessionFactory
     {
         if (requestedProvider is ExecutionProviderKind.DirectMl)
         {
-            return ExecutionProviderKind.DirectMl;
+            return OperatingSystem.IsWindows()
+                ? ExecutionProviderKind.DirectMl
+                : bootstrapSelectedProvider;
         }
 
         if (requestedProvider is ExecutionProviderKind.Cuda
@@ -1766,7 +1768,8 @@ internal static class OnnxExecutionSessionFactory
         ExecutionProviderKind provider) =>
         OperatingSystem.IsWindows() &&
         devicePolicy != WindowsMlExecutionDevicePolicy.Explicit &&
-        IsCatalogGpuProvider(provider);
+        IsCatalogGpuProvider(provider) &&
+        provider is not ExecutionProviderKind.DirectMl;
 
     private sealed class NullWindowsMlEpDevicePolicyProvider : IWindowsMlEpDevicePolicyProvider
     {

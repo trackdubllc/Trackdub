@@ -155,7 +155,7 @@ public sealed class OnnxExecutionSessionFactoryTests
     public void ResolveSessionOptionsProvider_keeps_directml_when_bootstrap_selected_cpu()
     {
         Assert.Equal(
-            ExecutionProviderKind.DirectMl,
+            OperatingSystem.IsWindows() ? ExecutionProviderKind.DirectMl : ExecutionProviderKind.Cpu,
             OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
                 ExecutionProviderKind.DirectMl,
                 ExecutionProviderKind.Cpu));
@@ -196,7 +196,7 @@ public sealed class OnnxExecutionSessionFactoryTests
     [RequiresDirectMlFact]
     public async Task CreateSingleAsync_directml_selects_dml_not_cpu()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"trackdub-dml-{Guid.NewGuid():N}.onnx");
+        string path = Path.Join(Path.GetTempPath(), $"trackdub-dml-{Guid.NewGuid():N}.onnx");
         await File.WriteAllBytesAsync(path, BuildIdentityOnnxModel());
         try
         {
@@ -221,7 +221,7 @@ public sealed class OnnxExecutionSessionFactoryTests
         OnnxExecutionProviderBootstrapperRegistry.ResetForTests();
         OnnxExecutionProviderBootstrapperRegistry.Initialize(new CpuSelectingDirectMlBootstrapper());
 
-        string path = Path.Combine(Path.GetTempPath(), $"trackdub-dml-cpu-bootstrap-{Guid.NewGuid():N}.onnx");
+        string path = Path.Join(Path.GetTempPath(), $"trackdub-dml-cpu-bootstrap-{Guid.NewGuid():N}.onnx");
         await File.WriteAllBytesAsync(path, BuildIdentityOnnxModel());
         try
         {
@@ -513,16 +513,16 @@ public sealed class OnnxExecutionSessionFactoryTests
 
     [Theory]
     [InlineData(WindowsMlExecutionDevicePolicy.Explicit, ExecutionProviderKind.DirectMl, false)]
-    [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.DirectMl, true)]
+    [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.DirectMl, false)]
     [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.TensorRTRtx, false)]
     [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.Migraphx, true)]
     [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.Cuda, false)]
     [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.TensorRt, false)]
-    [InlineData(WindowsMlExecutionDevicePolicy.PreferNpu, ExecutionProviderKind.DirectMl, true)]
-    [InlineData(WindowsMlExecutionDevicePolicy.MaxEfficiency, ExecutionProviderKind.DirectMl, true)]
-    [InlineData(WindowsMlExecutionDevicePolicy.MinOverallPower, ExecutionProviderKind.DirectMl, true)]
-    [InlineData(WindowsMlExecutionDevicePolicy.DefaultRender, ExecutionProviderKind.DirectMl, true)]
-    [InlineData(WindowsMlExecutionDevicePolicy.MinPower, ExecutionProviderKind.DirectMl, true)]
+    [InlineData(WindowsMlExecutionDevicePolicy.PreferNpu, ExecutionProviderKind.DirectMl, false)]
+    [InlineData(WindowsMlExecutionDevicePolicy.MaxEfficiency, ExecutionProviderKind.DirectMl, false)]
+    [InlineData(WindowsMlExecutionDevicePolicy.MinOverallPower, ExecutionProviderKind.DirectMl, false)]
+    [InlineData(WindowsMlExecutionDevicePolicy.DefaultRender, ExecutionProviderKind.DirectMl, false)]
+    [InlineData(WindowsMlExecutionDevicePolicy.MinPower, ExecutionProviderKind.DirectMl, false)]
     public void ShouldUseCatalogDevicePolicy_matrix(
         WindowsMlExecutionDevicePolicy policy,
         ExecutionProviderKind provider,
@@ -636,12 +636,12 @@ public sealed class OnnxExecutionSessionFactoryTests
             return;
         }
 
-        // On Windows, either the extended policy was genuinely applied (no fallback reason), or
-        // the pinned ORT binding lacks DEFAULT_RENDER/MIN_POWER and the reason must say so —
-        // the session must never silently report the extended policy as active when it is not.
+        // Packaged DirectML is appended explicitly. Catalog device policies do not apply, so a
+        // fallback reason is a DirectML append failure, not a silent "policy was applied" claim.
         if (fallbackReason is not null)
         {
-            Assert.Contains("was not applied", fallbackReason, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("was applied", fallbackReason, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("DirectML", fallbackReason, StringComparison.OrdinalIgnoreCase);
         }
     }
 
