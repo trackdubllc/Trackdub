@@ -892,11 +892,14 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                     new ExportStageRequest(
                         ProjectId: state.ProjectState.Project.Id,
                         OutputPath: outputPath,
-                        SubtitleFormats: hasTranscriptSegments ? [ExportSubtitleFormat.Srt] : [],
+                        SubtitleFormats: ResolveSubtitleFormats(options.SubtitleFormats, hasTranscriptSegments),
+                        SubtitleSource: ResolveSubtitleSource(options.SubtitleSource),
+                        BurnInSubtitles: options.BurnInSubtitles,
                         Container: container,
                         ApplyTimbrePolish: options.ApplyTimbrePolish,
                         RestoreOriginalPan: options.RestoreOriginalPan,
-                        MatchOriginalLoudness: options.MatchOriginalLoudness),
+                        MatchOriginalLoudness: options.MatchOriginalLoudness,
+                        VideoEncoder: options.VideoEncoder),
                     cancellationToken).ConfigureAwait(false);
                 if (exportResult.IsBlocked)
                 {
@@ -1374,6 +1377,29 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
 
     private static string ExportContainerKey(ExportOutputContainer container) =>
         container == ExportOutputContainer.Mkv ? "mkv" : "mp4";
+
+    private static IReadOnlyList<ExportSubtitleFormat> ResolveSubtitleFormats(
+        IReadOnlyList<string>? formats, bool hasTranscriptSegments)
+    {
+        if (formats is null)
+            return hasTranscriptSegments ? [ExportSubtitleFormat.Srt] : [];
+        var result = new List<ExportSubtitleFormat>(formats.Count);
+        foreach (string f in formats)
+        {
+            if (f.Equals("srt", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Srt);
+            else if (f.Equals("vtt", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Vtt);
+            else if (f.Equals("ass", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Ass);
+        }
+        return result;
+    }
+
+    private static ExportSubtitleSource ResolveSubtitleSource(string? source) =>
+        source?.Trim().ToLowerInvariant() switch
+        {
+            "transcript" => ExportSubtitleSource.Transcript,
+            "bilingual" => ExportSubtitleSource.Bilingual,
+            _ => ExportSubtitleSource.Translated,
+        };
 
     /// <summary>
     /// Determines the ordered list of stages to execute, respecting an optional filter.
