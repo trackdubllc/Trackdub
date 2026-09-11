@@ -893,7 +893,10 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                         ProjectId: state.ProjectState.Project.Id,
                         OutputPath: outputPath,
                         SubtitleFormats: hasTranscriptSegments ? [ExportSubtitleFormat.Srt] : [],
-                        Container: container),
+                        Container: container,
+                        ApplyTimbrePolish: options.ApplyTimbrePolish,
+                        RestoreOriginalPan: options.RestoreOriginalPan,
+                        MatchOriginalLoudness: options.MatchOriginalLoudness),
                     cancellationToken).ConfigureAwait(false);
                 if (exportResult.IsBlocked)
                 {
