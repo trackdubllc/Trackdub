@@ -39,6 +39,11 @@ public static class ModelExpectedRuntimeFormatter
             return "Runtime: MIGraphX (AMD GPU)";
         }
 
+        if (normalized.Equals(ModelExpectedRuntime.TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMl, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Runtime: TensorRT RTX, Windows ML catalog, MIGraphX, or DirectML fallback";
+        }
+
         if (normalized.Equals(ModelExpectedRuntime.WindowsMlCatalogOrMigraphxOrDirectMl, StringComparison.OrdinalIgnoreCase)
             || normalized.Equals(ModelExpectedRuntime.OnnxDirectMlOrMigraphx, StringComparison.OrdinalIgnoreCase))
         {
@@ -74,6 +79,7 @@ public static class ModelExpectedRuntimeFormatter
             ModelExpectedRuntime.OnnxDirectMl => "Windows GPU (DirectML fallback)",
             ModelExpectedRuntime.OnnxMigraphx => "MIGraphX (AMD GPU)",
             "windows-ml" => "Windows ML catalog",
+            "trt-rtx" or "tensorrt-rtx" => "TensorRT RTX",
             _ => token
         };
 }

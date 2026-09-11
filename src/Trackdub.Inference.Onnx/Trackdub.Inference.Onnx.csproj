@@ -22,6 +22,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Trackdub.Inference.Onnx.Tests" />
     <ProjectReference Include="..\Trackdub.Contracts\Trackdub.Contracts.csproj" />
     <ProjectReference Include="..\Trackdub.Domain\Trackdub.Domain.csproj" />
     <ProjectReference Include="..\Trackdub.Inference\Trackdub.Inference.csproj" />
@@ -62,9 +63,15 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" />
     <!-- Optional native CUDA/TensorRT ORT EPs when advanced setting is enabled (coexists with WinML resolver). -->
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" />
+    <!-- Sidecar only: CPU GenAI loader LoadLibrary("onnxruntime-genai-cuda.dll") for NvTensorRtRtx.
+         Exclude compile/runtime so this does not replace onnxruntime-genai.dll or pull ORT Gpu 1.28. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" GeneratePathProperty="true">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>compile;runtime;native;contentFiles;analyzers;build;buildTransitive</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
-  <!-- Linux: OnnxRuntime.Gpu (CUDA + CPU) + GenAI.Cuda for Phi/Whisper genai engines. -->
+  <!-- Linux: OnnxRuntime.Gpu (CPU + CUDA EP) + GenAI.Cuda natives (NVIDIA OGA interface, including NvTensorRtRtx). -->
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'
                         And $([MSBuild]::IsOSPlatform('Linux'))">
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" />

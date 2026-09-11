@@ -48,7 +48,10 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
             if (outcome == ProviderGuardOutcome.Return) return guardResult;
             if (outcome == ProviderGuardOutcome.Skip)
             {
-                if (fallbackUpdate is not null) providerFallback ??= fallbackUpdate;
+                if (fallbackUpdate is not null)
+                {
+                    providerFallback = MergeProviderFallback(providerFallback, fallbackUpdate);
+                }
                 continue;
             }
 
@@ -150,9 +153,11 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                             smokeResult.Detail ?? $"{provider} smoke test failed for variant '{variant.Alias}'."));
                 }
 
-                providerFallback ??= new RuntimePlanFallback(
-                    RuntimePlanFallbackCode.ProviderSmokeTestFailed,
-                    smokeResult.Detail ?? $"{provider} smoke test failed for variant '{variant.Alias}'.");
+                providerFallback = MergeProviderFallback(
+                    providerFallback,
+                    new RuntimePlanFallback(
+                        RuntimePlanFallbackCode.ProviderSmokeTestFailed,
+                        smokeResult.Detail ?? $"{provider} smoke test failed for variant '{variant.Alias}'."));
             }
         }
 
@@ -273,6 +278,26 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                     $"{requiredProvider} is not allowed for {candidate.Entry.EngineFamily} in stage {stage}."));
         }
         return null;
+    }
+
+    private static RuntimePlanFallback MergeProviderFallback(
+        RuntimePlanFallback? current,
+        RuntimePlanFallback next)
+    {
+        if (current is null)
+        {
+            return next;
+        }
+
+        // A later smoke failure is more specific than an earlier catalog EP that was simply
+        // not present on this machine (common once TensorRT is excluded from a stage).
+        if (current.Code == RuntimePlanFallbackCode.ProviderUnavailable &&
+            next.Code == RuntimePlanFallbackCode.ProviderSmokeTestFailed)
+        {
+            return next;
+        }
+
+        return current;
     }
 
     private StageRuntimePlan? EvaluateProviderGuard(

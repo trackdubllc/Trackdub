@@ -1,3 +1,4 @@
+using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
 
@@ -12,6 +13,7 @@ public sealed record BenchmarkOptions(
     bool AllVariants,
     ReportFormat ReportFormat,
     string? WindowsMlDevicePolicyKey,
+    string? Scope,
     bool ShowHelp)
 {
     public static bool TryParse(
@@ -27,6 +29,7 @@ public sealed record BenchmarkOptions(
         var allVariants = false;
         var reportFormat = ReportFormat.Both;
         string? windowsMlDevicePolicyKey = null;
+        string? scope = null;
         var showHelp = false;
 
         for (var index = 0; index < args.Count; index++)
@@ -48,6 +51,16 @@ public sealed record BenchmarkOptions(
                         return false;
                     }
 
+                    break;
+
+                case "--scope":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out scope))
+                    {
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    scope = scope.Trim();
                     break;
 
                 case "--output":
@@ -161,13 +174,38 @@ public sealed record BenchmarkOptions(
 
         if (showHelp)
         {
-            options = new BenchmarkOptions(string.Empty, outputPath, providerPreference, runCount, variant, allVariants, reportFormat, null, ShowHelp: true);
+            options = new BenchmarkOptions(
+                string.Empty,
+                outputPath,
+                providerPreference,
+                runCount,
+                variant,
+                allVariants,
+                reportFormat,
+                null,
+                scope,
+                ShowHelp: true);
             return true;
         }
 
-        if (string.IsNullOrWhiteSpace(modelPath))
+        if (!string.IsNullOrWhiteSpace(scope) &&
+            !scope.Equals(TrtRtxSmokeCatalog.ScopeName, StringComparison.OrdinalIgnoreCase))
         {
-            errorWriter.WriteLine("Missing required argument --model <path-or-scope>.");
+            errorWriter.WriteLine($"Unknown scope '{scope}'. Expected {TrtRtxSmokeCatalog.ScopeName}.");
+            options = DefaultWithHelp();
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(modelPath) && string.IsNullOrWhiteSpace(scope))
+        {
+            errorWriter.WriteLine("Missing required argument --model <path-or-scope> or --scope trt-rtx-smoke.");
+            options = DefaultWithHelp();
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(modelPath) && !string.IsNullOrWhiteSpace(scope))
+        {
+            errorWriter.WriteLine("Cannot combine --model with --scope.");
             options = DefaultWithHelp();
             return false;
         }
@@ -180,7 +218,7 @@ public sealed record BenchmarkOptions(
         }
 
         options = new BenchmarkOptions(
-            modelPath.Trim(),
+            string.IsNullOrWhiteSpace(modelPath) ? string.Empty : modelPath.Trim(),
             Path.GetFullPath(outputPath),
             providerPreference,
             runCount,
@@ -188,13 +226,24 @@ public sealed record BenchmarkOptions(
             allVariants,
             reportFormat,
             windowsMlDevicePolicyKey,
+            string.IsNullOrWhiteSpace(scope) ? null : scope,
             ShowHelp: false);
 
         return true;
     }
 
     private static BenchmarkOptions DefaultWithHelp() =>
-        new(string.Empty, Path.Combine(Environment.CurrentDirectory, "benchmark-report.json"), BenchmarkProviderPreference.Cpu, 5, null, false, ReportFormat.Both, null, ShowHelp: true);
+        new(
+            string.Empty,
+            Path.Combine(Environment.CurrentDirectory, "benchmark-report.json"),
+            BenchmarkProviderPreference.Cpu,
+            5,
+            null,
+            false,
+            ReportFormat.Both,
+            null,
+            null,
+            ShowHelp: true);
 
     private static bool TryParseProviderPreference(string value, out BenchmarkProviderPreference preference)
     {

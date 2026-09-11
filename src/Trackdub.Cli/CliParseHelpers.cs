@@ -219,12 +219,15 @@ internal static class CliParseHelpers
             return false;
         }
 
-        if (kind is ExecutionProviderKind.Cuda && OperatingSystem.IsWindows())
+        if (kind is ExecutionProviderKind parsedKind)
         {
-            kind = ExecutionProviderKind.TensorRTRtx;
-            warning =
-                "Warning: --execution-provider cuda on Windows maps to TensorRT RTX (trt-rtx). "
-                + "Use --execution-provider trt-rtx explicitly, or run on Linux for native CUDA.";
+            kind = ExecutionProviderTokens.ResolvePlatformPin(parsedKind, out string? platformRemapWarning);
+            if (platformRemapWarning is not null)
+            {
+                warning =
+                    "Warning: --execution-provider cuda on Windows maps to TensorRT RTX (trt-rtx). "
+                    + "Use --execution-provider trt-rtx explicitly, or run on Linux for native CUDA.";
+            }
         }
 
         return true;

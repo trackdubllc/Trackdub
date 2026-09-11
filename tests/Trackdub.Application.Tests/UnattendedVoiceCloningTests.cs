@@ -143,8 +143,97 @@ public sealed class UnattendedVoiceCloningTests
         Assert.Equal("am_adam", request.FallbackVoiceIdsBySpeakerId[speaker.Id]);
     }
 
+    [Fact]
+    public void BuildUnattendedTtsRequest_WhenNotCloning_AppliesVoiceOverrides()
+    {
+        DateTimeOffset createdAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        ProjectSpeaker speakerA = CreateSpeaker("Speaker 1", createdAt);
+        ProjectSpeaker speakerB = CreateSpeaker("Speaker 2", createdAt.AddSeconds(1));
+        TranscriptProjectState state = BuildState(
+            [speakerA, speakerB],
+            availableVoices: [new VoiceCatalogEntry("am_adam", "en-us", "male", "Adam")]);
+
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "clip.mp4",
+            TargetLanguageCode = "en",
+            VoiceAssignmentOverrides = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["SPEAKER_00"] = "af_bella",
+            },
+        };
+
+        GenerateTtsForAllSpeakersRequest request = DubbingPipelineEngine.BuildUnattendedTtsRequest(
+            state,
+            options,
+            ttsModelAlias: "kokoro-onnx");
+
+        Assert.Null(request.UseReferenceClipForVoiceCloningBySpeakerId);
+        Assert.NotNull(request.VoiceIdsBySpeakerId);
+        Assert.Equal("af_bella", request.VoiceIdsBySpeakerId[speakerA.Id]);
+        Assert.False(request.VoiceIdsBySpeakerId.ContainsKey(speakerB.Id));
+        Assert.NotNull(request.FallbackVoiceIdsBySpeakerId);
+        Assert.Equal("am_adam", request.FallbackVoiceIdsBySpeakerId[speakerB.Id]);
+        Assert.False(request.FallbackVoiceIdsBySpeakerId.ContainsKey(speakerA.Id));
+    }
+
+    [Fact]
+    public void BuildUnattendedTtsRequest_WhenCloning_SkipsCloneForVoiceOverrides()
+    {
+        DateTimeOffset createdAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        ProjectSpeaker speakerA = CreateSpeaker("Speaker 1", createdAt);
+        ProjectSpeaker speakerB = CreateSpeaker("Speaker 2", createdAt.AddSeconds(1));
+        TranscriptProjectState state = BuildState([speakerA, speakerB]);
+
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "clip.mp4",
+            TargetLanguageCode = "en",
+            UseVoiceCloning = true,
+            VoiceAssignmentOverrides = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Speaker 1"] = "af_bella",
+            },
+        };
+
+        GenerateTtsForAllSpeakersRequest request = DubbingPipelineEngine.BuildUnattendedTtsRequest(
+            state,
+            options,
+            ttsModelAlias: null);
+
+        Assert.Equal(VoiceCloningDefaults.ChatterboxPrimaryAlias, request.PreferredModelAlias);
+        Assert.Null(request.FallbackVoiceIdsBySpeakerId);
+        Assert.NotNull(request.VoiceIdsBySpeakerId);
+        Assert.Equal("af_bella", request.VoiceIdsBySpeakerId[speakerA.Id]);
+        Assert.NotNull(request.UseReferenceClipForVoiceCloningBySpeakerId);
+        Assert.False(request.UseReferenceClipForVoiceCloningBySpeakerId[speakerA.Id]);
+        Assert.True(request.UseReferenceClipForVoiceCloningBySpeakerId[speakerB.Id]);
+    }
+
+    [Fact]
+    public void BuildUnattendedTtsRequest_WhenVoiceOverrideDoesNotMatch_Throws()
+    {
+        TranscriptProjectState state = BuildState([CreateSpeaker("Speaker 1")]);
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "clip.mp4",
+            TargetLanguageCode = "en",
+            VoiceAssignmentOverrides = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["SPEAKER_09"] = "af_bella",
+            },
+        };
+
+        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
+            DubbingPipelineEngine.BuildUnattendedTtsRequest(state, options, ttsModelAlias: "kokoro-onnx"));
+        Assert.Contains("SPEAKER_09", ex.Message, StringComparison.Ordinal);
+    }
+
     private static ProjectSpeaker CreateSpeaker(string displayName) =>
-        new(Guid.NewGuid(), ProjectId, displayName, DateTimeOffset.UtcNow);
+        CreateSpeaker(displayName, DateTimeOffset.UtcNow);
+
+    private static ProjectSpeaker CreateSpeaker(string displayName, DateTimeOffset createdAtUtc) =>
+        new(Guid.NewGuid(), ProjectId, displayName, createdAtUtc);
 
     private static TranscriptProjectState BuildState(
         IReadOnlyList<ProjectSpeaker> speakers,

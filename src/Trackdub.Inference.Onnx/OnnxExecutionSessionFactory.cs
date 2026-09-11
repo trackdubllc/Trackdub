@@ -1482,6 +1482,17 @@ internal static class OnnxExecutionSessionFactory
         string.Equals(epName, DnnlExecutionProviderName, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(epName, DnnlUpperExecutionProviderName, StringComparison.OrdinalIgnoreCase);
 
+    // Classic TensorRT EP uses trt_profile_*. NvTensorRTRTX rejects those keys.
+    // Same shape grammar: "input:dim1xdim2x...,input2:..."
+    // https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html
+    private static readonly IReadOnlyDictionary<string, string> ClassicTrtProfileKeysToNvRtx =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["trt_profile_min_shapes"] = "nv_profile_min_shapes",
+            ["trt_profile_max_shapes"] = "nv_profile_max_shapes",
+            ["trt_profile_opt_shapes"] = "nv_profile_opt_shapes",
+        };
+
     private static IReadOnlyDictionary<string, string> BuildTensorRtRtxOptions(
         IReadOnlyDictionary<string, string>? additionalTrtOptions)
     {
@@ -1492,11 +1503,31 @@ internal static class OnnxExecutionSessionFactory
             ["enable_cuda_graph"] = "1"
         };
 
-        if (additionalTrtOptions != null)
+        if (additionalTrtOptions is null)
         {
-            foreach ((string key, string value) in additionalTrtOptions)
+            return trtOptions;
+        }
+
+        foreach ((string key, string value) in additionalTrtOptions)
+        {
+            if (ClassicTrtProfileKeysToNvRtx.ContainsKey(key))
             {
-                trtOptions[key] = value;
+                continue;
+            }
+
+            trtOptions[key] = value;
+        }
+
+        foreach ((string classicKey, string nvKey) in ClassicTrtProfileKeysToNvRtx)
+        {
+            if (trtOptions.ContainsKey(nvKey))
+            {
+                continue;
+            }
+
+            if (additionalTrtOptions.TryGetValue(classicKey, out string? shapes))
+            {
+                trtOptions[nvKey] = shapes;
             }
         }
 

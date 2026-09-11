@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text;
 using Trackdub.Benchmarks;
+using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.ModelManifest;
@@ -43,6 +44,53 @@ public sealed class BenchmarkOptionsTests
         Assert.Equal(7, options.RunCount);
         Assert.Equal(ReportFormat.Json, options.ReportFormat);
         Assert.EndsWith(Path.Combine("out", "report.json"), options.OutputPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryParse_ParsesTrtRtxSmokeScope()
+    {
+        var args = new[] { "--scope", TrtRtxSmokeCatalog.ScopeName, "--provider", "trt-rtx", "--runs", "1" };
+
+        bool success = BenchmarkOptions.TryParse(args, TextWriter.Null, out BenchmarkOptions options);
+
+        Assert.True(success);
+        Assert.Equal(TrtRtxSmokeCatalog.ScopeName, options.Scope);
+        Assert.Equal(string.Empty, options.ModelPath);
+        Assert.Equal(BenchmarkProviderPreference.TensorRtRtx, options.ProviderPreference);
+    }
+
+    [Fact]
+    public void TrtRtxSmokeCatalog_includes_starter_pack_turbo_models()
+    {
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("madlad400", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("whisper-small", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("qwen3-asr-0.6b", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("qwen3-asr-1.7b", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void TrtRtxSmokeCatalog_remaining_includes_untested_onnx_gpu_models()
+    {
+        Assert.Contains(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("nemotron", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("LatentSync", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("silero", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("Kokoro", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

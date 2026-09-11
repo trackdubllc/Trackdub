@@ -9,8 +9,10 @@ using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Contracts.Transcripts;
 using Trackdub.Domain;
 using Trackdub.Domain.Pipeline;
+using Trackdub.Domain.Speakers;
 using Trackdub.Domain.StageRuns;
 using Microsoft.Extensions.DependencyInjection;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
@@ -851,13 +853,24 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                         progress,
                         StageNames.Tts,
                         PipelineProgressEventKind.Progress,
-                        "Cloning each speaker from source audio.");
+                        options.VoiceAssignmentOverrides is { Count: > 0 }
+                            ? "Cloning speakers without a voice override from source audio."
+                            : "Cloning each speaker from source audio.");
                 }
 
                 GenerateTtsForAllSpeakersRequest ttsRequest = BuildUnattendedTtsRequest(
                     ttsState,
                     options,
                     runtimeSelections.TtsModelAlias);
+                if (ttsRequest.VoiceIdsBySpeakerId is { Count: > 0 })
+                {
+                    ReportProgress(
+                        progress,
+                        StageNames.Tts,
+                        PipelineProgressEventKind.Progress,
+                        $"Applying voice override to {ttsRequest.VoiceIdsBySpeakerId.Count} speaker(s).");
+                }
+
                 if (ttsRequest.FallbackVoiceIdsBySpeakerId is { Count: > 0 })
                 {
                     ReportProgress(
@@ -1104,8 +1117,10 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
     }
 
     /// <summary>
-    /// Builds the unattended TTS request: stock Kokoro fallback voices, or per-speaker
-    /// source-audio cloning when <see cref="DubbingSessionOptions.UseVoiceCloning"/> is set.
+    /// Builds the unattended TTS request: explicit <c>--voice</c> assignments, stock Kokoro
+    /// fallbacks for remaining speakers, and per-speaker source-audio cloning when
+    /// <see cref="DubbingSessionOptions.UseVoiceCloning"/> is set. Cloning is skipped for
+    /// speakers that have a voice override.
     /// </summary>
     internal static GenerateTtsForAllSpeakersRequest BuildUnattendedTtsRequest(
         TranscriptProjectState state,
@@ -1115,23 +1130,128 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(options);
 
+        IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
+            state,
+            options.VoiceAssignmentOverrides);
+
+        Dictionary<Guid, string>? fallbackVoiceIds = null;
         if (!options.UseVoiceCloning)
         {
-            return new GenerateTtsForAllSpeakersRequest(
-                FallbackVoiceIdsBySpeakerId: BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode),
-                PreferredModelAlias: ttsModelAlias);
+            fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode);
+            if (fallbackVoiceIds is not null && explicitVoiceIds.Count > 0)
+            {
+                fallbackVoiceIds = fallbackVoiceIds
+                    .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
+                    .ToDictionary(static pair => pair.Key, static pair => pair.Value);
+                if (fallbackVoiceIds.Count == 0)
+                {
+                    fallbackVoiceIds = null;
+                }
+            }
         }
 
-        Dictionary<Guid, bool>? cloneBySpeaker = state.Speakers.Count == 0
-            ? null
-            : state.Speakers.ToDictionary(static speaker => speaker.Id, static _ => true);
+        Dictionary<Guid, bool>? cloneBySpeaker = null;
+        if (options.UseVoiceCloning && state.Speakers.Count > 0)
+        {
+            cloneBySpeaker = state.Speakers.ToDictionary(
+                static speaker => speaker.Id,
+                speaker => !explicitVoiceIds.ContainsKey(speaker.Id));
+        }
+
+        string? preferredModelAlias = ttsModelAlias;
+        if (options.UseVoiceCloning && string.IsNullOrWhiteSpace(preferredModelAlias))
+        {
+            preferredModelAlias = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
+        }
 
         return new GenerateTtsForAllSpeakersRequest(
-            FallbackVoiceIdsBySpeakerId: null,
-            PreferredModelAlias: string.IsNullOrWhiteSpace(ttsModelAlias)
-                ? VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode)
-                : ttsModelAlias,
-            UseReferenceClipForVoiceCloningBySpeakerId: cloneBySpeaker);
+            FallbackVoiceIdsBySpeakerId: fallbackVoiceIds,
+            PreferredModelAlias: preferredModelAlias,
+            UseReferenceClipForVoiceCloningBySpeakerId: cloneBySpeaker,
+            VoiceIdsBySpeakerId: explicitVoiceIds.Count > 0 ? explicitVoiceIds : null);
+    }
+
+    /// <summary>
+    /// Maps CLI <c>--voice SPEAKER_ID:voice_id</c> keys onto project speakers.
+    /// Accepts a speaker Guid, display name (Speaker 1), or Whisper-style <c>SPEAKER_00</c> index.
+    /// </summary>
+    internal static IReadOnlyDictionary<Guid, string> ResolveVoiceAssignmentOverrides(
+        TranscriptProjectState state,
+        IReadOnlyDictionary<string, string>? overrides)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (overrides is null || overrides.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        ProjectSpeaker[] speakers =
+        [
+            .. state.Speakers
+                .OrderBy(static speaker => speaker.CreatedAtUtc)
+                .ThenBy(static speaker => speaker.Id)
+        ];
+
+        var resolved = new Dictionary<Guid, string>();
+        foreach ((string key, string voiceId) in overrides)
+        {
+            if (!TryMatchSpeaker(speakers, key, out ProjectSpeaker? speaker) || speaker is null)
+            {
+                string known = speakers.Length == 0
+                    ? "(none)"
+                    : string.Join(", ", speakers.Select(static candidate => candidate.DisplayName));
+                throw new InvalidOperationException(
+                    $"Voice override '{key}' did not match a speaker. Known speakers: {known}. Use a display name (Speaker 1) or Whisper-style id (SPEAKER_00).");
+            }
+
+            resolved[speaker.Id] = voiceId;
+        }
+
+        return resolved;
+    }
+
+    internal static bool TryMatchSpeaker(
+        IReadOnlyList<ProjectSpeaker> speakers,
+        string key,
+        out ProjectSpeaker? speaker)
+    {
+        speaker = null;
+        if (string.IsNullOrWhiteSpace(key) || speakers.Count == 0)
+        {
+            return false;
+        }
+
+        string trimmed = key.Trim();
+        if (Guid.TryParse(trimmed, out Guid speakerId))
+        {
+            speaker = speakers.FirstOrDefault(candidate => candidate.Id == speakerId);
+            return speaker is not null;
+        }
+
+        foreach (ProjectSpeaker candidate in speakers)
+        {
+            if (candidate.DisplayName.Equals(trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                speaker = candidate;
+                return true;
+            }
+        }
+
+        const string whisperPrefix = "speaker_";
+        if (trimmed.StartsWith(whisperPrefix, StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(
+                trimmed[whisperPrefix.Length..],
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out int index)
+            && index >= 0
+            && index < speakers.Count)
+        {
+            speaker = speakers[index];
+            return true;
+        }
+
+        return false;
     }
 
     private static bool IsVoiceLanguageMatch(string voiceLanguageCode, string? targetLanguageCode)

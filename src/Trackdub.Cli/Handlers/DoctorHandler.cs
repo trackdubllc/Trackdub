@@ -417,7 +417,7 @@ internal static class DoctorHandler
             Status = "warn",
             Message = $"{snapshot.StatusLabel}: {snapshot.Detail} {licenseNote}",
             Remediation =
-                "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license, or use Model Manager Install / tools/dev/Fetch-TrtRtxEp.ps1.",
+                "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license, then trackdub providers trt-rtx smoke, or use Model Manager Install / tools/dev/Fetch-TrtRtxEp.ps1.",
         };
     }
 

@@ -246,7 +246,7 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
 
         return new(ExecutionProviderKind.Cuda, false,
             isWindows
-                ? "CUDA native EP on Windows is off by default. Enable it in Settings → Hardware (advanced)."
+                ? "CUDA native EP on Windows is off by default. Use TensorRT RTX instead."
                 : "CUDA native EP is available on Linux and Windows (when enabled).");
     }
 
@@ -281,7 +281,7 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
 
         return new(ExecutionProviderKind.TensorRt, false,
             isWindows
-                ? "Native TensorRT on Windows is off by default. Enable it in Settings → Hardware (advanced), or use TensorRT RTX (WinML)."
+                ? "Native TensorRT on Windows is off by default. Use TensorRT RTX instead."
                 : "TensorRT native EP is available on Linux and Windows (when enabled).");
     }
 

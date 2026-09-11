@@ -7,8 +7,8 @@ using Trackdub.Sdk;
 namespace Trackdub.Cli.Commands;
 
 /// <summary>
-/// <c>providers list</c> plus <c>providers trt-rtx status|install</c> for EP discoverability and the
-/// TensorRT RTX EP ABI plugin installer.
+/// <c>providers list</c> plus <c>providers trt-rtx status|install|smoke</c> for EP discoverability,
+/// the TensorRT RTX EP ABI plugin installer, and starter-pack smoke tests.
 /// </summary>
 internal static class ProvidersCommand
 {
@@ -21,6 +21,7 @@ internal static class ProvidersCommand
               trackdub providers list
               trackdub providers trt-rtx status
               trackdub providers trt-rtx install --accept-license
+              trackdub providers trt-rtx smoke
             """);
 
         providersCommand.Add(CreateListCommand());
@@ -28,6 +29,7 @@ internal static class ProvidersCommand
         var trtRtxCommand = new Command("trt-rtx", "TensorRT RTX EP ABI plugin (Windows/Linux NVIDIA GPU).");
         trtRtxCommand.Add(CreateStatusCommand());
         trtRtxCommand.Add(CreateInstallCommand());
+        trtRtxCommand.Add(CreateSmokeCommand());
         providersCommand.Add(trtRtxCommand);
 
         return providersCommand;
@@ -128,6 +130,37 @@ internal static class ProvidersCommand
             {
                 return await TrtRtxProvidersHandler
                     .InstallAsync(factory, acceptLicense, Console.Out, Console.Error, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        });
+
+        return command;
+    }
+
+    private static Command CreateSmokeCommand()
+    {
+        var command = new Command("smoke", """
+            Run planner-style ONNX smoke tests for bundled models not in the turbo starter-pack catalog.
+            Skips Silero, Kokoro, python-musetalk, and models that are not cached locally.
+
+            Examples:
+              trackdub providers trt-rtx smoke
+            """);
+
+        command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(parseResult, out int buildExitCode);
+            if (factory is null)
+            {
+                return buildExitCode;
+            }
+
+            using (factory)
+            {
+                return await TrtRtxProvidersHandler
+                    .SmokeAsync(factory, Console.Out, Console.Error, cancellationToken)
                     .ConfigureAwait(false);
             }
         });

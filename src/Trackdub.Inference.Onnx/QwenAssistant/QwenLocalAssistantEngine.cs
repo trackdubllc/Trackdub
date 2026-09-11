@@ -3,6 +3,7 @@ using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Runtime.Planning;
+using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Runtime.Planning;
 
 namespace Trackdub.Inference.Onnx.QwenAssistant;
@@ -185,13 +186,5 @@ public sealed class QwenLocalAssistantEngine(
     }
 
     private static string ToGenAiProviderName(ExecutionProviderKind executionProvider) =>
-        executionProvider switch
-        {
-            ExecutionProviderKind.Cpu => "cpu",
-            ExecutionProviderKind.DirectMl => "dml",
-            ExecutionProviderKind.Cuda => "cuda",
-            ExecutionProviderKind.CoreMl => "coreml",
-            ExecutionProviderKind.TensorRTRtx => "trt-rtx",
-            _ => throw new ArgumentOutOfRangeException(nameof(executionProvider), executionProvider, "Unsupported GenAI execution provider.")
-        };
+        GenAiExecutionProviderNames.Resolve(executionProvider);
 }

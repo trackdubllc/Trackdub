@@ -39,6 +39,10 @@ internal static class StageRuntimeRequirementsCatalog
     private static IReadOnlyList<ExecutionProviderKind> DefaultOnnxStageAllowedProviders =>
         Milestone5PlanningPolicy.SupportedProvidersThisMilestone;
 
+    private static IReadOnlyList<ExecutionProviderKind> WithoutTensorRtFamilies(
+        IReadOnlyList<ExecutionProviderKind> providers) =>
+        [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx and not ExecutionProviderKind.TensorRt)];
+
     public static IReadOnlyDictionary<RuntimeStage, StageRuntimeRequirements> All { get; } =
         new Dictionary<RuntimeStage, StageRuntimeRequirements>
         {
@@ -46,7 +50,7 @@ internal static class StageRuntimeRequirementsCatalog
                 RuntimeStage.Vad,
                 ModelTask.Vad,
                 ["silero-vad", "silero"],
-                DefaultOnnxStageAllowedProviders,
+                WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 ["fp16", "q4f16"],
                 ["int8", "quantized", "uint8", "q4"]),
             [RuntimeStage.Asr] = new(

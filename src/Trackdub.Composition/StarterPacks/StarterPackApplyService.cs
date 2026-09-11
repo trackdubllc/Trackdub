@@ -179,16 +179,16 @@ public sealed class StarterPackApplyService(
                 .FirstOrDefault(stage => string.Equals(stage.Stage, stageName, StringComparison.OrdinalIgnoreCase));
 
             string variant;
-            string executionProviderToken;
+            string packExecutionProvider;
             if (compatibilityEntry is not null)
             {
                 variant = compatibilityEntry.ResolvedVariant;
-                executionProviderToken = compatibilityEntry.ResolvedExecutionProvider;
+                packExecutionProvider = compatibilityEntry.RequestedExecutionProvider;
             }
             else if (model.RuntimeDefaults.TryGetValue(hardwareKey, out StarterPackRuntimeDefaults? runtimeDefaults))
             {
                 variant = runtimeDefaults.Variant;
-                executionProviderToken = runtimeDefaults.ExecutionProvider;
+                packExecutionProvider = runtimeDefaults.ExecutionProvider;
             }
             else
             {
@@ -199,10 +199,19 @@ public sealed class StarterPackApplyService(
             variantOverrides[variantKey] = variant;
             variantOverrides[stageName] = variant;
 
-            if (TryResolveExecutionProvider(executionProviderToken, out ExecutionProviderKind provider) &&
-                TryResolveHardwareOverrideKey(stageName, applySettings.AsrModelOverride, out string hardwareOverrideKey))
+            if (!TryResolveHardwareOverrideKey(stageName, applySettings.AsrModelOverride, out string hardwareOverrideKey))
+            {
+                continue;
+            }
+
+            // auto clears leftover pins so the planner owns GPU EP at run time.
+            if (TryResolveExecutionProvider(packExecutionProvider, out ExecutionProviderKind provider))
             {
                 hardwareOverrides[hardwareOverrideKey] = provider;
+            }
+            else
+            {
+                hardwareOverrides.Remove(hardwareOverrideKey);
             }
         }
 
@@ -440,17 +449,12 @@ public sealed class StarterPackApplyService(
             return false;
         }
 
-        provider = token.Trim().ToLowerInvariant() switch
+        if (!ExecutionProviderTokens.TryParse(token, out ExecutionProviderKind parsed))
         {
-            "cpu" => ExecutionProviderKind.Cpu,
-            "directml" or "dml" => ExecutionProviderKind.DirectMl,
-            "cuda" => ExecutionProviderKind.Cuda,
-            "trt-rtx" or "tensorrt-rtx" => ExecutionProviderKind.TensorRTRtx,
-            "tensorrt" => ExecutionProviderKind.TensorRt,
-            "migraphx" => ExecutionProviderKind.Migraphx,
-            _ => throw new InvalidOperationException($"Unknown execution provider token '{token}'.")
-        };
+            throw new InvalidOperationException($"Unknown execution provider token '{token}'.");
+        }
 
+        provider = ExecutionProviderTokens.ResolvePlatformPin(parsed);
         return true;
     }
 }

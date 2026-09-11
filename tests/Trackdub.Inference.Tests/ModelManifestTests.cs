@@ -1856,6 +1856,10 @@ public sealed class ModelManifestLoaderTests
         Assert.Equal(
             ["encoder.onnx", "decoder_init.onnx", "decoder_step.onnx"],
             manifest.Optimization!.Olive!.Components);
+        Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);
+        Assert.Equal(
+            ModelExpectedRuntime.TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMl,
+            manifest.ExpectedRuntime);
     }
 
     [Fact]

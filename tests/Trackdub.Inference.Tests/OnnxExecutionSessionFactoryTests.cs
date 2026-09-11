@@ -269,6 +269,55 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
+    public void BuildTensorRtRtxOptions_remaps_classic_trt_profile_keys()
+    {
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
+
+        object? rawResult = method.Invoke(
+            null,
+            [
+                new Dictionary<string, string>
+                {
+                    ["trt_profile_min_shapes"] = "mel:1x128x1",
+                    ["trt_profile_max_shapes"] = "mel:1x128x3000",
+                    ["trt_profile_opt_shapes"] = "mel:1x128x3000",
+                }
+            ]);
+        var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
+
+        Assert.Equal("mel:1x128x1", options["nv_profile_min_shapes"]);
+        Assert.Equal("mel:1x128x3000", options["nv_profile_max_shapes"]);
+        Assert.Equal("mel:1x128x3000", options["nv_profile_opt_shapes"]);
+        Assert.False(options.ContainsKey("trt_profile_min_shapes"));
+        Assert.False(options.ContainsKey("trt_profile_max_shapes"));
+        Assert.False(options.ContainsKey("trt_profile_opt_shapes"));
+    }
+
+    [Fact]
+    public void BuildTensorRtRtxOptions_prefers_explicit_nv_profile_keys_over_classic()
+    {
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
+
+        object? rawResult = method.Invoke(
+            null,
+            [
+                new Dictionary<string, string>
+                {
+                    ["trt_profile_min_shapes"] = "mel:1x128x1",
+                    ["nv_profile_min_shapes"] = "mel:1x128x8",
+                }
+            ]);
+        var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
+
+        Assert.Equal("mel:1x128x8", options["nv_profile_min_shapes"]);
+        Assert.False(options.ContainsKey("trt_profile_min_shapes"));
+    }
+
+    [Fact]
     public void BuildSessionOptionsFingerprint_distinguishes_tensorrt_option_overrides()
     {
         MethodInfo method = typeof(OnnxExecutionSessionFactory)

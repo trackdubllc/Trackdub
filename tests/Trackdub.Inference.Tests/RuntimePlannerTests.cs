@@ -68,7 +68,7 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_WhenTensorRTRtxAvailableForVad_UsesTensorRTRtxWhenSmokePasses()
+    public async Task PlanAsync_WhenTensorRTRtxAvailableForVad_UsesDirectMlInstead()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
@@ -84,23 +84,21 @@ public sealed class RuntimePlannerTests
                 new(ExecutionProviderKind.DirectMl, true),
                 new(ExecutionProviderKind.TensorRTRtx, true)
             ],
-            request => new ExecutionProviderSmokeTestResult(true)); // Accept all
+            request => new ExecutionProviderSmokeTestResult(true));
 
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
 
-        // TRT-RTX is in VAD allow-list and wins milestone probe order when smoke passes
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
         Assert.Equal("silero-vad", plan.ModelAlias);
         Assert.Equal("silero-vad", plan.EngineFamily);
         Assert.Equal("balanced", plan.ModelTier);
         Assert.Equal("fp16", plan.Variant);
         Assert.Null(plan.Fallback);
-
     }
 
     [Fact]
-    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesTensorRtWhenSmokePasses()
+    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesCudaWhenSmokePasses()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
@@ -120,9 +118,8 @@ public sealed class RuntimePlannerTests
 
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
 
-        // Native TensorRT precedes CUDA in milestone probe order when both are allowed and smoke passes
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.TensorRt, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.Cuda, plan.ExecutionProvider);
         Assert.Equal("int8", plan.Variant);
     }
 
@@ -420,6 +417,107 @@ public sealed class RuntimePlannerTests
                 warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
                 && warning.Detail is not null
                 && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForVad_PlansDirectMlWithSkipWarning()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/silero-vad");
+        workspace.WriteCacheFile(cacheRoot, "onnx/model_fp16.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("onnx-community/silero-vad", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request => new ExecutionProviderSmokeTestResult(true));
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Vad,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PlanAsync_WhenTensorRTRtxSmokePassesForQwenAsr_UsesTensorRTRtx()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateQwenAsrSpec());
+
+        string cacheRoot = workspace.CreateCacheRoot("tonythethompson/qwen3-asr-0.6b-onnx");
+        workspace.WriteCacheFile(cacheRoot, "encoder.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("tonythethompson/qwen3-asr-0.6b-onnx", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            _ => new ExecutionProviderSmokeTestResult(true));
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
+        Assert.Equal("qwen3-asr", plan.EngineFamily);
+    }
+
+    [Fact]
+    public async Task PlanAsync_WhenTensorRTRtxSmokeFailsForQwenAsr_FallsBackToDirectMl()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateQwenAsrSpec());
+
+        string cacheRoot = workspace.CreateCacheRoot("tonythethompson/qwen3-asr-0.6b-onnx");
+        workspace.WriteCacheFile(cacheRoot, "encoder.onnx");
+
+        var smokeRequests = new List<ExecutionProviderSmokeTestRequest>();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("tonythethompson/qwen3-asr-0.6b-onnx", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request =>
+            {
+                smokeRequests.Add(request);
+                return new ExecutionProviderSmokeTestResult(
+                    request.ExecutionProvider is not ExecutionProviderKind.TensorRTRtx,
+                    request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx
+                        ? "Qwen TRT RTX three-session smoke failed."
+                        : null);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Equal("qwen3-asr", plan.EngineFamily);
+        Assert.Contains(smokeRequests, request => request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx);
+        Assert.Contains(smokeRequests, request => request.ExecutionProvider is ExecutionProviderKind.DirectMl);
     }
 
     [Fact]
@@ -1911,6 +2009,23 @@ public sealed class RuntimePlannerTests
             BenchmarkEntry: "model.onnx",
             Variants: [new ManifestVariantSpec("default", "model.onnx")]);
 
+    private static ManifestSpec CreateQwenAsrSpec() =>
+        new(
+            ModelId: "tonythethompson/qwen3-asr-0.6b-onnx",
+            Task: "asr",
+            License: "Apache-2.0",
+            CommercialAllowed: true,
+            RequiresAttribution: false,
+            RequiresUserConsent: false,
+            VoiceCloning: false,
+            EngineFamily: "qwen3-asr",
+            Aliases: ["qwen3-asr-0.6b"],
+            RootFolder: "qwen3-asr",
+            BenchmarkEntry: "encoder.onnx",
+            Variants: [new ManifestVariantSpec("default", "encoder.onnx")],
+            CapabilityTags: ["language-detection"],
+            SourceLanguages: ["auto"]);
+
     private static ManifestSpec CreateVadSpec(
         string primaryAlias,
         bool commercialAllowed,
@@ -2037,20 +2152,20 @@ public sealed class RuntimePlannerTests
         RuntimePlanner planner = CreatePlanner(
             registry,
             [new("onnx-community/silero-vad-turbo", turboRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
-            [new(ExecutionProviderKind.TensorRTRtx, true)],
-            _ => new ExecutionProviderSmokeTestResult(false, "TensorRT RTX smoke failed."));
+            [new(ExecutionProviderKind.DirectMl, true)],
+            _ => new ExecutionProviderSmokeTestResult(false, "DirectML smoke failed."));
 
         StageRuntimePlan plan = await planner.PlanAsync(
             new StageRuntimePlanningRequest(
                 RuntimeStage.Vad,
                 PreferredModelTier: "turbo",
-                PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+                PreferredExecutionProvider: ExecutionProviderKind.DirectMl,
                 RequirePreferredExecutionProvider: true));
 
         Assert.Equal(StageRuntimePlanStatus.Blocked, plan.Status);
         Assert.NotNull(plan.Fallback);
         Assert.Equal(RuntimePlanFallbackCode.ProviderSmokeTestFailed, plan.Fallback!.Code);
-        Assert.Contains("TensorRT RTX smoke failed", plan.Fallback.Detail, StringComparison.Ordinal);
+        Assert.Contains("DirectML smoke failed", plan.Fallback.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain(plan.Warnings, warning => warning.Code == RuntimePlanWarningCode.CpuFallback);
     }
 
