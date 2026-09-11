@@ -106,12 +106,11 @@ internal static class DubCommand
         };
         subtitleSourceOption.AcceptOnlyFromAmong("translated", "transcript", "bilingual");
 
-        var burnInSubtitlesOption = new Option<bool>("--burn-in-subtitles")
+        var burnInSubtitlesOption = new Option<bool>(new[] { "--burn-in-subtitles", "--burn-in" })
         {
             Description = "Burn subtitles into the exported video (default: false)",
             DefaultValueFactory = _ => false,
         };
-        burnInSubtitlesOption.AddAlias("--burn-in");
 
         var videoEncoderOption = new Option<string?>("--video-encoder")
         {
@@ -199,7 +198,7 @@ internal static class DubCommand
             string? exportFormat = parseResult.GetValue(exportFormatOption);
             bool? enableAsrTextRefinement = parseResult.GetValue(enableAsrTextRefinementOption);
             bool voiceClone = parseResult.GetValue(voiceCloneOption);
-            bool timbrePolish = parseResult.GetValue(noTimbrePolishOption) ? false : parseResult.GetValue(timbrePolishOption) ?? true;
+            bool timbrePolish = !parseResult.GetValue(noTimbrePolishOption) && (parseResult.GetValue(timbrePolishOption) ?? true);
             bool restorePan = parseResult.GetValue(restorePanOption) ?? false;
             bool matchLoudness = parseResult.GetValue(matchLoudnessOption) ?? false;
             string[] voiceOverrideTokens = parseResult.GetValue(voiceOption) ?? [];
