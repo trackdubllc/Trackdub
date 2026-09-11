@@ -379,7 +379,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
         string dir = CreateTempDir();
         string executablePath = Path.Join(dir, EspeakExecutableName);
         File.WriteAllBytes(executablePath, []);
-        Directory.CreateDirectory(Path.Combine(dir, "espeak-ng-data"));
+        Directory.CreateDirectory(Path.Join(dir, "espeak-ng-data"));
 
         using IDisposable env = SetEnvironmentVariable(EspeakNgPathResolver.EnvironmentVariableName, executablePath);
         using IDisposable dataEnv = SetEnvironmentVariable("ESPEAK_DATA_PATH", null);
