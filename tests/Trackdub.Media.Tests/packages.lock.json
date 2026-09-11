@@ -211,6 +211,7 @@
       "trackdub.media": {
         "type": "Project",
         "dependencies": {
+          "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.11, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Contracts": "[1.0.0, )",
@@ -230,6 +231,12 @@
         "requested": "[3.10.1, )",
         "resolved": "3.10.1",
         "contentHash": "6iSrYMk6RU8fyftdXrfR1TW3xpR/WhEmliORuWvAu2N05wECb8k2hykWiU53/1zqx616v/qUlDbJJyqv78MDkQ=="
+      },
+      "MathNet.Numerics": {
+        "type": "CentralTransitive",
+        "requested": "[5.0.0, )",
+        "resolved": "5.0.0",
+        "contentHash": "pg1W2VwaEQMAiTpGK840hZgzavnqjlCMTVSbtVCXVyT+7AX4mc1o89SPv4TBlAjhgCOo9c1Y+jZ5m3ti2YgGgA=="
       },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "CentralTransitive",
