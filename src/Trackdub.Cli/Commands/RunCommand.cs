@@ -297,10 +297,10 @@ internal static class RunCommand
 
         command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
         {
-            string? mediaPath = parseResult.GetValue(mediaOption);
+            string? mediaPath = UserPathText.NormalizeOptional(parseResult.GetValue(mediaOption));
             string? targetLanguage = parseResult.GetValue(targetLanguageOption);
             string? sourceLanguage = parseResult.GetValue(sourceLanguageOption);
-            string? outputDirectory = parseResult.GetValue(outputOption);
+            string? outputDirectory = UserPathText.NormalizeOptional(parseResult.GetValue(outputOption));
             string[] modelOverrides = parseResult.GetValue(modelOption) ?? [];
             string? exportFormat = parseResult.GetValue(exportFormatOption);
             string? fromStage = parseResult.GetValue(fromStageOption);
@@ -317,7 +317,7 @@ internal static class RunCommand
             bool burnInSubtitles = parseResult.GetValue(burnInSubtitlesOption);
             string? videoEncoderKey = parseResult.GetValue(videoEncoderOption);
             string? presetName = parseResult.GetValue(presetOption);
-            string? inputDir = parseResult.GetValue(inputDirOption);
+            string? inputDir = UserPathText.NormalizeOptional(parseResult.GetValue(inputDirOption));
             string? inputGlob = parseResult.GetValue(inputGlobOption);
             bool recursive = parseResult.GetValue(recursiveOption);
             bool continueOnError = parseResult.GetValue(continueOnErrorOption);

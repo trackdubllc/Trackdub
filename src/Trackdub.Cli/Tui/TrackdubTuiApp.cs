@@ -32,15 +32,7 @@ internal static class TrackdubTuiApp
             {
                 console.Clear();
                 RenderHeader(console, currentScreen, screens);
-                try
-                {
-                    await screens[currentScreen].RenderAsync(context).ConfigureAwait(false);
-                }
-                catch (InvalidOperationException ex)
-                {
-                    console.MarkupLine($"[red]{TuiMarkup.Escape(ex.Message)}[/]");
-                    context.SetStatus(ex.Message);
-                }
+                await TryRenderScreenAsync(screens[currentScreen], context).ConfigureAwait(false);
 
                 if (showHelp)
                 {
@@ -105,6 +97,19 @@ internal static class TrackdubTuiApp
             {
                 Console.CancelKeyPress -= cancelHandler;
             }
+        }
+    }
+
+    internal static async Task TryRenderScreenAsync(ITuiScreen screen, TrackdubTuiContext context)
+    {
+        try
+        {
+            await screen.RenderAsync(context).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            context.Console.MarkupLine($"[red]{TuiMarkup.Escape(ex.Message)}[/]");
+            context.SetStatus(ex.Message);
         }
     }
 

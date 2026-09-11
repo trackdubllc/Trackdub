@@ -42,4 +42,15 @@ public sealed class UserPathTextTests
         Assert.Null(UserPathText.NormalizeOptional("\"\""));
         Assert.Equal(@"C:\out", UserPathText.NormalizeOptional("\"C:\\out\""));
     }
+
+    [Fact]
+    public void NormalizeOptional_QuotedPath_CanBePassedToGetFullPath()
+    {
+        string? normalized = UserPathText.NormalizeOptional("\"C:\\media\\clip.mp4\"");
+
+        Assert.NotNull(normalized);
+        string fullPath = Path.GetFullPath(normalized);
+        Assert.DoesNotContain('"', fullPath);
+        Assert.EndsWith($"clip.mp4", fullPath, StringComparison.OrdinalIgnoreCase);
+    }
 }

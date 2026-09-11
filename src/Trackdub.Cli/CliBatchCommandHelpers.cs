@@ -146,7 +146,7 @@ internal static class CliBatchCommandHelpers
         {
             if (inputDir is not null)
             {
-                string resolvedDir = Path.GetFullPath(inputDir);
+                string resolvedDir = Path.GetFullPath(UserPathText.Normalize(inputDir));
                 if (!Directory.Exists(resolvedDir))
                 {
                     CliErrorReporter.ReportValidationError(
