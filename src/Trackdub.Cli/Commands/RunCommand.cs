@@ -210,11 +210,12 @@ internal static class RunCommand
         };
         subtitleSourceOption.AcceptOnlyFromAmong("translated", "transcript", "bilingual");
 
-        var burnInSubtitlesOption = new Option<bool>(["--burn-in-subtitles", "--burn-in"])
+        var burnInSubtitlesOption = new Option<bool>("--burn-in-subtitles")
         {
             Description = "Burn subtitles into the exported video (default: false)",
             DefaultValueFactory = _ => false,
         };
+        burnInSubtitlesOption.AddAlias("--burn-in");
 
         var videoEncoderOption = new Option<string?>("--video-encoder")
         {
