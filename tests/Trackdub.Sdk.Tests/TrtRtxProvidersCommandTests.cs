@@ -70,6 +70,21 @@ public sealed class TrtRtxProvidersCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task TrtRtxSmokeCommand_WhenPluginNotReady_ReturnsPipelineFailure()
+    {
+        using var stdout = new StringWriter();
+        int exitCode = await InvokeCliAsync(_emptyModelDirectory, ["providers", "trt-rtx", "smoke"], stdout);
+
+        Assert.Equal(Program.ExitPipelineFailure, exitCode);
+
+        using JsonDocument document = JsonDocument.Parse(stdout.ToString());
+        JsonElement root = document.RootElement;
+        Assert.False(root.GetProperty("ready").GetBoolean());
+        Assert.True(root.TryGetProperty("blocker", out _));
+        Assert.Equal(0, root.GetProperty("attempted").GetInt32());
+    }
+
+    [Fact]
     public async Task DoctorCommand_IncludesTensorRtRtxPluginCheck()
     {
         using var stdout = new StringWriter();

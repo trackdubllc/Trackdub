@@ -106,7 +106,7 @@ internal static class ProvidersListHandler
         {
             remediations[ExecutionProviderKind.TensorRTRtx] =
                 trtSnapshot.InstallHint
-                ?? "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license.";
+                ?? "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license, then trackdub providers trt-rtx smoke.";
         }
 
         MigraphxRuntimeReadinessSnapshot migraphxSnapshot = await migraphxTask.ConfigureAwait(false);

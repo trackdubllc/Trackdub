@@ -50,16 +50,24 @@ internal static class ModelsCommand
             DefaultValueFactory = _ => false,
         };
 
+        var variantOption = new Option<string?>("--variant")
+        {
+            Description = "Download a specific manifest variant (for example gpu-int4 or fp16)",
+        };
+
         var command = new Command("download", """
             Download a model into the local cache.
 
             Examples:
               trackdub models download onnx-community/silero-vad
+              trackdub models download microsoft/Phi-4-mini-instruct-onnx --variant gpu-int4
+              trackdub models download ResembleAI/chatterbox-turbo-ONNX --variant fp16
               trackdub models download --all-missing
             """)
         {
             modelIdArgument,
             allMissingOption,
+            variantOption,
         };
 
         command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
@@ -68,6 +76,7 @@ internal static class ModelsCommand
 
             bool allMissing = parseResult.GetValue(allMissingOption);
             string? modelId = parseResult.GetValue(modelIdArgument);
+            string? variantAlias = parseResult.GetValue(variantOption);
 
             TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(parseResult, out int buildExitCode);
             if (factory is null)
@@ -79,6 +88,15 @@ internal static class ModelsCommand
             {
                 if (allMissing)
                 {
+                    if (!string.IsNullOrWhiteSpace(variantAlias))
+                    {
+                        CliErrorReporter.ReportValidationError(
+                            ErrorCode.InvalidArgument,
+                            "--variant cannot be combined with --all-missing.",
+                            "variant");
+                        return Program.ExitArgumentError;
+                    }
+
                     return await ModelsHandler.DownloadAllMissingAsync(factory, cancellationToken).ConfigureAwait(false);
                 }
 
@@ -108,7 +126,7 @@ internal static class ModelsCommand
                 });
 
                 ModelDownloadResult result = await ModelsHandler
-                    .DownloadModelAsync(factory, modelId, progress, cancellationToken)
+                    .DownloadModelAsync(factory, modelId, variantAlias, progress, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (!result.Success)
@@ -119,7 +137,10 @@ internal static class ModelsCommand
                     return Program.ExitPipelineFailure;
                 }
 
-                Console.WriteLine($"Downloaded {modelId} ({result.NewState}).");
+                string downloadedLabel = string.IsNullOrWhiteSpace(variantAlias)
+                    ? modelId
+                    : $"{modelId}@{variantAlias}";
+                Console.WriteLine($"Downloaded {downloadedLabel} ({result.NewState}).");
                 return Program.ExitSuccess;
             }
         });

@@ -45,6 +45,65 @@
                       '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'libonnxruntime-genai.so')" />
     </ItemGroup>
   </Target>
+
+  <!-- Windows GenAI CPU loader dynamically loads onnxruntime-genai-cuda.dll for NvTensorRtRtx.
+       Copy that sidecar next to onnxruntime-genai.dll without taking Cuda's onnxruntime-genai.dll
+       or its Microsoft.ML.OnnxRuntime.Gpu 1.28 graph. -->
+  <Target Name="AddGenAiCudaSidecarToOutputItems"
+          BeforeTargets="GetCopyToOutputDirectoryItems"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl' And '$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)' != ''">
+    <ItemGroup>
+      <_GenAiCudaSidecar Include="$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)\runtimes\win-x64\native\onnxruntime-genai-cuda.dll"
+                         Condition="Exists('$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)\runtimes\win-x64\native\onnxruntime-genai-cuda.dll')"
+                         Rid="win-x64" />
+      <_GenAiCudaSidecar Include="$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)\runtimes\win-arm64\native\onnxruntime-genai-cuda.dll"
+                         Condition="Exists('$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)\runtimes\win-arm64\native\onnxruntime-genai-cuda.dll')"
+                         Rid="win-arm64" />
+      <ContentWithTargetPath Include="@(_GenAiCudaSidecar)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             TargetPath="runtimes\%(_GenAiCudaSidecar.Rid)\native\onnxruntime-genai-cuda.dll"
+                             Visible="false" />
+      <ContentWithTargetPath Include="@(_GenAiCudaSidecar)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             TargetPath="onnxruntime-genai-cuda.dll"
+                             Visible="false"
+                             Condition="'%(_GenAiCudaSidecar.Rid)' == 'win-x64'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CopyGenAiCudaSidecarToOutput"
+          AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl' And '$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)' != ''">
+    <ItemGroup>
+      <_GenAiCudaSidecarCopy Include="$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)\runtimes\win-x64\native\onnxruntime-genai-cuda.dll"
+                             Condition="Exists('$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)\runtimes\win-x64\native\onnxruntime-genai-cuda.dll')"
+                             Rid="win-x64" />
+      <_GenAiCudaSidecarCopy Include="$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)\runtimes\win-arm64\native\onnxruntime-genai-cuda.dll"
+                             Condition="Exists('$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)\runtimes\win-arm64\native\onnxruntime-genai-cuda.dll')"
+                             Rid="win-arm64" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_GenAiCudaSidecarCopy)"
+          DestinationFiles="@(_GenAiCudaSidecarCopy->'$(TargetDir)runtimes\%(Rid)\native\onnxruntime-genai-cuda.dll')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_GenAiCudaSidecarCopy)"
+          DestinationFiles="@(_GenAiCudaSidecarCopy->'$(TargetDir)$(TargetName)\runtimes\%(Rid)\native\onnxruntime-genai-cuda.dll')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <_GenAiCudaSidecarRoot Include="@(_GenAiCudaSidecarCopy)" Condition="'%(Rid)' == 'win-x64'" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_GenAiCudaSidecarRoot)"
+          DestinationFiles="$(TargetDir)onnxruntime-genai-cuda.dll"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="true"
+          Condition="'@(_GenAiCudaSidecarRoot)' != ''" />
+    <Copy SourceFiles="@(_GenAiCudaSidecarRoot)"
+          DestinationFiles="$(TargetDir)$(TargetName)\onnxruntime-genai-cuda.dll"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="true"
+          Condition="'@(_GenAiCudaSidecarRoot)' != ''" />
+  </Target>
   <!-- Strip Windows TFM on non-Windows to allow cross-platform solution builds -->
   <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(TargetFrameworks)' != ''">
     <TargetFrameworks>$([System.Text.RegularExpressions.Regex]::Replace('$(TargetFrameworks)', ';?net10\.0-windows[^;]*', ''))</TargetFrameworks>

@@ -142,7 +142,14 @@ public sealed class BundledModelManifestRegistry
 
         if (!aliasIndex.TryGetValue(alias, out BundledModelManifestEntry? entry))
         {
-            return false;
+            entry = Entries.FirstOrDefault(
+                candidate => candidate.ModelId.Equals(alias, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+            {
+                return false;
+            }
+
+            alias = entry.Aliases[0];
         }
 
         string resolvedEntryPath = entry.DefaultBenchmarkEntryPath;

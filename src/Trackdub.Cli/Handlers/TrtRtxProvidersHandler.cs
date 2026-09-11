@@ -1,7 +1,9 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 using Trackdub.Application.Runtime;
+using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Inference.Runtime.TensorRtRtx;
@@ -138,6 +140,124 @@ internal static class TrtRtxProvidersHandler
             : Program.ExitPipelineFailure;
     }
 
+    public static async Task<int> SmokeAsync(
+        TrackdubSessionFactory factory,
+        TextWriter output,
+        TextWriter progressOutput,
+        CancellationToken cancellationToken)
+    {
+        IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
+        ITensorRtRtxRuntimeReadinessService readinessService =
+            factory.GetRequiredService<ITensorRtRtxRuntimeReadinessService>();
+
+        TensorRtRtxRuntimeReadinessSnapshot snapshot = await readinessService
+            .ProbeAsync(allowProviderDownloads: false, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!snapshot.IsReady)
+        {
+            var blocked = new TrtRtxSmokeOutput
+            {
+                Ready = false,
+                Blocker = snapshot.Blocker.ToString(),
+                Detail = snapshot.Detail,
+                Attempted = 0,
+                Passed = 0,
+                Failed = 0,
+                Skipped = TrtRtxSmokeCatalog.StarterPackTurboGpu.Count,
+                Targets = [],
+            };
+
+            await output.WriteLineAsync(JsonSerializer.Serialize(blocked, SmokeJsonOptions)).ConfigureAwait(false);
+            await progressOutput.WriteLineAsync(
+                    snapshot.Detail ?? "TensorRT RTX EP ABI plugin is not ready. Run trackdub providers trt-rtx status.")
+                .ConfigureAwait(false);
+            return Program.ExitPipelineFailure;
+        }
+
+        TrtRtxStarterPackSmokeReport report;
+        try
+        {
+            report = await TrtRtxStarterPackSmokeRunner
+                .RunAsync(storagePaths.ModelCacheDirectory, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            var failed = new TrtRtxSmokeOutput
+            {
+                Ready = true,
+                Detail = ex.Message,
+                Attempted = 0,
+                Passed = 0,
+                Failed = 1,
+                Skipped = 0,
+                Targets = [],
+            };
+
+            await output.WriteLineAsync(JsonSerializer.Serialize(failed, SmokeJsonOptions)).ConfigureAwait(false);
+            await progressOutput.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return Program.ExitPipelineFailure;
+        }
+
+        var payload = new TrtRtxSmokeOutput
+        {
+            Ready = true,
+            Scope = TrtRtxSmokeCatalog.ScopeName,
+            Attempted = report.Attempted,
+            Passed = report.Passed,
+            Failed = report.Failed,
+            Skipped = report.Skipped,
+            Targets = report.Targets
+                .Select(target => new TrtRtxSmokeTargetOutput
+                {
+                    Label = target.Label,
+                    ModelReference = target.ModelReference,
+                    Status = target.Status.ToString().ToLowerInvariant(),
+                    Detail = target.Detail,
+                })
+                .ToArray(),
+        };
+
+        await output.WriteLineAsync(JsonSerializer.Serialize(payload, SmokeJsonOptions)).ConfigureAwait(false);
+
+        foreach (TrtRtxStarterPackSmokeTargetResult target in report.Targets)
+        {
+            string line = target.Status switch
+            {
+                TrtRtxStarterPackSmokeTargetStatus.Passed =>
+                    $"PASS {target.Label} ({target.ModelReference})",
+                TrtRtxStarterPackSmokeTargetStatus.Skipped =>
+                    $"SKIP {target.Label}: {target.Detail ?? "model not cached locally"}",
+                TrtRtxStarterPackSmokeTargetStatus.Failed =>
+                    $"FAIL {target.Label}: {target.Detail ?? "smoke test failed"}",
+                _ => $"{target.Label}: {target.Status}",
+            };
+
+            await progressOutput.WriteLineAsync(line).ConfigureAwait(false);
+        }
+
+        await progressOutput.WriteLineAsync(
+                $"TRT RTX smoke summary: passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}.")
+            .ConfigureAwait(false);
+
+        if (!report.HasAttempts)
+        {
+            await progressOutput.WriteLineAsync(
+                    "No TRT RTX smoke targets were cached locally. Download starter-pack models first.")
+                .ConfigureAwait(false);
+            return Program.ExitPipelineFailure;
+        }
+
+        return report.HasFailures ? Program.ExitPipelineFailure : Program.ExitSuccess;
+    }
+
+    private static readonly JsonSerializerOptions SmokeJsonOptions = new()
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     private static string? ResolveEffectivePluginDirectory(
         string? studioDirectory,
         string? environmentDirectory,
@@ -212,5 +332,26 @@ internal static class TrtRtxProvidersHandler
         public string? Detail { get; init; }
         public bool IsOrtProviderListed { get; init; }
         public string? LicenseReference { get; init; }
+    }
+
+    private sealed class TrtRtxSmokeOutput
+    {
+        public bool Ready { get; init; }
+        public string? Scope { get; init; }
+        public string? Blocker { get; init; }
+        public string? Detail { get; init; }
+        public int Attempted { get; init; }
+        public int Passed { get; init; }
+        public int Failed { get; init; }
+        public int Skipped { get; init; }
+        public IReadOnlyList<TrtRtxSmokeTargetOutput> Targets { get; init; } = [];
+    }
+
+    private sealed class TrtRtxSmokeTargetOutput
+    {
+        public string Label { get; init; } = string.Empty;
+        public string ModelReference { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+        public string? Detail { get; init; }
     }
 }

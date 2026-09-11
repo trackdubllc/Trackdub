@@ -20,7 +20,7 @@ public sealed class Qwen3AsrOnnxAudioTranscriptionEngine(
 {
     public const string EngineFamilyName = "qwen3-asr";
 
-    private static readonly IReadOnlyDictionary<string, string> TrtEncoderOptions = new Dictionary<string, string>
+    internal static readonly IReadOnlyDictionary<string, string> TrtEncoderOptions = new Dictionary<string, string>
     {
         ["trt_profile_min_shapes"] = "mel:1x128x1",
         ["trt_profile_max_shapes"] = "mel:1x128x3000",

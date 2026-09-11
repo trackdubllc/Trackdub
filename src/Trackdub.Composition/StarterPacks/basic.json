@@ -18,8 +18,8 @@
       "alias": "silero-vad",
       "runtime_defaults": {
         "cpu_safe": { "variant": "int8", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "fp16", "execution_provider": "cpu" },
-        "turbo_gpu": { "variant": "fp16", "execution_provider": "cpu" }
+        "balanced_gpu": { "variant": "fp16", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "fp16", "execution_provider": "auto" }
       }
     },
     {
@@ -29,8 +29,8 @@
       "alias": "whisper-tiny",
       "runtime_defaults": {
         "cpu_safe": { "variant": "default", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "default", "execution_provider": "directml" },
-        "turbo_gpu": { "variant": "default", "execution_provider": "directml" }
+        "balanced_gpu": { "variant": "default", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "default", "execution_provider": "auto" }
       }
     },
     {
@@ -51,8 +51,8 @@
       "alias": "phi-4-mini",
       "runtime_defaults": {
         "cpu_safe": { "variant": "cpu-int4", "execution_provider": "cpu" },
-        "balanced_gpu": { "variant": "gpu-int4", "execution_provider": "directml" },
-        "turbo_gpu": { "variant": "gpu-int4", "execution_provider": "trt-rtx" }
+        "balanced_gpu": { "variant": "gpu-int4", "execution_provider": "auto" },
+        "turbo_gpu": { "variant": "gpu-int4", "execution_provider": "auto" }
       }
     }
   ],

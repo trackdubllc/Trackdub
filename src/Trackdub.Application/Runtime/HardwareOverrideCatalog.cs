@@ -52,9 +52,11 @@ public static class HardwareOverrideCatalog
 
     public static IReadOnlyList<HardwareOverrideProviderChoice> GetProviderChoicesForStage(string stageKey)
     {
-        if (string.Equals(stageKey, "AsrGenAi", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(stageKey, "Vad", StringComparison.OrdinalIgnoreCase))
         {
-            return ProviderChoices.Where(static c => c.Provider != ExecutionProviderKind.TensorRTRtx).ToArray();
+            return ProviderChoices
+                .Where(static c => c.Provider is not ExecutionProviderKind.TensorRTRtx and not ExecutionProviderKind.TensorRt)
+                .ToArray();
         }
 
         return ProviderChoices;

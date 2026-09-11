@@ -51,6 +51,11 @@
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+    <!-- Sidecar only for OGA NvTensorRtRtx. Do not let this package replace the CPU GenAI loader. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" GeneratePathProperty="true">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>compile;runtime;native;contentFiles;analyzers;build;buildTransitive</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!-- macOS portable leg: Composition owns GenAI publish closure. Linux uses GenAI.Cuda via Inference.Onnx only. -->

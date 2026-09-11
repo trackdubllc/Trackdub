@@ -181,6 +181,8 @@ public sealed class StarterPackCompatibilityService(
             return false;
         }
 
+        provider = ExecutionProviderTokens.ResolvePlatformPin(provider);
+
         request = new StageRuntimePlanningRequest(
             runtimeStage,
             PreferredModelAlias: modelId,
@@ -242,9 +244,13 @@ public sealed class StarterPackCompatibilityService(
             return true;
         }
 
-        return RuntimeProviderTokenCompatibility.TryParseProviderToken(resolvedEp, out ExecutionProviderKind resolvedProvider) &&
-            RuntimeProviderTokenCompatibility.TryParseProviderToken(requestedEp, out ExecutionProviderKind requestedProvider) &&
-            resolvedProvider == requestedProvider;
+        if (!RuntimeProviderTokenCompatibility.TryParseProviderToken(resolvedEp, out ExecutionProviderKind resolvedProvider) ||
+            !RuntimeProviderTokenCompatibility.TryParseProviderToken(requestedEp, out ExecutionProviderKind requestedProvider))
+        {
+            return false;
+        }
+
+        return ExecutionProviderTokens.PlatformPinsEquivalent(requestedProvider, resolvedProvider);
     }
 
     private static bool IsAutoExecutionProvider(string executionProvider) =>

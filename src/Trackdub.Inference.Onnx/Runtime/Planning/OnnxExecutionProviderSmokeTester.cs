@@ -1,6 +1,8 @@
 using Microsoft.ML.OnnxRuntimeGenAI;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.Planning;
+using Trackdub.Inference.Onnx.Runtime;
+using Trackdub.Inference.Onnx.Qwen3Asr;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -103,14 +105,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
         using Config config = new(modelRootPath);
         config.ClearProviders();
-        config.AppendProvider(provider switch
-        {
-            ExecutionProviderKind.DirectMl => "dml",
-            ExecutionProviderKind.Cuda => "cuda",
-            ExecutionProviderKind.TensorRTRtx => "trt-rtx",
-            ExecutionProviderKind.CoreMl => "coreml",
-            _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Unsupported GenAI smoke provider.")
-        });
+        config.AppendProvider(GenAiExecutionProviderNames.Resolve(provider));
         return new Model(config);
     }
 
@@ -139,12 +134,27 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
-        using var encoderInputs = CreateWhisperEncoderInputs();
+        using var encoderInputs = CreateWhisperEncoderInputs(sessionLease.EncoderSession.InputMetadata);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults = sessionLease.EncoderSession.Run(encoderInputs.Values);
-        Tensor<float> hiddenStates = encoderResults.Single().AsTensor<float>();
+        Tensor<float> hiddenStates = ResolveWhisperEncoderHiddenStates(encoderResults);
 
         using var decoderInputs = CreateWhisperDecoderInputs(hiddenStates);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderSession.Run(decoderInputs.Values);
+    }
+
+    private static Tensor<float> ResolveWhisperEncoderHiddenStates(
+        IEnumerable<DisposableNamedOnnxValue> encoderResults)
+    {
+        foreach (DisposableNamedOnnxValue result in encoderResults)
+        {
+            if (result.Name.Contains("hidden", StringComparison.OrdinalIgnoreCase)
+                || result.Name.Equals("last_hidden_state", StringComparison.OrdinalIgnoreCase))
+            {
+                return result.AsTensor<float>();
+            }
+        }
+
+        return encoderResults.First().AsTensor<float>();
     }
 
     private static async Task SmokeTestAsrAsync(
@@ -164,7 +174,22 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             return;
         }
 
-        await SmokeTestWhisperAsync(request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
+        await SmokeTestGenericSessionAsync(request.EntryPath, request.ExecutionProvider, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task SmokeTestGenericSessionAsync(
+        string modelPath,
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken)
+    {
+        using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
+            .CreateSingleAsync(modelPath, provider, cancellationToken)
+            .ConfigureAwait(false);
+        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+
+        using var inputs = CreateMetadataDrivenInputs(sessionLease.Session.InputMetadata);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(inputs.Values);
     }
 
     private static async Task SmokeTestQwen3AsrAsync(
@@ -177,14 +202,24 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         string decoderInitPath = Path.Combine(root, "decoder_init.onnx");
         string decoderStepPath = Path.Combine(root, "decoder_step.onnx");
         using OnnxExecutionSessionFactory.Qwen3AsrSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreatePooledQwen3AsrAsync("qwen3-asr", encoderModelPath, decoderInitPath, decoderStepPath, provider, cancellationToken)
+            .CreatePooledQwen3AsrAsync(
+                "qwen3-asr",
+                encoderModelPath,
+                decoderInitPath,
+                decoderStepPath,
+                provider,
+                cancellationToken,
+                additionalTrtEncoderOptions: Qwen3AsrOnnxAudioTranscriptionEngine.TrtEncoderOptions)
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
         using var encoderInputs = new InputSet([
             NamedOnnxValue.CreateFromTensor("mel", new DenseTensor<float>(new float[128], [1, 128, 1]))
         ]);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.EncoderSession.Run(encoderInputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
+            sessionLease.EncoderSession.Run(encoderInputs.Values);
+        Tensor<float> audioFeatures = encoderResults.First().AsTensor<float>();
+        Qwen3AsrGreedyDecoder.RunSmokeInitAndStep(sessionLease, audioFeatures);
     }
 
     private static async Task SmokeTestNemotronAsrAsync(
@@ -267,12 +302,13 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         return new InputSet(values);
     }
 
-    private static InputSet CreateWhisperEncoderInputs()
+    private static InputSet CreateWhisperEncoderInputs(IReadOnlyDictionary<string, NodeMetadata> inputMetadata)
     {
-        IReadOnlyList<NamedOnnxValue> values =
-        [
-            NamedOnnxValue.CreateFromTensor("input_features", new DenseTensor<float>(new float[80 * 3000], [1, 80, 3000]))
-        ];
+        var values = new List<NamedOnnxValue>(inputMetadata.Count);
+        foreach ((string inputName, NodeMetadata metadata) in inputMetadata)
+        {
+            values.Add(CreateSmokeTensorInput(inputName, metadata));
+        }
 
         return new InputSet(values);
     }
@@ -416,28 +452,97 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     private static InputSet CreateDiarizationInputs(InferenceSession session)
     {
         IReadOnlyDictionary<string, NodeMetadata> inputs = session.InputMetadata;
+        if (TryCreateWaveformDiarizationInputs(inputs, out InputSet? waveformInputs))
+        {
+            return waveformInputs!;
+        }
+
+        return CreateMetadataDrivenInputs(inputs);
+    }
+
+    private static bool TryCreateWaveformDiarizationInputs(
+        IReadOnlyDictionary<string, NodeMetadata> inputs,
+        out InputSet? inputSet)
+    {
+        inputSet = null;
         IReadOnlyDictionary<string, Type> inputElementTypes = inputs.ToDictionary(
             static kvp => kvp.Key,
             static kvp => kvp.Value.ElementType,
             StringComparer.Ordinal);
-        (string waveformName, string? lengthName) = ResolveDiarizationInputNames(inputElementTypes);
 
-        int[] waveformDims = ResolveDiarizationWaveformShape(inputs[waveformName].Dimensions);
-        var values = new List<NamedOnnxValue>
+        try
         {
-            NamedOnnxValue.CreateFromTensor(waveformName, new DenseTensor<float>(new float[16000], waveformDims))
-        };
+            (string waveformName, string? lengthName) = ResolveDiarizationInputNames(inputElementTypes);
+            int[] waveformDims = ResolveDiarizationWaveformShape(inputs[waveformName].Dimensions);
+            var values = new List<NamedOnnxValue>
+            {
+                NamedOnnxValue.CreateFromTensor(waveformName, new DenseTensor<float>(new float[16000], waveformDims))
+            };
 
-        if (!string.IsNullOrWhiteSpace(lengthName))
+            if (!string.IsNullOrWhiteSpace(lengthName))
+            {
+                values.Add(NamedOnnxValue.CreateFromTensor(lengthName, new DenseTensor<long>(new long[] { 16000 }, [1])));
+            }
+
+            inputSet = new InputSet(values);
+            return true;
+        }
+        catch (InvalidOperationException)
         {
-            values.Add(NamedOnnxValue.CreateFromTensor(lengthName, new DenseTensor<long>(new long[] { 16000 }, [1])));
+            return false;
+        }
+    }
+
+    private static InputSet CreateMetadataDrivenInputs(IReadOnlyDictionary<string, NodeMetadata> inputMetadata)
+    {
+        var values = new List<NamedOnnxValue>(inputMetadata.Count);
+        foreach ((string inputName, NodeMetadata metadata) in inputMetadata)
+        {
+            values.Add(CreateSmokeTensorInput(inputName, metadata));
         }
 
         return new InputSet(values);
     }
 
+    private static NamedOnnxValue CreateSmokeTensorInput(string inputName, NodeMetadata metadata)
+    {
+        if (!metadata.IsTensor)
+        {
+            throw new NotSupportedException($"Smoke test input '{inputName}' is not a tensor input.");
+        }
+
+        int[] dimensions = metadata.Dimensions.Select(static dimension => dimension > 0 ? dimension : 1).ToArray();
+        int elementCount = dimensions.Aggregate(1, static (product, dimension) => checked(product * dimension));
+
+        return metadata.ElementDataType switch
+        {
+            TensorElementType.Float => NamedOnnxValue.CreateFromTensor(
+                inputName,
+                new DenseTensor<float>(new float[elementCount], dimensions)),
+            TensorElementType.Float16 => NamedOnnxValue.CreateFromTensor(
+                inputName,
+                new DenseTensor<Float16>(new Float16[elementCount], dimensions)),
+            TensorElementType.Int32 => NamedOnnxValue.CreateFromTensor(
+                inputName,
+                new DenseTensor<int>(new int[elementCount], dimensions)),
+            TensorElementType.Int64 => NamedOnnxValue.CreateFromTensor(
+                inputName,
+                new DenseTensor<long>(new long[elementCount], dimensions)),
+            TensorElementType.Bool => NamedOnnxValue.CreateFromTensor(
+                inputName,
+                new DenseTensor<bool>(new bool[elementCount], dimensions)),
+            _ => throw new NotSupportedException(
+                $"Smoke test input '{inputName}' uses unsupported tensor element type '{metadata.ElementDataType}'.")
+        };
+    }
+
     private static InputSet CreateTtsInputs(IReadOnlyDictionary<string, NodeMetadata> inputMetadata)
     {
+        if (LooksLikeChatterboxConditionalDecoder(inputMetadata))
+        {
+            return CreateChatterboxDecoderInputs(inputMetadata);
+        }
+
         var values = new List<NamedOnnxValue>(inputMetadata.Count);
         foreach ((string inputName, NodeMetadata metadata) in inputMetadata)
         {
@@ -450,6 +555,61 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         }
 
         return new InputSet(values);
+    }
+
+    private static bool LooksLikeChatterboxConditionalDecoder(IReadOnlyDictionary<string, NodeMetadata> inputMetadata) =>
+        inputMetadata.ContainsKey("speech_tokens")
+        && inputMetadata.ContainsKey("speaker_embeddings")
+        && inputMetadata.ContainsKey("speaker_features");
+
+    // ISTFT in conditional_decoder uses n_fft=960 / hop=480. One speech token yields 480
+    // samples and fails overlap-add (480 by 960). Keep a short but valid token sequence.
+    private const int ChatterboxDecoderSmokeSpeechTokenCount = 8;
+    private const int ChatterboxDecoderSmokeFeatureFrames = 8;
+
+    private static InputSet CreateChatterboxDecoderInputs(IReadOnlyDictionary<string, NodeMetadata> inputMetadata)
+    {
+        var values = new List<NamedOnnxValue>(inputMetadata.Count);
+        foreach ((string inputName, NodeMetadata metadata) in inputMetadata)
+        {
+            int[] dims = ResolveChatterboxDecoderSmokeDimensions(inputName, metadata.Dimensions);
+            NamedOnnxValue? value = CreateTtsInputValue(inputName, metadata.ElementType, dims);
+            if (value is not null)
+            {
+                values.Add(value);
+            }
+        }
+
+        return new InputSet(values);
+    }
+
+    internal static int[] ResolveChatterboxDecoderSmokeDimensionsForTesting(string inputName, IReadOnlyList<int> modelDimensions) =>
+        ResolveChatterboxDecoderSmokeDimensions(inputName, modelDimensions);
+
+    private static int[] ResolveChatterboxDecoderSmokeDimensions(string inputName, IReadOnlyList<int> modelDimensions)
+    {
+        if (inputName.Equals("speech_tokens", StringComparison.Ordinal)
+            && modelDimensions.Count == 2)
+        {
+            return
+            [
+                modelDimensions[0] > 0 ? modelDimensions[0] : 1,
+                ChatterboxDecoderSmokeSpeechTokenCount
+            ];
+        }
+
+        if (inputName.Equals("speaker_features", StringComparison.Ordinal)
+            && modelDimensions.Count == 3)
+        {
+            return
+            [
+                modelDimensions[0] > 0 ? modelDimensions[0] : 1,
+                modelDimensions[1] > 0 ? modelDimensions[1] : ChatterboxDecoderSmokeFeatureFrames,
+                modelDimensions[2] > 0 ? modelDimensions[2] : 80
+            ];
+        }
+
+        return modelDimensions.Select(static dimension => dimension > 0 ? dimension : 1).ToArray();
     }
 
     private static string ResolveTtsProbeModelPath(
