@@ -13,7 +13,8 @@ public sealed record StageRuntimePlanningRequest(
     ExecutionProviderKind? PreferredExecutionProvider = null,
     bool RequirePreferredExecutionProvider = false,
     string? PreferredModelVariantAlias = null,
-    DeviceExclusionSet? DeviceExclusions = null)
+    DeviceExclusionSet? DeviceExclusions = null,
+    bool SkipProviderSmokeTest = false)
 {
     public string? NormalizedPreferredModelAlias =>
         string.IsNullOrWhiteSpace(PreferredModelAlias)

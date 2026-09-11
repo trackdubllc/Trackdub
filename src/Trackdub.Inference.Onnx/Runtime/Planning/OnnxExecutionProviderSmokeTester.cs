@@ -32,7 +32,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                     await SmokeTestSeparationAsync(request.ModelId, request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
                     break;
                 case RuntimeStage.Translation:
-                    await SmokeTestTranslationAsync(request.EntryPath, request.ModelAlias, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
+                    await SmokeTestTranslationAsync(request, cancellationToken).ConfigureAwait(false);
                     break;
                 case RuntimeStage.Diarization:
                     await SmokeTestDiarizationAsync(request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
@@ -188,8 +188,46 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             return;
         }
 
+        if (UsesOrtGenAiModelLoad(engineFamily))
+        {
+            await SmokeTestGenAiLoadAsync(request.ModelRootPath, request.ExecutionProvider, cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
         await SmokeTestGenericSessionAsync(request.EntryPath, request.ExecutionProvider, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    internal static bool UsesOrtGenAiModelLoad(string? engineFamily) =>
+        engineFamily is not null
+        && engineFamily.Equals("whisper-genai", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool UsesOrtGenAiTranslationSmoke(string? engineFamily) =>
+        engineFamily is not null
+        && (engineFamily.Equals("phi-genai", StringComparison.OrdinalIgnoreCase)
+            || engineFamily.Equals("qwen-instruct", StringComparison.OrdinalIgnoreCase));
+
+    private static async Task SmokeTestGenAiLoadAsync(
+        string modelRootPath,
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken)
+    {
+        string configPath = Path.Combine(modelRootPath, "genai_config.json");
+        if (!File.Exists(configPath))
+        {
+            throw new FileNotFoundException(
+                "GenAI smoke test requires genai_config.json in the model root.",
+                configPath);
+        }
+
+        await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using (CreateGenAiSmokeModel(modelRootPath, provider))
+            {
+            }
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task SmokeTestGenericSessionAsync(
@@ -763,17 +801,24 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     }
 
     private static async Task SmokeTestTranslationAsync(
-        string entryPath,
-        string modelAlias,
-        ExecutionProviderKind provider,
+        ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
-        string encoderModelPath = ResolveTranslationEncoderPath(entryPath);
-        string decoderModelPath = ResolveOpusDecoderPath(encoderModelPath, modelAlias);
+        if (UsesOrtGenAiTranslationSmoke(request.EngineFamily))
+        {
+            await SmokeTestTextRefinementGenAiAsync(
+                request.ModelRootPath,
+                request.ExecutionProvider,
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        string encoderModelPath = ResolveTranslationEncoderPath(request.EntryPath);
+        string decoderModelPath = ResolveOpusDecoderPath(encoderModelPath, request.ModelAlias);
         using OnnxExecutionSessionFactory.OpusSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreateOpusAsync(encoderModelPath, decoderModelPath, provider, cancellationToken)
+            .CreateOpusAsync(encoderModelPath, decoderModelPath, request.ExecutionProvider, cancellationToken)
             .ConfigureAwait(false);
-        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
         using var encoderInputs = new InputSet([
             NamedOnnxValue.CreateFromTensor("input_ids", new DenseTensor<long>(new long[] { 0L }, [1, 1])),

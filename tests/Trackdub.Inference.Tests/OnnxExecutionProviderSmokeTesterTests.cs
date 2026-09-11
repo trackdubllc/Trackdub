@@ -341,4 +341,29 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     {
         Assert.Equal(expectedName, GenAiExecutionProviderNames.Resolve(provider));
     }
+
+    [Theory]
+    [InlineData("whisper-genai", true)]
+    [InlineData("whisper-onnx", false)]
+    [InlineData("qwen3-asr", false)]
+    [InlineData(null, false)]
+    public void UsesOrtGenAiModelLoad_routes_whisper_genai_away_from_inference_session(
+        string? engineFamily,
+        bool expected)
+    {
+        Assert.Equal(expected, OnnxExecutionProviderSmokeTester.UsesOrtGenAiModelLoad(engineFamily));
+    }
+
+    [Theory]
+    [InlineData("phi-genai", true)]
+    [InlineData("qwen-instruct", true)]
+    [InlineData("opus-mt", false)]
+    [InlineData("madlad", false)]
+    [InlineData(null, false)]
+    public void UsesOrtGenAiTranslationSmoke_routes_genai_families_away_from_opus_sessions(
+        string? engineFamily,
+        bool expected)
+    {
+        Assert.Equal(expected, OnnxExecutionProviderSmokeTester.UsesOrtGenAiTranslationSmoke(engineFamily));
+    }
 }

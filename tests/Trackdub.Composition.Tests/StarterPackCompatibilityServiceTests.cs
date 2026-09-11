@@ -111,6 +111,7 @@ public sealed class StarterPackCompatibilityServiceTests
         Assert.Equal("int8", capturedRequest.PreferredModelVariantAlias);
         Assert.Equal(ExecutionProviderKind.Cpu, capturedRequest.PreferredExecutionProvider);
         Assert.True(capturedRequest.RequirePreferredExecutionProvider);
+        Assert.True(capturedRequest.SkipProviderSmokeTest);
     }
 
     [Fact]
@@ -168,6 +169,7 @@ public sealed class StarterPackCompatibilityServiceTests
         Assert.NotNull(capturedRequest);
         Assert.Null(capturedRequest.PreferredExecutionProvider);
         Assert.False(capturedRequest.RequirePreferredExecutionProvider);
+        Assert.True(capturedRequest.SkipProviderSmokeTest);
     }
 
     [Fact]

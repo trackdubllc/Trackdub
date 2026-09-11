@@ -171,7 +171,8 @@ public sealed class StarterPackCompatibilityService(
                 runtimeStage,
                 PreferredModelAlias: modelId,
                 RequirePreferredModelAlias: true,
-                PreferredModelVariantAlias: preferredVariant);
+                PreferredModelVariantAlias: preferredVariant,
+                SkipProviderSmokeTest: true);
             return true;
         }
 
@@ -189,7 +190,8 @@ public sealed class StarterPackCompatibilityService(
             RequirePreferredModelAlias: true,
             PreferredExecutionProvider: provider,
             RequirePreferredExecutionProvider: true,
-            PreferredModelVariantAlias: preferredVariant);
+            PreferredModelVariantAlias: preferredVariant,
+            SkipProviderSmokeTest: true);
         return true;
     }
 
