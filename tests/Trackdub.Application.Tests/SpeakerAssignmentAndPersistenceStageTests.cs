@@ -46,7 +46,7 @@ public sealed class SpeakerAssignmentAndPersistenceStageTests
             new DiarizationStageHandler(
                 new FakeDiarizationEngine(),
                 new WritingModelDownloader(),
-                modelCacheRoot: Path.Combine(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
+                modelCacheRoot: Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
                 expectedSha256: SortFormerTestFixtures.ExpectedSha256));
         var stageRunStore = new FakeProjectStageRunStore();
         var stage = new SpeakerAssignmentAndPersistenceStage(
@@ -101,7 +101,7 @@ public sealed class SpeakerAssignmentAndPersistenceStageTests
             new DiarizationStageHandler(
                 new FakeDiarizationEngine(),
                 new WritingModelDownloader(),
-                modelCacheRoot: Path.Combine(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
+                modelCacheRoot: Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
                 expectedSha256: SortFormerTestFixtures.ExpectedSha256));
         var stage = new SpeakerAssignmentAndPersistenceStage(
             speakerAssignmentService,

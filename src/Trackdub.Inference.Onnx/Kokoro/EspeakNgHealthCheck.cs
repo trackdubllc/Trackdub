@@ -47,6 +47,9 @@ public sealed class EspeakNgHealthCheck : IEspeakNgHealthCheck
             return true;
         }
 
+        if (Path.IsPathRooted(EspeakDataDirectoryName))
+            throw new InvalidOperationException($"{nameof(EspeakDataDirectoryName)} must be a relative path, but got: {EspeakDataDirectoryName}");
+
         string? executableDirectory = Path.GetDirectoryName(executablePath);
         return !string.IsNullOrWhiteSpace(executableDirectory) &&
                Directory.Exists(Path.Combine(executableDirectory, EspeakDataDirectoryName));
