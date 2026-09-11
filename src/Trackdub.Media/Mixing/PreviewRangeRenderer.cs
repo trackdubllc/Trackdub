@@ -141,9 +141,12 @@ public sealed class PreviewRangeRenderer(IArtifactStore artifactStore) : IPrevie
                 float[] takeSamples = take.SampleRate == sampleRate
                     ? take.Samples
                     : ResampleLinear(take.Samples, take.SampleRate, sampleRate);
-                float[] reverbedSamples = request.MixPlan.ApplyTimbrePolish
-                    ? await TryApplyRoomToneReverbAsync(takeSamples, clip, sourcePath, sampleRate, request.MixPlan.VocalStemRelativePath, cancellationToken)
+                float[] envelopeMatched = request.MixPlan.ApplyTimbrePolish
+                    ? await TryApplySpectralEnvelopeAsync(takeSamples, clip, request.MixPlan.VocalStemRelativePath, sampleRate, cancellationToken)
                     : takeSamples;
+                float[] reverbedSamples = request.MixPlan.ApplyTimbrePolish
+                    ? await TryApplyRoomToneReverbAsync(envelopeMatched, clip, sourcePath, cancellationToken)
+                    : envelopeMatched;
                 PanGains panGains = await ResolveClipPanGainsAsync(
                     request.MixPlan,
                     clip,
@@ -185,37 +188,49 @@ public sealed class PreviewRangeRenderer(IArtifactStore artifactStore) : IPrevie
         }
     }
 
-    private async Task<float[]> TryApplyRoomToneReverbAsync(
+    private async Task<float[]> TryApplySpectralEnvelopeAsync(
         float[] dryTake,
         MixSpeechClip clip,
-        string sourcePath,
-        int sampleRate,
         string? vocalStemRelativePath,
+        int sampleRate,
+        CancellationToken cancellationToken)
+    {
+        if (vocalStemRelativePath is null)
+            return dryTake;
+        try
+        {
+            string vocalPath = artifactStore.GetPath(vocalStemRelativePath);
+            if (!File.Exists(vocalPath))
+                return dryTake;
+            double segmentDuration = clip.EndSeconds - clip.StartSeconds;
+            if (segmentDuration <= 0d)
+                return dryTake;
+            WaveMonoSamples refSamples = await WavePcm16
+                .ReadMonoSamplesAsync(vocalPath, clip.StartSeconds, segmentDuration, cancellationToken)
+                .ConfigureAwait(false);
+            float[] refResampled = refSamples.SampleRate == sampleRate
+                ? refSamples.Samples
+                : ResampleLinear(refSamples.Samples, refSamples.SampleRate, sampleRate);
+            return SpectralEnvelopeMatcher.TryApply(dryTake, refResampled, new StftProcessor()) ?? dryTake;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return dryTake;
+        }
+    }
+
+    private async Task<float[]> TryApplyRoomToneReverbAsync(
+        float[] samples,
+        MixSpeechClip clip,
+        string sourcePath,
         CancellationToken cancellationToken)
     {
         try
         {
-            float[] envelopeMatched = dryTake;
-            if (vocalStemRelativePath is not null)
-            {
-                string vocalPath = artifactStore.GetPath(vocalStemRelativePath);
-                if (File.Exists(vocalPath))
-                {
-                    double segmentDuration = clip.EndSeconds - clip.StartSeconds;
-                    if (segmentDuration > 0d)
-                    {
-                        WaveMonoSamples refSamples = await WavePcm16
-                            .ReadMonoSamplesAsync(vocalPath, clip.StartSeconds, segmentDuration, cancellationToken)
-                            .ConfigureAwait(false);
-                        float[] refResampled = refSamples.SampleRate == sampleRate
-                            ? refSamples.Samples
-                            : ResampleLinear(refSamples.Samples, refSamples.SampleRate, sampleRate);
-                        var stft = new StftProcessor();
-                        envelopeMatched = SpectralEnvelopeMatcher.TryApply(dryTake, refResampled, stft) ?? dryTake;
-                    }
-                }
-            }
-
             const double PreRollWindowSeconds = 0.3;
             double preRollEnd = clip.StartSeconds;
             double preRollStart = Math.Max(0d, preRollEnd - PreRollWindowSeconds);
@@ -225,7 +240,7 @@ public sealed class PreviewRangeRenderer(IArtifactStore artifactStore) : IPrevie
                 .ReadMonoSamplesAsync(sourcePath, preRollStart, preRollDuration, cancellationToken)
                 .ConfigureAwait(false);
 
-            return RoomToneConvolver.TryApply(envelopeMatched, preRoll.Samples) ?? envelopeMatched;
+            return RoomToneConvolver.TryApply(samples, preRoll.Samples) ?? samples;
         }
         catch (OperationCanceledException)
         {
@@ -233,7 +248,7 @@ public sealed class PreviewRangeRenderer(IArtifactStore artifactStore) : IPrevie
         }
         catch
         {
-            return dryTake;
+            return samples;
         }
     }
 

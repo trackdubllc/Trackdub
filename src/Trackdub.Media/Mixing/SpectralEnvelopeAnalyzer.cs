@@ -14,21 +14,44 @@ internal static class SpectralEnvelopeAnalyzer
     {
         if (samples.Length < stft.FftSize)
             return null;
-
         Complex[][] frames = stft.Forward(samples);
-        int binCount = stft.BinCount;
+        return ExtractFromFrames(frames, samples, stft.HopSize, lifterOrder);
+    }
+
+    // Accepts pre-computed frames so callers can avoid a redundant Forward pass.
+    // samples must be the same signal that was fed to stft.Forward to produce frames.
+    public static SpectralEnvelope? ExtractFromFrames(
+        Complex[][] frames,
+        ReadOnlySpan<float> samples,
+        int hopSize,
+        int lifterOrder = 32)
+    {
+        if (frames.Length == 0)
+            return null;
+
+        int binCount = frames[0].Length;
         var envelopeAccum = new double[binCount];
         int voicedFrames = 0;
 
-        foreach (Complex[] frame in frames)
+        for (int frameIndex = 0; frameIndex < frames.Length; frameIndex++)
         {
-            double rmsSum = 0d;
-            for (int k = 0; k < binCount; k++)
-                rmsSum += frame[k].Magnitude * frame[k].Magnitude;
-            if (Math.Sqrt(rmsSum / binCount) < MinVoicedRms)
+            // Gate on time-domain RMS so the threshold is in sample-amplitude space.
+            int sampleStart = frameIndex * hopSize;
+            int sampleCount = Math.Min(binCount * 2 - 2, samples.Length - sampleStart);
+            if (sampleCount <= 0)
+                continue;
+
+            double tdRmsSum = 0d;
+            for (int i = 0; i < sampleCount; i++)
+            {
+                double s = samples[sampleStart + i];
+                tdRmsSum += s * s;
+            }
+            if (Math.Sqrt(tdRmsSum / sampleCount) < MinVoicedRms)
                 continue;
 
             float[] logMag = new float[binCount];
+            Complex[] frame = frames[frameIndex];
             for (int k = 0; k < binCount; k++)
                 logMag[k] = (float)Math.Log(frame[k].Magnitude + Epsilon);
 
@@ -48,8 +71,7 @@ internal static class SpectralEnvelopeAnalyzer
         for (int k = 0; k < binCount; k++)
             bins[k] = (float)(envelopeAccum[k] / voicedFrames);
 
-        float voicedRatio = (float)voicedFrames / frames.Length;
-        return new SpectralEnvelope(bins, voicedRatio);
+        return new SpectralEnvelope(bins, (float)voicedFrames / frames.Length);
     }
 
     private static float[]? CepstralSmooth(float[] logMag, int lifterOrder)
