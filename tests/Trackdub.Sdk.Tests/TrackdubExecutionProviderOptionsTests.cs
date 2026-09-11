@@ -27,8 +27,72 @@ public sealed class TrackdubExecutionProviderOptionsTests
         StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
 
         Assert.Equal(WindowsMlExecutionDevicePolicy.MaxPerformance, settings.WindowsMlExecutionDevicePolicy);
+        Assert.True(settings.RequirePreferredExecutionProviders);
         Assert.NotEmpty(settings.HardwareOverrides!);
         Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.DirectMl, v));
+    }
+
+    [Theory]
+    [InlineData("trt-rtx", ExecutionProviderKind.TensorRTRtx)]
+    [InlineData("qnn", ExecutionProviderKind.Qnn)]
+    [InlineData("migraphx", ExecutionProviderKind.Migraphx)]
+    [InlineData("vitisai", ExecutionProviderKind.VitisAi)]
+    [InlineData("openvino-catalog", ExecutionProviderKind.OpenVinoCatalog)]
+    [InlineData("coreml", ExecutionProviderKind.CoreMl)]
+    [InlineData("dnnl", ExecutionProviderKind.Dnnl)]
+    [InlineData("tensorrt", ExecutionProviderKind.TensorRt)]
+    public async Task TryBuildFactory_VendorTags_MapToHardwareOverrides(string token, ExecutionProviderKind expected)
+    {
+        using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
+            modelDirectory: null,
+            executionProvider: token,
+            devicePolicy: null,
+            out int exitCode)!;
+
+        Assert.Equal(Program.ExitSuccess, exitCode);
+        IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
+        StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
+
+        Assert.True(settings.RequirePreferredExecutionProviders);
+        Assert.NotEmpty(settings.HardwareOverrides!);
+        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expected, v));
+    }
+
+    [Fact]
+    public async Task TryBuildFactory_WindowsCudaAlias_MapsToTensorRTRtx()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
+            modelDirectory: null,
+            executionProvider: "cuda",
+            devicePolicy: null,
+            out int exitCode)!;
+
+        Assert.Equal(Program.ExitSuccess, exitCode);
+        IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
+        StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
+
+        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.TensorRTRtx, v));
+    }
+
+    [Fact]
+    public void TryParseExecutionProvider_WindowsCuda_EmitsWarning()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.True(CliParseHelpers.TryParseExecutionProvider(
+            "cuda",
+            out ExecutionProviderKind? kind,
+            out string? warning));
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, kind);
+        Assert.Contains("trt-rtx", warning, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -87,7 +151,10 @@ public sealed class TrackdubExecutionProviderOptionsTests
 
             Assert.Equal(WindowsMlExecutionDevicePolicy.PreferNpu, settings.WindowsMlExecutionDevicePolicy);
             Assert.NotEmpty(settings.HardwareOverrides!);
-            Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.TensorRTRtx, v));
+            ExecutionProviderKind expectedEp = OperatingSystem.IsWindows()
+                ? ExecutionProviderKind.TensorRTRtx
+                : ExecutionProviderKind.Cuda;
+            Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expectedEp, v));
         }
     }
 

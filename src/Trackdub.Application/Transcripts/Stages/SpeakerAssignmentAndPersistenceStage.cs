@@ -85,8 +85,6 @@ public sealed class SpeakerAssignmentAndPersistenceStage(
         TranscriptRevision revision = TranscriptRevision.Create(projectId, revisionStageRunId, revisionNumber, DateTimeOffset.UtcNow);
         string activeProvenance = TextRefinementSegmentResolution.ResolveActiveTranscriptProvenance(context.TextRefinementResult);
 
-        int droppedEmptyCount = asrResult.Segments.Count(static segment =>
-            string.IsNullOrWhiteSpace(segment.Text));
         TranscriptSegment[] segments = asrResult.Segments
             .OrderBy(segment => segment.Index)
             .Select(segment => (
@@ -106,6 +104,7 @@ public sealed class SpeakerAssignmentAndPersistenceStage(
                 TranscriptWorkflowUtilities.CreateTranscriptWords(item.Segment.Words)))
             .ToArray();
 
+        int droppedEmptyCount = asrResult.Segments.Count - segments.Length;
         if (droppedEmptyCount > 0)
         {
             PipelineProgressReporter.Phase(

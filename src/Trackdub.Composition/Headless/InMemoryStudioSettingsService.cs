@@ -24,6 +24,7 @@ public sealed class InMemoryStudioSettingsService : IStudioSettingsService
             HardwareOverrides = options.HardwareOverrides is not null
                 ? new Dictionary<string, ExecutionProviderKind>(options.HardwareOverrides)
                 : new Dictionary<string, ExecutionProviderKind>(),
+            RequirePreferredExecutionProviders = options.RequirePreferredExecutionProviders,
             WindowsMlExecutionDevicePolicy = options.WindowsMlExecutionDevicePolicy,
         };
     }

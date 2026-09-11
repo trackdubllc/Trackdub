@@ -11,6 +11,23 @@ namespace Trackdub.Sdk.Composition;
 /// </summary>
 public static class HeadlessCompositionRoot
 {
+    private static readonly string[] HardwareOverrideStageKeys =
+    [
+        "Vad",
+        "Asr",
+        "AsrGenAi",
+        "AsrOnnxRuntime",
+        "AsrNemotron",
+        "Separation",
+        "OverlapRescue",
+        "Diarization",
+        "Translation",
+        "Tts",
+        "TextRefinement",
+        "LipSync",
+        "LipSynthesis",
+    ];
+
     /// <summary>
     /// Registers all standard Trackdub services and then replaces UI-coupled registrations
     /// with headless alternatives. Public for Sdk.Tests and advanced hosts. After building
@@ -36,35 +53,14 @@ public static class HeadlessCompositionRoot
     internal static HeadlessTrackdubOptions ToHeadlessOptions(TrackdubOptions options)
     {
         IReadOnlyDictionary<string, ExecutionProviderKind>? hardwareOverrides = null;
-        if (options.ExecutionProvider != ExecutionProviderPreference.Auto)
-        {
-            ExecutionProviderKind provider = options.ExecutionProvider switch
-            {
-                ExecutionProviderPreference.Cpu => ExecutionProviderKind.Cpu,
-                ExecutionProviderPreference.DirectML => ExecutionProviderKind.DirectMl,
-                ExecutionProviderPreference.Cuda => ExecutionProviderKind.TensorRTRtx,
-                _ => throw new ArgumentOutOfRangeException(
-                    nameof(options.ExecutionProvider),
-                    options.ExecutionProvider,
-                    "Unknown execution provider preference."),
-            };
+        bool requirePreferred = options.RequirePreferredExecutionProvider;
 
-            hardwareOverrides = new Dictionary<string, ExecutionProviderKind>
-            {
-                ["Vad"] = provider,
-                ["Asr"] = provider,
-                ["AsrGenAi"] = provider,
-                ["AsrOnnxRuntime"] = provider,
-                ["AsrNemotron"] = provider,
-                ["Separation"] = provider,
-                ["OverlapRescue"] = provider,
-                ["Diarization"] = provider,
-                ["Translation"] = provider,
-                ["Tts"] = provider,
-                ["TextRefinement"] = provider,
-                ["LipSync"] = provider,
-                ["LipSynthesis"] = provider,
-            };
+        if (options.PreferredExecutionProvider is ExecutionProviderKind provider)
+        {
+            hardwareOverrides = HardwareOverrideStageKeys.ToDictionary(
+                key => key,
+                _ => provider,
+                StringComparer.Ordinal);
         }
 
         return new HeadlessTrackdubOptions
@@ -73,6 +69,7 @@ public static class HeadlessCompositionRoot
             ModelCacheDirectory = options.ModelCacheDirectory,
             LogDirectory = options.LogDirectory,
             HardwareOverrides = hardwareOverrides,
+            RequirePreferredExecutionProviders = requirePreferred && hardwareOverrides is not null,
             WindowsMlExecutionDevicePolicy = options.WindowsMlExecutionDevicePolicy,
             FfmpegPath = options.FfmpegPath,
             FfprobePath = options.FfprobePath,

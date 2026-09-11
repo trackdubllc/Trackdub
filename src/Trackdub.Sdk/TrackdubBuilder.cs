@@ -1,5 +1,6 @@
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Domain;
 using Trackdub.Sdk.Composition;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,7 +15,8 @@ public sealed class TrackdubBuilder
     private string? _modelDirectory;
     private string? _modelCacheDirectory;
     private string? _logDirectory;
-    private ExecutionProviderPreference _executionProvider = ExecutionProviderPreference.Auto;
+    private ExecutionProviderKind? _preferredExecutionProvider;
+    private bool _requirePreferredExecutionProvider;
     private WindowsMlExecutionDevicePolicy _windowsMlExecutionDevicePolicy = WindowsMlExecutionDevicePolicy.Explicit;
     private string? _ffmpegPath;
     private string? _ffprobePath;
@@ -55,13 +57,28 @@ public sealed class TrackdubBuilder
     }
 
     /// <summary>
-    /// Sets the preferred execution provider for inference.
+    /// Sets the preferred execution provider for inference using the legacy four-value enum.
+    /// On Windows, <see cref="ExecutionProviderPreference.Cuda"/> maps to TensorRT RTX.
     /// </summary>
     /// <param name="preference">The execution provider preference.</param>
     /// <returns>This builder instance for fluent chaining.</returns>
     public TrackdubBuilder WithExecutionProvider(ExecutionProviderPreference preference)
     {
-        _executionProvider = preference;
+        _preferredExecutionProvider = ExecutionProviderPreferenceMapping.ToPreferredKind(preference);
+        _requirePreferredExecutionProvider = _preferredExecutionProvider is not null;
+        return this;
+    }
+
+    /// <summary>
+    /// Pins inference to a specific <see cref="ExecutionProviderKind"/> (required when the stage allows it).
+    /// Pass nothing / use <see cref="WithExecutionProvider(ExecutionProviderPreference)"/> with Auto for planner choice.
+    /// </summary>
+    /// <param name="provider">The execution provider kind to pin.</param>
+    /// <returns>This builder instance for fluent chaining.</returns>
+    public TrackdubBuilder WithExecutionProvider(ExecutionProviderKind provider)
+    {
+        _preferredExecutionProvider = provider;
+        _requirePreferredExecutionProvider = true;
         return this;
     }
 
@@ -142,7 +159,8 @@ public sealed class TrackdubBuilder
             ModelDirectory = _modelDirectory,
             ModelCacheDirectory = _modelCacheDirectory,
             LogDirectory = _logDirectory,
-            ExecutionProvider = _executionProvider,
+            PreferredExecutionProvider = _preferredExecutionProvider,
+            RequirePreferredExecutionProvider = _requirePreferredExecutionProvider,
             WindowsMlExecutionDevicePolicy = _windowsMlExecutionDevicePolicy,
             FfmpegPath = _ffmpegPath,
             FfprobePath = _ffprobePath,

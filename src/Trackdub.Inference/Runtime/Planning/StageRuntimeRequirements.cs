@@ -27,6 +27,7 @@ internal static class Milestone5PlanningPolicy
         ExecutionProviderKind.TensorRt,
         ExecutionProviderKind.Cuda,
         ExecutionProviderKind.OpenVino,
+        ExecutionProviderKind.CoreMl,
         ExecutionProviderKind.DirectMl,
         ExecutionProviderKind.Dnnl,
         ExecutionProviderKind.Cpu

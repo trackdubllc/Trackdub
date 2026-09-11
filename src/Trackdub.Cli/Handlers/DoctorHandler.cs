@@ -41,6 +41,7 @@ internal static class DoctorHandler
         checks.Add(CheckPlaybackNatives());
         checks.Add(CheckWindowsMlSummary());
         checks.Add(await CheckTensorRtRtxPluginAsync(factory, cancellationToken).ConfigureAwait(false));
+        checks.AddRange(await CheckCatalogExecutionProvidersAsync(factory, cancellationToken).ConfigureAwait(false));
 
         var readinessChecker = new TrackdubPipelineReadinessChecker(factory);
         PipelineReadinessReport readinessReport = await readinessChecker
@@ -417,6 +418,141 @@ internal static class DoctorHandler
             Message = $"{snapshot.StatusLabel}: {snapshot.Detail} {licenseNote}",
             Remediation =
                 "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license, or use Model Manager Install / tools/dev/Fetch-TrtRtxEp.ps1.",
+        };
+    }
+
+    private static async Task<IReadOnlyList<DoctorCheckRow>> CheckCatalogExecutionProvidersAsync(
+        TrackdubSessionFactory factory,
+        CancellationToken cancellationToken)
+    {
+        DoctorCheckRow[] rows = await Task.WhenAll(
+            ProbeMigraphxAsync(factory, cancellationToken),
+            ProbeWinMlCatalogAsync(
+                "execution-provider-qnn",
+                "qnn",
+                factory.GetRequiredService<IQnnCatalogRuntimeReadinessService>(),
+                cancellationToken),
+            ProbeWinMlCatalogAsync(
+                "execution-provider-vitisai",
+                "vitisai",
+                factory.GetRequiredService<IVitisAiCatalogRuntimeReadinessService>(),
+                cancellationToken),
+            ProbeWinMlCatalogAsync(
+                "execution-provider-openvino-catalog",
+                "openvino-catalog",
+                factory.GetRequiredService<IOpenVinoCatalogRuntimeReadinessService>(),
+                cancellationToken)).ConfigureAwait(false);
+
+        return rows;
+    }
+
+    private static async Task<DoctorCheckRow> ProbeMigraphxAsync(
+        TrackdubSessionFactory factory,
+        CancellationToken cancellationToken)
+    {
+        IMigraphxRuntimeReadinessService readiness =
+            factory.GetRequiredService<IMigraphxRuntimeReadinessService>();
+        MigraphxRuntimeReadinessSnapshot snapshot = await readiness
+            .ProbeAsync(allowProviderDownloads: false, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (snapshot.IsReady)
+        {
+            return new DoctorCheckRow
+            {
+                Id = "execution-provider-migraphx",
+                Status = "pass",
+                Message = $"migraphx: ready ({snapshot.RouteDisplay}). Registered≠models ready.",
+            };
+        }
+
+        if (!snapshot.IsSupportedPlatform)
+        {
+            return new DoctorCheckRow
+            {
+                Id = "execution-provider-migraphx",
+                Status = "pass",
+                Message = $"migraphx: {snapshot.Detail}",
+            };
+        }
+
+        return new DoctorCheckRow
+        {
+            Id = "execution-provider-migraphx",
+            Status = "warn",
+            Message = $"migraphx: {snapshot.Detail}",
+            Remediation = snapshot.InstallHint
+                ?? "Install the Windows ML MIGraphX catalog package or a ROCm ORT build on Linux.",
+        };
+    }
+
+    private static async Task<DoctorCheckRow> ProbeWinMlCatalogAsync(
+        string id,
+        string tag,
+        IOpenVinoCatalogRuntimeReadinessService readiness,
+        CancellationToken cancellationToken) =>
+        await ProbeWinMlCatalogCoreAsync(
+                id,
+                tag,
+                () => readiness.ProbeAsync(allowProviderDownloads: false, cancellationToken))
+            .ConfigureAwait(false);
+
+    private static async Task<DoctorCheckRow> ProbeWinMlCatalogAsync(
+        string id,
+        string tag,
+        IQnnCatalogRuntimeReadinessService readiness,
+        CancellationToken cancellationToken) =>
+        await ProbeWinMlCatalogCoreAsync(
+                id,
+                tag,
+                () => readiness.ProbeAsync(allowProviderDownloads: false, cancellationToken))
+            .ConfigureAwait(false);
+
+    private static async Task<DoctorCheckRow> ProbeWinMlCatalogAsync(
+        string id,
+        string tag,
+        IVitisAiCatalogRuntimeReadinessService readiness,
+        CancellationToken cancellationToken) =>
+        await ProbeWinMlCatalogCoreAsync(
+                id,
+                tag,
+                () => readiness.ProbeAsync(allowProviderDownloads: false, cancellationToken))
+            .ConfigureAwait(false);
+
+    private static async Task<DoctorCheckRow> ProbeWinMlCatalogCoreAsync(
+        string id,
+        string tag,
+        Func<Task<WinMlCatalogRuntimeReadinessSnapshot>> probe)
+    {
+        WinMlCatalogRuntimeReadinessSnapshot snapshot = await probe().ConfigureAwait(false);
+
+        if (snapshot.IsReady)
+        {
+            return new DoctorCheckRow
+            {
+                Id = id,
+                Status = "pass",
+                Message = $"{tag}: ready ({snapshot.RouteDisplay}). Registered≠models ready.",
+            };
+        }
+
+        if (!snapshot.IsSupportedPlatform)
+        {
+            return new DoctorCheckRow
+            {
+                Id = id,
+                Status = "pass",
+                Message = $"{tag}: {snapshot.Detail}",
+            };
+        }
+
+        return new DoctorCheckRow
+        {
+            Id = id,
+            Status = "warn",
+            Message = $"{tag}: {snapshot.Detail}",
+            Remediation = snapshot.InstallHint
+                ?? $"Install the Windows ML {tag} catalog EP and accept the vendor license in settings. Pin with --execution-provider {tag}.",
         };
     }
 

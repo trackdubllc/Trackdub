@@ -13,7 +13,16 @@ public static class ExecutionProviderRequest
             return null;
         }
 
-        if (Enum.TryParse(preferredExecutionProvider.Trim(), ignoreCase: true, out ExecutionProviderKind provider))
+        string trimmed = preferredExecutionProvider.Trim();
+
+        // Try canonical token table first (covers trt-rtx, dnnl, coreml, etc.)
+        if (ExecutionProviderTokens.TryParse(trimmed, out ExecutionProviderKind tokenKind))
+        {
+            return tokenKind;
+        }
+
+        // Fall back to enum name for backward compatibility
+        if (Enum.TryParse(trimmed, ignoreCase: true, out ExecutionProviderKind provider))
         {
             return provider;
         }
