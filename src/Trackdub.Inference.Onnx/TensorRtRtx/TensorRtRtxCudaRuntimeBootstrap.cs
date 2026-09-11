@@ -20,7 +20,7 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
 
         foreach (string directory in DiscoverSearchDirectories())
         {
-            string candidatePath = Path.Combine(directory, runtimeFileName);
+            string candidatePath = Path.Join(directory, runtimeFileName);
             if (!File.Exists(candidatePath))
             {
                 continue;
