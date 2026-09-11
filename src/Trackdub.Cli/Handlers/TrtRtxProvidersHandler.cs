@@ -164,7 +164,7 @@ internal static class TrtRtxProvidersHandler
                 Attempted = 0,
                 Passed = 0,
                 Failed = 0,
-                Skipped = TrtRtxSmokeCatalog.StarterPackTurboGpu.Count,
+                Skipped = TrtRtxSmokeCatalog.RemainingOnnxGpu.Count,
                 Targets = [],
             };
 

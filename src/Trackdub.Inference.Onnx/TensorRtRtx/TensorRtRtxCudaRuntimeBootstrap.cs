@@ -27,8 +27,10 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
             }
 
             PrependProcessPath(directory);
-            TryLoadNativeLibrary(candidatePath);
-            return candidatePath;
+            if (TryLoadNativeLibrary(candidatePath))
+            {
+                return candidatePath;
+            }
         }
 
         return null;
@@ -139,20 +141,22 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
         Environment.SetEnvironmentVariable("PATH", directory + Path.PathSeparator + currentPath);
     }
 
-    private static void TryLoadNativeLibrary(string libraryPath)
+    private static bool TryLoadNativeLibrary(string libraryPath)
     {
         try
         {
             if (NativeLibrary.TryLoad(libraryPath, out nint _))
             {
-                return;
+                return true;
             }
 
             NativeLibrary.Load(libraryPath);
+            return true;
         }
         catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
         {
             // PATH mutation above is still useful for downstream native loads.
+            return false;
         }
     }
 }
