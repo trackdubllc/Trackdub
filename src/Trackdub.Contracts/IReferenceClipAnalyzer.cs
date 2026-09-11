@@ -9,7 +9,8 @@ public sealed record ReferenceClipAnalysis(
     double TotalDurationSeconds,
     double ActiveSpeechSeconds,
     int SampleRate,
-    int ChannelCount)
+    int ChannelCount,
+    string? EstimatedGender = null)
 {
     public bool HasRecommendedMaximumWarning =>
         ActiveSpeechSeconds > ReferenceClipPolicy.RecommendedMaximumActiveSpeechSeconds;

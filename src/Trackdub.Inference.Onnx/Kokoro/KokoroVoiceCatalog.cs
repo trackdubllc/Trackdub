@@ -94,10 +94,34 @@ public sealed class KokoroVoiceCatalog : IVoiceCatalog
         }
     }
 
-    public IReadOnlyList<VoiceCatalogEntry> GetVoices(string? languageCode = null) =>
-        languageCode is null
-            ? voices
-            : voices.Where(v => v.LanguageCode == languageCode).ToList();
+    public static string ResolveRootContainingVoices(string modelRootPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelRootPath);
+
+        string current = Path.GetFullPath(modelRootPath);
+        if (Directory.Exists(Path.Combine(current, "voices")))
+        {
+            return current;
+        }
+
+        string? parent = Path.GetDirectoryName(current);
+        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(Path.Combine(parent, "voices")))
+        {
+            return parent;
+        }
+
+        return current;
+    }
+
+    public IReadOnlyList<VoiceCatalogEntry> GetVoices(string? languageCode = null)
+    {
+        if (string.IsNullOrWhiteSpace(languageCode))
+        {
+            return voices;
+        }
+
+        return [.. voices.Where(voice => IsLanguageMatch(voice.LanguageCode, languageCode))];
+    }
 
     public bool TryGetVoice(string voiceId, [NotNullWhen(true)] out VoiceCatalogEntry? entry)
     {
@@ -140,6 +164,26 @@ public sealed class KokoroVoiceCatalog : IVoiceCatalog
 
         entry = new VoiceCatalogEntry(voiceId, MapLanguageCode(voiceId[0]), MapGender(voiceId[1]), displayName);
         return true;
+    }
+
+    private static bool IsLanguageMatch(string voiceLanguageCode, string requestedLanguageCode)
+    {
+        string voice = voiceLanguageCode.Trim().Replace('_', '-').ToLowerInvariant();
+        string requested = requestedLanguageCode.Trim().Replace('_', '-').ToLowerInvariant();
+        if (voice.Length == 0 ||
+            voice.Equals("mul", StringComparison.Ordinal) ||
+            requested.Length == 0)
+        {
+            return true;
+        }
+
+        if (voice.Equals(requested, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return voice.StartsWith(requested + "-", StringComparison.Ordinal) ||
+               requested.StartsWith(voice + "-", StringComparison.Ordinal);
     }
 
     private static string MapLanguageCode(char languagePrefix) =>
