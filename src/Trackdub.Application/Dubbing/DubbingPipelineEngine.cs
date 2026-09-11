@@ -121,7 +121,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 preFlightFailures: [$"Media file not found: {effectiveOptions.SourceMediaPath}"]);
         }
 
-        options = effectiveOptions;
+        options = ApplyVoiceCloningDefaults(effectiveOptions);
 
         // --- Validation: create output directory if missing ---
         string projectOutputDirectory = options.ProjectOutputDirectory
@@ -158,6 +158,11 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
 
         await using (session.ConfigureAwait(false))
         {
+            if (options.UseVoiceCloning)
+            {
+                TryResolveService<IConsentService>(session)?.GrantVoiceCloningConsent();
+            }
+
             TranscriptProjectState? initialProjectState = null;
 
             // --- Ensure project/media spine exists for fresh SDK runs ---
@@ -839,22 +844,31 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                     return BuildNoTranscriptSegmentsSkip(stageName);
                 }
 
-                Dictionary<Guid, string>? fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(
+                if (options.UseVoiceCloning)
+                {
+                    TryResolveService<IConsentService>(session)?.GrantVoiceCloningConsent();
+                    ReportProgress(
+                        progress,
+                        StageNames.Tts,
+                        PipelineProgressEventKind.Progress,
+                        "Cloning each speaker from source audio.");
+                }
+
+                GenerateTtsForAllSpeakersRequest ttsRequest = BuildUnattendedTtsRequest(
                     ttsState,
-                    options.TargetLanguageCode);
-                if (fallbackVoiceIds is { Count: > 0 })
+                    options,
+                    runtimeSelections.TtsModelAlias);
+                if (ttsRequest.FallbackVoiceIdsBySpeakerId is { Count: > 0 })
                 {
                     ReportProgress(
                         progress,
                         StageNames.Tts,
                         PipelineProgressEventKind.Progress,
-                        $"Auto-assigning a fallback voice to {fallbackVoiceIds.Count} speaker(s) without a voice assignment (unattended run).");
+                        $"Auto-assigning a fallback voice to {ttsRequest.FallbackVoiceIdsBySpeakerId.Count} speaker(s) without a voice assignment (unattended run).");
                 }
 
                 await workspace.GenerateTtsForAllSpeakersAsync(
-                    new GenerateTtsForAllSpeakersRequest(
-                        FallbackVoiceIdsBySpeakerId: fallbackVoiceIds,
-                        PreferredModelAlias: runtimeSelections.TtsModelAlias),
+                    ttsRequest,
                     cancellationToken,
                     progress).ConfigureAwait(false);
                 return new StageWorkflowResult([], null);
@@ -1056,6 +1070,67 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             .Where(speaker => !deliberatelyAssignedSpeakerIds.Contains(speaker.Id))
             .ToDictionary(static speaker => speaker.Id, _ => defaultVoiceId);
         return fallbackVoiceIds.Count > 0 ? fallbackVoiceIds : null;
+    }
+
+    /// <summary>
+    /// Pins Chatterbox (or an explicit TTS override) when headless voice cloning is requested.
+    /// </summary>
+    internal static DubbingSessionOptions ApplyVoiceCloningDefaults(DubbingSessionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (!options.UseVoiceCloning)
+        {
+            return options;
+        }
+
+        if (options.ModelPreferences is not null &&
+            options.ModelPreferences.Keys.Any(key => key.Equals(StageNames.Tts, StringComparison.OrdinalIgnoreCase)))
+        {
+            return options;
+        }
+
+        var preferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (options.ModelPreferences is not null)
+        {
+            foreach ((string stage, string model) in options.ModelPreferences)
+            {
+                preferences[stage] = model;
+            }
+        }
+
+        preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
+        return options with { ModelPreferences = preferences };
+    }
+
+    /// <summary>
+    /// Builds the unattended TTS request: stock Kokoro fallback voices, or per-speaker
+    /// source-audio cloning when <see cref="DubbingSessionOptions.UseVoiceCloning"/> is set.
+    /// </summary>
+    internal static GenerateTtsForAllSpeakersRequest BuildUnattendedTtsRequest(
+        TranscriptProjectState state,
+        DubbingSessionOptions options,
+        string? ttsModelAlias)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (!options.UseVoiceCloning)
+        {
+            return new GenerateTtsForAllSpeakersRequest(
+                FallbackVoiceIdsBySpeakerId: BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode),
+                PreferredModelAlias: ttsModelAlias);
+        }
+
+        Dictionary<Guid, bool>? cloneBySpeaker = state.Speakers.Count == 0
+            ? null
+            : state.Speakers.ToDictionary(static speaker => speaker.Id, static _ => true);
+
+        return new GenerateTtsForAllSpeakersRequest(
+            FallbackVoiceIdsBySpeakerId: null,
+            PreferredModelAlias: string.IsNullOrWhiteSpace(ttsModelAlias)
+                ? VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode)
+                : ttsModelAlias,
+            UseReferenceClipForVoiceCloningBySpeakerId: cloneBySpeaker);
     }
 
     private static bool IsVoiceLanguageMatch(string voiceLanguageCode, string? targetLanguageCode)
@@ -1261,6 +1336,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             ["TargetLanguageCode"] = options.TargetLanguageCode,
             ["ForceRerun"] = options.ForceRerun.ToString(),
             ["EnableAsrTextRefinement"] = options.EnableAsrTextRefinement.ToString(),
+            ["UseVoiceCloning"] = options.UseVoiceCloning.ToString(),
             ["ExportFormat"] = ExportContainerKey(ResolveExportContainer(options.ExportFormat)),
         };
 

@@ -67,6 +67,15 @@ public sealed class TrackdubDubbingEngine : IDubbingPipelineEngine, ITransientFa
         string? targetLanguageCode) =>
         DubbingPipelineEngine.BuildUnattendedFallbackVoiceIds(state, targetLanguageCode);
 
+    internal static DubbingSessionOptions ApplyVoiceCloningDefaults(DubbingSessionOptions options) =>
+        DubbingPipelineEngine.ApplyVoiceCloningDefaults(options);
+
+    internal static GenerateTtsForAllSpeakersRequest BuildUnattendedTtsRequest(
+        TranscriptProjectState state,
+        DubbingSessionOptions options,
+        string? ttsModelAlias) =>
+        DubbingPipelineEngine.BuildUnattendedTtsRequest(state, options, ttsModelAlias);
+
     internal static ExportOutputContainer ResolveExportContainer(string? exportFormat) =>
         DubbingPipelineEngine.ResolveExportContainer(exportFormat);
 

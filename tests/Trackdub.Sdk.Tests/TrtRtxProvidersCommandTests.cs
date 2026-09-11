@@ -82,6 +82,10 @@ public sealed class TrtRtxProvidersCommandTests : IDisposable
         bool hasTrtCheck = checks.EnumerateArray()
             .Any(element => element.GetProperty("id").GetString() == "tensorrt-rtx-plugin");
         Assert.True(hasTrtCheck);
+
+        bool hasEspeakCheck = checks.EnumerateArray()
+            .Any(element => element.GetProperty("id").GetString() == "espeak-ng");
+        Assert.True(hasEspeakCheck);
     }
 
     private static async Task<int> InvokeCliAsync(string modelDirectory, string[] args, TextWriter stdout)

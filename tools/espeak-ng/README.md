@@ -12,8 +12,11 @@ must run the acquisition script to populate the working directory.
 ./Fetch-EspeakNg.ps1
 ```
 
-This downloads the expected version, verifies checksums, and extracts the
+This downloads the expected Windows MSI, verifies checksums, and extracts the
 distribution into this directory.
+
+Upstream ships Windows builds as an MSI (`espeak-ng.msi` on 1.52.0), not a
+win-x64 zip.
 
 ## Usage
 

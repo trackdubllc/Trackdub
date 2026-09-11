@@ -10,6 +10,7 @@ using Trackdub.Domain.AudioQuality;
 using Trackdub.Domain.Media;
 using Trackdub.Domain.Projects;
 using Trackdub.Domain.StageRuns;
+using Trackdub.Domain.Transcript;
 using Trackdub.Contracts.Licensing;
 using Trackdub.TestDoubles;
 
@@ -45,7 +46,7 @@ public sealed class SpeakerAssignmentAndPersistenceStageTests
             new DiarizationStageHandler(
                 new FakeDiarizationEngine(),
                 new WritingModelDownloader(),
-                modelCacheRoot: Path.Combine(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
+                modelCacheRoot: Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
                 expectedSha256: SortFormerTestFixtures.ExpectedSha256));
         var stageRunStore = new FakeProjectStageRunStore();
         var stage = new SpeakerAssignmentAndPersistenceStage(
@@ -72,7 +73,69 @@ public sealed class SpeakerAssignmentAndPersistenceStageTests
         Assert.Equal(asrStageRunId, manifest.UiSettings.SegmentStageRuns.Asr[1]);
     }
 
-    private static TranscriptGenerationContext CreateContext()
+    [Fact]
+    public async Task ExecuteAsync_skips_blank_asr_regions_instead_of_failing()
+    {
+        var artifactStore = new FakeArtifactStore();
+        var transcriptRepository = new FakeTranscriptRepository();
+        var mediaAssetRepository = new FakeMediaAssetRepository();
+        var fingerprintService = new FakeFileFingerprintService();
+        var artifactWriter = new TranscriptArtifactWriter(artifactStore, fingerprintService, mediaAssetRepository);
+        var speakerAssignmentService = new SpeakerAssignmentService(
+            new FakeSpeakerRepository(),
+            transcriptRepository,
+            new SegmentEditingService(transcriptRepository, new FakeTtsTakeRepository(), artifactWriter),
+            artifactStore,
+            new FakeProjectStageRunStore(),
+            new FakeDiarizationEngine(),
+            new SpeakerReferenceClipService(
+                artifactStore,
+                new FakeAudioClipExtractor(),
+                fingerprintService,
+                mediaAssetRepository,
+                new FakeVoiceAssignmentRepository(),
+                new FakeTtsTakeRepository(),
+                new FakeReferenceClipAnalyzer(),
+                new FakeReferenceClipTrimmer()),
+            artifactWriter,
+            new DiarizationStageHandler(
+                new FakeDiarizationEngine(),
+                new WritingModelDownloader(),
+                modelCacheRoot: Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
+                expectedSha256: SortFormerTestFixtures.ExpectedSha256));
+        var stage = new SpeakerAssignmentAndPersistenceStage(
+            speakerAssignmentService,
+            transcriptRepository,
+            artifactWriter,
+            artifactStore,
+            new FakeProjectStageRunStore());
+
+        TranscriptGenerationContext context = CreateContext(
+        [
+            new RecognizedTranscriptSegment(0, 0.0d, 2.0d, "Hello"),
+            new RecognizedTranscriptSegment(1, 2.0d, 3.0d, "   "),
+            new RecognizedTranscriptSegment(2, 3.0d, 4.0d, "World"),
+        ]);
+        await artifactStore.WriteJsonAsync(
+            ProjectArtifactPaths.ManifestRelativePath,
+            ProjectManifest.FromProject(context.Project),
+            TestContext.Current.CancellationToken);
+
+        await stage.ExecuteAsync(context, TestContext.Current.CancellationToken);
+
+        TranscriptRevision revision = Assert.Single(transcriptRepository.Revisions);
+        IReadOnlyList<TranscriptSegment> saved = await transcriptRepository.GetSegmentsAsync(
+            revision.Id,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(2, saved.Count);
+        Assert.Equal("Hello", saved[0].Text);
+        Assert.Equal("World", saved[1].Text);
+        Assert.Equal(0, saved[0].SegmentIndex);
+        Assert.Equal(2, saved[1].SegmentIndex);
+    }
+
+    private static TranscriptGenerationContext CreateContext(
+        IReadOnlyList<RecognizedTranscriptSegment>? asrSegments = null)
     {
         Guid projectId = Guid.NewGuid();
         Guid mediaAssetId = Guid.NewGuid();
@@ -106,6 +169,7 @@ public sealed class SpeakerAssignmentAndPersistenceStageTests
         var asrStageRun = StageRunRecord.Start(projectId, StageNames.Asr, now);
         var asrResult = new AsrStageResult(
             asrStageRun,
+            asrSegments ??
             [
                 new RecognizedTranscriptSegment(0, 0.0d, 2.0d, "Hello"),
                 new RecognizedTranscriptSegment(1, 2.0d, 4.0d, "World"),

@@ -1,10 +1,11 @@
 {
   "tool": "espeak-ng",
-  "version": "1.51.1",
+  "version": "1.52.0",
   "license": "GPL-3.0-or-later",
   "upstream": "https://github.com/espeak-ng/espeak-ng",
-  "release": "https://github.com/espeak-ng/espeak-ng/releases/tag/1.51.1",
+  "release": "https://github.com/espeak-ng/espeak-ng/releases/tag/1.52.0",
   "platform": "win-x64",
+  "windows_asset": "espeak-ng.msi",
   "files": {
     "espeak-ng.exe": {
       "sha256": "3080ec3822c1b266ef557c710bc79a97d20a7ab133a34bac308b81ab0afc733e",
@@ -16,5 +17,5 @@
     }
   },
   "data_directory": "espeak-ng-data",
-  "notes": "Windows x64 build from upstream release. Data directory contains phoneme definitions and language dictionaries."
+  "notes": "Windows x64 build from the upstream 1.52.0 MSI (espeak-ng.msi). Data directory contains phoneme definitions and language dictionaries."
 }

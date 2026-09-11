@@ -96,10 +96,38 @@ public sealed class ModelDownloadManifestFilesTests
         Assert.Contains(entry.ModelId, exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ResolveExpectedSha256_uses_entry_sha_for_anchor_and_skips_unhashed_sidecars()
+    {
+        BundledModelManifestEntry entry = CreateEntry(
+            downloadFiles: ["tokenizer.json"],
+            benchmarkEntry: "onnx/model.onnx",
+            variants:
+            [
+                new BundledModelManifestVariant("default", "onnx/model.onnx", [], IsDefault: true),
+            ],
+            sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            downloadFileHashes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["onnx/model_fp16.onnx"] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            });
+
+        Assert.Equal(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ModelDownloadManifestFiles.ResolveExpectedSha256(entry, "onnx/model.onnx", "onnx/model.onnx"));
+        Assert.Equal(
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            ModelDownloadManifestFiles.ResolveExpectedSha256(entry, "onnx/model_fp16.onnx", "onnx/model.onnx"));
+        Assert.Null(ModelDownloadManifestFiles.ResolveExpectedSha256(entry, "tokenizer.json", "onnx/model.onnx"));
+        Assert.Null(ModelDownloadManifestFiles.ResolveExpectedSha256(entry, "voices/af.bin", "onnx/model.onnx"));
+    }
+
     private static BundledModelManifestEntry CreateEntry(
         IReadOnlyList<string> downloadFiles,
         string benchmarkEntry,
-        IReadOnlyList<BundledModelManifestVariant> variants)
+        IReadOnlyList<BundledModelManifestVariant> variants,
+        string sha256 = "abc",
+        IReadOnlyDictionary<string, string>? downloadFileHashes = null)
     {
         string root = Path.Combine(Path.GetTempPath(), "manifest-files-test", Guid.NewGuid().ToString("N"));
         BundledModelManifestVariant[] resolvedVariants = variants
@@ -126,10 +154,10 @@ public sealed class ModelDownloadManifestFilesTests
             CommercialUseVerified: true,
             SourceUrl: "https://huggingface.co/example/model",
             Revision: "main",
-            Sha256: "abc",
+            Sha256: sha256,
             DownloadFiles: downloadFiles,
             DownloadFileSources: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            DownloadFileHashes: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            DownloadFileHashes: downloadFileHashes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             Aliases: ["example"],
             RootDirectory: root,
             DefaultBenchmarkEntryPath: Path.GetFullPath(Path.Combine(root, benchmarkEntry)),

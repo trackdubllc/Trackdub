@@ -2,8 +2,8 @@
 .SYNOPSIS
     Downloads and extracts the espeak-ng distribution for phonemization development.
 .DESCRIPTION
-    Fetches the expected espeak-ng release, verifies SHA-256 checksums, and extracts
-    binaries and data into tools/espeak-ng/.
+    Fetches the expected espeak-ng Windows MSI, verifies SHA-256 checksums, and extracts
+    binaries and data into tools/espeak-ng/. Upstream no longer publishes a win-x64 zip.
 .NOTES
     espeak-ng is GPL-3.0-or-later. Used for development only; not shipped.
 #>
@@ -15,33 +15,43 @@ $scriptDir = $PSScriptRoot
 
 $manifest = Get-Content (Join-Path $scriptDir 'espeak-ng.manifest.json') | ConvertFrom-Json
 $version = $manifest.version
+$assetName = if ($manifest.windows_asset) { [string]$manifest.windows_asset } else { "espeak-ng-$version-win-x64.zip" }
 $releaseBase = "https://github.com/espeak-ng/espeak-ng/releases/download/$version"
-$zipName = "espeak-ng-$version-win-x64.zip"
-$zipUrl = "$releaseBase/$zipName"
-$zipPath = Join-Path $scriptDir $zipName
+$assetUrl = "$releaseBase/$assetName"
+$assetPath = Join-Path $scriptDir $assetName
 
-Write-Host "Fetching espeak-ng $version..."
+Write-Host "Fetching espeak-ng $version ($assetName)..."
 
-if (-not (Test-Path $zipPath)) {
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
-    Write-Host "Downloaded: $zipName"
+if (-not (Test-Path $assetPath)) {
+    Invoke-WebRequest -Uri $assetUrl -OutFile $assetPath -UseBasicParsing
+    Write-Host "Downloaded: $assetName"
 } else {
-    Write-Host "Using cached: $zipName"
+    Write-Host "Using cached: $assetName"
 }
 
-# Extract
 $extractDir = Join-Path $scriptDir "extracted"
 if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
-Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+New-Item -ItemType Directory -Path $extractDir | Out-Null
 
-# Copy expected files and verify checksums
+$extension = [System.IO.Path]::GetExtension($assetName).ToLowerInvariant()
+if ($extension -eq '.msi') {
+    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/a', "`"$assetPath`"", '/qn', "`"TARGETDIR=$extractDir`"") -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "msiexec administrative extract failed with exit code $($process.ExitCode)."
+    }
+} elseif ($extension -eq '.zip') {
+    Expand-Archive -Path $assetPath -DestinationPath $extractDir -Force
+} else {
+    throw "Unsupported espeak-ng asset type: $assetName"
+}
+
 foreach ($fileName in @('espeak-ng.exe', 'libespeak-ng.dll')) {
-    $src = Get-ChildItem -Path $extractDir -Filter $fileName -Recurse | Select-Object -First 1
+    $src = Get-ChildItem -Path $extractDir -Filter $fileName -Recurse -File | Select-Object -First 1
     if (-not $src) { throw "File not found in archive: $fileName" }
-    
+
     $dest = Join-Path $scriptDir $fileName
     Copy-Item $src.FullName $dest -Force
-    
+
     $expectedHash = $manifest.files.$fileName.sha256
     $actualHash = (Get-FileHash $dest -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actualHash -ne $expectedHash) {
@@ -51,7 +61,6 @@ foreach ($fileName in @('espeak-ng.exe', 'libespeak-ng.dll')) {
     Write-Host "  Verified: $fileName"
 }
 
-# Copy data directory
 $dataSrc = Get-ChildItem -Path $extractDir -Directory -Filter "espeak-ng-data" -Recurse | Select-Object -First 1
 if ($dataSrc) {
     $dataDest = Join-Path $scriptDir "espeak-ng-data"
@@ -62,6 +71,5 @@ if ($dataSrc) {
     Write-Warning "espeak-ng-data directory not found in archive."
 }
 
-# Cleanup
 Remove-Item $extractDir -Recurse -Force
 Write-Host "espeak-ng $version ready."

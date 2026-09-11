@@ -30,6 +30,7 @@ internal static class RunPipelineHandler
             StageFilter = request.StageFilter,
             ForceRerun = request.ForceRerun,
             EnableAsrTextRefinement = request.EnableAsrTextRefinement,
+            UseVoiceCloning = request.UseVoiceCloning,
         };
 
         DubbingRunResult result;
@@ -123,6 +124,7 @@ internal static class RunPipelineHandler
         public IReadOnlyList<string>? StageFilter { get; init; }
         public bool ForceRerun { get; init; }
         public bool EnableAsrTextRefinement { get; init; }
+        public bool UseVoiceCloning { get; init; }
     }
 
     private sealed class RunPipelineOutput
