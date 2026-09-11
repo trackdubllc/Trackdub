@@ -70,4 +70,22 @@ public sealed record DubbingSessionOptions
     /// Defaults to false.
     /// </summary>
     public bool UseVoiceCloning { get; init; }
+
+    /// <summary>
+    /// When true, applies room-tone convolution to dubbed speech to match the acoustic environment.
+    /// Defaults to true.
+    /// </summary>
+    public bool ApplyTimbrePolish { get; init; } = true;
+
+    /// <summary>
+    /// When true, restores the original stereo pan position of each speaker in the dubbed mix.
+    /// Defaults to false.
+    /// </summary>
+    public bool RestoreOriginalPan { get; init; }
+
+    /// <summary>
+    /// When true, measures source loudness and normalizes the dubbed mix to match it.
+    /// Defaults to false.
+    /// </summary>
+    public bool MatchOriginalLoudness { get; init; }
 }

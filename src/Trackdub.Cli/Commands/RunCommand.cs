@@ -169,6 +169,21 @@ internal static class RunCommand
             DefaultValueFactory = _ => false,
         };
 
+        var timbrePolishOption = new Option<bool?>("--timbre-polish")
+        {
+            Description = "Apply room-tone convolution to dubbed speech to match the acoustic environment (default: true)",
+        };
+
+        var restorePanOption = new Option<bool?>("--restore-pan")
+        {
+            Description = "Restore the original stereo pan position of each speaker in the dubbed mix (default: false)",
+        };
+
+        var matchLoudnessOption = new Option<bool?>("--match-loudness")
+        {
+            Description = "Measure source loudness and normalize the dubbed mix to match it (default: false)",
+        };
+
         var presetOption = new Option<string?>("--preset")
         {
             Description = "Named preset to load pipeline settings from",
@@ -219,6 +234,9 @@ internal static class RunCommand
             forceRerunOption,
             enableAsrTextRefinementOption,
             voiceCloneOption,
+            timbrePolishOption,
+            restorePanOption,
+            matchLoudnessOption,
             presetOption,
             inputDirOption,
             inputGlobOption,
@@ -239,6 +257,9 @@ internal static class RunCommand
             bool forceRerun = parseResult.GetValue(forceRerunOption);
             bool? enableAsrTextRefinement = parseResult.GetValue(enableAsrTextRefinementOption);
             bool voiceClone = parseResult.GetValue(voiceCloneOption);
+            bool timbrePolish = parseResult.GetValue(timbrePolishOption) ?? true;
+            bool restorePan = parseResult.GetValue(restorePanOption) ?? false;
+            bool matchLoudness = parseResult.GetValue(matchLoudnessOption) ?? false;
             string? presetName = parseResult.GetValue(presetOption);
             string? inputDir = parseResult.GetValue(inputDirOption);
             string? inputGlob = parseResult.GetValue(inputGlobOption);
@@ -359,6 +380,9 @@ internal static class RunCommand
                         ForceRerun = forceRerun,
                         EnableAsrTextRefinement = resolvedEnableAsrTextRefinement,
                         UseVoiceCloning = voiceClone,
+                        ApplyTimbrePolish = timbrePolish,
+                        RestoreOriginalPan = restorePan,
+                        MatchOriginalLoudness = matchLoudness,
                     };
 
                     // Build BatchOptions
@@ -590,6 +614,9 @@ internal static class RunCommand
                             ForceRerun = forceRerun,
                             EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
                             UseVoiceCloning = voiceClone,
+                            ApplyTimbrePolish = timbrePolish,
+                            RestoreOriginalPan = restorePan,
+                            MatchOriginalLoudness = matchLoudness,
                         },
                         progress,
                         Console.Out,

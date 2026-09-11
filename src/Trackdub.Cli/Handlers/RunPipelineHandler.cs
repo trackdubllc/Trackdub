@@ -31,6 +31,9 @@ internal static class RunPipelineHandler
             ForceRerun = request.ForceRerun,
             EnableAsrTextRefinement = request.EnableAsrTextRefinement,
             UseVoiceCloning = request.UseVoiceCloning,
+            ApplyTimbrePolish = request.ApplyTimbrePolish,
+            RestoreOriginalPan = request.RestoreOriginalPan,
+            MatchOriginalLoudness = request.MatchOriginalLoudness,
         };
 
         DubbingRunResult result;
@@ -125,6 +128,9 @@ internal static class RunPipelineHandler
         public bool ForceRerun { get; init; }
         public bool EnableAsrTextRefinement { get; init; }
         public bool UseVoiceCloning { get; init; }
+        public bool ApplyTimbrePolish { get; init; } = true;
+        public bool RestoreOriginalPan { get; init; }
+        public bool MatchOriginalLoudness { get; init; }
     }
 
     private sealed class RunPipelineOutput
