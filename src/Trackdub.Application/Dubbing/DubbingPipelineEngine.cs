@@ -791,7 +791,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             case StageNames.Separation:
                 TranscriptProjectState separationState = await workspace.RunStemSeparationAsync(
                     cancellationToken,
-                    preferredModelAlias: runtimeSelections.SeparationModelAlias).ConfigureAwait(false);
+                    preferredModelAlias: runtimeSelections.SeparationModelAlias,
+                    modelPreferences: modelPreferences).ConfigureAwait(false);
 
                 IReadOnlyList<string>? enhancementDegradations = ExtractSpeechEnhancementDegradations(separationState);
                 if (enhancementDegradations is { Count: > 0 })
