@@ -121,7 +121,12 @@ public sealed class StarterPackPresentationService(
         {
             string profileId = StarterPackResolver.ResolveDefaultProfileId(pack);
             StarterPackCompatibilityReport report = await compatibility
-                .EvaluateAsync(pack.Id, profileId, hardwareProfile: null, cancellationToken)
+                .EvaluateAsync(
+                    pack.Id,
+                    profileId,
+                    hardwareProfile: null,
+                    cancellationToken,
+                    skipProviderSmokeTest: true)
                 .ConfigureAwait(false);
             if (report.AllStagesRunnable)
             {
@@ -272,7 +277,12 @@ public sealed class StarterPackPresentationService(
         }
 
         return await compatibility
-            .EvaluateAsync(pack.Id, profileId, hardwareProfile: null, cancellationToken)
+            .EvaluateAsync(
+                pack.Id,
+                profileId,
+                hardwareProfile: null,
+                cancellationToken,
+                skipProviderSmokeTest: true)
             .ConfigureAwait(false);
     }
 

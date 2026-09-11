@@ -102,7 +102,11 @@ public sealed class StarterPackCompatibilityServiceTests
         };
         StarterPackCompatibilityService service = CreateService(runtimePlanner: planner);
 
-        await service.EvaluateAsync("basic", "default", StarterPackHardwareProfile.CpuSafe);
+        await service.EvaluateAsync(
+            "basic",
+            "default",
+            StarterPackHardwareProfile.CpuSafe,
+            skipProviderSmokeTest: true);
 
         Assert.NotNull(capturedRequest);
         Assert.Equal(RuntimeStage.Vad, capturedRequest.Stage);
@@ -112,6 +116,32 @@ public sealed class StarterPackCompatibilityServiceTests
         Assert.Equal(ExecutionProviderKind.Cpu, capturedRequest.PreferredExecutionProvider);
         Assert.True(capturedRequest.RequirePreferredExecutionProvider);
         Assert.True(capturedRequest.SkipProviderSmokeTest);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_does_not_skip_provider_smoke_test_by_default()
+    {
+        StageRuntimePlanningRequest? capturedRequest = null;
+        var planner = new FakeRuntimePlanner
+        {
+            PlanHandler = request =>
+            {
+                capturedRequest ??= request;
+                return new StageRuntimePlan
+                {
+                    Stage = request.Stage,
+                    Status = StageRuntimePlanStatus.Ready,
+                    Variant = request.PreferredModelVariantAlias,
+                    ExecutionProvider = request.PreferredExecutionProvider ?? ExecutionProviderKind.Cpu
+                };
+            }
+        };
+        StarterPackCompatibilityService service = CreateService(runtimePlanner: planner);
+
+        await service.EvaluateAsync("basic", "default", StarterPackHardwareProfile.CpuSafe);
+
+        Assert.NotNull(capturedRequest);
+        Assert.False(capturedRequest.SkipProviderSmokeTest);
     }
 
     [Fact]
@@ -159,7 +189,8 @@ public sealed class StarterPackCompatibilityServiceTests
         StarterPackCompatibilityReport report = await service.EvaluateAsync(
             "auto-provider-pack",
             "default",
-            StarterPackHardwareProfile.CpuSafe);
+            StarterPackHardwareProfile.CpuSafe,
+            skipProviderSmokeTest: true);
 
         StageCompatibilityEntry stage = Assert.Single(report.Stages);
         Assert.True(report.AllStagesRunnable);

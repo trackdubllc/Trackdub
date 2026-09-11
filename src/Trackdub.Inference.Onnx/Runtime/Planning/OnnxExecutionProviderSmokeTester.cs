@@ -50,6 +50,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 case RuntimeStage.TextRefinement:
                     await SmokeTestTextRefinementGenAiAsync(
                         request.ModelRootPath,
+                        request.EntryPath,
                         request.ExecutionProvider,
                         cancellationToken).ConfigureAwait(false);
                     break;
@@ -80,21 +81,19 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
     private static async Task SmokeTestTextRefinementGenAiAsync(
         string modelRootPath,
+        string entryPath,
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
-        string configPath = Path.Combine(modelRootPath, "genai_config.json");
-        if (!File.Exists(configPath))
-        {
-            throw new FileNotFoundException(
-                "Text refinement smoke test requires genai_config.json in the model root.",
-                configPath);
-        }
+        string genAiRoot = RequireGenAiConfigRoot(
+            modelRootPath,
+            entryPath,
+            "Text refinement smoke test requires genai_config.json in the model root.");
 
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using Model model = CreateGenAiSmokeModel(modelRootPath, provider);
+            using Model model = CreateGenAiSmokeModel(genAiRoot, provider);
             using Tokenizer tokenizer = new(model);
             using GeneratorParams generatorParams = new(model);
             using Sequences input = tokenizer.Encode("Hello");
@@ -190,7 +189,11 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
         if (UsesOrtGenAiModelLoad(engineFamily))
         {
-            await SmokeTestGenAiLoadAsync(request.ModelRootPath, request.ExecutionProvider, cancellationToken)
+            await SmokeTestGenAiLoadAsync(
+                    request.ModelRootPath,
+                    request.EntryPath,
+                    request.ExecutionProvider,
+                    cancellationToken)
                 .ConfigureAwait(false);
             return;
         }
@@ -210,24 +213,37 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
     private static async Task SmokeTestGenAiLoadAsync(
         string modelRootPath,
+        string entryPath,
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
-        string configPath = Path.Combine(modelRootPath, "genai_config.json");
-        if (!File.Exists(configPath))
-        {
-            throw new FileNotFoundException(
-                "GenAI smoke test requires genai_config.json in the model root.",
-                configPath);
-        }
+        string genAiRoot = RequireGenAiConfigRoot(
+            modelRootPath,
+            entryPath,
+            "GenAI smoke test requires genai_config.json in the model root.");
 
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using (CreateGenAiSmokeModel(modelRootPath, provider))
+            using (CreateGenAiSmokeModel(genAiRoot, provider))
             {
             }
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string RequireGenAiConfigRoot(
+        string modelRootPath,
+        string entryPath,
+        string missingConfigMessage)
+    {
+        string genAiRoot = PlannedRuntimeModelResolver.ResolveGenAiModelRoot(modelRootPath, entryPath);
+        string configPath = Path.Join(genAiRoot, "genai_config.json");
+        if (!File.Exists(configPath))
+        {
+            throw new FileNotFoundException($"{missingConfigMessage} Missing: {configPath}", configPath);
+        }
+
+        return genAiRoot;
     }
 
     private static async Task SmokeTestGenericSessionAsync(
@@ -808,6 +824,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         {
             await SmokeTestTextRefinementGenAiAsync(
                 request.ModelRootPath,
+                request.EntryPath,
                 request.ExecutionProvider,
                 cancellationToken).ConfigureAwait(false);
             return;

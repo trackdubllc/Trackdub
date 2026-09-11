@@ -366,4 +366,79 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     {
         Assert.Equal(expected, OnnxExecutionProviderSmokeTester.UsesOrtGenAiTranslationSmoke(engineFamily));
     }
+
+    [Fact]
+    public async Task SmokeTestAsync_whisper_genai_looks_for_nested_genai_config()
+    {
+        using TempDirectoryFixture fixture = new();
+        string nestedRoot = Path.Join(fixture.RootPath, "cpu-int4");
+        Directory.CreateDirectory(nestedRoot);
+        string nestedConfig = Path.Join(nestedRoot, "genai_config.json");
+        var tester = new OnnxExecutionProviderSmokeTester();
+
+        ExecutionProviderSmokeTestResult result = await tester.SmokeTestAsync(
+            new ExecutionProviderSmokeTestRequest(
+                RuntimeStage.Asr,
+                "whisper-tiny-genai",
+                "whisper-tiny-genai",
+                "whisper-genai",
+                "default",
+                ExecutionProviderKind.Cpu,
+                fixture.RootPath,
+                nestedConfig));
+
+        Assert.False(result.Passed);
+        Assert.Contains("cpu-int4", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SmokeTestAsync_phi_genai_looks_for_nested_genai_config()
+    {
+        using TempDirectoryFixture fixture = new();
+        string nestedRoot = Path.Join(fixture.RootPath, "cpu_and_mobile", "cpu-int4");
+        Directory.CreateDirectory(nestedRoot);
+        string nestedConfig = Path.Join(nestedRoot, "genai_config.json");
+        var tester = new OnnxExecutionProviderSmokeTester();
+
+        ExecutionProviderSmokeTestResult result = await tester.SmokeTestAsync(
+            new ExecutionProviderSmokeTestRequest(
+                RuntimeStage.Translation,
+                "phi-3.5-mini-instruct-genai",
+                "phi-genai-pivot",
+                "phi-genai",
+                "cpu-int4",
+                ExecutionProviderKind.Cpu,
+                fixture.RootPath,
+                nestedConfig));
+
+        Assert.False(result.Passed);
+        Assert.Contains("cpu-int4", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class TempDirectoryFixture : IDisposable
+    {
+        public string RootPath { get; } = Path.Join(
+            Path.GetTempPath(),
+            "trackdub-tests",
+            Guid.NewGuid().ToString("N"));
+
+        public TempDirectoryFixture() => Directory.CreateDirectory(RootPath);
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(RootPath))
+                {
+                    Directory.Delete(RootPath, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
 }

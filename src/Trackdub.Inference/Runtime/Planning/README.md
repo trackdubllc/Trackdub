@@ -12,7 +12,7 @@ Runtime planning: manifest-driven provider selection, smoke-test gating, and sta
   `TensorRTRtx` -> `Migraphx` -> `OpenVinoCatalog` -> `Qnn` -> `VitisAi` -> `TensorRt` -> `Cuda` -> `OpenVino` -> `DirectMl` -> `Cpu`
 
   Individual stages may override via `AllowedProvidersByEngineFamily` (for example Kokoro TTS remains CPU-only; stock `whisper-onnx` and `latentsync-diffusion` skip TensorRT families because those graphs cannot import). Most ONNX spine stages reference the shared default list.
-- `StageRuntimePlanningRequest.SkipProviderSmokeTest` is for listing and inventory. GPU routes then report `Ready` (files + EP present) instead of compiling graphs. Pipeline and `SelectRouteAsync` keep the smoke gate and report `Verified`. The skip flag is part of the plan cache key so listing `Ready` cannot satisfy a later verified plan.
+- `StageRuntimePlanningRequest.SkipProviderSmokeTest` is for listing and inventory. GPU routes then report `Ready` (files + EP present) instead of compiling graphs. Pipeline, `SelectRouteAsync`, and starter-pack apply keep the smoke gate and report `Verified`. The skip flag is part of the plan cache key so listing `Ready` cannot satisfy a later verified plan. Starter-pack presentation and import pass `skipProviderSmokeTest: true`; `StarterPackApplyService` uses the default (`false`).
 - Planner output is a stable diagnostics/logging shape and must not expose absolute machine-local paths.
 - Smoke-test execution is interface-driven (`IExecutionProviderSmokeTester`); concrete ONNX sessions live in `Trackdub.Inference.Onnx`.
 
