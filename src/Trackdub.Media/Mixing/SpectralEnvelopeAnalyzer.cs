@@ -3,12 +3,14 @@ using MathNet.Numerics.IntegralTransforms;
 
 namespace Trackdub.Media.Mixing;
 
+internal readonly record struct SpectralEnvelope(float[] Bins, float VoicedFrameRatio);
+
 internal static class SpectralEnvelopeAnalyzer
 {
     private const float MinVoicedRms = 0.001f;
     private const float Epsilon = 1e-8f;
 
-    public static float[]? Extract(ReadOnlySpan<float> samples, StftProcessor stft, int lifterOrder = 32)
+    public static SpectralEnvelope? Extract(ReadOnlySpan<float> samples, StftProcessor stft, int lifterOrder = 32)
     {
         if (samples.Length < stft.FftSize)
             return null;
@@ -42,16 +44,17 @@ internal static class SpectralEnvelopeAnalyzer
         if (voicedFrames == 0)
             return null;
 
-        var result = new float[binCount];
+        var bins = new float[binCount];
         for (int k = 0; k < binCount; k++)
-            result[k] = (float)(envelopeAccum[k] / voicedFrames);
-        return result;
+            bins[k] = (float)(envelopeAccum[k] / voicedFrames);
+
+        float voicedRatio = (float)voicedFrames / frames.Length;
+        return new SpectralEnvelope(bins, voicedRatio);
     }
 
     private static float[]? CepstralSmooth(float[] logMag, int lifterOrder)
     {
         int binCount = logMag.Length;
-        // Reconstruct full-size symmetric log-spectrum for IFFT (size = original fftSize = (binCount-1)*2)
         int cepSize = (binCount - 1) * 2;
         if (cepSize <= 0)
             return null;
@@ -67,7 +70,6 @@ internal static class SpectralEnvelopeAnalyzer
 
         Fourier.Inverse(buffer, FourierOptions.Matlab);
 
-        // Lifter: zero out high-quefrency coefficients
         for (int n = lifterOrder + 1; n < cepSize - lifterOrder; n++)
             buffer[n] = Complex.Zero;
 
