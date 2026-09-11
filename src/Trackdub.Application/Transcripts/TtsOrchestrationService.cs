@@ -120,25 +120,20 @@ public sealed class TtsOrchestrationService(
                     speakerLabel,
                     currentItemLabel: speaker.DisplayName);
                 assignmentsBySpeakerId.TryGetValue(speaker.Id, out VoiceAssignment? assignment);
-                VoiceAssignment? fallbackAssignment = null;
-                if (assignment is null &&
-                    request.FallbackVoiceIdsBySpeakerId is not null &&
-                    request.FallbackVoiceIdsBySpeakerId.TryGetValue(speaker.Id, out string? fallbackVoiceId) &&
-                    !string.IsNullOrWhiteSpace(fallbackVoiceId))
+                if (assignment is null)
                 {
-                    fallbackAssignment = VoiceAssignment.CreateFallback(
-                        currentState.ProjectState.Project.Id,
+                    assignment = await TryPersistRequestedVoiceAssignmentAsync(
+                        currentState,
                         speaker.Id,
-                        "kokoro-onnx",
-                        fallbackVoiceId);
-                    await voiceAssignmentRepository.SaveAsync(fallbackAssignment, cancellationToken).ConfigureAwait(false);
+                        request,
+                        cancellationToken).ConfigureAwait(false);
                 }
 
                 await RunTtsForSpeakerAsync(
                     currentState,
                     speaker.Id,
                     segmentIndices: null,
-                    assignment ?? fallbackAssignment,
+                    assignment,
                     request.PreferredModelAlias,
                     request.UseReferenceClipForVoiceCloningBySpeakerId?.TryGetValue(speaker.Id, out bool useReferenceClipForVoiceCloning) == true
                         ? useReferenceClipForVoiceCloning
@@ -487,6 +482,41 @@ public sealed class TtsOrchestrationService(
                 preferredModelVariantAlias),
             cancellationToken,
             progress).ConfigureAwait(false);
+    }
+
+    private async Task<VoiceAssignment?> TryPersistRequestedVoiceAssignmentAsync(
+        TranscriptProjectState currentState,
+        Guid speakerId,
+        GenerateTtsForAllSpeakersRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.VoiceIdsBySpeakerId is not null &&
+            request.VoiceIdsBySpeakerId.TryGetValue(speakerId, out string? explicitVoiceId) &&
+            !string.IsNullOrWhiteSpace(explicitVoiceId))
+        {
+            VoiceAssignment assignment = VoiceAssignment.Create(
+                currentState.ProjectState.Project.Id,
+                speakerId,
+                "kokoro-onnx",
+                explicitVoiceId);
+            await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
+            return assignment;
+        }
+
+        if (request.FallbackVoiceIdsBySpeakerId is not null &&
+            request.FallbackVoiceIdsBySpeakerId.TryGetValue(speakerId, out string? fallbackVoiceId) &&
+            !string.IsNullOrWhiteSpace(fallbackVoiceId))
+        {
+            VoiceAssignment assignment = VoiceAssignment.CreateFallback(
+                currentState.ProjectState.Project.Id,
+                speakerId,
+                "kokoro-onnx",
+                fallbackVoiceId);
+            await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
+            return assignment;
+        }
+
+        return null;
     }
 
     private static string BuildSpeakerProgressLabel(ProjectSpeaker speaker, int speakerNumber, int speakerCount) =>
