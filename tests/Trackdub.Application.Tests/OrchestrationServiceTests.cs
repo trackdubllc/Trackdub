@@ -705,6 +705,58 @@ public sealed class OrchestrationServiceTests
     }
 
     [Fact]
+    public async Task TtsOrchestrationService_GenerateTtsForAllSpeakersAsync_uses_qwen3_stock_when_short_clone_target_is_not_kokoro()
+    {
+        var consent = new FakeConsentService();
+        consent.GrantVoiceCloningConsent();
+        var ttsEngine = new FakeVoiceCloneTtsEngine(consent) { SampleRate = 1000, DurationSamples = 1000 };
+        var analyzer = new FakeReferenceClipAnalyzer();
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(2.66d, 2.66d, 24000, 1, "male"));
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(2.66d, 2.66d, 24000, 1, "male"));
+        using var workspace = new TemporaryTestWorkspace();
+        TtsServiceContext context = CreateTtsServiceContext(
+            ttsEngine,
+            consent,
+            new FakeAuditLog(),
+            analyzer,
+            workspace.Root,
+            voiceCatalog: new FakeVoiceCatalog(
+            [
+                new("af_heart", "mul", "female", "Heart"),
+                new("am_adam", "mul", "male", "Adam"),
+                new("bf_alice", "en-gb", "female", "Alice"),
+                new(Qwen3TtsDefaults.CustomVoice06Alias, "ja", "synthetic", "Qwen3 custom"),
+            ]));
+        TranscriptProjectState spanishState = CreateTranslatedProjectState();
+        TranslationRevision japaneseRevision = spanishState.CurrentTranslationRevision! with { TargetLanguage = "ja" };
+        TranscriptProjectState state = AddNormalizedAudioArtifact(
+            spanishState with
+            {
+                CurrentTranslationRevision = japaneseRevision,
+                SelectedTranslationTargetLanguage = "ja",
+            },
+            context.ArtifactStore);
+        Guid speakerId = state.Speakers[0].Id;
+
+        await context.Service.GenerateTtsForAllSpeakersAsync(
+            state,
+            new GenerateTtsForAllSpeakersRequest(
+                UseReferenceClipForVoiceCloningBySpeakerId: new Dictionary<Guid, bool>
+                {
+                    [speakerId] = true
+                }),
+            TestContext.Current.CancellationToken);
+
+        VoiceAssignment assignment = Assert.Single(context.VoiceAssignmentRepository.All);
+        Assert.True(assignment.IsFallback);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, assignment.VoiceModelId);
+        Assert.Null(assignment.VoiceVariant);
+        TtsTake take = Assert.Single(context.TtsTakeRepository.All);
+        Assert.Equal(TtsTakeKind.Stock, take.Kind);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, take.VoiceId);
+    }
+
+    [Fact]
     public async Task TtsOrchestrationService_GenerateTtsForAllSpeakersAsync_keeps_cloning_speakers_that_meet_the_reference_floor()
     {
         var consent = new FakeConsentService();
@@ -1205,11 +1257,12 @@ public sealed class OrchestrationServiceTests
         IReferenceClipAnalyzer? referenceClipAnalyzer = null,
         string? artifactRoot = null,
         IAudioClipExtractor? audioClipExtractor = null,
-        FakeReferenceClipTrimmer? referenceClipTrimmer = null)
+        FakeReferenceClipTrimmer? referenceClipTrimmer = null,
+        IVoiceCatalog? voiceCatalog = null)
     {
         var voiceAssignmentRepository = new FakeVoiceAssignmentRepository();
         var ttsTakeRepository = new FakeTtsTakeRepository();
-        var voiceCatalog = new FakeVoiceCatalog();
+        voiceCatalog ??= new FakeVoiceCatalog();
         var artifactStore = new FakeArtifactStore(artifactRoot);
         var fileFingerprintService = new FakeFileFingerprintService();
         var mediaAssetRepository = new FakeMediaAssetRepository();
