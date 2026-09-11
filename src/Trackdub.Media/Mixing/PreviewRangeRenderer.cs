@@ -213,11 +213,7 @@ public sealed class PreviewRangeRenderer(IArtifactStore artifactStore) : IPrevie
                 : ResampleLinear(refSamples.Samples, refSamples.SampleRate, sampleRate);
             return SpectralEnvelopeMatcher.TryApply(dryTake, refResampled, new StftProcessor()) ?? dryTake;
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return dryTake;
         }

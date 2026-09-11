@@ -40,8 +40,8 @@ public sealed class MixPlanBuilder(IArtifactStore? artifactStore = null)
         ProjectArtifact sourceArtifact = SelectSourceAudioArtifact(request.Artifacts)
             ?? throw new InvalidOperationException("The project does not contain source audio for preview mixing.");
         ProjectArtifact? originalMixArtifact = SelectOriginalMixAudioArtifact(request.Artifacts, request.MediaAssetId);
-        IReadOnlyList<ProjectArtifact> stemCandidates = request.MediaAssetId.HasValue
-            ? request.Artifacts.Where(a => a.MediaAssetId == request.MediaAssetId.Value).ToList()
+        IReadOnlyList<ProjectArtifact> stemCandidates = request.MediaAssetId is Guid assetId
+            ? request.Artifacts.Where(a => a.MediaAssetId == assetId).ToList()
             : request.Artifacts;
         ProjectArtifact? vocalStemArtifact = TranscriptWorkflowUtilities.GetLatestAcceptedVocalStem(stemCandidates);
         Dictionary<Guid, ProjectArtifact> ttsArtifactsById = request.Artifacts
