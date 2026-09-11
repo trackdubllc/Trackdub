@@ -152,6 +152,96 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
+    public void ResolveSessionOptionsProvider_keeps_directml_when_bootstrap_selected_cpu_on_windows()
+    {
+        Assert.Equal(
+            OperatingSystem.IsWindows() ? ExecutionProviderKind.DirectMl : ExecutionProviderKind.Cpu,
+            OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
+                ExecutionProviderKind.DirectMl,
+                ExecutionProviderKind.Cpu));
+    }
+
+    [Fact]
+    public void ResolveSessionOptionsProvider_preserves_non_directml_cpu_selection()
+    {
+        Assert.Equal(
+            ExecutionProviderKind.Cpu,
+            OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
+                ExecutionProviderKind.TensorRTRtx,
+                ExecutionProviderKind.Cpu));
+    }
+
+    [Fact]
+    public void ResolveSessionOptionsProvider_preserves_native_cuda_selection()
+    {
+        Assert.Equal(
+            ExecutionProviderKind.Cuda,
+            OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
+                ExecutionProviderKind.Cuda,
+                ExecutionProviderKind.Cuda));
+    }
+
+    [Fact]
+    public void ResolveSessionOptionsProvider_maps_windows_cuda_cpu_bootstrap_to_directml()
+    {
+        ExecutionProviderKind resolved = OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
+            ExecutionProviderKind.Cuda,
+            ExecutionProviderKind.Cpu);
+
+        Assert.Equal(
+            OperatingSystem.IsWindows() ? ExecutionProviderKind.DirectMl : ExecutionProviderKind.Cpu,
+            resolved);
+    }
+
+    [RequiresDirectMlFact]
+    public async Task CreateSingleAsync_directml_selects_dml_not_cpu()
+    {
+        string path = Path.Join(Path.GetTempPath(), $"trackdub-dml-{Guid.NewGuid():N}.onnx");
+        await File.WriteAllBytesAsync(path, BuildIdentityOnnxModel());
+        try
+        {
+            using OnnxExecutionSessionFactory.SingleSessionLease lease =
+                await OnnxExecutionSessionFactory.CreateSingleAsync(
+                    path,
+                    ExecutionProviderKind.DirectMl,
+                    CancellationToken.None);
+
+            Assert.Equal("dml", lease.RequestedProvider);
+            Assert.Equal("dml", lease.SelectedProvider);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [RequiresDirectMlFact]
+    public async Task CreateSingleAsync_directml_appends_even_when_bootstrap_selected_cpu()
+    {
+        OnnxExecutionProviderBootstrapperRegistry.ResetForTests();
+        OnnxExecutionProviderBootstrapperRegistry.Initialize(new CpuSelectingDirectMlBootstrapper());
+
+        string path = Path.Join(Path.GetTempPath(), $"trackdub-dml-cpu-bootstrap-{Guid.NewGuid():N}.onnx");
+        await File.WriteAllBytesAsync(path, BuildIdentityOnnxModel());
+        try
+        {
+            using OnnxExecutionSessionFactory.SingleSessionLease lease =
+                await OnnxExecutionSessionFactory.CreateSingleAsync(
+                    path,
+                    ExecutionProviderKind.DirectMl,
+                    CancellationToken.None);
+
+            Assert.Equal("dml", lease.RequestedProvider);
+            Assert.Equal("dml", lease.SelectedProvider);
+        }
+        finally
+        {
+            File.Delete(path);
+            OnnxExecutionProviderBootstrapperRegistry.ResetForTests();
+        }
+    }
+
+    [Fact]
     public void BuildTensorRtRtxOptions_includes_runtime_cache_and_cuda_graph_by_default()
     {
         string? previousEngineCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT");
@@ -387,7 +477,7 @@ public sealed class OnnxExecutionSessionFactoryTests
 
 
     [Fact]
-    public void BuildSessionOptionsFingerprint_includes_policy_for_catalog_gpu_only()
+    public void BuildSessionOptionsFingerprint_includes_policy_only_for_catalog_providers_that_apply_it()
     {
         MethodInfo method = typeof(OnnxExecutionSessionFactory)
             .GetMethod("BuildSessionOptionsFingerprint", BindingFlags.NonPublic | BindingFlags.Static)
@@ -413,26 +503,40 @@ public sealed class OnnxExecutionSessionFactoryTests
             [ExecutionProviderKind.TensorRTRtx, WindowsMlExecutionDevicePolicy.Explicit, null]);
 
         Assert.Equal("default", Assert.IsType<string>(explicitDml));
-        Assert.NotEqual(Assert.IsType<string>(explicitDml), Assert.IsType<string>(maxPerfDml));
-        Assert.NotEqual(Assert.IsType<string>(maxPerfDml), Assert.IsType<string>(defaultRenderDml));
-        Assert.NotEqual(Assert.IsType<string>(maxPerfDml), Assert.IsType<string>(minPowerDml));
-        Assert.NotEqual(Assert.IsType<string>(defaultRenderDml), Assert.IsType<string>(minPowerDml));
+        Assert.Equal(Assert.IsType<string>(explicitDml), Assert.IsType<string>(maxPerfDml));
+        Assert.Equal(Assert.IsType<string>(explicitDml), Assert.IsType<string>(defaultRenderDml));
+        Assert.Equal(Assert.IsType<string>(explicitDml), Assert.IsType<string>(minPowerDml));
         Assert.Equal(Assert.IsType<string>(explicitTrt), Assert.IsType<string>(maxPerfTrt));
         Assert.NotEqual(Assert.IsType<string>(maxPerfTrt), Assert.IsType<string>(explicitDml));
+
+        object? explicitMigraphx = method.Invoke(
+            null,
+            [ExecutionProviderKind.Migraphx, WindowsMlExecutionDevicePolicy.Explicit, null]);
+        object? defaultRenderMigraphx = method.Invoke(
+            null,
+            [ExecutionProviderKind.Migraphx, WindowsMlExecutionDevicePolicy.DefaultRender, null]);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.NotEqual(Assert.IsType<string>(explicitMigraphx), Assert.IsType<string>(defaultRenderMigraphx));
+        }
+        else
+        {
+            Assert.Equal(Assert.IsType<string>(explicitMigraphx), Assert.IsType<string>(defaultRenderMigraphx));
+        }
     }
 
     [Theory]
     [InlineData(WindowsMlExecutionDevicePolicy.Explicit, ExecutionProviderKind.DirectMl, false)]
-    [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.DirectMl, true)]
+    [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.DirectMl, false)]
     [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.TensorRTRtx, false)]
     [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.Migraphx, true)]
     [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.Cuda, false)]
     [InlineData(WindowsMlExecutionDevicePolicy.MaxPerformance, ExecutionProviderKind.TensorRt, false)]
-    [InlineData(WindowsMlExecutionDevicePolicy.PreferNpu, ExecutionProviderKind.DirectMl, true)]
-    [InlineData(WindowsMlExecutionDevicePolicy.MaxEfficiency, ExecutionProviderKind.DirectMl, true)]
-    [InlineData(WindowsMlExecutionDevicePolicy.MinOverallPower, ExecutionProviderKind.DirectMl, true)]
-    [InlineData(WindowsMlExecutionDevicePolicy.DefaultRender, ExecutionProviderKind.DirectMl, true)]
-    [InlineData(WindowsMlExecutionDevicePolicy.MinPower, ExecutionProviderKind.DirectMl, true)]
+    [InlineData(WindowsMlExecutionDevicePolicy.PreferNpu, ExecutionProviderKind.DirectMl, false)]
+    [InlineData(WindowsMlExecutionDevicePolicy.MaxEfficiency, ExecutionProviderKind.DirectMl, false)]
+    [InlineData(WindowsMlExecutionDevicePolicy.MinOverallPower, ExecutionProviderKind.DirectMl, false)]
+    [InlineData(WindowsMlExecutionDevicePolicy.DefaultRender, ExecutionProviderKind.DirectMl, false)]
+    [InlineData(WindowsMlExecutionDevicePolicy.MinPower, ExecutionProviderKind.DirectMl, false)]
     public void ShouldUseCatalogDevicePolicy_matrix(
         WindowsMlExecutionDevicePolicy policy,
         ExecutionProviderKind provider,
@@ -546,12 +650,12 @@ public sealed class OnnxExecutionSessionFactoryTests
             return;
         }
 
-        // On Windows, either the extended policy was genuinely applied (no fallback reason), or
-        // the pinned ORT binding lacks DEFAULT_RENDER/MIN_POWER and the reason must say so —
-        // the session must never silently report the extended policy as active when it is not.
+        // Packaged DirectML is appended explicitly. Catalog device policies do not apply, so a
+        // fallback reason is a DirectML append failure, not a silent "policy was applied" claim.
         if (fallbackReason is not null)
         {
-            Assert.Contains("was not applied", fallbackReason, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("was applied", fallbackReason, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("DirectML", fallbackReason, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -731,6 +835,29 @@ public sealed class OnnxExecutionSessionFactoryTests
             WarningCount++;
             Messages.Add(formatter(state, exception));
         }
+    }
+
+    private sealed class CpuSelectingDirectMlBootstrapper : IExecutionProviderBootstrapper
+    {
+        public Task<ExecutionProviderBootstrapResult> BootstrapAsync(
+            ExecutionProviderKind provider,
+            bool allowDownloads,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = allowDownloads;
+            return Task.FromResult(new ExecutionProviderBootstrapResult(
+                provider,
+                ExecutionProviderKind.Cpu,
+                Succeeded: false,
+                Detail: "catalog unavailable",
+                FailureReason: "catalog unavailable"));
+        }
+
+        public Task<ExecutionProviderBootstrapResult> CheckReadinessAsync(
+            ExecutionProviderKind provider,
+            CancellationToken cancellationToken) =>
+            BootstrapAsync(provider, allowDownloads: false, cancellationToken);
     }
 
     private static InferenceSession CreateMinimalSession()

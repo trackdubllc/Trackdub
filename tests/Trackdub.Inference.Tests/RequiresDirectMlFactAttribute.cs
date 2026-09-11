@@ -32,35 +32,43 @@ public sealed class RequiresDirectMlFactAttribute : FactAttribute
 
 #if WINDOWS
         WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
+#endif
+
+        using SessionOptions options = new();
+        string? catalogFailure = null;
+        string? classicFailure = null;
+        if (OnnxExecutionSessionFactory.TryAppendDirectMlProvider(options, out catalogFailure)
+            || OnnxExecutionSessionFactory.TryAppendDirectMlProviderDirect(options, out classicFailure))
+        {
+            return null;
+        }
+
+#if WINDOWS
         try
         {
-            WindowsMlProviderRegistrationResult registration = WindowsMlProviderRegistrationPolicy.Shared
+            // Catalog registration can populate GetEpDevices, but packaged DirectML does not
+            // require it. Do not skip solely because RegisterCertifiedAsync failed or timed out.
+            _ = WindowsMlProviderRegistrationPolicy.Shared
                 .RegisterForReadinessAsync(ExecutionProviderKind.DirectMl, CancellationToken.None)
                 .ConfigureAwait(false)
                 .GetAwaiter()
                 .GetResult();
-            if (!registration.RegistrationSucceeded)
-            {
-                return string.IsNullOrWhiteSpace(registration.Detail)
-                    ? "DirectML execution provider is not available: Windows ML catalog registration failed."
-                    : $"DirectML execution provider is not available: {registration.Detail}";
-            }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return $"DirectML execution provider is not available: {ex.Message}";
+            // Append path below is the real availability gate.
+        }
+
+        using SessionOptions retryOptions = new();
+        if (OnnxExecutionSessionFactory.TryAppendDirectMlProvider(retryOptions, out catalogFailure)
+            || OnnxExecutionSessionFactory.TryAppendDirectMlProviderDirect(retryOptions, out classicFailure))
+        {
+            return null;
         }
 #endif
 
-        using SessionOptions options = new();
-        if (!OnnxExecutionSessionFactory.TryAppendDirectMlProvider(options, out string? failureReason))
-        {
-            return string.IsNullOrWhiteSpace(failureReason)
-                ? "DirectML execution provider is not available on this machine."
-                : $"DirectML execution provider is not available: {failureReason}";
-        }
-
-        return null;
+        string detail = catalogFailure ?? classicFailure ?? "unknown failure";
+        return $"DirectML execution provider is not available: {detail}";
     }
 }
 
