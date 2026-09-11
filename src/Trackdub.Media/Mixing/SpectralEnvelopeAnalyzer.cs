@@ -37,7 +37,7 @@ internal static class SpectralEnvelopeAnalyzer
         {
             // Gate on time-domain RMS so the threshold is in sample-amplitude space.
             int sampleStart = frameIndex * hopSize;
-            int sampleCount = Math.Min(binCount * 2 - 2, samples.Length - sampleStart);
+            int sampleCount = Math.Min((binCount * 2) - 2, samples.Length - sampleStart);
             if (sampleCount <= 0)
                 continue;
 

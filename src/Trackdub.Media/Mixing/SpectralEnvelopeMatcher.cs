@@ -83,7 +83,7 @@ internal static class SpectralEnvelopeMatcher
 
     private static float[] CenterPad(ReadOnlySpan<float> samples, int padSize)
     {
-        var result = new float[samples.Length + 2 * padSize];
+        var result = new float[samples.Length + (2 * padSize)];
         samples.CopyTo(result.AsSpan(padSize));
         return result;
     }
