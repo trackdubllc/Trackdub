@@ -152,7 +152,7 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
-    public void ResolveSessionOptionsProvider_keeps_directml_when_bootstrap_selected_cpu()
+    public void ResolveSessionOptionsProvider_keeps_directml_when_bootstrap_selected_cpu_on_windows()
     {
         Assert.Equal(
             OperatingSystem.IsWindows() ? ExecutionProviderKind.DirectMl : ExecutionProviderKind.Cpu,
@@ -503,12 +503,26 @@ public sealed class OnnxExecutionSessionFactoryTests
             [ExecutionProviderKind.TensorRTRtx, WindowsMlExecutionDevicePolicy.Explicit, null]);
 
         Assert.Equal("default", Assert.IsType<string>(explicitDml));
-        Assert.NotEqual(Assert.IsType<string>(explicitDml), Assert.IsType<string>(maxPerfDml));
-        Assert.NotEqual(Assert.IsType<string>(maxPerfDml), Assert.IsType<string>(defaultRenderDml));
-        Assert.NotEqual(Assert.IsType<string>(maxPerfDml), Assert.IsType<string>(minPowerDml));
-        Assert.NotEqual(Assert.IsType<string>(defaultRenderDml), Assert.IsType<string>(minPowerDml));
+        Assert.Equal(Assert.IsType<string>(explicitDml), Assert.IsType<string>(maxPerfDml));
+        Assert.Equal(Assert.IsType<string>(explicitDml), Assert.IsType<string>(defaultRenderDml));
+        Assert.Equal(Assert.IsType<string>(explicitDml), Assert.IsType<string>(minPowerDml));
         Assert.Equal(Assert.IsType<string>(explicitTrt), Assert.IsType<string>(maxPerfTrt));
         Assert.NotEqual(Assert.IsType<string>(maxPerfTrt), Assert.IsType<string>(explicitDml));
+
+        object? explicitMigraphx = method.Invoke(
+            null,
+            [ExecutionProviderKind.Migraphx, WindowsMlExecutionDevicePolicy.Explicit, null]);
+        object? defaultRenderMigraphx = method.Invoke(
+            null,
+            [ExecutionProviderKind.Migraphx, WindowsMlExecutionDevicePolicy.DefaultRender, null]);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.NotEqual(Assert.IsType<string>(explicitMigraphx), Assert.IsType<string>(defaultRenderMigraphx));
+        }
+        else
+        {
+            Assert.Equal(Assert.IsType<string>(explicitMigraphx), Assert.IsType<string>(defaultRenderMigraphx));
+        }
     }
 
     [Theory]

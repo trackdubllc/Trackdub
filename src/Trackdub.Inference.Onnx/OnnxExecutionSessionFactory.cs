@@ -1671,8 +1671,7 @@ internal static class OnnxExecutionSessionFactory
     private static bool ShouldIncludePolicyInFingerprint(
         WindowsMlExecutionDevicePolicy devicePolicy,
         ExecutionProviderKind selectedProviderKind) =>
-        devicePolicy != WindowsMlExecutionDevicePolicy.Explicit &&
-        IsCatalogGpuProvider(selectedProviderKind);
+        ShouldUseCatalogDevicePolicy(devicePolicy, selectedProviderKind);
 
     private static string? MergeFallbackReasons(string? encoder, string? decoder) =>
         (encoder, decoder) switch
