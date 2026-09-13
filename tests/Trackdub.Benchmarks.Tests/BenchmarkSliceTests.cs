@@ -183,6 +183,13 @@ public sealed class BenchmarkOptionsTests
 
     private static string ResolveRepositoryFile(string relativePath)
     {
+        if (Path.IsPathRooted(relativePath))
+        {
+            throw new ArgumentException(
+                $"Expected a relative path, but got rooted path '{relativePath}'.",
+                nameof(relativePath));
+        }
+
         DirectoryInfo? current = new(AppContext.BaseDirectory);
         while (current is not null)
         {
