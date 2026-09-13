@@ -126,7 +126,7 @@ internal static class TensorRtRtxPluginLocator
                         return true;
                     }
 
-                    string candidatePath = Path.Combine(normalizedDirectory, fileName);
+                    string candidatePath = Path.Join(normalizedDirectory, fileName);
                     return !fileExists(candidatePath);
                 })
                 .ToArray();
