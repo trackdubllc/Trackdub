@@ -710,6 +710,50 @@ public sealed class ModelManifestLoaderTests
     }
 
     [Fact]
+    public void LoadCatalog_LoadsOpenRailPlusPlusLicense()
+    {
+        string manifestPath = WriteTempManifest(
+            """
+            {
+              "models": [
+                {
+                  "model_id": "example/latentsync",
+                  "task": "lip-synthesis",
+                  "engine_family": "latentsync-diffusion",
+                  "license": "openrail++",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": true,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_safe_mode": true,
+                  "source_url": "https://example.invalid/model",
+                  "revision": "main",
+                  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "aliases": [ "example-latentsync" ],
+                  "root_path": "../../../../models/example-latentsync",
+                  "benchmark_entry": "unet.onnx",
+                  "variants": []
+                }
+              ]
+            }
+            """);
+
+        try
+        {
+            ModelManifest manifest = Assert.Single(ModelManifestLoader.LoadCatalog(manifestPath).Models);
+
+            Assert.Equal(ModelLicenseKind.OpenRailPlusPlus, manifest.License);
+            Assert.True(manifest.CommercialAllowed);
+            Assert.True(manifest.RequiresAttribution);
+        }
+        finally
+        {
+            File.Delete(manifestPath);
+        }
+    }
+
+    [Fact]
     public void LoadCatalog_RejectsInvalidLicense()
     {
         string manifestPath = WriteTempManifest(
@@ -1676,6 +1720,7 @@ public sealed class ModelManifestLoaderTests
         Assert.Contains(catalog.Models, manifest =>
             manifest.ModelId.Equals("ByteDance/LatentSync-1.6", StringComparison.Ordinal) &&
             manifest.Task is ModelTask.LipSynthesis &&
+            manifest.License is ModelLicenseKind.OpenRailPlusPlus &&
             manifest.CommercialAllowed &&
             manifest.CommercialUseVerified &&
             manifest.Lane is ModelLane.Commercial &&

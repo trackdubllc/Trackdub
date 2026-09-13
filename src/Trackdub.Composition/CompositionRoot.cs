@@ -924,6 +924,11 @@ public static class CompositionRoot
         {
             BenchmarkModelCandidate candidate = modelPathResolver.ResolveSingle("kokoro-onnx");
             string? modelRootPath = candidate.RootDirectory ?? Path.GetDirectoryName(candidate.ModelPath);
+            if (!string.IsNullOrWhiteSpace(modelRootPath))
+            {
+                modelRootPath = KokoroVoiceCatalog.ResolveRootContainingVoices(modelRootPath);
+            }
+
             return string.IsNullOrWhiteSpace(modelRootPath)
                 ? KokoroVoiceCatalog.KnownAvailable()
                 : await CreateKokoroVoiceCatalogSafe(modelRootPath, logger).ConfigureAwait(false);

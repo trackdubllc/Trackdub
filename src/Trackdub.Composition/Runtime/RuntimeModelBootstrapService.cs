@@ -236,7 +236,7 @@ public sealed class RuntimeModelBootstrapService(
                 entry.ModelId,
                 modelRootPath,
                 string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
-                fingerprint.Sha256,
+                ModelDownloadManifestFiles.ResolveCacheIdentitySha256(entry, fingerprint.Sha256),
                 DateTimeOffset.UtcNow),
             cancellationToken).ConfigureAwait(false);
 
@@ -346,7 +346,7 @@ public sealed class RuntimeModelBootstrapService(
                 entry.ModelId,
                 modelRootPath,
                 string.IsNullOrWhiteSpace(entry.Revision) ? "manual-import" : entry.Revision,
-                fingerprint.Sha256,
+                ModelDownloadManifestFiles.ResolveCacheIdentitySha256(entry, fingerprint.Sha256),
                 DateTimeOffset.UtcNow),
             cancellationToken).ConfigureAwait(false);
 
@@ -543,7 +543,7 @@ public sealed class RuntimeModelBootstrapService(
                 entry.ModelId,
                 modelRootPath,
                 string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
-                fingerprint.Sha256,
+                ModelDownloadManifestFiles.ResolveCacheIdentitySha256(entry, fingerprint.Sha256),
                 DateTimeOffset.UtcNow),
             cancellationToken).ConfigureAwait(false);
 

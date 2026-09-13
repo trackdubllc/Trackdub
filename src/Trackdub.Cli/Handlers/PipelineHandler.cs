@@ -62,7 +62,7 @@ internal static class PipelineHandler
         string projectPath,
         CancellationToken cancellationToken)
     {
-        string resolvedProjectPath = Path.GetFullPath(projectPath);
+        string resolvedProjectPath = Path.GetFullPath(UserPathText.Normalize(projectPath));
         if (!Directory.Exists(resolvedProjectPath)
             || !TrackdubProjectPaths.ContainsDatabase(resolvedProjectPath))
         {
@@ -162,7 +162,7 @@ internal static class PipelineHandler
         TuiPipelineRunOptions options,
         CancellationToken cancellationToken)
     {
-        string resolvedProjectPath = Path.GetFullPath(projectPath);
+        string resolvedProjectPath = Path.GetFullPath(UserPathText.Normalize(projectPath));
         TrackdubProjectContext? projectContext = await TrackdubProjectContextResolver
             .TryOpenAsync(factory, resolvedProjectPath, cancellationToken)
             .ConfigureAwait(false);

@@ -6,7 +6,7 @@ using Trackdub.Contracts.ApplicationContracts;
 namespace Trackdub.Infrastructure.Settings;
 
 public sealed class JsonStudioSettingsService(
-    TrackdubStoragePaths storagePaths,
+    IAppStoragePaths storagePaths,
     IApplicationLogger? logger = null) : IStudioSettingsService
 {
     private const int RecentProjectLimit = 10;

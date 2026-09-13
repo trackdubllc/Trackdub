@@ -24,12 +24,15 @@ public sealed class Pcm16ReferenceClipAnalyzer : IReferenceClipAnalyzer
         double activeSpeechSeconds = waveInfo.SampleRate <= 0
             ? 0d
             : activeFrames / (double)waveInfo.SampleRate;
+        WaveMonoSamples mono = await WavePcm16.ReadAllMonoSamplesAsync(fullPath, cancellationToken).ConfigureAwait(false);
+        string? estimatedGender = SpeechPitchGenderEstimator.EstimateGender(mono.Samples, mono.SampleRate);
 
         return new ReferenceClipAnalysis(
             waveInfo.DurationSeconds,
             activeSpeechSeconds,
             waveInfo.SampleRate,
-            waveInfo.ChannelCount);
+            waveInfo.ChannelCount,
+            estimatedGender);
     }
 
     private static async Task<long> CountActiveFramesAsync(

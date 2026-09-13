@@ -79,10 +79,17 @@ internal static class TrtRtxProvidersHandler
         ITrtRtxEpInstaller installer = factory.GetRequiredService<ITrtRtxEpInstaller>();
 
         StudioSettings settings = await settingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
-        if (acceptLicense && !settings.NvidiaTensorRtRtxLicenseAccepted)
+        if (acceptLicense)
         {
-            settings = settings with { NvidiaTensorRtRtxLicenseAccepted = true };
-            await settingsService.SaveAsync(settings, cancellationToken).ConfigureAwait(false);
+            if (!settings.NvidiaTensorRtRtxLicenseAccepted)
+            {
+                settings = settings with { NvidiaTensorRtRtxLicenseAccepted = true };
+                await settingsService.SaveAsync(settings, cancellationToken).ConfigureAwait(false);
+            }
+
+            await factory
+                .PersistNvidiaTensorRtRtxLicenseAsync(cancellationToken)
+                .ConfigureAwait(false);
             await progressOutput.WriteLineAsync(
                 $"Accepted NVIDIA TensorRT RTX license flag in studio settings. Reference: {LicenseReference}")
                 .ConfigureAwait(false);

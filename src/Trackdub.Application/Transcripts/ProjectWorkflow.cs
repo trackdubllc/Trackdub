@@ -311,31 +311,28 @@ public sealed class ProjectWorkflow(
             throw;
         }
 
-        if (regenerateTranscript)
+        TranscriptAudioRoutingPlan audioRoutingPlan = await TryPrepareSpeechAudioAsync(
+            currentState.ProjectState.Project.Id,
+            mediaAsset,
+            sourceAudioArtifact,
+            stemResult.VocalsArtifact,
+            currentState.ProjectState.Artifacts
+                .Concat(stemResult.Artifacts)
+                .ToArray(),
+            cancellationToken).ConfigureAwait(false);
+
+        if (regenerateTranscript && ShouldRegenerateTranscriptAfterStemRerun(currentState))
         {
-            TranscriptAudioRoutingPlan audioRoutingPlan = await TryPrepareSpeechAudioAsync(
-                currentState.ProjectState.Project.Id,
+            await transcriptGenerationService.GenerateTranscriptAsync(
+                currentState.ProjectState.Project,
                 mediaAsset,
                 sourceAudioArtifact,
-                stemResult.VocalsArtifact,
-                currentState.ProjectState.Artifacts
-                    .Concat(stemResult.Artifacts)
-                    .ToArray(),
-                cancellationToken).ConfigureAwait(false);
-
-            if (ShouldRegenerateTranscriptAfterStemRerun(currentState))
-            {
-                await transcriptGenerationService.GenerateTranscriptAsync(
-                    currentState.ProjectState.Project,
-                    mediaAsset,
-                    sourceAudioArtifact,
-                    audioRoutingPlan,
-                    ShouldRegenerateWithDiarization(currentState),
-                    modelPreferences ?? InferenceModelPreferences.Empty,
-                    cancellationToken,
-                    sourceLanguage: null,
-                    forceRerun: true).ConfigureAwait(false);
-            }
+                audioRoutingPlan,
+                ShouldRegenerateWithDiarization(currentState),
+                modelPreferences ?? InferenceModelPreferences.Empty,
+                cancellationToken,
+                sourceLanguage: null,
+                forceRerun: true).ConfigureAwait(false);
         }
 
         return await ReloadAsync(currentState.SelectedTranslationTargetLanguage, cancellationToken).ConfigureAwait(false);

@@ -662,6 +662,146 @@ public sealed class OrchestrationServiceTests
     }
 
     [Fact]
+    public async Task TtsOrchestrationService_GenerateTtsForAllSpeakersAsync_falls_back_to_gender_matched_kokoro_when_clone_reference_is_too_short()
+    {
+        var consent = new FakeConsentService();
+        consent.GrantVoiceCloningConsent();
+        var ttsEngine = new FakeVoiceCloneTtsEngine(consent) { SampleRate = 1000, DurationSamples = 1000 };
+        var analyzer = new FakeReferenceClipAnalyzer();
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(2.66d, 2.66d, 24000, 1, "male"));
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(2.66d, 2.66d, 24000, 1, "male"));
+        using var workspace = new TemporaryTestWorkspace();
+        TtsServiceContext context = CreateTtsServiceContext(
+            ttsEngine,
+            consent,
+            new FakeAuditLog(),
+            analyzer,
+            workspace.Root);
+        TranscriptProjectState state = AddNormalizedAudioArtifact(
+            CreateTranslatedProjectState() with { VoiceAssignments = [] },
+            context.ArtifactStore);
+        Guid speakerId = state.Speakers[0].Id;
+
+        await context.Service.GenerateTtsForAllSpeakersAsync(
+            state,
+            new GenerateTtsForAllSpeakersRequest(
+                UseReferenceClipForVoiceCloningBySpeakerId: new Dictionary<Guid, bool>
+                {
+                    [speakerId] = true
+                }),
+            TestContext.Current.CancellationToken);
+
+        TtsTake take = Assert.Single(context.TtsTakeRepository.All);
+        Assert.Equal(TtsTakeKind.Stock, take.Kind);
+        Assert.Null(take.ReferenceClipArtifactId);
+        Assert.Equal("am_adam", take.VoiceId);
+        VoiceAssignment assignment = Assert.Single(context.VoiceAssignmentRepository.All);
+        Assert.True(assignment.IsFallback);
+        Assert.Equal(StockTtsDefaults.KokoroPrimaryAlias, assignment.VoiceModelId);
+        Assert.Equal("am_adam", assignment.VoiceVariant);
+        Assert.Equal("am_adam", ttsEngine.LastVoicepack?.VoiceId);
+        Assert.Null(ttsEngine.LastReferenceClipArtifactId);
+        Assert.DoesNotContain(context.MediaAssetRepository.Artifacts, artifact => artifact.Kind == ArtifactKind.ReferenceClip);
+    }
+
+    [Fact]
+    public async Task TtsOrchestrationService_GenerateTtsForAllSpeakersAsync_uses_qwen3_stock_when_short_clone_target_is_not_kokoro()
+    {
+        var consent = new FakeConsentService();
+        consent.GrantVoiceCloningConsent();
+        var ttsEngine = new FakeVoiceCloneTtsEngine(consent) { SampleRate = 1000, DurationSamples = 1000 };
+        var analyzer = new FakeReferenceClipAnalyzer();
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(2.66d, 2.66d, 24000, 1, "male"));
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(2.66d, 2.66d, 24000, 1, "male"));
+        using var workspace = new TemporaryTestWorkspace();
+        TtsServiceContext context = CreateTtsServiceContext(
+            ttsEngine,
+            consent,
+            new FakeAuditLog(),
+            analyzer,
+            workspace.Root,
+            voiceCatalog: new FakeVoiceCatalog(
+            [
+                new("af_heart", "mul", "female", "Heart"),
+                new("am_adam", "mul", "male", "Adam"),
+                new("bf_alice", "en-gb", "female", "Alice"),
+                new(Qwen3TtsDefaults.CustomVoice06Alias, "ja", "synthetic", "Qwen3 custom"),
+            ]));
+        TranscriptProjectState spanishState = CreateTranslatedProjectState();
+        TranslationRevision japaneseRevision = spanishState.CurrentTranslationRevision! with { TargetLanguage = "ja" };
+        TranscriptProjectState state = AddNormalizedAudioArtifact(
+            spanishState with
+            {
+                CurrentTranslationRevision = japaneseRevision,
+                SelectedTranslationTargetLanguage = "ja",
+            },
+            context.ArtifactStore);
+        Guid speakerId = state.Speakers[0].Id;
+
+        await context.Service.GenerateTtsForAllSpeakersAsync(
+            state,
+            new GenerateTtsForAllSpeakersRequest(
+                UseReferenceClipForVoiceCloningBySpeakerId: new Dictionary<Guid, bool>
+                {
+                    [speakerId] = true
+                }),
+            TestContext.Current.CancellationToken);
+
+        VoiceAssignment assignment = Assert.Single(context.VoiceAssignmentRepository.All);
+        Assert.True(assignment.IsFallback);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, assignment.VoiceModelId);
+        Assert.Null(assignment.VoiceVariant);
+        TtsTake take = Assert.Single(context.TtsTakeRepository.All);
+        Assert.Equal(TtsTakeKind.Stock, take.Kind);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, take.VoiceId);
+    }
+
+    [Fact]
+    public async Task TtsOrchestrationService_GenerateTtsForAllSpeakersAsync_keeps_cloning_speakers_that_meet_the_reference_floor()
+    {
+        var consent = new FakeConsentService();
+        consent.GrantVoiceCloningConsent();
+        var ttsEngine = new FakeVoiceCloneTtsEngine(consent) { SampleRate = 1000, DurationSamples = 1000 };
+        var analyzer = new FakeReferenceClipAnalyzer();
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(4d, 4d, 24000, 1, "female"));
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(4d, 4d, 24000, 1, "female"));
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(2d, 2d, 24000, 1, "male"));
+        analyzer.QueueAnalysis(new ReferenceClipAnalysis(2d, 2d, 24000, 1, "male"));
+        using var workspace = new TemporaryTestWorkspace();
+        TtsServiceContext context = CreateTtsServiceContext(
+            ttsEngine,
+            consent,
+            new FakeAuditLog(),
+            analyzer,
+            workspace.Root);
+        TranscriptProjectState state = AddNormalizedAudioArtifact(
+            CreateTwoSpeakerTranslatedProjectState(),
+            context.ArtifactStore);
+        Guid speakerA = state.Speakers[0].Id;
+        Guid speakerB = state.Speakers[1].Id;
+
+        await context.Service.GenerateTtsForAllSpeakersAsync(
+            state,
+            new GenerateTtsForAllSpeakersRequest(
+                UseReferenceClipForVoiceCloningBySpeakerId: new Dictionary<Guid, bool>
+                {
+                    [speakerA] = true,
+                    [speakerB] = true
+                }),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, context.TtsTakeRepository.All.Count);
+        TtsTake cloned = Assert.Single(context.TtsTakeRepository.All, take => take.Kind == TtsTakeKind.VoiceCloned);
+        TtsTake stock = Assert.Single(context.TtsTakeRepository.All, take => take.Kind == TtsTakeKind.Stock);
+        Assert.Equal(speakerA, state.TranscriptSegments.Single(segment => segment.SegmentIndex == cloned.SegmentIndex).SpeakerId);
+        Assert.Equal(speakerB, state.TranscriptSegments.Single(segment => segment.SegmentIndex == stock.SegmentIndex).SpeakerId);
+        Assert.Equal("am_adam", stock.VoiceId);
+        VoiceAssignment fallback = Assert.Single(context.VoiceAssignmentRepository.All, assignment => assignment.IsFallback);
+        Assert.Equal(speakerB, fallback.SpeakerId);
+        Assert.Equal("am_adam", fallback.VoiceVariant);
+    }
+
+    [Fact]
     public async Task TtsOrchestrationService_GenerateTtsForSpeakerAsync_packs_segments_when_single_auto_reference_is_too_short()
     {
         var consent = new FakeConsentService();
@@ -1117,11 +1257,12 @@ public sealed class OrchestrationServiceTests
         IReferenceClipAnalyzer? referenceClipAnalyzer = null,
         string? artifactRoot = null,
         IAudioClipExtractor? audioClipExtractor = null,
-        FakeReferenceClipTrimmer? referenceClipTrimmer = null)
+        FakeReferenceClipTrimmer? referenceClipTrimmer = null,
+        IVoiceCatalog? voiceCatalog = null)
     {
         var voiceAssignmentRepository = new FakeVoiceAssignmentRepository();
         var ttsTakeRepository = new FakeTtsTakeRepository();
-        var voiceCatalog = new FakeVoiceCatalog();
+        voiceCatalog ??= new FakeVoiceCatalog();
         var artifactStore = new FakeArtifactStore(artifactRoot);
         var fileFingerprintService = new FakeFileFingerprintService();
         var mediaAssetRepository = new FakeMediaAssetRepository();
@@ -1276,6 +1417,58 @@ public sealed class OrchestrationServiceTests
             TranslatedSegments = [translatedSegment],
             SelectedTranslationTargetLanguage = "es",
             VoiceAssignments = [voiceAssignment]
+        };
+    }
+
+    private static TranscriptProjectState CreateTwoSpeakerTranslatedProjectState()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        TranscriptProjectState state = CreateTranscriptProjectState();
+        Guid projectId = state.ProjectState.Project.Id;
+        var speakerA = new ProjectSpeaker(Guid.NewGuid(), projectId, "Speaker 1", now);
+        var speakerB = new ProjectSpeaker(Guid.NewGuid(), projectId, "Speaker 2", now.AddSeconds(1));
+        TranscriptRevision transcriptRevision = state.CurrentTranscriptRevision!;
+        TranscriptSegment[] transcriptSegments =
+        [
+            TranscriptSegment.Create(
+                transcriptRevision.Id,
+                0,
+                0.0d,
+                2.0d,
+                "Hello there.",
+                speakerA.Id,
+                "en"),
+            TranscriptSegment.Create(
+                transcriptRevision.Id,
+                1,
+                2.0d,
+                4.0d,
+                "Second line.",
+                speakerB.Id,
+                "en"),
+        ];
+        TranslationRevision translationRevision = TranslationRevision.Create(
+            projectId,
+            stageRunId: null,
+            transcriptRevision.Id,
+            "es",
+            revisionNumber: 1,
+            now,
+            translationProvider: "fake",
+            modelId: "fake-translation-model");
+
+        return state with
+        {
+            Speakers = [speakerA, speakerB],
+            TranscriptSegments = transcriptSegments,
+            CurrentTranslationRevision = translationRevision,
+            TranslatedSegments =
+            [
+                TranslatedSegment.Create(translationRevision.Id, 0, 0.0d, 2.0d, "Linea traducida."),
+                TranslatedSegment.Create(translationRevision.Id, 1, 2.0d, 4.0d, "Segunda linea."),
+            ],
+            SelectedTranslationTargetLanguage = "es",
+            VoiceAssignments = []
         };
     }
 

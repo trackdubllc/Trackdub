@@ -49,7 +49,15 @@ internal static class ProjectHandler
         TextWriter output,
         CancellationToken cancellationToken)
     {
-        string resolvedProjectPath = Path.GetFullPath(projectPath);
+        if (!TryResolveFullPath(projectPath, out string resolvedProjectPath))
+        {
+            CliErrorReporter.ReportValidationError(
+                ErrorCode.ProjectNotFound,
+                $"Project directory not found: {UserPathText.Normalize(projectPath)}",
+                "--project");
+            return Program.ExitArgumentError;
+        }
+
         if (!ValidateProjectRoot(resolvedProjectPath, out int validationExitCode))
         {
             return validationExitCode;
@@ -90,8 +98,8 @@ internal static class ProjectHandler
         string projectPath,
         CancellationToken cancellationToken)
     {
-        string resolvedProjectPath = Path.GetFullPath(projectPath);
-        if (!ValidateProjectRoot(resolvedProjectPath, out _))
+        if (!TryResolveFullPath(projectPath, out string resolvedProjectPath)
+            || !ValidateProjectRoot(resolvedProjectPath, out _))
         {
             return null;
         }
@@ -111,21 +119,33 @@ internal static class ProjectHandler
         string? outputDirectory,
         CancellationToken cancellationToken)
     {
-        string resolvedMediaPath = Path.GetFullPath(mediaPath);
-        if (!File.Exists(resolvedMediaPath))
+        if (!TryResolveFullPath(mediaPath, out string resolvedMediaPath) || !File.Exists(resolvedMediaPath))
         {
             CliErrorReporter.ReportValidationError(
                 ErrorCode.MediaNotFound,
-                $"Media file not found: {resolvedMediaPath}",
+                $"Media file not found: {UserPathText.Normalize(mediaPath)}",
                 "--media");
             return (Program.ExitArgumentError, null);
         }
 
-        string resolvedOutputDirectory = outputDirectory is not null
-            ? Path.GetFullPath(outputDirectory)
-            : Path.Combine(
+        string resolvedOutputDirectory;
+        if (UserPathText.NormalizeOptional(outputDirectory) is { } normalizedOutputDirectory)
+        {
+            if (!TryResolveFullPath(normalizedOutputDirectory, out resolvedOutputDirectory))
+            {
+                CliErrorReporter.ReportValidationError(
+                    ErrorCode.InvalidArgument,
+                    $"Output directory is invalid: {normalizedOutputDirectory}",
+                    "--output");
+                return (Program.ExitArgumentError, null);
+            }
+        }
+        else
+        {
+            resolvedOutputDirectory = Path.Combine(
                 Path.GetDirectoryName(resolvedMediaPath) ?? ".",
                 Path.GetFileNameWithoutExtension(resolvedMediaPath) + ".trackdub");
+        }
 
         string resolvedProjectName = string.IsNullOrWhiteSpace(projectName)
             ? Path.GetFileNameWithoutExtension(resolvedMediaPath)
@@ -178,6 +198,27 @@ internal static class ProjectHandler
         }
 
         return true;
+    }
+
+    private static bool TryResolveFullPath(string? path, out string fullPath)
+    {
+        string normalized = UserPathText.Normalize(path);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            fullPath = string.Empty;
+            return false;
+        }
+
+        try
+        {
+            fullPath = Path.GetFullPath(normalized);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            fullPath = string.Empty;
+            return false;
+        }
     }
 
     private static ProjectSummaryOutput BuildSummary(string projectPath, TranscriptProjectState state) =>

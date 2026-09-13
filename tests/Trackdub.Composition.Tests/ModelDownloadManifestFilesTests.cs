@@ -122,6 +122,39 @@ public sealed class ModelDownloadManifestFilesTests
         Assert.Null(ModelDownloadManifestFiles.ResolveExpectedSha256(entry, "voices/af.bin", "onnx/model.onnx"));
     }
 
+    [Fact]
+    public void ResolveCacheIdentitySha256_prefers_manifest_identity_over_sidecar_digest()
+    {
+        BundledModelManifestEntry entry = CreateEntry(
+            downloadFiles: ["tokenizer.json"],
+            benchmarkEntry: "onnx/model.onnx",
+            variants: [],
+            sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+        Assert.Equal(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ModelDownloadManifestFiles.ResolveCacheIdentitySha256(
+                entry,
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+    }
+
+    [Fact]
+    public void ResolveCacheIdentitySha256_falls_back_to_verified_digest_when_manifest_has_no_identity_hash()
+    {
+        BundledModelManifestEntry entry = CreateEntry(
+            downloadFiles: ["tokenizer.json"],
+            benchmarkEntry: "onnx/model.onnx",
+            variants: [],
+            sha256: "");
+
+        Assert.Equal(
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            ModelDownloadManifestFiles.ResolveCacheIdentitySha256(
+                entry,
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+        Assert.Equal(string.Empty, ModelDownloadManifestFiles.ResolveCacheIdentitySha256(entry));
+    }
+
     private static BundledModelManifestEntry CreateEntry(
         IReadOnlyList<string> downloadFiles,
         string benchmarkEntry,

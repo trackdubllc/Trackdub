@@ -103,6 +103,7 @@ public sealed class TtsOrchestrationService(
             Dictionary<Guid, VoiceAssignment> assignmentsBySpeakerId = currentState.VoiceAssignments
                 .Where(assignment => !assignment.IsFallback)
                 .ToDictionary(assignment => assignment.SpeakerId);
+            HashSet<string> reservedStockVoiceIds = CollectReservedStockVoiceIds(currentState, request);
             ProjectSpeaker[] speakers = currentState.Speakers
                 .OrderBy(speaker => speaker.CreatedAtUtc)
                 .ToArray();
@@ -119,6 +120,18 @@ public sealed class TtsOrchestrationService(
                     "Preparing speaker",
                     speakerLabel,
                     currentItemLabel: speaker.DisplayName);
+                bool hasAssignedSegments = currentState.TranscriptSegments
+                    .Any(segment => segment.SpeakerId == speaker.Id);
+                if (!hasAssignedSegments)
+                {
+                    PipelineProgressReporter.Phase(
+                        progress,
+                        StageNames.Tts,
+                        "Skipping speaker",
+                        $"{speaker.DisplayName} has no assigned transcript segments.");
+                    continue;
+                }
+
                 assignmentsBySpeakerId.TryGetValue(speaker.Id, out VoiceAssignment? assignment);
                 if (assignment is null)
                 {
@@ -142,7 +155,8 @@ public sealed class TtsOrchestrationService(
                     request.RequirePreferredExecutionProvider,
                     request.PreferredModelVariantAlias,
                     cancellationToken,
-                    progress).ConfigureAwait(false);
+                    progress,
+                    reservedStockVoiceIds).ConfigureAwait(false);
             }
 
             PipelineProgressReporter.Completed(
@@ -426,7 +440,8 @@ public sealed class TtsOrchestrationService(
         bool requirePreferredExecutionProvider,
         string? preferredModelVariantAlias,
         CancellationToken cancellationToken,
-        IProgress<PipelineProgressEvent>? progress = null)
+        IProgress<PipelineProgressEvent>? progress = null,
+        HashSet<string>? reservedStockVoiceIds = null)
     {
         ProjectSpeaker speaker = currentState.Speakers.FirstOrDefault(speaker => speaker.Id == speakerId)
             ?? throw new InvalidOperationException("The selected speaker was not found.");
@@ -455,8 +470,31 @@ public sealed class TtsOrchestrationService(
                 currentState,
                 assignment,
                 cancellationToken).ConfigureAwait(false);
-            assignment = preparedReferenceClip.Assignment;
-            projectArtifacts = preparedReferenceClip.ProjectArtifacts;
+            if (preparedReferenceClip.InsufficientSpeechAnalysis is { } insufficientSpeech)
+            {
+                assignment = await FallBackShortCloneToStockTtsAsync(
+                    currentState,
+                    speaker,
+                    assignment,
+                    translationRevision.TargetLanguage,
+                    insufficientSpeech,
+                    reservedStockVoiceIds,
+                    cancellationToken).ConfigureAwait(false);
+                projectArtifacts = currentState.ProjectState.Artifacts;
+                useReferenceClipForVoiceCloning = false;
+                preferredModelAlias = assignment.VoiceModelId;
+
+                PipelineProgressReporter.Phase(
+                    progress,
+                    StageNames.Tts,
+                    "Using stock voice",
+                    $"{speaker.DisplayName}: clone reference had {insufficientSpeech.ActiveSpeechSeconds:F2}s of active speech (need {ReferenceClipPolicy.MinimumActiveSpeechSeconds:F1}s). Using {DescribeStockFallback(assignment)}.");
+            }
+            else
+            {
+                assignment = preparedReferenceClip.Assignment;
+                projectArtifacts = preparedReferenceClip.ProjectArtifacts;
+            }
         }
 
         PipelineProgressReporter.Phase(
@@ -583,11 +621,20 @@ public sealed class TtsOrchestrationService(
             throw new InvalidOperationException("Reference clip active-speech validation is not configured.");
         }
 
-        ProjectArtifact referenceArtifact = await CaptureAutoReferenceClipAsync(
+        AutoReferenceCaptureResult capture = await CaptureAutoReferenceClipAsync(
             currentState,
             assignment.SpeakerId,
             singlePlan,
             cancellationToken).ConfigureAwait(false);
+        if (capture.Artifact is null)
+        {
+            return new PreparedReferenceClip(
+                assignment,
+                currentState.ProjectState.Artifacts,
+                capture.Analysis);
+        }
+
+        ProjectArtifact referenceArtifact = capture.Artifact;
         VoiceAssignment updatedAssignment = await AssignReferenceClipArtifactAsync(
             currentState.ProjectState.Project.Id,
             assignment,
@@ -631,7 +678,7 @@ public sealed class TtsOrchestrationService(
             .FirstOrDefault(artifact => artifact.Id == artifactId && artifact.Kind == ArtifactKind.ReferenceClip);
     }
 
-    private async Task<ProjectArtifact> CaptureAutoReferenceClipAsync(
+    private async Task<AutoReferenceCaptureResult> CaptureAutoReferenceClipAsync(
         TranscriptProjectState currentState,
         Guid speakerId,
         AutoReferenceClipPlan singlePlan,
@@ -665,8 +712,7 @@ public sealed class TtsOrchestrationService(
 
             if (extraction.Analysis.ActiveSpeechSeconds < ReferenceClipPolicy.MinimumActiveSpeechSeconds)
             {
-                throw new InvalidOperationException(
-                    $"Automatic voice clone reference capture needs at least {ReferenceClipPolicy.MinimumActiveSpeechSeconds:F1} seconds of active speech for this speaker; detected {extraction.Analysis.ActiveSpeechSeconds:F2} seconds. Upload a reference clip or assign more speech to this speaker.");
+                return new AutoReferenceCaptureResult(null, extraction.Analysis);
             }
 
             await tx.CommitAsync(artifactStore, cancellationToken).ConfigureAwait(false);
@@ -689,7 +735,7 @@ public sealed class TtsOrchestrationService(
                 Provenance: BuildAutoReferenceProvenance(speakerId, selectedPlan, extraction.Analysis));
             await mediaAssetRepository.SaveArtifactAsync(artifact, cancellationToken).ConfigureAwait(false);
             savedArtifactId = artifact.Id;
-            return artifact;
+            return new AutoReferenceCaptureResult(artifact, extraction.Analysis);
         }
         catch
         {
@@ -994,9 +1040,127 @@ public sealed class TtsOrchestrationService(
             : $"{provenance};{stretchProvenance}";
     }
 
+    private async Task<VoiceAssignment> FallBackShortCloneToStockTtsAsync(
+        TranscriptProjectState currentState,
+        ProjectSpeaker speaker,
+        VoiceAssignment currentAssignment,
+        string targetLanguage,
+        ReferenceClipAnalysis insufficientSpeech,
+        HashSet<string>? reservedStockVoiceIds,
+        CancellationToken cancellationToken)
+    {
+        if (TryResolveExistingStockVoiceId(currentAssignment) is string existingVoiceId &&
+            StockTtsVoiceMatcher.SupportsKokoro(targetLanguage))
+        {
+            reservedStockVoiceIds?.Add(existingVoiceId);
+            VoiceAssignment keptAssignment = currentAssignment with
+            {
+                VoiceModelId = StockTtsDefaults.KokoroPrimaryAlias,
+                VoiceVariant = existingVoiceId,
+                RequiresConsent = false,
+                IsFallback = true,
+                ReferenceClipArtifactId = null
+            };
+            await voiceAssignmentRepository.SaveAsync(keptAssignment, cancellationToken).ConfigureAwait(false);
+            return keptAssignment;
+        }
+
+        if (!StockTtsVoiceMatcher.SupportsKokoro(targetLanguage))
+        {
+            VoiceAssignment stockAssignment = currentAssignment with
+            {
+                VoiceModelId = StockTtsVoiceMatcher.ResolveFallbackModelAlias(targetLanguage),
+                VoiceVariant = null,
+                RequiresConsent = false,
+                IsFallback = true,
+                ReferenceClipArtifactId = null
+            };
+            await voiceAssignmentRepository.SaveAsync(stockAssignment, cancellationToken).ConfigureAwait(false);
+            return stockAssignment;
+        }
+
+        IReadOnlyList<VoiceCatalogEntry> catalogVoices = voiceCatalog.GetVoices();
+        if (catalogVoices.Count == 0)
+        {
+            catalogVoices = currentState.AvailableVoices;
+        }
+        VoiceCatalogEntry voice = StockTtsVoiceMatcher.PickClosest(
+                catalogVoices,
+                targetLanguage,
+                insufficientSpeech.EstimatedGender,
+                reservedStockVoiceIds)
+            ?? throw new InvalidOperationException(
+                $"Automatic voice clone reference capture needs at least {ReferenceClipPolicy.MinimumActiveSpeechSeconds:F1} seconds of active speech for {speaker.DisplayName}; detected {insufficientSpeech.ActiveSpeechSeconds:F2} seconds, and no Kokoro voice matched target language '{targetLanguage}'.");
+
+        reservedStockVoiceIds?.Add(voice.VoiceId);
+        VoiceAssignment fallbackAssignment = VoiceAssignment.CreateFallback(
+            currentState.ProjectState.Project.Id,
+            speaker.Id,
+            StockTtsDefaults.KokoroPrimaryAlias,
+            voice.VoiceId);
+        await voiceAssignmentRepository.SaveAsync(fallbackAssignment, cancellationToken).ConfigureAwait(false);
+        return fallbackAssignment;
+    }
+
+    private static HashSet<string> CollectReservedStockVoiceIds(
+        TranscriptProjectState currentState,
+        GenerateTtsForAllSpeakersRequest request)
+    {
+        var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (VoiceAssignment assignment in currentState.VoiceAssignments)
+        {
+            if (!string.IsNullOrWhiteSpace(assignment.VoiceVariant))
+            {
+                reserved.Add(assignment.VoiceVariant);
+            }
+        }
+
+        if (request.VoiceIdsBySpeakerId is not null)
+        {
+            foreach (string voiceId in request.VoiceIdsBySpeakerId.Values)
+            {
+                if (!string.IsNullOrWhiteSpace(voiceId))
+                {
+                    reserved.Add(voiceId);
+                }
+            }
+        }
+
+        if (request.FallbackVoiceIdsBySpeakerId is not null)
+        {
+            foreach (string voiceId in request.FallbackVoiceIdsBySpeakerId.Values)
+            {
+                if (!string.IsNullOrWhiteSpace(voiceId))
+                {
+                    reserved.Add(voiceId);
+                }
+            }
+        }
+
+        return reserved;
+    }
+
+    private string? TryResolveExistingStockVoiceId(VoiceAssignment assignment)
+    {
+        string candidate = string.IsNullOrWhiteSpace(assignment.VoiceVariant)
+            ? assignment.VoiceModelId
+            : assignment.VoiceVariant;
+        return voiceCatalog.TryGetVoice(candidate, out _) ? candidate : null;
+    }
+
+    private static string DescribeStockFallback(VoiceAssignment assignment) =>
+        string.IsNullOrWhiteSpace(assignment.VoiceVariant)
+            ? assignment.VoiceModelId
+            : $"{assignment.VoiceModelId} / {assignment.VoiceVariant}";
+
     private sealed record PreparedReferenceClip(
         VoiceAssignment Assignment,
-        IReadOnlyList<ProjectArtifact> ProjectArtifacts);
+        IReadOnlyList<ProjectArtifact> ProjectArtifacts,
+        ReferenceClipAnalysis? InsufficientSpeechAnalysis = null);
+
+    private sealed record AutoReferenceCaptureResult(
+        ProjectArtifact? Artifact,
+        ReferenceClipAnalysis Analysis);
 
     private sealed record AutoReferenceClipPlan(
         ProjectArtifact SourceArtifact,
