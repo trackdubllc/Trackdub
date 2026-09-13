@@ -623,6 +623,8 @@ public sealed class OrchestrationServiceTests
         // CreateTranslatedProjectState seeds a pre-existing non-fallback assignment of "af_heart".
         TranscriptProjectState state = CreateTranslatedProjectState();
         Guid speakerId = state.Speakers[0].Id;
+        VoiceAssignment seededAssignment = state.VoiceAssignments.Single();
+        context.VoiceAssignmentRepository.Seed(seededAssignment);
 
         await context.Service.GenerateTtsForAllSpeakersAsync(
             state,
@@ -641,8 +643,10 @@ public sealed class OrchestrationServiceTests
         VoiceAssignment assignment = Assert.Single(
             context.VoiceAssignmentRepository.All,
             candidate => candidate.SpeakerId == speakerId);
+        Assert.Equal(seededAssignment.Id, assignment.Id);
         Assert.Equal("am_adam", assignment.VoiceVariant);
         Assert.False(assignment.IsFallback);
+        Assert.Equal(1, context.VoiceAssignmentRepository.All.Count);
     }
 
     [Fact]
@@ -675,6 +679,8 @@ public sealed class OrchestrationServiceTests
         Guid projectId = state.ProjectState.Project.Id;
         Guid speakerA = state.Speakers[0].Id;
         Guid speakerB = state.Speakers[1].Id;
+        VoiceAssignment seededAssignmentB = VoiceAssignment.Create(projectId, speakerB, "kokoro-onnx", "af_heart");
+        context.VoiceAssignmentRepository.Seed(seededAssignmentB);
         // Speaker B relies on a pre-existing non-fallback assignment; speaker A gets an explicit
         // request override. The per-speaker precedence must be independent: A synthesizes/persists
         // its override while B keeps its untouched pre-existing assignment.
@@ -682,7 +688,7 @@ public sealed class OrchestrationServiceTests
         {
             VoiceAssignments =
             [
-                VoiceAssignment.Create(projectId, speakerB, "kokoro-onnx", "af_heart")
+                seededAssignmentB
             ]
         };
 
@@ -718,9 +724,12 @@ public sealed class OrchestrationServiceTests
         // Speaker B's pre-existing assignment is left untouched: only speaker A's override is
         // (re)persisted, so no new assignment row is written for speaker B and the af_heart take
         // above confirms B still synthesized with its original assignment.
-        Assert.DoesNotContain(
+        VoiceAssignment assignmentB = Assert.Single(
             context.VoiceAssignmentRepository.All,
             assignment => assignment.SpeakerId == speakerB);
+        Assert.Equal(seededAssignmentB.Id, assignmentB.Id);
+        Assert.Equal("af_heart", assignmentB.VoiceVariant);
+        Assert.Equal(2, context.VoiceAssignmentRepository.All.Count);
     }
 
     [Fact]

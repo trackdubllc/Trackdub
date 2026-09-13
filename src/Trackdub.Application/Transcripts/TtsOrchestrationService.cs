@@ -553,11 +553,30 @@ public sealed class TtsOrchestrationService(
             request.VoiceIdsBySpeakerId.TryGetValue(speakerId, out string? explicitVoiceId) &&
             !string.IsNullOrWhiteSpace(explicitVoiceId))
         {
-            VoiceAssignment assignment = VoiceAssignment.Create(
+            string normalizedVoiceId = explicitVoiceId.Trim();
+            if (!voiceCatalog.TryGetVoice(normalizedVoiceId, out _))
+            {
+                throw new InvalidOperationException($"Voicepack '{normalizedVoiceId}' is not available.");
+            }
+
+            VoiceAssignment? existing = await voiceAssignmentRepository.GetAsync(
                 currentState.ProjectState.Project.Id,
                 speakerId,
-                "kokoro-onnx",
-                explicitVoiceId);
+                cancellationToken).ConfigureAwait(false);
+            VoiceAssignment assignment = existing is null
+                ? VoiceAssignment.Create(
+                    currentState.ProjectState.Project.Id,
+                    speakerId,
+                    "kokoro-onnx",
+                    normalizedVoiceId)
+                : existing with
+                {
+                    VoiceModelId = "kokoro-onnx",
+                    VoiceVariant = normalizedVoiceId,
+                    RequiresConsent = false,
+                    IsFallback = false,
+                    ReferenceClipArtifactId = existing.ReferenceClipArtifactId
+                };
             await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
             return assignment;
         }
@@ -566,11 +585,30 @@ public sealed class TtsOrchestrationService(
             request.FallbackVoiceIdsBySpeakerId.TryGetValue(speakerId, out string? fallbackVoiceId) &&
             !string.IsNullOrWhiteSpace(fallbackVoiceId))
         {
-            VoiceAssignment assignment = VoiceAssignment.CreateFallback(
+            string normalizedVoiceId = fallbackVoiceId.Trim();
+            if (!voiceCatalog.TryGetVoice(normalizedVoiceId, out _))
+            {
+                throw new InvalidOperationException($"Voicepack '{normalizedVoiceId}' is not available.");
+            }
+
+            VoiceAssignment? existing = await voiceAssignmentRepository.GetAsync(
                 currentState.ProjectState.Project.Id,
                 speakerId,
-                "kokoro-onnx",
-                fallbackVoiceId);
+                cancellationToken).ConfigureAwait(false);
+            VoiceAssignment assignment = existing is null
+                ? VoiceAssignment.CreateFallback(
+                    currentState.ProjectState.Project.Id,
+                    speakerId,
+                    "kokoro-onnx",
+                    normalizedVoiceId)
+                : existing with
+                {
+                    VoiceModelId = "kokoro-onnx",
+                    VoiceVariant = normalizedVoiceId,
+                    RequiresConsent = false,
+                    IsFallback = true,
+                    ReferenceClipArtifactId = existing.ReferenceClipArtifactId
+                };
             await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
             return assignment;
         }
