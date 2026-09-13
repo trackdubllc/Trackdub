@@ -667,6 +667,63 @@ public sealed class OrchestrationServiceTests
     }
 
     [Fact]
+    public async Task TtsOrchestrationService_GenerateTtsForAllSpeakersAsync_applies_request_override_per_speaker_independently()
+    {
+        var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1000 };
+        TtsServiceContext context = CreateTtsServiceContext(ttsEngine);
+        TranscriptProjectState state = CreateTwoSpeakerTranslatedProjectState();
+        Guid projectId = state.ProjectState.Project.Id;
+        Guid speakerA = state.Speakers[0].Id;
+        Guid speakerB = state.Speakers[1].Id;
+        // Speaker B relies on a pre-existing non-fallback assignment; speaker A gets an explicit
+        // request override. The per-speaker precedence must be independent: A synthesizes/persists
+        // its override while B keeps its untouched pre-existing assignment.
+        state = state with
+        {
+            VoiceAssignments =
+            [
+                VoiceAssignment.Create(projectId, speakerB, "kokoro-onnx", "af_heart")
+            ]
+        };
+
+        await context.Service.GenerateTtsForAllSpeakersAsync(
+            state,
+            new GenerateTtsForAllSpeakersRequest(
+                VoiceIdsBySpeakerId: new Dictionary<Guid, string>
+                {
+                    [speakerA] = "am_adam"
+                }),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, context.TtsTakeRepository.All.Count);
+        TtsTake takeA = Assert.Single(
+            context.TtsTakeRepository.All,
+            take => state.TranscriptSegments.Single(segment => segment.SegmentIndex == take.SegmentIndex).SpeakerId == speakerA);
+        TtsTake takeB = Assert.Single(
+            context.TtsTakeRepository.All,
+            take => state.TranscriptSegments.Single(segment => segment.SegmentIndex == take.SegmentIndex).SpeakerId == speakerB);
+        // Speaker A synthesized the override voice; speaker B synthesized its pre-existing assignment.
+        Assert.Equal("am_adam", takeA.VoiceId);
+        Assert.Equal(TtsTakeKind.Stock, takeA.Kind);
+        Assert.Equal("af_heart", takeB.VoiceId);
+        Assert.Equal(TtsTakeKind.Stock, takeB.Kind);
+
+        // Speaker A persisted the override as a non-fallback assignment.
+        VoiceAssignment assignmentA = Assert.Single(
+            context.VoiceAssignmentRepository.All,
+            assignment => assignment.SpeakerId == speakerA);
+        Assert.Equal("am_adam", assignmentA.VoiceVariant);
+        Assert.False(assignmentA.IsFallback);
+
+        // Speaker B's pre-existing assignment is left untouched: only speaker A's override is
+        // (re)persisted, so no new assignment row is written for speaker B and the af_heart take
+        // above confirms B still synthesized with its original assignment.
+        Assert.DoesNotContain(
+            context.VoiceAssignmentRepository.All,
+            assignment => assignment.SpeakerId == speakerB);
+    }
+
+    [Fact]
     public async Task TtsOrchestrationService_GenerateTtsForAllSpeakersAsync_auto_captures_clone_without_voice_assignment()
     {
         var consent = new FakeConsentService();
