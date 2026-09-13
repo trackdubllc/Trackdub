@@ -998,10 +998,21 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                             : "Cloning each speaker from source audio.");
                 }
 
+                RuntimeExecutionProviderSelection ttsExecutionProvider =
+                    RuntimeModelSetupCoordinator.CreateExecutionProviderSelection(
+                        runtimeSelections,
+                        RuntimeStage.Tts);
                 GenerateTtsForAllSpeakersRequest ttsRequest = BuildUnattendedTtsRequest(
                     ttsState,
                     options,
-                    runtimeSelections.TtsModelAlias);
+                    runtimeSelections.TtsModelAlias) with
+                {
+                    PreferredExecutionProvider = ttsExecutionProvider.PreferredExecutionProvider,
+                    RequirePreferredExecutionProvider = ttsExecutionProvider.RequirePreferredExecutionProvider,
+                    PreferredModelVariantAlias = RuntimeModelSetupCoordinator.ResolvePreferredModelVariantAlias(
+                        runtimeSelections,
+                        RuntimeStage.Tts),
+                };
                 if (ttsRequest.VoiceIdsBySpeakerId is { Count: > 0 })
                 {
                     ReportProgress(
@@ -1285,22 +1296,6 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             state,
             options.VoiceAssignmentOverrides);
 
-        Dictionary<Guid, string>? fallbackVoiceIds = null;
-        if (!options.UseVoiceCloning && options.AutoAssignFallbackVoices)
-        {
-            fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode);
-            if (fallbackVoiceIds is not null && explicitVoiceIds.Count > 0)
-            {
-                fallbackVoiceIds = fallbackVoiceIds
-                    .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
-                    .ToDictionary(static pair => pair.Key, static pair => pair.Value);
-                if (fallbackVoiceIds.Count == 0)
-                {
-                    fallbackVoiceIds = null;
-                }
-            }
-        }
-
         Dictionary<Guid, bool>? cloneBySpeaker = null;
         if (options.VoiceCloneBySpeakerId is not null)
         {
@@ -1311,6 +1306,23 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             cloneBySpeaker = state.Speakers.ToDictionary(
                 static speaker => speaker.Id,
                 speaker => !explicitVoiceIds.ContainsKey(speaker.Id));
+        }
+
+        Dictionary<Guid, string>? fallbackVoiceIds = null;
+        if (options.AutoAssignFallbackVoices)
+        {
+            fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode);
+            if (fallbackVoiceIds is not null)
+            {
+                fallbackVoiceIds = fallbackVoiceIds
+                    .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
+                    .Where(pair => cloneBySpeaker?.GetValueOrDefault(pair.Key) != true)
+                    .ToDictionary(static pair => pair.Key, static pair => pair.Value);
+                if (fallbackVoiceIds.Count == 0)
+                {
+                    fallbackVoiceIds = null;
+                }
+            }
         }
 
         string? preferredModelAlias = ttsModelAlias;
