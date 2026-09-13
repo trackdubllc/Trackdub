@@ -35,14 +35,15 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
     /// <inheritdoc />
     public string? ResolveRuntimePath()
     {
-        foreach (string candidate in EnumerateCandidateDirectories())
+        string rid = GetCurrentRuntimeIdentifier();
+        foreach (string candidate in EnumerateCandidateDirectories(rid))
         {
             if (Directory.Exists(candidate) && HasPlatformLibrary(candidate))
             {
                 return candidate;
             }
 
-            string? archSubfolder = ProbeArchitectureSubfolders(candidate);
+            string? archSubfolder = ProbeArchitectureSubfolders(candidate, rid);
             if (archSubfolder is not null)
             {
                 return archSubfolder;
@@ -62,11 +63,9 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
         return null;
     }
 
-    private IEnumerable<string> EnumerateCandidateDirectories()
+    private static string GetCurrentRuntimeIdentifier()
     {
-        yield return Path.Combine(baseDirectory, "libvlc");
-
-        string rid = RuntimeInformation.ProcessArchitecture switch
+        return RuntimeInformation.ProcessArchitecture switch
         {
             Architecture.Arm64 when OperatingSystem.IsWindows() => "win-arm64",
             Architecture.Arm64 when OperatingSystem.IsMacOS() => "osx-arm64",
@@ -75,6 +74,11 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
             _ when OperatingSystem.IsMacOS() => "osx-x64",
             _ => "linux-x64",
         };
+    }
+
+    private IEnumerable<string> EnumerateCandidateDirectories(string rid)
+    {
+        yield return Path.Combine(baseDirectory, "libvlc");
 
         int depth = 0;
         for (string? current = baseDirectory; !string.IsNullOrWhiteSpace(current) && depth < 14; depth++)
@@ -92,8 +96,17 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
         }
     }
 
-    private static string? ProbeArchitectureSubfolders(string candidate)
+    private static string? ProbeArchitectureSubfolders(string candidate, string rid)
     {
+        // Bundled runtime packages lay out every architecture side by side
+        // (libvlc/win-x64, libvlc/win-arm64, ...); the subfolder matching the
+        // current process architecture must win over arbitrary enumeration order.
+        string ridFolder = Path.Combine(candidate, rid);
+        if (Directory.Exists(ridFolder) && HasPlatformLibrary(ridFolder))
+        {
+            return ridFolder;
+        }
+
         try
         {
             foreach (string subdirectory in Directory.EnumerateDirectories(candidate))
