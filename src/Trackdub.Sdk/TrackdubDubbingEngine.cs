@@ -103,4 +103,7 @@ public sealed class TrackdubDubbingEngine : IDubbingPipelineEngine, ITransientFa
 
     internal static string[] ResolveStageOrder(IReadOnlyList<string>? stageFilter) =>
         DubbingPipelineEngine.ResolveStageOrder(stageFilter);
+
+    internal static Dictionary<string, string> CaptureExecutionSnapshot(DubbingSessionOptions options) =>
+        DubbingPipelineEngine.CaptureExecutionSnapshot(options);
 }
