@@ -1,5 +1,11 @@
+using System.Reflection;
+
+using Spectre.Console.Testing;
+
 using Trackdub.Cli.Handlers;
+using Trackdub.Cli.Tui;
 using Trackdub.Cli.Tui.Screens;
+using Trackdub.Sdk;
 
 namespace Trackdub.Sdk.Tests;
 
@@ -86,44 +92,97 @@ public sealed class PipelineWizardStateTests
     }
 
     [Fact]
-    public void ResetSemantics_FreshInstanceRestoresAllDefaults()
+    public async Task ConfigureFlow_ResetReplacesWizardStateWithDefaults()
     {
-        // Mutate an instance the way the wizard handlers do across overlay steps.
-        var mutated = new PipelineWizardState
+        using TrackdubSessionFactory factory = new TrackdubBuilder().Build();
+        var console = new TestConsole();
+        console.Profile.Capabilities.Interactive = true;
+        console.Input.PushTextWithEnter("es");
+        var context = new TrackdubTuiContext(factory, console, CancellationToken.None)
         {
-            VoiceClone = true,
-            TimbrePolish = false,
-            RestorePan = true,
-            MatchLoudness = true,
-            AsrRefinement = true,
-            BurnIn = true,
-            ForceRerun = true,
-            ExportFormat = "mkv",
-            SubtitleSource = "bilingual",
-            SubtitleFormats = ["vtt"],
-            VideoEncoder = "nvenc",
-            TargetLanguageOverride = "es",
+            ProjectPath = "project",
         };
+        var screen = new PipelineTuiScreen();
 
-        // ResetWizardState() resets by assigning a fresh instance (single source of truth).
-        PipelineWizardState reset = new();
+        await OpenConfigureWizardAsync(screen, context);
+        await PressAsync(screen, context, ConsoleKey.DownArrow, ConsoleKey.Enter);
+        await PressAsync(screen, context, ConsoleKey.DownArrow, ConsoleKey.DownArrow, ConsoleKey.Enter);
+        await PressAsync(screen, context, ConsoleKey.DownArrow, ConsoleKey.Enter);
+        await PressAsync(screen, context, ConsoleKey.DownArrow, ConsoleKey.DownArrow, ConsoleKey.Enter);
+        await PressAsync(screen, context, ConsoleKey.DownArrow, ConsoleKey.DownArrow, ConsoleKey.Enter);
 
-        Assert.False(reset.VoiceClone);
-        Assert.True(reset.TimbrePolish);
-        Assert.False(reset.RestorePan);
-        Assert.False(reset.MatchLoudness);
-        Assert.False(reset.AsrRefinement);
-        Assert.False(reset.BurnIn);
-        Assert.False(reset.ForceRerun);
-        Assert.Null(reset.ExportFormat);
-        Assert.Null(reset.SubtitleSource);
-        Assert.Null(reset.SubtitleFormats);
-        Assert.Null(reset.VideoEncoder);
-        Assert.Null(reset.TargetLanguageOverride);
+        PipelineWizardState beforeReset = GetWizardState(screen);
+        Assert.True(beforeReset.VoiceClone);
+        Assert.Equal("mkv", beforeReset.ExportFormat);
+        Assert.Equal(["vtt"], beforeReset.SubtitleFormats);
 
-        // Sanity: the mutated instance genuinely diverged from defaults before reset.
-        Assert.True(mutated.VoiceClone);
-        Assert.False(mutated.TimbrePolish);
-        Assert.NotNull(mutated.SubtitleFormats);
+        await PressAsync(screen, context, ConsoleKey.Escape);
+        console.Input.PushTextWithEnter(string.Empty);
+        await OpenConfigureWizardAsync(screen, context);
+
+        PipelineWizardState afterReset = GetWizardState(screen);
+        Assert.False(afterReset.VoiceClone);
+        Assert.True(afterReset.TimbrePolish);
+        Assert.Null(afterReset.ExportFormat);
+        Assert.Null(afterReset.SubtitleFormats);
+        Assert.Null(afterReset.TargetLanguageOverride);
     }
+
+    [Fact]
+    public async Task ConfigureFlow_SubtitleSentinelsPreserveNoneAndSkipSemantics()
+    {
+        PipelineWizardState none = await SelectSubtitleFormatAsync(3);
+        Assert.NotNull(none.SubtitleFormats);
+        Assert.Empty(none.SubtitleFormats!);
+
+        PipelineWizardState skip = await SelectSubtitleFormatAsync(4);
+        Assert.Null(skip.SubtitleFormats);
+    }
+
+    private static async Task<PipelineWizardState> SelectSubtitleFormatAsync(
+        int downArrowCount)
+    {
+        using TrackdubSessionFactory factory = new TrackdubBuilder().Build();
+        var console = new TestConsole();
+        console.Profile.Capabilities.Interactive = true;
+        console.Input.PushTextWithEnter("es");
+        var context = new TrackdubTuiContext(factory, console, CancellationToken.None)
+        {
+            ProjectPath = "project",
+        };
+        var screen = new PipelineTuiScreen();
+
+        await OpenConfigureWizardAsync(screen, context);
+        await PressAsync(screen, context, ConsoleKey.Enter, ConsoleKey.Enter);
+        for (int i = 0; i < downArrowCount; i++)
+        {
+            await PressAsync(screen, context, ConsoleKey.DownArrow);
+        }
+        await PressAsync(screen, context, ConsoleKey.Enter);
+        await PressAsync(screen, context, ConsoleKey.Enter);
+        return GetWizardState(screen);
+    }
+
+    private static async Task OpenConfigureWizardAsync(
+        PipelineTuiScreen screen,
+        TrackdubTuiContext context)
+    {
+        await PressAsync(screen, context, ConsoleKey.G, ConsoleKey.DownArrow, ConsoleKey.Enter);
+    }
+
+    private static async Task PressAsync(
+        PipelineTuiScreen screen,
+        TrackdubTuiContext context,
+        params ConsoleKey[] keys)
+    {
+        foreach (ConsoleKey key in keys)
+        {
+            await screen.HandleKeyAsync(new ConsoleKeyInfo('\0', key, false, false, false), context);
+        }
+    }
+
+    private static PipelineWizardState GetWizardState(PipelineTuiScreen screen) =>
+        (PipelineWizardState)typeof(PipelineTuiScreen)
+            .GetField("_wizard", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(screen)!;
 }
