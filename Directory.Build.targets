@@ -104,8 +104,4 @@
           SkipUnchangedFiles="true"
           Condition="'@(_GenAiCudaSidecarRoot)' != ''" />
   </Target>
-  <!-- Strip Windows TFM on non-Windows to allow cross-platform solution builds -->
-  <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(TargetFrameworks)' != ''">
-    <TargetFrameworks>$([System.Text.RegularExpressions.Regex]::Replace('$(TargetFrameworks)', ';?net10\.0-windows[^;]*', ''))</TargetFrameworks>
-  </PropertyGroup>
 </Project>

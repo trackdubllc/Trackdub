@@ -112,16 +112,14 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
                 resolution.Detail);
         }
 
-        string? cudaRuntimePath = TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoaded();
-        if (cudaRuntimePath is null)
+        TensorRtRtxCudaRuntimeEnsureResult cudaRuntime = TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoadedResult();
+        if (!cudaRuntime.Succeeded)
         {
             return new TensorRtRtxBootstrapResult(
                 false,
                 TensorRtRtxProviderIds.PluginEpAbi,
-                TensorRtRtxReadinessBlocker.EpRegisterFailed,
-                "CUDA 12 runtime (cudart64_12.dll / libcudart.so.12) was not found. "
-                + "Install CUDA Toolkit 12.x, run `pip install nvidia-cuda-runtime-cu12`, "
-                + "or set TRACKDUB_CUDA12_BIN_DIR to the directory containing the CUDA 12 runtime.");
+                TensorRtRtxReadinessBlocker.CudaRuntimeMissing,
+                cudaRuntime.Detail);
         }
 
         try
@@ -164,11 +162,29 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
         }
         catch (Exception ex) when (ex is OnnxRuntimeException or DllNotFoundException or BadImageFormatException or InvalidOperationException)
         {
+            // Win32 ERROR_MOD_NOT_FOUND (126) on cu12 plugins almost always means cudart64_12 is still
+            // invisible to the OS loader. Do not collapse that into a generic registration failure.
+            bool looksLikeMissingModule =
+                ex is DllNotFoundException
+                || (ex is OnnxRuntimeException &&
+                    (ex.Message.Contains("126", StringComparison.Ordinal) ||
+                     ex.Message.Contains("cudart", StringComparison.OrdinalIgnoreCase) ||
+                     ex.Message.Contains("The specified module could not be found", StringComparison.OrdinalIgnoreCase)));
+
+            TensorRtRtxReadinessBlocker blocker = looksLikeMissingModule
+                ? TensorRtRtxReadinessBlocker.CudaRuntimeMissing
+                : TensorRtRtxReadinessBlocker.EpRegisterFailed;
+
+            string detailPrefix = looksLikeMissingModule
+                ? "TensorRT RTX EP ABI plugin registration failed: a required native module was not found "
+                  + "(likely CUDA 12 runtime / cudart64_12). "
+                : "TensorRT RTX EP ABI plugin registration failed: ";
+
             return new TensorRtRtxBootstrapResult(
                 false,
                 TensorRtRtxProviderIds.PluginEpAbi,
-                TensorRtRtxReadinessBlocker.EpRegisterFailed,
-                $"TensorRT RTX EP ABI plugin registration failed: {ex.Message}");
+                blocker,
+                detailPrefix + ex.Message);
         }
     }
 
