@@ -85,6 +85,70 @@ public sealed class BenchmarkModelPathResolverTests
     }
 
     [Fact]
+    public void ResolveSingle_ManifestKokoroRootDirectoryPrefersCacheRootWithVoices()
+    {
+        Assert.True(
+            Trackdub.Inference.Runtime.ModelManifest.BundledModelManifestRegistry.TryLoadDefault(
+                out Trackdub.Inference.Runtime.ModelManifest.BundledModelManifestRegistry? registry,
+                out string? error),
+            error ?? "Bundled model manifest was not found.");
+
+        Trackdub.Inference.Runtime.ModelManifest.BundledModelManifestEntry kokoroEntry =
+            registry!.Entries.Single(entry =>
+                entry.ModelId.Equals("onnx-community/Kokoro-82M-v1.0-ONNX", StringComparison.OrdinalIgnoreCase));
+
+        // The manifest branch only runs when the repo models entry point exists on disk. Create the
+        // default benchmark entry there (WITHOUT a voices/ directory) so the branch is exercised and
+        // so a regression that reports Entry.RootDirectory would fail the voices assertion.
+        string manifestRootDirectory = kokoroEntry.RootDirectory;
+        string manifestEntryPath = kokoroEntry.DefaultBenchmarkEntryPath;
+        bool createdManifestRoot = !Directory.Exists(manifestRootDirectory);
+        Assert.False(
+            File.Exists(manifestEntryPath),
+            $"Expected no pre-existing manifest entry at '{manifestEntryPath}'.");
+
+        string cacheRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-manifest-{Guid.NewGuid():N}");
+        string cacheModelRoot = Path.Combine(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX");
+        string cacheOnnxDirectory = Path.Combine(cacheModelRoot, "onnx");
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(manifestEntryPath)!);
+            File.WriteAllBytes(manifestEntryPath, []);
+
+            Directory.CreateDirectory(cacheOnnxDirectory);
+            Directory.CreateDirectory(Path.Combine(cacheModelRoot, "voices"));
+            File.WriteAllBytes(Path.Combine(cacheOnnxDirectory, "model.onnx"), []);
+            File.WriteAllBytes(Path.Combine(cacheModelRoot, "voices", "af_heart.bin"), []);
+
+            var resolver = new BenchmarkModelPathResolver(registry, cacheRoot);
+            BenchmarkModelCandidate candidate = resolver.ResolveSingle("kokoro-onnx");
+
+            Assert.True(
+                candidate.RootDirectory is not null &&
+                Directory.Exists(Path.Combine(candidate.RootDirectory, "voices")),
+                $"Expected Kokoro RootDirectory to contain voices/, got '{candidate.RootDirectory}'.");
+        }
+        finally
+        {
+            if (File.Exists(manifestEntryPath))
+            {
+                File.Delete(manifestEntryPath);
+            }
+
+            if (createdManifestRoot && Directory.Exists(manifestRootDirectory))
+            {
+                Directory.Delete(manifestRootDirectory, recursive: true);
+            }
+
+            if (Directory.Exists(cacheRoot))
+            {
+                Directory.Delete(cacheRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void ResolveSingle_CachedKokoroRootDirectoryContainsVoices()
     {
         Assert.True(

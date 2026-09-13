@@ -219,7 +219,8 @@ public sealed class BenchmarkModelPathResolver(
         }
 
         var candidates = new List<BenchmarkModelCandidate>();
-        if (File.Exists(defaultResolution!.Entry.DefaultBenchmarkEntryPath))
+        string manifestCandidateRootDirectory = ResolveManifestCandidateRootDirectory(defaultResolution!.Entry);
+        if (File.Exists(defaultResolution.Entry.DefaultBenchmarkEntryPath))
         {
             candidates.Add(new BenchmarkModelCandidate(
                 CandidateKey: "variant:default",
@@ -227,7 +228,7 @@ public sealed class BenchmarkModelPathResolver(
                 ModelPath: defaultResolution.Entry.DefaultBenchmarkEntryPath,
                 VariantAlias: "default",
                 ResolutionNote: $"Resolved model alias '{reference}' using manifest '{manifestRegistry.ManifestPath}'.",
-                RootDirectory: defaultResolution.Entry.RootDirectory));
+                RootDirectory: manifestCandidateRootDirectory));
         }
 
         foreach (BundledModelManifestVariant variant in defaultResolution.Entry.Variants)
@@ -243,7 +244,7 @@ public sealed class BenchmarkModelPathResolver(
                 ModelPath: variant.EntryPath,
                 VariantAlias: variant.Alias,
                 ResolutionNote: $"Resolved model alias '{reference}' using manifest '{manifestRegistry.ManifestPath}'.",
-                RootDirectory: defaultResolution.Entry.RootDirectory));
+                RootDirectory: manifestCandidateRootDirectory));
         }
 
         if (candidates.Count == 0)
@@ -275,6 +276,25 @@ public sealed class BenchmarkModelPathResolver(
                 ? "variant:default"
                 : SelectDefaultCandidateKey(candidates));
         return true;
+    }
+
+    private string ResolveManifestCandidateRootDirectory(BundledModelManifestEntry entry)
+    {
+        // When the model is present in the on-disk cache, the cache root is the directory that
+        // actually contains the model artifacts (e.g. Kokoro's `voices/`). Prefer it so consumers
+        // such as CompositionRoot.CreateKokoroVoiceCatalog resolve `<root>/voices` correctly.
+        // Otherwise fall back to the manifest-relative repo models root to preserve the existing
+        // repo-models-on-disk behavior.
+        if (!string.IsNullOrWhiteSpace(_modelCacheDirectory))
+        {
+            string cachedRootDirectory = ResolveModelCacheRootDirectory(_modelCacheDirectory, entry.ModelId);
+            if (Directory.Exists(cachedRootDirectory))
+            {
+                return cachedRootDirectory;
+            }
+        }
+
+        return entry.RootDirectory;
     }
 
     private BenchmarkModelResolutionResult? TryDiscoverCachedManifestCandidates(
