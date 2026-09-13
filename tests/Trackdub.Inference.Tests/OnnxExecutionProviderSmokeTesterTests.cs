@@ -335,6 +335,15 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     [InlineData(ExecutionProviderKind.TensorRTRtx, "NvTensorRtRtx")]
     [InlineData(ExecutionProviderKind.DirectMl, "dml")]
     [InlineData(ExecutionProviderKind.Cpu, "cpu")]
+    [InlineData(ExecutionProviderKind.Cuda, "cuda")]
+    [InlineData(ExecutionProviderKind.CoreMl, "coreml")]
+    [InlineData(ExecutionProviderKind.TensorRt, "NvTensorRtRtx")]
+    [InlineData(ExecutionProviderKind.Migraphx, "AMDGPU")]
+    [InlineData(ExecutionProviderKind.OpenVino, "OpenVINO")]
+    [InlineData(ExecutionProviderKind.OpenVinoCatalog, "OpenVINO")]
+    [InlineData(ExecutionProviderKind.Qnn, "QNN")]
+    [InlineData(ExecutionProviderKind.VitisAi, "VitisAI")]
+    [InlineData(ExecutionProviderKind.Dnnl, "cpu")]
     public void GenAiExecutionProviderNames_maps_trackdub_pins_to_ort_genai_names(
         ExecutionProviderKind provider,
         string expectedName)
