@@ -70,18 +70,45 @@ public sealed class TrtRtxProvidersCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task TrtRtxSmokeCommand_WhenPluginNotReady_ReturnsPipelineFailure()
+    public async Task TrtRtxSmokeCommand_EmitsSmokeReportJson()
     {
         using var stdout = new StringWriter();
         int exitCode = await InvokeCliAsync(_emptyModelDirectory, ["providers", "trt-rtx", "smoke"], stdout);
 
-        Assert.Equal(Program.ExitPipelineFailure, exitCode);
+        // The command runs on both plugin-ready (RTX) and plugin-not-ready machines,
+        // so accept either the all-pass success code or the pipeline-failure code.
+        Assert.True(exitCode is Program.ExitSuccess or Program.ExitPipelineFailure);
 
         using JsonDocument document = JsonDocument.Parse(stdout.ToString());
         JsonElement root = document.RootElement;
-        Assert.False(root.GetProperty("ready").GetBoolean());
-        Assert.True(root.TryGetProperty("blocker", out _));
-        Assert.Equal(0, root.GetProperty("attempted").GetInt32());
+
+        // 'ready' must always be emitted as a JSON boolean.
+        Assert.True(root.TryGetProperty("ready", out JsonElement ready));
+        Assert.True(ready.ValueKind is JsonValueKind.True or JsonValueKind.False);
+
+        // 'attempted' must always be emitted as a non-negative integer.
+        Assert.True(root.TryGetProperty("attempted", out JsonElement attempted));
+        Assert.Equal(JsonValueKind.Number, attempted.ValueKind);
+        Assert.True(attempted.GetInt32() >= 0);
+
+        if (ready.GetBoolean())
+        {
+            // Ready branch: with zero attempts (no starter-pack models cached), the
+            // command always takes the no-attempts path and fails the pipeline. When
+            // there are attempts, the exit code depends on which cached models pass,
+            // which is environment-dependent, so it is left unconstrained here.
+            if (attempted.GetInt32() == 0)
+            {
+                Assert.Equal(Program.ExitPipelineFailure, exitCode);
+            }
+        }
+        else
+        {
+            // Not-ready branch: fails the pipeline, reports zero attempts, and names a blocker.
+            Assert.Equal(Program.ExitPipelineFailure, exitCode);
+            Assert.Equal(0, attempted.GetInt32());
+            Assert.True(root.TryGetProperty("blocker", out _));
+        }
     }
 
     [Fact]
