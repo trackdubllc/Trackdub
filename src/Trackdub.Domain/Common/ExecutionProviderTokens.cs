@@ -171,9 +171,8 @@ public static class ExecutionProviderTokens
     private static IReadOnlyList<string> BuildCliTags()
     {
         var tags = new List<string> { "auto" };
-        foreach (ExecutionProviderKind kind in Enum.GetValues<ExecutionProviderKind>())
+        foreach (ExecutionProviderKind kind in Enum.GetValues<ExecutionProviderKind>().Where(k => k != default))
         {
-            if (kind == default) continue;
             tags.Add(ToCanonicalTag(kind));
         }
         return tags;
@@ -182,9 +181,8 @@ public static class ExecutionProviderTokens
     private static IReadOnlyList<string> BuildAcceptedTokens()
     {
         var tokens = new List<string>();
-        foreach (ExecutionProviderKind kind in Enum.GetValues<ExecutionProviderKind>())
+        foreach (ExecutionProviderKind kind in Enum.GetValues<ExecutionProviderKind>().Where(k => k != default))
         {
-            if (kind == default) continue;
             tokens.Add(ToCanonicalTag(kind));
             tokens.AddRange(GetAliases(kind));
         }
