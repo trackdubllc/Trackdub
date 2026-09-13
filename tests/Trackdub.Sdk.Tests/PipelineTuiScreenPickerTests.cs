@@ -173,6 +173,76 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
         Assert.Equal(0, runner.RunStageCallCount);
     }
 
+    [Fact]
+    public async Task RunAll_Configure_DeepBackWalk_ReopensPriorPickersPreservingSelections()
+    {
+        var runner = new RecordingPipelineRunner();
+        using TrackdubSessionFactory factory = CreateFactory();
+        var console = new TestConsole();
+        console.Profile.Capabilities.Interactive = true;
+        console.Input.PushTextWithEnter("es"); // target language prompt
+
+        var context = new TrackdubTuiContext(factory, console, CancellationToken.None)
+        {
+            ProjectPath = await CreateOpenProjectAsync(factory),
+        };
+        var screen = new PipelineTuiScreen(runner);
+
+        await screen.RenderAsync(context);
+
+        await screen.HandleKeyAsync(Key(ConsoleKey.G), context);
+        SelectValue(screen, "__configure__");
+        await screen.HandleKeyAsync(Key(ConsoleKey.Enter), context);
+
+        // Walk forward into the wizard, making a distinct selection at each step so we can
+        // confirm accumulated _w* state survives the Back walk.
+        await SelectAndEnterAsync(screen, context, "__yes__");   // voice clone → true
+        Assert.Equal("Export container format", GetPicker(screen).Title);
+        await SelectAndEnterAsync(screen, context, "mkv");       // export format
+        Assert.Equal("Subtitle format", GetPicker(screen).Title);
+        await SelectAndEnterAsync(screen, context, "srt");       // subtitle format
+        Assert.Equal("Subtitle transcript source", GetPicker(screen).Title);
+        await SelectAndEnterAsync(screen, context, "bilingual"); // subtitle source
+        Assert.Equal("Advanced options", GetPicker(screen).Title);
+
+        // Descend into the video-encoder picker and set nvenc, then Back to Advanced.
+        await SelectAndEnterAsync(screen, context, "__video__");
+        Assert.Equal("Video encoder", GetPicker(screen).Title);
+        await SelectAndEnterAsync(screen, context, "nvenc");
+        Assert.Equal("Advanced options", GetPicker(screen).Title);
+
+        // Now walk Back up several wizard pickers, asserting each prior picker re-opens by title.
+        // Back transitions must NOT reset accumulated _w* state (only re-entering __configure__ does).
+        await SelectAndEnterAsync(screen, context, "__back__"); // advanced → subtitle source
+        Assert.Equal("Subtitle transcript source", GetPicker(screen).Title);
+        await SelectAndEnterAsync(screen, context, "__back__"); // source → subtitle format
+        Assert.Equal("Subtitle format", GetPicker(screen).Title);
+        await SelectAndEnterAsync(screen, context, "__back__"); // format → export format
+        Assert.Equal("Export container format", GetPicker(screen).Title);
+
+        // No run fired anywhere along the Back walk.
+        Assert.Equal(0, runner.RunFullPipelineCallCount);
+
+        // Walk forward again straight to Run WITHOUT re-entering __configure__ (so no reset),
+        // re-selecting the same values along the visible pickers. The video-encoder selection
+        // (nvenc) made before the Back walk was never re-visited, so its survival to the fired
+        // options proves the Back transitions preserved accumulated _w* state.
+        await SelectAndEnterAsync(screen, context, "mkv");       // export format
+        await SelectAndEnterAsync(screen, context, "srt");       // subtitle format
+        await SelectAndEnterAsync(screen, context, "bilingual"); // subtitle source
+        Assert.Equal("Advanced options", GetPicker(screen).Title);
+        await SelectAndEnterAsync(screen, context, "__run__");   // advanced → fire
+
+        Assert.Equal(1, runner.RunFullPipelineCallCount);
+        PipelineHandler.TuiPipelineRunOptions options = runner.LastFullPipelineOptions!;
+        Assert.True(options.UseVoiceCloning);                    // set before the Back walk, preserved
+        Assert.Equal("mkv", options.ExportFormat);
+        Assert.Equal(["srt"], options.SubtitleFormats!);
+        Assert.Equal("bilingual", options.SubtitleSource);
+        Assert.Equal("nvenc", options.VideoEncoderKey);          // set before the Back walk, preserved
+        Assert.Equal("es", options.TargetLanguageOverride);
+    }
+
     // -------------------------------------------------------------------------
     // (3) Alias forwarding to the runner
     // -------------------------------------------------------------------------
@@ -222,6 +292,34 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
         await screen.HandleKeyAsync(Key(ConsoleKey.Enter), context);
 
         SelectValue(screen, "__default__");
+        await screen.HandleKeyAsync(Key(ConsoleKey.Enter), context);
+
+        Assert.Equal(1, runner.RunStageCallCount);
+        Assert.Equal(StageNames.Asr, runner.LastStageName);
+        Assert.Null(runner.LastModelAlias);
+        Assert.False(screen.HasOverlay);
+    }
+
+    [Fact]
+    public async Task StageRun_EnterAlias_WhitespaceOnly_ForwardsNullAliasToRunner()
+    {
+        var runner = new RecordingPipelineRunner();
+        using TrackdubSessionFactory factory = CreateFactory();
+        var console = new TestConsole();
+        console.Profile.Capabilities.Interactive = true;
+        console.Input.PushTextWithEnter("   "); // whitespace-only alias → null
+
+        var context = new TrackdubTuiContext(factory, console, CancellationToken.None)
+        {
+            ProjectPath = await CreateOpenProjectAsync(factory),
+        };
+        var screen = new PipelineTuiScreen(runner);
+
+        await screen.HandleKeyAsync(Key(ConsoleKey.S), context);
+        SelectValue(screen, StageNames.Asr);
+        await screen.HandleKeyAsync(Key(ConsoleKey.Enter), context);
+
+        SelectValue(screen, "__enter_alias__");
         await screen.HandleKeyAsync(Key(ConsoleKey.Enter), context);
 
         Assert.Equal(1, runner.RunStageCallCount);
@@ -355,6 +453,42 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAll_Configure_VideoEncoderAuto_MapsToNull()
+    {
+        var runner = new RecordingPipelineRunner();
+        using TrackdubSessionFactory factory = CreateFactory();
+        var console = new TestConsole();
+        console.Profile.Capabilities.Interactive = true;
+        console.Input.PushTextWithEnter("de");
+
+        var context = new TrackdubTuiContext(factory, console, CancellationToken.None)
+        {
+            ProjectPath = await CreateOpenProjectAsync(factory),
+        };
+        var screen = new PipelineTuiScreen(runner);
+
+        await screen.RenderAsync(context);
+
+        await screen.HandleKeyAsync(Key(ConsoleKey.G), context);
+        SelectValue(screen, "__configure__");
+        await screen.HandleKeyAsync(Key(ConsoleKey.Enter), context);
+
+        await SelectAndEnterAsync(screen, context, "__no__");     // voice clone
+        await SelectAndEnterAsync(screen, context, "__auto__");   // export format
+        await SelectAndEnterAsync(screen, context, "__skip__");   // subtitle format
+        await SelectAndEnterAsync(screen, context, "translated"); // subtitle source
+
+        // Advanced: open the video encoder picker and explicitly select "auto".
+        await SelectAndEnterAsync(screen, context, "__video__");
+        await SelectAndEnterAsync(screen, context, "auto");       // "auto" → null mapping
+        await SelectAndEnterAsync(screen, context, "__run__");    // fire
+
+        Assert.Equal(1, runner.RunFullPipelineCallCount);
+        PipelineHandler.TuiPipelineRunOptions options = runner.LastFullPipelineOptions!;
+        Assert.Null(options.VideoEncoderKey);
+    }
+
+    [Fact]
     public async Task RunAll_Configure_SubtitleNone_MapsToEmptyList()
     {
         var runner = new RecordingPipelineRunner();
@@ -385,6 +519,9 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
         PipelineHandler.TuiPipelineRunOptions options = runner.LastFullPipelineOptions!;
         Assert.NotNull(options.SubtitleFormats);
         Assert.Empty(options.SubtitleFormats!);
+
+        // The "translated" subtitle-source default maps to null (HandleSubtitleSourceChoiceAsync).
+        Assert.Null(options.SubtitleSource);
     }
 
     [Fact]
@@ -452,11 +589,9 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
 
     private static TuiInlinePicker GetPicker(PipelineTuiScreen screen)
     {
-        var field = typeof(PipelineTuiScreen).GetField(
-            "_picker",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        Assert.NotNull(field);
-        var picker = field!.GetValue(screen) as TuiInlinePicker;
+        // Uses the internal test-only accessor (Trackdub.Cli exposes InternalsVisibleTo
+        // Trackdub.Sdk.Tests) rather than reflecting into the private _picker field.
+        TuiInlinePicker? picker = screen.CurrentPicker;
         Assert.NotNull(picker);
         return picker!;
     }

@@ -76,6 +76,13 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 
     public bool HasOverlay => _picker is not null;
 
+    /// <summary>
+    /// Test-only accessor exposing the currently open picker (or <see langword="null"/> when no
+    /// overlay is active). Lets tests inspect picker title/choices and drive navigation without
+    /// reflecting into the private <c>_picker</c> field. Not used by production code.
+    /// </summary>
+    internal TuiInlinePicker? CurrentPicker => _picker;
+
     public void ClearOverlay()
     {
         _picker = null;
