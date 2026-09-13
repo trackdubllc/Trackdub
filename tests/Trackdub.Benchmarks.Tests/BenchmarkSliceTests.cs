@@ -220,6 +220,21 @@ public sealed class BenchmarkOptionsTests
         Assert.DoesNotContain(
             TrtRtxSmokeCatalog.RemainingOnnxGpu,
             target => target.ModelReference.Contains("Kokoro", StringComparison.OrdinalIgnoreCase));
+
+        // GPU-only invariant: Phi-3.5 ships only a cpu-int4 bundle, so it must not appear here.
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("Phi-3.5-mini-instruct-onnx", StringComparison.OrdinalIgnoreCase));
+
+        // phi-4 must map to the gpu-int4 variant, never cpu-int4.
+        Assert.Contains(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Equals("microsoft/phi-4-onnx", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(target.Variant, "gpu-int4", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Equals("microsoft/phi-4-onnx", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(target.Variant, "cpu-int4", StringComparison.Ordinal));
     }
 
     [Fact]
