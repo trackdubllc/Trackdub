@@ -160,11 +160,21 @@ public static class CompositionRoot
         services.TryAddSingleton(storagePaths);
         services.TryAddSingleton<IAppStoragePaths>(storagePaths);
         services.TryAddSingleton<IEngineCacheMaintenanceService, EngineCacheMaintenanceService>();
-        services.TryAddSingleton<IMigraphxReadinessProbe, MigraphxReadinessProbe>();
-        services.TryAddSingleton<IDnnlReadinessProbe, DnnlReadinessProbe>();
-        services.TryAddSingleton<IOpenVinoCatalogReadinessProbe, OpenVinoCatalogReadinessProbe>();
-        services.TryAddSingleton<IQnnCatalogReadinessProbe, QnnCatalogReadinessProbe>();
-        services.TryAddSingleton<IVitisAiCatalogReadinessProbe, VitisAiCatalogReadinessProbe>();
+        // Readiness probes are wrapped in thread-safe caching decorators so a single
+        // `providers list` invocation runs each underlying native/ORT readiness check exactly
+        // once. Both OnnxExecutionProviderDiscovery and the *RuntimeReadinessService wrappers
+        // resolve these same cached singletons, so the discovery pass and the remediation pass
+        // reuse one probe result instead of double-probing.
+        services.TryAddSingleton<IMigraphxReadinessProbe>(_ =>
+            new CachingMigraphxReadinessProbe(new MigraphxReadinessProbe()));
+        services.TryAddSingleton<IDnnlReadinessProbe>(_ =>
+            new CachingDnnlReadinessProbe(new DnnlReadinessProbe()));
+        services.TryAddSingleton<IOpenVinoCatalogReadinessProbe>(_ =>
+            new CachingOpenVinoCatalogReadinessProbe(new OpenVinoCatalogReadinessProbe()));
+        services.TryAddSingleton<IQnnCatalogReadinessProbe>(_ =>
+            new CachingQnnCatalogReadinessProbe(new QnnCatalogReadinessProbe()));
+        services.TryAddSingleton<IVitisAiCatalogReadinessProbe>(_ =>
+            new CachingVitisAiCatalogReadinessProbe(new VitisAiCatalogReadinessProbe()));
         services.TryAddSingleton<IDiagnosticsRuntimeInfo, DiagnosticsRuntimeInfoProvider>();
         services.TryAddSingleton<IApplicationLogger>(sp =>
             new RollingFileApplicationLogger(
@@ -278,7 +288,8 @@ public static class CompositionRoot
                 });
         });
         services.TryAddSingleton<ITensorRtRtxReadinessProbe>(sp =>
-            new TensorRtRtxReadinessProbe(sp.GetRequiredService<ITensorRtRtxProviderBootstrap>()));
+            new CachingTensorRtRtxReadinessProbe(
+                new TensorRtRtxReadinessProbe(sp.GetRequiredService<ITensorRtRtxProviderBootstrap>())));
         services.TryAddSingleton<ITensorRtRtxRuntimeReadinessService, TensorRtRtxRuntimeReadinessService>();
         services.TryAddSingleton<ICloudApiKeyProvider, EnvironmentCloudApiKeyProvider>();
         services.TryAddSingleton<ICloudCredentialReadiness, CloudCredentialReadinessService>();
