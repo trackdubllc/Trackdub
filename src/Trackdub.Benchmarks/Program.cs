@@ -572,19 +572,12 @@ public static class Program
             }
 
             if (report.Status is BenchmarkStatus.Failed)
-            {
-                failed++;
-                await error.WriteLineAsync($"FAIL {target.Label}: benchmark status {report.Status}.").ConfigureAwait(false);
-            }
-            else
-            {
-                passed++;
+        await WriteBatchReportAndSummaryAsync(
+            TrtRtxSmokeCatalog.ScopeName, options.OutputPath, reports, options.ReportFormat, output, cancellationToken);
             }
         }
 
-        var batchReport = new BenchmarkBatchReport(
-            RequestedReference: TrtRtxSmokeCatalog.ScopeName,
-            ReportPath: options.OutputPath,
+            await output.WriteLineAsync($"TRT RTX smoke summary: passed={passed}, failed={failed}, skipped={skipped}.")
             Results: reports,
             GeneratedAtUtc: DateTimeOffset.UtcNow);
 
