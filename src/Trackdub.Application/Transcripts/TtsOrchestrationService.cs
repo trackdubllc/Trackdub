@@ -132,14 +132,30 @@ public sealed class TtsOrchestrationService(
                     continue;
                 }
 
-                assignmentsBySpeakerId.TryGetValue(speaker.Id, out VoiceAssignment? assignment);
-                if (assignment is null)
+                // An explicit --voice override in the request must take precedence over any
+                // previously persisted non-fallback assignment (e.g. on a resume run). Only when
+                // the request carries no explicit override for the speaker do we honor the
+                // pre-existing assignment, falling back to the request path otherwise.
+                VoiceAssignment? assignment;
+                if (RequestHasExplicitVoiceOverride(request, speaker.Id))
                 {
                     assignment = await TryPersistRequestedVoiceAssignmentAsync(
                         currentState,
                         speaker.Id,
                         request,
                         cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    assignmentsBySpeakerId.TryGetValue(speaker.Id, out assignment);
+                    if (assignment is null)
+                    {
+                        assignment = await TryPersistRequestedVoiceAssignmentAsync(
+                            currentState,
+                            speaker.Id,
+                            request,
+                            cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 await RunTtsForSpeakerAsync(
@@ -521,6 +537,11 @@ public sealed class TtsOrchestrationService(
             cancellationToken,
             progress).ConfigureAwait(false);
     }
+
+    private static bool RequestHasExplicitVoiceOverride(GenerateTtsForAllSpeakersRequest request, Guid speakerId) =>
+        request.VoiceIdsBySpeakerId is not null &&
+        request.VoiceIdsBySpeakerId.TryGetValue(speakerId, out string? explicitVoiceId) &&
+        !string.IsNullOrWhiteSpace(explicitVoiceId);
 
     private async Task<VoiceAssignment?> TryPersistRequestedVoiceAssignmentAsync(
         TranscriptProjectState currentState,
