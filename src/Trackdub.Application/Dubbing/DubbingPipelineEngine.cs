@@ -200,6 +200,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 runStart,
                 stageOutcomes,
                 executionSnapshot,
+                progress,
                 cancellationToken).ConfigureAwait(false);
             if (preFlightResult is not null)
             {
@@ -323,6 +324,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         DateTimeOffset runStart,
         List<StageOutcome> stageOutcomes,
         Dictionary<string, string> executionSnapshot,
+        IProgress<PipelineProgressEvent>? progress,
         CancellationToken cancellationToken)
     {
         if (session.Workspace.Project is null)
@@ -356,6 +358,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 preFlightSelections,
                 readinessService,
                 coordinator,
+                progress,
                 cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -434,6 +437,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         RuntimeModelSelections selections,
         IPipelineReadinessService readinessService,
         RuntimeModelSetupCoordinator coordinator,
+        IProgress<PipelineProgressEvent>? progress,
         CancellationToken cancellationToken)
     {
         // Map to RuntimeStage, skipping stages with valid existing artifacts (resumable).
@@ -465,16 +469,20 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 options.TargetLanguageCode)
             .ConfigureAwait(false);
 
-        // Auto-provision downloadable models upfront. No dialogs — headless callbacks.
+        // Provision downloadable models upfront via the host's interaction surface.
+        // Headless sessions auto-download-or-cancel; interactive hosts show dialogs.
         if (report.Stages.Any(s => s.Status == ReadinessState.DownloadRequired))
         {
-            RuntimeModelSetupCallbacks headlessCallbacks = BuildHeadlessCallbacks(cancellationToken);
+            RuntimeModelSetupCallbacks setupCallbacks =
+                TryResolveService<IPipelineModelSetupInteraction>(session)
+                    ?.CreateCallbacks(progress, cancellationToken)
+                ?? BuildHeadlessCallbacks(cancellationToken);
             RuntimeModelSetupResult provisionResult = await coordinator
                 .EnsurePipelineModelsAvailableAsync(
                     session.Workspace,
                     selections,
                     report,
-                    headlessCallbacks,
+                    setupCallbacks,
                     options.SourceLanguageCode,
                     options.TargetLanguageCode,
                     cancellationToken)
@@ -549,17 +557,11 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
 
     /// <summary>
     /// Headless provisioning callbacks: auto-download when possible, cancel otherwise.
-    /// No UI dialogs, no file pickers.
+    /// No UI dialogs, no file pickers. Used when the session does not register an
+    /// <see cref="IPipelineModelSetupInteraction"/> (e.g. minimal test hosts).
     /// </summary>
     private static RuntimeModelSetupCallbacks BuildHeadlessCallbacks(CancellationToken cancellationToken) =>
-        new(
-            ResolveDecisionAsync: prompt => Task.FromResult(
-                prompt.Status.CanAutoDownload
-                    ? RuntimeModelSetupDecision.Download
-                    : RuntimeModelSetupDecision.Cancel),
-            PickImportFileAsync: () => Task.FromResult<string?>(null),
-            CreateDownloadProgress: _ => new Progress<ModelDownloadProgress>(),
-            RunOperationAsync: (op, _) => op(cancellationToken));
+        HeadlessRuntimeModelSetup.CreateCallbacks(cancellationToken);
 
     internal static bool ShouldSkipModelPreFlight(
         string stageName,
@@ -644,12 +646,15 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             StageNames.Translation => RuntimeStage.Translation,
             StageNames.Tts => RuntimeStage.Tts,
             StageNames.Separation => RuntimeStage.Separation,
+            StageNames.AudioPreparation => RuntimeStage.SpeechEnhancement,
+            StageNames.OverlapRescue => RuntimeStage.OverlapRescue,
+            StageNames.TextRefinementAsr => RuntimeStage.TextRefinement,
             StageNames.LipSync => RuntimeStage.LipSync,
             StageNames.LipSynthesis => RuntimeStage.LipSynthesis,
             _ => null,
         };
 
-    private readonly record struct StageWorkflowResult(
+    internal readonly record struct StageWorkflowResult(
         IReadOnlyList<string> ArtifactPaths,
         IReadOnlyList<string>? DegradationRecords,
         StageStatus Status = StageStatus.Succeeded,
@@ -774,7 +779,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
     /// Dispatches execution to the appropriate workspace workflow method for the given stage.
     /// Returns artifact paths and any degradation records produced by the stage.
     /// </summary>
-    private static async Task<StageWorkflowResult> RunStageWorkflowAsync(
+    internal static async Task<StageWorkflowResult> RunStageWorkflowAsync(
         IDubbingSession session,
         DubbingSessionOptions options,
         string stageName,
@@ -789,11 +794,20 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         switch (stageName)
         {
             case StageNames.Separation:
+                if (!options.EnableStemSeparation)
+                {
+                    return new StageWorkflowResult(
+                        [],
+                        ["Stem separation is disabled for this run."],
+                        StageStatus.Skipped,
+                        StageSkipReasonCodes.DisabledByOption);
+                }
+
                 TranscriptProjectState separationState = await workspace.RunStemSeparationAsync(
                     cancellationToken,
                     preferredModelAlias: runtimeSelections.SeparationModelAlias,
                     modelPreferences: modelPreferences,
-                    regenerateTranscript: false).ConfigureAwait(false);
+                    regenerateTranscript: options.RegenerateTranscriptOnSeparation).ConfigureAwait(false);
 
                 IReadOnlyList<string>? enhancementDegradations = ExtractSpeechEnhancementDegradations(separationState);
                 if (enhancementDegradations is { Count: > 0 })
@@ -813,15 +827,76 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                     string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
                     await workspace.RunTranscriptStageAsync(
                         stageName,
-                        enableSpeakerDiarization: string.Equals(
-                            stageName,
-                            StageNames.Diarization,
-                            StringComparison.OrdinalIgnoreCase),
+                        enableSpeakerDiarization: options.EnableSpeakerDiarization &&
+                            string.Equals(
+                                stageName,
+                                StageNames.Diarization,
+                                StringComparison.OrdinalIgnoreCase),
                         modelPreferences,
                         cancellationToken,
                         progress,
                         sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
                     return new StageWorkflowResult([], null);
+                }
+
+            case StageNames.AudioPreparation:
+                {
+                    TranscriptProjectState audioPrepState = await workspace
+                        .RunSpeechAudioPreparationAsync(cancellationToken, progress)
+                        .ConfigureAwait(false);
+                    return BuildStageWorkflowResultFromStageRun(audioPrepState, StageNames.AudioPreparation);
+                }
+
+            case StageNames.TextRefinementAsr:
+                {
+                    string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
+                    TranscriptProjectState refinementState = await workspace.RunTranscriptStageAsync(
+                        stageName,
+                        enableSpeakerDiarization: options.EnableSpeakerDiarization,
+                        modelPreferences,
+                        cancellationToken,
+                        progress,
+                        sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
+                    return BuildStageWorkflowResultFromStageRun(refinementState, StageNames.TextRefinementAsr);
+                }
+
+            case StageNames.OverlapRescue:
+                {
+                    TranscriptProjectState preRescueState = await workspace.Project
+                        .OpenAsync(cancellationToken).ConfigureAwait(false);
+                    StageRunRecord? diarizationRun = GetLatestStageRun(preRescueState, StageNames.Diarization);
+                    if (diarizationRun is null ||
+                        diarizationRun.Status is not (StageRunStatus.Completed
+                            or StageRunStatus.PartiallyCompleted
+                            or StageRunStatus.Skipped))
+                    {
+                        return new StageWorkflowResult(
+                            [],
+                            ["Overlap rescue requires a completed diarization run first."],
+                            StageStatus.Skipped,
+                            StageSkipReasonCodes.PrerequisiteFailed);
+                    }
+
+                    var rescueProgress = new Progress<OverlapRescueProgress>(update =>
+                        ReportProgress(
+                            progress,
+                            StageNames.OverlapRescue,
+                            PipelineProgressEventKind.Progress,
+                            update.IsPersistingArtifacts
+                                ? "Overlap rescue: saving source candidates."
+                                : string.Format(
+                                    CultureInfo.InvariantCulture,
+                                    "Overlap rescue region {0}/{1}",
+                                    update.CompletedRegions,
+                                    update.TotalRegions)));
+
+                    TranscriptProjectState rescueState = await workspace.RunOverlapRescueAsync(
+                        cancellationToken,
+                        rescueProgress,
+                        preferredModelAlias: runtimeSelections.OverlapRescueModelAlias,
+                        modelPreferences: modelPreferences,
+                        retranscribeCandidates: options.RetranscribeOverlapCandidates).ConfigureAwait(false);
+                    return BuildStageWorkflowResultFromStageRun(rescueState, StageNames.OverlapRescue);
                 }
 
             case StageNames.Translation:
@@ -964,8 +1039,13 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 }
 
             default:
-                // Unknown stage — skip gracefully.
-                return new StageWorkflowResult([], null);
+                // A catalog stage with no registered workflow is a defect, not a no-op;
+                // report failure rather than silently succeeding.
+                return new StageWorkflowResult(
+                    [],
+                    [$"Stage '{stageName}' has no registered workflow."],
+                    StageStatus.Failed,
+                    "STAGE_UNSUPPORTED");
         }
     }
 
@@ -1137,7 +1217,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             options.VoiceAssignmentOverrides);
 
         Dictionary<Guid, string>? fallbackVoiceIds = null;
-        if (!options.UseVoiceCloning)
+        if (!options.UseVoiceCloning && options.AutoAssignFallbackVoices)
         {
             fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode);
             if (fallbackVoiceIds is not null && explicitVoiceIds.Count > 0)
@@ -1465,7 +1545,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
 
         if (options.SourceLanguageCode is not null)
         {
-            snapshot["SourceLanguageCode"] = options.SourceLanguageCode;
+            snapshot["SourceLanguage"] = options.SourceLanguageCode;
         }
 
         if (options.ModelPreferences is not null)

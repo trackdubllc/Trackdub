@@ -59,6 +59,39 @@ public sealed record DubbingSessionOptions
     public bool EnableAsrTextRefinement { get; init; }
 
     /// <summary>
+    /// When true, the Separation stage executes when included in the run.
+    /// Defaults to true to preserve the historical headless behavior; desktop
+    /// callers pass their stem-separation shell flag.
+    /// </summary>
+    public bool EnableStemSeparation { get; init; } = true;
+
+    /// <summary>
+    /// When true, the Diarization stage produces speaker turns during transcription.
+    /// Defaults to true to preserve the historical headless behavior.
+    /// </summary>
+    public bool EnableSpeakerDiarization { get; init; } = true;
+
+    /// <summary>
+    /// When true, re-running separation regenerates the transcript from the new stems.
+    /// Defaults to true to preserve the historical headless behavior; interactive
+    /// callers pass false to keep the user's transcript intact.
+    /// </summary>
+    public bool RegenerateTranscriptOnSeparation { get; init; } = true;
+
+    /// <summary>
+    /// When true, the OverlapRescue stage retranscribes rescued regions and merges
+    /// candidates into the transcript. Defaults to false (artifacts only).
+    /// </summary>
+    public bool RetranscribeOverlapCandidates { get; init; }
+
+    /// <summary>
+    /// When true, speakers without a voice assignment silently receive a fallback
+    /// voice (unattended/headless behavior). When false, TTS fails honestly when
+    /// assignments are missing. Defaults to true to preserve headless behavior.
+    /// </summary>
+    public bool AutoAssignFallbackVoices { get; init; } = true;
+
+    /// <summary>
     /// When true, re-executes all stages regardless of existing artifacts.
     /// Defaults to false.
     /// </summary>
