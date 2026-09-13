@@ -861,11 +861,12 @@ public sealed class StartTtsStageHandler(
             PreferredModelVariantAlias: request.PreferredModelVariantAlias);
     }
 
+    // Recognizes exactly the same clone-only alias set (Chatterbox + CosyVoice + Qwen3-base + F5)
+    // as TtsOrchestrationService's non-clone substitution guard, via the shared predicate, so the
+    // two notions of "clone-only alias" cannot drift.
     private static bool IsVoiceCloningAlias(string? alias) =>
         NormalizeAlias(alias) is string normalizedAlias &&
-        (VoiceCloningDefaults.IsVoiceCloningModelAlias(normalizedAlias) ||
-         Qwen3TtsDefaults.IsBaseAlias(normalizedAlias) ||
-         IsF5VoiceCloningAlias(normalizedAlias));
+        VoiceCloningDefaults.IsCloneOnlyModelAlias(normalizedAlias);
 
     private static bool ShouldForceStockTtsAlias(string? alias)
     {
@@ -885,14 +886,6 @@ public sealed class StartTtsStageHandler(
         string lang = languageCode.Trim().Split('-')[0].ToLowerInvariant();
         return lang != "en" && lang != "es";
     }
-
-    private static bool IsF5VoiceCloningAlias(string alias) =>
-        alias.Equals("f5", StringComparison.OrdinalIgnoreCase) ||
-        alias.Equals("f5tts", StringComparison.OrdinalIgnoreCase) ||
-        alias.Equals("f5tts-onnx", StringComparison.OrdinalIgnoreCase) ||
-        alias.Equals("f5-tts", StringComparison.OrdinalIgnoreCase) ||
-        alias.Equals("f5-tts-onnx", StringComparison.OrdinalIgnoreCase) ||
-        alias.Equals("swivid-f5-tts", StringComparison.OrdinalIgnoreCase);
 
     private static string? NormalizeAlias(string? alias) =>
         string.IsNullOrWhiteSpace(alias)

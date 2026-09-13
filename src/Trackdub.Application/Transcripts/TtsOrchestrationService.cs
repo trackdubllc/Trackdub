@@ -1136,7 +1136,11 @@ public sealed class TtsOrchestrationService(
             return false;
         }
 
-        return VoiceCloningDefaults.IsVoiceCloningModelAlias(assignment.VoiceModelId);
+        // Recognize the SAME clone-only alias set (Chatterbox + CosyVoice + Qwen3-base + F5) that
+        // StartTtsStageHandler.IsVoiceCloningAlias treats as a clone model, so a persisted
+        // Qwen3-base/F5 clone assignment is substituted here instead of falling through to the
+        // stock voicepack lookup and throwing "Voicepack '...' is not available.".
+        return VoiceCloningDefaults.IsCloneOnlyModelAlias(assignment.VoiceModelId);
     }
 
     private async Task<VoiceAssignment> SubstituteStockVoiceForCloneOnlyAssignmentAsync(
@@ -1167,6 +1171,8 @@ public sealed class TtsOrchestrationService(
             catalogVoices = currentState.AvailableVoices;
         }
 
+        // Gender matching is intentionally skipped here (gender: null): there is no reference-clip
+        // gender analysis on this non-clone substitution path, unlike FallBackShortCloneToStockTtsAsync.
         VoiceCatalogEntry voice = StockTtsVoiceMatcher.PickClosest(
                 catalogVoices,
                 targetLanguage,

@@ -469,6 +469,99 @@ public sealed class OrchestrationServiceTests
     }
 
     [Fact]
+    public async Task TtsOrchestrationService_GenerateTtsForSpeakerAsync_substitutes_qwen3_stock_for_persisted_qwen3_base_clone_on_non_kokoro_target()
+    {
+        // Regression for the clone-alias coverage gap: a persisted non-fallback Qwen3-base
+        // (clone-only) assignment on a NON-clone run must be substituted with a stock voice
+        // instead of throwing "Voicepack 'qwen3-tts-0.6b-base' is not available.". The target
+        // language is Japanese (SupportsKokoro == false), which exercises the untested non-Kokoro
+        // substitution branch resolving the Qwen3 fallback (custom-voice) alias.
+        var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1000 };
+        TtsServiceContext context = CreateTtsServiceContext(
+            ttsEngine,
+            voiceCatalog: new FakeVoiceCatalog(
+            [
+                new("af_heart", "mul", "female", "Heart"),
+                new("am_adam", "mul", "male", "Adam"),
+                new("bf_alice", "en-gb", "female", "Alice"),
+                new(Qwen3TtsDefaults.CustomVoice06Alias, "ja", "synthetic", "Qwen3 custom"),
+            ]));
+        TranscriptProjectState spanishState = CreateTranslatedProjectState();
+        TranslationRevision japaneseRevision = spanishState.CurrentTranslationRevision! with { TargetLanguage = "ja" };
+        Guid projectId = spanishState.ProjectState.Project.Id;
+        Guid speakerId = spanishState.Speakers[0].Id;
+        VoiceAssignment persistedClone = VoiceAssignment.Create(
+            projectId,
+            speakerId,
+            Qwen3TtsDefaults.Base06Alias,
+            voiceVariant: null,
+            requiresConsent: true,
+            isFallback: false,
+            referenceClipArtifactId: Guid.NewGuid());
+        TranscriptProjectState state = spanishState with
+        {
+            CurrentTranslationRevision = japaneseRevision,
+            SelectedTranslationTargetLanguage = "ja",
+            VoiceAssignments = [persistedClone]
+        };
+
+        await context.Service.GenerateTtsForSpeakerAsync(
+            state,
+            new GenerateTtsForSpeakerRequest(speakerId, UseReferenceClipForVoiceCloning: false),
+            TestContext.Current.CancellationToken);
+
+        VoiceAssignment substituted = Assert.Single(context.VoiceAssignmentRepository.All);
+        Assert.True(substituted.IsFallback);
+        Assert.Equal(Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null), substituted.VoiceModelId);
+        Assert.Null(substituted.VoiceVariant);
+        Assert.Null(substituted.ReferenceClipArtifactId);
+        Assert.False(VoiceCloningDefaults.IsCloneOnlyModelAlias(substituted.VoiceModelId));
+        TtsTake take = Assert.Single(context.TtsTakeRepository.All);
+        Assert.Equal(TtsTakeStatus.Completed, take.Status);
+        Assert.Equal(TtsTakeKind.Stock, take.Kind);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, take.VoiceId);
+    }
+
+    [Fact]
+    public async Task TtsOrchestrationService_GenerateTtsForSpeakerAsync_substitutes_stock_for_persisted_f5_clone_on_non_clone_run()
+    {
+        // Regression for the F5 half of the clone-alias coverage gap: a persisted non-fallback
+        // F5 (clone-only) assignment on a NON-clone run must be substituted with a stock voice
+        // rather than throwing "Voicepack 'f5tts-onnx' is not available.". The target language is
+        // Spanish (SupportsKokoro == true), so a Kokoro voice is chosen via PickClosest.
+        var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1000 };
+        TtsServiceContext context = CreateTtsServiceContext(ttsEngine);
+        TranscriptProjectState baseState = CreateTranslatedProjectState();
+        Guid projectId = baseState.ProjectState.Project.Id;
+        Guid speakerId = baseState.Speakers[0].Id;
+        VoiceAssignment persistedClone = VoiceAssignment.Create(
+            projectId,
+            speakerId,
+            "f5tts-onnx",
+            voiceVariant: null,
+            requiresConsent: true,
+            isFallback: false,
+            referenceClipArtifactId: Guid.NewGuid());
+        TranscriptProjectState state = baseState with { VoiceAssignments = [persistedClone] };
+
+        await context.Service.GenerateTtsForSpeakerAsync(
+            state,
+            new GenerateTtsForSpeakerRequest(speakerId, UseReferenceClipForVoiceCloning: false),
+            TestContext.Current.CancellationToken);
+
+        VoiceAssignment substituted = Assert.Single(context.VoiceAssignmentRepository.All);
+        Assert.True(substituted.IsFallback);
+        Assert.Equal(StockTtsDefaults.KokoroPrimaryAlias, substituted.VoiceModelId);
+        Assert.False(VoiceCloningDefaults.IsCloneOnlyModelAlias(substituted.VoiceModelId));
+        Assert.Null(substituted.ReferenceClipArtifactId);
+        Assert.NotNull(substituted.VoiceVariant);
+        TtsTake take = Assert.Single(context.TtsTakeRepository.All);
+        Assert.Equal(TtsTakeStatus.Completed, take.Status);
+        Assert.Equal(TtsTakeKind.Stock, take.Kind);
+        Assert.Contains(take.VoiceId, new[] { "af_heart", "am_adam", "bf_alice" });
+    }
+
+    [Fact]
     public async Task TtsOrchestrationService_GenerateTtsForSpeakerAsync_skips_orphaned_artifact_path()
     {
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1000 };
