@@ -120,8 +120,15 @@ internal static class TensorRtRtxPluginLocator
 
             missingFiles = RequiredFileNames
                 .Where(fileName =>
-                    Path.IsPathRooted(fileName) ||
-                    !fileExists(Path.Combine(normalizedDirectory, fileName)))
+                {
+                    if (Path.IsPathRooted(fileName))
+                    {
+                        return true;
+                    }
+
+                    string candidatePath = Path.Combine(normalizedDirectory, fileName);
+                    return !fileExists(candidatePath);
+                })
                 .ToArray();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
