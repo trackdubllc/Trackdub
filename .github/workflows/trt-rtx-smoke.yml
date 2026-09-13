@@ -16,12 +16,17 @@ jobs:
     if: vars.TRACKDUB_TRT_RTX_SMOKE == 'true'
     runs-on: self-hosted
     timeout-minutes: 45
-    # Remove continue-on-error once the self-hosted GPU runner completes ≥3 consecutive green runs.
-    continue-on-error: true
     env:
       DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
       DOTNET_ROOT: ${{ github.workspace }}/.dotnet
       TRACKDUB_TRT_RTX_SMOKE: '1'
+      # Pin the model cache so the "Download starter-pack models" step and the
+      # "Run TRT RTX provider smoke" step resolve the same directory. The CLI
+      # (TrackdubStoragePaths) writes to TRACKDUB_CACHE_ROOT/model-cache; the
+      # benchmark (BenchmarkModelPathResolver) reads TRACKDUB_MODEL_CACHE. Keep
+      # the two consistent (TRACKDUB_MODEL_CACHE == TRACKDUB_CACHE_ROOT/model-cache).
+      TRACKDUB_CACHE_ROOT: ${{ github.workspace }}/.trackdub-cache
+      TRACKDUB_MODEL_CACHE: ${{ github.workspace }}/.trackdub-cache/model-cache
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
@@ -55,6 +60,34 @@ jobs:
       - name: Build Benchmarks
         shell: pwsh
         run: dotnet build src/Trackdub.Benchmarks/Trackdub.Benchmarks.csproj -f net10.0-windows10.0.19041.0 -m:1 --no-restore
+
+      - name: Download starter-pack models
+        shell: pwsh
+        run: |
+          # Source of truth: src/Trackdub.Composition/StarterPacks/TrtRtxSmokeCatalog.cs
+          # -> TrtRtxSmokeCatalog.StarterPackTurboGpu. Keep this list and the variants
+          # (gpu-int4, quantized, fp16) in sync with that catalog so BenchmarkModelPathResolver
+          # can resolve every smoke target instead of skipping it.
+          $targets = @(
+            @{ Id = 'cgus/diar_streaming_sortformer_4spk-v2.1-onnx' },
+            @{ Id = 'openai/whisper-small' },
+            @{ Id = 'openai/whisper-medium' },
+            @{ Id = 'tonythethompson/qwen3-asr-0.6b-onnx' },
+            @{ Id = 'tonythethompson/qwen3-asr-1.7b-onnx' },
+            @{ Id = 'microsoft/Phi-4-mini-instruct-onnx'; Variant = 'gpu-int4' },
+            @{ Id = 'google/madlad400-3b-mt'; Variant = 'quantized' },
+            @{ Id = 'ResembleAI/chatterbox-turbo-ONNX'; Variant = 'fp16' }
+          )
+          foreach ($target in $targets) {
+            $variantArgs = if ($target.ContainsKey('Variant')) { @('--variant', $target.Variant) } else { @() }
+            $label = if ($target.ContainsKey('Variant')) { "$($target.Id)@$($target.Variant)" } else { $target.Id }
+            Write-Host "Downloading $label"
+            dotnet run --project src/Trackdub.Cli -f net10.0-windows10.0.19041.0 --no-restore -- `
+              models download $target.Id @variantArgs
+            if ($LASTEXITCODE -ne 0) {
+              throw "Model download failed for $label (exit code $LASTEXITCODE)."
+            }
+          }
 
       - name: Run TRT RTX provider smoke
         shell: pwsh
