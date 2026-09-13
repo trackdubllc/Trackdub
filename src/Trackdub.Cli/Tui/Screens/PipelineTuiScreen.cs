@@ -5,11 +5,62 @@ using Trackdub.Cli.Tui;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Domain.StageRuns;
+using Trackdub.Sdk;
 
 namespace Trackdub.Cli.Tui.Screens;
 
+/// <summary>
+/// Injectable seam over the two <see cref="PipelineHandler"/> run entry points that
+/// actually execute the ML pipeline. Exists so <see cref="PipelineTuiScreen"/>'s terminal
+/// picker actions can be exercised deterministically in tests without a live pipeline run.
+/// </summary>
+internal interface IPipelineRunner
+{
+    Task<int> RunStageAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        string stageName,
+        string? modelAlias,
+        CancellationToken cancellationToken);
+
+    Task<int> RunFullPipelineAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        PipelineHandler.TuiPipelineRunOptions options,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Default <see cref="IPipelineRunner"/> that delegates to the static <see cref="PipelineHandler"/>
+/// entry points, preserving production behavior.
+/// </summary>
+internal sealed class DefaultPipelineRunner : IPipelineRunner
+{
+    public Task<int> RunStageAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        string stageName,
+        string? modelAlias,
+        CancellationToken cancellationToken) =>
+        PipelineHandler.RunStageAsync(factory, projectPath, stageName, modelAlias, cancellationToken);
+
+    public Task<int> RunFullPipelineAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        PipelineHandler.TuiPipelineRunOptions options,
+        CancellationToken cancellationToken) =>
+        PipelineHandler.RunFullPipelineAsync(factory, projectPath, options, cancellationToken);
+}
+
 internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 {
+    private readonly IPipelineRunner _runner;
+
+    public PipelineTuiScreen(IPipelineRunner? runner = null)
+    {
+        _runner = runner ?? new DefaultPipelineRunner();
+    }
+
     private const string BackChoice = "__back__";
     private const string RunChoice = "__run__";
     private const string ConfigureChoice = "__configure__";
@@ -277,7 +328,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
         string stageName = _wStageName!;
         string? modelAlias = _wModelAlias;
 
-        int exitCode = await PipelineHandler
+        int exitCode = await _runner
             .RunStageAsync(context.Factory, context.ProjectPath!, stageName, modelAlias, context.CancellationToken)
             .ConfigureAwait(false);
 
@@ -547,7 +598,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
         TrackdubTuiContext context,
         PipelineHandler.TuiPipelineRunOptions options)
     {
-        int exitCode = await PipelineHandler
+        int exitCode = await _runner
             .RunFullPipelineAsync(context.Factory, context.ProjectPath!, options, context.CancellationToken)
             .ConfigureAwait(false);
 
