@@ -15,7 +15,7 @@ public sealed class LibVlcRuntimeLocatorTests
         try
         {
             Directory.CreateDirectory(libvlcDir);
-            File.WriteAllBytes(Path.Combine(libvlcDir, libraryName), [0x4D, 0x5A]);
+            File.WriteAllBytes(Path.Combine(libvlcDir, RequireRelativeSegment(libraryName)), [0x4D, 0x5A]);
 
             string? resolved = new LibVlcRuntimeLocator(root).ResolveRuntimePath();
 
@@ -31,6 +31,8 @@ public sealed class LibVlcRuntimeLocatorTests
     public void ResolveRuntimePath_prefers_current_rid_subfolder_over_other_architectures()
     {
         (string rid, string libraryName, string[] otherRids) = GetPlatformFixture();
+        string safeRid = RequireRelativeSegment(rid);
+        string safeLibraryName = RequireRelativeSegment(libraryName);
 
         // Create non-matching RID folders first so EnumerateDirectories would
         // prefer the wrong architecture on creation-order filesystems. Matching
@@ -40,14 +42,14 @@ public sealed class LibVlcRuntimeLocatorTests
         {
             foreach (string other in otherRids.Where(candidate => candidate != rid))
             {
-                string dir = Path.Combine(root, "libvlc", other);
+                string dir = Path.Combine(root, "libvlc", RequireRelativeSegment(other));
                 Directory.CreateDirectory(dir);
-                File.WriteAllBytes(Path.Combine(dir, libraryName), [0x4D, 0x5A]);
+                File.WriteAllBytes(Path.Combine(dir, safeLibraryName), [0x4D, 0x5A]);
             }
 
-            string ridDir = Path.Combine(root, "libvlc", rid);
+            string ridDir = Path.Combine(root, "libvlc", safeRid);
             Directory.CreateDirectory(ridDir);
-            File.WriteAllBytes(Path.Combine(ridDir, libraryName), [0x4D, 0x5A]);
+            File.WriteAllBytes(Path.Combine(ridDir, safeLibraryName), [0x4D, 0x5A]);
 
             string? resolved = new LibVlcRuntimeLocator(root).ResolveRuntimePath();
 
@@ -81,6 +83,19 @@ public sealed class LibVlcRuntimeLocatorTests
             ? "linux-arm64"
             : "linux-x64";
         return (linuxRid, "libvlc.so", ["linux-arm64", "linux-x64"]);
+    }
+
+    private static string RequireRelativeSegment(string value)
+    {
+        string safe = Path.GetFileName(value);
+        if (string.IsNullOrWhiteSpace(safe)
+            || !string.Equals(safe, value, StringComparison.Ordinal)
+            || Path.IsPathRooted(safe))
+        {
+            throw new ArgumentException($"Expected a single relative path segment, got '{value}'.", nameof(value));
+        }
+
+        return safe;
     }
 
     private static string CreateTempRoot()
