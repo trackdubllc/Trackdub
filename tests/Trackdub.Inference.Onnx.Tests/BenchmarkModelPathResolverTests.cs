@@ -108,7 +108,7 @@ public sealed class BenchmarkModelPathResolverTests
             $"Expected no pre-existing manifest entry at '{manifestEntryPath}'.");
 
         string cacheRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-manifest-{Guid.NewGuid():N}");
-        string cacheModelRoot = Path.Combine(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX");
+        string cacheModelRoot = Path.Join(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX");
         string cacheOnnxDirectory = Path.Combine(cacheModelRoot, "onnx");
 
         try
