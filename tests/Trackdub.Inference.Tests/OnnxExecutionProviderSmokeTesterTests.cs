@@ -342,6 +342,7 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     [InlineData(ExecutionProviderKind.OpenVino, "OpenVINO")]
     [InlineData(ExecutionProviderKind.OpenVinoCatalog, "OpenVINO")]
     [InlineData(ExecutionProviderKind.Qnn, "QNN")]
+    [InlineData(ExecutionProviderKind.VitisAi, "VitisAI")]
     [InlineData(ExecutionProviderKind.Dnnl, "cpu")]
     public void GenAiExecutionProviderNames_maps_trackdub_pins_to_ort_genai_names(
         ExecutionProviderKind provider,

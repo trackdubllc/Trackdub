@@ -23,6 +23,10 @@ internal static class GenAiExecutionProviderNames
     // ORT GenAI QNN device (Qualcomm QNN).
     public const string Qnn = "QNN";
 
+    // ORT GenAI VitisAI device (AMD Ryzen AI NPU). RyzenAI is an accepted alias of
+    // the same dispatch-table entry.
+    public const string VitisAi = "VitisAI";
+
     public static string Resolve(ExecutionProviderKind provider) =>
         provider switch
         {
@@ -40,6 +44,7 @@ internal static class GenAiExecutionProviderNames
             ExecutionProviderKind.OpenVino => OpenVino,
             ExecutionProviderKind.OpenVinoCatalog => OpenVino,
             ExecutionProviderKind.Qnn => Qnn,
+            ExecutionProviderKind.VitisAi => VitisAi,
             // Intel oneDNN / DNNL is a CPU-side execution provider; ORT GenAI runs it on
             // its CPU device, so it resolves to the CPU provider name.
             ExecutionProviderKind.Dnnl => "cpu",
