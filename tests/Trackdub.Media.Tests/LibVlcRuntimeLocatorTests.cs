@@ -83,8 +83,9 @@ public sealed class LibVlcRuntimeLocatorTests
         {
             Directory.Delete(root, recursive: true);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            Console.Error.WriteLine($"Failed to delete temporary test directory '{root}': {ex.Message}");
         }
     }
 }
