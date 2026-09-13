@@ -505,6 +505,19 @@ public sealed class PlaybackService(
             {
                 snapshot = await vlcBackend.GetSnapshotAsync(ct).ConfigureAwait(false);
             }
+
+            // When the fallback also fails, the snapshot warning was overwritten with
+            // the LibVLC error above and the primary libmpv failure reason is lost.
+            // Keep it visible so diagnostics show why playback is unavailable.
+            if (!snapshot.IsLoaded && !string.IsNullOrWhiteSpace(primaryOpenError))
+            {
+                snapshot = snapshot with
+                {
+                    WarningMessage = AppendSentence(
+                        snapshot.WarningMessage,
+                        $"libmpv open failed: {primaryOpenError}")
+                };
+            }
         }
 
         // Phase 3 (fast, gated): commit the result. If a newer OpenAsync has since started
