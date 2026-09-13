@@ -157,7 +157,7 @@ internal static class ConfigCommand
 
             Examples:
               trackdub config preset save my-preset --target-language es
-              trackdub config preset save gpu-fast --target-language fr --execution-provider directml --device-policy max-performance
+              trackdub config preset save gpu-fast --target-language fr --execution-provider migraphx --device-policy max-performance
               trackdub config preset save custom --target-language de --model asr:whisper-large-v3 --model tts:kokoro-onnx
             """)
         {
