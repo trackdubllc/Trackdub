@@ -418,6 +418,39 @@ public sealed class BenchmarkOptionsTests
         }
     }
 
+    [Fact]
+    public async Task ProgramRunAsync_TrtRtxSmokeScope_WritesBatchReportPathInJsonMode()
+    {
+        string reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        try
+        {
+            int exitCode = await Program.RunAsync(
+                [
+                    "--scope", TrtRtxSmokeCatalog.ScopeName,
+                    "--provider", "trt-rtx",
+                    "--runs", "1",
+                    "--output", reportPath,
+                    "--format", "json"
+                ],
+                TextReader.Null,
+                output,
+                error,
+                TestContext.Current.CancellationToken);
+
+            Assert.Contains($"Batch report written to: {reportPath}", output.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(reportPath))
+            {
+                File.Delete(reportPath);
+            }
+        }
+    }
+
     [RequiresBundledModelFact("silero-vad/onnx/model.onnx")]
     public async Task ProgramRunAsync_AllVariantsWritesAggregateAndPerVariantReports()
     {
