@@ -598,6 +598,11 @@ public static class Program
                 .ConfigureAwait(false);
         }
 
+        if (options.ReportFormat is ReportFormat.Json or ReportFormat.Both)
+        {
+            await output.WriteLineAsync($"Batch report written to: {batchReport.ReportPath}").ConfigureAwait(false);
+        }
+
         if (passed == 0 && failed == 0)
         {
             await error.WriteLineAsync("TRT RTX smoke did not run any targets (all skipped). Download starter-pack models first.").ConfigureAwait(false);
