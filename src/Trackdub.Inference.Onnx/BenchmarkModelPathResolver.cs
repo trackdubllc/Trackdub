@@ -378,7 +378,7 @@ public sealed class BenchmarkModelPathResolver(
                 entry.DefaultBenchmarkEntryPath,
                 out string cachedDefaultEntryPath)
             && !candidates.Any(candidate =>
-                candidate.ModelPath.Equals(cachedDefaultEntryPath, StringComparison.OrdinalIgnoreCase)))
+                candidate.CandidateKey.Equals("variant:default", StringComparison.OrdinalIgnoreCase)))
         {
             candidates.Insert(0, new BenchmarkModelCandidate(
                 CandidateKey: "variant:default",
@@ -452,18 +452,22 @@ public sealed class BenchmarkModelPathResolver(
 
     private static string? ResolveManifestVariantAlias(string modelPath, BundledModelManifestEntry entry)
     {
-        string normalizedModelPath = modelPath.Replace('\\', '/');
+        string normalizedModelPath = NormalizePathForComparison(modelPath);
         foreach (BundledModelManifestVariant variant in entry.Variants)
         {
-            string normalizedEntryPath = variant.EntryPath.Replace('\\', '/');
-            if (normalizedModelPath.EndsWith(normalizedEntryPath, StringComparison.OrdinalIgnoreCase))
+            string relativeEntryPath = NormalizePathForComparison(
+                Path.GetRelativePath(entry.RootDirectory, variant.EntryPath));
+            if (normalizedModelPath.EndsWith(relativeEntryPath, StringComparison.OrdinalIgnoreCase)
+                || PathsEqual(normalizedModelPath, NormalizePathForComparison(variant.EntryPath)))
             {
                 return variant.Alias;
             }
         }
 
-        string normalizedDefaultEntryPath = entry.DefaultBenchmarkEntryPath.Replace('\\', '/');
-        if (normalizedModelPath.EndsWith(normalizedDefaultEntryPath, StringComparison.OrdinalIgnoreCase))
+        string relativeDefaultEntryPath = NormalizePathForComparison(
+            Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath));
+        if (normalizedModelPath.EndsWith(relativeDefaultEntryPath, StringComparison.OrdinalIgnoreCase)
+            || PathsEqual(normalizedModelPath, NormalizePathForComparison(entry.DefaultBenchmarkEntryPath)))
         {
             return entry.Variants.FirstOrDefault(variant =>
                     variant.Alias.Equals("default", StringComparison.OrdinalIgnoreCase))
@@ -473,6 +477,12 @@ public sealed class BenchmarkModelPathResolver(
 
         return null;
     }
+
+    private static string NormalizePathForComparison(string path) =>
+        path.Replace('\\', '/').TrimEnd('/');
+
+    private static bool PathsEqual(string left, string right) =>
+        left.Equals(right, StringComparison.OrdinalIgnoreCase);
 
     private static string ResolveModelCacheRootDirectory(string modelCacheDirectory, string modelId)
     {
@@ -635,12 +645,22 @@ public sealed class BenchmarkModelPathResolver(
             return false;
         }
 
+        string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(candidate.ModelPath);
         return string.Equals(candidate.VariantAlias, trimmedVariant, StringComparison.OrdinalIgnoreCase)
             || string.Equals(candidate.DisplayName, trimmedVariant, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(Path.GetFileNameWithoutExtension(candidate.ModelPath), trimmedVariant, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(Path.GetFileNameWithoutExtension(candidate.ModelPath), $"model_{trimmedVariant}", StringComparison.OrdinalIgnoreCase)
-            || Path.GetFileNameWithoutExtension(candidate.ModelPath).EndsWith($"_{trimmedVariant}", StringComparison.OrdinalIgnoreCase);
+            || string.Equals(fileNameWithoutExtension, trimmedVariant, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(fileNameWithoutExtension, $"model_{trimmedVariant}", StringComparison.OrdinalIgnoreCase)
+            // Suffix match for names like language_model_fp16, but not for canonical
+            // default stems (speech_encoder / silero_vad) that InferVariantAlias maps to default.
+            || (fileNameWithoutExtension.EndsWith($"_{trimmedVariant}", StringComparison.OrdinalIgnoreCase)
+                && !IsCanonicalDefaultEntryStem(fileNameWithoutExtension));
     }
+
+    private static bool IsCanonicalDefaultEntryStem(string fileNameWithoutExtension) =>
+        fileNameWithoutExtension.Equals("model", StringComparison.OrdinalIgnoreCase) ||
+        fileNameWithoutExtension.Equals("encoder_model", StringComparison.OrdinalIgnoreCase) ||
+        fileNameWithoutExtension.Equals("speech_encoder", StringComparison.OrdinalIgnoreCase) ||
+        fileNameWithoutExtension.Equals("silero_vad", StringComparison.OrdinalIgnoreCase);
 
     private static string ExpandToAbsolutePath(string path) =>
         Path.IsPathRooted(path)

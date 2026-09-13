@@ -152,26 +152,42 @@ public static class TrtRtxStarterPackSmokeRunner
                 candidate.ModelPath);
 
             attempted++;
-            ExecutionProviderSmokeTestResult smokeResult = await smokeTester
-                .SmokeTestAsync(request, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (smokeResult.Passed)
+            try
             {
-                passed++;
-                results.Add(new TrtRtxStarterPackSmokeTargetResult(
-                    target.Label,
-                    target.ModelReference,
-                    TrtRtxStarterPackSmokeTargetStatus.Passed));
+                ExecutionProviderSmokeTestResult smokeResult = await smokeTester
+                    .SmokeTestAsync(request, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (smokeResult.Passed)
+                {
+                    passed++;
+                    results.Add(new TrtRtxStarterPackSmokeTargetResult(
+                        target.Label,
+                        target.ModelReference,
+                        TrtRtxStarterPackSmokeTargetStatus.Passed));
+                }
+                else
+                {
+                    failed++;
+                    results.Add(new TrtRtxStarterPackSmokeTargetResult(
+                        target.Label,
+                        target.ModelReference,
+                        TrtRtxStarterPackSmokeTargetStatus.Failed,
+                        smokeResult.Detail ?? "smoke test failed"));
+                }
             }
-            else
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
             {
                 failed++;
                 results.Add(new TrtRtxStarterPackSmokeTargetResult(
                     target.Label,
                     target.ModelReference,
                     TrtRtxStarterPackSmokeTargetStatus.Failed,
-                    smokeResult.Detail ?? "smoke test failed"));
+                    ex.Message));
             }
         }
 

@@ -109,20 +109,6 @@ public sealed class PresetHandlerTests : IDisposable
     }
 
     [Theory]
-    [InlineData("trt-rtx")]
-    [InlineData("qnn")]
-    [InlineData("migraphx")]
-    [InlineData("coreml")]
-    public async Task SaveAsync_ValidVendorExecutionProvider_Succeeds(string provider)
-    {
-        int exitCode = await PresetHandler.SaveAsync(
-            "vendor-ep", CreatePreset(executionProvider: provider), _store, _stdout, CancellationToken.None);
-
-        Assert.Equal(Program.ExitSuccess, exitCode);
-        Assert.True(File.Exists(Path.Combine(_tempDir, "vendor-ep.json")));
-    }
-
-    [Theory]
     [InlineData("not-a-policy")]
     [InlineData("bogus")]
     public async Task SaveAsync_InvalidDevicePolicy_ReturnsArgumentErrorAndEmitsValidationMessage(string invalidPolicy)

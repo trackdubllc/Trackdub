@@ -169,6 +169,8 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
             yield return cudaPath;
             yield return Path.Join(cudaPath, "bin");
             yield return Path.Join(cudaPath, "bin", "x64");
+            yield return Path.Join(cudaPath, "lib64");
+            yield return Path.Join(cudaPath, "lib");
         }
 
         if (OperatingSystem.IsWindows())

@@ -1693,8 +1693,13 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         if (formats is null)
             return hasTranscriptSegments ? [ExportSubtitleFormat.Srt] : [];
         var result = new List<ExportSubtitleFormat>(formats.Count);
-        foreach (string f in formats)
+        foreach (string? f in formats)
         {
+            if (string.IsNullOrWhiteSpace(f))
+            {
+                continue;
+            }
+
             if (f.Equals("srt", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Srt);
             else if (f.Equals("vtt", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Vtt);
             else if (f.Equals("ass", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Ass);
