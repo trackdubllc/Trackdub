@@ -187,7 +187,7 @@ internal static class BenchmarkHardwareInfo
         try
         {
             string safeName = Path.GetFileName(executableName);
-            if (string.IsNullOrWhiteSpace(safeName))
+            if (string.IsNullOrWhiteSpace(safeName) || Path.IsPathRooted(safeName))
             {
                 return null;
             }
@@ -223,7 +223,7 @@ internal static class BenchmarkHardwareInfo
                 foreach (string extension in extensions)
                 {
                     string candidateName = Path.GetFileName(safeName + extension);
-                    if (string.IsNullOrEmpty(candidateName))
+                    if (string.IsNullOrEmpty(candidateName) || Path.IsPathRooted(candidateName))
                     {
                         continue;
                     }
@@ -238,13 +238,22 @@ internal static class BenchmarkHardwareInfo
 
             return null;
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException
-            or IOException
-            or ArgumentException
-            or NotSupportedException)
+        catch (UnauthorizedAccessException)
         {
-            // If we cannot probe PATH, assume the executable is unavailable rather
-            // than risk spawning a process that cannot be cleaned up deterministically.
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        catch (NotSupportedException)
+        {
+            // Filesystem/PATH probe failed. Treat the executable as missing rather
+            // than spawn a process that cannot be cleaned up deterministically.
             return null;
         }
     }
