@@ -863,11 +863,7 @@ public sealed class StartTtsStageHandler(
 
     private static bool IsVoiceCloningAlias(string? alias) =>
         NormalizeAlias(alias) is string normalizedAlias &&
-        (normalizedAlias.Equals(VoiceCloningDefaults.ChatterboxPrimaryAlias, StringComparison.OrdinalIgnoreCase) ||
-         normalizedAlias.Equals(VoiceCloningDefaults.ChatterboxFallbackAlias, StringComparison.OrdinalIgnoreCase) ||
-         normalizedAlias.Equals(VoiceCloningDefaults.ChatterboxMultilingualAlias, StringComparison.OrdinalIgnoreCase) ||
-         normalizedAlias.Equals(VoiceCloningDefaults.CosyVoicePrimaryAlias, StringComparison.OrdinalIgnoreCase) ||
-         normalizedAlias.Equals(VoiceCloningDefaults.CosyVoiceFallbackAlias, StringComparison.OrdinalIgnoreCase) ||
+        (VoiceCloningDefaults.IsVoiceCloningModelAlias(normalizedAlias) ||
          Qwen3TtsDefaults.IsBaseAlias(normalizedAlias) ||
          IsF5VoiceCloningAlias(normalizedAlias));
 
