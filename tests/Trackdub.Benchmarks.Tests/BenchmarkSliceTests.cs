@@ -77,6 +77,62 @@ public sealed class BenchmarkOptionsTests
     }
 
     [Fact]
+    public void TrtRtxSmokeWorkflow_downloads_every_starter_pack_turbo_target()
+    {
+        string workflow = ReadTrtRtxSmokeWorkflow();
+
+        // The workflow must populate the cache for every smoke target before running the
+        // benchmark; otherwise BenchmarkModelPathResolver skips them all and the smoke run
+        // exits non-zero. This guards against the regression where the download step was absent.
+        Assert.Contains("models download", workflow, StringComparison.Ordinal);
+
+        foreach (TrtRtxSmokeCatalog.Target target in TrtRtxSmokeCatalog.StarterPackTurboGpu)
+        {
+            Assert.Contains(target.ModelReference, workflow, StringComparison.Ordinal);
+            if (!string.IsNullOrWhiteSpace(target.Variant))
+            {
+                Assert.Contains(target.Variant, workflow, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    [Fact]
+    public void TrtRtxSmokeWorkflow_does_not_mask_smoke_failures()
+    {
+        string workflow = ReadTrtRtxSmokeWorkflow();
+
+        // continue-on-error at the job level (or a per-step masker) would hide the benchmark's
+        // non-zero all-skipped exit, so the run would report green even when nothing ran.
+        Assert.DoesNotContain("continue-on-error", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("|| true", workflow, StringComparison.Ordinal);
+    }
+
+    private static string ReadTrtRtxSmokeWorkflow()
+    {
+        string workflowPath = ResolveRepositoryFile(
+            Path.Combine(".github", "workflows", "trt-rtx-smoke.yml"));
+        return File.ReadAllText(workflowPath);
+    }
+
+    private static string ResolveRepositoryFile(string relativePath)
+    {
+        DirectoryInfo? current = new(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            string candidate = Path.Combine(current.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new FileNotFoundException(
+            $"Could not locate '{relativePath}' walking up from '{AppContext.BaseDirectory}'.");
+    }
+
+    [Fact]
     public void TrtRtxSmokeCatalog_remaining_includes_untested_onnx_gpu_models()
     {
         Assert.Contains(
