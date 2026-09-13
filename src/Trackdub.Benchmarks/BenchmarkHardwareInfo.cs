@@ -109,6 +109,17 @@ internal static class BenchmarkHardwareInfo
     /// </summary>
     private static string GetWmiProperty(string className, string propertyName)
     {
+        // wmic is deprecated and absent on modern Windows images (for example
+        // windows-latest CI runners). Skip the spawn entirely when it cannot be
+        // resolved so we never leave an orphaned child process or an undrained
+        // redirected-pipe reader thread alive: such a lingering foreground thread
+        // keeps the test host from exiting cleanly and corrupts the xunit.v3
+        // stdout IPC handshake that dotnet test uses to enumerate assemblies.
+        if (!TryResolveExecutable("wmic"))
+        {
+            return "Unknown";
+        }
+
         try
         {
             var psi = new ProcessStartInfo
@@ -125,6 +136,14 @@ internal static class BenchmarkHardwareInfo
             if (process is null)
                 return "Unknown";
 
+            // Drain both redirected pipes on background reader tasks BEFORE waiting.
+            // Reading stdout to completion before WaitForExit (the previous ordering)
+            // can deadlock when the child fills the stderr pipe buffer, and leaves the
+            // stderr reader undrained. Draining both first guarantees the process ends
+            // and its reader threads complete, so nothing keeps the host alive.
+            Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+
             if (!process.WaitForExit(5000))
             {
                 try { process.Kill(entireProcessTree: true); }
@@ -139,7 +158,15 @@ internal static class BenchmarkHardwareInfo
                 return "Unknown";
             }
 
-            string output = process.StandardOutput.ReadToEnd();
+            // Ensure the async pipe readers have fully completed (and their threads
+            // released) before the process handle is disposed by the using block.
+            Task.WaitAll([outputTask, errorTask], 5000);
+            if (!outputTask.IsCompletedSuccessfully)
+            {
+                return "Unknown";
+            }
+
+            string output = outputTask.Result;
 
             // Skip header line; return first non-empty result.
             return output.Split('\n')
@@ -151,6 +178,57 @@ internal static class BenchmarkHardwareInfo
         {
             // WMI property query failed - return Unknown to allow benchmark to continue
             return "Unknown";
+        }
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="executableName"/> can be located on PATH
+    /// (or in the Windows System32 directory). Used to avoid spawning tools such as
+    /// <c>wmic</c> that have been removed from modern Windows images.
+    /// </summary>
+    private static bool TryResolveExecutable(string executableName)
+    {
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                string systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                string wbemCandidate = Path.Combine(systemDirectory, "wbem", executableName + ".exe");
+                string systemCandidate = Path.Combine(systemDirectory, executableName + ".exe");
+                if (File.Exists(wbemCandidate) || File.Exists(systemCandidate))
+                {
+                    return true;
+                }
+            }
+
+            string? pathVariable = Environment.GetEnvironmentVariable("PATH");
+            if (string.IsNullOrEmpty(pathVariable))
+            {
+                return false;
+            }
+
+            string[] extensions = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? [".exe", ".cmd", ".bat", string.Empty]
+                : [string.Empty];
+
+            foreach (string directory in pathVariable.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                foreach (string extension in extensions)
+                {
+                    if (File.Exists(Path.Combine(directory, executableName + extension)))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+        catch (Exception)
+        {
+            // If we cannot probe PATH, assume the executable is unavailable rather
+            // than risk spawning a process that cannot be cleaned up deterministically.
+            return false;
         }
     }
 }
