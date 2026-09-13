@@ -176,8 +176,7 @@ public sealed class BenchmarkOptionsTests
 
     private static string ReadTrtRtxSmokeWorkflow()
     {
-        string workflowPath = ResolveRepositoryFile(
-            Path.Combine(".github", "workflows", "trt-rtx-smoke.yml"));
+        string workflowPath = ResolveRepositoryFile(".github/workflows/trt-rtx-smoke.yml");
         return File.ReadAllText(workflowPath);
     }
 
