@@ -201,7 +201,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 stageOutcomes,
                 executionSnapshot,
                 progress,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                initialProjectState).ConfigureAwait(false);
             if (preFlightResult is not null)
             {
                 return preFlightResult;
@@ -211,7 +212,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             RuntimeModelSelections runtimeSelections = await CreateRuntimeSelectionsAsync(
                 session,
                 options,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                initialProjectState).ConfigureAwait(false);
 
             MergeRuntimeModelSelectionsIntoSnapshot(
                 executionSnapshot,
@@ -325,7 +327,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         List<StageOutcome> stageOutcomes,
         Dictionary<string, string> executionSnapshot,
         IProgress<PipelineProgressEvent>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TranscriptProjectState? state = null)
     {
         if (session.Workspace.Project is null)
         {
@@ -335,7 +338,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         RuntimeModelSelections preFlightSelections = await CreateRuntimeSelectionsAsync(
             session,
             options,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            state).ConfigureAwait(false);
         MergeRuntimeModelSelectionsIntoSnapshot(
             executionSnapshot,
             preFlightSelections,
@@ -359,7 +363,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 readinessService,
                 coordinator,
                 progress,
-                cancellationToken)
+                cancellationToken,
+                state)
                 .ConfigureAwait(false);
         }
 
@@ -438,7 +443,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         IPipelineReadinessService readinessService,
         RuntimeModelSetupCoordinator coordinator,
         IProgress<PipelineProgressEvent>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TranscriptProjectState? state = null)
     {
         // Map to RuntimeStage, skipping stages with valid existing artifacts (resumable).
         var enabledStages = new List<RuntimeStage>();
@@ -500,7 +506,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             }
 
             // Re-evaluate after provisioning with refreshed selections in case settings changed.
-            selections = await CreateRuntimeSelectionsAsync(session, options, cancellationToken)
+            selections = await CreateRuntimeSelectionsAsync(session, options, cancellationToken, state)
                 .ConfigureAwait(false);
             MergeRuntimeModelSelectionsIntoSnapshot(
                 executionSnapshot,
@@ -825,17 +831,70 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 return new StageWorkflowResult([], enhancementDegradations);
 
             case StageNames.Vad:
-            case StageNames.Asr:
-            case StageNames.Diarization:
                 {
                     string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
                     await workspace.RunTranscriptStageAsync(
                         stageName,
-                        enableSpeakerDiarization: options.EnableSpeakerDiarization &&
-                            string.Equals(
-                                stageName,
-                                StageNames.Diarization,
-                                StringComparison.OrdinalIgnoreCase),
+                        enableSpeakerDiarization: false,
+                        modelPreferences,
+                        cancellationToken,
+                        progress,
+                        sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
+                    return new StageWorkflowResult([], null);
+                }
+
+            case StageNames.Asr:
+                {
+                    TranscriptProjectState asrOpen = await workspace.Project
+                        .OpenAsync(cancellationToken).ConfigureAwait(false);
+                    if (asrOpen.CurrentTranscriptRevision is not null &&
+                        asrOpen.TranscriptSegments.Count > 0)
+                    {
+                        // Interactive re-run: re-transcribe the existing segments in place
+                        // instead of regenerating a fresh revision from VAD regions.
+                        IReadOnlyList<Guid> segmentIds = asrOpen.TranscriptSegments
+                            .Select(static segment => segment.Id)
+                            .ToArray();
+                        TranscriptProjectState retranscribed = await workspace.RetranscribeSegmentsAsync(
+                            RuntimeModelSetupCoordinator.CreateRetranscribeRequest(
+                                runtimeSelections,
+                                asrOpen.CurrentTranscriptRevision.Id,
+                                segmentIds),
+                            cancellationToken).ConfigureAwait(false);
+                        return BuildStageWorkflowResultFromStageRun(retranscribed, StageNames.Asr);
+                    }
+
+                    string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
+                    await workspace.RunTranscriptStageAsync(
+                        stageName,
+                        enableSpeakerDiarization: false,
+                        modelPreferences,
+                        cancellationToken,
+                        progress,
+                        sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
+                    return new StageWorkflowResult([], null);
+                }
+
+            case StageNames.Diarization:
+                {
+                    TranscriptProjectState diarizationOpen = await workspace.Project
+                        .OpenAsync(cancellationToken).ConfigureAwait(false);
+                    if (diarizationOpen.CurrentTranscriptRevision is not null &&
+                        diarizationOpen.TranscriptSegments.Count > 0)
+                    {
+                        // Interactive re-run: re-diarize and re-assign speaker ids on the
+                        // existing transcript segments, matching the desktop host's
+                        // "Identify speakers" semantics.
+                        TranscriptProjectState rediarized = await workspace.RerunDiarizationAsync(
+                            RuntimeModelSetupCoordinator.CreateRerunDiarizationRequest(runtimeSelections),
+                            cancellationToken).ConfigureAwait(false);
+                        return BuildStageWorkflowResultFromStageRun(rediarized, StageNames.Diarization);
+                    }
+
+                    string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
+                    await workspace.RunTranscriptStageAsync(
+                        stageName,
+                        enableSpeakerDiarization: options.EnableSpeakerDiarization,
                         modelPreferences,
                         cancellationToken,
                         progress,
@@ -1372,8 +1431,20 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
     private static async Task<RuntimeModelSelections> CreateRuntimeSelectionsAsync(
         IDubbingSession session,
         DubbingSessionOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TranscriptProjectState? state = null)
     {
+        if (TryResolveService<IPipelineRuntimeSelectionsProvider>(session) is { } selectionsProvider)
+        {
+            RuntimeModelSelections? provided = await selectionsProvider
+                .CreateSelectionsAsync(state, options, cancellationToken)
+                .ConfigureAwait(false);
+            if (provided is not null)
+            {
+                return provided;
+            }
+        }
+
         StudioSettings settings = StudioSettings.Default;
         IServiceProvider? serviceProvider = session.Services;
         if (serviceProvider?.GetService<IStudioSettingsService>() is IStudioSettingsService settingsService)
@@ -1405,8 +1476,10 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             AsrModelAlias: modelPreferences.GetValueOrDefault(StageNames.Asr),
             DiarizationModelAlias: modelPreferences.GetValueOrDefault(StageNames.Diarization),
             SeparationModelAlias: modelPreferences.GetValueOrDefault(StageNames.Separation),
+            OverlapRescueModelAlias: modelPreferences.GetValueOrDefault(StageNames.OverlapRescue),
             TranslationModelAlias: modelPreferences.GetValueOrDefault(StageNames.Translation),
             TtsModelAlias: modelPreferences.GetValueOrDefault(StageNames.Tts),
+            TextRefinementModelAlias: modelPreferences.GetValueOrDefault(StageNames.TextRefinementAsr),
             LipSyncModelAlias: modelPreferences.GetValueOrDefault(StageNames.LipSync),
             LipSynthesisModelAlias: modelPreferences.GetValueOrDefault(StageNames.LipSynthesis),
             EnableAsrTextRefinement: options.EnableAsrTextRefinement);
