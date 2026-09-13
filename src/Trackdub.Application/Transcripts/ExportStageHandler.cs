@@ -897,7 +897,22 @@ public sealed class ExportStageHandler(
             achievedLufs,
             outputs,
             warnings,
-            RenderedSegmentIndices: currentState.TranscriptSegments.Select(static segment => segment.SegmentIndex).ToArray()));
+            RenderedSegmentIndices: currentState.TranscriptSegments.Select(static segment => segment.SegmentIndex).ToArray(),
+            Gating: BuildExportGating(request)));
+
+    // Persist the export-gating flag values for this run so StageArtifactResumeEvaluator can
+    // compare them against a later run's snapshot. Produced by the same ExportResumeGating helper
+    // the execution snapshot uses, so capture and comparison cannot diverge.
+    private static ExportManifestGating BuildExportGating(ExportStageRequest request) =>
+        new(ExportResumeGating.Build(
+            request.Container,
+            request.ApplyTimbrePolish,
+            request.RestoreOriginalPan,
+            request.MatchOriginalLoudness,
+            request.BurnInSubtitles,
+            request.SubtitleSource,
+            ExportResumeGating.SubtitleFormatsTokenFromResolvedFormats(request.SubtitleFormats),
+            request.VideoEncoder));
 
     private static StageRunRecord[] GetContributingStageRuns(TranscriptProjectState currentState, MixPlan? mixPlan)
     {

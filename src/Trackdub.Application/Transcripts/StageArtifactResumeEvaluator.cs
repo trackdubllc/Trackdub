@@ -176,6 +176,103 @@ public static class StageArtifactResumeEvaluator
             exportRelativePath);
     }
 
+    /// <summary>
+    /// Resume gate that also honors the export-gating flag comparison for the Export stage.
+    /// For non-Export stages this is equivalent to <see cref="CanResumeStage"/>. For the Export
+    /// stage it additionally loads the prior successful run's persisted ExportManifest and
+    /// refuses to resume when any export-gating flag (ExportFormat, ApplyTimbrePolish,
+    /// RestoreOriginalPan, MatchOriginalLoudness, BurnInSubtitles, SubtitleSource,
+    /// SubtitleFormats, VideoEncoder) differs from the current snapshot.
+    /// </summary>
+    public static async Task<bool> CanResumeStageAsync(
+        TranscriptProjectState state,
+        IArtifactStore artifactStore,
+        string stageName,
+        IReadOnlyDictionary<string, string> snapshot,
+        string projectRootPath,
+        string? targetLanguageCode = null,
+        string? exportRelativePath = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanResumeStage(
+                state,
+                artifactStore,
+                stageName,
+                snapshot,
+                projectRootPath,
+                targetLanguageCode,
+                exportRelativePath))
+        {
+            return false;
+        }
+
+        if (!string.Equals(stageName, StageNames.Export, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return await ExportGatingMatchesSnapshotAsync(
+            state,
+            artifactStore,
+            snapshot,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> ExportGatingMatchesSnapshotAsync(
+        TranscriptProjectState state,
+        IArtifactStore artifactStore,
+        IReadOnlyDictionary<string, string> snapshot,
+        CancellationToken cancellationToken)
+    {
+        StageRunRecord? latestExportRun = GetLatestSuccessfulRun(state.StageRuns, StageNames.Export);
+        if (latestExportRun is null)
+        {
+            return false;
+        }
+
+        ExportManifest? manifest;
+        try
+        {
+            manifest = await artifactStore
+                .ReadJsonAsync<ExportManifest>(
+                    ProjectArtifactPaths.GetExportManifestRelativePath(latestExportRun.Id),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            // A manifest that cannot be read tells us nothing about the prior run's flags.
+            // Preserve existing behavior (resume) rather than force a spurious rerun.
+            return true;
+        }
+
+        IReadOnlyDictionary<string, string>? persistedFlags = manifest?.Gating?.Flags;
+        if (persistedFlags is null || persistedFlags.Count == 0)
+        {
+            // Older projects have no persisted gating flags. There is nothing to compare against,
+            // so preserve the pre-existing resume behavior rather than force a spurious rerun.
+            return true;
+        }
+
+        foreach (string key in ExportResumeGating.GatingKeys)
+        {
+            if (!persistedFlags.TryGetValue(key, out string? persistedValue))
+            {
+                // Flag absent from the persisted set: the prior run did not record it, so we
+                // cannot prove a change. Skip it rather than force a rerun.
+                continue;
+            }
+
+            snapshot.TryGetValue(key, out string? currentValue);
+            if (!string.Equals(persistedValue, currentValue ?? string.Empty, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static bool TryResolveProjectScopedPath(
         string projectRootPath,
         string? relativePath,

@@ -1460,29 +1460,25 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             ["ForceRerun"] = options.ForceRerun.ToString(),
             ["EnableAsrTextRefinement"] = options.EnableAsrTextRefinement.ToString(),
             ["UseVoiceCloning"] = options.UseVoiceCloning.ToString(),
-            ["ExportFormat"] = ExportContainerKey(ResolveExportContainer(options.ExportFormat)),
         };
 
-        // Audio/subtitle/encoder flags gate the Export stage's artifact resume: any change
-        // here must invalidate a cached export so it reruns without requiring --force-rerun.
-        snapshot["ApplyTimbrePolish"] = options.ApplyTimbrePolish.ToString();
-        snapshot["RestoreOriginalPan"] = options.RestoreOriginalPan.ToString();
-        snapshot["MatchOriginalLoudness"] = options.MatchOriginalLoudness.ToString();
-        snapshot["BurnInSubtitles"] = options.BurnInSubtitles.ToString();
-
-        // Normalize the subtitle source so equivalent inputs (null and "translated") map to the
-        // same value and do not spuriously invalidate the cached export.
-        snapshot["SubtitleSource"] = ResolveSubtitleSource(options.SubtitleSource).ToString();
-
-        // Map SubtitleFormats directly (not via the transcript-dependent default in
-        // ResolveSubtitleFormats). null => "default" (pipeline default SRT); an empty list
-        // suppresses all subtitles and yields an empty token distinct from "default"; other
-        // lists are normalized case-insensitively so ["srt"] and ["SRT"] match.
-        snapshot["SubtitleFormats"] = options.SubtitleFormats is null
-            ? "default"
-            : string.Join(",", NormalizeSubtitleFormatTokens(options.SubtitleFormats));
-
-        snapshot["VideoEncoder"] = VideoEncoderPreferenceSettings.ToKey(options.VideoEncoder);
+        // Audio/subtitle/encoder flags (and the pre-existing ExportFormat) gate the Export
+        // stage's artifact resume: any change here must invalidate a cached export so it reruns
+        // without requiring --force-rerun. These values are produced by ExportResumeGating so
+        // capture (here) and comparison (the persisted ExportManifest, read back by
+        // StageArtifactResumeEvaluator) share one normalization and cannot drift.
+        foreach ((string key, string value) in ExportResumeGating.Build(
+            ResolveExportContainer(options.ExportFormat),
+            options.ApplyTimbrePolish,
+            options.RestoreOriginalPan,
+            options.MatchOriginalLoudness,
+            options.BurnInSubtitles,
+            ResolveSubtitleSource(options.SubtitleSource),
+            ExportResumeGating.SubtitleFormatsTokenFromRawOptions(options.SubtitleFormats),
+            options.VideoEncoder))
+        {
+            snapshot[key] = value;
+        }
 
         if (options.SourceLanguageCode is not null)
         {
@@ -1518,9 +1514,6 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         return Path.Combine(projectRootPath, "exports", "dubbed" + extension);
     }
 
-    private static string ExportContainerKey(ExportOutputContainer container) =>
-        container == ExportOutputContainer.Mkv ? "mkv" : "mp4";
-
     private static IReadOnlyList<ExportSubtitleFormat> ResolveSubtitleFormats(
         IReadOnlyList<string>? formats, bool hasTranscriptSegments)
     {
@@ -1532,24 +1525,6 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             if (f.Equals("srt", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Srt);
             else if (f.Equals("vtt", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Vtt);
             else if (f.Equals("ass", StringComparison.OrdinalIgnoreCase)) result.Add(ExportSubtitleFormat.Ass);
-        }
-        return result;
-    }
-
-    private static IReadOnlyList<string> NormalizeSubtitleFormatTokens(IReadOnlyList<string> formats)
-    {
-        // Reuse the same srt/vtt/ass case-insensitive mapping as ResolveSubtitleFormats so that
-        // ["srt"] and ["SRT"] normalize to the same ExportSubtitleFormat name. An empty input
-        // yields an empty result, which produces an empty snapshot token distinct from "default".
-        var result = new List<string>(formats.Count);
-        foreach (string f in formats)
-        {
-            if (f.Equals("srt", StringComparison.OrdinalIgnoreCase))
-                result.Add(ExportSubtitleFormat.Srt.ToString());
-            else if (f.Equals("vtt", StringComparison.OrdinalIgnoreCase))
-                result.Add(ExportSubtitleFormat.Vtt.ToString());
-            else if (f.Equals("ass", StringComparison.OrdinalIgnoreCase))
-                result.Add(ExportSubtitleFormat.Ass.ToString());
         }
         return result;
     }
@@ -1628,14 +1603,15 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 ResolveExportContainer(options.ExportFormat)))
             : null;
 
-        return StageArtifactResumeEvaluator.CanResumeStage(
+        return await StageArtifactResumeEvaluator.CanResumeStageAsync(
             state,
             artifactStore,
             stageName,
             currentSnapshot,
             session.ProjectRootPath,
             options.TargetLanguageCode,
-            exportRelativePath);
+            exportRelativePath,
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
