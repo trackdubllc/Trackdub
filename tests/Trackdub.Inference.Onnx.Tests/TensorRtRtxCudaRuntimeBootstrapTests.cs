@@ -60,4 +60,16 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
         string detail = TensorRtRtxCudaRuntimeBootstrap.DescribeInstalledCudaMajorVersions();
         Assert.False(string.IsNullOrWhiteSpace(detail));
     }
+
+    [Fact]
+    public void DiscoverSearchDirectories_SurvivesInaccessiblePythonRootChildren()
+    {
+        // Smoke: discovery must not throw even when AppData Python trees contain
+        // unreadable children; EnumerateChildDirectoriesSafe swallows IO failures.
+        IReadOnlyList<string> directories = TensorRtRtxCudaRuntimeBootstrap
+            .DiscoverSearchDirectories()
+            .ToArray();
+
+        Assert.NotNull(directories);
+    }
 }

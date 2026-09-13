@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Text;
 using Trackdub.Inference.Runtime.TensorRtRtx;
 
@@ -97,7 +98,7 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
             string cudaRoot = Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA");
             if (Directory.Exists(cudaRoot))
             {
-                foreach (string versionDirectory in Directory.EnumerateDirectories(cudaRoot))
+                foreach (string versionDirectory in EnumerateChildDirectoriesSafe(cudaRoot))
                 {
                     if (TryParseCudaMajor(Path.GetFileName(versionDirectory), out int major))
                     {
@@ -180,7 +181,7 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
             if (Directory.Exists(cudaRoot))
             {
                 // Prefer CUDA 12 installs so a machine with both 12 and 13 loads cu12 first.
-                foreach (string versionDirectory in Directory.EnumerateDirectories(cudaRoot)
+                foreach (string versionDirectory in EnumerateChildDirectoriesSafe(cudaRoot)
                              .OrderBy(static path => PreferCuda12First(path)))
                 {
                     yield return Path.Join(versionDirectory, "bin");
@@ -200,7 +201,7 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
                     continue;
                 }
 
-                foreach (string pythonVersionDir in Directory.EnumerateDirectories(pythonRoot))
+                foreach (string pythonVersionDir in EnumerateChildDirectoriesSafe(pythonRoot))
                 {
                     // System/venv layout: Python\Python3X\Lib\site-packages
                     yield return Path.Join(pythonVersionDir, "Lib", "site-packages", "nvidia", "cuda_runtime", "bin");
@@ -227,6 +228,47 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
         return 100;
     }
 
+    /// <summary>
+    /// Enumerates immediate child directories under a fixed local root.
+    /// Swallows access / IO failures so CUDA discovery cannot crash bootstrap
+    /// on locked folders, broken junctions, or unreadable install trees.
+    /// </summary>
+    private static IEnumerable<string> EnumerateChildDirectoriesSafe(string root)
+    {
+        IEnumerator<string>? enumerator = null;
+        try
+        {
+            enumerator = Directory.EnumerateDirectories(root).GetEnumerator();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        {
+            yield break;
+        }
+
+        using (enumerator)
+        {
+            while (true)
+            {
+                bool moved;
+                try
+                {
+                    moved = enumerator.MoveNext();
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    yield break;
+                }
+
+                if (!moved)
+                {
+                    yield break;
+                }
+
+                yield return enumerator.Current;
+            }
+        }
+    }
+
     private static bool TryAddDirectory(HashSet<string> seen, string? directory, out string? normalized)
     {
         normalized = null;
@@ -239,12 +281,25 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
         {
             normalized = Path.GetFullPath(Environment.ExpandEnvironmentVariables(directory));
         }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        catch (Exception ex) when (
+            ex is ArgumentException
+                or NotSupportedException
+                or PathTooLongException
+                or IOException
+                or UnauthorizedAccessException
+                or SecurityException)
         {
             return false;
         }
 
-        return seen.Add(normalized) && Directory.Exists(normalized);
+        try
+        {
+            return seen.Add(normalized) && Directory.Exists(normalized);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static void PrependProcessPath(string directory)
