@@ -160,7 +160,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
 
         await using (session.ConfigureAwait(false))
         {
-            if (options.UseVoiceCloning)
+            if (RequestsVoiceCloning(options))
             {
                 TryResolveService<IConsentService>(session)?.GrantVoiceCloningConsent();
             }
@@ -599,6 +599,10 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         return null;
     }
 
+    private static bool RequestsVoiceCloning(DubbingSessionOptions options) =>
+        options.UseVoiceCloning ||
+        (options.VoiceCloneBySpeakerId?.Values.Any(static clone => clone) ?? false);
+
     private static bool IsProjectMissingException(Exception ex)
     {
         // ProjectMediaIngestService.OpenAsync throws this exact InvalidOperationException
@@ -923,7 +927,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                     return BuildNoTranscriptSegmentsSkip(stageName);
                 }
 
-                if (options.UseVoiceCloning)
+                if (RequestsVoiceCloning(options))
                 {
                     TryResolveService<IConsentService>(session)?.GrantVoiceCloningConsent();
                     ReportProgress(
@@ -967,7 +971,9 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 TranscriptProjectState state = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
                 bool hasTranscriptSegments = state.TranscriptSegments.Count > 0;
                 ExportOutputContainer container = ResolveExportContainer(options.ExportFormat);
-                string outputPath = ResolveExportOutputPath(session.ProjectRootPath, container);
+                string outputPath = !string.IsNullOrWhiteSpace(options.ExportOutputPath)
+                    ? options.ExportOutputPath
+                    : ResolveExportOutputPath(session.ProjectRootPath, container);
                 if (!hasTranscriptSegments)
                 {
                     ReportProgress(
@@ -985,7 +991,11 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                         SubtitleFormats: ResolveSubtitleFormats(options.SubtitleFormats, hasTranscriptSegments),
                         SubtitleSource: ResolveSubtitleSource(options.SubtitleSource),
                         BurnInSubtitles: options.BurnInSubtitles,
+                        TargetLufs: options.ExportTargetLufs ?? ExportLoudnessTargets.OnlineLufs,
                         Container: container,
+                        SourceGainDb: options.ExportSourceGainDb ?? 0d,
+                        DubbedSpeechGainDb: options.ExportDubbedSpeechGainDb ?? 0d,
+                        DuckingGainDb: options.ExportDuckingGainDb,
                         ApplyTimbrePolish: options.ApplyTimbrePolish,
                         RestoreOriginalPan: options.RestoreOriginalPan,
                         MatchOriginalLoudness: options.MatchOriginalLoudness,
@@ -1179,7 +1189,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
     internal static DubbingSessionOptions ApplyVoiceCloningDefaults(DubbingSessionOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        if (!options.UseVoiceCloning)
+        if (!RequestsVoiceCloning(options))
         {
             return options;
         }
@@ -1233,7 +1243,11 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         }
 
         Dictionary<Guid, bool>? cloneBySpeaker = null;
-        if (options.UseVoiceCloning && state.Speakers.Count > 0)
+        if (options.VoiceCloneBySpeakerId is not null)
+        {
+            cloneBySpeaker = new Dictionary<Guid, bool>(options.VoiceCloneBySpeakerId);
+        }
+        else if (options.UseVoiceCloning && state.Speakers.Count > 0)
         {
             cloneBySpeaker = state.Speakers.ToDictionary(
                 static speaker => speaker.Id,
@@ -1241,7 +1255,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         }
 
         string? preferredModelAlias = ttsModelAlias;
-        if (options.UseVoiceCloning && string.IsNullOrWhiteSpace(preferredModelAlias))
+        if (RequestsVoiceCloning(options) && string.IsNullOrWhiteSpace(preferredModelAlias))
         {
             preferredModelAlias = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
         }
@@ -1553,6 +1567,14 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             foreach ((string stage, string model) in options.ModelPreferences)
             {
                 snapshot[$"Model:{stage}"] = model;
+            }
+        }
+
+        if (options.VoiceCloneBySpeakerId is not null)
+        {
+            foreach ((Guid speaker, bool clone) in options.VoiceCloneBySpeakerId)
+            {
+                snapshot[$"VoiceClone:{speaker:D}"] = clone.ToString();
             }
         }
 
