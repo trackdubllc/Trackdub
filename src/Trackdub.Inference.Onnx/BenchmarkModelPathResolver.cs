@@ -288,7 +288,17 @@ public sealed class BenchmarkModelPathResolver(
         if (!string.IsNullOrWhiteSpace(_modelCacheDirectory))
         {
             string cachedRootDirectory = ResolveModelCacheRootDirectory(_modelCacheDirectory, entry.ModelId);
-            if (Directory.Exists(cachedRootDirectory))
+            if (Directory.Exists(cachedRootDirectory)
+                && (TryMapManifestPathToCache(
+                        cachedRootDirectory,
+                        entry.RootDirectory,
+                        entry.DefaultBenchmarkEntryPath,
+                        out _)
+                    || entry.Variants.Any(variant => TryMapManifestPathToCache(
+                        cachedRootDirectory,
+                        entry.RootDirectory,
+                        variant.EntryPath,
+                        out _))))
             {
                 return cachedRootDirectory;
             }
