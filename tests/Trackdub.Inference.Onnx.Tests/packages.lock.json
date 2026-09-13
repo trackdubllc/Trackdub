@@ -199,7 +199,7 @@
       "trackdub.inference": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Extensions.Logging.Abstractions": "[10.0.11, )",
+          "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )"
         }
@@ -210,7 +210,7 @@
           "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.ML.OnnxRuntime": "[1.29.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI": "[0.15.2, )",
-          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26454.1, )",
+          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26461.1, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )"
@@ -230,11 +230,11 @@
       },
       "Microsoft.Extensions.Logging.Abstractions": {
         "type": "CentralTransitive",
-        "requested": "[10.0.11, )",
-        "resolved": "10.0.11",
-        "contentHash": "Ljd0Uxoq5XpScD2Bg0nM/r3mwx7Ao5Uq24eo2ARxbGvqJ7Zht6rt2cJtwVRH4Cv+1ZVMdXz6TB43KbpmsxRrvQ==",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "+24lC4plfbEDNfLAdTV/SWKS7dW+16X4HdydO3R++134kSNTzcbYA4KpR1Hdh6uWisB8Za3AzwyOn+K+NxWIug==",
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.11"
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12"
         }
       },
       "Microsoft.ML.OnnxRuntime": {
@@ -267,9 +267,9 @@
       },
       "Microsoft.ML.Tokenizers": {
         "type": "CentralTransitive",
-        "requested": "[3.0.0-preview.26454.1, )",
-        "resolved": "3.0.0-preview.26454.1",
-        "contentHash": "myZyytDd5N9HHPNaU3j8UC+OtM8/S/O7wwI9FefThO+jXMuBCPAp3/kKt2SQymj4nVn92nqzqLKJJmShEJqj2A=="
+        "requested": "[3.0.0-preview.26461.1, )",
+        "resolved": "3.0.0-preview.26461.1",
+        "contentHash": "Y5Rk4XS42Cxn5qokZp3/+Q0FQ26+v7ZZvFYfphlXVDZzxIly2gkOXWYvQSz/DHWaxjCmE8RxSRi/Thvs0pWCcw=="
       }
     },
     "net10.0-windows10.0.19041": {
@@ -522,7 +522,7 @@
       "trackdub.inference": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Extensions.Logging.Abstractions": "[10.0.11, )",
+          "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )"
         }
@@ -533,7 +533,7 @@
           "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.29.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI": "[0.15.2, )",
-          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26454.1, )",
+          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26461.1, )",
           "Microsoft.WindowsAppSDK.ML": "[1.8.2109, )",
           "Microsoft.WindowsAppSDK.Runtime": "[1.8.251106002, )",
           "Trackdub.Contracts": "[1.0.0, )",
@@ -555,11 +555,11 @@
       },
       "Microsoft.Extensions.Logging.Abstractions": {
         "type": "CentralTransitive",
-        "requested": "[10.0.11, )",
-        "resolved": "10.0.11",
-        "contentHash": "Ljd0Uxoq5XpScD2Bg0nM/r3mwx7Ao5Uq24eo2ARxbGvqJ7Zht6rt2cJtwVRH4Cv+1ZVMdXz6TB43KbpmsxRrvQ==",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "+24lC4plfbEDNfLAdTV/SWKS7dW+16X4HdydO3R++134kSNTzcbYA4KpR1Hdh6uWisB8Za3AzwyOn+K+NxWIug==",
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.11"
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12"
         }
       },
       "Microsoft.ML.OnnxRuntime": {
@@ -603,9 +603,9 @@
       },
       "Microsoft.ML.Tokenizers": {
         "type": "CentralTransitive",
-        "requested": "[3.0.0-preview.26454.1, )",
-        "resolved": "3.0.0-preview.26454.1",
-        "contentHash": "myZyytDd5N9HHPNaU3j8UC+OtM8/S/O7wwI9FefThO+jXMuBCPAp3/kKt2SQymj4nVn92nqzqLKJJmShEJqj2A=="
+        "requested": "[3.0.0-preview.26461.1, )",
+        "resolved": "3.0.0-preview.26461.1",
+        "contentHash": "Y5Rk4XS42Cxn5qokZp3/+Q0FQ26+v7ZZvFYfphlXVDZzxIly2gkOXWYvQSz/DHWaxjCmE8RxSRi/Thvs0pWCcw=="
       },
       "Microsoft.WindowsAppSDK.ML": {
         "type": "CentralTransitive",
