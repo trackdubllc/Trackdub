@@ -914,7 +914,11 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                         ApplyTimbrePolish: options.ApplyTimbrePolish,
                         RestoreOriginalPan: options.RestoreOriginalPan,
                         MatchOriginalLoudness: options.MatchOriginalLoudness,
-                        VideoEncoder: options.VideoEncoder),
+                        VideoEncoder: options.VideoEncoder,
+                        // Carry the raw requested formats (including the null/empty distinction)
+                        // so the export-resume gate persists and compares the same token the
+                        // snapshot records, instead of the transcript-state-resolved formats.
+                        RawSubtitleFormats: options.SubtitleFormats),
                     cancellationToken).ConfigureAwait(false);
                 if (exportResult.IsBlocked)
                 {

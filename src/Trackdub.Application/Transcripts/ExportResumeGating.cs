@@ -41,9 +41,10 @@ internal static class ExportResumeGating
     /// <summary>
     /// Builds the canonical export-gating key/value pairs from the already-resolved export
     /// primitives. The <paramref name="subtitleFormatsToken"/> is produced by
-    /// <see cref="SubtitleFormatsTokenFromRawOptions"/> (snapshot side, options may be null) or
-    /// <see cref="SubtitleFormatsTokenFromResolvedFormats"/> (manifest side, resolved formats)
-    /// so both paths share the same case-insensitive normalization.
+    /// <see cref="SubtitleFormatsTokenFromRawOptions"/> on both the snapshot side (the run-start
+    /// options) and the manifest side (the export request's raw requested formats), so both paths
+    /// share the same normalization and agree for the default (null) case as well as for
+    /// equivalent explicit requests.
     /// </summary>
     public static IReadOnlyDictionary<string, string> Build(
         ExportOutputContainer container,
@@ -67,27 +68,18 @@ internal static class ExportResumeGating
         };
 
     /// <summary>
-    /// Snapshot-side subtitle-formats token. Maps null (pipeline default SRT) to "default";
-    /// an empty list (all subtitles suppressed) to an empty token distinct from "default";
-    /// and other lists to their case-insensitively normalized ExportSubtitleFormat names.
-    /// Order and duplicates are preserved to mirror what the export actually emits.
+    /// Subtitle-formats token from the caller's RAW requested formats, used by BOTH the run-start
+    /// execution snapshot and the per-run ExportManifest so the two sides always agree. Maps null
+    /// (pipeline default SRT) to "default"; an empty list (all subtitles suppressed) to an empty
+    /// token distinct from "default"; and other lists to their case-insensitively normalized
+    /// ExportSubtitleFormat names. Order and duplicates are preserved to mirror what the export
+    /// actually emits. Comparing raw-to-raw avoids the transcript-state dependency that resolving
+    /// formats would introduce, and keeps the null / empty / explicit cases genuinely distinct.
     /// </summary>
     public static string SubtitleFormatsTokenFromRawOptions(IReadOnlyList<string>? formats) =>
         formats is null
             ? "default"
             : string.Join(",", NormalizeRawFormatTokens(formats));
-
-    /// <summary>
-    /// Manifest-side subtitle-formats token, built from the resolved ExportStageRequest formats.
-    /// Uses the same ExportSubtitleFormat names as the snapshot side so that, for a run whose
-    /// formats were explicitly requested (e.g. ["srt"]), the persisted token equals the
-    /// snapshot token for an equivalent current request (e.g. ["SRT"]).
-    /// </summary>
-    public static string SubtitleFormatsTokenFromResolvedFormats(IReadOnlyList<ExportSubtitleFormat> formats)
-    {
-        ArgumentNullException.ThrowIfNull(formats);
-        return string.Join(",", formats.Select(static format => format.ToString()));
-    }
 
     private static IReadOnlyList<string> NormalizeRawFormatTokens(IReadOnlyList<string> formats)
     {

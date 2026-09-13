@@ -911,7 +911,10 @@ public sealed class ExportStageHandler(
             request.MatchOriginalLoudness,
             request.BurnInSubtitles,
             request.SubtitleSource,
-            ExportResumeGating.SubtitleFormatsTokenFromResolvedFormats(request.SubtitleFormats),
+            // Persist the RAW requested formats so the token matches the snapshot side exactly:
+            // null (pipeline default) -> "default" on both sides, avoiding the spurious rerun that
+            // resolving to [Srt] would cause for every default-subtitle export.
+            ExportResumeGating.SubtitleFormatsTokenFromRawOptions(request.RawSubtitleFormats),
             request.VideoEncoder));
 
     private static StageRunRecord[] GetContributingStageRuns(TranscriptProjectState currentState, MixPlan? mixPlan)

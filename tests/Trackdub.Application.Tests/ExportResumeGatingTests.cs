@@ -73,11 +73,11 @@ public sealed class ExportResumeGatingTests
     public async Task CanResumeStageAsync_returns_true_for_equivalent_subtitle_source_and_formats()
     {
         using var temp = new TempDir();
-        // Prior run recorded the resolved translated source and the resolved [Srt] format.
+        // Prior run recorded the raw translated source and the raw ["srt"] format.
         ExportResumeFixture fixture = await ExportResumeFixture.CreateAsync(temp.Path, BaselineGating());
 
         // Current snapshot built from the raw options: SubtitleSource null (== "translated")
-        // and SubtitleFormats ["SRT"] (case-insensitively == the resolved "Srt" token).
+        // and SubtitleFormats ["SRT"] (case-insensitively == the baseline "Srt" token).
         Dictionary<string, string> snapshot = new(ExportResumeGating.Build(
             ExportOutputContainer.Mp4,
             applyTimbrePolish: true,
@@ -98,6 +98,77 @@ public sealed class ExportResumeGatingTests
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(canResume);
+    }
+
+    [Fact]
+    public async Task CanResumeStageAsync_returns_true_for_default_subtitle_formats()
+    {
+        using var temp = new TempDir();
+        // Prior default run: raw options.SubtitleFormats == null, persisted as the "default" token.
+        ExportResumeFixture fixture = await ExportResumeFixture.CreateAsync(temp.Path, DefaultSubtitleGating());
+
+        // Current run with the same default (null) options. Both sides use
+        // SubtitleFormatsTokenFromRawOptions, so null -> "default" on both and nothing changed.
+        // This pins the v2 fix: without it the manifest would hold the resolved "Srt" token while
+        // the snapshot holds "default", forcing a spurious rerun of every default-subtitle export.
+        bool canResume = await StageArtifactResumeEvaluator.CanResumeStageAsync(
+            fixture.State,
+            fixture.ArtifactStore,
+            StageNames.Export,
+            DefaultSubtitleSnapshot(),
+            temp.Path,
+            exportRelativePath: fixture.ExportRelativePath,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(canResume);
+    }
+
+    [Fact]
+    public async Task CanResumeStageAsync_returns_false_when_default_differs_from_explicit_formats()
+    {
+        using var temp = new TempDir();
+        // Prior default run (null options -> "default" token).
+        ExportResumeFixture fixture = await ExportResumeFixture.CreateAsync(temp.Path, DefaultSubtitleGating());
+
+        // Current run explicitly requests ["vtt"] -> a genuinely different export output.
+        Dictionary<string, string> snapshot = DefaultSubtitleSnapshot();
+        snapshot[ExportResumeGating.SubtitleFormatsKey] =
+            ExportResumeGating.SubtitleFormatsTokenFromRawOptions(["vtt"]);
+
+        bool canResume = await StageArtifactResumeEvaluator.CanResumeStageAsync(
+            fixture.State,
+            fixture.ArtifactStore,
+            StageNames.Export,
+            snapshot,
+            temp.Path,
+            exportRelativePath: fixture.ExportRelativePath,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(canResume);
+    }
+
+    [Fact]
+    public async Task CanResumeStageAsync_returns_false_when_default_differs_from_empty_formats()
+    {
+        using var temp = new TempDir();
+        // Prior default run (null options -> "default" token).
+        ExportResumeFixture fixture = await ExportResumeFixture.CreateAsync(temp.Path, DefaultSubtitleGating());
+
+        // Current run explicitly suppresses all subtitles ([] -> "" token), distinct from default.
+        Dictionary<string, string> snapshot = DefaultSubtitleSnapshot();
+        snapshot[ExportResumeGating.SubtitleFormatsKey] =
+            ExportResumeGating.SubtitleFormatsTokenFromRawOptions([]);
+
+        bool canResume = await StageArtifactResumeEvaluator.CanResumeStageAsync(
+            fixture.State,
+            fixture.ArtifactStore,
+            StageNames.Export,
+            snapshot,
+            temp.Path,
+            exportRelativePath: fixture.ExportRelativePath,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(canResume);
     }
 
     [Fact]
@@ -149,6 +220,8 @@ public sealed class ExportResumeGatingTests
         };
 
     private static ExportManifestGating BaselineGating() =>
+        // The manifest now persists the RAW requested formats (["srt"]), the same producer the
+        // snapshot uses, so the explicit-request baseline matches an equivalent current snapshot.
         new(ExportResumeGating.Build(
             ExportOutputContainer.Mp4,
             applyTimbrePolish: true,
@@ -156,8 +229,33 @@ public sealed class ExportResumeGatingTests
             matchOriginalLoudness: false,
             burnInSubtitles: false,
             subtitleSource: ExportSubtitleSource.Translated,
-            subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromResolvedFormats([ExportSubtitleFormat.Srt]),
+            subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromRawOptions(["srt"]),
             videoEncoder: VideoEncoderPreference.Auto));
+
+    // The DEFAULT path: a prior run whose raw options were null (no subtitle formats specified).
+    // The manifest records the "default" token, so a later default run's snapshot must match and
+    // resume. This is the case the v2 review flagged as spuriously rerunning.
+    private static ExportManifestGating DefaultSubtitleGating() =>
+        new(ExportResumeGating.Build(
+            ExportOutputContainer.Mp4,
+            applyTimbrePolish: true,
+            restoreOriginalPan: false,
+            matchOriginalLoudness: false,
+            burnInSubtitles: false,
+            subtitleSource: ExportSubtitleSource.Translated,
+            subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromRawOptions(null),
+            videoEncoder: VideoEncoderPreference.Auto));
+
+    private static Dictionary<string, string> DefaultSubtitleSnapshot() =>
+        new(ExportResumeGating.Build(
+            ExportOutputContainer.Mp4,
+            applyTimbrePolish: true,
+            restoreOriginalPan: false,
+            matchOriginalLoudness: false,
+            burnInSubtitles: false,
+            subtitleSource: ExportSubtitleSource.Translated,
+            subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromRawOptions(null),
+            videoEncoder: VideoEncoderPreference.Auto), StringComparer.OrdinalIgnoreCase);
 
     private static Dictionary<string, string> BaselineSnapshot() =>
         new(ExportResumeGating.Build(
