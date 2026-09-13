@@ -16,4 +16,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Trackdub.Inference.Onnx.Tests" />
+  </ItemGroup>
+
 </Project>
