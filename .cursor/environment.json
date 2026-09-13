@@ -1,0 +1,12 @@
+{
+  "name": "Trackdub core",
+  "install": "dotnet restore Trackdub.slnx -m:1 && dotnet build Trackdub.slnx -c Debug --no-restore -m:1",
+  "egressAllowlist": [
+    "api.nuget.org",
+    "pkgs.dev.azure.com",
+    "huggingface.co",
+    "cdn-lfs.huggingface.co",
+    "cdn-lfs-us-1.huggingface.co",
+    "cas-bridge.xethub.hf.co"
+  ]
+}
