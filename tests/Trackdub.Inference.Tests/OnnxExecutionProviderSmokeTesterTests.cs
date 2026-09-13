@@ -335,6 +335,15 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     [InlineData(ExecutionProviderKind.TensorRTRtx, "NvTensorRtRtx")]
     [InlineData(ExecutionProviderKind.DirectMl, "dml")]
     [InlineData(ExecutionProviderKind.Cpu, "cpu")]
+    [InlineData(ExecutionProviderKind.Cuda, "cuda")]
+    [InlineData(ExecutionProviderKind.CoreMl, "coreml")]
+    [InlineData(ExecutionProviderKind.TensorRt, "NvTensorRtRtx")]
+    [InlineData(ExecutionProviderKind.Migraphx, "AMDGPU")]
+    [InlineData(ExecutionProviderKind.OpenVino, "OpenVINO")]
+    [InlineData(ExecutionProviderKind.OpenVinoCatalog, "OpenVINO")]
+    [InlineData(ExecutionProviderKind.Qnn, "QNN")]
+    [InlineData(ExecutionProviderKind.VitisAi, "VitisAI")]
+    [InlineData(ExecutionProviderKind.Dnnl, "cpu")]
     public void GenAiExecutionProviderNames_maps_trackdub_pins_to_ort_genai_names(
         ExecutionProviderKind provider,
         string expectedName)
@@ -389,6 +398,37 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
 
         Assert.False(result.Passed);
         Assert.Contains("cpu-int4", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SmokeTestAsync_whisper_genai_uses_genai_model_load_path_not_inference_session()
+    {
+        using TempDirectoryFixture fixture = new();
+
+        // Seed the model root with an intentionally INVALID ONNX decoy (the literal bytes
+        // "not-a-real-onnx-graph", which are not a parseable ONNX graph) at the model.onnx path
+        // that the generic InferenceSession fallback (SmokeTestGenericSessionAsync) would try to
+        // load, and leave out genai_config.json. If routing regressed to that fallback path the
+        // failure Detail would reference the .onnx parse/load; because the correct GenAI
+        // model-load path is taken instead, the failure Detail reports the missing
+        // genai_config.json, which is what we assert here.
+        string entryPath = Path.Join(fixture.RootPath, "model.onnx");
+        File.WriteAllText(entryPath, "not-a-real-onnx-graph");
+        var tester = new OnnxExecutionProviderSmokeTester();
+
+        ExecutionProviderSmokeTestResult result = await tester.SmokeTestAsync(
+            new ExecutionProviderSmokeTestRequest(
+                RuntimeStage.Asr,
+                "whisper-tiny-genai",
+                "whisper-tiny-genai",
+                "whisper-genai",
+                "default",
+                ExecutionProviderKind.Cpu,
+                fixture.RootPath,
+                entryPath));
+
+        Assert.False(result.Passed);
+        Assert.Contains("genai_config.json", result.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
