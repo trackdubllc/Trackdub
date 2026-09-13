@@ -121,6 +121,33 @@ public sealed class BundledModelManifestRegistry
         return new BundledModelManifestRegistry(manifestPaths[0], entries, aliasIndex);
     }
 
+    internal static BundledModelManifestRegistry CreateForTests(
+        string manifestPath,
+        IReadOnlyList<BundledModelManifestEntry> entries)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
+        ArgumentNullException.ThrowIfNull(entries);
+
+        var aliasIndex = new Dictionary<string, BundledModelManifestEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (BundledModelManifestEntry entry in entries)
+        {
+            if (entry.Aliases.Count == 0)
+            {
+                throw new InvalidOperationException($"Model '{entry.ModelId}' did not define any aliases.");
+            }
+
+            foreach (string alias in entry.Aliases)
+            {
+                if (!aliasIndex.TryAdd(alias, entry))
+                {
+                    throw new InvalidOperationException($"Alias '{alias}' is defined more than once.");
+                }
+            }
+        }
+
+        return new BundledModelManifestRegistry(manifestPath, entries, aliasIndex);
+    }
+
     public bool TryResolve(string reference, out BundledModelManifestResolution? resolution)
     {
         resolution = null;
