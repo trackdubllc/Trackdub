@@ -100,7 +100,38 @@ internal static class TensorRtRtxPluginLocator
                 Detail: $"TensorRT RTX plugin directory path is invalid: {ex.Message}");
         }
 
-        if (!directoryExists(normalizedDirectory))
+        bool directoryPresent;
+        string[] missingFiles;
+        try
+        {
+            directoryPresent = directoryExists(normalizedDirectory);
+
+            if (!directoryPresent)
+            {
+                return new TensorRtRtxPluginResolution(
+                    Succeeded: false,
+                    DirectoryPath: normalizedDirectory,
+                    ProviderLibraryPath: null,
+                    Source: source,
+                    MissingFiles: RequiredFileNames,
+                    Blocker: TensorRtRtxReadinessBlocker.EpNotPresent,
+                    Detail: $"TensorRT RTX plugin directory '{normalizedDirectory}' was not found.");
+            }
+
+            missingFiles = RequiredFileNames
+                .Where(fileName =>
+                {
+                    if (Path.IsPathRooted(fileName))
+                    {
+                        return true;
+                    }
+
+                    string candidatePath = Path.Join(normalizedDirectory, fileName);
+                    return !fileExists(candidatePath);
+                })
+                .ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return new TensorRtRtxPluginResolution(
                 Succeeded: false,
@@ -109,12 +140,8 @@ internal static class TensorRtRtxPluginLocator
                 Source: source,
                 MissingFiles: RequiredFileNames,
                 Blocker: TensorRtRtxReadinessBlocker.EpNotPresent,
-                Detail: $"TensorRT RTX plugin directory '{normalizedDirectory}' was not found.");
+                Detail: $"TensorRT RTX plugin directory '{normalizedDirectory}' could not be read: {ex.Message}");
         }
-
-        string[] missingFiles = RequiredFileNames
-            .Where(fileName => !fileExists(Path.Combine(normalizedDirectory, fileName)))
-            .ToArray();
 
         if (missingFiles.Length > 0)
         {
