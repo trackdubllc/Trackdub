@@ -392,6 +392,35 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     }
 
     [Fact]
+    public async Task SmokeTestAsync_whisper_genai_uses_genai_model_load_path_not_inference_session()
+    {
+        using TempDirectoryFixture fixture = new();
+
+        // Seed the model root with a file that WOULD be a valid raw ONNX InferenceSession
+        // target if the smoke tester fell through to SmokeTestGenericSessionAsync, but leave
+        // out genai_config.json. If routing regresses to the InferenceSession path the failure
+        // Detail would reference the .onnx load; the GenAI model-load path instead reports the
+        // missing genai_config.json, which is what we assert here.
+        string entryPath = Path.Join(fixture.RootPath, "model.onnx");
+        File.WriteAllText(entryPath, "not-a-real-onnx-graph");
+        var tester = new OnnxExecutionProviderSmokeTester();
+
+        ExecutionProviderSmokeTestResult result = await tester.SmokeTestAsync(
+            new ExecutionProviderSmokeTestRequest(
+                RuntimeStage.Asr,
+                "whisper-tiny-genai",
+                "whisper-tiny-genai",
+                "whisper-genai",
+                "default",
+                ExecutionProviderKind.Cpu,
+                fixture.RootPath,
+                entryPath));
+
+        Assert.False(result.Passed);
+        Assert.Contains("genai_config.json", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task SmokeTestAsync_phi_genai_looks_for_nested_genai_config()
     {
         using TempDirectoryFixture fixture = new();
