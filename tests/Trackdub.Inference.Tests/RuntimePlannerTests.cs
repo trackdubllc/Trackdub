@@ -454,6 +454,306 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
+    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForOpusMt_PlansDirectMlWithoutTrtSmoke()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = LoadBundledRegistry();
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/opus-mt-es-en");
+        WriteBundledCacheFiles(workspace, registry, "opus-es-en", cacheRoot, "merged-decoder");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [CreateCacheRecord(registry, "onnx-community/opus-mt-es-en", cacheRoot)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request =>
+            {
+                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
+                {
+                    throw new InvalidOperationException("TensorRT families must not be smoked for opus-mt.");
+                }
+
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Translation,
+            PreferredModelAlias: "opus-es-en",
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true,
+            SourceLanguage: "es",
+            TargetLanguage: "en"));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal("opus-mt", plan.EngineFamily);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForMadlad_PlansDirectMlWithoutTrtSmoke()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            new ManifestSpec(
+                ModelId: "google/madlad400-3b-mt",
+                Task: "translation",
+                License: "Apache-2.0",
+                CommercialAllowed: true,
+                RequiresAttribution: true,
+                RequiresUserConsent: false,
+                VoiceCloning: false,
+                EngineFamily: "madlad",
+                Aliases: ["madlad400-mt", "madlad400"],
+                RootFolder: "madlad400",
+                BenchmarkEntry: "encoder_model.onnx",
+                Variants:
+                [
+                    new ManifestVariantSpec("int8", "encoder_model_int8.onnx"),
+                    new ManifestVariantSpec("fp16", "encoder_model_fp16.onnx")
+                ]));
+        string cacheRoot = workspace.CreateCacheRoot("google/madlad400-3b-mt");
+        workspace.WriteCacheFile(cacheRoot, "encoder_model.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("google/madlad400-3b-mt", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request =>
+            {
+                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
+                {
+                    throw new InvalidOperationException("TensorRT families must not be smoked for madlad.");
+                }
+
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Translation,
+            PreferredModelAlias: "madlad400-mt",
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true,
+            SourceLanguage: "es",
+            TargetLanguage: "en"));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal("google/madlad400-3b-mt", plan.ModelId);
+        Assert.Equal("madlad", plan.EngineFamily);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForWhisperOnnx_PlansDirectMlWithoutTrtSmoke()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            new ManifestSpec(
+                ModelId: "onnx-community/whisper-tiny",
+                Task: "asr",
+                License: "Apache-2.0",
+                CommercialAllowed: true,
+                RequiresAttribution: false,
+                RequiresUserConsent: false,
+                VoiceCloning: false,
+                EngineFamily: "whisper-onnx",
+                Aliases: ["whisper-tiny-onnx", "whisper-tiny"],
+                RootFolder: "whisper-tiny-onnx",
+                BenchmarkEntry: "onnx/encoder_model.onnx",
+                Variants: [new ManifestVariantSpec("default", "onnx/encoder_model.onnx")],
+                CapabilityTags: ["language-detection"],
+                SourceLanguages: ["auto"]));
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/whisper-tiny");
+        workspace.WriteCacheFile(cacheRoot, "onnx/encoder_model.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("onnx-community/whisper-tiny", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request =>
+            {
+                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
+                {
+                    throw new InvalidOperationException("TensorRT families must not be smoked for whisper-onnx.");
+                }
+
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "whisper-tiny-onnx",
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal("whisper-onnx", plan.EngineFamily);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForLatentSync_PlansDirectMlWithoutTrtSmoke()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            new ManifestSpec(
+                ModelId: "ByteDance/LatentSync-1.6",
+                Task: "lip-synthesis",
+                License: "Apache-2.0",
+                CommercialAllowed: true,
+                RequiresAttribution: true,
+                RequiresUserConsent: false,
+                VoiceCloning: false,
+                EngineFamily: "latentsync-diffusion",
+                Aliases: ["latentsync-1.6", "latentsync"],
+                RootFolder: "latentsync",
+                BenchmarkEntry: "unet.onnx",
+                Variants: [new ManifestVariantSpec("default", "unet.onnx")]));
+
+        string cacheRoot = workspace.CreateCacheRoot("ByteDance/LatentSync-1.6");
+        workspace.WriteCacheFile(cacheRoot, "unet.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("ByteDance/LatentSync-1.6", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request =>
+            {
+                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
+                {
+                    throw new InvalidOperationException("TensorRT families must not be smoked for latentsync-diffusion.");
+                }
+
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.LipSynthesis,
+            PreferredModelAlias: "latentsync-1.6",
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal("latentsync-diffusion", plan.EngineFamily);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PlanAsync_SkipProviderSmokeTest_ReturnsReadyForGpuWithoutSmoke()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateQwenAsrSpec());
+
+        string cacheRoot = workspace.CreateCacheRoot("tonythethompson/qwen3-asr-0.6b-onnx");
+        workspace.WriteCacheFile(cacheRoot, "encoder.onnx");
+
+        var smokeRequests = new List<ExecutionProviderSmokeTestRequest>();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("tonythethompson/qwen3-asr-0.6b-onnx", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request =>
+            {
+                smokeRequests.Add(request);
+                throw new InvalidOperationException("Listing plans must not smoke GPU providers.");
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true,
+            SkipProviderSmokeTest: true));
+
+        Assert.Equal(StageRuntimePlanStatus.Ready, plan.Status);
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
+        Assert.Equal("qwen3-asr", plan.EngineFamily);
+        Assert.Empty(smokeRequests);
+    }
+
+    [Fact]
+    public async Task PlanAsync_SkipProviderSmokeTest_DoesNotPoisonVerifiedPlanCache()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateQwenAsrSpec());
+
+        string cacheRoot = workspace.CreateCacheRoot("tonythethompson/qwen3-asr-0.6b-onnx");
+        workspace.WriteCacheFile(cacheRoot, "encoder.onnx");
+
+        var smokeRequests = new List<ExecutionProviderSmokeTestRequest>();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("tonythethompson/qwen3-asr-0.6b-onnx", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request =>
+            {
+                smokeRequests.Add(request);
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan listingPlan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true,
+            SkipProviderSmokeTest: true));
+
+        StageRuntimePlan runtimePlan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true));
+
+        Assert.Equal(StageRuntimePlanStatus.Ready, listingPlan.Status);
+        Assert.Equal(StageRuntimePlanStatus.Verified, runtimePlan.Status);
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, runtimePlan.ExecutionProvider);
+        Assert.Contains(smokeRequests, request => request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx);
+    }
+
+    [Fact]
     public async Task PlanAsync_WhenTensorRTRtxSmokePassesForQwenAsr_UsesTensorRTRtx()
     {
         using var workspace = new RuntimePlannerTestWorkspace();

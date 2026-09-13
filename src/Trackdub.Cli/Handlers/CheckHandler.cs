@@ -26,7 +26,7 @@ internal static class CheckHandler
     {
         if (projectPath is not null)
         {
-            string resolvedProjectPath = Path.GetFullPath(projectPath);
+            string resolvedProjectPath = Path.GetFullPath(UserPathText.Normalize(projectPath));
             if (!Directory.Exists(resolvedProjectPath))
             {
                 CliErrorReporter.ReportValidationError(

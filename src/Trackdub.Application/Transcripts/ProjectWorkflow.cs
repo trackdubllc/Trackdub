@@ -311,31 +311,28 @@ public sealed class ProjectWorkflow(
             throw;
         }
 
-        if (regenerateTranscript)
+        TranscriptAudioRoutingPlan audioRoutingPlan = await TryPrepareSpeechAudioAsync(
+            currentState.ProjectState.Project.Id,
+            mediaAsset,
+            sourceAudioArtifact,
+            stemResult.VocalsArtifact,
+            currentState.ProjectState.Artifacts
+                .Concat(stemResult.Artifacts)
+                .ToArray(),
+            cancellationToken).ConfigureAwait(false);
+
+        if (regenerateTranscript && ShouldRegenerateTranscriptAfterStemRerun(currentState))
         {
-            TranscriptAudioRoutingPlan audioRoutingPlan = await TryPrepareSpeechAudioAsync(
-                currentState.ProjectState.Project.Id,
+            await transcriptGenerationService.GenerateTranscriptAsync(
+                currentState.ProjectState.Project,
                 mediaAsset,
                 sourceAudioArtifact,
-                stemResult.VocalsArtifact,
-                currentState.ProjectState.Artifacts
-                    .Concat(stemResult.Artifacts)
-                    .ToArray(),
-                cancellationToken).ConfigureAwait(false);
-
-            if (ShouldRegenerateTranscriptAfterStemRerun(currentState))
-            {
-                await transcriptGenerationService.GenerateTranscriptAsync(
-                    currentState.ProjectState.Project,
-                    mediaAsset,
-                    sourceAudioArtifact,
-                    audioRoutingPlan,
-                    ShouldRegenerateWithDiarization(currentState),
-                    modelPreferences ?? InferenceModelPreferences.Empty,
-                    cancellationToken,
-                    sourceLanguage: null,
-                    forceRerun: true).ConfigureAwait(false);
-            }
+                audioRoutingPlan,
+                ShouldRegenerateWithDiarization(currentState),
+                modelPreferences ?? InferenceModelPreferences.Empty,
+                cancellationToken,
+                sourceLanguage: null,
+                forceRerun: true).ConfigureAwait(false);
         }
 
         return await ReloadAsync(currentState.SelectedTranslationTargetLanguage, cancellationToken).ConfigureAwait(false);
@@ -476,6 +473,39 @@ public sealed class ProjectWorkflow(
         }
     }
 
+    private async Task WritePreparationFallbackAsync(
+        Guid projectId,
+        Guid mediaAssetId,
+        string? detail,
+        CancellationToken cancellationToken)
+    {
+        if (degradationWriter is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await degradationWriter.WriteAsync(
+                new PipelineDegradationRecord(
+                    StageNames.AudioPreparation,
+                    "SPEECH_PREPARATION_FAILED",
+                    "Speech audio preparation was unavailable or failed; the unprocessed audio will be used for transcription.",
+                    Detail: detail,
+                    SelectedFallback: "unprocessed-audio",
+                    RecommendedAction: null,
+                    DateTimeOffset.UtcNow,
+                    StageRunId: null),
+                projectId,
+                mediaAssetId,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Degradation write is best-effort.
+        }
+    }
+
     private async Task WriteEnhancementFallbackAsync(
         Guid projectId,
         Guid mediaAssetId,
@@ -568,6 +598,11 @@ public sealed class ProjectWorkflow(
 
         if (speechAudioPreparationStageHandler is null)
         {
+            await WritePreparationFallbackAsync(
+                projectId,
+                mediaAsset.Id,
+                "Speech audio preparation is not configured in this host.",
+                cancellationToken).ConfigureAwait(false);
             ProjectArtifact fallbackSource = enhancementResult?.EnhancedAudioArtifact
                 ?? existingEnhanced
                 ?? selectedSource;
@@ -614,6 +649,8 @@ public sealed class ProjectWorkflow(
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
         {
+            await WritePreparationFallbackAsync(projectId, mediaAsset.Id, ex.Message, cancellationToken)
+                .ConfigureAwait(false);
             ProjectArtifact fallbackSource = enhancementResult?.EnhancedAudioArtifact
                 ?? existingEnhanced
                 ?? selectedSource;

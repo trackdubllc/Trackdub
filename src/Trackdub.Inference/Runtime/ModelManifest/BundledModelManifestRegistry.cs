@@ -37,7 +37,7 @@ public sealed class BundledModelManifestRegistry
         catch (Exception ex) when (ex is IOException or ModelManifestValidationException or InvalidOperationException)
         {
             registry = null;
-            error = ex.Message;
+            error = AppendSourceTreeToolHint(manifestPath, ex.Message);
             return false;
         }
     }
@@ -119,6 +119,33 @@ public sealed class BundledModelManifestRegistry
         }
 
         return new BundledModelManifestRegistry(manifestPaths[0], entries, aliasIndex);
+    }
+
+    internal static BundledModelManifestRegistry CreateForTests(
+        string manifestPath,
+        IReadOnlyList<BundledModelManifestEntry> entries)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
+        ArgumentNullException.ThrowIfNull(entries);
+
+        var aliasIndex = new Dictionary<string, BundledModelManifestEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (BundledModelManifestEntry entry in entries)
+        {
+            if (entry.Aliases.Count == 0)
+            {
+                throw new InvalidOperationException($"Model '{entry.ModelId}' did not define any aliases.");
+            }
+
+            foreach (string alias in entry.Aliases)
+            {
+                if (!aliasIndex.TryAdd(alias, entry))
+                {
+                    throw new InvalidOperationException($"Alias '{alias}' is defined more than once.");
+                }
+            }
+        }
+
+        return new BundledModelManifestRegistry(manifestPath, entries, aliasIndex);
     }
 
     public bool TryResolve(string reference, out BundledModelManifestResolution? resolution)
@@ -425,6 +452,20 @@ public sealed class BundledModelManifestRegistry
         }
 
         return variants.Values.ToArray();
+    }
+
+    internal static string AppendSourceTreeToolHint(string manifestPath, string message)
+    {
+        string normalized = manifestPath.Replace('\\', '/');
+        if (!normalized.Contains("/src/Trackdub.Inference/Runtime/ModelManifest/", StringComparison.OrdinalIgnoreCase))
+        {
+            return message;
+        }
+
+        return message
+            + " This is the repo source-tree manifest, resolved from the current directory."
+            + " A globally installed trackdub tool must be rebuilt from this checkout,"
+            + " or run `dotnet run --project src/Trackdub.Cli` instead.";
     }
 
     private static string? LocateDefaultManifestPath()

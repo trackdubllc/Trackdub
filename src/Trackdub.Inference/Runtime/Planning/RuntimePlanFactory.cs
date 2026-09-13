@@ -21,6 +21,7 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         bool requirePreferredExecutionProvider,
         bool preferMigraphxOnAmdGpu,
         string? preferredModelVariantAlias,
+        bool skipProviderSmokeTest,
         CancellationToken cancellationToken)
     {
         cacheIndex.TryGetValue(candidate.Entry.ModelId, out IReadOnlyList<LocalModelCacheRecord>? cacheRecords);
@@ -76,8 +77,10 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                     continue;
                 }
 
-                if (provider is ExecutionProviderKind.Cpu)
+                if (provider is ExecutionProviderKind.Cpu || skipProviderSmokeTest)
                 {
+                    // CPU is file-only Ready. Listing/inventory SkipProviderSmokeTest is the same
+                    // gate without compiling graphs: files + EP present, not Verified.
                     return CreatePlan(
                         stage,
                         StageRuntimePlanStatus.Ready,
@@ -87,7 +90,7 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                         entryPath,
                         modelIntegrityStatus,
                         providerFallback,
-                        includeCpuFallbackWarning: providerFallback is not null,
+                        includeCpuFallbackWarning: providerFallback is not null && provider is ExecutionProviderKind.Cpu,
                         isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
                         modelRootPath: rootPath,
                         modelEntryRelativePath: variant.RelativeEntryPath,

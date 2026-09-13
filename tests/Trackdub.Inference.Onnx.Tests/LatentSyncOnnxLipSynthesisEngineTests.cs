@@ -15,7 +15,7 @@ public sealed class LatentSyncOnnxLipSynthesisEngineTests
         Assert.True(registry.TryResolve(LatentSyncModelPaths.ManifestAlias, out BundledModelManifestResolution? resolution));
         Assert.NotNull(resolution);
         Assert.Equal(LatentSyncModelPaths.ModelId, resolution.Entry.ModelId);
-        Assert.False(registry.TryResolve(LatentSyncModelPaths.ModelId, out _));
+        Assert.True(registry.TryResolve(LatentSyncModelPaths.ModelId, out _));
 
         Assert.False(LatentSyncOnnxLipSynthesisEngine.IsExperimentalFromManifest(registry));
     }

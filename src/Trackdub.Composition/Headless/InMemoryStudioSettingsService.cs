@@ -15,10 +15,13 @@ public sealed class InMemoryStudioSettingsService : IStudioSettingsService
     private readonly object _lock = new();
     private StudioSettings _settings;
 
-    public InMemoryStudioSettingsService(HeadlessTrackdubOptions options)
+    public InMemoryStudioSettingsService(
+        HeadlessTrackdubOptions options,
+        StudioSettings? persistedSettings = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
+        StudioSettings persisted = persistedSettings ?? StudioSettings.Default;
         _settings = StudioSettings.Default with
         {
             HardwareOverrides = options.HardwareOverrides is not null
@@ -26,6 +29,13 @@ public sealed class InMemoryStudioSettingsService : IStudioSettingsService
                 : new Dictionary<string, ExecutionProviderKind>(),
             RequirePreferredExecutionProviders = options.RequirePreferredExecutionProviders,
             WindowsMlExecutionDevicePolicy = options.WindowsMlExecutionDevicePolicy,
+            NvidiaTensorRtRtxLicenseAccepted =
+                options.NvidiaTensorRtRtxLicenseAccepted || persisted.NvidiaTensorRtRtxLicenseAccepted,
+            AmdRyzenAiLicenseAccepted = persisted.AmdRyzenAiLicenseAccepted,
+            IntelOpenVinoLicenseAccepted = persisted.IntelOpenVinoLicenseAccepted,
+            QualcommQnnLicenseAccepted = persisted.QualcommQnnLicenseAccepted,
+            TensorRtRtxPluginDirectory =
+                options.TensorRtRtxPluginDirectory ?? persisted.TensorRtRtxPluginDirectory,
         };
     }
 

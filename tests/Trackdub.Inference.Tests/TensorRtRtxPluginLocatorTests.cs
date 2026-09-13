@@ -67,6 +67,34 @@ public sealed class TensorRtRtxPluginLocatorTests
     }
 
     [Fact]
+    public void Resolve_WhenDirectoryExistsThrowsIOException_ReturnsFailingResolution()
+    {
+        string pluginDirectory = SamplePluginDirectory("io-error-trt-rtx");
+        TensorRtRtxPluginResolution resolution = TensorRtRtxPluginLocator.Resolve(
+            explicitPluginDirectory: pluginDirectory,
+            directoryExists: _ => throw new IOException("The device is not ready."),
+            fileExists: _ => false);
+
+        Assert.False(resolution.Succeeded);
+        Assert.Equal(TensorRtRtxReadinessBlocker.EpNotPresent, resolution.Blocker);
+        Assert.Contains("could not be read", resolution.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_WhenFileExistsThrowsUnauthorizedAccess_ReturnsFailingResolution()
+    {
+        string pluginDirectory = SamplePluginDirectory("access-denied-trt-rtx");
+        TensorRtRtxPluginResolution resolution = TensorRtRtxPluginLocator.Resolve(
+            explicitPluginDirectory: pluginDirectory,
+            directoryExists: _ => true,
+            fileExists: _ => throw new UnauthorizedAccessException("Access to the path is denied."));
+
+        Assert.False(resolution.Succeeded);
+        Assert.Equal(TensorRtRtxReadinessBlocker.EpNotPresent, resolution.Blocker);
+        Assert.Contains("could not be read", resolution.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Resolve_UsesExplicitSettingBeforeEnvironmentVariable()
     {
         string explicitDirectory = SamplePluginDirectory("explicit-trt-rtx");

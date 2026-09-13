@@ -268,8 +268,14 @@ internal static class Qwen3AsrGreedyDecoder
         }
     }
 
-    private static Tensor<float> ExtractLogits(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results) =>
-        results.Single(static result => result.Name == "logits").AsTensor<float>();
+    private static DenseTensor<float> ExtractLogits(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results)
+    {
+        Tensor<float> tensor = results.Single(static result => result.Name == "logits").AsTensor<float>();
+        int[] dimensions = tensor.Dimensions.ToArray();
+        var buffer = new float[tensor.Length];
+        CopyTensorValues(tensor, buffer);
+        return new DenseTensor<float>(buffer, dimensions);
+    }
 
     private static void DisposeKvState(IReadOnlyList<NamedOnnxValue> kvState)
     {

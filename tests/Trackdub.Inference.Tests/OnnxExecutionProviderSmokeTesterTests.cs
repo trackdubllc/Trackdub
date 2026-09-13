@@ -335,10 +335,150 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     [InlineData(ExecutionProviderKind.TensorRTRtx, "NvTensorRtRtx")]
     [InlineData(ExecutionProviderKind.DirectMl, "dml")]
     [InlineData(ExecutionProviderKind.Cpu, "cpu")]
+    [InlineData(ExecutionProviderKind.Cuda, "cuda")]
+    [InlineData(ExecutionProviderKind.CoreMl, "coreml")]
+    [InlineData(ExecutionProviderKind.TensorRt, "NvTensorRtRtx")]
+    [InlineData(ExecutionProviderKind.Migraphx, "AMDGPU")]
+    [InlineData(ExecutionProviderKind.OpenVino, "OpenVINO")]
+    [InlineData(ExecutionProviderKind.OpenVinoCatalog, "OpenVINO")]
+    [InlineData(ExecutionProviderKind.Qnn, "QNN")]
+    [InlineData(ExecutionProviderKind.VitisAi, "VitisAI")]
+    [InlineData(ExecutionProviderKind.Dnnl, "cpu")]
     public void GenAiExecutionProviderNames_maps_trackdub_pins_to_ort_genai_names(
         ExecutionProviderKind provider,
         string expectedName)
     {
         Assert.Equal(expectedName, GenAiExecutionProviderNames.Resolve(provider));
+    }
+
+    [Theory]
+    [InlineData("whisper-genai", true)]
+    [InlineData("whisper-onnx", false)]
+    [InlineData("qwen3-asr", false)]
+    [InlineData(null, false)]
+    public void UsesOrtGenAiModelLoad_routes_whisper_genai_away_from_inference_session(
+        string? engineFamily,
+        bool expected)
+    {
+        Assert.Equal(expected, OnnxExecutionProviderSmokeTester.UsesOrtGenAiModelLoad(engineFamily));
+    }
+
+    [Theory]
+    [InlineData("phi-genai", true)]
+    [InlineData("qwen-instruct", true)]
+    [InlineData("opus-mt", false)]
+    [InlineData("madlad", false)]
+    [InlineData(null, false)]
+    public void UsesOrtGenAiTranslationSmoke_routes_genai_families_away_from_opus_sessions(
+        string? engineFamily,
+        bool expected)
+    {
+        Assert.Equal(expected, OnnxExecutionProviderSmokeTester.UsesOrtGenAiTranslationSmoke(engineFamily));
+    }
+
+    [Fact]
+    public async Task SmokeTestAsync_whisper_genai_looks_for_nested_genai_config()
+    {
+        using TempDirectoryFixture fixture = new();
+        string nestedRoot = Path.Join(fixture.RootPath, "cpu-int4");
+        Directory.CreateDirectory(nestedRoot);
+        string nestedConfig = Path.Join(nestedRoot, "genai_config.json");
+        var tester = new OnnxExecutionProviderSmokeTester();
+
+        ExecutionProviderSmokeTestResult result = await tester.SmokeTestAsync(
+            new ExecutionProviderSmokeTestRequest(
+                RuntimeStage.Asr,
+                "whisper-tiny-genai",
+                "whisper-tiny-genai",
+                "whisper-genai",
+                "default",
+                ExecutionProviderKind.Cpu,
+                fixture.RootPath,
+                nestedConfig));
+
+        Assert.False(result.Passed);
+        Assert.Contains("cpu-int4", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SmokeTestAsync_whisper_genai_uses_genai_model_load_path_not_inference_session()
+    {
+        using TempDirectoryFixture fixture = new();
+
+        // Seed the model root with an intentionally INVALID ONNX decoy (the literal bytes
+        // "not-a-real-onnx-graph", which are not a parseable ONNX graph) at the model.onnx path
+        // that the generic InferenceSession fallback (SmokeTestGenericSessionAsync) would try to
+        // load, and leave out genai_config.json. If routing regressed to that fallback path the
+        // failure Detail would reference the .onnx parse/load; because the correct GenAI
+        // model-load path is taken instead, the failure Detail reports the missing
+        // genai_config.json, which is what we assert here.
+        string entryPath = Path.Join(fixture.RootPath, "model.onnx");
+        File.WriteAllText(entryPath, "not-a-real-onnx-graph");
+        var tester = new OnnxExecutionProviderSmokeTester();
+
+        ExecutionProviderSmokeTestResult result = await tester.SmokeTestAsync(
+            new ExecutionProviderSmokeTestRequest(
+                RuntimeStage.Asr,
+                "whisper-tiny-genai",
+                "whisper-tiny-genai",
+                "whisper-genai",
+                "default",
+                ExecutionProviderKind.Cpu,
+                fixture.RootPath,
+                entryPath));
+
+        Assert.False(result.Passed);
+        Assert.Contains("genai_config.json", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SmokeTestAsync_phi_genai_looks_for_nested_genai_config()
+    {
+        using TempDirectoryFixture fixture = new();
+        string nestedRoot = Path.Join(fixture.RootPath, "cpu_and_mobile", "cpu-int4");
+        Directory.CreateDirectory(nestedRoot);
+        string nestedConfig = Path.Join(nestedRoot, "genai_config.json");
+        var tester = new OnnxExecutionProviderSmokeTester();
+
+        ExecutionProviderSmokeTestResult result = await tester.SmokeTestAsync(
+            new ExecutionProviderSmokeTestRequest(
+                RuntimeStage.Translation,
+                "phi-3.5-mini-instruct-genai",
+                "phi-genai-pivot",
+                "phi-genai",
+                "cpu-int4",
+                ExecutionProviderKind.Cpu,
+                fixture.RootPath,
+                nestedConfig));
+
+        Assert.False(result.Passed);
+        Assert.Contains("cpu-int4", result.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class TempDirectoryFixture : IDisposable
+    {
+        public string RootPath { get; } = Path.Join(
+            Path.GetTempPath(),
+            "trackdub-tests",
+            Guid.NewGuid().ToString("N"));
+
+        public TempDirectoryFixture() => Directory.CreateDirectory(RootPath);
+
+        public void Dispose()
+        {
+            try
+            {
+                if (Directory.Exists(RootPath))
+                {
+                    Directory.Delete(RootPath, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
     }
 }

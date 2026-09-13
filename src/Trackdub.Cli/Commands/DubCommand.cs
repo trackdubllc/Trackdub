@@ -70,6 +70,11 @@ internal static class DubCommand
             Description = "Apply room-tone convolution to dubbed speech to match the acoustic environment (default: true)",
         };
 
+        var noTimbrePolishOption = new Option<bool>("--no-timbre-polish")
+        {
+            Description = "Disable room-tone convolution (negates the default-on --timbre-polish)",
+        };
+
         var restorePanOption = new Option<bool?>("--restore-pan")
         {
             Description = "Restore the original stereo pan position of each speaker in the dubbed mix (default: false)",
@@ -101,7 +106,7 @@ internal static class DubCommand
         };
         subtitleSourceOption.AcceptOnlyFromAmong("translated", "transcript", "bilingual");
 
-        var burnInSubtitlesOption = new Option<bool>("--burn-in-subtitles")
+        var burnInSubtitlesOption = new Option<bool>("--burn-in")
         {
             Description = "Burn subtitles into the exported video (default: false)",
             DefaultValueFactory = _ => false,
@@ -168,6 +173,7 @@ internal static class DubCommand
             enableAsrTextRefinementOption,
             voiceCloneOption,
             timbrePolishOption,
+            noTimbrePolishOption,
             restorePanOption,
             matchLoudnessOption,
             voiceOption,
@@ -184,15 +190,15 @@ internal static class DubCommand
 
         command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
         {
-            string? mediaPath = parseResult.GetValue(mediaOption);
+            string? mediaPath = UserPathText.NormalizeOptional(parseResult.GetValue(mediaOption));
             string? targetLanguage = parseResult.GetValue(targetLanguageOption);
             string? sourceLanguage = parseResult.GetValue(sourceLanguageOption);
-            string? outputDirectory = parseResult.GetValue(outputOption);
+            string? outputDirectory = UserPathText.NormalizeOptional(parseResult.GetValue(outputOption));
             string[] modelOverrides = parseResult.GetValue(modelOption) ?? [];
             string? exportFormat = parseResult.GetValue(exportFormatOption);
             bool? enableAsrTextRefinement = parseResult.GetValue(enableAsrTextRefinementOption);
             bool voiceClone = parseResult.GetValue(voiceCloneOption);
-            bool timbrePolish = parseResult.GetValue(timbrePolishOption) ?? true;
+            bool timbrePolish = !parseResult.GetValue(noTimbrePolishOption) && (parseResult.GetValue(timbrePolishOption) ?? true);
             bool restorePan = parseResult.GetValue(restorePanOption) ?? false;
             bool matchLoudness = parseResult.GetValue(matchLoudnessOption) ?? false;
             string[] voiceOverrideTokens = parseResult.GetValue(voiceOption) ?? [];
@@ -201,7 +207,7 @@ internal static class DubCommand
             bool burnInSubtitles = parseResult.GetValue(burnInSubtitlesOption);
             string? videoEncoderKey = parseResult.GetValue(videoEncoderOption);
             string? presetName = parseResult.GetValue(presetOption);
-            string? inputDir = parseResult.GetValue(inputDirOption);
+            string? inputDir = UserPathText.NormalizeOptional(parseResult.GetValue(inputDirOption));
             string? inputGlob = parseResult.GetValue(inputGlobOption);
             bool recursive = parseResult.GetValue(recursiveOption);
             bool continueOnError = parseResult.GetValue(continueOnErrorOption);

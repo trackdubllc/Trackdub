@@ -187,7 +187,8 @@ public sealed record GenerateTtsForAllSpeakersRequest(
     IReadOnlyDictionary<Guid, bool>? UseReferenceClipForVoiceCloningBySpeakerId = null,
     ExecutionProviderKind? PreferredExecutionProvider = null,
     bool RequirePreferredExecutionProvider = false,
-    string? PreferredModelVariantAlias = null);
+    string? PreferredModelVariantAlias = null,
+    IReadOnlyDictionary<Guid, string>? VoiceIdsBySpeakerId = null);
 
 public sealed record PreviewVoiceRequest(
     string VoiceId,

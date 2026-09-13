@@ -116,6 +116,66 @@ public sealed class WindowsMlProviderRegistrationPolicyTests
     }
 
     [Fact]
+    public async Task BootstrapAsync_DirectMlKeepsDirectMlWhenCatalogRegistrationFails()
+    {
+        var bootstrapper = new WindowsExecutionProviderBootstrapper(
+            CreateFailingDirectMlCatalogPolicy(),
+            new StubNativeCudaTensorRtWindowsPolicy(allowed: false),
+            new StubTensorRtRtxProviderBootstrap((_, _) =>
+                throw new InvalidOperationException("TRT RTX bootstrap must not run for DirectML.")));
+
+        ExecutionProviderBootstrapResult result = await bootstrapper
+            .BootstrapAsync(ExecutionProviderKind.DirectMl, allowDownloads: true, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ExecutionProviderKind.DirectMl, result.RequestedProvider);
+        Assert.Equal(ExecutionProviderKind.DirectMl, result.SelectedProvider);
+        Assert.Contains("catalog unavailable", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CheckReadinessAsync_DirectMlKeepsDirectMlWhenCatalogRegistrationFails()
+    {
+        var bootstrapper = new WindowsExecutionProviderBootstrapper(
+            CreateFailingDirectMlCatalogPolicy(),
+            new StubNativeCudaTensorRtWindowsPolicy(allowed: false),
+            new StubTensorRtRtxProviderBootstrap((_, _) =>
+                throw new InvalidOperationException("TRT RTX bootstrap must not run for DirectML.")));
+
+        ExecutionProviderBootstrapResult result = await bootstrapper
+            .CheckReadinessAsync(ExecutionProviderKind.DirectMl, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ExecutionProviderKind.DirectMl, result.SelectedProvider);
+        Assert.Contains("catalog unavailable", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BootstrapAsync_TensorRtRtxFallsBackToDirectMlWhenCatalogRegistrationFails()
+    {
+        var bootstrapper = new WindowsExecutionProviderBootstrapper(
+            CreateFailingDirectMlCatalogPolicy(),
+            new StubNativeCudaTensorRtWindowsPolicy(allowed: false),
+            new StubTensorRtRtxProviderBootstrap((_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(new TensorRtRtxBootstrapResult(
+                    Succeeded: false,
+                    ProviderId: TensorRtRtxProviderIds.PluginEpAbi,
+                    Blocker: TensorRtRtxReadinessBlocker.EpNotPresent,
+                    Detail: "plugin missing"));
+            }));
+
+        ExecutionProviderBootstrapResult result = await bootstrapper
+            .BootstrapAsync(ExecutionProviderKind.TensorRTRtx, allowDownloads: true, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ExecutionProviderKind.DirectMl, result.SelectedProvider);
+        Assert.Contains("session factory will still attempt packaged DirectML append", result.Detail, StringComparison.Ordinal);
+        Assert.Contains("plugin missing", result.FailureReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RegisterForSessionAsync_DirectMlRegistersInstalledCertifiedOnceAndReportsPackagedRoute()
     {
         var registerCalls = 0;
@@ -538,6 +598,16 @@ public sealed class WindowsMlProviderRegistrationPolicyTests
         Assert.Null(session.Mode);
         Assert.Equal(WindowsMlBootstrapMode.EnsureAllCertifiedCatalog, bulk.Mode);
     }
+
+    private static WindowsMlProviderRegistrationPolicy CreateFailingDirectMlCatalogPolicy() =>
+        new(
+            registerInstalledCertifiedAsync: _ =>
+                Task.FromResult(new WindowsMlBootstrapResult(
+                    WindowsMlBootstrapMode.RegisterInstalledCertified,
+                    Succeeded: false,
+                    FailureReason: "catalog unavailable")),
+            ensureAndRegisterCertifiedAsync: _ =>
+                throw new InvalidOperationException("Ensure should not run for DirectML catalog fallback."));
 
     private sealed class StubNativeCudaTensorRtWindowsPolicy(bool allowed) : INativeCudaTensorRtWindowsPolicy
     {

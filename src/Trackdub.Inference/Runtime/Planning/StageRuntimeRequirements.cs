@@ -68,14 +68,26 @@ internal static class StageRuntimeRequirementsCatalog
                 ],
                 DefaultOnnxStageAllowedProviders,
                 ["default", "fp16"],
-                ["default", "int8", "quantized", "uint8", "q4"]),
+                ["default", "int8", "quantized", "uint8", "q4"],
+                // Stock Olive whisper-onnx graphs omit trt-rtx in supported_providers and use
+                // fused contrib ops TensorRT RTX cannot import. Keep qwen3-asr on TRT RTX.
+                new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["whisper-onnx"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                }),
             [RuntimeStage.Translation] = new(
                 RuntimeStage.Translation,
                 ModelTask.Translation,
                 ["opus-en-es", "helsinki-opus-en-es", "opus-en-fr", "opus-en-de", "opus-en-it", "opus-en-pt", "opus-es-en", "helsinki-opus-es-en", "madlad400-mt", "madlad400"],
                 DefaultOnnxStageAllowedProviders,
                 ["merged-decoder", "quantized", "fp16"],
-                ["merged-decoder", "quantized", "int8", "fp16"]),
+                ["merged-decoder", "quantized", "int8", "fp16"],
+                // Encoder-decoder InferenceSession ctor stack-overflows under TensorRT RTX (ORT 1.24.5).
+                new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["opus-mt"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["madlad"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                }),
             [RuntimeStage.Diarization] = new(
                 RuntimeStage.Diarization,
                 ModelTask.Diarization,
@@ -147,6 +159,11 @@ internal static class StageRuntimeRequirementsCatalog
                 DefaultOnnxStageAllowedProviders,
                 ["fp16", "default"],
                 ["int8", "default"],
+                // LatentSync UNet exports MultiHeadAttention, which TensorRT RTX cannot import.
+                AllowedProvidersByEngineFamily: new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["latentsync-diffusion"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                },
                 AllowedEngineFamilies: ["latentsync-diffusion"]),
         };
 }

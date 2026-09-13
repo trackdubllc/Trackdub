@@ -28,4 +28,36 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
             }
         }
     }
+
+    [Fact]
+    public void TryEnsureLoadedResult_without_cuda12_in_search_path_reports_missing_runtime()
+    {
+        string emptyDir = Path.Combine(Path.GetTempPath(), $"trackdub-cuda-empty-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(emptyDir);
+
+        try
+        {
+            TensorRtRtxCudaRuntimeEnsureResult result =
+                TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoadedResult([emptyDir]);
+
+            Assert.False(result.Succeeded);
+            Assert.Null(result.LoadedPath);
+            Assert.Contains("CUDA 12 runtime", result.Detail, StringComparison.Ordinal);
+            Assert.Contains("cu12", result.Detail, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(emptyDir))
+            {
+                Directory.Delete(emptyDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void DescribeInstalledCudaMajorVersions_is_never_empty()
+    {
+        string detail = TensorRtRtxCudaRuntimeBootstrap.DescribeInstalledCudaMajorVersions();
+        Assert.False(string.IsNullOrWhiteSpace(detail));
+    }
 }

@@ -277,12 +277,12 @@ public sealed class WindowsExecutionProviderBootstrapper : IExecutionProviderBoo
         WindowsMlProviderRegistrationResult directMlFallback = await _registrationPolicy
             .RegisterForReadinessAsync(ExecutionProviderKind.DirectMl, cancellationToken)
             .ConfigureAwait(false);
-        ExecutionProviderKind selectedProvider = directMlFallback.RegistrationSucceeded
-            ? ExecutionProviderKind.DirectMl
-            : ExecutionProviderKind.Cpu;
-        string detail = selectedProvider is ExecutionProviderKind.DirectMl
+        // Packaged DirectML is included with Windows ML. Catalog registration failure must not
+        // skip the session-options append path.
+        ExecutionProviderKind selectedProvider = ExecutionProviderKind.DirectMl;
+        string detail = directMlFallback.RegistrationSucceeded
             ? $"{plugin.Detail} Verified fallback: DirectMl."
-            : $"{plugin.Detail} DirectML fallback was not verified; using CPU.";
+            : $"{plugin.Detail} DirectML catalog registration did not succeed; session factory will still attempt packaged DirectML append.";
 
         return new ExecutionProviderBootstrapResult(
             ExecutionProviderKind.TensorRTRtx,
@@ -356,6 +356,13 @@ public sealed class WindowsExecutionProviderBootstrapper : IExecutionProviderBoo
             return result.Provider;
         }
 
+        if (result.Provider is ExecutionProviderKind.DirectMl)
+        {
+            // Packaged DirectML is included with Windows ML even when RegisterCertifiedAsync
+            // fails or times out. Session creation still has to append DML and prove placement.
+            return ExecutionProviderKind.DirectMl;
+        }
+
         ExecutionProviderKind candidate = result.Provider switch
         {
             ExecutionProviderKind.TensorRTRtx => ExecutionProviderKind.DirectMl,
@@ -363,7 +370,6 @@ public sealed class WindowsExecutionProviderBootstrapper : IExecutionProviderBoo
             ExecutionProviderKind.CoreMl => ExecutionProviderKind.Cpu,
             ExecutionProviderKind.Cuda => ExecutionProviderKind.DirectMl,
             ExecutionProviderKind.TensorRt => ExecutionProviderKind.TensorRTRtx,
-            ExecutionProviderKind.DirectMl => ExecutionProviderKind.Cpu,
             _ => ExecutionProviderKind.Cpu,
         };
 

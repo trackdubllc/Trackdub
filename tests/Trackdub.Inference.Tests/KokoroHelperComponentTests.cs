@@ -264,6 +264,10 @@ public sealed class KokoroHelperComponentTests : IDisposable
 
         Assert.Single(enUs);
         Assert.Equal("af_heart", enUs[0].VoiceId);
+
+        IReadOnlyList<VoiceCatalogEntry> en = catalog.GetVoices("en");
+        Assert.Single(en);
+        Assert.Equal("af_heart", en[0].VoiceId);
     }
 
     [Fact]
@@ -311,7 +315,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
     public void EspeakNgPathResolver_Resolve_UsesEnvironmentVariablePath()
     {
         string dir = CreateTempDir();
-        string executablePath = Path.Combine(dir, EspeakExecutableName);
+        string executablePath = Path.Join(dir, EspeakExecutableName);
         File.WriteAllBytes(executablePath, []);
 
         string resolved = EspeakNgPathResolver.Resolve(
@@ -346,7 +350,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
     public void EspeakNgPathResolver_Resolve_FallsBackToPathExecutable()
     {
         string dir = CreateTempDir();
-        string executablePath = Path.Combine(dir, EspeakExecutableName);
+        string executablePath = Path.Join(dir, EspeakExecutableName);
         File.WriteAllBytes(executablePath, []);
 
         string resolved = EspeakNgPathResolver.Resolve(
@@ -377,9 +381,9 @@ public sealed class KokoroHelperComponentTests : IDisposable
     public void EspeakNgHealthCheck_WhenExecutableAndDataPresent_ReportsAvailable()
     {
         string dir = CreateTempDir();
-        string executablePath = Path.Combine(dir, EspeakExecutableName);
+        string executablePath = Path.Join(dir, EspeakExecutableName);
         File.WriteAllBytes(executablePath, []);
-        Directory.CreateDirectory(Path.Combine(dir, "espeak-ng-data"));
+        Directory.CreateDirectory(Path.Join(dir, "espeak-ng-data"));
 
         using IDisposable env = SetEnvironmentVariable(EspeakNgPathResolver.EnvironmentVariableName, executablePath);
         using IDisposable dataEnv = SetEnvironmentVariable("ESPEAK_DATA_PATH", null);
@@ -394,7 +398,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
     public void EspeakNgHealthCheck_WhenDataFolderMissing_ReportsUnavailable()
     {
         string dir = CreateTempDir();
-        string executablePath = Path.Combine(dir, EspeakExecutableName);
+        string executablePath = Path.Join(dir, EspeakExecutableName);
         File.WriteAllBytes(executablePath, []);
 
         using IDisposable env = SetEnvironmentVariable(EspeakNgPathResolver.EnvironmentVariableName, executablePath);
@@ -409,7 +413,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
     public void EspeakNgPhonemizer_Phonemize_WrapsStartupFailureWithActionableError()
     {
         string dir = CreateTempDir();
-        string executablePath = Path.Combine(dir, EspeakExecutableName);
+        string executablePath = Path.Join(dir, EspeakExecutableName);
         File.WriteAllBytes(executablePath, []);
         var phonemizer = new EspeakNgPhonemizer(executablePath);
 

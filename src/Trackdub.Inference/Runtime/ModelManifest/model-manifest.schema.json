@@ -45,7 +45,7 @@
         },
         "task": {
           "type": "string",
-          "enum": [ "asr", "translation", "tts", "diarization", "vad", "separation", "speech-enhancement", "forced-alignment", "text-refinement", "overlap-rescue", "lip-synthesis" ]
+          "enum": [ "asr", "translation", "tts", "diarization", "vad", "separation", "speech-enhancement", "forced-alignment", "text-refinement", "overlap-rescue", "lip-synthesis", "face-detection", "face-landmarks" ]
         },
         "engine_family": {
           "type": "string",
@@ -72,7 +72,7 @@
         },
         "license": {
           "type": "string",
-          "enum": [ "MIT", "Apache-2.0", "CC-BY-4.0", "CC-BY-NC-4.0", "NVIDIA-Open-Model-License", "OpenMDW-1.1", "custom", "unknown", "non-commercial" ]
+          "enum": [ "MIT", "Apache-2.0", "CC-BY-4.0", "CC-BY-NC-4.0", "NVIDIA-Open-Model-License", "OpenMDW-1.1", "openrail++", "custom", "unknown", "non-commercial", "noncommercial" ]
         },
         "commercial_allowed": {
           "type": "boolean"

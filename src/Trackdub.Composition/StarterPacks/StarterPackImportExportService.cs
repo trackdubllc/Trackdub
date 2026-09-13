@@ -81,7 +81,12 @@ public sealed partial class StarterPackImportExportService(
         try
         {
             StarterPackCompatibilityReport compatibility = await compatibilityService
-                .EvaluateAsync(pack.Id, profileId, hardwareProfile: null, cancellationToken)
+                .EvaluateAsync(
+                    pack.Id,
+                    profileId,
+                    hardwareProfile: null,
+                    cancellationToken,
+                    skipProviderSmokeTest: true)
                 .ConfigureAwait(false);
             warnings.AddRange(compatibility.Stages
                 .Where(stage => stage.FallbackApplied)

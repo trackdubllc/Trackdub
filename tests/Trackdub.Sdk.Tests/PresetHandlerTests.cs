@@ -60,7 +60,7 @@ public sealed class PresetHandlerTests : IDisposable
         Assert.Equal(Program.ExitSuccess, exitCode);
         string output = _stdout.ToString();
         Assert.Contains("Saved preset 'my-preset'", output);
-        Assert.Contains(Path.Combine(_tempDir, "my-preset.json"), output);
+        Assert.Contains(Path.Join(_tempDir, "my-preset.json"), output);
     }
 
     [Theory]
@@ -91,7 +91,21 @@ public sealed class PresetHandlerTests : IDisposable
         string output = _stdout.ToString();
         Assert.Contains("Invalid execution provider", output);
         Assert.Contains(CliParseHelpers.FormatSupportedExecutionProviders(), output);
-        Assert.False(File.Exists(Path.Combine(_tempDir, "bad-ep.json")));
+        Assert.False(File.Exists(Path.Join(_tempDir, "bad-ep.json")));
+    }
+
+    [Theory]
+    [InlineData("trt-rtx")]
+    [InlineData("qnn")]
+    [InlineData("migraphx")]
+    [InlineData("coreml")]
+    public async Task SaveAsync_ValidVendorExecutionProvider_Succeeds(string provider)
+    {
+        int exitCode = await PresetHandler.SaveAsync(
+            "vendor-ep", CreatePreset(executionProvider: provider), _store, _stdout, CancellationToken.None);
+
+        Assert.Equal(Program.ExitSuccess, exitCode);
+        Assert.True(File.Exists(Path.Join(_tempDir, "vendor-ep.json")));
     }
 
     [Theory]
@@ -120,7 +134,7 @@ public sealed class PresetHandlerTests : IDisposable
         string output = _stdout.ToString();
         Assert.Contains("Invalid device policy", output);
         Assert.Contains(WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys(), output);
-        Assert.False(File.Exists(Path.Combine(_tempDir, "bad-dp.json")));
+        Assert.False(File.Exists(Path.Join(_tempDir, "bad-dp.json")));
     }
 
     [Fact]
@@ -132,7 +146,7 @@ public sealed class PresetHandlerTests : IDisposable
             _store, _stdout, CancellationToken.None);
 
         Assert.Equal(Program.ExitSuccess, exitCode);
-        Assert.True(File.Exists(Path.Combine(_tempDir, "default-prefs.json")));
+        Assert.True(File.Exists(Path.Join(_tempDir, "default-prefs.json")));
     }
 
     [Fact]
@@ -209,7 +223,7 @@ public sealed class PresetHandlerTests : IDisposable
     public async Task LoadAsync_MalformedJson_ReturnsArgumentErrorAndEmitsFailure()
     {
         Directory.CreateDirectory(_tempDir);
-        string filePath = Path.Combine(_tempDir, "corrupt.json");
+        string filePath = Path.Join(_tempDir, "corrupt.json");
         await File.WriteAllTextAsync(filePath, "{ not valid json !!!");
 
         int exitCode = await PresetHandler.LoadAsync(
@@ -232,7 +246,7 @@ public sealed class PresetHandlerTests : IDisposable
               "targetLanguage": "ja"
             }
             """;
-        string filePath = Path.Combine(_tempDir, "too-new.json");
+        string filePath = Path.Join(_tempDir, "too-new.json");
         await File.WriteAllTextAsync(filePath, json);
 
         int exitCode = await PresetHandler.LoadAsync(
@@ -325,7 +339,7 @@ public sealed class PresetHandlerTests : IDisposable
         Assert.Equal(Program.ExitSuccess, exitCode);
         string output = _stdout.ToString();
         Assert.Contains("Deleted preset 'doomed'.", output);
-        Assert.False(File.Exists(Path.Combine(_tempDir, "doomed.json")));
+        Assert.False(File.Exists(Path.Join(_tempDir, "doomed.json")));
     }
 
     [Fact]

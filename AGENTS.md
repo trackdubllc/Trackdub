@@ -58,7 +58,10 @@ dotnet build Trackdub.slnx --configuration Release --no-restore -m:1 -warnaserro
 dotnet test Trackdub.slnx --configuration Release --no-build -m:1
 
 # Run headless CLI
+# On Windows, Trackdub.Cli is multi-targeted (net10.0 + net10.0-windows10.0.19041.0),
+# so dotnet run needs an explicit --framework flag; on non-Windows a plain run works.
 dotnet run --project src/Trackdub.Cli -- --help
+dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows
 
 # Solution filter builds
 dotnet build Trackdub.Inference.slnx -m:1
@@ -112,20 +115,6 @@ Imperative title: `Add ...`, `Remove ...`, `Fix ...`, `Revise ...`
 4. Cross-platform is a requirement. Don't assume any single OS.
 5. Never fake readiness. Each state (registered, downloaded, ran, succeeded) is distinct.
 
-## Linear (mandatory for agents)
-
-Linear workspace [trackdubllc](https://linear.app/trackdubllc) (team **TS**) is the source of truth for trackable work across Trackdub repos.
-
-Agents **must** both **reference and update** Linear autonomously:
-
-1. Search for an existing `TS-*` / backlog id before creating duplicates.
-2. Create issues for new work (bugs, follow-ups, debt) on the right project with `repo:*` / `area:*` / `agent-owned` labels.
-3. Move issues In Progress → In Review → Done as work progresses; comment blockers and proof.
-4. Mention `TS-xxx` / `Fixes TS-xxx` in PR bodies once GitHub↔Linear is connected.
-5. Never mark Done without honest evidence. Never fake readiness in Linear either.
-
-Full procedure: [docs/operations/linear-workflow.md](docs/operations/linear-workflow.md). Integrations (GitHub / Notion / Figma) are tracked under project **Platform & Tooling**.
-
 ## Repository Policy
 
 See [docs/repository-policy.md](docs/repository-policy.md) for organization and governance details.
@@ -142,6 +131,7 @@ No long-running services. The product entrypoint is the headless CLI (`src/Track
 - FFmpeg/ffprobe are required for media stages; playback natives (libmpv/LibVLC) are optional for CLI pipeline runs. Readiness: `dotnet run --project src/Trackdub.Cli -- doctor`.
 - Full `dub` / ASR / TTS / translation need ONNX models downloaded into the model cache (`dotnet run --project src/Trackdub.Cli -- models bundle-needed`, then `dotnet run --project src/Trackdub.Cli -- models download <id>`). Tests that need models skip cleanly when missing.
 - Prefer `dotnet run --project src/Trackdub.Cli -- <args>` over a global tool install. Use `--no-build` after a fresh Debug build.
+- On Windows, `Trackdub.Cli` is multi-targeted (`net10.0` and `net10.0-windows10.0.19041.0`), so `dotnet run` fails without an explicit framework; pass `--framework net10.0` (or `--framework net10.0-windows10.0.19041.0`), e.g. `dotnet run --project src/Trackdub.Cli --framework net10.0 -- <args>`. On non-Windows the project targets only `net10.0`, so no flag is needed.
 - Default data/cache roots land under `~/.local/share/Trackdub` (override with `TRACKDUB_DATA_ROOT` / `TRACKDUB_CACHE_ROOT` if needed).
 
 ## Documentation

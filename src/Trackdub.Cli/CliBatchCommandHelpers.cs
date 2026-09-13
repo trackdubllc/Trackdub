@@ -141,12 +141,13 @@ internal static class CliBatchCommandHelpers
     {
         mediaFiles = [];
         exitCode = Program.ExitSuccess;
+        string? resolvedDir = null;
 
         try
         {
             if (inputDir is not null)
             {
-                string resolvedDir = Path.GetFullPath(inputDir);
+                resolvedDir = Path.GetFullPath(UserPathText.Normalize(inputDir));
                 if (!Directory.Exists(resolvedDir))
                 {
                     CliErrorReporter.ReportValidationError(
@@ -185,8 +186,8 @@ internal static class CliBatchCommandHelpers
 
         if (mediaFiles.Count == 0)
         {
-            string source = inputDir is not null
-                ? $"directory '{Path.GetFullPath(inputDir)}'"
+            string source = resolvedDir is not null
+                ? $"directory '{resolvedDir}'"
                 : $"glob pattern '{inputGlob}'";
             CliErrorReporter.ReportValidationError(
                 ErrorCode.InvalidArgument,

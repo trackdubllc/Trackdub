@@ -35,7 +35,15 @@ New-Item -ItemType Directory -Path $extractDir | Out-Null
 
 $extension = [System.IO.Path]::GetExtension($assetName).ToLowerInvariant()
 if ($extension -eq '.msi') {
-    $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/a', $assetPath, '/qn', "TARGETDIR=$extractDir") -Wait -PassThru
+    # Prefer Sysnative so 32-bit PowerShell reaches the 64-bit msiexec, not SysWOW64.
+    $msiexec = Join-Path $env:SystemRoot 'Sysnative\msiexec.exe'
+    if (-not (Test-Path -LiteralPath $msiexec)) {
+        $msiexec = Join-Path $env:SystemRoot 'System32\msiexec.exe'
+    }
+
+    # Pass one msiexec argument string. An ArgumentList array with quoted TARGETDIR
+    # makes msiexec return 1639 (ERROR_INVALID_COMMAND_LINE).
+    $process = Start-Process -FilePath $msiexec -ArgumentList "/a `"$assetPath`" TARGETDIR=`"$extractDir`" /qn" -Wait -PassThru
     if ($process.ExitCode -ne 0) {
         throw "msiexec administrative extract failed with exit code $($process.ExitCode)."
     }
