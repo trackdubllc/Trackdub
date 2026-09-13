@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -115,7 +116,7 @@ internal static class BenchmarkHardwareInfo
         // redirected-pipe reader thread alive: such a lingering foreground thread
         // keeps the test host from exiting cleanly and corrupts the xunit.v3
         // stdout IPC handshake that dotnet test uses to enumerate assemblies.
-        if (!TryResolveExecutable("wmic"))
+        if (TryResolveExecutable("wmic") is not { } wmicPath)
         {
             return "Unknown";
         }
@@ -124,7 +125,7 @@ internal static class BenchmarkHardwareInfo
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "wmic",
+                FileName = wmicPath,
                 Arguments = $"path {className} get {propertyName}",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -146,22 +147,16 @@ internal static class BenchmarkHardwareInfo
 
             if (!process.WaitForExit(5000))
             {
-                try { process.Kill(entireProcessTree: true); }
-                catch (InvalidOperationException)
-                {
-                    // Best-effort cleanup after timeout; process may have already exited.
-                }
-                catch (System.ComponentModel.Win32Exception)
-                {
-                    // Best-effort cleanup after timeout; ignore kill failure and continue returning Unknown.
-                }
+                KillProcessTreeBestEffort(process);
+                WaitForExitBestEffort(process, 5000);
+                Task.WaitAll([outputTask, errorTask], 5000);
                 return "Unknown";
             }
 
             // Ensure the async pipe readers have fully completed (and their threads
             // released) before the process handle is disposed by the using block.
             Task.WaitAll([outputTask, errorTask], 5000);
-            if (!outputTask.IsCompletedSuccessfully)
+            if (!outputTask.IsCompletedSuccessfully || !errorTask.IsCompletedSuccessfully)
             {
                 return "Unknown";
             }
@@ -182,29 +177,41 @@ internal static class BenchmarkHardwareInfo
     }
 
     /// <summary>
-    /// Returns true when <paramref name="executableName"/> can be located on PATH
-    /// (or in the Windows System32 directory). Used to avoid spawning tools such as
-    /// <c>wmic</c> that have been removed from modern Windows images.
+    /// Returns the full path when <paramref name="executableName"/> can be located
+    /// under Windows System32\wbem, System32, or PATH. Used to avoid spawning tools
+    /// such as <c>wmic</c> that have been removed from modern Windows images, and
+    /// to start the same path that the probe found (wbem is often not on PATH).
     /// </summary>
-    private static bool TryResolveExecutable(string executableName)
+    private static string? TryResolveExecutable(string executableName)
     {
         try
         {
+            string safeName = Path.GetFileName(executableName);
+            if (string.IsNullOrWhiteSpace(safeName))
+            {
+                return null;
+            }
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 string systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
-                string wbemCandidate = Path.Combine(systemDirectory, "wbem", executableName + ".exe");
-                string systemCandidate = Path.Combine(systemDirectory, executableName + ".exe");
-                if (File.Exists(wbemCandidate) || File.Exists(systemCandidate))
+                string wbemCandidate = Path.Combine(systemDirectory, "wbem", safeName + ".exe");
+                if (File.Exists(wbemCandidate))
                 {
-                    return true;
+                    return wbemCandidate;
+                }
+
+                string systemCandidate = Path.Combine(systemDirectory, safeName + ".exe");
+                if (File.Exists(systemCandidate))
+                {
+                    return systemCandidate;
                 }
             }
 
             string? pathVariable = Environment.GetEnvironmentVariable("PATH");
             if (string.IsNullOrEmpty(pathVariable))
             {
-                return false;
+                return null;
             }
 
             string[] extensions = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
@@ -215,20 +222,69 @@ internal static class BenchmarkHardwareInfo
             {
                 foreach (string extension in extensions)
                 {
-                    if (File.Exists(Path.Combine(directory, executableName + extension)))
+                    string candidateName = Path.GetFileName(safeName + extension);
+                    if (string.IsNullOrEmpty(candidateName))
                     {
-                        return true;
+                        continue;
+                    }
+
+                    string candidate = Path.Combine(directory, candidateName);
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
                     }
                 }
             }
 
-            return false;
+            return null;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is UnauthorizedAccessException
+            or IOException
+            or ArgumentException
+            or NotSupportedException)
         {
             // If we cannot probe PATH, assume the executable is unavailable rather
             // than risk spawning a process that cannot be cleaned up deterministically.
-            return false;
+            return null;
+        }
+    }
+
+    private static void KillProcessTreeBestEffort(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Process already exited.
+        }
+        catch (Win32Exception)
+        {
+            // Best-effort cleanup after timeout.
+        }
+        catch (NotSupportedException)
+        {
+            // Entire-tree kill is unsupported on this platform.
+        }
+    }
+
+    private static void WaitForExitBestEffort(Process process, int milliseconds)
+    {
+        try
+        {
+            process.WaitForExit(milliseconds);
+        }
+        catch (InvalidOperationException)
+        {
+            // Process was never started or has already been disposed.
+        }
+        catch (Win32Exception)
+        {
+            // Wait failed; callers still drain redirected pipes before dispose.
         }
     }
 }
