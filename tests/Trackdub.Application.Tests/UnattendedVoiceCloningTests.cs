@@ -6,6 +6,7 @@ using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain.Media;
 using Trackdub.Domain.Projects;
 using Trackdub.Domain.Speakers;
+using Trackdub.Domain.StageRuns;
 using Trackdub.Domain.Transcript;
 
 namespace Trackdub.Application.Tests;
@@ -55,8 +56,55 @@ public sealed class UnattendedVoiceCloningTests
 
         DubbingSessionOptions resolved = DubbingPipelineEngine.ApplyVoiceCloningDefaults(options);
 
-        Assert.Same(options, resolved);
+        Assert.NotNull(resolved.ModelPreferences);
         Assert.Equal("chatterbox-multilingual", resolved.ModelPreferences!["tts"]);
+    }
+
+    [Fact]
+    public void ApplyVoiceCloningDefaults_WhenTtsKeyIsCaseSensitive_NormalizesToOrdinalIgnoreCase()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "clip.mp4",
+            TargetLanguageCode = "en",
+            ModelPreferences = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["TTS"] = "chatterbox-multilingual",
+                ["asr"] = "whisper-small-genai",
+            },
+            UseVoiceCloning = true,
+        };
+
+        DubbingSessionOptions resolved = DubbingPipelineEngine.ApplyVoiceCloningDefaults(options);
+
+        Assert.NotNull(resolved.ModelPreferences);
+        // The explicit override survives a case-insensitive lookup (StageNames.Tts == "tts").
+        Assert.Equal("chatterbox-multilingual", resolved.ModelPreferences![StageNames.Tts]);
+        Assert.Equal("chatterbox-multilingual", resolved.ModelPreferences["tts"]);
+        // All original entries are preserved.
+        Assert.Equal("whisper-small-genai", resolved.ModelPreferences["asr"]);
+    }
+
+    [Fact]
+    public void BuildUnattendedTtsRequest_WhenTtsKeyIsCaseSensitive_RuntimeSelectionRetainsAlias()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "clip.mp4",
+            TargetLanguageCode = "en",
+            ModelPreferences = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["TTS"] = "chatterbox-multilingual",
+            },
+            UseVoiceCloning = true,
+        };
+
+        DubbingSessionOptions resolved = DubbingPipelineEngine.ApplyVoiceCloningDefaults(options);
+
+        // Simulate the runtime-selection lookup path used by BuildModelPreferences.
+        Assert.NotNull(resolved.ModelPreferences);
+        string? ttsAlias = resolved.ModelPreferences!.GetValueOrDefault(StageNames.Tts);
+        Assert.Equal("chatterbox-multilingual", ttsAlias);
     }
 
     [Fact]

@@ -1104,15 +1104,17 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             return options;
         }
 
-        if (options.ModelPreferences is not null &&
-            options.ModelPreferences.Keys.Any(key => key.Equals(StageNames.Tts, StringComparison.OrdinalIgnoreCase)))
-        {
-            return options;
-        }
-
         var preferences = options.ModelPreferences is not null
             ? new Dictionary<string, string>(options.ModelPreferences, StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (preferences.ContainsKey(StageNames.Tts))
+        {
+            // Preserve the explicit TTS override, but return the case-insensitive copy so that
+            // BuildModelPreferences' GetValueOrDefault(StageNames.Tts) lookup resolves regardless
+            // of the casing the caller used for the original TTS key.
+            return options with { ModelPreferences = preferences };
+        }
 
         preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
         return options with { ModelPreferences = preferences };
