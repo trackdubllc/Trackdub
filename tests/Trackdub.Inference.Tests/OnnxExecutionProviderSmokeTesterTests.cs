@@ -396,11 +396,13 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     {
         using TempDirectoryFixture fixture = new();
 
-        // Seed the model root with a file that WOULD be a valid raw ONNX InferenceSession
-        // target if the smoke tester fell through to SmokeTestGenericSessionAsync, but leave
-        // out genai_config.json. If routing regresses to the InferenceSession path the failure
-        // Detail would reference the .onnx load; the GenAI model-load path instead reports the
-        // missing genai_config.json, which is what we assert here.
+        // Seed the model root with an intentionally INVALID ONNX decoy (the literal bytes
+        // "not-a-real-onnx-graph", which are not a parseable ONNX graph) at the model.onnx path
+        // that the generic InferenceSession fallback (SmokeTestGenericSessionAsync) would try to
+        // load, and leave out genai_config.json. If routing regressed to that fallback path the
+        // failure Detail would reference the .onnx parse/load; because the correct GenAI
+        // model-load path is taken instead, the failure Detail reports the missing
+        // genai_config.json, which is what we assert here.
         string entryPath = Path.Join(fixture.RootPath, "model.onnx");
         File.WriteAllText(entryPath, "not-a-real-onnx-graph");
         var tester = new OnnxExecutionProviderSmokeTester();
