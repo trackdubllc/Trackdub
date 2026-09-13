@@ -104,6 +104,35 @@ public sealed class BenchmarkModelPathResolverTests
     }
 
     [Fact]
+    public void ResolveSingle_ManifestKokoroRootDirectoryFallsBackWhenCacheIsIncomplete()
+    {
+        BundledModelManifestEntry kokoroTemplate = LoadDefaultManifestRegistry().Entries.Single(entry =>
+            entry.ModelId.Equals("onnx-community/Kokoro-82M-v1.0-ONNX", StringComparison.OrdinalIgnoreCase));
+
+        string cacheRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-empty-cache-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX"));
+        string manifestRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-repo-{Guid.NewGuid():N}");
+        SeedKokoroModelLayout(manifestRoot, includeVoices: true);
+
+        try
+        {
+            BundledModelManifestRegistry registry = CreateRelocatedKokoroRegistry(kokoroTemplate, manifestRoot);
+            var resolver = new BenchmarkModelPathResolver(registry, cacheRoot);
+            BenchmarkModelCandidate candidate = resolver.ResolveSingle("kokoro-onnx");
+
+            AssertRootDirectoryContainsVoices(candidate);
+            Assert.True(
+                PathsEqual(candidate.RootDirectory, manifestRoot),
+                "Incomplete cache root must not replace the repo models root that contains voices/.");
+        }
+        finally
+        {
+            DeleteDirectory(cacheRoot);
+            DeleteDirectory(manifestRoot);
+        }
+    }
+
+    [Fact]
     public void ResolveSingle_CachedKokoroRootDirectoryContainsVoices()
     {
         BundledModelManifestRegistry registry = LoadDefaultManifestRegistry();
