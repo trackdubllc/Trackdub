@@ -1184,20 +1184,20 @@ public sealed class TtsOrchestrationService(
                 $"No stock voice matched target language '{targetLanguage}' to replace the persisted voice-clone model for {speaker.DisplayName}.");
 
         reservedStockVoiceIds?.Add(voice.VoiceId);
-        VoiceAssignment fallbackAssignment = currentAssignment with
         // Update the existing assignment in place to transition its VoiceModelId and flags
         // without changing its Id, avoiding SQLite primary-key conflicts when SaveAsync
         // performs an INSERT that no longer matches the partial is_fallback=0 index.
-        currentAssignment = currentAssignment with
+        VoiceAssignment updatedAssignment = currentAssignment with
+        {
             VoiceModelId = StockTtsDefaults.KokoroPrimaryAlias,
             VoiceVariant = voice.VoiceId,
             RequiresConsent = false,
             IsFallback = true,
             ReferenceClipArtifactId = null
         };
-        await voiceAssignmentRepository.SaveAsync(fallbackAssignment, cancellationToken).ConfigureAwait(false);
-        await voiceAssignmentRepository.SaveAsync(currentAssignment, cancellationToken).ConfigureAwait(false);
-        return currentAssignment;
+        await voiceAssignmentRepository.SaveAsync(updatedAssignment, cancellationToken).ConfigureAwait(false);
+        return updatedAssignment;
+    }
 
     private static HashSet<string> CollectReservedStockVoiceIds(
         TranscriptProjectState currentState,
