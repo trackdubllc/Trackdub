@@ -79,7 +79,7 @@ internal static class ExportResumeGating
     public static string SubtitleFormatsTokenFromRawOptions(IReadOnlyList<string>? formats) =>
         formats is null
             ? "default"
-            : string.Join(",", NormalizeRawFormatTokens(formats));
+            : string.Join(",", NormalizeRawFormatTokens(formats).Distinct(StringComparer.Ordinal));
 
     private static IReadOnlyList<string> NormalizeRawFormatTokens(IReadOnlyList<string> formats)
     {

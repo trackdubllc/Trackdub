@@ -239,7 +239,7 @@ public static class StageArtifactResumeEvaluator
                     cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
             // A manifest that cannot be read tells us nothing about the prior run's flags.
             // Preserve existing behavior (resume) rather than force a spurious rerun.

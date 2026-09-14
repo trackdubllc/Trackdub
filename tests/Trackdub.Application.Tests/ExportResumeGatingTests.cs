@@ -410,7 +410,7 @@ public sealed class ExportResumeGatingTests
     private sealed class TempDir : IDisposable
     {
         public TempDir()
-        {
+            Path = System.IO.Path.Join(System.IO.Path.GetTempPath(), $"trackdub-export-resume-{Guid.NewGuid():N}");
             Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"trackdub-export-resume-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
