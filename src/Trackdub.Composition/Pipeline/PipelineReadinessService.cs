@@ -318,12 +318,15 @@ public sealed class PipelineReadinessService(
         bool skipProviderSmokeTest = false)
     {
         RuntimeModelRequestOptions options = RuntimeModelRequestFactory.CreateOptions(selections);
+        ExecutionProviderKind? preferredProvider =
+            RuntimeModelRequestFactory.ResolvePreferredExecutionProvider(options, stage);
 
         return new(
             Stage: stage,
             PreferredModelAlias: modelAlias,
-            PreferredExecutionProvider: selections.HardwareOverrides.TryGetValue(
-                stage.ToString(), out ExecutionProviderKind ep) ? ep : null,
+            PreferredExecutionProvider: preferredProvider,
+            RequirePreferredExecutionProvider: preferredProvider is not null
+                && (selections.IsDevBuild || selections.RequirePreferredExecutionProviders),
             PreferredModelVariantAlias: RuntimeModelRequestFactory.ResolvePreferredModelVariantAlias(
                 options,
                 stage,

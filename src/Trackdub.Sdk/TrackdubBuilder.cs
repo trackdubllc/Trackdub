@@ -65,7 +65,9 @@ public sealed class TrackdubBuilder
     public TrackdubBuilder WithExecutionProvider(ExecutionProviderPreference preference)
     {
         _preferredExecutionProvider = ExecutionProviderPreferenceMapping.ToPreferredKind(preference);
-        _requirePreferredExecutionProvider = _preferredExecutionProvider is not null;
+        // Legacy preference stays soft so the planner can fall back when the preferred
+        // provider is unavailable. Explicit Kind pins use the overload below.
+        _requirePreferredExecutionProvider = false;
         return this;
     }
 

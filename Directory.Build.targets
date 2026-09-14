@@ -67,7 +67,12 @@
                              CopyToOutputDirectory="PreserveNewest"
                              TargetPath="onnxruntime-genai-cuda.dll"
                              Visible="false"
-                             Condition="'%(_GenAiCudaSidecar.Rid)' == 'win-x64'" />
+                             Condition="'$(RuntimeIdentifier)' == '' AND '%(_GenAiCudaSidecar.Rid)' == 'win-x64'" />
+      <ContentWithTargetPath Include="@(_GenAiCudaSidecar)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             TargetPath="onnxruntime-genai-cuda.dll"
+                             Visible="false"
+                             Condition="'$(RuntimeIdentifier)' != '' AND '%(_GenAiCudaSidecar.Rid)' == '$(RuntimeIdentifier)'" />
     </ItemGroup>
   </Target>
 
@@ -91,7 +96,10 @@
           OverwriteReadOnlyFiles="true"
           SkipUnchangedFiles="true" />
     <ItemGroup>
-      <_GenAiCudaSidecarRoot Include="@(_GenAiCudaSidecarCopy)" Condition="'%(Rid)' == 'win-x64'" />
+      <_GenAiCudaSidecarRoot Include="@(_GenAiCudaSidecarCopy)"
+                             Condition="'$(RuntimeIdentifier)' == '' AND '%(Rid)' == 'win-x64'" />
+      <_GenAiCudaSidecarRoot Include="@(_GenAiCudaSidecarCopy)"
+                             Condition="'$(RuntimeIdentifier)' != '' AND '%(Rid)' == '$(RuntimeIdentifier)'" />
     </ItemGroup>
     <Copy SourceFiles="@(_GenAiCudaSidecarRoot)"
           DestinationFiles="$(TargetDir)onnxruntime-genai-cuda.dll"
