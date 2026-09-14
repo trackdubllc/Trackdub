@@ -152,7 +152,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     private static Tensor<float> ResolveWhisperEncoderHiddenStates(
         IEnumerable<DisposableNamedOnnxValue> encoderResults)
     {
-        foreach (DisposableNamedOnnxValue result in encoderResults)
+        DisposableNamedOnnxValue[] materialised = encoderResults as DisposableNamedOnnxValue[]
+            ?? encoderResults.ToArray();
+        foreach (DisposableNamedOnnxValue result in materialised)
         {
             if (result.Name.Contains("hidden", StringComparison.OrdinalIgnoreCase)
                 || result.Name.Equals("last_hidden_state", StringComparison.OrdinalIgnoreCase))
@@ -161,7 +163,10 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             }
         }
 
-        return encoderResults.First().AsTensor<float>();
+        string available = string.Join(", ", materialised.Select(static result => result.Name));
+        throw new InvalidOperationException(
+            "Whisper encoder smoke test did not produce a hidden-state output. "
+            + $"Available outputs: {(string.IsNullOrWhiteSpace(available) ? "(none)" : available)}.");
     }
 
     private static async Task SmokeTestAsrAsync(

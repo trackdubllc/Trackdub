@@ -989,6 +989,12 @@ public sealed class LibMpvCompositedPlaybackBackend :
                || string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
     }
 
+    // Diagnostic seam for tests and playback triage: exposes raw libmpv properties such as
+    // hwdec-current, video-format, and width/height so a black-frame report can show which
+    // decoder actually engaged instead of guessing from the configured option.
+    internal string? ReadMpvPropertyForDiagnostics(string propertyName) =>
+        ReadPropertyString(propertyName);
+
     private string? ReadPropertyString(string propertyName)
     {
         if (mpvHandle == IntPtr.Zero || mpv_get_property_string is null)

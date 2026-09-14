@@ -192,6 +192,10 @@ internal static class TrtRtxProvidersHandler
                     cancellationToken)
                 .ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             var failed = new TrtRtxSmokeOutput

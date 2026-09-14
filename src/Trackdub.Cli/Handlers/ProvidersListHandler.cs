@@ -101,37 +101,39 @@ internal static class ProvidersListHandler
 
         var remediations = new Dictionary<ExecutionProviderKind, string>();
 
-        // Local helper to reduce duplication for IsReady/InstallHint projection blocks
+        // Local helper to reduce duplication for IsReady/InstallHint projection blocks,
+        // gated on the provider's supported platform.
         void AddRemediationIfNotReady(
             ExecutionProviderKind providerKind,
+            bool isSupportedPlatform,
             bool isReady,
             string? installHint,
             string fallbackText)
         {
-            if (!isReady)
+            if (isSupportedPlatform && !isReady)
             {
                 remediations[providerKind] = installHint ?? fallbackText;
             }
         }
 
         TensorRtRtxRuntimeReadinessSnapshot trtSnapshot = await trtTask.ConfigureAwait(false);
-        AddRemediationIfNotReady(ExecutionProviderKind.TensorRTRtx, trtSnapshot.IsReady, trtSnapshot.InstallHint,
+        AddRemediationIfNotReady(ExecutionProviderKind.TensorRTRtx, trtSnapshot.IsSupportedPlatform, trtSnapshot.IsReady, trtSnapshot.InstallHint,
             "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license, then trackdub providers trt-rtx smoke.");
 
         MigraphxRuntimeReadinessSnapshot migraphxSnapshot = await migraphxTask.ConfigureAwait(false);
-        AddRemediationIfNotReady(ExecutionProviderKind.Migraphx, migraphxSnapshot.IsReady, migraphxSnapshot.InstallHint,
+        AddRemediationIfNotReady(ExecutionProviderKind.Migraphx, migraphxSnapshot.IsSupportedPlatform, migraphxSnapshot.IsReady, migraphxSnapshot.InstallHint,
             "Install the Windows ML MIGraphX catalog package or a ROCm ONNX Runtime build on Linux.");
 
         WinMlCatalogRuntimeReadinessSnapshot openVinoSnapshot = await openVinoTask.ConfigureAwait(false);
-        AddRemediationIfNotReady(ExecutionProviderKind.OpenVinoCatalog, openVinoSnapshot.IsReady, openVinoSnapshot.InstallHint,
+        AddRemediationIfNotReady(ExecutionProviderKind.OpenVinoCatalog, openVinoSnapshot.IsSupportedPlatform, openVinoSnapshot.IsReady, openVinoSnapshot.InstallHint,
             "Accept the Intel OpenVINO license in settings and install the Windows ML OpenVINO catalog EP.");
 
         WinMlCatalogRuntimeReadinessSnapshot qnnSnapshot = await qnnTask.ConfigureAwait(false);
-        AddRemediationIfNotReady(ExecutionProviderKind.Qnn, qnnSnapshot.IsReady, qnnSnapshot.InstallHint,
+        AddRemediationIfNotReady(ExecutionProviderKind.Qnn, qnnSnapshot.IsSupportedPlatform, qnnSnapshot.IsReady, qnnSnapshot.InstallHint,
             "Accept the Qualcomm QNN license in settings and install the Windows ML QNN catalog EP.");
 
         WinMlCatalogRuntimeReadinessSnapshot vitisSnapshot = await vitisTask.ConfigureAwait(false);
-        AddRemediationIfNotReady(ExecutionProviderKind.VitisAi, vitisSnapshot.IsReady, vitisSnapshot.InstallHint,
+        AddRemediationIfNotReady(ExecutionProviderKind.VitisAi, vitisSnapshot.IsSupportedPlatform, vitisSnapshot.IsReady, vitisSnapshot.InstallHint,
             "Accept the AMD Ryzen AI license in settings and install the Windows ML VitisAI catalog EP.");
 
         return remediations;
