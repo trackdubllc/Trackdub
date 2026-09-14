@@ -1267,15 +1267,13 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         // Callers may hand us an arbitrary IReadOnlyDictionary whose comparer is case-sensitive
         // (e.g. StringComparer.Ordinal), so it can legitimately contain keys that differ only by
         // case such as both "TTS" and "tts". Copying via the collection constructor with an
-        // OrdinalIgnoreCase comparer would throw ArgumentException on those duplicates, so we
-        // normalize by explicit enumeration instead. Duplicate-precedence policy: last write wins
-        // in the source's enumeration order, matching how the downstream case-insensitive
-        // GetValueOrDefault(StageNames.Tts) lookup in BuildModelPreferences would otherwise
-        // collapse the entries.
+        // OrdinalIgnoreCase comparer throws ArgumentException on those duplicates, so normalize
+        // by explicit enumeration. Duplicate-precedence: last write wins in the source's
+        // enumeration order (matches Dictionary enumeration, but that order is not guaranteed).
         var preferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (options.ModelPreferences is not null)
         {
-            foreach (KeyValuePair<string, string> preference in options.ModelPreferences)
+            foreach (var preference in options.ModelPreferences)
             {
                 preferences[preference.Key] = preference.Value;
             }
