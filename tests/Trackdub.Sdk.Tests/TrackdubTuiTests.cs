@@ -493,7 +493,8 @@ public sealed class TrackdubTuiTests : IDisposable
             TranscriptProjectState? state,
             CancellationToken cancellationToken = default,
             string? sourceLanguageCode = null,
-            string? targetLanguageCode = null) =>
+            string? targetLanguageCode = null,
+            bool validateRuntime = true) =>
             Task.FromResult(PipelineReadinessReport.Empty);
 
         public void InvalidateCache(IReadOnlyList<RuntimeStage>? stages = null)

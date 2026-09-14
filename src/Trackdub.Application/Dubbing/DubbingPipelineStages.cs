@@ -25,15 +25,19 @@ public static class DubbingPipelineStages
     ];
 
     /// <summary>
-    /// Full stage catalog used when resolving StageFilter.
+    /// Full stage catalog used when resolving StageFilter. AudioPreparation, OverlapRescue,
+    /// and TextRefinementAsr are opt-in utility stages shared with the desktop shell.
     /// Lip-sync runs after TTS (takes exist). Lip-synthesis runs after Export (needs ExportAudio).
     /// </summary>
     public static readonly IReadOnlyList<string> ExtendedStageOrder =
     [
         StageNames.Separation,
+        StageNames.AudioPreparation,
         StageNames.Vad,
         StageNames.Diarization,
         StageNames.Asr,
+        StageNames.OverlapRescue,
+        StageNames.TextRefinementAsr,
         StageNames.Translation,
         StageNames.Tts,
         StageNames.LipSync,
@@ -55,9 +59,11 @@ public static class DubbingPipelineStages
     private static readonly HashSet<string> StagesRequiringSourceMedia = new(StringComparer.OrdinalIgnoreCase)
     {
         StageNames.Separation,
+        StageNames.AudioPreparation,
         StageNames.Vad,
         StageNames.Asr,
         StageNames.Diarization,
+        StageNames.OverlapRescue,
         StageNames.LipSynthesis,
     };
 
