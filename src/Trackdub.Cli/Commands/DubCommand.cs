@@ -298,25 +298,22 @@ internal static class DubCommand
                 }
 
                 // Build template DubbingSessionOptions (SourceMediaPath is a placeholder; BatchProcessor overrides per-file)
-                var templateOptions = new DubbingSessionOptions
-                {
-                    SourceMediaPath = "batch",
-                    TargetLanguageCode = targetLanguage,
-                    SourceLanguageCode = sourceLanguage,
-                    ProjectOutputDirectory = outputDirectory is not null ? Path.GetFullPath(outputDirectory) : null,
-                    ModelPreferences = modelPreferences.Count > 0 ? modelPreferences : null,
-                    ExportFormat = exportFormat,
-                    EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
-                    UseVoiceCloning = voiceClone,
-                    ApplyTimbrePolish = timbrePolish,
-                    RestoreOriginalPan = restorePan,
-                    MatchOriginalLoudness = matchLoudness,
-                    VoiceAssignmentOverrides = voiceOverrides.Count > 0 ? voiceOverrides : null,
-                    SubtitleFormats = subtitleFormats,
-                    SubtitleSource = subtitleSource,
-                    BurnInSubtitles = burnInSubtitles,
-                    VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
-                };
+                var templateOptions = PipelineOptionBuilder.BuildBatchSessionOptions(
+                    targetLanguage,
+                    sourceLanguage,
+                    outputDirectory,
+                    modelPreferences,
+                    exportFormat,
+                    enableAsrTextRefinement ?? false,
+                    voiceClone,
+                    timbrePolish,
+                    restorePan,
+                    matchLoudness,
+                    voiceOverrides,
+                    subtitleFormats,
+                    subtitleSource,
+                    burnInSubtitles,
+                    videoEncoderKey);
 
                 // Build BatchOptions
                 var batchOptions = new BatchOptions
@@ -429,25 +426,23 @@ internal static class DubCommand
                     singleProgressFormat,
                     async (progress, ct) => await RunPipelineHandler.ExecuteAsync(
                         singleFactory,
-                        new RunPipelineHandler.RunPipelineRequest
-                        {
-                            SourceMediaPath = resolvedMediaPath,
-                            ProjectOutputDirectory = resolvedOutputDirectory,
-                            SourceLanguageCode = sourceLanguage,
-                            TargetLanguageCode = targetLanguage,
-                            ModelPreferences = singleModelPreferences.Count > 0 ? singleModelPreferences : null,
-                            ExportFormat = exportFormat,
-                            EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
-                            UseVoiceCloning = voiceClone,
-                            ApplyTimbrePolish = timbrePolish,
-                            RestoreOriginalPan = restorePan,
-                            MatchOriginalLoudness = matchLoudness,
-                            VoiceAssignmentOverrides = voiceOverrides.Count > 0 ? voiceOverrides : null,
-                            SubtitleFormats = subtitleFormats,
-                            SubtitleSource = subtitleSource,
-                            BurnInSubtitles = burnInSubtitles,
-                            VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
-                        },
+                        PipelineOptionBuilder.BuildSingleFileRequest(
+                            resolvedMediaPath,
+                            resolvedOutputDirectory,
+                            sourceLanguage,
+                            targetLanguage,
+                            singleModelPreferences,
+                            exportFormat,
+                            enableAsrTextRefinement ?? false,
+                            voiceClone,
+                            timbrePolish,
+                            restorePan,
+                            matchLoudness,
+                            voiceOverrides,
+                            subtitleFormats,
+                            subtitleSource,
+                            burnInSubtitles,
+                            videoEncoderKey),
                         progress,
                         Console.Out,
                         ct).ConfigureAwait(false),
