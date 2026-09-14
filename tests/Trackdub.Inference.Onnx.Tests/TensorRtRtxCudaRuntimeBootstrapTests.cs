@@ -1,4 +1,11 @@
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Trackdub.Inference.Onnx.TensorRtRtx;
+
+#if WINDOWS
+using System.Security.AccessControl;
+using System.Security.Principal;
+#endif
 
 namespace Trackdub.Inference.Onnx.Tests;
 
@@ -59,5 +66,118 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
     {
         string detail = TensorRtRtxCudaRuntimeBootstrap.DescribeInstalledCudaMajorVersions();
         Assert.False(string.IsNullOrWhiteSpace(detail));
+    }
+
+    [Fact]
+    public void EnumerateChildDirectoriesSafe_SurvivesUnreadableRoot()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"trackdub-cuda-blocked-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "child"));
+
+        try
+        {
+            if (!TryDenyDirectoryEnumerateAccess(root))
+            {
+                return;
+            }
+
+            // Must not throw when Directory.EnumerateDirectories fails on a locked root.
+            string[] children = TensorRtRtxCudaRuntimeBootstrap
+                .EnumerateChildDirectoriesSafe(root)
+                .ToArray();
+
+            Assert.Empty(children);
+        }
+        finally
+        {
+            RestoreDirectoryAccess(root);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static bool TryDenyDirectoryEnumerateAccess(string directory)
+    {
+#if WINDOWS
+        if (OperatingSystem.IsWindows())
+        {
+            DenyWindowsDirectoryEnumerateAccess(directory);
+            return true;
+        }
+#endif
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ||
+            RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            File.SetUnixFileMode(directory, UnixFileMode.None);
+            return true;
+        }
+
+        return false;
+    }
+
+#if WINDOWS
+    [SupportedOSPlatform("windows")]
+    private static void DenyWindowsDirectoryEnumerateAccess(string directory)
+    {
+        DirectoryInfo info = new(directory);
+        DirectorySecurity security = info.GetAccessControl();
+        SecurityIdentifier? currentUser = WindowsIdentity.GetCurrent().User;
+        Assert.NotNull(currentUser);
+        security.AddAccessRule(new FileSystemAccessRule(
+            currentUser,
+            FileSystemRights.ListDirectory | FileSystemRights.Read | FileSystemRights.ReadData,
+            AccessControlType.Deny));
+        info.SetAccessControl(security);
+    }
+#endif
+
+    private static void RestoreDirectoryAccess(string directory)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        try
+        {
+#if WINDOWS
+            if (OperatingSystem.IsWindows())
+            {
+                DirectoryInfo info = new(directory);
+                DirectorySecurity security = info.GetAccessControl();
+                AuthorizationRuleCollection rules = security.GetAccessRules(
+                    includeExplicit: true,
+                    includeInherited: false,
+                    typeof(SecurityIdentifier));
+                foreach (FileSystemAccessRule rule in rules.OfType<FileSystemAccessRule>())
+                {
+                    if (rule.AccessControlType == AccessControlType.Deny)
+                    {
+                        security.RemoveAccessRule(rule);
+                    }
+                }
+
+                info.SetAccessControl(security);
+                return;
+            }
+#endif
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ||
+                RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                File.SetUnixFileMode(
+                    directory,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup so temp delete can proceed.
+        }
     }
 }

@@ -9,6 +9,13 @@ public interface ITranscriptWorkspaceSession : IDisposable
     string ProjectRootPath { get; }
 
     TranscriptWorkspace Workspace { get; }
+
+    /// <summary>
+    /// Service provider for the session's DI scope. Workspace workflows and
+    /// pipeline hosts resolve per-session services (consent, model setup
+    /// interaction, tier gates) from it.
+    /// </summary>
+    IServiceProvider Services { get; }
 }
 
 public interface ITranscriptWorkspaceSessionFactory
@@ -33,6 +40,12 @@ public sealed class ProjectSessionService(
     public TranscriptWorkspace? CurrentWorkspace => currentSession?.Workspace;
 
     public string? CurrentProjectRootPath => currentSession?.ProjectRootPath;
+
+    /// <summary>
+    /// The live workspace session, when a project is open. Callers must not
+    /// dispose it; the service owns session lifetime.
+    /// </summary>
+    public ITranscriptWorkspaceSession? CurrentSession => currentSession;
 
     public bool CanUndo => undoStack.Count > 0;
 
