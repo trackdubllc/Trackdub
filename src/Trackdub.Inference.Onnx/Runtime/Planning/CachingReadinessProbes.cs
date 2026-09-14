@@ -15,9 +15,25 @@ namespace Trackdub.Inference.Onnx.Runtime.Planning;
 /// path is never served a value cached from an <c>allowProviderDownloads:false</c> probe. Concurrent
 /// callers (BuildRemediationsAsync fans out via Task.WhenAll) share one in-flight probe rather than
 /// racing. The cached value is always the actual first probe result: readiness is never fabricated.
-/// A faulted or cancelled probe is not cached permanently, so a later call re-probes.
+/// A faulted or cancelled underlying probe is not cached permanently, so a later call re-probes.
+/// <para>
+/// Cancellation semantics: the shared underlying probe is started with
+/// <see cref="CancellationToken.None"/> and runs to completion regardless of any single caller's
+/// token, so a cancelled caller cannot transition the shared task to <see cref="TaskStatus.Canceled"/>
+/// and poison concurrent callers. Each caller observes the shared result through its OWN token via
+/// <c>WaitAsync</c>, so a caller whose token is cancelled sees an
+/// <see cref="OperationCanceledException"/> without affecting other callers or cancelling the
+/// underlying probe. The faulted/cancelled discard logic inspects the stored underlying task, not
+/// the per-caller <c>WaitAsync</c> wrapper.
+/// </para>
+/// <para>
+/// The memoized result lives for the lifetime of the singleton registration, so callers that
+/// perform a state-changing operation (install/register/download) must call
+/// <see cref="Invalidate"/> before re-probing to verify the new state; otherwise the re-probe
+/// would observe the stale pre-change snapshot.
+/// </para>
 /// </remarks>
-public abstract class CachingReadinessProbe<TReport>
+public abstract class CachingReadinessProbe<TReport> : IReadinessProbeCache
 {
     private readonly Func<bool, CancellationToken, Task<TReport>> _probe;
     private readonly object _gate = new();
@@ -27,10 +43,25 @@ public abstract class CachingReadinessProbe<TReport>
     protected CachingReadinessProbe(Func<bool, CancellationToken, Task<TReport>> probe) =>
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
 
+    /// <summary>
+    /// Discards both cached readiness results so the next probe re-runs against current state.
+    /// Used after a state-changing install/register so a verification re-probe does not observe the
+    /// stale pre-change snapshot. This never fabricates a readiness value.
+    /// </summary>
+    public void Invalidate()
+    {
+        lock (_gate)
+        {
+            _cachedForDownloadsDisabled = null;
+            _cachedForDownloadsEnabled = null;
+        }
+    }
+
     protected Task<TReport> ProbeCachedAsync(bool allowProviderDownloads, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        Task<TReport> started;
         lock (_gate)
         {
             Task<TReport>? existing = allowProviderDownloads
@@ -38,26 +69,33 @@ public abstract class CachingReadinessProbe<TReport>
                 : _cachedForDownloadsDisabled;
 
             // Only reuse a still-pending or successfully completed probe. A faulted or cancelled
-            // task is discarded so the next caller re-runs the actual probe.
+            // underlying task is discarded so the next caller re-runs the actual probe.
             if (existing is not null &&
                 existing.Status is not TaskStatus.Faulted and not TaskStatus.Canceled)
             {
-                return existing;
-            }
-
-            Task<TReport> started = _probe(allowProviderDownloads, cancellationToken);
-
-            if (allowProviderDownloads)
-            {
-                _cachedForDownloadsEnabled = started;
+                started = existing;
             }
             else
             {
-                _cachedForDownloadsDisabled = started;
-            }
+                // Start the shared probe with CancellationToken.None so no single caller's
+                // cancellation can poison the shared task for concurrent callers. The stored
+                // task is this underlying task, which the discard check above inspects.
+                started = _probe(allowProviderDownloads, CancellationToken.None);
 
-            return started;
+                if (allowProviderDownloads)
+                {
+                    _cachedForDownloadsEnabled = started;
+                }
+                else
+                {
+                    _cachedForDownloadsDisabled = started;
+                }
+            }
         }
+
+        // Observe the shared task through the caller's own token: a cancelled caller sees an
+        // OperationCanceledException without cancelling the underlying probe or other callers.
+        return started.WaitAsync(cancellationToken);
     }
 
     /// <summary>

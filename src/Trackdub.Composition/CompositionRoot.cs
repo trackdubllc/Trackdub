@@ -164,7 +164,10 @@ public static class CompositionRoot
         // `providers list` invocation runs each underlying native/ORT readiness check exactly
         // once. Both OnnxExecutionProviderDiscovery and the *RuntimeReadinessService wrappers
         // resolve these same cached singletons, so the discovery pass and the remediation pass
-        // reuse one probe result instead of double-probing.
+        // reuse one probe result instead of double-probing. Because these singletons live for the
+        // process lifetime, callers that perform a state-changing install/register (e.g.
+        // TrtRtxProvidersHandler.InstallAsync) invalidate the cache via IReadinessProbeCache before
+        // re-probing so verification observes the new state, not the stale pre-change snapshot.
         services.TryAddSingleton<IMigraphxReadinessProbe>(_ =>
             new CachingMigraphxReadinessProbe(new MigraphxReadinessProbe()));
         services.TryAddSingleton<IDnnlReadinessProbe>(_ =>

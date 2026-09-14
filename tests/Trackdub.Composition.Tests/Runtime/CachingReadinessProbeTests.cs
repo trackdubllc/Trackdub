@@ -129,22 +129,59 @@ public sealed class CachingReadinessProbeTests
     }
 
     [Fact]
-    public async Task CancelledProbe_IsNotCached_AndReprobesOnNextCall()
+    public async Task CanceledProbe_IsNotCached_AndReprobesOnNextCall()
     {
-        var cts = new CancellationTokenSource();
-        cts.Cancel();
-
-        var counting = new CountingTensorRtRtxReadinessProbe(EligibleReport());
+        var counting = new CountingTensorRtRtxReadinessProbe(EligibleReport())
+        {
+            CancelOnFirstCall = true,
+        };
         var cached = new CachingTensorRtRtxReadinessProbe(counting);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            cached.ProbeAsync(allowProviderDownloads: false, cts.Token));
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            cached.ProbeAsync(allowProviderDownloads: false, CancellationToken.None));
 
-        // The cancelled probe must not be cached permanently; a retry re-runs the probe.
+        // The canceled underlying probe must not be cached permanently; a retry re-runs the probe.
         TensorRtRtxReadinessReport recovered =
             await cached.ProbeAsync(allowProviderDownloads: false, CancellationToken.None);
 
         Assert.True(recovered.IsHardwareEligible);
+        Assert.Equal(2, counting.CallCount);
+    }
+
+    [Fact]
+    public async Task Invalidate_ForcesReprobe_AfterStateChange()
+    {
+        TensorRtRtxReadinessReport preInstall = EligibleReport();
+        TensorRtRtxReadinessReport postInstall = EligibleReport() with
+        {
+            Blocker = TensorRtRtxReadinessBlocker.None,
+            IsOrtProviderListed = true,
+            IsRegisteredWithOrt = true,
+            Detail = "TensorRT RTX EP plugin installed and registered.",
+        };
+
+        // Model a pre/post-install state transition: the underlying probe returns the stale
+        // "not present" report until the simulated install flips it to a ready report.
+        TensorRtRtxReadinessReport current = preInstall;
+        var counting = new CountingTensorRtRtxReadinessProbe(_ => current);
+        var cached = new CachingTensorRtRtxReadinessProbe(counting);
+
+        TensorRtRtxReadinessReport before =
+            await cached.ProbeAsync(allowProviderDownloads: false, CancellationToken.None);
+        Assert.Same(preInstall, before);
+        Assert.False(before.IsReady);
+
+        // Simulate a successful install that changes process state.
+        current = postInstall;
+
+        // Without invalidation the cached pre-install snapshot would be served; invalidate first.
+        ((IReadinessProbeCache)cached).Invalidate();
+
+        TensorRtRtxReadinessReport after =
+            await cached.ProbeAsync(allowProviderDownloads: false, CancellationToken.None);
+
+        Assert.Same(postInstall, after);
+        Assert.True(after.IsReady);
         Assert.Equal(2, counting.CallCount);
     }
 
@@ -167,6 +204,8 @@ public sealed class CachingReadinessProbeTests
 
         public bool ThrowOnFirstCall { get; init; }
 
+        public bool CancelOnFirstCall { get; init; }
+
         public int CallCount => Volatile.Read(ref _callCount);
 
         public async Task<TensorRtRtxReadinessReport> ProbeAsync(
@@ -182,6 +221,11 @@ public sealed class CachingReadinessProbeTests
             if (ThrowOnFirstCall && call == 1)
             {
                 throw new InvalidOperationException("Simulated probe failure.");
+            }
+
+            if (CancelOnFirstCall && call == 1)
+            {
+                throw new OperationCanceledException("Simulated probe cancellation.");
             }
 
             return _factory(allowProviderDownloads);
