@@ -484,6 +484,7 @@ public static class CompositionRoot
         services.TryAddScoped<PipelineDegradationWriter>();
         services.TryAddScoped<TranscriptWorkspace>();
         services.TryAddSingleton<RuntimeModelSetupCoordinator>();
+        services.TryAddSingleton<IPipelineModelSetupInteraction, HeadlessPipelineModelSetupInteraction>();
         services.TryAddSingleton<TranscriptImportModelProvisioner>();
         services.TryAddSingleton<TranscriptWorkspaceCommandService>();
         services.TryAddSingleton<VoicePreviewCache>();

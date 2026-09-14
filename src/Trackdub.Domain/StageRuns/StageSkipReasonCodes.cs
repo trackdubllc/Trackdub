@@ -13,12 +13,16 @@ public static class StageSkipReasonCodes
 
     public const string NoSpeechRegions = "NO_SPEECH_REGIONS";
 
+    /// <summary>Stage was explicitly disabled by a run option or host flag.</summary>
+    public const string DisabledByOption = "DISABLED_BY_OPTION";
+
     private static readonly HashSet<string> BenignSkipReasonCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         ExistingArtifactsValid,
         PrerequisiteFailed,
         NoTranscriptSegments,
         NoSpeechRegions,
+        DisabledByOption,
     };
 
     /// <summary>
