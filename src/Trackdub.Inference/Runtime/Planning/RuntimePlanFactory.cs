@@ -21,6 +21,7 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         bool requirePreferredExecutionProvider,
         bool preferMigraphxOnAmdGpu,
         string? preferredModelVariantAlias,
+        bool skipProviderSmokeTest,
         CancellationToken cancellationToken)
     {
         cacheIndex.TryGetValue(candidate.Entry.ModelId, out IReadOnlyList<LocalModelCacheRecord>? cacheRecords);
@@ -34,16 +35,24 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         StageRuntimePlan? earlyExit = TryGetBlockedEarlyExit(stage, orderedProviders, candidate, preferredExecutionProvider, requirePreferredExecutionProvider);
         if (earlyExit is not null) return earlyExit;
 
+        bool preferredForbiddenForEngine = IsPreferredProviderForbiddenForEngine(
+            requirements,
+            candidate.Entry,
+            preferredExecutionProvider);
+
         RuntimePlanFallback? providerFallback = null;
         foreach (ExecutionProviderKind provider in orderedProviders)
         {
             StageRuntimePlan? guardResult = EvaluateProviderGuard(provider, candidate, providerAvailabilities,
-                preferredExecutionProvider, requirePreferredExecutionProvider, stage,
+                preferredExecutionProvider, requirePreferredExecutionProvider && !preferredForbiddenForEngine, stage,
                 out ProviderGuardOutcome outcome, out RuntimePlanFallback? fallbackUpdate);
             if (outcome == ProviderGuardOutcome.Return) return guardResult;
             if (outcome == ProviderGuardOutcome.Skip)
             {
-                if (fallbackUpdate is not null) providerFallback ??= fallbackUpdate;
+                if (fallbackUpdate is not null)
+                {
+                    providerFallback = MergeProviderFallback(providerFallback, fallbackUpdate);
+                }
                 continue;
             }
 
@@ -68,8 +77,10 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                     continue;
                 }
 
-                if (provider is ExecutionProviderKind.Cpu)
+                if (provider is ExecutionProviderKind.Cpu || skipProviderSmokeTest)
                 {
+                    // CPU is file-only Ready. Listing/inventory SkipProviderSmokeTest is the same
+                    // gate without compiling graphs: files + EP present, not Verified.
                     return CreatePlan(
                         stage,
                         StageRuntimePlanStatus.Ready,
@@ -79,11 +90,14 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                         entryPath,
                         modelIntegrityStatus,
                         providerFallback,
-                        includeCpuFallbackWarning: providerFallback is not null,
+                        includeCpuFallbackWarning: providerFallback is not null && provider is ExecutionProviderKind.Cpu,
                         isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
                         modelRootPath: rootPath,
                         modelEntryRelativePath: variant.RelativeEntryPath,
-                        requiredModelRelativePaths: variant.RequiredRelativePaths);
+                        requiredModelRelativePaths: variant.RequiredRelativePaths,
+                        preferredExecutionProviderSkippedForEngine: preferredForbiddenForEngine
+                            ? preferredExecutionProvider
+                            : null);
                 }
 
                 ExecutionProviderSmokeTestResult smokeResult;
@@ -127,10 +141,13 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                         isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
                         modelRootPath: rootPath,
                         modelEntryRelativePath: variant.RelativeEntryPath,
-                        requiredModelRelativePaths: variant.RequiredRelativePaths);
+                        requiredModelRelativePaths: variant.RequiredRelativePaths,
+                        preferredExecutionProviderSkippedForEngine: preferredForbiddenForEngine
+                            ? preferredExecutionProvider
+                            : null);
                 }
 
-                if (requirePreferredExecutionProvider)
+                if (requirePreferredExecutionProvider && !preferredForbiddenForEngine)
                 {
                     return CreateBlockedPlan(
                         stage,
@@ -139,9 +156,11 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                             smokeResult.Detail ?? $"{provider} smoke test failed for variant '{variant.Alias}'."));
                 }
 
-                providerFallback ??= new RuntimePlanFallback(
-                    RuntimePlanFallbackCode.ProviderSmokeTestFailed,
-                    smokeResult.Detail ?? $"{provider} smoke test failed for variant '{variant.Alias}'.");
+                providerFallback = MergeProviderFallback(
+                    providerFallback,
+                    new RuntimePlanFallback(
+                        RuntimePlanFallbackCode.ProviderSmokeTestFailed,
+                        smokeResult.Detail ?? $"{provider} smoke test failed for variant '{variant.Alias}'."));
             }
         }
 
@@ -172,10 +191,15 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         StageRuntimePlan? earlyExit = TryGetBlockedEarlyExit(stage, orderedProviders, candidate, preferredExecutionProvider, requirePreferredExecutionProvider);
         if (earlyExit is not null) return earlyExit;
 
+        bool preferredForbiddenForEngine = IsPreferredProviderForbiddenForEngine(
+            requirements,
+            candidate.Entry,
+            preferredExecutionProvider);
+
         foreach (ExecutionProviderKind provider in orderedProviders)
         {
             StageRuntimePlan? guardResult = EvaluateProviderGuard(provider, candidate, providerAvailabilities,
-                preferredExecutionProvider, requirePreferredExecutionProvider, stage,
+                preferredExecutionProvider, requirePreferredExecutionProvider && !preferredForbiddenForEngine, stage,
                 out ProviderGuardOutcome outcome, out _);
             if (outcome == ProviderGuardOutcome.Return) return guardResult;
             if (outcome == ProviderGuardOutcome.Skip) continue;
@@ -216,7 +240,10 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                     isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
                     modelRootPath: variant.LocalRootPath,
                     modelEntryRelativePath: variant.RelativeEntryPath,
-                    requiredModelRelativePaths: variant.RequiredRelativePaths);
+                    requiredModelRelativePaths: variant.RequiredRelativePaths,
+                    preferredExecutionProviderSkippedForEngine: preferredForbiddenForEngine
+                        ? preferredExecutionProvider
+                        : null);
             }
         }
 
@@ -254,6 +281,26 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                     $"{requiredProvider} is not allowed for {candidate.Entry.EngineFamily} in stage {stage}."));
         }
         return null;
+    }
+
+    private static RuntimePlanFallback MergeProviderFallback(
+        RuntimePlanFallback? current,
+        RuntimePlanFallback next)
+    {
+        if (current is null)
+        {
+            return next;
+        }
+
+        // A later smoke failure is more specific than an earlier catalog EP that was simply
+        // not present on this machine (common once TensorRT is excluded from a stage).
+        if (current.Code == RuntimePlanFallbackCode.ProviderUnavailable &&
+            next.Code == RuntimePlanFallbackCode.ProviderSmokeTestFailed)
+        {
+            return next;
+        }
+
+        return current;
     }
 
     private StageRuntimePlan? EvaluateProviderGuard(
@@ -314,7 +361,8 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         bool isLocalOptimizedVariant = false,
         string? modelRootPath = null,
         string? modelEntryRelativePath = null,
-        IReadOnlyList<string>? requiredModelRelativePaths = null)
+        IReadOnlyList<string>? requiredModelRelativePaths = null,
+        ExecutionProviderKind? preferredExecutionProviderSkippedForEngine = null)
     {
         return new StageRuntimePlan
         {
@@ -333,7 +381,12 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
             RequiredModelRelativePaths = requiredModelRelativePaths ?? [],
             IsLocalOptimizedVariant = isLocalOptimizedVariant,
             Fallback = fallback,
-            Warnings = BuildWarnings(candidate.Entry, provider, includeCpuFallbackWarning, modelIntegrityStatus)
+            Warnings = BuildWarnings(
+                candidate.Entry,
+                provider,
+                includeCpuFallbackWarning,
+                modelIntegrityStatus,
+                preferredExecutionProviderSkippedForEngine)
         };
     }
 
@@ -341,13 +394,21 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         BundledModelManifestEntry entry,
         ExecutionProviderKind provider,
         bool includeCpuFallbackWarning,
-        RuntimeModelIntegrityStatus modelIntegrityStatus)
+        RuntimeModelIntegrityStatus modelIntegrityStatus,
+        ExecutionProviderKind? preferredExecutionProviderSkippedForEngine = null)
     {
         var warnings = new List<RuntimePlanWarning>();
 
         if (includeCpuFallbackWarning)
         {
             warnings.Add(new RuntimePlanWarning(RuntimePlanWarningCode.CpuFallback));
+        }
+
+        if (preferredExecutionProviderSkippedForEngine is ExecutionProviderKind skippedProvider)
+        {
+            warnings.Add(new RuntimePlanWarning(
+                RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine,
+                $"{skippedProvider} is not allowed for {entry.EngineFamily}; planned {provider} instead."));
         }
 
         if (modelIntegrityStatus is RuntimeModelIntegrityStatus.Skipped)
@@ -393,9 +454,13 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
 
         if (requirePreferredExecutionProvider && preferredExecutionProvider is ExecutionProviderKind requiredProvider)
         {
-            return allowedProviders.Contains(requiredProvider)
-                ? [requiredProvider]
-                : [];
+            if (allowedProviders.Contains(requiredProvider))
+            {
+                return [requiredProvider];
+            }
+
+            // Engine family forbids the pin (e.g. Kokoro is CPU-only). Plan with the allowed
+            // list instead of blocking; callers attach PreferredExecutionProviderNotAllowedForEngine.
         }
 
         var availableProviders = Milestone5PlanningPolicy.SupportedProvidersThisMilestone
@@ -403,7 +468,8 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
 
         IReadOnlyList<ExecutionProviderKind> ordered = availableProviders.ToArray();
 
-        if (preferredExecutionProvider is ExecutionProviderKind preferred)
+        if (preferredExecutionProvider is ExecutionProviderKind preferred
+            && allowedProviders.Contains(preferred))
         {
             ordered = availableProviders
                 .OrderByDescending(p => p == preferred)
@@ -411,6 +477,26 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         }
 
         return MigraphxProviderOrdering.ApplyAmdMigraphxFirst(ordered, preferMigraphxOnAmdGpu);
+    }
+
+    private static bool IsPreferredProviderForbiddenForEngine(
+        StageRuntimeRequirements requirements,
+        BundledModelManifestEntry entry,
+        ExecutionProviderKind? preferredExecutionProvider)
+    {
+        if (preferredExecutionProvider is not ExecutionProviderKind preferred)
+        {
+            return false;
+        }
+
+        IReadOnlyList<ExecutionProviderKind> allowedProviders = requirements.AllowedProvidersThisMilestone;
+        if (requirements.AllowedProvidersByEngineFamily is not null &&
+            requirements.AllowedProvidersByEngineFamily.TryGetValue(entry.EngineFamily, out IReadOnlyList<ExecutionProviderKind>? engineFamilyProviders))
+        {
+            allowedProviders = engineFamilyProviders;
+        }
+
+        return !allowedProviders.Contains(preferred);
     }
 
     private static ExecutionProviderAvailability GetAvailability(

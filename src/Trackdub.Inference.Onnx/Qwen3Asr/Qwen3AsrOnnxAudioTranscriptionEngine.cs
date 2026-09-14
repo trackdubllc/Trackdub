@@ -5,7 +5,6 @@ using Trackdub.Inference.Onnx.Audio;
 using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.Runtime.Planning;
 using Trackdub.Inference.Onnx.Runtime.Routing;
-using Trackdub.Inference.Onnx.Whisper;
 using Trackdub.Inference.Runtime.Planning;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -20,7 +19,7 @@ public sealed class Qwen3AsrOnnxAudioTranscriptionEngine(
 {
     public const string EngineFamilyName = "qwen3-asr";
 
-    private static readonly IReadOnlyDictionary<string, string> TrtEncoderOptions = new Dictionary<string, string>
+    internal static readonly IReadOnlyDictionary<string, string> TrtEncoderOptions = new Dictionary<string, string>
     {
         ["trt_profile_min_shapes"] = "mel:1x128x1",
         ["trt_profile_max_shapes"] = "mel:1x128x3000",
@@ -111,8 +110,10 @@ public sealed class Qwen3AsrOnnxAudioTranscriptionEngine(
                 additionalTrtEncoderOptions: TrtEncoderOptions)
             .ConfigureAwait(false);
 
-        IReadOnlyList<SpeechRegion> transcriptionRegions = WhisperOnnxAudioTranscriptionEngine
-            .BuildTranscriptionRegionsForTesting(effectiveRegions, durationSeconds);
+        // Keep caller-provided regions (VAD or diarization plan). Whisper's nearby-region
+        // merge would collapse multi-speaker turns into one clip-length segment and reindex
+        // away SpeakerIdsBySegmentIndex.
+        IReadOnlyList<SpeechRegion> transcriptionRegions = PreserveCallerSpeechRegions(effectiveRegions);
         string? forcedLanguageName = Qwen3AsrLanguageCodes.TryGetLanguageName(request.SourceLanguage);
         var segments = new List<RecognizedTranscriptSegment>(transcriptionRegions.Count);
 
@@ -237,6 +238,17 @@ public sealed class Qwen3AsrOnnxAudioTranscriptionEngine(
 
         return Qwen3AsrLanguageCodes.TryGetIsoCode(pluralityLanguage);
     }
+
+    internal static IReadOnlyList<SpeechRegion> BuildTranscriptionRegionsForTesting(
+        IReadOnlyList<SpeechRegion> regions) =>
+        PreserveCallerSpeechRegions(regions);
+
+    private static IReadOnlyList<SpeechRegion> PreserveCallerSpeechRegions(
+        IReadOnlyList<SpeechRegion> regions) =>
+        regions
+            .Where(static region => region.EndSeconds > region.StartSeconds)
+            .OrderBy(static region => region.Index)
+            .ToArray();
 
     private static void EnsurePlanReady(StageRuntimePlan plan, RuntimeStage stage)
     {

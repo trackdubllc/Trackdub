@@ -18,7 +18,8 @@ public sealed class StarterPackCompatibilityService(
         string packId,
         string profileId,
         StarterPackHardwareProfile? hardwareProfile = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool skipProviderSmokeTest = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packId);
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
@@ -50,6 +51,7 @@ public sealed class StarterPackCompatibilityService(
             StageCompatibilityEntry stage = await EvaluateModelStageAsync(
                 model,
                 hardwareKey,
+                skipProviderSmokeTest,
                 cancellationToken).ConfigureAwait(false);
             if (stage.Runnable && partialOffloadModelIds.Contains(model.ModelId))
             {
@@ -86,6 +88,7 @@ public sealed class StarterPackCompatibilityService(
     private async Task<StageCompatibilityEntry> EvaluateModelStageAsync(
         StarterPackModelDefinition model,
         string hardwareKey,
+        bool skipProviderSmokeTest,
         CancellationToken cancellationToken)
     {
         string stageName = StarterPackStageMapping.ToStageName(model.Stage);
@@ -99,6 +102,7 @@ public sealed class StarterPackCompatibilityService(
                 model.ModelId,
                 requestedVariant,
                 requestedEp,
+                skipProviderSmokeTest,
                 out StageRuntimePlanningRequest? planningRequest,
                 out string? blockedReason))
         {
@@ -153,6 +157,7 @@ public sealed class StarterPackCompatibilityService(
         string modelId,
         string requestedVariant,
         string requestedEp,
+        bool skipProviderSmokeTest,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out StageRuntimePlanningRequest? request,
         out string? blockedReason)
     {
@@ -171,7 +176,8 @@ public sealed class StarterPackCompatibilityService(
                 runtimeStage,
                 PreferredModelAlias: modelId,
                 RequirePreferredModelAlias: true,
-                PreferredModelVariantAlias: preferredVariant);
+                PreferredModelVariantAlias: preferredVariant,
+                SkipProviderSmokeTest: skipProviderSmokeTest);
             return true;
         }
 
@@ -181,13 +187,16 @@ public sealed class StarterPackCompatibilityService(
             return false;
         }
 
+        provider = ExecutionProviderTokens.ResolvePlatformPin(provider);
+
         request = new StageRuntimePlanningRequest(
             runtimeStage,
             PreferredModelAlias: modelId,
             RequirePreferredModelAlias: true,
             PreferredExecutionProvider: provider,
             RequirePreferredExecutionProvider: true,
-            PreferredModelVariantAlias: preferredVariant);
+            PreferredModelVariantAlias: preferredVariant,
+            SkipProviderSmokeTest: skipProviderSmokeTest);
         return true;
     }
 
@@ -242,9 +251,13 @@ public sealed class StarterPackCompatibilityService(
             return true;
         }
 
-        return RuntimeProviderTokenCompatibility.TryParseProviderToken(resolvedEp, out ExecutionProviderKind resolvedProvider) &&
-            RuntimeProviderTokenCompatibility.TryParseProviderToken(requestedEp, out ExecutionProviderKind requestedProvider) &&
-            resolvedProvider == requestedProvider;
+        if (!RuntimeProviderTokenCompatibility.TryParseProviderToken(resolvedEp, out ExecutionProviderKind resolvedProvider) ||
+            !RuntimeProviderTokenCompatibility.TryParseProviderToken(requestedEp, out ExecutionProviderKind requestedProvider))
+        {
+            return false;
+        }
+
+        return ExecutionProviderTokens.PlatformPinsEquivalent(requestedProvider, resolvedProvider);
     }
 
     private static bool IsAutoExecutionProvider(string executionProvider) =>

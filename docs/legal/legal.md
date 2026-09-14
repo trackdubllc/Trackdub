@@ -1,18 +1,9 @@
-# Contributor License Agreement Placeholder
+# Contributor terms
 
-This project is intended to support GPLv3 + commercial dual licensing.
-
-To preserve that option, outside contributors should sign a contributor agreement before their code is merged.
-
-At minimum, the agreement should grant the project owner the right to:
-
-- use the contribution in the GPL community edition
-- relicense the contribution under commercial terms
-- sublicense as needed for commercial customers
-- modify, distribute, and maintain the contribution
-- include the contribution in future versions
-
-This is a placeholder. Use a lawyer-reviewed CLA or copyright assignment before accepting external contributions if dual licensing matters.
+This repository is licensed under the [Apache License, Version 2.0](../../LICENSE).
+Contributions are submitted under that license. No separate Contributor License
+Agreement is currently required. See [CONTRIBUTING.md](../../CONTRIBUTING.md)
+and [LICENSE-HISTORY.md](LICENSE-HISTORY.md).
 
 # Model License Policy
 
@@ -152,18 +143,7 @@ Each entry should include:
 - commercial use allowed? yes
 - redistribution allowed? yes, provided LGPL-2.1 obligations are met (dynamic linking, no source modifications)
 - attribution required? yes
-- notes: .NET bindings for the LibVLC media framework. The application links to LibVLC dynamically (LGPL compliance). No modifications are made to the LibVLC or LibVLCSharp source. Used in `Trackdub.Media.Playback` and `Trackdub.App.Avalonia`.
-
-## LibVLCSharp.Avalonia
-
-- name: LibVLCSharp.Avalonia
-- version / revision: centrally pinned in Directory.Packages.props
-- source URL: https://www.nuget.org/packages/LibVLCSharp.Avalonia
-- license: LGPL-2.1-or-later
-- commercial use allowed? yes
-- redistribution allowed? yes, same terms as LibVLCSharp
-- attribution required? yes
-- notes: Avalonia-specific VideoView control for rendering LibVLC video output. Used in `Trackdub.App.Avalonia` only.
+- notes: .NET bindings for the LibVLC media framework. Trackdub links to LibVLC dynamically (LGPL compliance). No modifications are made to the LibVLC or LibVLCSharp source. Used in `Trackdub.Media.Playback` as one of two composited playback backends (libmpv is the primary compositor; LibVLC is the fallback). Bundling the native LibVLC runtime and any UI-shell video-rendering control is a packaging concern of the consuming desktop product, and is documented in that product's own third-party notices.
 
 ## VideoLAN.LibVLC.Windows (LibVLC native runtime — Windows)
 
@@ -174,7 +154,7 @@ Each entry should include:
 - commercial use allowed? yes
 - redistribution allowed? yes, provided LGPL-2.1 notice and dynamic-linking obligations are met
 - attribution required? yes
-- notes: Bundled LibVLC native runtime for Windows (~100 MB). Extracted at build time into the application output directory. The application links dynamically — no static linking or source modification. Scoped to the Avalonia app project.
+- notes: Bundled LibVLC native runtime for Windows (~100 MB). Extracted at build time into the application output directory. The application links dynamically — no static linking or source modification. Packaging/distribution of the native runtime is handled by the consuming desktop product.
 
 ## VideoLAN.LibVLC.Mac (LibVLC native runtime — macOS)
 
@@ -185,7 +165,7 @@ Each entry should include:
 - commercial use allowed? yes
 - redistribution allowed? yes, same terms as the Windows runtime package
 - attribution required? yes
-- notes: Bundled LibVLC native runtime for macOS. Extracted at build time into the application output directory. The application links dynamically — no static linking or source modification. Scoped to the Avalonia app project.
+- notes: Bundled LibVLC native runtime for macOS. Extracted at build time into the application output directory. The application links dynamically — no static linking or source modification. Packaging/distribution of the native runtime is handled by the consuming desktop product.
 
 ## LibVLC on Linux (system-installed)
 

@@ -7,7 +7,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $agentCommands = @('codex', 'claude', 'devin', 'opencode', 'pi', 'mistral', 'dirac', 'autohand', 'agent')
-$controlCommands = @('done', 'status', 'sync', 'check', 'verify', 'publish', 'run-avalonia')
+$controlCommands = @('done', 'status', 'sync', 'check', 'verify', 'publish')
 $validCommands = $agentCommands + $controlCommands
 
 if ($RawArgs.Count -eq 0) {
@@ -37,19 +37,9 @@ if ($remainingArgs.Count -gt 0 -and -not $remainingArgs[0].StartsWith('-')) {
 
 $Fast = $remainingArgs -contains 'fast'
 
-$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$flow = Join-Path $repoRoot 'tools\agent-git-flow.ps1'
-
-if (-not (Test-Path -LiteralPath $flow)) {
-    throw "Missing helper: $flow"
-}
-
-function Invoke-Flow {
-    & $flow @args
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
-}
+$scriptsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot = Split-Path -Parent $scriptsDir
+$worktreesDir = Join-Path $repoRoot '.worktrees'
 
 function Assert-Name {
     if ([string]::IsNullOrWhiteSpace($Name)) {
@@ -57,48 +47,89 @@ function Assert-Name {
     }
 }
 
+function Invoke-Dotnet {
+    param([string[]]$Args)
+    & dotnet @Args -m:1
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+function Invoke-Verify {
+    param([switch]$NoTests)
+    Set-Location $repoRoot
+    Write-Host "Restoring..."
+    Invoke-Dotnet @('restore', 'Trackdub.slnx')
+    Write-Host "Building..."
+    Invoke-Dotnet @('build', 'Trackdub.slnx', '--no-restore')
+    if (-not $NoTests) {
+        Write-Host "Testing..."
+        Invoke-Dotnet @('test', 'Trackdub.slnx', '--no-build')
+    }
+    Write-Host "Verify passed."
+}
+
 if ($agentCommands -contains $Command) {
     Assert-Name
-    Invoke-Flow new -Agent $Command -Name $Name -AllowDirty
+    $branch = "agent/$Command/$Name"
+    $wtPath = Join-Path $worktreesDir "$Command-$Name"
+
+    Set-Location $repoRoot
+    & git fetch origin main --quiet
+    if (Test-Path $wtPath) {
+        Write-Host "Worktree already exists: $wtPath"
+        Set-Location $wtPath
+    }
+    else {
+        New-Item -ItemType Directory -Force -Path $worktreesDir | Out-Null
+        & git worktree add -b $branch $wtPath origin/main
+        if ($LASTEXITCODE -ne 0) { throw "git worktree add failed" }
+        Set-Location $wtPath
+    }
+    Write-Host "Worktree ready: $wtPath (branch: $branch)"
     exit
 }
 
 switch ($Command) {
     'done' {
-        $flowArgs = @('finish')
-        if ($Fast) {
-            $flowArgs += '-NoTests'
-        }
-
-        Invoke-Flow @flowArgs
+        Set-Location $repoRoot
+        Write-Host "Rebasing onto origin/main..."
+        & git fetch origin main --quiet
+        & git rebase origin/main
+        if ($LASTEXITCODE -ne 0) { throw "Rebase failed. Resolve conflicts and re-run." }
+        Invoke-Verify -NoTests:$Fast
+        & git push origin HEAD
+        Write-Host "Done. Branch pushed."
     }
 
     'status' {
-        Invoke-Flow status
+        Set-Location $repoRoot
+        & git status --short --branch
+        Write-Host ""
+        & git worktree list
     }
 
     'sync' {
-        Invoke-Flow sync-main
+        Set-Location $repoRoot
+        & git fetch origin main --quiet
+        & git rebase origin/main
+        if ($LASTEXITCODE -ne 0) { throw "Rebase failed. Resolve conflicts manually." }
+        Write-Host "Synced with origin/main."
     }
 
     'check' {
-        Invoke-Flow verify -NoTests
+        Invoke-Verify -NoTests
     }
 
     'verify' {
-        Invoke-Flow verify
-    }
-
-    'run-avalonia' {
-        & (Join-Path $repoRoot 'scripts\run-avalonia.ps1') @remainingArgs
+        Invoke-Verify
     }
 
     'publish' {
-        $flowArgs = @('publish-main')
-        if ($Fast) {
-            $flowArgs += '-NoTests'
+        Set-Location $repoRoot
+        if (-not $Fast) {
+            Invoke-Verify
         }
-
-        Invoke-Flow @flowArgs
+        & git push origin HEAD:main
+        if ($LASTEXITCODE -ne 0) { throw "Push to main failed." }
+        Write-Host "Published to origin/main."
     }
 }

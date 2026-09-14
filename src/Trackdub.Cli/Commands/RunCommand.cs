@@ -163,6 +163,72 @@ internal static class RunCommand
             Description = "Run optional Qwen ASR text polish after transcription",
         };
 
+        var voiceCloneOption = new Option<bool>("--voice-clone")
+        {
+            Description = "Clone each speaker from source audio instead of a stock voicepack. Grants session voice-cloning consent for this run.",
+            DefaultValueFactory = _ => false,
+        };
+
+        var timbrePolishOption = new Option<bool?>("--timbre-polish")
+        {
+            Description = "Apply room-tone convolution to dubbed speech to match the acoustic environment (default: true)",
+        };
+
+        var noTimbrePolishOption = new Option<bool>("--no-timbre-polish")
+        {
+            Description = "Disable room-tone convolution (negates the default-on --timbre-polish)",
+        };
+
+        var restorePanOption = new Option<bool?>("--restore-pan")
+        {
+            Description = "Restore the original stereo pan position of each speaker in the dubbed mix (default: false)",
+        };
+
+        var matchLoudnessOption = new Option<bool?>("--match-loudness")
+        {
+            Description = "Measure source loudness and normalize the dubbed mix to match it (default: false)",
+        };
+
+        var voiceOption = new Option<string[]>("--voice")
+        {
+            Description = "Assign a specific voice to a speaker in format SPEAKER_ID:voice_id (repeatable, e.g., --voice SPEAKER_00:af_bella)",
+            AllowMultipleArgumentsPerToken = true,
+        };
+        voiceOption.Arity = ArgumentArity.ZeroOrMore;
+
+        var subtitleFormatOption = new Option<string[]>("--subtitle-format")
+        {
+            Description = "Subtitle format(s) to include: srt, vtt, ass, or none (repeatable; default: srt)",
+            AllowMultipleArgumentsPerToken = true,
+        };
+        subtitleFormatOption.Arity = ArgumentArity.ZeroOrMore;
+        subtitleFormatOption.AcceptOnlyFromAmong("srt", "vtt", "ass", "none");
+
+        var subtitleSourceOption = new Option<string?>("--subtitle-source")
+        {
+            Description = "Which transcript to use for subtitles: translated (default), transcript, bilingual",
+        };
+        subtitleSourceOption.AcceptOnlyFromAmong("translated", "transcript", "bilingual");
+
+        var burnInSubtitlesOption = new Option<bool>("--burn-in")
+        {
+            Description = "Burn subtitles into the exported video (default: false)",
+            DefaultValueFactory = _ => false,
+        };
+
+        var videoEncoderOption = new Option<string?>("--video-encoder")
+        {
+            Description = $"Video encoder preference: {string.Join(", ", VideoEncoderPreferenceSettings.AutoKey, VideoEncoderPreferenceSettings.SoftwareKey, VideoEncoderPreferenceSettings.NvencKey, VideoEncoderPreferenceSettings.QsvKey, VideoEncoderPreferenceSettings.AmfKey, VideoEncoderPreferenceSettings.VideoToolboxKey, VideoEncoderPreferenceSettings.VaapiKey)} (default: auto)",
+        };
+        videoEncoderOption.AcceptOnlyFromAmong(
+            VideoEncoderPreferenceSettings.AutoKey,
+            VideoEncoderPreferenceSettings.SoftwareKey,
+            VideoEncoderPreferenceSettings.NvencKey,
+            VideoEncoderPreferenceSettings.QsvKey,
+            VideoEncoderPreferenceSettings.AmfKey,
+            VideoEncoderPreferenceSettings.VideoToolboxKey,
+            VideoEncoderPreferenceSettings.VaapiKey);
+
         var presetOption = new Option<string?>("--preset")
         {
             Description = "Named preset to load pipeline settings from",
@@ -197,6 +263,7 @@ internal static class RunCommand
               trackdub run pipeline --media ./video.mp4 --target-language es
               trackdub run pipeline --media ./video.mp4 --target-language fr --from-stage translation
               trackdub run pipeline --media ./video.mp4 --target-language de --only vad --only asr --force-rerun
+              trackdub run pipeline --media ./video.mp4 --target-language en --voice-clone
               trackdub run pipeline --input-dir ./videos --target-language es --continue-on-error
               trackdub run pipeline --preset my-preset --input-glob "**/*.mp4"
             """)
@@ -211,6 +278,16 @@ internal static class RunCommand
             onlyOption,
             forceRerunOption,
             enableAsrTextRefinementOption,
+            voiceCloneOption,
+            timbrePolishOption,
+            noTimbrePolishOption,
+            restorePanOption,
+            matchLoudnessOption,
+            voiceOption,
+            subtitleFormatOption,
+            subtitleSourceOption,
+            burnInSubtitlesOption,
+            videoEncoderOption,
             presetOption,
             inputDirOption,
             inputGlobOption,
@@ -220,18 +297,27 @@ internal static class RunCommand
 
         command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
         {
-            string? mediaPath = parseResult.GetValue(mediaOption);
+            string? mediaPath = UserPathText.NormalizeOptional(parseResult.GetValue(mediaOption));
             string? targetLanguage = parseResult.GetValue(targetLanguageOption);
             string? sourceLanguage = parseResult.GetValue(sourceLanguageOption);
-            string? outputDirectory = parseResult.GetValue(outputOption);
+            string? outputDirectory = UserPathText.NormalizeOptional(parseResult.GetValue(outputOption));
             string[] modelOverrides = parseResult.GetValue(modelOption) ?? [];
             string? exportFormat = parseResult.GetValue(exportFormatOption);
             string? fromStage = parseResult.GetValue(fromStageOption);
             string[] onlyStages = parseResult.GetValue(onlyOption) ?? [];
             bool forceRerun = parseResult.GetValue(forceRerunOption);
             bool? enableAsrTextRefinement = parseResult.GetValue(enableAsrTextRefinementOption);
+            bool voiceClone = parseResult.GetValue(voiceCloneOption);
+            bool timbrePolish = !parseResult.GetValue(noTimbrePolishOption) && (parseResult.GetValue(timbrePolishOption) ?? true);
+            bool restorePan = parseResult.GetValue(restorePanOption) ?? false;
+            bool matchLoudness = parseResult.GetValue(matchLoudnessOption) ?? false;
+            string[] voiceOverrideTokens = parseResult.GetValue(voiceOption) ?? [];
+            string[] subtitleFormatTokens = parseResult.GetValue(subtitleFormatOption) ?? [];
+            string? subtitleSource = parseResult.GetValue(subtitleSourceOption);
+            bool burnInSubtitles = parseResult.GetValue(burnInSubtitlesOption);
+            string? videoEncoderKey = parseResult.GetValue(videoEncoderOption);
             string? presetName = parseResult.GetValue(presetOption);
-            string? inputDir = parseResult.GetValue(inputDirOption);
+            string? inputDir = UserPathText.NormalizeOptional(parseResult.GetValue(inputDirOption));
             string? inputGlob = parseResult.GetValue(inputGlobOption);
             bool recursive = parseResult.GetValue(recursiveOption);
             bool continueOnError = parseResult.GetValue(continueOnErrorOption);
@@ -250,6 +336,18 @@ internal static class RunCommand
             {
                 return presetNameExitCode;
             }
+
+            Dictionary<string, string>? voiceOverrides = CliModelOverrides.ParseVoiceOverrides(voiceOverrideTokens);
+            if (voiceOverrides is null)
+            {
+                return Program.ExitArgumentError;
+            }
+
+            IReadOnlyList<string>? subtitleFormats = subtitleFormatTokens.Length == 0
+                ? null
+                : subtitleFormatTokens.Any(f => f.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    ? (IReadOnlyList<string>)[]
+                    : subtitleFormatTokens;
 
             bool isBatchMode = inputDir is not null || inputGlob is not null;
 
@@ -349,6 +447,15 @@ internal static class RunCommand
                         StageFilter = batchStageFilter,
                         ForceRerun = forceRerun,
                         EnableAsrTextRefinement = resolvedEnableAsrTextRefinement,
+                        UseVoiceCloning = voiceClone,
+                        ApplyTimbrePolish = timbrePolish,
+                        RestoreOriginalPan = restorePan,
+                        MatchOriginalLoudness = matchLoudness,
+                        VoiceAssignmentOverrides = voiceOverrides.Count > 0 ? voiceOverrides : null,
+                        SubtitleFormats = subtitleFormats,
+                        SubtitleSource = subtitleSource,
+                        BurnInSubtitles = burnInSubtitles,
+                        VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
                     };
 
                     // Build BatchOptions
@@ -579,6 +686,15 @@ internal static class RunCommand
                             StageFilter = stageFilter,
                             ForceRerun = forceRerun,
                             EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
+                            UseVoiceCloning = voiceClone,
+                            ApplyTimbrePolish = timbrePolish,
+                            RestoreOriginalPan = restorePan,
+                            MatchOriginalLoudness = matchLoudness,
+                            VoiceAssignmentOverrides = voiceOverrides.Count > 0 ? voiceOverrides : null,
+                            SubtitleFormats = subtitleFormats,
+                            SubtitleSource = subtitleSource,
+                            BurnInSubtitles = burnInSubtitles,
+                            VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
                         },
                         progress,
                         Console.Out,

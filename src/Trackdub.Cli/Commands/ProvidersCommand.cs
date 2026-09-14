@@ -7,26 +7,62 @@ using Trackdub.Sdk;
 namespace Trackdub.Cli.Commands;
 
 /// <summary>
-/// <c>providers trt-rtx status</c> and <c>install</c> for headless TensorRT RTX EP ABI plugin management.
+/// <c>providers list</c> plus <c>providers trt-rtx status|install|smoke</c> for EP discoverability,
+/// the TensorRT RTX EP ABI plugin installer, and starter-pack smoke tests.
 /// </summary>
 internal static class ProvidersCommand
 {
     public static Command Create()
     {
         var providersCommand = new Command("providers", """
-            Inspect and install inference execution provider bundles.
+            Inspect inference execution providers and install downloadable EP bundles.
 
             Examples:
+              trackdub providers list
               trackdub providers trt-rtx status
               trackdub providers trt-rtx install --accept-license
+              trackdub providers trt-rtx smoke
             """);
+
+        providersCommand.Add(CreateListCommand());
 
         var trtRtxCommand = new Command("trt-rtx", "TensorRT RTX EP ABI plugin (Windows/Linux NVIDIA GPU).");
         trtRtxCommand.Add(CreateStatusCommand());
         trtRtxCommand.Add(CreateInstallCommand());
+        trtRtxCommand.Add(CreateSmokeCommand());
         providersCommand.Add(trtRtxCommand);
 
         return providersCommand;
+    }
+
+    private static Command CreateListCommand()
+    {
+        var command = new Command("list", """
+            List every execution-provider kind with canonical tag, aliases, availability, and remediation (JSON).
+
+            Examples:
+              trackdub providers list
+            """);
+
+        command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(parseResult, out int buildExitCode);
+            if (factory is null)
+            {
+                return buildExitCode;
+            }
+
+            using (factory)
+            {
+                return await ProvidersListHandler
+                    .ListAsync(factory, Console.Out, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        });
+
+        return command;
     }
 
     private static Command CreateStatusCommand()
@@ -94,6 +130,37 @@ internal static class ProvidersCommand
             {
                 return await TrtRtxProvidersHandler
                     .InstallAsync(factory, acceptLicense, Console.Out, Console.Error, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        });
+
+        return command;
+    }
+
+    private static Command CreateSmokeCommand()
+    {
+        var command = new Command("smoke", """
+            Run planner-style ONNX smoke tests for bundled models not in the turbo starter-pack catalog.
+            Skips Silero, Kokoro, python-musetalk, and models that are not cached locally.
+
+            Examples:
+              trackdub providers trt-rtx smoke
+            """);
+
+        command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(parseResult, out int buildExitCode);
+            if (factory is null)
+            {
+                return buildExitCode;
+            }
+
+            using (factory)
+            {
+                return await TrtRtxProvidersHandler
+                    .SmokeAsync(factory, Console.Out, Console.Error, cancellationToken)
                     .ConfigureAwait(false);
             }
         });

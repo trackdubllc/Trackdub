@@ -2,85 +2,22 @@ using Trackdub.Domain;
 
 namespace Trackdub.Inference.Runtime.Planning;
 
+/// <summary>
+/// Manifest / Olive compatibility surface over <see cref="ExecutionProviderTokens"/>.
+/// </summary>
 public static class RuntimeProviderTokenCompatibility
 {
-    public static IReadOnlyList<string> AllowedVariantProviderTokens { get; } =
-    [
-        "cpu",
-        "dnnl",
-        "onednn",
-        "dml",
-        "directml",
-        "cuda",
-        "tensorrt",
-        "trt-rtx",
-        "tensorrt-rtx",
-        "migraphx",
-        "rocm",
-        "openvino",
-        "openvino-catalog",
-        "qnn",
-        "vitisai"
-    ];
+    public static IReadOnlyList<string> AllowedVariantProviderTokens =>
+        ExecutionProviderTokens.AcceptedProviderTokens;
 
-    public static bool IsKnownProviderToken(string? token, bool allowAuto = false)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            return false;
-        }
+    public static bool IsKnownProviderToken(string? token, bool allowAuto = false) =>
+        ExecutionProviderTokens.IsKnownProviderToken(token, allowAuto);
 
-        if (allowAuto && token.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return TryParseProviderToken(token, out _);
-    }
-
-    public static bool TryParseProviderToken(string? token, out ExecutionProviderKind provider)
-    {
-        provider = default;
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            return false;
-        }
-
-        provider = token.Trim().ToLowerInvariant() switch
-        {
-            "cpu" => ExecutionProviderKind.Cpu,
-            "dnnl" or "onednn" or "onnxruntime-dnnl" => ExecutionProviderKind.Dnnl,
-            "dml" or "directml" => ExecutionProviderKind.DirectMl,
-            "cuda" => ExecutionProviderKind.Cuda,
-            "tensorrt" => ExecutionProviderKind.TensorRt,
-            "trt-rtx" or "tensorrt-rtx" => ExecutionProviderKind.TensorRTRtx,
-            "migraphx" or "rocm" => ExecutionProviderKind.Migraphx,
-            "openvino" => ExecutionProviderKind.OpenVino,
-            "openvino-catalog" => ExecutionProviderKind.OpenVinoCatalog,
-            "qnn" => ExecutionProviderKind.Qnn,
-            "vitisai" => ExecutionProviderKind.VitisAi,
-            _ => default
-        };
-
-        return provider != default;
-    }
+    public static bool TryParseProviderToken(string? token, out ExecutionProviderKind provider) =>
+        ExecutionProviderTokens.TryParse(token, out provider);
 
     public static string ToManifestToken(ExecutionProviderKind provider) =>
-        provider switch
-        {
-            ExecutionProviderKind.Cpu => "cpu",
-            ExecutionProviderKind.Dnnl => "onnxruntime-dnnl",
-            ExecutionProviderKind.DirectMl => "directml",
-            ExecutionProviderKind.Cuda => "cuda",
-            ExecutionProviderKind.TensorRt => "tensorrt",
-            ExecutionProviderKind.TensorRTRtx => "trt-rtx",
-            ExecutionProviderKind.Migraphx => "migraphx",
-            ExecutionProviderKind.OpenVino => "openvino",
-            ExecutionProviderKind.OpenVinoCatalog => "openvino-catalog",
-            ExecutionProviderKind.Qnn => "qnn",
-            ExecutionProviderKind.VitisAi => "vitisai",
-            _ => provider.ToString().ToLowerInvariant()
-        };
+        ExecutionProviderTokens.ToManifestToken(provider);
 
     public static bool IsVariantSupportedForProvider(
         IReadOnlyList<string>? supportedProviders,
@@ -148,6 +85,7 @@ public static class RuntimeProviderTokenCompatibility
             "onnxruntime-tensorrt" => provider is ExecutionProviderKind.TensorRt,
             "tensorrt-rtx" or "trt-rtx" => provider is ExecutionProviderKind.TensorRTRtx,
             "onnxruntime-migraphx" => provider is ExecutionProviderKind.Migraphx,
+            "onnxruntime-coreml" or "coreml" => provider is ExecutionProviderKind.CoreMl,
             _ => false
         };
     }
@@ -169,6 +107,8 @@ public static class RuntimeProviderTokenCompatibility
             "onnxruntime-tensorrt" or
             "tensorrt-rtx" or
             "trt-rtx" or
-            "onnxruntime-migraphx";
+            "onnxruntime-migraphx" or
+            "onnxruntime-coreml" or
+            "coreml";
     }
 }

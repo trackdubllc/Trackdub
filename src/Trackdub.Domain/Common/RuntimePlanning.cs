@@ -82,7 +82,12 @@ public enum RuntimePlanWarningCode
     ModelIntegrityNotVerified = 5,
     DeviceFallback = 6,
     PreferredOptimizedVariantUnavailable = 7,
-    ExpectedRuntimeMismatch = 8
+    ExpectedRuntimeMismatch = 8,
+    /// <summary>
+    /// Preferred execution provider was skipped because the selected engine family does not allow it
+    /// (for example Kokoro TTS is CPU-only).
+    /// </summary>
+    PreferredExecutionProviderNotAllowedForEngine = 9
 }
 
 public enum RuntimeModelIntegrityStatus

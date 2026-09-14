@@ -1,0 +1,1 @@
+GitHub-native features only: Dependabot v2 for automated dependency updates, CODEOWNERS for ownership routing, and GitHub's built-in issue/PR template system.

@@ -115,4 +115,25 @@ public sealed class HardwareOverrideCatalogTests
         Assert.Equal(ExecutionProviderKind.DirectMl, overrides["Translation"]);
         Assert.Equal(ExecutionProviderKind.Cpu, overrides["Tts"]);
     }
+
+    [Fact]
+    public void GetProviderChoicesForStage_AsrGenAi_includes_tensorrt_rtx()
+    {
+        HardwareOverrideProviderChoice[] choices =
+            HardwareOverrideCatalog.GetProviderChoicesForStage("AsrGenAi").ToArray();
+
+        Assert.Contains(choices, choice => choice.Provider is ExecutionProviderKind.TensorRTRtx);
+        Assert.Contains(choices, choice => choice.Provider is ExecutionProviderKind.TensorRt);
+    }
+
+    [Fact]
+    public void GetProviderChoicesForStage_Vad_omits_tensorrt_families()
+    {
+        HardwareOverrideProviderChoice[] choices =
+            HardwareOverrideCatalog.GetProviderChoicesForStage("Vad").ToArray();
+
+        Assert.Contains(choices, choice => choice.Provider is ExecutionProviderKind.DirectMl);
+        Assert.DoesNotContain(choices, choice => choice.Provider is ExecutionProviderKind.TensorRTRtx);
+        Assert.DoesNotContain(choices, choice => choice.Provider is ExecutionProviderKind.TensorRt);
+    }
 }

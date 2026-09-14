@@ -31,9 +31,9 @@ public sealed class PipelineReadinessService(
         consentService ?? throw new ArgumentNullException(nameof(consentService));
     private readonly IRuntimePlanningPreferences? _runtimePlanningPreferences = runtimePlanningPreferences;
 
-    // Cache key: (stage, modelAlias, sourceLanguage, targetLanguage) → StageReadiness
+    // Cache key: (stage, modelAlias, sourceLanguage, targetLanguage, validateRuntime) → StageReadiness
     // Simple in-memory cache; invalidated on selection change via InvalidateCache().
-    private readonly ConcurrentDictionary<(RuntimeStage Stage, string? ModelAlias, string? SourceLanguage, string? TargetLanguage), StageReadiness> _cache = new();
+    private readonly ConcurrentDictionary<(RuntimeStage Stage, string? ModelAlias, string? SourceLanguage, string? TargetLanguage, bool ValidateRuntime), StageReadiness> _cache = new();
 
     public async Task<PipelineReadinessReport> EvaluateAsync(
         IReadOnlyList<RuntimeStage> enabledStages,
@@ -41,7 +41,8 @@ public sealed class PipelineReadinessService(
         TranscriptProjectState? state,
         CancellationToken cancellationToken = default,
         string? sourceLanguageCode = null,
-        string? targetLanguageCode = null)
+        string? targetLanguageCode = null,
+        bool validateRuntime = true)
     {
         ArgumentNullException.ThrowIfNull(enabledStages);
         ArgumentNullException.ThrowIfNull(selections);
@@ -88,8 +89,8 @@ public sealed class PipelineReadinessService(
                 continue;
             }
 
-            // Cache hit (keyed on stage + alias + language context).
-            var cacheKey = (stage, modelAlias, planningSourceLanguageCode, planningTargetLanguageCode);
+            // Cache hit (keyed on stage + alias + language context + validation mode).
+            var cacheKey = (stage, modelAlias, planningSourceLanguageCode, planningTargetLanguageCode, validateRuntime);
             if (_cache.TryGetValue(cacheKey, out readiness!))
             {
                 stageReadinesses.Add(readiness);
@@ -104,6 +105,7 @@ public sealed class PipelineReadinessService(
                     selections,
                     planningSourceLanguageCode,
                     planningTargetLanguageCode,
+                    validateRuntime,
                     cancellationToken).ConfigureAwait(false);
 
             // TTS: additionally check voice-clone consent when local TTS is ready.
@@ -184,6 +186,7 @@ public sealed class PipelineReadinessService(
         RuntimeModelSelections selections,
         string? sourceLanguageCode,
         string? targetLanguageCode,
+        bool validateRuntime,
         CancellationToken cancellationToken)
     {
         StageRuntimePlanningRequest request = BuildPlanningRequest(
@@ -191,7 +194,8 @@ public sealed class PipelineReadinessService(
             modelAlias,
             selections,
             sourceLanguageCode,
-            targetLanguageCode);
+            targetLanguageCode,
+            skipProviderSmokeTest: !validateRuntime);
         request = await StageRuntimePlanningRequestFactory
             .ApplyPreferredModelTierAsync(request, _runtimePlanningPreferences, cancellationToken)
             .ConfigureAwait(false);
@@ -310,7 +314,8 @@ public sealed class PipelineReadinessService(
         string? modelAlias,
         RuntimeModelSelections selections,
         string? sourceLanguageCode = null,
-        string? targetLanguageCode = null)
+        string? targetLanguageCode = null,
+        bool skipProviderSmokeTest = false)
     {
         RuntimeModelRequestOptions options = RuntimeModelRequestFactory.CreateOptions(selections);
 
@@ -329,7 +334,8 @@ public sealed class PipelineReadinessService(
                 RuntimeStage.Translation => sourceLanguageCode,
                 _ => null,
             },
-            TargetLanguage: stage == RuntimeStage.Translation ? targetLanguageCode : null);
+            TargetLanguage: stage == RuntimeStage.Translation ? targetLanguageCode : null,
+            SkipProviderSmokeTest: skipProviderSmokeTest);
     }
 
     private static bool HasVoiceCloneRequest(TranscriptProjectState? state) =>

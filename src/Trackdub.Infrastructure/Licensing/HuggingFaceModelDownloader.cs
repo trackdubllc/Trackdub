@@ -200,7 +200,7 @@ public sealed class HuggingFaceModelDownloader : IModelDownloader
                     byte[] buffer = new byte[BufferSize];
                     int bytesRead;
 
-                    while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) != 0)
+                    while ((bytesRead = await contentStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) != 0)
                     {
                         await fileStream.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
                         totalBytesRead += bytesRead;

@@ -78,30 +78,43 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
 
     private IEnumerable<string> EnumerateCandidateDirectories(string rid)
     {
+
+        string? safeRid = SanitizeRelativePathSegment(rid);
+        if (safeRid is null)
+        {
+            yield break;
+        }
+
         yield return Path.Combine(baseDirectory, "libvlc");
 
         int depth = 0;
         for (string? current = baseDirectory; !string.IsNullOrWhiteSpace(current) && depth < 14; depth++)
         {
-            yield return Path.Combine(current, "native", rid, "libvlc");
-            yield return Path.Combine(current, "libvlc", rid);
+            yield return Path.Combine(current, "native", safeRid, "libvlc");
+            yield return Path.Combine(current, "libvlc", safeRid);
             current = Directory.GetParent(current)?.FullName;
         }
 
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!string.IsNullOrWhiteSpace(localAppData))
         {
-            yield return Path.Combine(localAppData, "Trackdub", "native", rid, "libvlc");
-            yield return Path.Combine(localAppData, "Trackdub", "libvlc", rid);
+            yield return Path.Combine(localAppData, "Trackdub", "native", safeRid, "libvlc");
+            yield return Path.Combine(localAppData, "Trackdub", "libvlc", safeRid);
         }
     }
 
     private static string? ProbeArchitectureSubfolders(string candidate, string rid)
     {
+        string? safeRid = SanitizeRelativePathSegment(rid);
+        if (safeRid is null)
+        {
+            return null;
+        }
+
         // Bundled runtime packages lay out every architecture side by side
         // (libvlc/win-x64, libvlc/win-arm64, ...); the subfolder matching the
         // current process architecture must win over arbitrary enumeration order.
-        string ridFolder = Path.Combine(candidate, rid);
+        string ridFolder = Path.Combine(candidate, safeRid);
         if (Directory.Exists(ridFolder) && HasPlatformLibrary(ridFolder))
         {
             return ridFolder;
@@ -186,5 +199,22 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Rejects rooted or multi-segment values so <see cref="Path.Combine"/> cannot
+    /// discard earlier path arguments when assembling candidate directories.
+    /// </summary>
+    private static string? SanitizeRelativePathSegment(string value)
+    {
+        string safe = Path.GetFileName(value);
+        if (string.IsNullOrWhiteSpace(safe)
+            || !string.Equals(safe, value, StringComparison.Ordinal)
+            || Path.IsPathRooted(safe))
+        {
+            return null;
+        }
+
+        return safe;
     }
 }

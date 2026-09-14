@@ -51,6 +51,11 @@
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+    <!-- Sidecar only for OGA NvTensorRtRtx. Do not let this package replace the CPU GenAI loader. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" GeneratePathProperty="true">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>compile;runtime;native;contentFiles;analyzers;build;buildTransitive</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!-- macOS portable leg: Composition owns GenAI publish closure. Linux uses GenAI.Cuda via Inference.Onnx only. -->
@@ -111,8 +116,15 @@
   <Target Name="CopyWinMlAssetsToOutput"
           AfterTargets="CopyFilesToOutputDirectory"
           Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl' And '@(_WinMlAssets)' != ''">
+    <!-- Root: load next to Trackdub.Composition.dll at runtime. -->
     <Copy SourceFiles="@(_WinMlAssets)"
           DestinationFiles="@(_WinMlAssets->'$(TargetDir)%(TargetPath)')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false" />
+    <!-- Library-layout folder: referencing projects (Sdk, Benchmarks)
+         resolve ContentWithTargetPath under $(TargetDir)$(TargetName)\. -->
+    <Copy SourceFiles="@(_WinMlAssets)"
+          DestinationFiles="@(_WinMlAssets->'$(TargetDir)$(TargetName)\%(TargetPath)')"
           OverwriteReadOnlyFiles="true"
           SkipUnchangedFiles="false" />
   </Target>
@@ -178,6 +190,10 @@
           Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl' And '@(_TrackdubDnnlNativeAssets)' != ''">
     <Copy SourceFiles="@(_TrackdubDnnlNativeAssets)"
           DestinationFiles="@(_TrackdubDnnlNativeAssets->'$(TargetDir)%(Filename)%(Extension)')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false" />
+    <Copy SourceFiles="@(_TrackdubDnnlNativeAssets)"
+          DestinationFiles="@(_TrackdubDnnlNativeAssets->'$(TargetDir)$(TargetName)\%(Filename)%(Extension)')"
           OverwriteReadOnlyFiles="true"
           SkipUnchangedFiles="false" />
   </Target>

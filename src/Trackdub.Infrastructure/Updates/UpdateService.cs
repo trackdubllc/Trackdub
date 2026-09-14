@@ -297,7 +297,7 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
             int bytesRead;
 
             while ((bytesRead = await contentStream
-                .ReadAsync(buffer, 0, buffer.Length, cancellationToken)
+                .ReadAsync(buffer, cancellationToken)
                 .ConfigureAwait(false)) != 0)
             {
                 await fileStream

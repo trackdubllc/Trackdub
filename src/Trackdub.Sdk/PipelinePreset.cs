@@ -46,16 +46,14 @@ public sealed record PipelinePreset
     public string? ExportFormat { get; init; }
 
     /// <summary>
-    /// ONNX execution provider preference (e.g., "auto", "cpu", "directml", "cuda").
-    /// Must be one of the values accepted by <c>CliParseHelpers.TryParseExecutionProvider</c>;
-    /// an empty value means "use the application default".
+    /// ONNX execution provider preference (canonical tags from <c>ExecutionProviderTokens</c>,
+    /// e.g. "auto", "cpu", "directml", "trt-rtx", "qnn"). Empty means application default.
     /// </summary>
     public string? ExecutionProvider { get; init; }
 
     /// <summary>
-    /// Device selection policy (e.g., "explicit", "max-performance", "prefer-npu", "max-efficiency", "min-overall-power").
-    /// Must be one of the values accepted by <c>WindowsMlExecutionDevicePolicySettings.TryParseKey</c>;
-    /// an empty value means "use the application default".
+    /// Windows ML catalog device policy (e.g., "explicit", "max-performance", "prefer-npu").
+    /// Ignored for non-catalog pins such as cpu, trt-rtx, cuda, and tensorrt.
     /// </summary>
     public string? DevicePolicy { get; init; }
 

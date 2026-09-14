@@ -30,6 +30,11 @@ public sealed record StudioSettings(
     StudioExportSettings? Export = null,
     StudioPlaybackSettings? Playback = null,
     IReadOnlyDictionary<string, ExecutionProviderKind>? HardwareOverrides = null,
+    /// <summary>
+    /// When true, <see cref="HardwareOverrides"/> are required for stages that allow the provider
+    /// (headless CLI/SDK pins). UI soft preferences leave this false.
+    /// </summary>
+    bool RequirePreferredExecutionProviders = false,
     IReadOnlyDictionary<string, string>? ModelVariantOverrides = null,
     IReadOnlyDictionary<string, string>? StageModelAliases = null,
     string? AppliedStarterPackId = null,
@@ -40,6 +45,10 @@ public sealed record StudioSettings(
     /// When true, the first-run starter pack onboarding modal has been shown or dismissed.
     /// </summary>
     bool StarterPackOnboardingCompleted = false,
+    /// <summary>
+    /// Advanced native ORT CUDA/TensorRT on Windows. Default off. Not exposed in Settings UI;
+    /// kept so JSON / <c>INativeCudaTensorRtWindowsPolicy</c> wiring still functions.
+    /// </summary>
     bool AllowNativeCudaTensorRtOnWindows = false,
     WindowsMlExecutionDevicePolicy WindowsMlExecutionDevicePolicy = WindowsMlExecutionDevicePolicy.Explicit,
     string? HardwareQualityPresetOverrideKey = null,
@@ -79,6 +88,7 @@ public sealed record StudioSettings(
         Export: StudioExportSettings.Default,
         Playback: StudioPlaybackSettings.Default,
         HardwareOverrides: new Dictionary<string, ExecutionProviderKind>(),
+        RequirePreferredExecutionProviders: false,
         ModelVariantOverrides: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
         StageModelAliases: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
         AppliedStarterPackId: null,

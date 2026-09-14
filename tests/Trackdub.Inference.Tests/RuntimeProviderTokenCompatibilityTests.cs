@@ -22,6 +22,7 @@ public sealed class RuntimeProviderTokenCompatibilityTests
     [InlineData("qnn", ExecutionProviderKind.Qnn)]
     [InlineData("vitisai", ExecutionProviderKind.VitisAi)]
     [InlineData("onnxruntime-dnnl", ExecutionProviderKind.Dnnl)]
+    [InlineData("coreml", ExecutionProviderKind.CoreMl)]
     public void TryParseProviderToken_accepts_manifest_aliases(string token, ExecutionProviderKind expected)
     {
         Assert.True(RuntimeProviderTokenCompatibility.TryParseProviderToken(token, out ExecutionProviderKind actual));
@@ -88,6 +89,7 @@ public sealed class RuntimeProviderTokenCompatibilityTests
             ExecutionProviderKind.TensorRt,
             ExecutionProviderKind.Cuda,
             ExecutionProviderKind.OpenVino,
+            ExecutionProviderKind.CoreMl,
             ExecutionProviderKind.DirectMl,
             ExecutionProviderKind.Dnnl,
             ExecutionProviderKind.Cpu

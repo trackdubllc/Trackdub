@@ -50,15 +50,18 @@ dotnet test Trackdub.slnx -m:1
 dotnet test tests/Trackdub.<Area>.Tests --no-restore -m:1
 
 # Single test
-dotnet test tests/Trackdub.Application.Tests --filter "FullyQualifiedName~<TestName>"
+dotnet test tests/Trackdub.Application.Tests --filter "FullyQualifiedName~<TestName>" -m:1
 
 # CI build (Release, warnings as errors)
-dotnet restore Trackdub.slnx
+dotnet restore Trackdub.slnx -m:1
 dotnet build Trackdub.slnx --configuration Release --no-restore -m:1 -warnaserror
-dotnet test Trackdub.slnx --configuration Release --no-build
+dotnet test Trackdub.slnx --configuration Release --no-build -m:1
 
 # Run headless CLI
+# On Windows, Trackdub.Cli is multi-targeted (net10.0 + net10.0-windows10.0.19041.0),
+# so dotnet run needs an explicit --framework flag; on non-Windows a plain run works.
 dotnet run --project src/Trackdub.Cli -- --help
+dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows
 
 # Solution filter builds
 dotnet build Trackdub.Inference.slnx -m:1
@@ -116,6 +119,20 @@ Imperative title: `Add ...`, `Remove ...`, `Fix ...`, `Revise ...`
 
 See [docs/repository-policy.md](docs/repository-policy.md) for organization and governance details.
 
+## Cursor Cloud specific instructions
+
+No long-running services. The product entrypoint is the headless CLI (`src/Trackdub.Cli`). Standard build/test/run commands are in [AGENTS.md Commands](#commands) and README.
+
+### Cloud agent gotchas
+
+- Always pass `-m:1` to `dotnet restore`, `dotnet build`, and `dotnet test` (matches CI and avoids restore/build races).
+- NuGet restore needs network access to both `nuget.org` and the Azure Artifacts `dotnet-libraries` feed (see `NuGet.config`) for `Microsoft.ML.Tokenizers` 3.x.
+- `dotnet format Trackdub.slnx --verify-no-changes` is the lint/format gate (CI `format` job).
+- FFmpeg/ffprobe are required for media stages; playback natives (libmpv/LibVLC) are optional for CLI pipeline runs. Readiness: `dotnet run --project src/Trackdub.Cli -- doctor`.
+- Full `dub` / ASR / TTS / translation need ONNX models downloaded into the model cache (`dotnet run --project src/Trackdub.Cli -- models bundle-needed`, then `dotnet run --project src/Trackdub.Cli -- models download <id>`). Tests that need models skip cleanly when missing.
+- Prefer `dotnet run --project src/Trackdub.Cli -- <args>` over a global tool install. Use `--no-build` after a fresh Debug build.
+- On Windows, `Trackdub.Cli` is multi-targeted (`net10.0` and `net10.0-windows10.0.19041.0`), so `dotnet run` fails without an explicit framework; pass `--framework net10.0` (or `--framework net10.0-windows10.0.19041.0`), e.g. `dotnet run --project src/Trackdub.Cli --framework net10.0 -- <args>`. On non-Windows the project targets only `net10.0`, so no flag is needed.
+- Default data/cache roots land under `~/.local/share/Trackdub` (override with `TRACKDUB_DATA_ROOT` / `TRACKDUB_CACHE_ROOT` if needed).
 
 ## Documentation
 

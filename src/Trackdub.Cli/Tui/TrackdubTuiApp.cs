@@ -32,7 +32,7 @@ internal static class TrackdubTuiApp
             {
                 console.Clear();
                 RenderHeader(console, currentScreen, screens);
-                await screens[currentScreen].RenderAsync(context).ConfigureAwait(false);
+                await TryRenderScreenAsync(screens[currentScreen], context).ConfigureAwait(false);
 
                 if (showHelp)
                 {
@@ -100,6 +100,19 @@ internal static class TrackdubTuiApp
         }
     }
 
+    internal static async Task TryRenderScreenAsync(ITuiScreen screen, TrackdubTuiContext context)
+    {
+        try
+        {
+            await screen.RenderAsync(context).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            context.Console.MarkupLine($"[red]{TuiMarkup.Escape(ex.Message)}[/]");
+            context.SetStatus(ex.Message);
+        }
+    }
+
     private static IReadOnlyDictionary<TuiScreenId, ITuiScreen> CreateScreens() =>
         new Dictionary<TuiScreenId, ITuiScreen>
         {
@@ -137,7 +150,7 @@ internal static class TrackdubTuiApp
         {
             TuiScreenId.Home => "  [white]o[/] open  [white]n[/] new project",
             TuiScreenId.Models => "  [white]p[/] packs  [white]d[/] ad-hoc download  [white]a[/] all missing  [white]v[/] verify",
-            TuiScreenId.Pipeline => "  [white]o[/] open  [white]s[/] run stage  [white]g[/] run all",
+            TuiScreenId.Pipeline => "  [white]o[/] open  [white]s[/] run stage  [white]g[/] run all (configurable)",
             _ => string.Empty,
         };
 
@@ -173,8 +186,11 @@ internal static class TrackdubTuiApp
 
                 Pipeline screen
                   o  Open a .trackdub project directory
-                  s  Run one stage (user-triggered)
-                  g  Run all stages for the open project
+                  s  Run one stage — optionally override model alias
+                  g  Run all — "defaults" fires immediately;
+                     "configure" walks voice clone, export format, subtitle
+                     format/source, and advanced toggles (timbre, pan,
+                     loudness, ASR refinement, burn-in, video encoder)
 
                 Project screen
                   Read-only spine, artifacts, and SQLite stage runs for open project

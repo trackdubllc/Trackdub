@@ -14,10 +14,25 @@ public sealed record HeadlessTrackdubOptions
     public string? ModelCacheDirectory { get; init; }
     public string? LogDirectory { get; init; }
     public IReadOnlyDictionary<string, ExecutionProviderKind>? HardwareOverrides { get; init; }
+
+    /// <summary>
+    /// When true, hardware overrides are hard requirements for stages that allow the provider.
+    /// Headless CLI/SDK pins set this; UI soft preferences leave it false.
+    /// </summary>
+    public bool RequirePreferredExecutionProviders { get; init; }
+
     public WindowsMlExecutionDevicePolicy WindowsMlExecutionDevicePolicy { get; init; } =
         WindowsMlExecutionDevicePolicy.Explicit;
     public string? FfmpegPath { get; init; }
     public string? FfprobePath { get; init; }
     public IApplicationLogger? Logger { get; init; }
     public Action<IServiceCollection>? ServiceConfigurator { get; init; }
+
+    /// <summary>
+    /// When true, TensorRT RTX planning is enabled even if disk settings have not
+    /// accepted the NVIDIA license yet. Disk remains the source of truth for CLI.
+    /// </summary>
+    public bool NvidiaTensorRtRtxLicenseAccepted { get; init; }
+
+    public string? TensorRtRtxPluginDirectory { get; init; }
 }

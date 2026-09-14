@@ -289,6 +289,7 @@ public static class CompositionRoot
 
         services.TryAddSingleton<IAppHealthMonitor, AppHealthMonitor>();
         services.TryAddSingleton<IFfmpegHealthCheck>(_ => new FfmpegHealthCheck());
+        services.TryAddSingleton<IEspeakNgHealthCheck, EspeakNgHealthCheck>();
         services.TryAddSingleton<IExplicitFfmpegInstaller>(_ => new FfmpegExplicitInstaller());
         services.TryAddSingleton<IDiagnosticsCollector>(sp =>
             new DiagnosticsCollector(
@@ -483,6 +484,7 @@ public static class CompositionRoot
         services.TryAddScoped<PipelineDegradationWriter>();
         services.TryAddScoped<TranscriptWorkspace>();
         services.TryAddSingleton<RuntimeModelSetupCoordinator>();
+        services.TryAddSingleton<IPipelineModelSetupInteraction, HeadlessPipelineModelSetupInteraction>();
         services.TryAddSingleton<TranscriptImportModelProvisioner>();
         services.TryAddSingleton<TranscriptWorkspaceCommandService>();
         services.TryAddSingleton<VoicePreviewCache>();
@@ -923,6 +925,11 @@ public static class CompositionRoot
         {
             BenchmarkModelCandidate candidate = modelPathResolver.ResolveSingle("kokoro-onnx");
             string? modelRootPath = candidate.RootDirectory ?? Path.GetDirectoryName(candidate.ModelPath);
+            if (!string.IsNullOrWhiteSpace(modelRootPath))
+            {
+                modelRootPath = KokoroVoiceCatalog.ResolveRootContainingVoices(modelRootPath);
+            }
+
             return string.IsNullOrWhiteSpace(modelRootPath)
                 ? KokoroVoiceCatalog.KnownAvailable()
                 : await CreateKokoroVoiceCatalogSafe(modelRootPath, logger).ConfigureAwait(false);

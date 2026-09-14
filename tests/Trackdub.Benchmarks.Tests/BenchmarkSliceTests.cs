@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text;
 using Trackdub.Benchmarks;
+using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.ModelManifest;
@@ -43,6 +44,197 @@ public sealed class BenchmarkOptionsTests
         Assert.Equal(7, options.RunCount);
         Assert.Equal(ReportFormat.Json, options.ReportFormat);
         Assert.EndsWith(Path.Combine("out", "report.json"), options.OutputPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryParse_ParsesTrtRtxSmokeScope()
+    {
+        var args = new[] { "--scope", TrtRtxSmokeCatalog.ScopeName, "--provider", "trt-rtx", "--runs", "1" };
+
+        bool success = BenchmarkOptions.TryParse(args, TextWriter.Null, out BenchmarkOptions options);
+
+        Assert.True(success);
+        Assert.Equal(TrtRtxSmokeCatalog.ScopeName, options.Scope);
+        Assert.Equal(string.Empty, options.ModelPath);
+        Assert.Equal(BenchmarkProviderPreference.TensorRtRtx, options.ProviderPreference);
+    }
+
+    [Fact]
+    public void TrtRtxSmokeCatalog_includes_starter_pack_turbo_models()
+    {
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("madlad400", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("whisper-small", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("qwen3-asr-0.6b", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("qwen3-asr-1.7b", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void TrtRtxSmokeWorkflow_downloads_every_starter_pack_turbo_target()
+    {
+        string workflow = ReadTrtRtxSmokeWorkflow();
+
+        // The workflow must populate the cache for every smoke target before running the
+        // benchmark; otherwise BenchmarkModelPathResolver skips them all and the smoke run
+        // exits non-zero. This guards against the regression where the download step was absent.
+        Assert.Contains("models download", workflow, StringComparison.Ordinal);
+
+        // Parse the pwsh hashtable target entries the workflow loops over, e.g.
+        //   @{ Id = 'microsoft/Phi-4-mini-instruct-onnx'; Variant = 'gpu-int4' }
+        //   @{ Id = 'openai/whisper-small' }
+        // Presence-only checks would pass even if an id were paired with the wrong variant
+        // or a stale target lingered after a catalog removal, so match each id to the variant
+        // declared on the same entry and assert the set matches the catalog exactly.
+        IReadOnlyDictionary<string, string?> workflowTargets = ParseWorkflowDownloadTargets(workflow);
+
+        Assert.Equal(TrtRtxSmokeCatalog.StarterPackTurboGpu.Count, workflowTargets.Count);
+
+        foreach (TrtRtxSmokeCatalog.Target target in TrtRtxSmokeCatalog.StarterPackTurboGpu)
+        {
+            Assert.True(
+                workflowTargets.TryGetValue(target.ModelReference, out string? workflowVariant),
+                $"Workflow is missing a download entry for '{target.ModelReference}'.");
+
+            string? expectedVariant = string.IsNullOrWhiteSpace(target.Variant) ? null : target.Variant;
+            Assert.True(
+                string.Equals(expectedVariant, workflowVariant, StringComparison.Ordinal),
+                $"Workflow entry for '{target.ModelReference}' declares variant "
+                    + $"'{workflowVariant ?? "<none>"}' but the catalog expects "
+                    + $"'{expectedVariant ?? "<none>"}'.");
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string?> ParseWorkflowDownloadTargets(string workflow)
+    {
+        // Match each `@{ Id = '<id>' [; Variant = '<variant>'] }` entry, capturing the id and,
+        // when present, the variant declared on the same logical entry.
+        var entryPattern = new System.Text.RegularExpressions.Regex(
+            @"@\{\s*Id\s*=\s*'(?<id>[^']+)'(?:\s*;\s*Variant\s*=\s*'(?<variant>[^']+)')?\s*\}",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+        var targets = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (System.Text.RegularExpressions.Match match in entryPattern.Matches(workflow))
+        {
+            string id = match.Groups["id"].Value;
+            string? variant = match.Groups["variant"].Success ? match.Groups["variant"].Value : null;
+            Assert.False(
+                targets.ContainsKey(id),
+                $"Workflow lists '{id}' more than once in the download loop.");
+            targets.Add(id, variant);
+        }
+
+        return targets;
+    }
+
+    [Fact]
+    public void TrtRtxSmokeWorkflow_does_not_mask_smoke_failures()
+    {
+        string workflow = ReadTrtRtxSmokeWorkflow();
+
+        // continue-on-error at the job level (or a per-step masker) would hide the benchmark's
+        // non-zero all-skipped exit, so the run would report green even when nothing ran.
+        Assert.DoesNotContain("continue-on-error", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("|| true", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TrtRtxSmokeWorkflow_keeps_model_cache_derived_from_cache_root()
+    {
+        string workflow = ReadTrtRtxSmokeWorkflow();
+
+        // The CLI writes to TRACKDUB_CACHE_ROOT/model-cache while the benchmark reads
+        // TRACKDUB_MODEL_CACHE, so the two steps only agree while
+        // TRACKDUB_MODEL_CACHE == TRACKDUB_CACHE_ROOT/model-cache. GitHub Actions cannot
+        // reference a sibling env var within the same env map, so the values are set by hand;
+        // this guard fails if a future edit changes one without the other and silently
+        // reintroduces the all-skipped result.
+        string cacheRoot = ReadJobEnvValue(workflow, "TRACKDUB_CACHE_ROOT");
+        string modelCache = ReadJobEnvValue(workflow, "TRACKDUB_MODEL_CACHE");
+
+        Assert.Equal(cacheRoot + "/model-cache", modelCache);
+    }
+
+    private static string ReadJobEnvValue(string workflow, string name)
+    {
+        var pattern = new System.Text.RegularExpressions.Regex(
+            $@"^\s*{System.Text.RegularExpressions.Regex.Escape(name)}\s*:\s*(?<value>\S.*?)\s*$",
+            System.Text.RegularExpressions.RegexOptions.Multiline
+                | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+        System.Text.RegularExpressions.Match match = pattern.Match(workflow);
+        Assert.True(match.Success, $"Workflow does not define env var '{name}'.");
+
+        return match.Groups["value"].Value.Trim().Trim('\'', '"');
+    }
+
+    private static string ReadTrtRtxSmokeWorkflow()
+    {
+        string workflowPath = ResolveRepositoryFile(".github/workflows/trt-rtx-smoke.yml");
+        return File.ReadAllText(workflowPath);
+    }
+
+    private static string ResolveRepositoryFile(string relativePath)
+    {
+        if (Path.IsPathRooted(relativePath))
+        {
+            throw new ArgumentException(
+                $"Expected a relative path, but got rooted path '{relativePath}'.",
+                nameof(relativePath));
+        }
+
+        DirectoryInfo? current = new(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            string candidate = Path.Combine(current.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new FileNotFoundException(
+            $"Could not locate '{relativePath}' walking up from '{AppContext.BaseDirectory}'.");
+    }
+
+    [Fact]
+    public void TrtRtxSmokeCatalog_remaining_includes_untested_onnx_gpu_models()
+    {
+        Assert.Contains(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("nemotron", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("LatentSync", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("silero", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("Kokoro", StringComparison.OrdinalIgnoreCase));
+
+        // GPU-only invariant: Phi-3.5 ships only a cpu-int4 bundle, so it must not appear here.
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Contains("Phi-3.5-mini-instruct-onnx", StringComparison.OrdinalIgnoreCase));
+
+        // phi-4 must map to the gpu-int4 variant, never cpu-int4.
+        Assert.Contains(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Equals("microsoft/phi-4-onnx", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(target.Variant, "gpu-int4", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            target => target.ModelReference.Equals("microsoft/phi-4-onnx", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(target.Variant, "cpu-int4", StringComparison.Ordinal));
     }
 
     [Fact]

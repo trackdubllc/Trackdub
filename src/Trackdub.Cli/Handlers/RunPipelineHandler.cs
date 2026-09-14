@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Sdk;
 
@@ -30,6 +31,15 @@ internal static class RunPipelineHandler
             StageFilter = request.StageFilter,
             ForceRerun = request.ForceRerun,
             EnableAsrTextRefinement = request.EnableAsrTextRefinement,
+            UseVoiceCloning = request.UseVoiceCloning,
+            ApplyTimbrePolish = request.ApplyTimbrePolish,
+            RestoreOriginalPan = request.RestoreOriginalPan,
+            MatchOriginalLoudness = request.MatchOriginalLoudness,
+            VoiceAssignmentOverrides = request.VoiceAssignmentOverrides,
+            SubtitleFormats = request.SubtitleFormats,
+            SubtitleSource = request.SubtitleSource,
+            BurnInSubtitles = request.BurnInSubtitles,
+            VideoEncoder = request.VideoEncoder,
         };
 
         DubbingRunResult result;
@@ -123,6 +133,15 @@ internal static class RunPipelineHandler
         public IReadOnlyList<string>? StageFilter { get; init; }
         public bool ForceRerun { get; init; }
         public bool EnableAsrTextRefinement { get; init; }
+        public bool UseVoiceCloning { get; init; }
+        public bool ApplyTimbrePolish { get; init; } = true;
+        public bool RestoreOriginalPan { get; init; }
+        public bool MatchOriginalLoudness { get; init; }
+        public IReadOnlyDictionary<string, string>? VoiceAssignmentOverrides { get; init; }
+        public IReadOnlyList<string>? SubtitleFormats { get; init; }
+        public string? SubtitleSource { get; init; }
+        public bool BurnInSubtitles { get; init; }
+        public VideoEncoderPreference VideoEncoder { get; init; }
     }
 
     private sealed class RunPipelineOutput

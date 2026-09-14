@@ -49,6 +49,33 @@ public sealed class PlannedRuntimeModelResolverTests
         Assert.Equal(fixture.RootPath, resolvedRoot, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ResolveGenAiModelRoot_WhenEntryPathIsNestedGenAiConfig_UsesPackageDirectory()
+    {
+        using TempDirectoryFixture fixture = new();
+        string packageRoot = Path.Combine(fixture.RootPath, "cpu_and_mobile", "cpu-int4");
+        string genAiConfigPath = Path.Combine(packageRoot, "genai_config.json");
+
+        string resolvedRoot = PlannedRuntimeModelResolver.ResolveGenAiModelRoot(
+            fixture.RootPath,
+            genAiConfigPath);
+
+        Assert.Equal(packageRoot, resolvedRoot, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveGenAiModelRoot_WhenEntryPathIsRootGenAiConfig_UsesCacheRoot()
+    {
+        using TempDirectoryFixture fixture = new();
+        string genAiConfigPath = Path.Combine(fixture.RootPath, "genai_config.json");
+
+        string resolvedRoot = PlannedRuntimeModelResolver.ResolveGenAiModelRoot(
+            fixture.RootPath,
+            genAiConfigPath);
+
+        Assert.Equal(fixture.RootPath, resolvedRoot, StringComparer.OrdinalIgnoreCase);
+    }
+
     private sealed class TempDirectoryFixture : IDisposable
     {
         public string RootPath { get; } = Path.Combine(

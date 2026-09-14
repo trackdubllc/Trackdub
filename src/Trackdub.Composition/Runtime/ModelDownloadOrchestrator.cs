@@ -309,16 +309,10 @@ public sealed class ModelDownloadOrchestrator(
 
         if (hashResult.IsValid)
         {
-            if (record is null)
-            {
-                await RegisterCacheRecordAsync(entry, modelRootDirectory, hashResult, cancellationToken).ConfigureAwait(false);
-                EmitStateChange(modelId, ModelCacheState.Missing, ModelCacheState.Installed);
-                return new ModelVerificationResult(modelId, ModelCacheState.Missing, ModelCacheState.Installed, true, null);
-            }
-
-            await SetModelIntegrityStateAsync(modelId, integrityFailed: false, entry, modelRootDirectory, cancellationToken)
-                .ConfigureAwait(false);
-            ModelCacheState newState = currentState is ModelCacheState.Corrupt ? ModelCacheState.Installed : currentState;
+            await RegisterCacheRecordAsync(entry, modelRootDirectory, hashResult, cancellationToken).ConfigureAwait(false);
+            ModelCacheState newState = record is null || currentState is ModelCacheState.Corrupt
+                ? ModelCacheState.Installed
+                : currentState;
             if (newState != currentState)
             {
                 EmitStateChange(modelId, currentState, newState);
@@ -416,10 +410,13 @@ public sealed class ModelDownloadOrchestrator(
                 return (normalizedRelativePath, new HashVerificationResult(false, false, null, null, "Required model file is missing."));
             }
 
-            string? expectedHash = ResolveExpectedHash(entry, normalizedRelativePath, benchmarkRelativePath);
-            if (entry.DownloadFileHashes.Count > 0 && string.IsNullOrWhiteSpace(expectedHash))
+            string? expectedHash = ModelDownloadManifestFiles.ResolveExpectedSha256(
+                entry,
+                normalizedRelativePath,
+                benchmarkRelativePath);
+            if (string.IsNullOrWhiteSpace(expectedHash))
             {
-                return (normalizedRelativePath, new HashVerificationResult(false, false, null, null, "Manifest does not define a SHA-256 for this required model file."));
+                continue;
             }
 
             HashVerificationResult hashResult = await hashVerifier
@@ -439,21 +436,6 @@ public sealed class ModelDownloadOrchestrator(
         }
 
         return (benchmarkRelativePath, benchmarkResult ?? lastResult);
-    }
-
-    private static string? ResolveExpectedHash(
-        BundledModelManifestEntry entry,
-        string normalizedRelativePath,
-        string benchmarkRelativePath)
-    {
-        if (entry.DownloadFileHashes.TryGetValue(normalizedRelativePath, out string? fileHash))
-        {
-            return fileHash;
-        }
-
-        return normalizedRelativePath.Equals(benchmarkRelativePath, StringComparison.OrdinalIgnoreCase)
-            ? entry.Sha256
-            : null;
     }
 
     private static string NormalizeRelativePath(string relativePath) =>
@@ -606,6 +588,9 @@ public sealed class ModelDownloadOrchestrator(
                 LocalModelCacheRecord? existing = records.FirstOrDefault(r =>
                     r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase) &&
                     r.RootPath.Equals(modelRootDirectory, StringComparison.OrdinalIgnoreCase));
+                string identitySha256 = ModelDownloadManifestFiles.ResolveCacheIdentitySha256(
+                    entry,
+                    hashResult.ActualSha256);
                 var updated = records
                     .Where(r =>
                         !(r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase) &&
@@ -616,14 +601,16 @@ public sealed class ModelDownloadOrchestrator(
                         entry.ModelId,
                         modelRootDirectory,
                         string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
-                        hashResult.ActualSha256 ?? entry.Sha256,
+                        identitySha256,
                         DateTimeOffset.UtcNow,
                         IntegrityFailed: false)
                     : existing with
                     {
                         Revision = string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
-                        Sha256 = hashResult.ActualSha256 ?? entry.Sha256,
-                        CachedAtUtc = DateTimeOffset.UtcNow,
+                        Sha256 = identitySha256,
+                        CachedAtUtc = string.Equals(existing.Sha256, identitySha256, StringComparison.OrdinalIgnoreCase)
+                            ? existing.CachedAtUtc
+                            : DateTimeOffset.UtcNow,
                         IntegrityFailed = false
                     });
                 return updated;

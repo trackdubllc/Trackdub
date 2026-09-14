@@ -204,6 +204,7 @@ MagicPaths/
 # Note: .github/ workflows and repo config stay tracked. Only local overlays below.
 .claude/worktrees/
 .claire/worktrees/
+.worktrees/
 .claude/agent-memory/
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
@@ -233,7 +234,9 @@ output/unused-code-audit/
 .bob/DO NOT USE mcp.json
 
 # Local agent skill overlays (committed skills under these trees are tracked explicitly)
-/.github/skills
+/.github/skills/*
+!/.github/skills/code-review/
+!/.github/skills/code-review/**
 /.bob/skills
 /.autohand/skills
 /.openhands/skills
@@ -293,7 +296,18 @@ output/unused-code-audit/
 /.vibe
 /.vibe
 /.terramind
-/.qoder
+/.qoder/*
+# Track generated wiki pages + knowledge cards (shared AI/code context) and the
+# wiki_plan.yaml steering config; keep meta and better-harness reports ignored.
+!/.qoder/repowiki
+/.qoder/repowiki/*
+!/.qoder/repowiki/wiki_plan.yaml
+!/.qoder/repowiki/en
+!/.qoder/repowiki/knowledge
+/.qoder/repowiki/en/*
+!/.qoder/repowiki/en/content
+/.qoder/repowiki/knowledge/*
+!/.qoder/repowiki/knowledge/en
 /.pi/skills
 /.neovate
 /.tinycloud
@@ -304,3 +318,5 @@ smoke-output.txt
 /.codex-plugins
 __pycache__/
 *.py[cod]
+/.dirac-cache
+/.magicpath-work

@@ -104,6 +104,46 @@ internal static class ModelDownloadManifestFiles
                 ? entry.SourceUrl
                 : "no configured downloadable source";
 
+    /// <summary>
+    /// Resolves the pinned SHA-256 for a required cache file.
+    /// Per-file hashes cover optional variants (for example Kokoro fp16/q8f16).
+    /// Sidecar files such as tokenizers and voice packs stay required on disk
+    /// without a digest unless they are the hash-anchor entry.
+    /// </summary>
+    public static string? ResolveExpectedSha256(
+        BundledModelManifestEntry entry,
+        string normalizedRelativePath,
+        string hashAnchorRelativePath)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentException.ThrowIfNullOrWhiteSpace(normalizedRelativePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hashAnchorRelativePath);
+
+        if (entry.DownloadFileHashes.TryGetValue(normalizedRelativePath, out string? fileHash) &&
+            !string.IsNullOrWhiteSpace(fileHash))
+        {
+            return fileHash;
+        }
+
+        return normalizedRelativePath.Equals(hashAnchorRelativePath, StringComparison.OrdinalIgnoreCase)
+            ? entry.Sha256
+            : null;
+    }
+
+    /// <summary>
+    /// Cache records store the manifest identity hash (benchmark entry), not the
+    /// digest of whichever sidecar happened to be verified last.
+    /// </summary>
+    public static string ResolveCacheIdentitySha256(
+        BundledModelManifestEntry entry,
+        string? verifiedFileSha256 = null)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return string.IsNullOrWhiteSpace(entry.Sha256)
+            ? verifiedFileSha256 ?? string.Empty
+            : entry.Sha256;
+    }
+
     public static bool TryResolveExternalDownloadSource(
         BundledModelManifestEntry entry,
         string relativePath,

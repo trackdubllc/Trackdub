@@ -95,7 +95,8 @@ public sealed class RuntimePlanner : IRuntimePlanner
             TargetLanguage: request.TargetLanguage,
             ModelTier: request.PreferredModelTier,
             ExclusionSetSnapshot: exclusionSnapshot,
-            NvidiaGpuArchitecture: hardwareProfile.NvidiaGpuArchitecture);
+            NvidiaGpuArchitecture: hardwareProfile.NvidiaGpuArchitecture,
+            SkipProviderSmokeTest: request.SkipProviderSmokeTest);
 
         if (_planCache.TryGetValue(cacheKey, out StageRuntimePlan? cachedPlan))
         {
@@ -328,6 +329,7 @@ public sealed class RuntimePlanner : IRuntimePlanner
                 request.RequirePreferredExecutionProvider,
                 preferMigraphxOnAmdGpu,
                 request.NormalizedPreferredModelVariantAlias,
+                request.SkipProviderSmokeTest,
                 cancellationToken).ConfigureAwait(false);
 
             if (readyPlan is not null)
@@ -454,4 +456,5 @@ internal sealed record PlanCacheKey(
     string? TargetLanguage,
     string? ModelTier,
     string ExclusionSetSnapshot,
-    NvidiaGpuArchitectureBucket NvidiaGpuArchitecture);
+    NvidiaGpuArchitectureBucket NvidiaGpuArchitecture,
+    bool SkipProviderSmokeTest);

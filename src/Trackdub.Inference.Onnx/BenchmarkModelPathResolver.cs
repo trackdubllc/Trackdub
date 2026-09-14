@@ -219,7 +219,8 @@ public sealed class BenchmarkModelPathResolver(
         }
 
         var candidates = new List<BenchmarkModelCandidate>();
-        if (File.Exists(defaultResolution!.Entry.DefaultBenchmarkEntryPath))
+        string manifestCandidateRootDirectory = ResolveManifestCandidateRootDirectory(defaultResolution!.Entry);
+        if (File.Exists(defaultResolution.Entry.DefaultBenchmarkEntryPath))
         {
             candidates.Add(new BenchmarkModelCandidate(
                 CandidateKey: "variant:default",
@@ -227,7 +228,7 @@ public sealed class BenchmarkModelPathResolver(
                 ModelPath: defaultResolution.Entry.DefaultBenchmarkEntryPath,
                 VariantAlias: "default",
                 ResolutionNote: $"Resolved model alias '{reference}' using manifest '{manifestRegistry.ManifestPath}'.",
-                RootDirectory: defaultResolution.Entry.RootDirectory));
+                RootDirectory: manifestCandidateRootDirectory));
         }
 
         foreach (BundledModelManifestVariant variant in defaultResolution.Entry.Variants)
@@ -243,7 +244,7 @@ public sealed class BenchmarkModelPathResolver(
                 ModelPath: variant.EntryPath,
                 VariantAlias: variant.Alias,
                 ResolutionNote: $"Resolved model alias '{reference}' using manifest '{manifestRegistry.ManifestPath}'.",
-                RootDirectory: defaultResolution.Entry.RootDirectory));
+                RootDirectory: manifestCandidateRootDirectory));
         }
 
         if (candidates.Count == 0)
@@ -277,6 +278,35 @@ public sealed class BenchmarkModelPathResolver(
         return true;
     }
 
+    private string ResolveManifestCandidateRootDirectory(BundledModelManifestEntry entry)
+    {
+        // When the model is present in the on-disk cache, the cache root is the directory that
+        // actually contains the model artifacts (e.g. Kokoro's `voices/`). Prefer it so consumers
+        // such as CompositionRoot.CreateKokoroVoiceCatalog resolve `<root>/voices` correctly.
+        // Otherwise fall back to the manifest-relative repo models root to preserve the existing
+        // repo-models-on-disk behavior.
+        if (!string.IsNullOrWhiteSpace(_modelCacheDirectory))
+        {
+            string cachedRootDirectory = ResolveModelCacheRootDirectory(_modelCacheDirectory, entry.ModelId);
+            if (Directory.Exists(cachedRootDirectory)
+                && (TryMapManifestPathToCache(
+                        cachedRootDirectory,
+                        entry.RootDirectory,
+                        entry.DefaultBenchmarkEntryPath,
+                        out _)
+                    || entry.Variants.Any(variant => TryMapManifestPathToCache(
+                        cachedRootDirectory,
+                        entry.RootDirectory,
+                        variant.EntryPath,
+                        out _))))
+            {
+                return cachedRootDirectory;
+            }
+        }
+
+        return entry.RootDirectory;
+    }
+
     private BenchmarkModelResolutionResult? TryDiscoverCachedManifestCandidates(
         string reference,
         string alias,
@@ -294,15 +324,154 @@ public sealed class BenchmarkModelPathResolver(
         }
 
         BenchmarkModelResolutionResult cacheDiscovery = DiscoverFromDirectory(reference, cachedRootDirectory);
-        if (cacheDiscovery.Candidates.Count == 0)
+        IReadOnlyList<BenchmarkModelCandidate> manifestCandidates =
+            DiscoverCachedManifestVariantCandidates(reference, cachedRootDirectory, entry);
+
+        if (cacheDiscovery.Candidates.Count == 0 && manifestCandidates.Count == 0)
         {
             return null;
         }
 
+        IReadOnlyList<BenchmarkModelCandidate> mergedCandidates = MergeCacheCandidates(
+            ApplyManifestVariantAliases(cacheDiscovery.Candidates, entry),
+            manifestCandidates);
+
         return cacheDiscovery with
         {
-            ScopeKey = $"cache:{alias}"
+            ScopeKey = $"cache:{alias}",
+            Candidates = mergedCandidates,
+            Error = null,
+            DefaultCandidateKey = mergedCandidates.Any(candidate =>
+                    candidate.CandidateKey.Equals("variant:default", StringComparison.OrdinalIgnoreCase))
+                ? "variant:default"
+                : cacheDiscovery.DefaultCandidateKey,
         };
+    }
+
+    private static IReadOnlyList<BenchmarkModelCandidate> DiscoverCachedManifestVariantCandidates(
+        string reference,
+        string cachedRootDirectory,
+        BundledModelManifestEntry entry)
+    {
+        var candidates = new List<BenchmarkModelCandidate>();
+        foreach (BundledModelManifestVariant variant in entry.Variants)
+        {
+            if (TryMapManifestPathToCache(
+                    cachedRootDirectory,
+                    entry.RootDirectory,
+                    variant.EntryPath,
+                    out string cachedEntryPath))
+            {
+                candidates.Add(new BenchmarkModelCandidate(
+                    CandidateKey: $"variant:{variant.Alias}",
+                    DisplayName: $"{entry.ModelId}@{variant.Alias}",
+                    ModelPath: cachedEntryPath,
+                    VariantAlias: variant.Alias,
+                    ResolutionNote: $"Resolved cached manifest variant '{variant.Alias}' for '{reference}'.",
+                    RootDirectory: cachedRootDirectory));
+            }
+        }
+
+        if (TryMapManifestPathToCache(
+                cachedRootDirectory,
+                entry.RootDirectory,
+                entry.DefaultBenchmarkEntryPath,
+                out string cachedDefaultEntryPath)
+            && !candidates.Any(candidate =>
+                candidate.ModelPath.Equals(cachedDefaultEntryPath, StringComparison.OrdinalIgnoreCase)))
+        {
+            candidates.Insert(0, new BenchmarkModelCandidate(
+                CandidateKey: "variant:default",
+                DisplayName: $"{entry.ModelId} (default)",
+                ModelPath: cachedDefaultEntryPath,
+                VariantAlias: "default",
+                ResolutionNote: $"Resolved cached default entry for '{reference}'.",
+                RootDirectory: cachedRootDirectory));
+        }
+
+        return candidates;
+    }
+
+    private static bool TryMapManifestPathToCache(
+        string cachedRootDirectory,
+        string manifestRootDirectory,
+        string manifestAbsolutePath,
+        out string cachedPath)
+    {
+        cachedPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(manifestAbsolutePath))
+        {
+            return false;
+        }
+
+        string relativePath = Path.GetRelativePath(manifestRootDirectory, manifestAbsolutePath);
+        if (string.IsNullOrWhiteSpace(relativePath)
+            || relativePath.StartsWith("..", StringComparison.Ordinal)
+            || Path.IsPathRooted(relativePath))
+        {
+            return false;
+        }
+
+        cachedPath = Path.GetFullPath(Path.Combine(cachedRootDirectory, relativePath));
+        return File.Exists(cachedPath);
+    }
+
+    private static IReadOnlyList<BenchmarkModelCandidate> MergeCacheCandidates(
+        IReadOnlyList<BenchmarkModelCandidate> directoryCandidates,
+        IReadOnlyList<BenchmarkModelCandidate> manifestCandidates)
+    {
+        var merged = new List<BenchmarkModelCandidate>(manifestCandidates);
+        foreach (BenchmarkModelCandidate candidate in directoryCandidates)
+        {
+            if (merged.Any(existing =>
+                    existing.ModelPath.Equals(candidate.ModelPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            merged.Add(candidate);
+        }
+
+        return merged;
+    }
+
+    private static IReadOnlyList<BenchmarkModelCandidate> ApplyManifestVariantAliases(
+        IReadOnlyList<BenchmarkModelCandidate> candidates,
+        BundledModelManifestEntry entry)
+    {
+        return candidates
+            .Select(candidate =>
+            {
+                string? manifestVariantAlias = ResolveManifestVariantAlias(candidate.ModelPath, entry);
+                return manifestVariantAlias is null
+                    ? candidate
+                    : candidate with { VariantAlias = manifestVariantAlias };
+            })
+            .ToArray();
+    }
+
+    private static string? ResolveManifestVariantAlias(string modelPath, BundledModelManifestEntry entry)
+    {
+        string normalizedModelPath = modelPath.Replace('\\', '/');
+        foreach (BundledModelManifestVariant variant in entry.Variants)
+        {
+            string normalizedEntryPath = variant.EntryPath.Replace('\\', '/');
+            if (normalizedModelPath.EndsWith(normalizedEntryPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return variant.Alias;
+            }
+        }
+
+        string normalizedDefaultEntryPath = entry.DefaultBenchmarkEntryPath.Replace('\\', '/');
+        if (normalizedModelPath.EndsWith(normalizedDefaultEntryPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return entry.Variants.FirstOrDefault(variant =>
+                    variant.Alias.Equals("default", StringComparison.OrdinalIgnoreCase))
+                ?.Alias
+                ?? "default";
+        }
+
+        return null;
     }
 
     private static string ResolveModelCacheRootDirectory(string modelCacheDirectory, string modelId)
@@ -468,7 +637,9 @@ public sealed class BenchmarkModelPathResolver(
 
         return string.Equals(candidate.VariantAlias, trimmedVariant, StringComparison.OrdinalIgnoreCase)
             || string.Equals(candidate.DisplayName, trimmedVariant, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(Path.GetFileNameWithoutExtension(candidate.ModelPath), trimmedVariant, StringComparison.OrdinalIgnoreCase);
+            || string.Equals(Path.GetFileNameWithoutExtension(candidate.ModelPath), trimmedVariant, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(Path.GetFileNameWithoutExtension(candidate.ModelPath), $"model_{trimmedVariant}", StringComparison.OrdinalIgnoreCase)
+            || Path.GetFileNameWithoutExtension(candidate.ModelPath).EndsWith($"_{trimmedVariant}", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ExpandToAbsolutePath(string path) =>

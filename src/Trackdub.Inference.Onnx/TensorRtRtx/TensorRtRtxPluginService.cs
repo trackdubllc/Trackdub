@@ -112,6 +112,16 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
                 resolution.Detail);
         }
 
+        TensorRtRtxCudaRuntimeEnsureResult cudaRuntime = TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoadedResult();
+        if (!cudaRuntime.Succeeded)
+        {
+            return new TensorRtRtxBootstrapResult(
+                false,
+                TensorRtRtxProviderIds.PluginEpAbi,
+                TensorRtRtxReadinessBlocker.CudaRuntimeMissing,
+                cudaRuntime.Detail);
+        }
+
         try
         {
             await RegistrationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -152,11 +162,29 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
         }
         catch (Exception ex) when (ex is OnnxRuntimeException or DllNotFoundException or BadImageFormatException or InvalidOperationException)
         {
+            // Win32 ERROR_MOD_NOT_FOUND (126) on cu12 plugins almost always means cudart64_12 is still
+            // invisible to the OS loader. Do not collapse that into a generic registration failure.
+            bool looksLikeMissingModule =
+                ex is DllNotFoundException
+                || (ex is OnnxRuntimeException &&
+                    (ex.Message.Contains("126", StringComparison.Ordinal) ||
+                     ex.Message.Contains("cudart", StringComparison.OrdinalIgnoreCase) ||
+                     ex.Message.Contains("The specified module could not be found", StringComparison.OrdinalIgnoreCase)));
+
+            TensorRtRtxReadinessBlocker blocker = looksLikeMissingModule
+                ? TensorRtRtxReadinessBlocker.CudaRuntimeMissing
+                : TensorRtRtxReadinessBlocker.EpRegisterFailed;
+
+            string detailPrefix = looksLikeMissingModule
+                ? "TensorRT RTX EP ABI plugin registration failed: a required native module was not found "
+                  + "(likely CUDA 12 runtime / cudart64_12). "
+                : "TensorRT RTX EP ABI plugin registration failed: ";
+
             return new TensorRtRtxBootstrapResult(
                 false,
                 TensorRtRtxProviderIds.PluginEpAbi,
-                TensorRtRtxReadinessBlocker.EpRegisterFailed,
-                $"TensorRT RTX EP ABI plugin registration failed: {ex.Message}");
+                blocker,
+                detailPrefix + ex.Message);
         }
     }
 

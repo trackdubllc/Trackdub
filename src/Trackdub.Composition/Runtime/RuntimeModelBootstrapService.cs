@@ -236,7 +236,7 @@ public sealed class RuntimeModelBootstrapService(
                 entry.ModelId,
                 modelRootPath,
                 string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
-                fingerprint.Sha256,
+                ModelDownloadManifestFiles.ResolveCacheIdentitySha256(entry, fingerprint.Sha256),
                 DateTimeOffset.UtcNow),
             cancellationToken).ConfigureAwait(false);
 
@@ -346,7 +346,7 @@ public sealed class RuntimeModelBootstrapService(
                 entry.ModelId,
                 modelRootPath,
                 string.IsNullOrWhiteSpace(entry.Revision) ? "manual-import" : entry.Revision,
-                fingerprint.Sha256,
+                ModelDownloadManifestFiles.ResolveCacheIdentitySha256(entry, fingerprint.Sha256),
                 DateTimeOffset.UtcNow),
             cancellationToken).ConfigureAwait(false);
 
@@ -543,7 +543,7 @@ public sealed class RuntimeModelBootstrapService(
                 entry.ModelId,
                 modelRootPath,
                 string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
-                fingerprint.Sha256,
+                ModelDownloadManifestFiles.ResolveCacheIdentitySha256(entry, fingerprint.Sha256),
                 DateTimeOffset.UtcNow),
             cancellationToken).ConfigureAwait(false);
 
@@ -858,10 +858,13 @@ public sealed class RuntimeModelBootstrapService(
                 return (normalizedRelativePath, new HashVerificationResult(false, false, null, null, "Required model file is missing."));
             }
 
-            string? expectedHash = ResolveExpectedHash(entry, normalizedRelativePath, selectedRelativePath);
-            if (entry.DownloadFileHashes.Count > 0 && string.IsNullOrWhiteSpace(expectedHash))
+            string? expectedHash = ModelDownloadManifestFiles.ResolveExpectedSha256(
+                entry,
+                normalizedRelativePath,
+                selectedRelativePath);
+            if (string.IsNullOrWhiteSpace(expectedHash))
             {
-                return (normalizedRelativePath, new HashVerificationResult(false, false, null, null, "Manifest does not define a SHA-256 for this required model file."));
+                continue;
             }
 
             HashVerificationResult hashResult = await hashVerifier
@@ -881,21 +884,6 @@ public sealed class RuntimeModelBootstrapService(
         }
 
         return (selectedRelativePath, selectedEntryResult ?? lastResult);
-    }
-
-    private static string? ResolveExpectedHash(
-        BundledModelManifestEntry entry,
-        string normalizedRelativePath,
-        string selectedRelativePath)
-    {
-        if (entry.DownloadFileHashes.TryGetValue(normalizedRelativePath, out string? fileHash))
-        {
-            return fileHash;
-        }
-
-        return normalizedRelativePath.Equals(selectedRelativePath, StringComparison.OrdinalIgnoreCase)
-            ? entry.Sha256
-            : null;
     }
 
     private static string ResolveStatusRelativePath(

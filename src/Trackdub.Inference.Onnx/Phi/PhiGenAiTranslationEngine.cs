@@ -4,6 +4,7 @@ using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Runtime.Routing;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Inference.Onnx.Runtime.Planning;
+using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Runtime.Planning;
 
 namespace Trackdub.Inference.Onnx.Phi;
@@ -202,14 +203,7 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
     }
 
     private static string ToGenAiProviderName(ExecutionProviderKind executionProvider) =>
-        executionProvider switch
-        {
-            ExecutionProviderKind.Cpu => "cpu",
-            ExecutionProviderKind.DirectMl => "dml",
-            ExecutionProviderKind.Cuda => "cuda",
-            ExecutionProviderKind.CoreMl => "coreml",
-            _ => throw new ArgumentOutOfRangeException(nameof(executionProvider), executionProvider, "Unsupported GenAI execution provider.")
-        };
+        GenAiExecutionProviderNames.Resolve(executionProvider);
 
     private static StageRuntimeExecutionSummary CreateExecutionSummary(
         StageRuntimePlan plan,

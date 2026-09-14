@@ -25,13 +25,22 @@ internal static class ModelsHandler
         TrackdubSessionFactory factory,
         string modelId,
         IProgress<ModelDownloadProgress>? progress,
+        CancellationToken cancellationToken) =>
+        await DownloadModelAsync(factory, modelId, variantAlias: null, progress, cancellationToken)
+            .ConfigureAwait(false);
+
+    public static async Task<ModelDownloadResult> DownloadModelAsync(
+        TrackdubSessionFactory factory,
+        string modelId,
+        string? variantAlias,
+        IProgress<ModelDownloadProgress>? progress,
         CancellationToken cancellationToken)
     {
         IModelDownloadOrchestrator orchestrator = factory.GetRequiredService<IModelDownloadOrchestrator>();
         try
         {
             return await orchestrator
-                .DownloadAsync(modelId, progress, cancellationToken)
+                .DownloadAsync(modelId, variantAlias, progress, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException)

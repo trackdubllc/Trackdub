@@ -53,6 +53,19 @@ public sealed class TrackdubSessionFactory : IDubbingSessionFactory, IDisposable
         return _serviceProvider.GetRequiredService<T>();
     }
 
+    /// <summary>
+    /// Writes NVIDIA TensorRT RTX license acceptance to the disk settings file used by
+    /// headless hosts. The in-memory overlay does not persist across processes.
+    /// </summary>
+    public Task PersistNvidiaTensorRtRtxLicenseAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        IAppStoragePaths storagePaths = _serviceProvider.GetRequiredService<IAppStoragePaths>();
+        return HeadlessPersistedEpLicenses.PersistNvidiaTensorRtRtxAcceptanceAsync(
+            storagePaths,
+            cancellationToken);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

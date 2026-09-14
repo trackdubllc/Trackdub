@@ -25,6 +25,31 @@ public sealed class Pcm16ReferenceClipAnalyzerTests : IDisposable
         Assert.True(analysis.TotalDurationSeconds >= 3.9d);
         Assert.True(analysis.ActiveSpeechSeconds < 1.0d);
         Assert.True(analysis.ActiveSpeechSeconds < ReferenceClipPolicy.MinimumActiveSpeechSeconds);
+        Assert.Equal("female", analysis.EstimatedGender);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_estimates_male_from_low_pitch_speech()
+    {
+        string path = Path.Combine(tempDirectory, "male-speech.wav");
+        WriteWave(path, sampleRate: 16000, totalSeconds: 1.5, activeSeconds: 1.5, frequencyHz: 120d);
+        var analyzer = new Pcm16ReferenceClipAnalyzer();
+
+        var analysis = await analyzer.AnalyzeAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Equal("male", analysis.EstimatedGender);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_estimates_female_from_high_pitch_speech()
+    {
+        string path = Path.Combine(tempDirectory, "female-speech.wav");
+        WriteWave(path, sampleRate: 16000, totalSeconds: 1.5, activeSeconds: 1.5, frequencyHz: 220d);
+        var analyzer = new Pcm16ReferenceClipAnalyzer();
+
+        var analysis = await analyzer.AnalyzeAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Equal("female", analysis.EstimatedGender);
     }
 
     public void Dispose()
@@ -35,14 +60,19 @@ public sealed class Pcm16ReferenceClipAnalyzerTests : IDisposable
         }
     }
 
-    private static void WriteWave(string path, int sampleRate, double totalSeconds, double activeSeconds)
+    private static void WriteWave(
+        string path,
+        int sampleRate,
+        double totalSeconds,
+        double activeSeconds,
+        double frequencyHz = 220d)
     {
         int sampleCount = (int)(sampleRate * totalSeconds);
         int activeSampleCount = (int)(sampleRate * activeSeconds);
         byte[] data = new byte[sampleCount * sizeof(short)];
         for (int i = 0; i < activeSampleCount; i++)
         {
-            double phase = 2d * Math.PI * 220d * i / sampleRate;
+            double phase = 2d * Math.PI * frequencyHz * i / sampleRate;
             short sample = (short)(Math.Sin(phase) * short.MaxValue * 0.5d);
             BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(i * sizeof(short), sizeof(short)), sample);
         }

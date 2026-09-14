@@ -196,7 +196,7 @@ public sealed class ModelDownloaderAdapter(
                     byte[] buffer = new byte[BufferSize];
                     int bytesRead;
                     while ((bytesRead = await contentStream
-                               .ReadAsync(buffer, 0, buffer.Length, cancellationToken)
+                               .ReadAsync(buffer, cancellationToken)
                                .ConfigureAwait(false)) != 0)
                     {
                         await fileStream

@@ -159,6 +159,11 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
                 cancellationToken).ConfigureAwait(false);
             repetitionGuarded |= transcription.RepetitionGuarded;
 
+            if (string.IsNullOrWhiteSpace(transcription.Text))
+            {
+                continue;
+            }
+
             segments.Add(new RecognizedTranscriptSegment(
                 region.Index,
                 region.StartSeconds,

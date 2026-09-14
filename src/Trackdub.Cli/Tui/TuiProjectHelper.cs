@@ -24,7 +24,7 @@ internal static class TuiProjectHelper
         string projectName,
         CancellationToken cancellationToken)
     {
-        string resolvedPath = Path.GetFullPath(projectPath);
+        string resolvedPath = Path.GetFullPath(UserPathText.Normalize(projectPath));
         context.ProjectPath = resolvedPath;
 
         IStudioSettingsService settingsService = context.Factory.GetRequiredService<IStudioSettingsService>();

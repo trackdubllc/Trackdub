@@ -1,4 +1,5 @@
 using Trackdub.Application.Transcripts;
+using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Domain.StageRuns;
@@ -40,12 +41,28 @@ internal static class PipelineHandler
         IReadOnlyList<PipelineStageRow> Stages,
         bool IsRunReady);
 
+    internal sealed record TuiPipelineRunOptions
+    {
+        public bool UseVoiceCloning { get; init; }
+        public bool ApplyTimbrePolish { get; init; } = true;
+        public bool RestoreOriginalPan { get; init; }
+        public bool MatchOriginalLoudness { get; init; }
+        public bool EnableAsrTextRefinement { get; init; }
+        public bool ForceRerun { get; init; }
+        public string? ExportFormat { get; init; }
+        public IReadOnlyList<string>? SubtitleFormats { get; init; }
+        public string? SubtitleSource { get; init; }
+        public bool BurnInSubtitles { get; init; }
+        public string? VideoEncoderKey { get; init; }
+        public string? TargetLanguageOverride { get; init; }
+    }
+
     internal static async Task<PipelineSnapshot?> TryLoadSnapshotAsync(
         TrackdubSessionFactory factory,
         string projectPath,
         CancellationToken cancellationToken)
     {
-        string resolvedProjectPath = Path.GetFullPath(projectPath);
+        string resolvedProjectPath = Path.GetFullPath(UserPathText.Normalize(projectPath));
         if (!Directory.Exists(resolvedProjectPath)
             || !TrackdubProjectPaths.ContainsDatabase(resolvedProjectPath))
         {
@@ -109,6 +126,14 @@ internal static class PipelineHandler
         string projectPath,
         string stageName,
         CancellationToken cancellationToken) =>
+        RunStageAsync(factory, projectPath, stageName, modelAlias: null, cancellationToken);
+
+    internal static Task<int> RunStageAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        string stageName,
+        string? modelAlias,
+        CancellationToken cancellationToken) =>
         CliProgressRunner.ExecuteAsync(
             "text",
             async (progress, ct) =>
@@ -118,19 +143,26 @@ internal static class PipelineHandler
                     factory,
                     projectPath,
                     stageName,
-                    modelAlias: null,
+                    modelAlias,
                     progress,
                     output,
                     ct).ConfigureAwait(false);
             },
             cancellationToken);
 
+    internal static Task<int> RunFullPipelineAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        CancellationToken cancellationToken) =>
+        RunFullPipelineAsync(factory, projectPath, new TuiPipelineRunOptions(), cancellationToken);
+
     internal static async Task<int> RunFullPipelineAsync(
         TrackdubSessionFactory factory,
         string projectPath,
+        TuiPipelineRunOptions options,
         CancellationToken cancellationToken)
     {
-        string resolvedProjectPath = Path.GetFullPath(projectPath);
+        string resolvedProjectPath = Path.GetFullPath(UserPathText.Normalize(projectPath));
         TrackdubProjectContext? projectContext = await TrackdubProjectContextResolver
             .TryOpenAsync(factory, resolvedProjectPath, cancellationToken)
             .ConfigureAwait(false);
@@ -153,7 +185,9 @@ internal static class PipelineHandler
             return Program.ExitArgumentError;
         }
 
-        if (string.IsNullOrWhiteSpace(projectContext.TargetLanguageCode))
+        string targetLanguage = options.TargetLanguageOverride ?? projectContext.TargetLanguageCode ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(targetLanguage))
         {
             CliErrorReporter.ReportValidationError(
                 ErrorCode.InvalidArgument,
@@ -173,7 +207,18 @@ internal static class PipelineHandler
                     {
                         SourceMediaPath = projectContext.SourceMediaPath,
                         ProjectOutputDirectory = resolvedProjectPath,
-                        TargetLanguageCode = projectContext.TargetLanguageCode,
+                        TargetLanguageCode = targetLanguage,
+                        UseVoiceCloning = options.UseVoiceCloning,
+                        ApplyTimbrePolish = options.ApplyTimbrePolish,
+                        RestoreOriginalPan = options.RestoreOriginalPan,
+                        MatchOriginalLoudness = options.MatchOriginalLoudness,
+                        EnableAsrTextRefinement = options.EnableAsrTextRefinement,
+                        ForceRerun = options.ForceRerun,
+                        ExportFormat = options.ExportFormat,
+                        SubtitleFormats = options.SubtitleFormats,
+                        SubtitleSource = options.SubtitleSource,
+                        BurnInSubtitles = options.BurnInSubtitles,
+                        VideoEncoder = VideoEncoderPreferenceSettings.FromKey(options.VideoEncoderKey),
                     },
                     progress,
                     output,

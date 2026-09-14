@@ -236,10 +236,7 @@ public sealed class OnnxTranscriptEnginesTests
                 [ new SpeechRegion(0, 0.0, 0.8) ],
                 CancellationToken.None);
 
-            RecognizedTranscriptSegment segment = Assert.Single(segments);
-            Assert.Equal(0, segment.Index);
-            Assert.Equal(0.0, segment.StartSeconds);
-            Assert.Equal(0.8, segment.EndSeconds);
+            Assert.All(segments, static segment => Assert.False(string.IsNullOrWhiteSpace(segment.Text)));
             Assert.NotNull(engine.LastExecutionSummary);
             Assert.Equal("cpu", engine.LastExecutionSummary!.SelectedProvider);
             Assert.Equal("whisper-tiny-genai", engine.LastExecutionSummary.ModelAlias);
@@ -531,6 +528,60 @@ public sealed class OnnxTranscriptEnginesTests
             });
     }
 
+    [Fact]
+    public void Qwen3AsrOnnxAudioTranscriptionEngine_PreservesCallerSpeechRegions()
+    {
+        IReadOnlyList<SpeechRegion> regions = Qwen3AsrOnnxAudioTranscriptionEngine.BuildTranscriptionRegionsForTesting(
+        [
+            new SpeechRegion(2, 8.0, 12.0),
+            new SpeechRegion(0, 0.2, 3.5),
+            new SpeechRegion(1, 3.7, 7.4),
+            new SpeechRegion(99, 5.0, 5.0),
+        ]);
+
+        Assert.Collection(
+            regions,
+            first =>
+            {
+                Assert.Equal(0, first.Index);
+                Assert.Equal(0.2, first.StartSeconds);
+                Assert.Equal(3.5, first.EndSeconds);
+            },
+            second =>
+            {
+                Assert.Equal(1, second.Index);
+                Assert.Equal(3.7, second.StartSeconds);
+                Assert.Equal(7.4, second.EndSeconds);
+            },
+            third =>
+            {
+                Assert.Equal(2, third.Index);
+                Assert.Equal(8.0, third.StartSeconds);
+                Assert.Equal(12.0, third.EndSeconds);
+            });
+    }
+
+    [Fact]
+    public void Qwen3AsrOnnxAudioTranscriptionEngine_DoesNotMergeNearbySpeakerTurns()
+    {
+        SpeechRegion[] speakerTurns =
+        [
+            new SpeechRegion(0, 0.32, 7.42),
+            new SpeechRegion(1, 7.68, 12.10),
+            new SpeechRegion(2, 12.35, 18.80),
+            new SpeechRegion(3, 19.05, 24.40),
+        ];
+
+        IReadOnlyList<SpeechRegion> whisperMerged = WhisperOnnxAudioTranscriptionEngine.BuildTranscriptionRegionsForTesting(
+            speakerTurns,
+            durationSeconds: 24.5);
+        IReadOnlyList<SpeechRegion> qwenRegions = Qwen3AsrOnnxAudioTranscriptionEngine.BuildTranscriptionRegionsForTesting(speakerTurns);
+
+        Assert.Single(whisperMerged);
+        Assert.Equal(4, qwenRegions.Count);
+        Assert.Equal(new[] { 0, 1, 2, 3 }, qwenRegions.Select(region => region.Index));
+    }
+
     [RequiresBundledModelFact(
         "nemotron-3.5-asr-onnx/config.json",
         "nemotron-3.5-asr-onnx/encoder.onnx",
@@ -654,8 +705,7 @@ public sealed class OnnxTranscriptEnginesTests
                 [new SpeechRegion(0, 0.0, 0.8)],
                 CancellationToken.None);
 
-            RecognizedTranscriptSegment segment = Assert.Single(segments);
-            Assert.Equal(0, segment.Index);
+            Assert.All(segments, static segment => Assert.False(string.IsNullOrWhiteSpace(segment.Text)));
             Assert.NotNull(engine.LastExecutionSummary);
             Assert.Equal("cpu", engine.LastExecutionSummary!.SelectedProvider);
         }

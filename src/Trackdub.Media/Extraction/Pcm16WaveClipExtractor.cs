@@ -64,7 +64,7 @@ public sealed class Pcm16WaveClipExtractor : IAudioClipExtractor
         await using (FileStream sourceStream = new FileStream(sourceWavePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true))
         {
             byte[] headerBuffer = new byte[4096];
-            int headerBytesRead = await sourceStream.ReadAsync(headerBuffer, 0, headerBuffer.Length, cancellationToken).ConfigureAwait(false);
+            int headerBytesRead = await sourceStream.ReadAsync(headerBuffer, cancellationToken).ConfigureAwait(false);
             if (headerBytesRead < 44)
             {
                 throw new InvalidOperationException("Source wave file is too small to contain a valid header.");
@@ -248,7 +248,7 @@ public sealed class Pcm16WaveClipExtractor : IAudioClipExtractor
         while (remainingBytes > 0)
         {
             int bytesToRead = Math.Min(buffer.Length, remainingBytes);
-            int bytesRead = await source.ReadAsync(buffer, 0, bytesToRead, cancellationToken).ConfigureAwait(false);
+            int bytesRead = await source.ReadAsync(buffer.AsMemory(0, bytesToRead), cancellationToken).ConfigureAwait(false);
             if (bytesRead == 0)
             {
                 throw new InvalidOperationException("Unexpected end of wave file while reading clip data.");

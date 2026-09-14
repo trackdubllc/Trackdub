@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "linear-release-setup": {
+      "source": "linear/linear-release",
+      "sourceType": "github",
+      "skillPath": "skills/linear-release-setup/SKILL.md",
+      "computedHash": "f6e1b7c9779323210fd4800a10049b30c87bc34bf254acbae606d6dea3f4478d"
+    }
+  }
+}

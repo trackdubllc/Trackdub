@@ -26,14 +26,103 @@ public sealed class FfmpegAutoDownloaderTests
         FfmpegDownloadPackage x64 = FfmpegAutoDownloader.GetDefaultPackage(Architecture.X64);
         FfmpegDownloadPackage arm64 = FfmpegAutoDownloader.GetDefaultPackage(Architecture.Arm64);
 
-        Assert.Contains("win64", x64.AssetFileName, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("win64", x64.DownloadUrl, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("winarm64", x64.AssetFileName, StringComparison.OrdinalIgnoreCase);
+        // x64 comes from GyanD, an immutable versioned release — pinned and hash-verified.
+        // (GyanD's own naming doesn't include "win64" — it's a Windows-only distributor,
+        // so its filenames don't need an arch qualifier; the URL host is what identifies it.)
+        Assert.Contains("GyanD", x64.DownloadUrl, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("arm64", x64.AssetFileName, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(x64.Sha256);
+        Assert.Equal(64, x64.Sha256!.Length);
+        // GyanD doesn't embed the license variant in its filename the way BtbN does
+        // (it only ever publishes GPL builds) — VersionTag records it for clarity.
+        Assert.Contains("gpl", x64.VersionTag, StringComparison.OrdinalIgnoreCase);
+
+        // arm64 comes from BtbN's rolling "latest" tag — no fixed content to pin a hash
+        // against (see FfmpegDownloadPackage's doc comment), so Sha256 is deliberately null.
         Assert.Contains("winarm64", arm64.AssetFileName, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("winarm64", arm64.DownloadUrl, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("/latest/", arm64.DownloadUrl, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(arm64.Sha256);
+        Assert.Contains("gpl", arm64.AssetFileName, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("lgpl", arm64.AssetFileName, StringComparison.OrdinalIgnoreCase);
+
         Assert.NotEqual(x64.VersionTag, arm64.VersionTag);
-        Assert.Equal(64, x64.Sha256.Length);
-        Assert.Equal(64, arm64.Sha256.Length);
+    }
+
+    [Fact]
+    public void TryEnsureExecutable_records_tofu_baseline_when_package_has_no_pinned_hash()
+    {
+        // Mirrors the real arm64/Linux packages: Sha256 is null because the source is a
+        // mutable "latest" tag. First install has no prior baseline to compare against,
+        // so it must succeed and record one — not silently skip verification forever.
+        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            byte[] archiveBytes = CreateArchiveBytes();
+            var package = new FfmpegDownloadPackage(
+                "test-build-unverified",
+                "ffmpeg-test.zip",
+                "https://example.invalid/ffmpeg-test.zip",
+                Sha256: null);
+
+            using var client = new HttpClient(new StaticArchiveHandler(archiveBytes));
+            var downloader = new FfmpegAutoDownloader(tempRoot, client, package);
+
+            string? ffmpegPath = downloader.TryEnsureExecutable(["ffmpeg.exe"]);
+
+            Assert.NotNull(ffmpegPath);
+            Assert.True(File.Exists(ffmpegPath));
+
+            string hashPath = Path.Combine(downloader.GetInstallRoot(), "archive.sha256");
+            Assert.True(File.Exists(hashPath));
+            string expectedHash = Convert.ToHexString(SHA256.HashData(archiveBytes)).ToLowerInvariant();
+            Assert.Equal(expectedHash, File.ReadAllText(hashPath).Trim(), ignoreCase: true);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryEnsureExecutable_rejects_reinstall_when_rolling_release_content_changed()
+    {
+        // Simulates a second install attempt (e.g. after the extracted payload was
+        // deleted but the TOFU baseline survived) where the "latest" tag has since been
+        // republished with different bytes — must fail loudly, not silently re-trust.
+        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            var package = new FfmpegDownloadPackage(
+                "test-build-unverified",
+                "ffmpeg-test.zip",
+                "https://example.invalid/ffmpeg-test.zip",
+                Sha256: null);
+
+            using (var firstClient = new HttpClient(new StaticArchiveHandler(CreateArchiveBytes())))
+            {
+                var firstDownloader = new FfmpegAutoDownloader(tempRoot, firstClient, package);
+                Assert.NotNull(firstDownloader.TryEnsureExecutable(["ffmpeg.exe"]));
+            }
+
+            string installRoot = new FfmpegAutoDownloader(tempRoot, package: package).GetInstallRoot();
+            Directory.Delete(Path.Combine(installRoot, "payload"), recursive: true);
+
+            byte[] differentArchiveBytes = CreateArchiveBytes("ffmpeg-v2", "ffprobe-v2");
+            using var secondClient = new HttpClient(new StaticArchiveHandler(differentArchiveBytes));
+            var secondDownloader = new FfmpegAutoDownloader(tempRoot, secondClient, package);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => secondDownloader.TryEnsureExecutable(["ffmpeg.exe"]));
+            Assert.Contains("rolling-release hash changed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
     }
 
     [Fact]
@@ -138,13 +227,13 @@ public sealed class FfmpegAutoDownloaderTests
         }
     }
 
-    private static byte[] CreateArchiveBytes()
+    private static byte[] CreateArchiveBytes(string ffmpegContent = "ffmpeg", string ffprobeContent = "ffprobe")
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/bin/ffmpeg.exe", "ffmpeg");
-            AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/bin/ffprobe.exe", "ffprobe");
+            AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/bin/ffmpeg.exe", ffmpegContent);
+            AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/bin/ffprobe.exe", ffprobeContent);
             AddEntry(archive, "ffmpeg-master-latest-win64-lgpl-shared/LICENSE.txt", "LGPL");
         }
 

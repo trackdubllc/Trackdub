@@ -86,6 +86,150 @@ public sealed class StarterPackApplyServiceTests
         Assert.Equal("whisper-tiny", updated.StageModelAliases!["asr"]);
     }
 
+    [Fact]
+    public async Task BuildUpdatedSettings_turbo_gpu_leaves_gpu_stages_to_planner()
+    {
+        StarterPackCatalog catalog = new();
+        StarterPackDefinition pack = await catalog.GetAsync("balanced");
+        StarterPackProfileDefinition profile = StarterPackResolver.ResolveProfile(pack, "default");
+        StarterPackApplySettings applySettings = StarterPackApplyContract.Resolve(pack.Id, profile.Id);
+
+        StudioSettings updated = StarterPackApplyService.BuildUpdatedSettings(
+            StudioSettings.Default,
+            pack,
+            profile,
+            applySettings,
+            StarterPackHardwareProfile.TurboGpu);
+
+        Assert.False(updated.HardwareOverrides!.ContainsKey("Vad"));
+        Assert.False(updated.HardwareOverrides.ContainsKey("Diarization"));
+        Assert.False(updated.HardwareOverrides.ContainsKey("AsrGenAi"));
+        Assert.False(updated.HardwareOverrides.ContainsKey("Translation"));
+        Assert.Equal(ExecutionProviderKind.Cpu, updated.HardwareOverrides["Tts"]);
+        Assert.DoesNotContain(updated.HardwareOverrides, pair => pair.Value == ExecutionProviderKind.TensorRTRtx);
+        Assert.DoesNotContain(updated.HardwareOverrides, pair => pair.Value == ExecutionProviderKind.DirectMl);
+    }
+
+    [Fact]
+    public async Task BuildUpdatedSettings_premium_turbo_gpu_does_not_pin_madlad_ep()
+    {
+        StarterPackCatalog catalog = new();
+        StarterPackDefinition pack = await catalog.GetAsync("premium");
+        StarterPackProfileDefinition profile = StarterPackResolver.ResolveProfile(pack, "default");
+        StarterPackApplySettings applySettings = StarterPackApplyContract.Resolve(pack.Id, profile.Id);
+
+        StudioSettings updated = StarterPackApplyService.BuildUpdatedSettings(
+            StudioSettings.Default,
+            pack,
+            profile,
+            applySettings,
+            StarterPackHardwareProfile.TurboGpu);
+
+        Assert.False(updated.HardwareOverrides!.ContainsKey("Translation"));
+        Assert.False(updated.HardwareOverrides.ContainsKey("Tts"));
+        Assert.Equal("quantized", updated.ModelVariantOverrides!["translation"]);
+    }
+
+    [Fact]
+    public async Task BuildUpdatedSettings_turbo_gpu_clears_stale_gpu_pins_and_keeps_kokoro_cpu()
+    {
+        StarterPackCatalog catalog = new();
+        StarterPackDefinition pack = await catalog.GetAsync("balanced");
+        StarterPackProfileDefinition profile = StarterPackResolver.ResolveProfile(pack, "default");
+        StarterPackApplySettings applySettings = StarterPackApplyContract.Resolve(pack.Id, profile.Id);
+
+        StudioSettings current = StudioSettings.Default with
+        {
+            HardwareOverrides = new Dictionary<string, ExecutionProviderKind>
+            {
+                ["Vad"] = ExecutionProviderKind.Cpu,
+                ["Diarization"] = ExecutionProviderKind.DirectMl,
+                ["AsrGenAi"] = ExecutionProviderKind.TensorRTRtx,
+                ["Translation"] = ExecutionProviderKind.TensorRTRtx,
+                ["Tts"] = ExecutionProviderKind.DirectMl,
+            }
+        };
+
+        StudioSettings updated = StarterPackApplyService.BuildUpdatedSettings(
+            current,
+            pack,
+            profile,
+            applySettings,
+            StarterPackHardwareProfile.TurboGpu);
+
+        Assert.False(updated.HardwareOverrides!.ContainsKey("Vad"));
+        Assert.False(updated.HardwareOverrides.ContainsKey("Diarization"));
+        Assert.False(updated.HardwareOverrides.ContainsKey("AsrGenAi"));
+        Assert.False(updated.HardwareOverrides.ContainsKey("Translation"));
+        Assert.Equal(ExecutionProviderKind.Cpu, updated.HardwareOverrides["Tts"]);
+    }
+
+    [Fact]
+    public async Task BuildUpdatedSettings_cpu_safe_pins_cpu_execution_providers()
+    {
+        StarterPackCatalog catalog = new();
+        StarterPackDefinition pack = await catalog.GetAsync("balanced");
+        StarterPackProfileDefinition profile = StarterPackResolver.ResolveProfile(pack, "default");
+        StarterPackApplySettings applySettings = StarterPackApplyContract.Resolve(pack.Id, profile.Id);
+
+        StudioSettings updated = StarterPackApplyService.BuildUpdatedSettings(
+            StudioSettings.Default,
+            pack,
+            profile,
+            applySettings,
+            StarterPackHardwareProfile.CpuSafe);
+
+        Assert.Equal(ExecutionProviderKind.Cpu, updated.HardwareOverrides!["Vad"]);
+        Assert.Equal(ExecutionProviderKind.Cpu, updated.HardwareOverrides["Diarization"]);
+        Assert.Equal(ExecutionProviderKind.Cpu, updated.HardwareOverrides["AsrGenAi"]);
+        Assert.Equal(ExecutionProviderKind.Cpu, updated.HardwareOverrides["Translation"]);
+        Assert.Equal(ExecutionProviderKind.Cpu, updated.HardwareOverrides["Tts"]);
+    }
+
+    [Fact]
+    public async Task BuildUpdatedSettings_ignores_compatibility_resolved_gpu_ep_when_pack_requests_auto()
+    {
+        StarterPackCatalog catalog = new();
+        StarterPackDefinition pack = await catalog.GetAsync("balanced");
+        StarterPackProfileDefinition profile = StarterPackResolver.ResolveProfile(pack, "default");
+        StarterPackApplySettings applySettings = StarterPackApplyContract.Resolve(pack.Id, profile.Id);
+
+        var compatibility = new StarterPackCompatibilityReport(
+            pack.Id,
+            profile.Id,
+            "turbo_gpu",
+            [
+                new StageCompatibilityEntry(
+                    "translation",
+                    "phi-4-mini",
+                    "gpu-int4",
+                    "auto",
+                    "gpu-int4",
+                    "trt-rtx",
+                    FallbackApplied: false,
+                    FallbackReason: null,
+                    Runnable: true)
+            ],
+            AllStagesRunnable: true,
+            AnyFallbackApplied: false);
+
+        StudioSettings updated = StarterPackApplyService.BuildUpdatedSettings(
+            StudioSettings.Default with
+            {
+                HardwareOverrides = new Dictionary<string, ExecutionProviderKind>
+                {
+                    ["Translation"] = ExecutionProviderKind.DirectMl
+                }
+            },
+            pack,
+            profile,
+            applySettings,
+            StarterPackHardwareProfile.TurboGpu,
+            compatibility);
+
+        Assert.False(updated.HardwareOverrides!.ContainsKey("Translation"));
+    }
+
     private static (StarterPackApplyService Service, FakeStudioSettingsService Settings, BundledModelManifestRegistry Registry)
         CreateService(
             IEnumerable<ModelInventoryEntry>? inventoryEntries = null,
@@ -134,7 +278,8 @@ public sealed class StarterPackApplyServiceTests
             string packId,
             string profileId,
             StarterPackHardwareProfile? hardwareProfile = null,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            bool skipProviderSmokeTest = false) =>
             Task.FromResult(new StarterPackCompatibilityReport(
                 packId,
                 profileId,

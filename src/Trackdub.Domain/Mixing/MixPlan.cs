@@ -25,7 +25,8 @@ public sealed record MixPlan
         string? OriginalMixAudioRelativePath = null,
         int OutputChannelCount = 1,
         bool RestoreOriginalPan = false,
-        bool ApplyTimbrePolish = true)
+        bool ApplyTimbrePolish = true,
+        string? VocalStemRelativePath = null)
     {
         this.ProjectId = ProjectId;
         this.MediaAssetId = MediaAssetId;
@@ -44,6 +45,7 @@ public sealed record MixPlan
         this.OutputChannelCount = OutputChannelCount;
         this.RestoreOriginalPan = RestoreOriginalPan;
         this.ApplyTimbrePolish = ApplyTimbrePolish;
+        this.VocalStemRelativePath = VocalStemRelativePath;
     }
 
     public Guid ProjectId { get; init; }
@@ -95,6 +97,8 @@ public sealed record MixPlan
     public bool RestoreOriginalPan { get; init; }
 
     public bool ApplyTimbrePolish { get; init; }
+
+    public string? VocalStemRelativePath { get; init; }
 
     private static string? NormalizeOriginalMixAudioRelativePath(string? value, string sourceAudioRelativePath)
     {

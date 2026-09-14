@@ -170,7 +170,8 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
             CreateRegistryWithManifestRootOutsideConfiguredCache(
                 downloadFilesJson: "[ \"sidecar.txt\" ]",
-                downloadFileHashesJson: hashesJson);
+                downloadFileHashesJson: hashesJson,
+                sha256: entryHash);
         var store = new LocalModelCacheRecordStore(storagePaths);
         var downloader = new CaptureDestinationDownloader();
         var orchestrator = new ModelDownloadOrchestrator(registry, store, downloader, storagePaths);
@@ -179,6 +180,105 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
 
         Assert.True(result.Success, result.FailureReason);
         Assert.Equal(ModelCacheState.Installed, result.NewState);
+        LocalModelCacheRecord record = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(entryHash, record.Sha256);
+        Assert.NotEqual(sidecarHash, record.Sha256);
+    }
+
+    [Fact]
+    public async Task DownloadAsync_variant_keeps_manifest_identity_sha_when_sidecar_is_last_hashed_file()
+    {
+        const string identitySha = "c12e31df78c74f9589b165c8d51e65171f5028b77b7fedb41900f55f7f410dc8";
+        string tokenizerHash = Sha256Hex("downloaded:example/model:tokenizer.json");
+        string hashesJson =
+            $$"""
+              "download_file_hashes": {
+                "tokenizer.json": "{{tokenizerHash}}"
+              },
+            """;
+        (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
+            CreateRegistryWithKnownSha256(identitySha, hashesJson);
+        var store = new LocalModelCacheRecordStore(storagePaths);
+        var downloader = new CaptureDestinationDownloader();
+        var orchestrator = new ModelDownloadOrchestrator(registry, store, downloader, storagePaths);
+
+        ModelDownloadResult result = await orchestrator.DownloadAsync(
+            "example/model",
+            "q4",
+            progress: null,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success, result.FailureReason);
+        LocalModelCacheRecord record = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(identitySha, record.Sha256);
+        Assert.NotEqual(tokenizerHash, record.Sha256);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_repairs_cache_record_when_sidecar_digest_was_stored_as_identity()
+    {
+        const string expectedSha = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        string tokenizerHash = Sha256Hex("{}");
+        (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
+            CreateRegistryWithKnownSha256(expectedSha);
+        var store = new LocalModelCacheRecordStore(storagePaths);
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
+        await File.WriteAllTextAsync(cachedBenchmarkPath, "hello", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Join(cacheRoot, "tokenizer.json"), "{}", TestContext.Current.CancellationToken);
+        await store.SaveAsync(
+            [
+                new LocalModelCacheRecord(
+                    "example/model",
+                    cacheRoot,
+                    "main",
+                    tokenizerHash,
+                    DateTimeOffset.UtcNow)
+            ],
+            TestContext.Current.CancellationToken);
+
+        var orchestrator = new ModelDownloadOrchestrator(registry, store, new StubDownloader(), storagePaths);
+        ModelVerificationResult verification = await orchestrator.VerifyAsync("example/model", TestContext.Current.CancellationToken);
+
+        Assert.True(verification.HashMatch, verification.FailureReason);
+        LocalModelCacheRecord record = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(expectedSha, record.Sha256);
+        Assert.NotEqual(tokenizerHash, record.Sha256);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_does_not_bump_CachedAtUtc_when_identity_sha_already_matches()
+    {
+        const string expectedSha = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        DateTimeOffset cachedAt = new(2024, 1, 2, 3, 4, 5, TimeSpan.Zero);
+        (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
+            CreateRegistryWithKnownSha256(expectedSha);
+        var store = new LocalModelCacheRecordStore(storagePaths);
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
+        await File.WriteAllTextAsync(cachedBenchmarkPath, "hello", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Join(cacheRoot, "tokenizer.json"), "{}", TestContext.Current.CancellationToken);
+        await store.SaveAsync(
+            [
+                new LocalModelCacheRecord(
+                    "example/model",
+                    cacheRoot,
+                    "main",
+                    expectedSha,
+                    cachedAt)
+            ],
+            TestContext.Current.CancellationToken);
+
+        var orchestrator = new ModelDownloadOrchestrator(registry, store, new StubDownloader(), storagePaths);
+        ModelVerificationResult verification = await orchestrator.VerifyAsync("example/model", TestContext.Current.CancellationToken);
+
+        Assert.True(verification.HashMatch, verification.FailureReason);
+        LocalModelCacheRecord record = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(expectedSha, record.Sha256);
+        Assert.Equal(cachedAt, record.CachedAtUtc);
+        Assert.False(record.IntegrityFailed);
     }
 
     [Fact]
@@ -333,7 +433,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var store = new LocalModelCacheRecordStore(storagePaths);
         var downloader = new CaptureDestinationDownloader();
 
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
         string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
         string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
@@ -365,7 +465,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var store = new LocalModelCacheRecordStore(storagePaths);
         var downloader = new CaptureDestinationDownloader();
 
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
         string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
         string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
@@ -400,7 +500,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var store = new LocalModelCacheRecordStore(storagePaths);
         var downloader = new CancellingDownloader();
 
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
         string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
         string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
@@ -452,7 +552,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var store = new LocalModelCacheRecordStore(storagePaths);
         var downloader = new CaptureDestinationDownloader();
 
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
         string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         await File.WriteAllTextAsync(benchmarkPath, "existing", TestContext.Current.CancellationToken);
@@ -480,7 +580,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var store = new LocalModelCacheRecordStore(storagePaths);
         var downloader = new CaptureDestinationDownloader();
 
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
         string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
         string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
         string variantRoot = Path.Combine(cacheRoot, "optimized", "dml");
@@ -533,7 +633,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var store = new LocalModelCacheRecordStore(storagePaths);
         var downloader = new CaptureDestinationDownloader();
 
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
         string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
         string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
@@ -561,7 +661,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
             CreateRegistryWithManifestRootOutsideConfiguredCache();
         var store = new LocalModelCacheRecordStore(storagePaths);
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
         string cachedModelPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(cachedModelPath)!);
         await File.WriteAllTextAsync(cachedModelPath, "cached", TestContext.Current.CancellationToken);
@@ -591,8 +691,8 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
             CreateRegistryWithKnownSha256("0000000000000000000000000000000000000000000000000000000000000000");
         var store = new LocalModelCacheRecordStore(storagePaths);
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
-        string cachedBenchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
         await File.WriteAllTextAsync(cachedBenchmarkPath, "wrong-content", TestContext.Current.CancellationToken);
 
@@ -659,12 +759,12 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
             CreateRegistryWithKnownSha256(expectedSha);
         var store = new LocalModelCacheRecordStore(storagePaths);
-        string cacheRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
-        string cachedBenchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
         await File.WriteAllTextAsync(cachedBenchmarkPath, "hello", TestContext.Current.CancellationToken);
         // tokenizer.json is also a required download file in the manifest; must exist for verification.
-        await File.WriteAllTextAsync(Path.Combine(cacheRoot, "tokenizer.json"), "{}", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Join(cacheRoot, "tokenizer.json"), "{}", TestContext.Current.CancellationToken);
 
         await store.SaveAsync(
             [
@@ -682,6 +782,41 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         ModelVerificationResult verification = await orchestrator.VerifyAsync("example/model", TestContext.Current.CancellationToken);
 
         Assert.True(verification.HashMatch);
+        IReadOnlyList<LocalModelCacheRecord> records = await store.LoadAsync(TestContext.Current.CancellationToken);
+        Assert.False(Assert.Single(records).IntegrityFailed);
+    }
+
+    [Fact]
+    public async Task VerifyAsync_does_not_mark_corrupt_when_only_optional_variant_hashes_are_pinned()
+    {
+        const string expectedSha = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        string fp16Hash = Sha256Hex("optional-fp16");
+        (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths) =
+            CreateRegistryWithOptionalVariantHashes(expectedSha, fp16Hash);
+        var store = new LocalModelCacheRecordStore(storagePaths);
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string cachedBenchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        Directory.CreateDirectory(Path.GetDirectoryName(cachedBenchmarkPath)!);
+        await File.WriteAllTextAsync(cachedBenchmarkPath, "hello", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Join(cacheRoot, "tokenizer.json"), "{}", TestContext.Current.CancellationToken);
+
+        await store.SaveAsync(
+            [
+                new LocalModelCacheRecord(
+                    "example/model",
+                    cacheRoot,
+                    "main",
+                    expectedSha,
+                    DateTimeOffset.UtcNow,
+                    IntegrityFailed: true)
+            ],
+            TestContext.Current.CancellationToken);
+
+        var orchestrator = new ModelDownloadOrchestrator(registry, store, new StubDownloader(), storagePaths);
+        ModelVerificationResult verification = await orchestrator.VerifyAsync("example/model", TestContext.Current.CancellationToken);
+
+        Assert.True(verification.HashMatch, verification.FailureReason);
+        Assert.Equal(ModelCacheState.Installed, verification.NewState);
         IReadOnlyList<LocalModelCacheRecord> records = await store.LoadAsync(TestContext.Current.CancellationToken);
         Assert.False(Assert.Single(records).IntegrityFailed);
     }
@@ -706,7 +841,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         TrackdubStoragePaths storagePaths = new(tempRoot);
         string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_orch", "manifest.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-        Directory.CreateDirectory(Path.Combine(storagePaths.ModelCacheDirectory, "example-model"));
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model"));
         File.WriteAllText(
             manifestPath,
             """
@@ -756,7 +891,8 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             string downloadFileSourcesJson = "",
             string downloadFileHashesJson = "",
             string revision = "main",
-            string variantsJson = "\"variants\": []")
+            string variantsJson = "\"variants\": []",
+            string sha256 = "")
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
         string manifestDirectory = Path.Combine(tempRoot, "manifest-outside-cache");
@@ -787,7 +923,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
                   "commercial_use_verified": false,
                   "source_url": "https://huggingface.co/example/model",
                   "revision": "{{revision}}",
-                  "sha256": "",
+                  "sha256": "{{sha256}}",
                   "aliases": [ "example" ],
                   "root_path": "{{manifestRoot.Replace("\\", "\\\\")}}",
                   "benchmark_entry": "onnx/model.onnx",
@@ -805,12 +941,14 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)))
             .ToLowerInvariant();
 
-    private (BundledModelManifestRegistry Registry, TrackdubStoragePaths StoragePaths, string BenchmarkPath) CreateRegistryWithKnownSha256(string sha256)
+    private (BundledModelManifestRegistry Registry, TrackdubStoragePaths StoragePaths, string BenchmarkPath) CreateRegistryWithKnownSha256(
+        string sha256,
+        string downloadFileHashesJson = "")
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
         string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_orch", "manifest-sha.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-        Directory.CreateDirectory(Path.Combine(storagePaths.ModelCacheDirectory, "example-model"));
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model"));
         File.WriteAllText(
             manifestPath,
             $$"""
@@ -839,7 +977,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
                   "root_path": "../example-model",
                   "benchmark_entry": "onnx/model.onnx",
                   "download_files": [ "tokenizer.json" ],
-                  "variants": [
+            {{downloadFileHashesJson}}      "variants": [
                     {
                       "alias": "q4",
                       "entry_path": "onnx/model_q4.onnx",
@@ -854,6 +992,64 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         BundledModelManifestRegistry registry = BundledModelManifestRegistry.Load(manifestPath);
         BundledModelManifestEntry entry = registry.Entries.Single(e => e.ModelId == "example/model");
         return (registry, storagePaths, entry.DefaultBenchmarkEntryPath);
+    }
+
+    private (BundledModelManifestRegistry Registry, TrackdubStoragePaths StoragePaths) CreateRegistryWithOptionalVariantHashes(
+        string sha256,
+        string optionalVariantHash)
+    {
+        TrackdubStoragePaths storagePaths = new(tempRoot);
+        string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_orch", "manifest-optional-hashes.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model"));
+        File.WriteAllText(
+            manifestPath,
+            $$"""
+            {
+              "models": [
+                {
+                  "model_id": "example/model",
+                  "task": "tts",
+                  "engine_family": "example-tts",
+                  "capabilities": [ "tts" ],
+                  "language_coverage": {
+                    "target_languages": [ "en" ]
+                  },
+                  "tier": "balanced",
+                  "license": "MIT",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_use_verified": true,
+                  "source_url": "https://huggingface.co/example/model",
+                  "revision": "main",
+                  "sha256": "{{sha256}}",
+                  "aliases": [ "example" ],
+                  "root_path": "../example-model",
+                  "benchmark_entry": "onnx/model.onnx",
+                  "download_files": [ "tokenizer.json" ],
+                  "download_file_hashes": {
+                    "onnx/model_fp16.onnx": "{{optionalVariantHash}}"
+                  },
+                  "variants": [
+                    {
+                      "alias": "default",
+                      "entry_path": "onnx/model.onnx",
+                      "is_default": true
+                    },
+                    {
+                      "alias": "fp16",
+                      "entry_path": "onnx/model_fp16.onnx"
+                    }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        return (BundledModelManifestRegistry.Load(manifestPath), storagePaths);
     }
 
     private static BundledModelManifestRegistry LoadBundledRegistry()

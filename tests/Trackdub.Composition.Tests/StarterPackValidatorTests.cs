@@ -86,6 +86,7 @@ public sealed class StarterPackValidatorTests
 
         Assert.Contains(packs, pack => pack.Id == "basic");
         Assert.Contains(packs, pack => pack.Id == "balanced");
+        Assert.Contains(packs, pack => pack.Id == "premium");
     }
 
     private static StarterPackDefinition CreatePack(string variant, string executionProvider) =>
