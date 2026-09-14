@@ -477,6 +477,9 @@ public sealed class OrchestrationServiceTests
         // language is Japanese (SupportsKokoro == false), which exercises the untested non-Kokoro
         // substitution branch resolving the Qwen3 fallback (custom-voice) alias.
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1000 };
+        // Production's IVoiceCatalog is Kokoro-only; it does NOT contain the Qwen3 custom-voice
+        // alias. On this non-Kokoro target the substitution routes through the synthetic
+        // qwen3:ryan voice (no catalog lookup), so the catalog deliberately omits the alias.
         TtsServiceContext context = CreateTtsServiceContext(
             ttsEngine,
             voiceCatalog: new FakeVoiceCatalog(
@@ -484,7 +487,6 @@ public sealed class OrchestrationServiceTests
                 new("af_heart", "mul", "female", "Heart"),
                 new("am_adam", "mul", "male", "Adam"),
                 new("bf_alice", "en-gb", "female", "Alice"),
-                new(Qwen3TtsDefaults.CustomVoice06Alias, "ja", "synthetic", "Qwen3 custom"),
             ]));
         TranscriptProjectState spanishState = CreateTranslatedProjectState();
         TranslationRevision japaneseRevision = spanishState.CurrentTranslationRevision! with { TargetLanguage = "ja" };
@@ -519,7 +521,10 @@ public sealed class OrchestrationServiceTests
         TtsTake take = Assert.Single(context.TtsTakeRepository.All);
         Assert.Equal(TtsTakeStatus.Completed, take.Status);
         Assert.Equal(TtsTakeKind.Stock, take.Kind);
-        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, take.VoiceId);
+        // The non-Kokoro clone-only substitution leaves PreferredModelAlias blank so
+        // StartTtsStageHandler routes to the synthetic qwen3:ryan voice rather than a
+        // Kokoro-only catalog lookup that would throw for the Qwen3 custom-voice alias.
+        Assert.Equal("qwen3:ryan", take.VoiceId);
     }
 
     [Fact]

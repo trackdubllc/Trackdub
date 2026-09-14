@@ -1090,41 +1090,24 @@ public sealed class TtsOrchestrationService(
             return keptAssignment;
         }
 
-        if (!StockTtsVoiceMatcher.SupportsKokoro(targetLanguage))
-        {
-            VoiceAssignment stockAssignment = currentAssignment with
-            {
-                VoiceModelId = StockTtsVoiceMatcher.ResolveFallbackModelAlias(targetLanguage),
-                VoiceVariant = null,
-                RequiresConsent = false,
-                IsFallback = true,
-                ReferenceClipArtifactId = null
-            };
-            await voiceAssignmentRepository.SaveAsync(stockAssignment, cancellationToken).ConfigureAwait(false);
-            return stockAssignment;
-        }
-
-        IReadOnlyList<VoiceCatalogEntry> catalogVoices = voiceCatalog.GetVoices();
-        if (catalogVoices.Count == 0)
-        {
-            catalogVoices = currentState.AvailableVoices;
-        }
-        VoiceCatalogEntry voice = StockTtsVoiceMatcher.PickClosest(
-                catalogVoices,
+        return await SubstituteStockVoiceAsync(
+                currentState,
+                speaker,
+                currentAssignment,
                 targetLanguage,
-                insufficientSpeech.EstimatedGender,
-                reservedStockVoiceIds)
-            ?? throw new InvalidOperationException(
-                $"Automatic voice clone reference capture needs at least {ReferenceClipPolicy.MinimumActiveSpeechSeconds:F1} seconds of active speech for {speaker.DisplayName}; detected {insufficientSpeech.ActiveSpeechSeconds:F2} seconds, and no Kokoro voice matched target language '{targetLanguage}'.");
-
-        reservedStockVoiceIds?.Add(voice.VoiceId);
-        VoiceAssignment fallbackAssignment = VoiceAssignment.CreateFallback(
-            currentState.ProjectState.Project.Id,
-            speaker.Id,
-            StockTtsDefaults.KokoroPrimaryAlias,
-            voice.VoiceId);
-        await voiceAssignmentRepository.SaveAsync(fallbackAssignment, cancellationToken).ConfigureAwait(false);
-        return fallbackAssignment;
+                gender: insufficientSpeech.EstimatedGender,
+                reservedStockVoiceIds,
+                noKokoroMatchError: () =>
+                    $"Automatic voice clone reference capture needs at least {ReferenceClipPolicy.MinimumActiveSpeechSeconds:F1} seconds of active speech for {speaker.DisplayName}; detected {insufficientSpeech.ActiveSpeechSeconds:F2} seconds, and no Kokoro voice matched target language '{targetLanguage}'.",
+                // Short-clone fallback mints a NEW fallback assignment id rather than transitioning
+                // the current assignment in place.
+                buildKokoroAssignment: voice => VoiceAssignment.CreateFallback(
+                    currentState.ProjectState.Project.Id,
+                    speaker.Id,
+                    StockTtsDefaults.KokoroPrimaryAlias,
+                    voice.VoiceId),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private bool IsCloneOnlyStockUnresolvable(VoiceAssignment assignment)
@@ -1153,6 +1136,50 @@ public sealed class TtsOrchestrationService(
         HashSet<string>? reservedStockVoiceIds,
         CancellationToken cancellationToken)
     {
+        return await SubstituteStockVoiceAsync(
+                currentState,
+                speaker,
+                currentAssignment,
+                targetLanguage,
+                // Gender matching is intentionally skipped here (gender: null): there is no
+                // reference-clip gender analysis on this non-clone substitution path, unlike
+                // FallBackShortCloneToStockTtsAsync.
+                gender: null,
+                reservedStockVoiceIds,
+                noKokoroMatchError: () =>
+                    $"No stock voice matched target language '{targetLanguage}' to replace the persisted voice-clone model for {speaker.DisplayName}.",
+                // Update the existing assignment in place to transition its VoiceModelId and flags
+                // without changing its Id, avoiding SQLite primary-key conflicts when SaveAsync
+                // performs an INSERT that no longer matches the partial is_fallback=0 index.
+                buildKokoroAssignment: voice => currentAssignment with
+                {
+                    VoiceModelId = StockTtsDefaults.KokoroPrimaryAlias,
+                    VoiceVariant = voice.VoiceId,
+                    RequiresConsent = false,
+                    IsFallback = true,
+                    ReferenceClipArtifactId = null
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // Shared stock-voice fallback construction and persistence workflow used by both the
+    // short-clone fallback (FallBackShortCloneToStockTtsAsync) and the clone-only substitution
+    // (SubstituteStockVoiceForCloneOnlyAssignmentAsync) paths. Extracting it keeps the two paths
+    // from drifting apart on aliases, flags, or persistence behavior. The paths differ only by the
+    // gender passed to PickClosest, the no-match error message, and the Kokoro-branch assignment
+    // policy (new-id fallback vs id-preserving in-place transition).
+    private async Task<VoiceAssignment> SubstituteStockVoiceAsync(
+        TranscriptProjectState currentState,
+        ProjectSpeaker speaker,
+        VoiceAssignment currentAssignment,
+        string targetLanguage,
+        string? gender,
+        HashSet<string>? reservedStockVoiceIds,
+        Func<string> noKokoroMatchError,
+        Func<VoiceCatalogEntry, VoiceAssignment> buildKokoroAssignment,
+        CancellationToken cancellationToken)
+    {
         if (!StockTtsVoiceMatcher.SupportsKokoro(targetLanguage))
         {
             VoiceAssignment stockAssignment = currentAssignment with
@@ -1173,30 +1200,17 @@ public sealed class TtsOrchestrationService(
             catalogVoices = currentState.AvailableVoices;
         }
 
-        // Gender matching is intentionally skipped here (gender: null): there is no reference-clip
-        // gender analysis on this non-clone substitution path, unlike FallBackShortCloneToStockTtsAsync.
         VoiceCatalogEntry voice = StockTtsVoiceMatcher.PickClosest(
                 catalogVoices,
                 targetLanguage,
-                gender: null,
+                gender,
                 reservedStockVoiceIds)
-            ?? throw new InvalidOperationException(
-                $"No stock voice matched target language '{targetLanguage}' to replace the persisted voice-clone model for {speaker.DisplayName}.");
+            ?? throw new InvalidOperationException(noKokoroMatchError());
 
         reservedStockVoiceIds?.Add(voice.VoiceId);
-        // Update the existing assignment in place to transition its VoiceModelId and flags
-        // without changing its Id, avoiding SQLite primary-key conflicts when SaveAsync
-        // performs an INSERT that no longer matches the partial is_fallback=0 index.
-        VoiceAssignment updatedAssignment = currentAssignment with
-        {
-            VoiceModelId = StockTtsDefaults.KokoroPrimaryAlias,
-            VoiceVariant = voice.VoiceId,
-            RequiresConsent = false,
-            IsFallback = true,
-            ReferenceClipArtifactId = null
-        };
-        await voiceAssignmentRepository.SaveAsync(updatedAssignment, cancellationToken).ConfigureAwait(false);
-        return updatedAssignment;
+        VoiceAssignment assignment = buildKokoroAssignment(voice);
+        await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
+        return assignment;
     }
 
     private static HashSet<string> CollectReservedStockVoiceIds(
