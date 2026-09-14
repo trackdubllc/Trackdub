@@ -131,6 +131,61 @@ public sealed class PipelineReadinessServiceTests
         Assert.Equal(ReadinessState.Ready, lipSynthesis.Status);
     }
 
+    [Fact]
+    public async Task EvaluateAsync_validate_runtime_false_skips_provider_smoke_test()
+    {
+        var captured = new List<bool>();
+        var planner = new FakeRuntimePlanner
+        {
+            PlanHandler = req =>
+            {
+                captured.Add(req.SkipProviderSmokeTest);
+                return new StageRuntimePlan { Stage = req.Stage, Status = StageRuntimePlanStatus.Ready };
+            }
+        };
+
+        var service = new PipelineReadinessService(planner, new NullCloudApiKeyProvider(), new FakeConsentService());
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            HardwareOverrides: new Dictionary<string, ExecutionProviderKind>());
+
+        await service.EvaluateAsync(
+            [RuntimeStage.Vad], selections, state: null, validateRuntime: false);
+        await service.EvaluateAsync(
+            [RuntimeStage.Asr], selections, state: null, validateRuntime: true);
+
+        Assert.Equal([true, false], captured);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_caches_per_validate_runtime_mode()
+    {
+        int planCalls = 0;
+        var planner = new FakeRuntimePlanner
+        {
+            PlanHandler = req =>
+            {
+                planCalls++;
+                return new StageRuntimePlan { Stage = req.Stage, Status = StageRuntimePlanStatus.Ready };
+            }
+        };
+
+        var service = new PipelineReadinessService(planner, new NullCloudApiKeyProvider(), new FakeConsentService());
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            HardwareOverrides: new Dictionary<string, ExecutionProviderKind>());
+
+        // Same stage evaluated in both modes must not share a cache entry.
+        await service.EvaluateAsync([RuntimeStage.Vad], selections, state: null, validateRuntime: false);
+        await service.EvaluateAsync([RuntimeStage.Vad], selections, state: null, validateRuntime: true);
+        await service.EvaluateAsync([RuntimeStage.Vad], selections, state: null, validateRuntime: false);
+        await service.EvaluateAsync([RuntimeStage.Vad], selections, state: null, validateRuntime: true);
+
+        Assert.Equal(2, planCalls);
+    }
+
     private sealed class NullCloudApiKeyProvider : ICloudApiKeyProvider
     {
         public Task<string?> GetApiKeyAsync(string providerKey, CancellationToken cancellationToken) =>

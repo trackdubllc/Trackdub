@@ -22,9 +22,12 @@ public sealed class TrackdubPipelineStagesTests
 
     [Theory]
     [InlineData(StageNames.Separation, false)]
+    [InlineData(StageNames.AudioPreparation, false)]
     [InlineData(StageNames.Vad, false)]
     [InlineData(StageNames.Diarization, false)]
     [InlineData(StageNames.Asr, false)]
+    [InlineData(StageNames.OverlapRescue, false)]
+    [InlineData(StageNames.TextRefinementAsr, false)]
     [InlineData(StageNames.Translation, true)]
     [InlineData(StageNames.Tts, true)]
     [InlineData(StageNames.LipSync, false)]
@@ -41,9 +44,12 @@ public sealed class TrackdubPipelineStagesTests
         string[] classifiedStages =
         [
             StageNames.Separation,
+            StageNames.AudioPreparation,
             StageNames.Vad,
             StageNames.Diarization,
             StageNames.Asr,
+            StageNames.OverlapRescue,
+            StageNames.TextRefinementAsr,
             StageNames.Translation,
             StageNames.Tts,
             StageNames.LipSync,
