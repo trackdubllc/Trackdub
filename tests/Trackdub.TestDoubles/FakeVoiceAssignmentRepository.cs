@@ -46,6 +46,17 @@ public sealed class FakeVoiceAssignmentRepository : IVoiceAssignmentRepository
             return Task.CompletedTask;
         }
 
+        // No matching (project_id, speaker_id, is_fallback) row means SQLite performs a plain
+        // INSERT (the ON CONFLICT partial-unique target only covers is_fallback = 0 rows). Mirror
+        // the PRIMARY KEY constraint: inserting a row whose Id already belongs to a different
+        // logical row (e.g. a fallback save that reused a non-fallback row's Id) must fail exactly
+        // as SQLite would, so tests catch a regression of the fallback primary-key conflict bug.
+        if (assignments.Exists(candidate => candidate.Id == assignment.Id))
+        {
+            throw new InvalidOperationException(
+                $"A voice assignment with primary key '{assignment.Id}' already exists.");
+        }
+
         assignments.Add(assignment);
         return Task.CompletedTask;
     }
