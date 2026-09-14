@@ -510,7 +510,9 @@ public sealed class TtsOrchestrationService(
                 translationRevision.TargetLanguage,
                 reservedStockVoiceIds,
                 cancellationToken).ConfigureAwait(false);
-            preferredModelAlias = substituteAssignment.VoiceModelId;
+            preferredModelAlias = StockTtsVoiceMatcher.SupportsKokoro(translationRevision.TargetLanguage)
+                ? substituteAssignment.VoiceModelId
+                : null;
             assignment = substituteAssignment;
 
             PipelineProgressReporter.Phase(
