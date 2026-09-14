@@ -72,7 +72,7 @@ internal static class ExportResumeGating
     /// execution snapshot and the per-run ExportManifest so the two sides always agree. Maps null
     /// (pipeline default SRT) to "default"; an empty list (all subtitles suppressed) to an empty
     /// token distinct from "default"; and other lists to their case-insensitively normalized
-    /// ExportSubtitleFormat names. Order and duplicates are preserved to mirror what the export
+    /// ExportSubtitleFormat names. Order is preserved and duplicates are collapsed to mirror what the export
     /// actually emits. Comparing raw-to-raw avoids the transcript-state dependency that resolving
     /// formats would introduce, and keeps the null / empty / explicit cases genuinely distinct.
     /// </summary>
