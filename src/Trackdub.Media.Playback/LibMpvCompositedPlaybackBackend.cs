@@ -357,6 +357,17 @@ public sealed class LibMpvCompositedPlaybackBackend :
             frameHeight = preservedHeight;
             frameStride = preservedStride;
         }
+        else
+        {
+            // A prior failed attempt zeroed the geometry via ReleaseResources. Restore the stub
+            // size (the same contract as missing probe metadata) so CreateRenderTargetBuffers never
+            // allocates a zero-byte buffer; ApplyPlayerDimensionsFromProperties corrects it once
+            // libmpv reports the real stream geometry.
+            frameWidth = 1280;
+            frameHeight = 720;
+            frameStride = checked(frameWidth * PixelSizeBytes);
+            usingStubDimensions = true;
+        }
 
         usingSoftwareDecode = forceSoftwareDecode;
 
@@ -364,11 +375,18 @@ public sealed class LibMpvCompositedPlaybackBackend :
         {
             LoadNativeLibrary();
             CreatePlayerCore(forceSoftwareDecode, runtime);
+
+            // The render context must exist BEFORE the file load reaches video output init:
+            // with vo=libmpv, mpv's playloop fails VO initialization ("Error opening/initializing
+            // the selected video_out (--vo) device", then "Video: no video") if no render context
+            // is registered when the demuxer finishes opening. Racing it after WaitForMediaReady
+            // meant video silently decoded to nothing and every SW render tick delivered a zeroed
+            // buffer while still reporting success.
+            CreateRenderContext();
             LoadSourceMedia(sourcePath);
             WaitForMediaReady(cancellationToken);
             ApplyPlayerDimensionsFromProperties();
             CreateRenderTargetBuffers();
-            CreateRenderContext();
             StartRenderLoop();
             PreparePausedPreviewFrame();
 
@@ -568,43 +586,64 @@ public sealed class LibMpvCompositedPlaybackBackend :
     {
         bool eventDriven = mpv_observe_property is not null && mpv_set_wakeup_callback is not null;
         DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        string? lastPath = null;
+        double lastDuration = double.NaN;
 
-        while (DateTime.UtcNow < deadline)
+        bool IsReady()
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            string? loadedPath = ReadPropertyString("path");
-            if (!string.IsNullOrWhiteSpace(loadedPath))
+            lastPath = ReadPropertyString("path");
+            if (string.IsNullOrWhiteSpace(lastPath))
             {
-                double durationSeconds = ReadDoubleProperty("duration");
-                if (durationSeconds > 0d || fallbackDurationSeconds > 0d)
-                {
-                    return;
-                }
+                return false;
+            }
+
+            lastDuration = ReadDoubleProperty("duration");
+            return lastDuration > 0d || fallbackDurationSeconds > 0d;
+        }
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            if (IsReady())
+            {
+                return;
+            }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                break;
             }
 
             if (eventDriven)
             {
-                // Block until the next libmpv event (property change, file-loaded, ...) instead of
-                // spinning every 25ms; re-check the properties above once woken (or once the
-                // remaining deadline elapses, so a missed/coalesced wakeup can't hang this past 15s).
+                // Block until the next libmpv event wakes us, but never longer than 250ms per
+                // slice. A wakeup callback that never fires (or fires before the wait starts)
+                // must not pin the loop for the whole budget while the properties already hold
+                // the loaded media — the slice cap is the polling backstop.
                 TimeSpan remaining = deadline - DateTime.UtcNow;
-                if (remaining <= TimeSpan.Zero)
-                {
-                    break;
-                }
-
-                mediaReadyWakeupSignal.Wait(remaining, cancellationToken);
+                TimeSpan slice = remaining < MediaReadyPollSlice ? remaining : MediaReadyPollSlice;
+                mediaReadyWakeupSignal.Wait(slice, cancellationToken);
                 mediaReadyWakeupSignal.Reset();
             }
             else
             {
-                Thread.Sleep(25);
+                Thread.Sleep(MediaReadyPollSlice);
             }
         }
 
-        throw new TimeoutException("Timed out waiting for libmpv to finish loading the source media.");
+        // One last read after the deadline: the media may have become ready inside the final
+        // wait slice, and cancel-as-timeout must report what the properties actually held.
+        cancellationToken.ThrowIfCancellationRequested();
+        if (IsReady())
+        {
+            return;
+        }
+
+        throw new TimeoutException(
+            $"Timed out waiting for libmpv to finish loading the source media " +
+            $"(path='{lastPath ?? "(null)"}', duration={lastDuration}, fallbackDuration={fallbackDurationSeconds}).");
     }
+
+    private static readonly TimeSpan MediaReadyPollSlice = TimeSpan.FromMilliseconds(250);
 
     private void PreparePausedPreviewFrame()
     {
