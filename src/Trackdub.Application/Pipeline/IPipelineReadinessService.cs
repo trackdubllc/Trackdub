@@ -16,13 +16,20 @@ public interface IPipelineReadinessService
     /// current project state. Results are cached by (stage, selection-hash, artifact-fingerprint)
     /// and invalidated by selection changes.
     /// </summary>
+    /// <param name="validateRuntime">
+    /// When true (default), non-CPU provider candidates are verified with a real runtime
+    /// smoke test (ONNX session creation and inference) and report Verified on success.
+    /// When false, planning stops at file-existence checks and reports Ready only — use
+    /// this for UI badge refreshes that must never execute native inference work.
+    /// </param>
     Task<PipelineReadinessReport> EvaluateAsync(
         IReadOnlyList<RuntimeStage> enabledStages,
         RuntimeModelSelections selections,
         TranscriptProjectState? state,
         CancellationToken cancellationToken = default,
         string? sourceLanguageCode = null,
-        string? targetLanguageCode = null);
+        string? targetLanguageCode = null,
+        bool validateRuntime = true);
 
     /// <summary>
     /// Invalidates the cached evaluation for the given stages, forcing re-evaluation on

@@ -159,16 +159,13 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
                 cancellationToken).ConfigureAwait(false);
             repetitionGuarded |= transcription.RepetitionGuarded;
 
-            if (string.IsNullOrWhiteSpace(transcription.Text))
-            {
-                continue;
-            }
-
+            // Keep blank regions so Segment.Index stays aligned for callers that
+            // map recognition by index (retranscribe falls back to original text).
             segments.Add(new RecognizedTranscriptSegment(
                 region.Index,
                 region.StartSeconds,
                 region.EndSeconds,
-                transcription.Text,
+                transcription.Text ?? string.Empty,
                 transcription.DetectedLanguage ?? detectedTranscriptLanguage,
                 transcription.Words));
         }

@@ -81,7 +81,16 @@ public sealed class ModelDownloadOrchestrator(
 
             if (gatedState is ModelCacheState.Installed or ModelCacheState.Ready)
             {
-                precomputedRequiredFiles = ModelDownloadManifestFiles.ResolveRequiredFiles(entry, variantAlias);
+                try
+                {
+                    precomputedRequiredFiles = ModelDownloadManifestFiles.ResolveRequiredFiles(entry, variantAlias);
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+                {
+                    logger?.LogError($"Model download failed for '{modelId}': {ex.Message}", ex);
+                    return new ModelDownloadResult(modelId, false, gatedState, ex.Message);
+                }
+
                 IReadOnlyList<string> missingFiles = ResolveMissingRequiredFiles(modelRootDirectory, precomputedRequiredFiles);
                 if (missingFiles.Count == 0)
                 {

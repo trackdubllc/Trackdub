@@ -41,6 +41,34 @@ public sealed record DubbingSessionOptions
     public string? ExportFormat { get; init; }
 
     /// <summary>
+    /// Absolute output path for the Export stage. When null, the engine derives
+    /// a path inside the project directory from the container format.
+    /// Interactive hosts pass the user's chosen destination.
+    /// </summary>
+    public string? ExportOutputPath { get; init; }
+
+    /// <summary>
+    /// Target loudness (LUFS) for the exported mix. When null, the export stage
+    /// uses the product default loudness target.
+    /// </summary>
+    public double? ExportTargetLufs { get; init; }
+
+    /// <summary>
+    /// Gain applied to the source/background bed in the exported mix (dB).
+    /// </summary>
+    public double? ExportSourceGainDb { get; init; }
+
+    /// <summary>
+    /// Gain applied to dubbed speech in the exported mix (dB).
+    /// </summary>
+    public double? ExportDubbedSpeechGainDb { get; init; }
+
+    /// <summary>
+    /// Optional ducking gain applied to the source bed under dubbed speech (dB).
+    /// </summary>
+    public double? ExportDuckingGainDb { get; init; }
+
+    /// <summary>
     /// Optional voice assignment overrides per speaker.
     /// Keys are speaker identifiers, values are voice identifiers.
     /// </summary>
@@ -59,6 +87,39 @@ public sealed record DubbingSessionOptions
     public bool EnableAsrTextRefinement { get; init; }
 
     /// <summary>
+    /// When true, the Separation stage executes when included in the run.
+    /// Defaults to true to preserve the historical headless behavior; desktop
+    /// callers pass their stem-separation shell flag.
+    /// </summary>
+    public bool EnableStemSeparation { get; init; } = true;
+
+    /// <summary>
+    /// When true, the Diarization stage produces speaker turns during transcription.
+    /// Defaults to true to preserve the historical headless behavior.
+    /// </summary>
+    public bool EnableSpeakerDiarization { get; init; } = true;
+
+    /// <summary>
+    /// When true, re-running separation regenerates the transcript from the new stems.
+    /// Defaults to true to preserve the historical headless behavior; interactive
+    /// callers pass false to keep the user's transcript intact.
+    /// </summary>
+    public bool RegenerateTranscriptOnSeparation { get; init; } = true;
+
+    /// <summary>
+    /// When true, the OverlapRescue stage retranscribes rescued regions and merges
+    /// candidates into the transcript. Defaults to false (artifacts only).
+    /// </summary>
+    public bool RetranscribeOverlapCandidates { get; init; }
+
+    /// <summary>
+    /// When true, speakers without a voice assignment silently receive a fallback
+    /// voice (unattended/headless behavior). When false, TTS fails honestly when
+    /// assignments are missing. Defaults to true to preserve headless behavior.
+    /// </summary>
+    public bool AutoAssignFallbackVoices { get; init; } = true;
+
+    /// <summary>
     /// When true, re-executes all stages regardless of existing artifacts.
     /// Defaults to false.
     /// </summary>
@@ -70,6 +131,14 @@ public sealed record DubbingSessionOptions
     /// Defaults to false.
     /// </summary>
     public bool UseVoiceCloning { get; init; }
+
+    /// <summary>
+    /// Per-speaker voice-clone map: speaker id -> clone from reference audio (true)
+    /// or use the assigned/stock voice (false). When set, this map wins over the
+    /// blanket <see cref="UseVoiceCloning"/> behavior for TTS. Interactive hosts
+    /// pass their per-speaker voice mode selections.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, bool>? VoiceCloneBySpeakerId { get; init; }
 
     /// <summary>
     /// When true, applies room-tone convolution to dubbed speech to match the acoustic environment.
