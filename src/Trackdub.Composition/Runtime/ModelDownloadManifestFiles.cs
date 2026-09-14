@@ -130,6 +130,20 @@ internal static class ModelDownloadManifestFiles
             : null;
     }
 
+    /// <summary>
+    /// Cache records store the manifest identity hash (benchmark entry), not the
+    /// digest of whichever sidecar happened to be verified last.
+    /// </summary>
+    public static string ResolveCacheIdentitySha256(
+        BundledModelManifestEntry entry,
+        string? verifiedFileSha256 = null)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return string.IsNullOrWhiteSpace(entry.Sha256)
+            ? verifiedFileSha256 ?? string.Empty
+            : entry.Sha256;
+    }
+
     public static bool TryResolveExternalDownloadSource(
         BundledModelManifestEntry entry,
         string relativePath,

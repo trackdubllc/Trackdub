@@ -152,6 +152,96 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
+    public void ResolveSessionOptionsProvider_keeps_directml_when_bootstrap_selected_cpu()
+    {
+        Assert.Equal(
+            ExecutionProviderKind.DirectMl,
+            OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
+                ExecutionProviderKind.DirectMl,
+                ExecutionProviderKind.Cpu));
+    }
+
+    [Fact]
+    public void ResolveSessionOptionsProvider_preserves_non_directml_cpu_selection()
+    {
+        Assert.Equal(
+            ExecutionProviderKind.Cpu,
+            OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
+                ExecutionProviderKind.TensorRTRtx,
+                ExecutionProviderKind.Cpu));
+    }
+
+    [Fact]
+    public void ResolveSessionOptionsProvider_preserves_native_cuda_selection()
+    {
+        Assert.Equal(
+            ExecutionProviderKind.Cuda,
+            OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
+                ExecutionProviderKind.Cuda,
+                ExecutionProviderKind.Cuda));
+    }
+
+    [Fact]
+    public void ResolveSessionOptionsProvider_maps_windows_cuda_cpu_bootstrap_to_directml()
+    {
+        ExecutionProviderKind resolved = OnnxExecutionSessionFactory.ResolveSessionOptionsProvider(
+            ExecutionProviderKind.Cuda,
+            ExecutionProviderKind.Cpu);
+
+        Assert.Equal(
+            OperatingSystem.IsWindows() ? ExecutionProviderKind.DirectMl : ExecutionProviderKind.Cpu,
+            resolved);
+    }
+
+    [RequiresDirectMlFact]
+    public async Task CreateSingleAsync_directml_selects_dml_not_cpu()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"trackdub-dml-{Guid.NewGuid():N}.onnx");
+        await File.WriteAllBytesAsync(path, BuildIdentityOnnxModel());
+        try
+        {
+            using OnnxExecutionSessionFactory.SingleSessionLease lease =
+                await OnnxExecutionSessionFactory.CreateSingleAsync(
+                    path,
+                    ExecutionProviderKind.DirectMl,
+                    CancellationToken.None);
+
+            Assert.Equal("dml", lease.RequestedProvider);
+            Assert.Equal("dml", lease.SelectedProvider);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [RequiresDirectMlFact]
+    public async Task CreateSingleAsync_directml_appends_even_when_bootstrap_selected_cpu()
+    {
+        OnnxExecutionProviderBootstrapperRegistry.ResetForTests();
+        OnnxExecutionProviderBootstrapperRegistry.Initialize(new CpuSelectingDirectMlBootstrapper());
+
+        string path = Path.Combine(Path.GetTempPath(), $"trackdub-dml-cpu-bootstrap-{Guid.NewGuid():N}.onnx");
+        await File.WriteAllBytesAsync(path, BuildIdentityOnnxModel());
+        try
+        {
+            using OnnxExecutionSessionFactory.SingleSessionLease lease =
+                await OnnxExecutionSessionFactory.CreateSingleAsync(
+                    path,
+                    ExecutionProviderKind.DirectMl,
+                    CancellationToken.None);
+
+            Assert.Equal("dml", lease.RequestedProvider);
+            Assert.Equal("dml", lease.SelectedProvider);
+        }
+        finally
+        {
+            File.Delete(path);
+            OnnxExecutionProviderBootstrapperRegistry.ResetForTests();
+        }
+    }
+
+    [Fact]
     public void BuildTensorRtRtxOptions_includes_runtime_cache_and_cuda_graph_by_default()
     {
         string? previousEngineCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT");
@@ -731,6 +821,29 @@ public sealed class OnnxExecutionSessionFactoryTests
             WarningCount++;
             Messages.Add(formatter(state, exception));
         }
+    }
+
+    private sealed class CpuSelectingDirectMlBootstrapper : IExecutionProviderBootstrapper
+    {
+        public Task<ExecutionProviderBootstrapResult> BootstrapAsync(
+            ExecutionProviderKind provider,
+            bool allowDownloads,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = allowDownloads;
+            return Task.FromResult(new ExecutionProviderBootstrapResult(
+                provider,
+                ExecutionProviderKind.Cpu,
+                Succeeded: false,
+                Detail: "catalog unavailable",
+                FailureReason: "catalog unavailable"));
+        }
+
+        public Task<ExecutionProviderBootstrapResult> CheckReadinessAsync(
+            ExecutionProviderKind provider,
+            CancellationToken cancellationToken) =>
+            BootstrapAsync(provider, allowDownloads: false, cancellationToken);
     }
 
     private static InferenceSession CreateMinimalSession()

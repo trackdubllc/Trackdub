@@ -84,8 +84,11 @@ public static class HeadlessCompositionRoot
         services.RemoveAll<IPlaybackBackendFactory>();
 
         // Step 4: Replace settings service with in-memory headless variant.
+        // Hardware pins stay process-local. Vendor EP license flags seed from disk
+        // so CLI `providers trt-rtx install --accept-license` survives to the next dub.
+        StudioSettings persistedSettings = HeadlessPersistedEpLicenses.Load(options);
         services.Replace(ServiceDescriptor.Singleton<IStudioSettingsService>(
-            new InMemoryStudioSettingsService(options)));
+            new InMemoryStudioSettingsService(options, persistedSettings)));
 
         // Step 5: Wire explicit FFmpeg/FFprobe paths into media services when configured.
         // AddTrackdub() registers these with null paths (PATH/cache discovery). Headless hosts

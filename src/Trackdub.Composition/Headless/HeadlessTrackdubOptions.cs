@@ -27,4 +27,12 @@ public sealed record HeadlessTrackdubOptions
     public string? FfprobePath { get; init; }
     public IApplicationLogger? Logger { get; init; }
     public Action<IServiceCollection>? ServiceConfigurator { get; init; }
+
+    /// <summary>
+    /// When true, TensorRT RTX planning is enabled even if disk settings have not
+    /// accepted the NVIDIA license yet. Disk remains the source of truth for CLI.
+    /// </summary>
+    public bool NvidiaTensorRtRtxLicenseAccepted { get; init; }
+
+    public string? TensorRtRtxPluginDirectory { get; init; }
 }

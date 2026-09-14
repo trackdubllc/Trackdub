@@ -37,7 +37,7 @@ public sealed class BundledModelManifestRegistry
         catch (Exception ex) when (ex is IOException or ModelManifestValidationException or InvalidOperationException)
         {
             registry = null;
-            error = ex.Message;
+            error = AppendSourceTreeToolHint(manifestPath, ex.Message);
             return false;
         }
     }
@@ -425,6 +425,20 @@ public sealed class BundledModelManifestRegistry
         }
 
         return variants.Values.ToArray();
+    }
+
+    private static string AppendSourceTreeToolHint(string manifestPath, string message)
+    {
+        string normalized = manifestPath.Replace('\\', '/');
+        if (!normalized.Contains("/src/Trackdub.Inference/Runtime/ModelManifest/", StringComparison.OrdinalIgnoreCase))
+        {
+            return message;
+        }
+
+        return message
+            + " This is the repo source-tree manifest, resolved from the current directory."
+            + " A globally installed trackdub tool must be rebuilt from this checkout,"
+            + " or run `dotnet run --project src/Trackdub.Cli` instead.";
     }
 
     private static string? LocateDefaultManifestPath()

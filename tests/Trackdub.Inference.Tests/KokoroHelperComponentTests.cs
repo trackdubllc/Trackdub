@@ -264,6 +264,10 @@ public sealed class KokoroHelperComponentTests : IDisposable
 
         Assert.Single(enUs);
         Assert.Equal("af_heart", enUs[0].VoiceId);
+
+        IReadOnlyList<VoiceCatalogEntry> en = catalog.GetVoices("en");
+        Assert.Single(en);
+        Assert.Equal("af_heart", en[0].VoiceId);
     }
 
     [Fact]

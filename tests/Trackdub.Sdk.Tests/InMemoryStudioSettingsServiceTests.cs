@@ -33,4 +33,17 @@ public sealed class InMemoryStudioSettingsServiceTests
         Assert.Equal(ExecutionProviderKind.DirectMl, settings.HardwareOverrides["LipSync"]);
         Assert.Equal(ExecutionProviderKind.DirectMl, settings.HardwareOverrides["LipSynthesis"]);
     }
+
+    [Fact]
+    public async Task LoadAsync_seeds_nvidia_trt_rtx_license_from_persisted_settings()
+    {
+        var service = new InMemoryStudioSettingsService(
+            new HeadlessTrackdubOptions(),
+            StudioSettings.Default with { NvidiaTensorRtRtxLicenseAccepted = true });
+
+        StudioSettings settings = await service.LoadAsync(CancellationToken.None);
+
+        Assert.True(settings.NvidiaTensorRtRtxLicenseAccepted);
+        Assert.Empty(settings.HardwareOverrides!);
+    }
 }

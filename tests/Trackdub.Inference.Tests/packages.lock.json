@@ -406,6 +406,7 @@
       "trackdub.media": {
         "type": "Project",
         "dependencies": {
+          "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.11, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Contracts": "[1.0.0, )",
@@ -1036,6 +1037,7 @@
       "trackdub.media": {
         "type": "Project",
         "dependencies": {
+          "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.11, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Contracts": "[1.0.0, )",

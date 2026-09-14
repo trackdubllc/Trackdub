@@ -338,7 +338,7 @@ public sealed class BenchmarkModelPathResolver(
                     ModelPath: cachedEntryPath,
                     VariantAlias: variant.Alias,
                     ResolutionNote: $"Resolved cached manifest variant '{variant.Alias}' for '{reference}'.",
-                    RootDirectory: Path.GetDirectoryName(cachedEntryPath)));
+                    RootDirectory: cachedRootDirectory));
             }
         }
 
@@ -356,7 +356,7 @@ public sealed class BenchmarkModelPathResolver(
                 ModelPath: cachedDefaultEntryPath,
                 VariantAlias: "default",
                 ResolutionNote: $"Resolved cached default entry for '{reference}'.",
-                RootDirectory: Path.GetDirectoryName(cachedDefaultEntryPath)));
+                RootDirectory: cachedRootDirectory));
         }
 
         return candidates;

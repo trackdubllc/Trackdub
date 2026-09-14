@@ -221,6 +221,9 @@ public sealed class KokoroVoiceCatalogTests : IDisposable
         IReadOnlyList<VoiceCatalogEntry> enUs = catalog.GetVoices("en-us");
         Assert.Equal(2, enUs.Count);
         Assert.All(enUs, v => Assert.Equal("en-us", v.LanguageCode));
+
+        IReadOnlyList<VoiceCatalogEntry> en = catalog.GetVoices("en");
+        Assert.Equal(3, en.Count);
     }
 
     [Fact]
@@ -303,6 +306,33 @@ public sealed class KokoroVoiceCatalogTests : IDisposable
         Assert.NotNull(binPath);
         Assert.True(File.Exists(binPath));
         Assert.EndsWith("af_heart.bin", binPath, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResolveRootContainingVoices_WalksUpFromOnnxDirectory()
+    {
+        string root = CreateTempModelRoot();
+        CreateFakeVoicepackBin(root, "af_heart");
+        string onnxDirectory = Path.Combine(root, "onnx");
+        Directory.CreateDirectory(onnxDirectory);
+
+        string resolved = KokoroVoiceCatalog.ResolveRootContainingVoices(onnxDirectory);
+
+        Assert.Equal(Path.GetFullPath(root), resolved);
+    }
+
+    [Fact]
+    public async Task GetVoices_EnMatchesEnUs()
+    {
+        string root = CreateTempModelRoot();
+        CreateFakeVoicepackBin(root, "af_heart");
+        CreateFakeVoicepackBin(root, "ef_dora");
+
+        KokoroVoiceCatalog catalog = await KokoroVoiceCatalog.LoadAsync(root);
+        IReadOnlyList<VoiceCatalogEntry> voices = catalog.GetVoices("en");
+
+        Assert.Single(voices);
+        Assert.Equal("af_heart", voices[0].VoiceId);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

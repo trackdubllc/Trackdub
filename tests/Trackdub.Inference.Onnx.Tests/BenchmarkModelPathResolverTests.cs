@@ -83,4 +83,40 @@ public sealed class BenchmarkModelPathResolverTests
             }
         }
     }
+
+    [Fact]
+    public void ResolveSingle_CachedKokoroRootDirectoryContainsVoices()
+    {
+        Assert.True(
+            Trackdub.Inference.Runtime.ModelManifest.BundledModelManifestRegistry.TryLoadDefault(
+                out Trackdub.Inference.Runtime.ModelManifest.BundledModelManifestRegistry? registry,
+                out string? error),
+            error ?? "Bundled model manifest was not found.");
+
+        string cacheRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-cache-{Guid.NewGuid():N}");
+        string modelRoot = Path.Combine(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX");
+        string onnxDirectory = Path.Combine(modelRoot, "onnx");
+        Directory.CreateDirectory(onnxDirectory);
+        Directory.CreateDirectory(Path.Combine(modelRoot, "voices"));
+        File.WriteAllBytes(Path.Combine(onnxDirectory, "model.onnx"), []);
+        File.WriteAllBytes(Path.Combine(modelRoot, "voices", "af_heart.bin"), []);
+
+        try
+        {
+            var resolver = new BenchmarkModelPathResolver(registry, cacheRoot);
+            BenchmarkModelCandidate candidate = resolver.ResolveSingle("kokoro-onnx");
+
+            Assert.True(
+                candidate.RootDirectory is not null &&
+                Directory.Exists(Path.Combine(candidate.RootDirectory, "voices")),
+                $"Expected Kokoro RootDirectory to contain voices/, got '{candidate.RootDirectory}'.");
+        }
+        finally
+        {
+            if (Directory.Exists(cacheRoot))
+            {
+                Directory.Delete(cacheRoot, recursive: true);
+            }
+        }
+    }
 }

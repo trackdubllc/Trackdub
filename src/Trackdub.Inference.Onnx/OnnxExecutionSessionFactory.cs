@@ -89,7 +89,10 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        SessionOptionsSelection sessionOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtOptions);
+        SessionOptionsSelection sessionOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtOptions);
         using SessionOptions sessionOptions = sessionOptionsSelection.Options;
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, sessionOptionsSelection.SelectedProvider);
         InferenceSession? session = null;
@@ -130,8 +133,14 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
+        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtEncoderOptions);
+        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtDecoderOptions);
         using SessionOptions encoderOptions = encoderOptionsSelection.Options;
         using SessionOptions decoderOptions = decoderOptionsSelection.Options;
         InferenceSession? encoderSession = null;
@@ -194,8 +203,14 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
+        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtEncoderOptions);
+        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtDecoderOptions);
         using SessionOptions encoderOptions = encoderOptionsSelection.Options;
         using SessionOptions decoderOptions = decoderOptionsSelection.Options;
         InferenceSession? encoderSession = null;
@@ -271,7 +286,10 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        SessionOptionsSelection optionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtOptions);
+        SessionOptionsSelection optionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtOptions);
         using SessionOptions options = optionsSelection.Options;
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, optionsSelection.SelectedProvider);
         ExecutionProviderKind optionsSelectedProvider = optionsSelection.SelectedProvider;
@@ -336,8 +354,14 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
+        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtEncoderOptions);
+        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtDecoderOptions);
 
         using SessionOptions encoderOptions = encoderOptionsSelection.Options;
         using SessionOptions decoderOptions = decoderOptionsSelection.Options;
@@ -442,8 +466,14 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
+        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtEncoderOptions);
+        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtDecoderOptions);
 
         using SessionOptions encoderOptions = encoderOptionsSelection.Options;
         using SessionOptions decoderInitOptions = decoderOptionsSelection.Options;
@@ -581,10 +611,11 @@ internal static class OnnxExecutionSessionFactory
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        SessionOptionsSelection unetOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, null);
-        SessionOptionsSelection vaeEncOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, null);
-        SessionOptionsSelection vaeDecOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, null);
-        SessionOptionsSelection whisperOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, null);
+        ExecutionProviderKind sessionProvider = ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider);
+        SessionOptionsSelection unetOptionsSelection = CreateSessionOptions(sessionProvider, devicePolicy, null);
+        SessionOptionsSelection vaeEncOptionsSelection = CreateSessionOptions(sessionProvider, devicePolicy, null);
+        SessionOptionsSelection vaeDecOptionsSelection = CreateSessionOptions(sessionProvider, devicePolicy, null);
+        SessionOptionsSelection whisperOptionsSelection = CreateSessionOptions(sessionProvider, devicePolicy, null);
         using SessionOptions unetOptions = unetOptionsSelection.Options;
         using SessionOptions vaeEncOptions = vaeEncOptionsSelection.Options;
         using SessionOptions vaeDecOptions = vaeDecOptionsSelection.Options;
@@ -720,8 +751,14 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
+        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtEncoderOptions);
+        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtDecoderOptions);
 
         using SessionOptions encoderOptions = encoderOptionsSelection.Options;
         using SessionOptions decoderOptions = decoderOptionsSelection.Options;
@@ -887,8 +924,14 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        var encoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        var decoderOptionsSelection = CreateSessionOptions(bootstrapResult.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
+        var encoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtEncoderOptions);
+        var decoderOptionsSelection = CreateSessionOptions(
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            devicePolicy,
+            additionalTrtDecoderOptions);
 
         using var encoderOptions = encoderOptionsSelection.Options;
         using var decoderOptions = decoderOptionsSelection.Options;
@@ -998,19 +1041,45 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
-        ExecutionProviderKind bootstrapSelected = bootstrapResult.SelectedProvider;
+        ExecutionProviderKind sessionProvider = ResolveSessionOptionsProvider(
+            requestedProvider,
+            bootstrapResult.SelectedProvider);
         SessionOptionsSelection probeSelection = CreateSessionOptions(
-            bootstrapSelected,
+            sessionProvider,
             devicePolicy,
             additionalTrtOptions);
         ExecutionProviderKind selectedProvider = probeSelection.SelectedProvider;
         probeSelection.Options.Dispose();
 
         return new SessionOptionsFactoryBundle(
-            () => CreateSessionOptions(bootstrapSelected, devicePolicy, additionalTrtOptions).Options,
+            () => CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtOptions).Options,
             requestedProvider,
             selectedProvider,
             FormatBootstrapDetail(bootstrapResult.Detail, probeSelection.FallbackReason) ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Packaged DirectML is included with Windows ML. Catalog RegisterCertifiedAsync is not a
+    /// prerequisite for GetEpDevices/append, so a bootstrap CPU select must not skip the DML path.
+    /// Native CUDA on Windows still wins when bootstrap selected CUDA.
+    /// </summary>
+    internal static ExecutionProviderKind ResolveSessionOptionsProvider(
+        ExecutionProviderKind requestedProvider,
+        ExecutionProviderKind bootstrapSelectedProvider)
+    {
+        if (requestedProvider is ExecutionProviderKind.DirectMl)
+        {
+            return ExecutionProviderKind.DirectMl;
+        }
+
+        if (requestedProvider is ExecutionProviderKind.Cuda
+            && bootstrapSelectedProvider is ExecutionProviderKind.Cpu
+            && OperatingSystem.IsWindows())
+        {
+            return ExecutionProviderKind.DirectMl;
+        }
+
+        return bootstrapSelectedProvider;
     }
 
     internal static string FormatProviderLabel(ExecutionProviderKind provider) =>
@@ -1449,16 +1518,27 @@ internal static class OnnxExecutionSessionFactory
         WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
 #endif
         var devices = OrtEnv.Instance().GetEpDevices();
-        var directMlDevice = devices.FirstOrDefault(d => IsDirectMlDeviceCandidate(d.EpName, d.HardwareDevice.Type));
-        if (directMlDevice is null)
+        OrtEpDevice? directMlDevice = devices.FirstOrDefault(d => IsDirectMlDeviceCandidate(d.EpName, d.HardwareDevice.Type))
+            ?? devices.FirstOrDefault(d => IsDirectMlExecutionProviderName(d.EpName));
+        if (directMlDevice is not null)
         {
-            throw new InvalidOperationException("DirectML catalog execution provider is not visible in OrtEnv.GetEpDevices().");
+            options.AppendExecutionProvider(
+                OrtEnv.Instance(),
+                new[] { directMlDevice },
+                new Dictionary<string, string>(StringComparer.Ordinal));
+            return;
         }
 
-        options.AppendExecutionProvider(
-            OrtEnv.Instance(),
-            new[] { directMlDevice },
-            new Dictionary<string, string>(StringComparer.Ordinal));
+        try
+        {
+            options.AppendExecutionProvider(DirectMlExecutionProviderName);
+        }
+        catch (Exception ex) when (ex is OnnxRuntimeException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            throw new InvalidOperationException(
+                "DirectML catalog execution provider is not visible in OrtEnv.GetEpDevices().",
+                ex);
+        }
     }
 
     private sealed record SessionOptionsSelection(
@@ -1473,10 +1553,13 @@ internal static class OnnxExecutionSessionFactory
         hardwareDeviceType is OrtHardwareDeviceType.GPU &&
         string.Equals(epName, TensorRtRtxExecutionProviderName, StringComparison.Ordinal);
 
+    private static bool IsDirectMlExecutionProviderName(string epName) =>
+        string.Equals(epName, DirectMlExecutionProviderName, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(epName, DirectMlLongExecutionProviderName, StringComparison.OrdinalIgnoreCase);
+
     private static bool IsDirectMlDeviceCandidate(string epName, OrtHardwareDeviceType hardwareDeviceType) =>
         hardwareDeviceType is OrtHardwareDeviceType.GPU &&
-        (string.Equals(epName, DirectMlExecutionProviderName, StringComparison.OrdinalIgnoreCase) ||
-         string.Equals(epName, DirectMlLongExecutionProviderName, StringComparison.OrdinalIgnoreCase));
+        IsDirectMlExecutionProviderName(epName);
 
     private static bool IsDnnlExecutionProviderName(string epName) =>
         string.Equals(epName, DnnlExecutionProviderName, StringComparison.OrdinalIgnoreCase) ||

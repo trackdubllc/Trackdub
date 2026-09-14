@@ -32,7 +32,15 @@ internal static class TrackdubTuiApp
             {
                 console.Clear();
                 RenderHeader(console, currentScreen, screens);
-                await screens[currentScreen].RenderAsync(context).ConfigureAwait(false);
+                try
+                {
+                    await screens[currentScreen].RenderAsync(context).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    console.MarkupLine($"[red]{TuiMarkup.Escape(ex.Message)}[/]");
+                    context.SetStatus(ex.Message);
+                }
 
                 if (showHelp)
                 {
