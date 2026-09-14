@@ -436,27 +436,24 @@ internal static class RunCommand
                     }
 
                     // Build template DubbingSessionOptions
-                    var templateOptions = new DubbingSessionOptions
-                    {
-                        SourceMediaPath = "batch",
-                        ProjectOutputDirectory = null,
-                        SourceLanguageCode = resolvedSourceLanguage,
-                        TargetLanguageCode = resolvedTargetLanguage,
-                        ModelPreferences = batchModelPreferences.Count > 0 ? batchModelPreferences : null,
-                        ExportFormat = resolvedExportFormat,
-                        StageFilter = batchStageFilter,
-                        ForceRerun = forceRerun,
-                        EnableAsrTextRefinement = resolvedEnableAsrTextRefinement,
-                        UseVoiceCloning = voiceClone,
-                        ApplyTimbrePolish = timbrePolish,
-                        RestoreOriginalPan = restorePan,
-                        MatchOriginalLoudness = matchLoudness,
-                        VoiceAssignmentOverrides = voiceOverrides.Count > 0 ? voiceOverrides : null,
-                        SubtitleFormats = subtitleFormats,
-                        SubtitleSource = subtitleSource,
-                        BurnInSubtitles = burnInSubtitles,
-                        VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
-                    };
+                    var templateOptions = PipelineOptionBuilder.BuildBatchSessionOptions(
+                        resolvedTargetLanguage,
+                        resolvedSourceLanguage,
+                        null, // outputDirectory: null for batch (BatchHandler resolves per-file)
+                        batchModelPreferences,
+                        resolvedExportFormat,
+                        resolvedEnableAsrTextRefinement,
+                        voiceClone,
+                        timbrePolish,
+                        restorePan,
+                        matchLoudness,
+                        voiceOverrides,
+                        subtitleFormats,
+                        subtitleSource,
+                        burnInSubtitles,
+                        videoEncoderKey,
+                        batchStageFilter,
+                        forceRerun);
 
                     // Build BatchOptions
                     string? resolvedOutputRoot = outputDirectory is not null
@@ -675,27 +672,25 @@ internal static class RunCommand
                     progressFormat,
                     async (progress, ct) => await RunPipelineHandler.ExecuteAsync(
                         factory,
-                        new RunPipelineHandler.RunPipelineRequest
-                        {
-                            SourceMediaPath = resolvedMediaPath,
-                            ProjectOutputDirectory = resolvedOutputDirectory,
-                            SourceLanguageCode = sourceLanguage,
-                            TargetLanguageCode = targetLanguage,
-                            ModelPreferences = modelPreferences.Count > 0 ? modelPreferences : null,
-                            ExportFormat = exportFormat,
-                            StageFilter = stageFilter,
-                            ForceRerun = forceRerun,
-                            EnableAsrTextRefinement = enableAsrTextRefinement ?? false,
-                            UseVoiceCloning = voiceClone,
-                            ApplyTimbrePolish = timbrePolish,
-                            RestoreOriginalPan = restorePan,
-                            MatchOriginalLoudness = matchLoudness,
-                            VoiceAssignmentOverrides = voiceOverrides.Count > 0 ? voiceOverrides : null,
-                            SubtitleFormats = subtitleFormats,
-                            SubtitleSource = subtitleSource,
-                            BurnInSubtitles = burnInSubtitles,
-                            VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
-                        },
+                        PipelineOptionBuilder.BuildSingleFileRequest(
+                            resolvedMediaPath,
+                            resolvedOutputDirectory,
+                            sourceLanguage,
+                            targetLanguage,
+                            modelPreferences,
+                            exportFormat,
+                            enableAsrTextRefinement ?? false,
+                            voiceClone,
+                            timbrePolish,
+                            restorePan,
+                            matchLoudness,
+                            voiceOverrides,
+                            subtitleFormats,
+                            subtitleSource,
+                            burnInSubtitles,
+                            videoEncoderKey,
+                            stageFilter,
+                            forceRerun),
                         progress,
                         Console.Out,
                         ct).ConfigureAwait(false),
