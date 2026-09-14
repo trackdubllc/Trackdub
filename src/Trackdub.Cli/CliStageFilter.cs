@@ -1,3 +1,4 @@
+using Trackdub.Application.Dubbing;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Sdk;
 
@@ -6,30 +7,10 @@ namespace Trackdub.Cli;
 internal static class CliStageFilter
 {
     /// <summary>Speech/export pipeline used by unfiltered runs and <c>--from-stage</c> resumes.</summary>
-    private static readonly string[] s_pipelineStageOrder =
-    [
-        StageNames.Separation,
-        StageNames.Vad,
-        StageNames.Diarization,
-        StageNames.Asr,
-        StageNames.Translation,
-        StageNames.Tts,
-        StageNames.Export,
-    ];
+    private static readonly IReadOnlyList<string> s_pipelineStageOrder = DubbingPipelineStages.DefaultStageOrder;
 
     /// <summary>Full catalog for <c>--only</c> validation and lip-stage <c>--from-stage</c> resumes.</summary>
-    private static readonly string[] s_extendedStageOrder =
-    [
-        StageNames.Separation,
-        StageNames.Vad,
-        StageNames.Diarization,
-        StageNames.Asr,
-        StageNames.Translation,
-        StageNames.Tts,
-        StageNames.LipSync,
-        StageNames.Export,
-        StageNames.LipSynthesis,
-    ];
+    private static readonly IReadOnlyList<string> s_extendedStageOrder = DubbingPipelineStages.ExtendedStageOrder;
 
     internal static IReadOnlyList<string>? Build(string? fromStage, string[]? onlyStages)
     {
@@ -65,19 +46,44 @@ internal static class CliStageFilter
             return [];
         }
 
-        // Use pipeline order for normal stages, extended order only when starting from a lip stage
-        string[] order = IsLipStage(fromStage) ? s_extendedStageOrder : s_pipelineStageOrder;
-        int startIndex = IndexOfStage(order, fromStage);
+        // Lip stages resume through the extended order; normal stages use the
+        // pipeline order. Utility stages absent from the pipeline order run
+        // themselves, then continue into the remaining pipeline stages at their
+        // catalog position.
+        if (IsLipStage(fromStage))
+        {
+            int lipIndex = IndexOfStage(s_extendedStageOrder, fromStage);
+            return s_extendedStageOrder.Skip(lipIndex).ToArray();
+        }
 
-        return order.Skip(startIndex).ToArray();
+        int pipelineIndex = IndexOfStage(s_pipelineStageOrder, fromStage);
+        if (pipelineIndex >= 0)
+        {
+            return s_pipelineStageOrder.Skip(pipelineIndex).ToArray();
+        }
+
+        int extendedIndex = IndexOfStage(s_extendedStageOrder, fromStage);
+        return new[] { fromStage }
+            .Concat(s_extendedStageOrder
+                .Skip(extendedIndex + 1)
+                .Where(stage => IndexOfStage(s_pipelineStageOrder, stage) >= 0))
+            .ToArray();
     }
 
     private static bool IsLipStage(string stageName) =>
         string.Equals(stageName, StageNames.LipSync, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(stageName, StageNames.LipSynthesis, StringComparison.OrdinalIgnoreCase);
 
-    private static int IndexOfStage(string[] order, string stageName) =>
-        Array.FindIndex(
-            order,
-            candidate => string.Equals(candidate, stageName, StringComparison.OrdinalIgnoreCase));
+    private static int IndexOfStage(IReadOnlyList<string> order, string stageName)
+    {
+        for (int i = 0; i < order.Count; i++)
+        {
+            if (string.Equals(order[i], stageName, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 }

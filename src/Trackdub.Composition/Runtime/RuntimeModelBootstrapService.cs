@@ -846,6 +846,8 @@ public sealed class RuntimeModelBootstrapService(
         CancellationToken cancellationToken)
     {
         string selectedRelativePath = NormalizeRelativePath(selectedEntryRelativePath);
+        string benchmarkRelativePath = NormalizeRelativePath(
+            Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath));
         HashVerificationResult? selectedEntryResult = null;
         HashVerificationResult lastResult = new(true, false, null, null, "No hash verification was required.");
 
@@ -861,7 +863,7 @@ public sealed class RuntimeModelBootstrapService(
             string? expectedHash = ModelDownloadManifestFiles.ResolveExpectedSha256(
                 entry,
                 normalizedRelativePath,
-                selectedRelativePath);
+                benchmarkRelativePath);
             if (string.IsNullOrWhiteSpace(expectedHash))
             {
                 continue;

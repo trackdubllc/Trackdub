@@ -102,7 +102,7 @@ internal static class ProvidersListHandler
         var remediations = new Dictionary<ExecutionProviderKind, string>();
 
         TensorRtRtxRuntimeReadinessSnapshot trtSnapshot = await trtTask.ConfigureAwait(false);
-        if (!trtSnapshot.IsReady)
+        if (trtSnapshot.IsSupportedPlatform && !trtSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.TensorRTRtx] =
                 trtSnapshot.InstallHint
@@ -110,7 +110,7 @@ internal static class ProvidersListHandler
         }
 
         MigraphxRuntimeReadinessSnapshot migraphxSnapshot = await migraphxTask.ConfigureAwait(false);
-        if (!migraphxSnapshot.IsReady)
+        if (migraphxSnapshot.IsSupportedPlatform && !migraphxSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.Migraphx] =
                 migraphxSnapshot.InstallHint
@@ -118,7 +118,7 @@ internal static class ProvidersListHandler
         }
 
         WinMlCatalogRuntimeReadinessSnapshot openVinoSnapshot = await openVinoTask.ConfigureAwait(false);
-        if (!openVinoSnapshot.IsReady)
+        if (openVinoSnapshot.IsSupportedPlatform && !openVinoSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.OpenVinoCatalog] =
                 openVinoSnapshot.InstallHint
@@ -126,7 +126,7 @@ internal static class ProvidersListHandler
         }
 
         WinMlCatalogRuntimeReadinessSnapshot qnnSnapshot = await qnnTask.ConfigureAwait(false);
-        if (!qnnSnapshot.IsReady)
+        if (qnnSnapshot.IsSupportedPlatform && !qnnSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.Qnn] =
                 qnnSnapshot.InstallHint
@@ -134,7 +134,7 @@ internal static class ProvidersListHandler
         }
 
         WinMlCatalogRuntimeReadinessSnapshot vitisSnapshot = await vitisTask.ConfigureAwait(false);
-        if (!vitisSnapshot.IsReady)
+        if (vitisSnapshot.IsSupportedPlatform && !vitisSnapshot.IsReady)
         {
             remediations[ExecutionProviderKind.VitisAi] =
                 vitisSnapshot.InstallHint
