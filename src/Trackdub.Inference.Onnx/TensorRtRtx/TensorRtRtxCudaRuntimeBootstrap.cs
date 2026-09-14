@@ -233,7 +233,7 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
     /// Swallows access / IO failures so CUDA discovery cannot crash bootstrap
     /// on locked folders, broken junctions, or unreadable install trees.
     /// </summary>
-    private static IEnumerable<string> EnumerateChildDirectoriesSafe(string root)
+    internal static IEnumerable<string> EnumerateChildDirectoriesSafe(string root)
     {
         IEnumerator<string>? enumerator = null;
         try

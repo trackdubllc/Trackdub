@@ -176,7 +176,7 @@ public static class TrtRtxStarterPackSmokeRunner
                         smokeResult.Detail ?? "smoke test failed"));
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
@@ -187,7 +187,7 @@ public static class TrtRtxStarterPackSmokeRunner
                     target.Label,
                     target.ModelReference,
                     TrtRtxStarterPackSmokeTargetStatus.Failed,
-                    ex.Message));
+                    string.IsNullOrWhiteSpace(ex.Message) ? "smoke test failed" : ex.Message));
             }
         }
 

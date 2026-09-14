@@ -625,16 +625,9 @@ public sealed class BenchmarkModelPathResolver(
     private static string? InferVariantAlias(string modelPath)
     {
         string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(modelPath);
-        if (fileNameWithoutExtension.Equals("model", StringComparison.OrdinalIgnoreCase) ||
-            fileNameWithoutExtension.Equals("encoder.onnx", StringComparison.OrdinalIgnoreCase) ||
-            fileNameWithoutExtension.Equals("encoder_model", StringComparison.OrdinalIgnoreCase) ||
-            fileNameWithoutExtension.Equals("speech_encoder", StringComparison.OrdinalIgnoreCase) ||
-            fileNameWithoutExtension.Equals("silero_vad", StringComparison.OrdinalIgnoreCase))
-        {
-            return "default";
-        }
-
-        return fileNameWithoutExtension;
+        return IsCanonicalDefaultEntryStem(fileNameWithoutExtension)
+            ? "default"
+            : fileNameWithoutExtension;
     }
 
     private static bool VariantMatches(BenchmarkModelCandidate candidate, string explicitVariantAlias)
@@ -656,8 +649,13 @@ public sealed class BenchmarkModelPathResolver(
                 && !IsCanonicalDefaultEntryStem(fileNameWithoutExtension));
     }
 
+    /// <summary>
+    /// Stems for PreferredEntryFileNames (without extension) that map to the
+    /// canonical <c>default</c> variant alias.
+    /// </summary>
     private static bool IsCanonicalDefaultEntryStem(string fileNameWithoutExtension) =>
         fileNameWithoutExtension.Equals("model", StringComparison.OrdinalIgnoreCase) ||
+        fileNameWithoutExtension.Equals("encoder", StringComparison.OrdinalIgnoreCase) ||
         fileNameWithoutExtension.Equals("encoder_model", StringComparison.OrdinalIgnoreCase) ||
         fileNameWithoutExtension.Equals("speech_encoder", StringComparison.OrdinalIgnoreCase) ||
         fileNameWithoutExtension.Equals("silero_vad", StringComparison.OrdinalIgnoreCase);

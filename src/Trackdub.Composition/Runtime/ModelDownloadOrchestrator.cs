@@ -85,9 +85,9 @@ public sealed class ModelDownloadOrchestrator(
                 {
                     precomputedRequiredFiles = ModelDownloadManifestFiles.ResolveRequiredFiles(entry, variantAlias);
                 }
-                catch (InvalidOperationException ex)
+                catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
                 {
-                    logger?.LogError($"Model download failed for '{modelId}': {ex.Message}");
+                    logger?.LogError($"Model download failed for '{modelId}': {ex.Message}", ex);
                     return new ModelDownloadResult(modelId, false, gatedState, ex.Message);
                 }
 
