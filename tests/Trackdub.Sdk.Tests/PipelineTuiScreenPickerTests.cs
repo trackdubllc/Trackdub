@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Spectre.Console.Testing;
@@ -36,11 +37,13 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
             {
                 Directory.Delete(dir, recursive: true);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
+                Trace.WriteLine($"Failed to delete temp directory '{dir}' due to I/O error: {ex.Message}");
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                Trace.WriteLine($"Failed to delete temp directory '{dir}' due to access error: {ex.Message}");
             }
         }
     }
