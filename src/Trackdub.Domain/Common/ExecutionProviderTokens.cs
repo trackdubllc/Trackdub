@@ -97,11 +97,13 @@ public static class ExecutionProviderTokens
 
     /// <summary>
     /// Applies platform policy to a parsed execution-provider pin.
-    /// On Windows, <see cref="ExecutionProviderKind.Cuda"/> maps to
-    /// <see cref="ExecutionProviderKind.TensorRTRtx"/> (NVIDIA compatibility alias).
+    /// On Windows, <see cref="ExecutionProviderKind.Cuda"/> and
+    /// <see cref="ExecutionProviderKind.TensorRt"/> map to
+    /// <see cref="ExecutionProviderKind.TensorRTRtx"/> (NVIDIA compatibility aliases).
     /// </summary>
     public static ExecutionProviderKind ResolvePlatformPin(ExecutionProviderKind kind) =>
-        kind is ExecutionProviderKind.Cuda && OperatingSystem.IsWindows()
+        kind is ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRt
+            && OperatingSystem.IsWindows()
             ? ExecutionProviderKind.TensorRTRtx
             : kind;
 
