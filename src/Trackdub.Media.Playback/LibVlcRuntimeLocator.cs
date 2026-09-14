@@ -78,7 +78,6 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
 
     private IEnumerable<string> EnumerateCandidateDirectories(string rid)
     {
-
         string? safeRid = SanitizeRelativePathSegment(rid);
         if (safeRid is null)
         {
