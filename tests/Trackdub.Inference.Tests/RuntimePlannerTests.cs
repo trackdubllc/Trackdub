@@ -1367,7 +1367,7 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_CurrentBundledSeparationSpleeterCached_UsesCpuWithoutGpuSmokeTest()
+    public async Task PlanAsync_CurrentBundledSeparationSpleeterCached_UsesCpuWithoutGpuSmokeTestAsync()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = LoadBundledRegistry();
@@ -2045,7 +2045,7 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_NonCpuProviderNeverReturnsReadyWithoutPassingSmokeTest()
+    public async Task PlanAsync_NonCpuProviderNeverReturnsReadyWithoutPassingSmokeTestAsync()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
