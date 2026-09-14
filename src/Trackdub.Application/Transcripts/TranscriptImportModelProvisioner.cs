@@ -1,12 +1,17 @@
+using Trackdub.Application.Pipeline;
+
 namespace Trackdub.Application.Transcripts;
 
 /// <summary>
 /// Ensures VAD/ASR (and optional separation) models are provisioned before transcription runs.
 /// </summary>
-public sealed class TranscriptImportModelProvisioner(RuntimeModelSetupCoordinator coordinator)
+public sealed class TranscriptImportModelProvisioner(
+    RuntimeModelSetupCoordinator coordinator,
+    IPipelineModelSetupInteraction? modelSetupInteraction = null)
 {
     private readonly RuntimeModelSetupCoordinator coordinator =
         coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+    private readonly IPipelineModelSetupInteraction? modelSetupInteraction = modelSetupInteraction;
 
     public async Task EnsureImportModelsAsync(
         TranscriptWorkspace workspace,
@@ -21,7 +26,9 @@ public sealed class TranscriptImportModelProvisioner(RuntimeModelSetupCoordinato
         RuntimeModelSelections selections =
             RuntimeModelRequestFactory.CreateSelectionsFromPreferences(modelPreferences);
         RuntimeModelSetupCallbacks effectiveCallbacks =
-            callbacks ?? HeadlessRuntimeModelSetup.CreateCallbacks(cancellationToken);
+            callbacks
+            ?? modelSetupInteraction?.CreateCallbacks(progress: null, cancellationToken)
+            ?? HeadlessRuntimeModelSetup.CreateCallbacks(cancellationToken);
 
         RuntimeModelSetupResult result = await coordinator
             .EnsureImportModelsAvailableAsync(
@@ -52,7 +59,9 @@ public sealed class TranscriptImportModelProvisioner(RuntimeModelSetupCoordinato
         RuntimeModelSelections selections =
             RuntimeModelRequestFactory.CreateSelectionsFromPreferences(modelPreferences);
         RuntimeModelSetupCallbacks effectiveCallbacks =
-            callbacks ?? HeadlessRuntimeModelSetup.CreateCallbacks(cancellationToken);
+            callbacks
+            ?? modelSetupInteraction?.CreateCallbacks(progress: null, cancellationToken)
+            ?? HeadlessRuntimeModelSetup.CreateCallbacks(cancellationToken);
 
         RuntimeModelSetupResult result = await coordinator
             .EnsureDiarizationModelAvailableAsync(workspace, selections, effectiveCallbacks, cancellationToken)

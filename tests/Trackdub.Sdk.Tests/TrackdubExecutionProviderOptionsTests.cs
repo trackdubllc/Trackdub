@@ -27,7 +27,7 @@ public sealed class TrackdubExecutionProviderOptionsTests
         StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
 
         Assert.Equal(WindowsMlExecutionDevicePolicy.MaxPerformance, settings.WindowsMlExecutionDevicePolicy);
-        Assert.True(settings.RequirePreferredExecutionProviders);
+        Assert.False(settings.RequirePreferredExecutionProviders);
         Assert.NotEmpty(settings.HardwareOverrides!);
         Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.DirectMl, v));
     }
@@ -40,7 +40,6 @@ public sealed class TrackdubExecutionProviderOptionsTests
     [InlineData("openvino-catalog", ExecutionProviderKind.OpenVinoCatalog)]
     [InlineData("coreml", ExecutionProviderKind.CoreMl)]
     [InlineData("dnnl", ExecutionProviderKind.Dnnl)]
-    [InlineData("tensorrt", ExecutionProviderKind.TensorRt)]
     public async Task TryBuildFactory_VendorTags_MapToHardwareOverrides(string token, ExecutionProviderKind expected)
     {
         using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
@@ -53,6 +52,27 @@ public sealed class TrackdubExecutionProviderOptionsTests
         IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
         StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
 
+        Assert.True(settings.RequirePreferredExecutionProviders);
+        Assert.NotEmpty(settings.HardwareOverrides!);
+        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expected, v));
+    }
+
+    [Fact]
+    public async Task TryBuildFactory_TensorRtTag_MapsToPlatformPin()
+    {
+        using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
+            modelDirectory: null,
+            executionProvider: "tensorrt",
+            devicePolicy: null,
+            out int exitCode)!;
+
+        Assert.Equal(Program.ExitSuccess, exitCode);
+        IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
+        StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
+
+        ExecutionProviderKind expected = OperatingSystem.IsWindows()
+            ? ExecutionProviderKind.TensorRTRtx
+            : ExecutionProviderKind.TensorRt;
         Assert.True(settings.RequirePreferredExecutionProviders);
         Assert.NotEmpty(settings.HardwareOverrides!);
         Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expected, v));

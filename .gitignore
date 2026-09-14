@@ -320,3 +320,4 @@ __pycache__/
 *.py[cod]
 /.dirac-cache
 /.magicpath-work
+..vc-fix/

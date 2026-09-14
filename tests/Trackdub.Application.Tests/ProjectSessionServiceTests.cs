@@ -187,6 +187,8 @@ public sealed class ProjectSessionServiceTests
 
         public TranscriptWorkspace Workspace => throw new NotSupportedException();
 
+        public IServiceProvider Services => throw new NotSupportedException();
+
         public int DisposeCount { get; private set; }
 
         public void Dispose()
