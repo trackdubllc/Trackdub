@@ -539,6 +539,9 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
                   "root_path": "models/example",
                   "benchmark_entry": "onnx/model.onnx",
                   "download_files": [ "tokenizer.json" ],
+                  "download_file_hashes": {
+                    "onnx/model_q4.onnx": "{{sha256}}"
+                  },
                   "variants": [
                     {
                       "alias": "q4",

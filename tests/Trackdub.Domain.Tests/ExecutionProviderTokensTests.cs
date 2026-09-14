@@ -111,4 +111,49 @@ public sealed class ExecutionProviderTokensTests
             ExecutionProviderKind.Cuda,
             ExecutionProviderKind.TensorRTRtx));
     }
+
+    [Fact]
+    public void ResolvePlatformPin_tensorrt_maps_to_trt_rtx_on_windows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Equal(
+                ExecutionProviderKind.TensorRt,
+                ExecutionProviderTokens.ResolvePlatformPin(ExecutionProviderKind.TensorRt));
+            return;
+        }
+
+        Assert.Equal(
+            ExecutionProviderKind.TensorRTRtx,
+            ExecutionProviderTokens.ResolvePlatformPin(ExecutionProviderKind.TensorRt));
+    }
+
+    [Fact]
+    public void ResolvePlatformPin_tensorrt_stays_tensorrt_on_linux()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.Equal(
+            ExecutionProviderKind.TensorRt,
+            ExecutionProviderTokens.ResolvePlatformPin(ExecutionProviderKind.TensorRt));
+    }
+
+    [Fact]
+    public void PlatformPinsEquivalent_treats_windows_tensorrt_and_trt_rtx_as_same_pin()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.False(ExecutionProviderTokens.PlatformPinsEquivalent(
+                ExecutionProviderKind.TensorRt,
+                ExecutionProviderKind.TensorRTRtx));
+            return;
+        }
+
+        Assert.True(ExecutionProviderTokens.PlatformPinsEquivalent(
+            ExecutionProviderKind.TensorRt,
+            ExecutionProviderKind.TensorRTRtx));
+    }
 }

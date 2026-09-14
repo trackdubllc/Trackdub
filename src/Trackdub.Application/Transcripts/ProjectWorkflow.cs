@@ -473,6 +473,39 @@ public sealed class ProjectWorkflow(
         }
     }
 
+    private async Task WritePreparationFallbackAsync(
+        Guid projectId,
+        Guid mediaAssetId,
+        string? detail,
+        CancellationToken cancellationToken)
+    {
+        if (degradationWriter is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await degradationWriter.WriteAsync(
+                new PipelineDegradationRecord(
+                    StageNames.AudioPreparation,
+                    "SPEECH_PREPARATION_FAILED",
+                    "Speech audio preparation was unavailable or failed; the unprocessed audio will be used for transcription.",
+                    Detail: detail,
+                    SelectedFallback: "unprocessed-audio",
+                    RecommendedAction: null,
+                    DateTimeOffset.UtcNow,
+                    StageRunId: null),
+                projectId,
+                mediaAssetId,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Degradation write is best-effort.
+        }
+    }
+
     private async Task WriteEnhancementFallbackAsync(
         Guid projectId,
         Guid mediaAssetId,
@@ -565,6 +598,11 @@ public sealed class ProjectWorkflow(
 
         if (speechAudioPreparationStageHandler is null)
         {
+            await WritePreparationFallbackAsync(
+                projectId,
+                mediaAsset.Id,
+                "Speech audio preparation is not configured in this host.",
+                cancellationToken).ConfigureAwait(false);
             ProjectArtifact fallbackSource = enhancementResult?.EnhancedAudioArtifact
                 ?? existingEnhanced
                 ?? selectedSource;
@@ -611,6 +649,8 @@ public sealed class ProjectWorkflow(
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
         {
+            await WritePreparationFallbackAsync(projectId, mediaAsset.Id, ex.Message, cancellationToken)
+                .ConfigureAwait(false);
             ProjectArtifact fallbackSource = enhancementResult?.EnhancedAudioArtifact
                 ?? existingEnhanced
                 ?? selectedSource;

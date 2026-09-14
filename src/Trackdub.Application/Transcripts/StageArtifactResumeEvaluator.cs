@@ -474,7 +474,13 @@ public static class StageArtifactResumeEvaluator
         if (!snapshot.TryGetValue("SourceLanguage", out string? requestedLanguage) ||
             string.IsNullOrWhiteSpace(requestedLanguage))
         {
-            return true;
+            // Snapshots captured before the key alignment wrote "SourceLanguageCode";
+            // keep honoring those rows.
+            if (!snapshot.TryGetValue("SourceLanguageCode", out requestedLanguage) ||
+                string.IsNullOrWhiteSpace(requestedLanguage))
+            {
+                return true;
+            }
         }
 
         string? normalizedRequested = TranscriptWorkflowUtilities.NormalizeTranscriptLanguageCode(requestedLanguage);

@@ -276,8 +276,9 @@ internal static class DoctorHandler
             Id = "espeak-ng",
             Status = "fail",
             Message = status.ErrorMessage ?? "eSpeak-NG is not available.",
-            Remediation =
-                "Kokoro TTS needs eSpeak-NG. Run tools/espeak-ng/Fetch-EspeakNg.ps1, set TRACKDUB_ESPEAK_NG_PATH to espeak-ng.exe, or install eSpeak-NG on PATH.",
+            Remediation = OperatingSystem.IsWindows()
+                ? "Kokoro TTS needs eSpeak-NG. Run tools/espeak-ng/Fetch-EspeakNg.ps1, set TRACKDUB_ESPEAK_NG_PATH to espeak-ng.exe, or install eSpeak-NG on PATH."
+                : "Kokoro TTS needs eSpeak-NG. Install the espeak-ng package, set TRACKDUB_ESPEAK_NG_PATH to the espeak-ng binary, or ensure espeak-ng is on PATH.",
         };
     }
 
