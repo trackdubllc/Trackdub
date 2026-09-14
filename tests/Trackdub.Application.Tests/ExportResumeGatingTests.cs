@@ -426,11 +426,13 @@ public sealed class ExportResumeGatingTests
                     Directory.Delete(Path, recursive: true);
                 }
             }
-            catch (IOException)
+            catch (IOException ex)
             {
+                System.Diagnostics.Trace.WriteLine($"Failed to delete temp directory '{Path}': {ex}");
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                System.Diagnostics.Trace.WriteLine($"Failed to delete temp directory '{Path}' due to access restrictions: {ex}");
             }
         }
     }
