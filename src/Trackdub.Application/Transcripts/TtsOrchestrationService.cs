@@ -1185,7 +1185,10 @@ public sealed class TtsOrchestrationService(
 
         reservedStockVoiceIds?.Add(voice.VoiceId);
         VoiceAssignment fallbackAssignment = currentAssignment with
-        {
+        // Update the existing assignment in place to transition its VoiceModelId and flags
+        // without changing its Id, avoiding SQLite primary-key conflicts when SaveAsync
+        // performs an INSERT that no longer matches the partial is_fallback=0 index.
+        currentAssignment = currentAssignment with
             VoiceModelId = StockTtsDefaults.KokoroPrimaryAlias,
             VoiceVariant = voice.VoiceId,
             RequiresConsent = false,
@@ -1193,8 +1196,8 @@ public sealed class TtsOrchestrationService(
             ReferenceClipArtifactId = null
         };
         await voiceAssignmentRepository.SaveAsync(fallbackAssignment, cancellationToken).ConfigureAwait(false);
-        return fallbackAssignment;
-    }
+        await voiceAssignmentRepository.SaveAsync(currentAssignment, cancellationToken).ConfigureAwait(false);
+        return currentAssignment;
 
     private static HashSet<string> CollectReservedStockVoiceIds(
         TranscriptProjectState currentState,

@@ -425,7 +425,9 @@ public partial class TranscriptProjectServiceTests
     public async Task GenerateTtsForSpeakerAsync_non_clone_run_substitutes_stock_voice_for_persisted_clone_assignment()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        // Avoid Path.Combine silently dropping arguments by ensuring tempDirectory is not
+        // rooted in a way that would cause the second argument to be treated as absolute
+        string sourcePath = Path.Combine(tempDirectory ?? string.Empty, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
