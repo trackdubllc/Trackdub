@@ -66,7 +66,7 @@ public static class VoiceCloningDefaults
     /// </summary>
     public static bool IsCloneOnlyModelAlias(string? alias) =>
         IsVoiceCloningModelAlias(alias) ||
-        Qwen3TtsDefaults.IsBaseAlias(alias) ||
+        Qwen3TtsDefaults.IsBaseAlias(alias?.Trim()) ||
         IsF5VoiceCloningModelAlias(alias);
 
     /// <summary>
