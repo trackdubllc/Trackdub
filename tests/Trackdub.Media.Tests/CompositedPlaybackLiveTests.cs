@@ -43,14 +43,31 @@ public sealed class CompositedPlaybackLiveTests
         {
             backend.TryAttachFrameSink(sink);
             await backend.OpenAsync(source, TestContext.Current.CancellationToken);
-            await backend.PreparePreviewFrameAsync(TestContext.Current.CancellationToken);
-            await Task.Delay(250, TestContext.Current.CancellationToken);
+
+            // The first delivered frame can legitimately be black while decode warms up; keep
+            // preparing until a frame with visible signal arrives or the attempt budget runs out.
+            bool usable = false;
+            for (int attempt = 0; attempt < 20 && !usable; attempt++)
+            {
+                await backend.PreparePreviewFrameAsync(TestContext.Current.CancellationToken);
+                await Task.Delay(250, TestContext.Current.CancellationToken);
+                usable = sink.LastFrame is { } last && HasVisibleSignal(last);
+            }
 
             PlaybackSnapshot snapshot = await backend.GetSnapshotAsync(TestContext.Current.CancellationToken);
             Assert.True(snapshot.IsLoaded, snapshot.WarningMessage ?? "backend not loaded");
             Assert.NotNull(sink.LastFrame);
             Assert.True(sink.LastFrame!.Format.Width > 0);
             Assert.True(sink.LastFrame.Format.Height > 0);
+            Assert.True(
+                usable,
+                "libmpv delivered frames but every sampled pixel was zero. " +
+                $"hwdec-current={backend.ReadMpvPropertyForDiagnostics("hwdec-current") ?? "(null)"}, " +
+                $"video-format={backend.ReadMpvPropertyForDiagnostics("video-format") ?? "(null)"}, " +
+                $"width={backend.ReadMpvPropertyForDiagnostics("width") ?? "(null)"}, " +
+                $"height={backend.ReadMpvPropertyForDiagnostics("height") ?? "(null)"}, " +
+                $"time-pos={backend.ReadMpvPropertyForDiagnostics("time-pos") ?? "(null)"}, " +
+                $"warning={snapshot.WarningMessage ?? "(none)"}");
         }
         finally
         {
@@ -133,6 +150,27 @@ public sealed class CompositedPlaybackLiveTests
 
         string temp = Path.Combine(Path.GetTempPath(), "trackdub-playback-test.mp4");
         return File.Exists(temp) ? temp : null;
+    }
+
+    private static bool HasVisibleSignal(VideoFrame frame)
+    {
+        int stride = frame.Format.Stride;
+        int height = frame.Format.Height;
+        byte[] data = frame.Data;
+        for (int y = 0; y < height; y++)
+        {
+            int rowStart = y * stride;
+            int rowEnd = Math.Min(rowStart + stride, data.Length);
+            for (int offset = rowStart; offset + 2 < rowEnd; offset += 4)
+            {
+                if (data[offset] != 0 || data[offset + 1] != 0 || data[offset + 2] != 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static MediaSourceDescriptor BuildSource(string mediaPath) =>

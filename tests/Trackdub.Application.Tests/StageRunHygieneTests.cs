@@ -1333,4 +1333,95 @@ public sealed class StageArtifactResumeEvaluatorTests
             snapshot: new Dictionary<string, string> { [$"Model:{StageNames.Asr}"] = "whisper-small" },
             projectRootPath: artifactStore.GetPath(".")));
     }
+
+    [Fact]
+    public void CanResumeStage_returns_true_for_asr_when_canonical_source_language_matches()
+    {
+        (TranscriptProjectState state, FakeArtifactStore artifactStore) =
+            CreateAsrResumableState(persistedLanguage: "en");
+
+        Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Asr,
+            snapshot: new Dictionary<string, string> { ["SourceLanguage"] = "en" },
+            projectRootPath: artifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_false_for_asr_when_canonical_source_language_differs()
+    {
+        (TranscriptProjectState state, FakeArtifactStore artifactStore) =
+            CreateAsrResumableState(persistedLanguage: "en");
+
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Asr,
+            snapshot: new Dictionary<string, string> { ["SourceLanguage"] = "fr" },
+            projectRootPath: artifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_asr_honors_legacy_source_language_code_key()
+    {
+        (TranscriptProjectState state, FakeArtifactStore artifactStore) =
+            CreateAsrResumableState(persistedLanguage: "en");
+
+        // Snapshots captured before the key alignment wrote "SourceLanguageCode".
+        Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Asr,
+            snapshot: new Dictionary<string, string> { ["SourceLanguageCode"] = "en" },
+            projectRootPath: artifactStore.GetPath(".")));
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Asr,
+            snapshot: new Dictionary<string, string> { ["SourceLanguageCode"] = "fr" },
+            projectRootPath: artifactStore.GetPath(".")));
+    }
+
+    private static (TranscriptProjectState State, FakeArtifactStore Store) CreateAsrResumableState(
+        string persistedLanguage)
+    {
+        var artifactStore = new FakeArtifactStore();
+        Guid projectId = Guid.NewGuid();
+        Guid mediaAssetId = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        StageRunRecord asrRun = StageRunRecord
+            .Start(projectId, StageNames.Asr, now.AddHours(-1))
+            .Complete(now);
+        var revision = TranscriptRevision.Create(projectId, asrRun.Id, 1, now);
+        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 1.0, "hello");
+
+        const string rawTranscriptPath = "artifacts/transcript/transcript-revision-raw.json";
+        artifactStore.Seed(rawTranscriptPath);
+        ProjectArtifact rawArtifact = new(
+            Guid.NewGuid(),
+            projectId,
+            mediaAssetId,
+            ArtifactKind.TranscriptRevision,
+            rawTranscriptPath,
+            "hash",
+            64,
+            null,
+            null,
+            null,
+            now,
+            StageRunId: asrRun.Id,
+            Provenance: "generated-asr-raw");
+
+        TranscriptProjectState state = CreateState(
+            projectId,
+            [asrRun],
+            [rawArtifact],
+            currentTranscriptRevision: revision,
+            transcriptSegments: [segment],
+            transcriptLanguage: persistedLanguage);
+
+        return (state, artifactStore);
+    }
 }
