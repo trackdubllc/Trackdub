@@ -337,8 +337,7 @@ public sealed class ExportResumeGatingTests
                 manifest,
                 CancellationToken.None);
 
-            string exportRelativePath = Path.Combine("exports", "dubbed.mp4")
-                .Replace(Path.DirectorySeparatorChar, '/');
+            string exportRelativePath = "exports/dubbed.mp4";
             if (writeExportOutput)
             {
                 string exportDir = "exports".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
