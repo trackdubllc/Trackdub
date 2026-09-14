@@ -646,7 +646,7 @@ public sealed class OrchestrationServiceTests
         Assert.Equal(seededAssignment.Id, assignment.Id);
         Assert.Equal("am_adam", assignment.VoiceVariant);
         Assert.False(assignment.IsFallback);
-        Assert.Equal(1, context.VoiceAssignmentRepository.All.Count);
+        Assert.Single(context.VoiceAssignmentRepository.All);
     }
 
     [Fact]

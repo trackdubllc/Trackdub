@@ -591,24 +591,16 @@ public sealed class TtsOrchestrationService(
                 throw new InvalidOperationException($"Voicepack '{normalizedVoiceId}' is not available.");
             }
 
-            VoiceAssignment? existing = await voiceAssignmentRepository.GetAsync(
+            // Always mint a fresh fallback assignment. voiceAssignmentRepository.GetAsync only
+            // ever returns NON-fallback rows, so reusing an existing row's primary-key Id for a
+            // fallback (is_fallback=1) row does not match the non-fallback partial-unique upsert
+            // conflict target and would collide with that row's PRIMARY KEY on a real SQLite-backed
+            // resume. CreateFallback allocates a new Id, so the fallback row inserts cleanly.
+            VoiceAssignment assignment = VoiceAssignment.CreateFallback(
                 currentState.ProjectState.Project.Id,
                 speakerId,
-                cancellationToken).ConfigureAwait(false);
-            VoiceAssignment assignment = existing is null
-                ? VoiceAssignment.CreateFallback(
-                    currentState.ProjectState.Project.Id,
-                    speakerId,
-                    "kokoro-onnx",
-                    normalizedVoiceId)
-                : existing with
-                {
-                    VoiceModelId = "kokoro-onnx",
-                    VoiceVariant = normalizedVoiceId,
-                    RequiresConsent = false,
-                    IsFallback = true,
-                    ReferenceClipArtifactId = existing.ReferenceClipArtifactId
-                };
+                "kokoro-onnx",
+                normalizedVoiceId);
             await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
             return assignment;
         }
