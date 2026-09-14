@@ -418,10 +418,38 @@ public sealed class BenchmarkOptionsTests
         }
     }
 
-    [Fact]
+    // Gate on the TRT RTX smoke starter-pack models being present under the repo's
+    // gitignored models/ directory. RunTrtRtxSmokeScopeAsync runs runner.RunAsync for
+    // every TrtRtxSmokeCatalog.StarterPackTurboGpu target whose model resolves, so
+    // without this gate the test would either exercise only the degenerate all-skipped
+    // branch (no models cached) or run the full smoke sweep in a unit-test run (models
+    // cached). With the gate it runs the real smoke deliberately or skips cleanly, in
+    // line with the tests README policy against long model runs. The relative paths map
+    // each StarterPackTurboGpu target to its manifest root_path + benchmark_entry.
+    [RequiresBundledModelFact(
+        "sortformer/cgus-diar_streaming_sortformer_4spk-v2.1-onnx/onnx/model.onnx",
+        "whisper-small-genai/encoder.onnx",
+        "whisper-medium-genai/encoder.onnx",
+        "qwen3-asr-0.6b-onnx/encoder.onnx",
+        "qwen3-asr-1.7b-onnx/encoder.onnx",
+        "phi-4-mini-genai/cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/genai_config.json",
+        "madlad/google-madlad400-3b-mt/encoder_model_quantized.onnx",
+        "chatterbox-turbo-onnx/onnx/language_model.onnx")]
     public async Task ProgramRunAsync_TrtRtxSmokeScope_WritesBatchReportPathInJsonMode()
     {
         string reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string reportDirectory = Path.GetDirectoryName(reportPath)!;
+        string reportNameWithoutExtension = Path.GetFileNameWithoutExtension(reportPath);
+        string reportExtension = Path.GetExtension(reportPath);
+
+        // Per-variant report paths written by DeriveVariantReportPath for each smoke
+        // target that actually runs: "{output}-{label}{ext}" in the same directory.
+        string[] variantReportPaths = TrtRtxSmokeCatalog.StarterPackTurboGpu
+            .Select(target => Path.Combine(
+                reportDirectory,
+                $"{reportNameWithoutExtension}-{target.Label}{reportExtension}"))
+            .ToArray();
+
         var output = new StringWriter();
         var error = new StringWriter();
 
@@ -447,6 +475,14 @@ public sealed class BenchmarkOptionsTests
             if (File.Exists(reportPath))
             {
                 File.Delete(reportPath);
+            }
+
+            foreach (string variantReportPath in variantReportPaths)
+            {
+                if (File.Exists(variantReportPath))
+                {
+                    File.Delete(variantReportPath);
+                }
             }
         }
     }
