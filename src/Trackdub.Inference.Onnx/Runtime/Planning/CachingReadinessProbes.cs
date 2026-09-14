@@ -59,6 +59,21 @@ public abstract class CachingReadinessProbe<TReport>
             return started;
         }
     }
+
+    /// <summary>
+    /// Invalidates all cached probe results, forcing the next <c>ProbeAsync</c> call to re-run
+    /// the underlying probe. Call this after state-changing operations (installs, registrations,
+    /// downloads) to ensure subsequent probes reflect the new system state rather than returning
+    /// stale cached reports.
+    /// </summary>
+    public void InvalidateCache()
+    {
+        lock (_gate)
+        {
+            _cachedForDownloadsDisabled = null;
+            _cachedForDownloadsEnabled = null;
+        }
+    }
 }
 
 /// <summary>Caching decorator for <see cref="ITensorRtRtxReadinessProbe"/>.</summary>

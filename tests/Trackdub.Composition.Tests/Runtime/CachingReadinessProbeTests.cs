@@ -128,6 +128,26 @@ public sealed class CachingReadinessProbeTests
         Assert.Equal(2, counting.CallCount);
     }
 
+    [Fact]
+    public async Task CancelledProbe_IsNotCached_AndReprobesOnNextCall()
+    {
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var counting = new CountingTensorRtRtxReadinessProbe(EligibleReport());
+        var cached = new CachingTensorRtRtxReadinessProbe(counting);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            cached.ProbeAsync(allowProviderDownloads: false, cts.Token));
+
+        // The cancelled probe must not be cached permanently; a retry re-runs the probe.
+        TensorRtRtxReadinessReport recovered =
+            await cached.ProbeAsync(allowProviderDownloads: false, CancellationToken.None);
+
+        Assert.True(recovered.IsHardwareEligible);
+        Assert.Equal(2, counting.CallCount);
+    }
+
     private sealed class CountingTensorRtRtxReadinessProbe : ITensorRtRtxReadinessProbe
     {
         private readonly Func<bool, TensorRtRtxReadinessReport> _factory;
