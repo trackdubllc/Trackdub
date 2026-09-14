@@ -40,8 +40,10 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
             catch (IOException ex)
             {
                 Trace.WriteLine($"Failed to delete temp directory '{dir}' due to I/O error: {ex.Message}");
+                Trace.WriteLine($"Failed to delete temp directory '{dir}' due to I/O error: {ex.Message}");
             }
             catch (UnauthorizedAccessException ex)
+                Trace.WriteLine($"Failed to delete temp directory '{dir}' due to access error: {ex.Message}");
             {
                 Trace.WriteLine($"Failed to delete temp directory '{dir}' due to access error: {ex.Message}");
             }
