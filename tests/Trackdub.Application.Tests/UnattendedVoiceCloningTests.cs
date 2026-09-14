@@ -86,7 +86,7 @@ public sealed class UnattendedVoiceCloningTests
     }
 
     [Fact]
-    public void BuildUnattendedTtsRequest_WhenTtsKeyIsCaseSensitive_RuntimeSelectionRetainsAlias()
+    public void ApplyVoiceCloningDefaults_WhenTtsKeyIsCaseSensitive_NormalizedOutputResolvesCaseInsensitiveLookup()
     {
         var options = new DubbingSessionOptions
         {
@@ -101,10 +101,61 @@ public sealed class UnattendedVoiceCloningTests
 
         DubbingSessionOptions resolved = DubbingPipelineEngine.ApplyVoiceCloningDefaults(options);
 
-        // Simulate the runtime-selection lookup path used by BuildModelPreferences.
+        // The normalized (OrdinalIgnoreCase) output exposes the explicit override through the
+        // same case-insensitive GetValueOrDefault(StageNames.Tts) lookup that BuildModelPreferences
+        // performs, even though the caller supplied the key as "TTS".
         Assert.NotNull(resolved.ModelPreferences);
         string? ttsAlias = resolved.ModelPreferences!.GetValueOrDefault(StageNames.Tts);
         Assert.Equal("chatterbox-multilingual", ttsAlias);
+    }
+
+    [Fact]
+    public void ApplyVoiceCloningDefaults_WhenCaseSensitiveDictionaryHasDuplicateTtsKeys_DoesNotThrowAndNormalizes()
+    {
+        // A case-sensitive (Ordinal) dictionary can legitimately hold two keys that differ only by
+        // case. Normalizing to OrdinalIgnoreCase must not throw ArgumentException on the duplicate;
+        // last write wins in enumeration order.
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "clip.mp4",
+            TargetLanguageCode = "en",
+            ModelPreferences = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["TTS"] = "chatterbox-turbo",
+                ["tts"] = "chatterbox-multilingual",
+            },
+            UseVoiceCloning = true,
+        };
+
+        DubbingSessionOptions resolved = DubbingPipelineEngine.ApplyVoiceCloningDefaults(options);
+
+        Assert.NotNull(resolved.ModelPreferences);
+        // Last write wins: the "tts" entry, enumerated after "TTS", is retained.
+        Assert.Equal("chatterbox-multilingual", resolved.ModelPreferences!.GetValueOrDefault(StageNames.Tts));
+    }
+
+    [Fact]
+    public void BuildModelPreferences_WhenTtsKeyIsCaseSensitive_RuntimeSelectionRetainsAlias()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "clip.mp4",
+            TargetLanguageCode = "en",
+            ModelPreferences = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["TTS"] = "chatterbox-multilingual",
+            },
+            UseVoiceCloning = true,
+        };
+
+        // Drive the real runtime-selection path: normalize, then feed the result through the same
+        // BuildModelPreferences lookup used by CreateSelectionsFromSettings so a regression that
+        // reverts to reading the caller's case-sensitive dictionary is caught here.
+        DubbingSessionOptions resolved = DubbingPipelineEngine.ApplyVoiceCloningDefaults(options);
+        InferenceModelPreferences? preferences = DubbingPipelineEngine.BuildModelPreferences(resolved);
+
+        Assert.NotNull(preferences);
+        Assert.Equal("chatterbox-multilingual", preferences!.TtsModelAlias);
     }
 
     [Fact]

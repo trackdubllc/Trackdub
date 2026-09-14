@@ -1264,9 +1264,22 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             return options;
         }
 
-        var preferences = options.ModelPreferences is not null
-            ? new Dictionary<string, string>(options.ModelPreferences, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Callers may hand us an arbitrary IReadOnlyDictionary whose comparer is case-sensitive
+        // (e.g. StringComparer.Ordinal), so it can legitimately contain keys that differ only by
+        // case such as both "TTS" and "tts". Copying via the collection constructor with an
+        // OrdinalIgnoreCase comparer would throw ArgumentException on those duplicates, so we
+        // normalize by explicit enumeration instead. Duplicate-precedence policy: last write wins
+        // in the source's enumeration order, matching how the downstream case-insensitive
+        // GetValueOrDefault(StageNames.Tts) lookup in BuildModelPreferences would otherwise
+        // collapse the entries.
+        var preferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (options.ModelPreferences is not null)
+        {
+            foreach (KeyValuePair<string, string> preference in options.ModelPreferences)
+            {
+                preferences[preference.Key] = preference.Value;
+            }
+        }
 
         if (preferences.ContainsKey(StageNames.Tts))
         {
@@ -1474,7 +1487,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
     /// <summary>
     /// Builds <see cref="InferenceModelPreferences"/> from the dubbing session options.
     /// </summary>
-    private static InferenceModelPreferences? BuildModelPreferences(DubbingSessionOptions options)
+    internal static InferenceModelPreferences? BuildModelPreferences(DubbingSessionOptions options)
     {
         bool hasModelOverrides = options.ModelPreferences is { Count: > 0 };
         if (!hasModelOverrides && !options.EnableAsrTextRefinement)
