@@ -5,11 +5,62 @@ using Trackdub.Cli.Tui;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Domain.StageRuns;
+using Trackdub.Sdk;
 
 namespace Trackdub.Cli.Tui.Screens;
 
+/// <summary>
+/// Injectable seam over the two <see cref="PipelineHandler"/> run entry points that
+/// actually execute the ML pipeline. Exists so <see cref="PipelineTuiScreen"/>'s terminal
+/// picker actions can be exercised deterministically in tests without a live pipeline run.
+/// </summary>
+internal interface IPipelineRunner
+{
+    Task<int> RunStageAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        string stageName,
+        string? modelAlias,
+        CancellationToken cancellationToken);
+
+    Task<int> RunFullPipelineAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        PipelineHandler.TuiPipelineRunOptions options,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Default <see cref="IPipelineRunner"/> that delegates to the static <see cref="PipelineHandler"/>
+/// entry points, preserving production behavior.
+/// </summary>
+internal sealed class DefaultPipelineRunner : IPipelineRunner
+{
+    public Task<int> RunStageAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        string stageName,
+        string? modelAlias,
+        CancellationToken cancellationToken) =>
+        PipelineHandler.RunStageAsync(factory, projectPath, stageName, modelAlias, cancellationToken);
+
+    public Task<int> RunFullPipelineAsync(
+        TrackdubSessionFactory factory,
+        string projectPath,
+        PipelineHandler.TuiPipelineRunOptions options,
+        CancellationToken cancellationToken) =>
+        PipelineHandler.RunFullPipelineAsync(factory, projectPath, options, cancellationToken);
+}
+
 internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 {
+    private readonly IPipelineRunner _runner;
+
+    public PipelineTuiScreen(IPipelineRunner? runner = null)
+    {
+        _runner = runner ?? new DefaultPipelineRunner();
+    }
+
     private const string BackChoice = "__back__";
     private const string RunChoice = "__run__";
     private const string ConfigureChoice = "__configure__";
@@ -25,6 +76,13 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
 
     public bool HasOverlay => _picker is not null;
 
+    /// <summary>
+    /// Test-only accessor exposing the currently open picker (or <see langword="null"/> when no
+    /// overlay is active). Lets tests inspect picker title/choices and drive navigation without
+    /// reflecting into the private <c>_picker</c> field. Not used by production code.
+    /// </summary>
+    internal TuiInlinePicker? CurrentPicker => _picker;
+
     public void ClearOverlay()
     {
         _picker = null;
@@ -34,19 +92,14 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
     private TuiInlinePicker? _picker;
     private Func<string, Task<bool>>? _pickerHandler;
 
-    // Wizard accumulation state (reset at start of each wizard flow)
-    private bool _wVoiceClone;
-    private bool _wTimbrePolish = true;
-    private bool _wRestorePan;
-    private bool _wMatchLoudness;
-    private bool _wAsrRefinement;
-    private bool _wBurnIn;
-    private bool _wForceRerun;
-    private string? _wExportFormat;
-    private string? _wSubtitleSource;
-    private IReadOnlyList<string>? _wSubtitleFormats;
-    private string? _wVideoEncoder;
-    private string? _wTargetLanguageOverride;
+    // Full-pipeline wizard accumulation state (reset at start of each wizard flow)
+    private PipelineWizardState _wizard = new();
+
+    // Compile-checked accessor for the current wizard state (visible to Trackdub.Sdk.Tests
+    // via InternalsVisibleTo) so tests do not reach into the private field via reflection.
+    internal PipelineWizardState WizardState => _wizard;
+
+    // Stage-run wizard state (independent of the full-pipeline wizard)
     private string? _wStageName;
     private string? _wModelAlias;
 
@@ -277,7 +330,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
         string stageName = _wStageName!;
         string? modelAlias = _wModelAlias;
 
-        int exitCode = await PipelineHandler
+        int exitCode = await _runner
             .RunStageAsync(context.Factory, context.ProjectPath!, stageName, modelAlias, context.CancellationToken)
             .ConfigureAwait(false);
 
@@ -330,8 +383,8 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
                     string lang = context.Console.Prompt(
                         new TextPrompt<string>("Target language BCP-47 (e.g. es, fr, de):")
                             .AllowEmpty());
-                    _wTargetLanguageOverride = string.IsNullOrWhiteSpace(lang) ? null : lang;
-                    if (_wTargetLanguageOverride is null)
+                    _wizard.TargetLanguageOverride = string.IsNullOrWhiteSpace(lang) ? null : lang;
+                    if (_wizard.TargetLanguageOverride is null)
                     {
                         context.SetStatus("Target language is required to run the pipeline.");
                         return true;
@@ -365,7 +418,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
             return await BeginRunAllMenuAsync(context).ConfigureAwait(false);
         }
 
-        _wVoiceClone = choice == YesChoice;
+        _wizard.VoiceClone = choice == YesChoice;
         return await BeginExportFormatPickerAsync(context).ConfigureAwait(false);
     }
 
@@ -390,7 +443,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
             return await BeginVoiceClonePickerAsync(context).ConfigureAwait(false);
         }
 
-        _wExportFormat = choice == "__auto__" ? null : choice;
+        _wizard.ExportFormat = choice == "__auto__" ? null : choice;
         return await BeginSubtitleFormatPickerAsync(context).ConfigureAwait(false);
     }
 
@@ -417,7 +470,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
             return await BeginExportFormatPickerAsync(context).ConfigureAwait(false);
         }
 
-        _wSubtitleFormats = choice switch
+        _wizard.SubtitleFormats = choice switch
         {
             "__none__" => [],
             "__skip__" => null,
@@ -448,7 +501,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
             return await BeginSubtitleFormatPickerAsync(context).ConfigureAwait(false);
         }
 
-        _wSubtitleSource = choice == "translated" ? null : choice;
+        _wizard.SubtitleSource = choice == "translated" ? null : choice;
         return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
     }
 
@@ -460,13 +513,13 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
             "Advanced options",
             [
                 (RunChoice,        "Run now — use selected settings"),
-                ("__timbre__",     $"Timbre polish: {Toggle(_wTimbrePolish)}"),
-                ("__pan__",        $"Restore pan: {Toggle(_wRestorePan)}"),
-                ("__loudness__",   $"Match loudness: {Toggle(_wMatchLoudness)}"),
-                ("__asr__",        $"ASR text refinement: {Toggle(_wAsrRefinement)}"),
-                ("__burnin__",     $"Burn-in subtitles: {Toggle(_wBurnIn)}"),
-                ("__forcererun__", $"Force rerun: {Toggle(_wForceRerun)}"),
-                (VideoChoice,      $"Video encoder: {_wVideoEncoder ?? "auto"}"),
+                ("__timbre__",     $"Timbre polish: {Toggle(_wizard.TimbrePolish)}"),
+                ("__pan__",        $"Restore pan: {Toggle(_wizard.RestorePan)}"),
+                ("__loudness__",   $"Match loudness: {Toggle(_wizard.MatchLoudness)}"),
+                ("__asr__",        $"ASR text refinement: {Toggle(_wizard.AsrRefinement)}"),
+                ("__burnin__",     $"Burn-in subtitles: {Toggle(_wizard.BurnIn)}"),
+                ("__forcererun__", $"Force rerun: {Toggle(_wizard.ForceRerun)}"),
+                (VideoChoice,      $"Video encoder: {_wizard.VideoEncoder ?? "auto"}"),
                 (BackChoice,       "Back"),
             ]);
         _pickerHandler = choice => HandleAdvancedChoiceAsync(context, choice);
@@ -481,34 +534,19 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
                 return await BeginSubtitleSourcePickerAsync(context).ConfigureAwait(false);
 
             case RunChoice:
-                return await FireFullPipelineAsync(
-                    context,
-                    new PipelineHandler.TuiPipelineRunOptions
-                    {
-                        UseVoiceCloning = _wVoiceClone,
-                        ApplyTimbrePolish = _wTimbrePolish,
-                        RestoreOriginalPan = _wRestorePan,
-                        MatchOriginalLoudness = _wMatchLoudness,
-                        EnableAsrTextRefinement = _wAsrRefinement,
-                        BurnInSubtitles = _wBurnIn,
-                        ForceRerun = _wForceRerun,
-                        ExportFormat = _wExportFormat,
-                        SubtitleFormats = _wSubtitleFormats,
-                        SubtitleSource = _wSubtitleSource,
-                        VideoEncoderKey = _wVideoEncoder,
-                        TargetLanguageOverride = _wTargetLanguageOverride,
-                    }).ConfigureAwait(false);
+                return await FireFullPipelineAsync(context, _wizard.ToRunOptions())
+                    .ConfigureAwait(false);
 
             case VideoChoice:
                 return await BeginVideoEncoderPickerAsync(context).ConfigureAwait(false);
 
             // Toggles — flip state and re-open advanced picker
-            case "__timbre__": _wTimbrePolish = !_wTimbrePolish; break;
-            case "__pan__": _wRestorePan = !_wRestorePan; break;
-            case "__loudness__": _wMatchLoudness = !_wMatchLoudness; break;
-            case "__asr__": _wAsrRefinement = !_wAsrRefinement; break;
-            case "__burnin__": _wBurnIn = !_wBurnIn; break;
-            case "__forcererun__": _wForceRerun = !_wForceRerun; break;
+            case "__timbre__": _wizard.TimbrePolish = !_wizard.TimbrePolish; break;
+            case "__pan__": _wizard.RestorePan = !_wizard.RestorePan; break;
+            case "__loudness__": _wizard.MatchLoudness = !_wizard.MatchLoudness; break;
+            case "__asr__": _wizard.AsrRefinement = !_wizard.AsrRefinement; break;
+            case "__burnin__": _wizard.BurnIn = !_wizard.BurnIn; break;
+            case "__forcererun__": _wizard.ForceRerun = !_wizard.ForceRerun; break;
         }
 
         return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
@@ -539,7 +577,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
             return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
         }
 
-        _wVideoEncoder = choice == "auto" ? null : choice;
+        _wizard.VideoEncoder = choice == "auto" ? null : choice;
         return await BeginAdvancedPickerAsync(context).ConfigureAwait(false);
     }
 
@@ -547,7 +585,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
         TrackdubTuiContext context,
         PipelineHandler.TuiPipelineRunOptions options)
     {
-        int exitCode = await PipelineHandler
+        int exitCode = await _runner
             .RunFullPipelineAsync(context.Factory, context.ProjectPath!, options, context.CancellationToken)
             .ConfigureAwait(false);
 
@@ -572,21 +610,7 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
         return false;
     }
 
-    private void ResetWizardState()
-    {
-        _wVoiceClone = false;
-        _wTimbrePolish = true;
-        _wRestorePan = false;
-        _wMatchLoudness = false;
-        _wAsrRefinement = false;
-        _wBurnIn = false;
-        _wForceRerun = false;
-        _wExportFormat = null;
-        _wSubtitleSource = null;
-        _wSubtitleFormats = null;
-        _wVideoEncoder = null;
-        _wTargetLanguageOverride = null;
-    }
+    private void ResetWizardState() => _wizard = new PipelineWizardState();
 
     private static string FormatLastRun(
         StageRunStatus? status,
