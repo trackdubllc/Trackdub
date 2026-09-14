@@ -30,7 +30,8 @@ public static class TrtRtxSmokeCatalog
 
     /// <summary>
     /// Bundled ONNX GPU models not in <see cref="StarterPackTurboGpu"/>.
-    /// Omits Silero (TRT excluded), Kokoro (CPU-only), and python-musetalk.
+    /// Omits Silero (TRT excluded), Kokoro (CPU-only), python-musetalk, and
+    /// Phi-3.5 (CPU-only bundle: no GPU variant in the manifest).
     /// </summary>
     public static IReadOnlyList<Target> RemainingOnnxGpu { get; } =
     [
@@ -44,8 +45,7 @@ public static class TrtRtxSmokeCatalog
         new("Xenova/whisper-large-v3", null, "asr-whisper-large-v3-onnx"),
         new("tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx", null, "asr-nemotron-0.6b"),
         new("tonythethompson/Qwen2.5-1.5B-Instruct", null, "text-refinement-qwen"),
-        new("microsoft/Phi-3.5-mini-instruct-onnx", "cpu-int4", "translation-phi-3.5"),
-        new("microsoft/phi-4-onnx", "cpu-int4", "translation-phi-4"),
+        new("microsoft/phi-4-onnx", "gpu-int4", "translation-phi-4"),
         new("onnx-community/opus-mt-en-es", "merged-decoder", "translation-opus-en-es"),
         new("onnx-community/opus-mt-es-en", "merged-decoder", "translation-opus-es-en"),
         new("onnx-community/opus-mt-en-fr", "merged-decoder", "translation-opus-en-fr"),

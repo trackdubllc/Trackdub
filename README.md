@@ -164,6 +164,17 @@ dotnet run --project src/Trackdub.Cli -- dub --media input.mp4 --target-language
 dotnet run --project src/Trackdub.Cli -- doctor
 ```
 
+On Windows, `Trackdub.Cli` is multi-targeted (`net10.0` and `net10.0-windows10.0.19041.0`),
+so `dotnet run` cannot pick a target framework on its own and fails without an explicit
+`--framework` flag. Pass one, for example:
+
+```bash
+dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help
+```
+
+On non-Windows platforms the project targets only `net10.0`, so a plain
+`dotnet run --project src/Trackdub.Cli -- <args>` works without the flag.
+
 ## Solution Filters
 
 - `Trackdub.Inference.slnx` — Inference, Composition, benchmarks, and tests
