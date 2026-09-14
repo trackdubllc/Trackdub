@@ -37,6 +37,10 @@ internal sealed class PipelineTuiScreen : ITuiScreen, ITuiOverlayScreen
     // Full-pipeline wizard accumulation state (reset at start of each wizard flow)
     private PipelineWizardState _wizard = new();
 
+    // Compile-checked accessor for the current wizard state (visible to Trackdub.Sdk.Tests
+    // via InternalsVisibleTo) so tests do not reach into the private field via reflection.
+    internal PipelineWizardState WizardState => _wizard;
+
     // Stage-run wizard state (independent of the full-pipeline wizard)
     private string? _wStageName;
     private string? _wModelAlias;

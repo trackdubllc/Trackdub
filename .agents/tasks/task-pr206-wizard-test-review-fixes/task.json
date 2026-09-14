@@ -1,0 +1,7 @@
+{
+  "task_id": "task-pr206-wizard-test-review-fixes",
+  "task_description": "Address the four unresolved PR #206 review findings on PipelineWizardStateTests.cs: (1) exhaustively set/assert every wizard property in the reset-flow test; (2) queue a valid 'es' language so the second Configure attempt actually re-enters the wizard and assert the picker is active; (3) replace hardcoded-string reflection with a compile-checked internal accessor; (4) reconcile FEAT-003.json status/verification with reality (tests actually run now that restore works).",
+  "status": "pending",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}
