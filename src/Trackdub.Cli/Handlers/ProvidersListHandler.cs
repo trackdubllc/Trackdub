@@ -101,45 +101,40 @@ internal static class ProvidersListHandler
 
         var remediations = new Dictionary<ExecutionProviderKind, string>();
 
-        TensorRtRtxRuntimeReadinessSnapshot trtSnapshot = await trtTask.ConfigureAwait(false);
-        if (trtSnapshot.IsSupportedPlatform && !trtSnapshot.IsReady)
+        // Local helper to reduce duplication for IsReady/InstallHint projection blocks,
+        // gated on the provider's supported platform.
+        void AddRemediationIfNotReady(
+            ExecutionProviderKind providerKind,
+            bool isSupportedPlatform,
+            bool isReady,
+            string? installHint,
+            string fallbackText)
         {
-            remediations[ExecutionProviderKind.TensorRTRtx] =
-                trtSnapshot.InstallHint
-                ?? "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license, then trackdub providers trt-rtx smoke.";
+            if (isSupportedPlatform && !isReady)
+            {
+                remediations[providerKind] = installHint ?? fallbackText;
+            }
         }
+
+        TensorRtRtxRuntimeReadinessSnapshot trtSnapshot = await trtTask.ConfigureAwait(false);
+        AddRemediationIfNotReady(ExecutionProviderKind.TensorRTRtx, trtSnapshot.IsSupportedPlatform, trtSnapshot.IsReady, trtSnapshot.InstallHint,
+            "Run trackdub providers trt-rtx status, then trackdub providers trt-rtx install --accept-license, then trackdub providers trt-rtx smoke.");
 
         MigraphxRuntimeReadinessSnapshot migraphxSnapshot = await migraphxTask.ConfigureAwait(false);
-        if (migraphxSnapshot.IsSupportedPlatform && !migraphxSnapshot.IsReady)
-        {
-            remediations[ExecutionProviderKind.Migraphx] =
-                migraphxSnapshot.InstallHint
-                ?? "Install the Windows ML MIGraphX catalog package or a ROCm ONNX Runtime build on Linux.";
-        }
+        AddRemediationIfNotReady(ExecutionProviderKind.Migraphx, migraphxSnapshot.IsSupportedPlatform, migraphxSnapshot.IsReady, migraphxSnapshot.InstallHint,
+            "Install the Windows ML MIGraphX catalog package or a ROCm ONNX Runtime build on Linux.");
 
         WinMlCatalogRuntimeReadinessSnapshot openVinoSnapshot = await openVinoTask.ConfigureAwait(false);
-        if (openVinoSnapshot.IsSupportedPlatform && !openVinoSnapshot.IsReady)
-        {
-            remediations[ExecutionProviderKind.OpenVinoCatalog] =
-                openVinoSnapshot.InstallHint
-                ?? "Accept the Intel OpenVINO license in settings and install the Windows ML OpenVINO catalog EP.";
-        }
+        AddRemediationIfNotReady(ExecutionProviderKind.OpenVinoCatalog, openVinoSnapshot.IsSupportedPlatform, openVinoSnapshot.IsReady, openVinoSnapshot.InstallHint,
+            "Accept the Intel OpenVINO license in settings and install the Windows ML OpenVINO catalog EP.");
 
         WinMlCatalogRuntimeReadinessSnapshot qnnSnapshot = await qnnTask.ConfigureAwait(false);
-        if (qnnSnapshot.IsSupportedPlatform && !qnnSnapshot.IsReady)
-        {
-            remediations[ExecutionProviderKind.Qnn] =
-                qnnSnapshot.InstallHint
-                ?? "Accept the Qualcomm QNN license in settings and install the Windows ML QNN catalog EP.";
-        }
+        AddRemediationIfNotReady(ExecutionProviderKind.Qnn, qnnSnapshot.IsSupportedPlatform, qnnSnapshot.IsReady, qnnSnapshot.InstallHint,
+            "Accept the Qualcomm QNN license in settings and install the Windows ML QNN catalog EP.");
 
         WinMlCatalogRuntimeReadinessSnapshot vitisSnapshot = await vitisTask.ConfigureAwait(false);
-        if (vitisSnapshot.IsSupportedPlatform && !vitisSnapshot.IsReady)
-        {
-            remediations[ExecutionProviderKind.VitisAi] =
-                vitisSnapshot.InstallHint
-                ?? "Accept the AMD Ryzen AI license in settings and install the Windows ML VitisAI catalog EP.";
-        }
+        AddRemediationIfNotReady(ExecutionProviderKind.VitisAi, vitisSnapshot.IsSupportedPlatform, vitisSnapshot.IsReady, vitisSnapshot.InstallHint,
+            "Accept the AMD Ryzen AI license in settings and install the Windows ML VitisAI catalog EP.");
 
         return remediations;
     }
