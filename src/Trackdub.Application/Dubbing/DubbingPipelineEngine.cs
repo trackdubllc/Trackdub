@@ -2015,6 +2015,7 @@ public sealed class DubbingPipelineEngine(
 
         return selections with
         {
+            VadModelAlias = preferences.VadModelAlias ?? selections.VadModelAlias,
             DiarizationModelAlias = preferences.DiarizationModelAlias ?? selections.DiarizationModelAlias,
             SeparationModelAlias = preferences.SeparationModelAlias ?? selections.SeparationModelAlias,
             OverlapRescueModelAlias = preferences.OverlapRescueModelAlias ?? selections.OverlapRescueModelAlias,
