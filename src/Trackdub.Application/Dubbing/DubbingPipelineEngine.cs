@@ -897,13 +897,9 @@ public sealed class DubbingPipelineEngine(
                     $"Service resolution failed for {typeof(T).Name}; dependent pipeline checks are disabled for this run.",
                     ex);
         }
-        catch (ObjectDisposedException)
+        catch (Exception)
         {
-            // The logger itself may be the service that failed to resolve.
-        }
-        catch (InvalidOperationException)
-        {
-            // The logger itself may be the service that failed to resolve.
+            // Best-effort logging: swallow any exception from the replaceable logger.
         }
     }
 
