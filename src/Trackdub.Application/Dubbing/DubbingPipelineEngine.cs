@@ -75,87 +75,37 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         var stageOutcomes = new List<StageOutcome>();
         string[] stagesToRun = ResolveStageOrder(options.StageFilter);
 
-        if (stagesToRun.Length == 0 && options.StageFilter is { Count: > 0 })
+        DubbingRunResult? selectionError = ValidateStageSelection(options, stagesToRun, runId, runStart, stageOutcomes);
+        if (selectionError is not null)
         {
-            return BuildErrorResult(runId, runStart, stageOutcomes,
-                DubbingRunStatus.Failed,
-                preFlightFailures: [$"StageFilter did not match any known pipeline stage: {string.Join(", ", options.StageFilter)}"]);
+            return selectionError;
         }
 
-        string[] stagesMissingTargetLanguage = stagesToRun
-            .Where(DubbingPipelineStages.RequiresTargetLanguage)
-            .ToArray();
-        if (string.IsNullOrWhiteSpace(options.TargetLanguageCode)
-            && stagesMissingTargetLanguage.Length > 0)
-        {
-            return BuildErrorResult(runId, runStart, stageOutcomes,
-                DubbingRunStatus.Failed,
-                preFlightFailures:
-                [$"Target language is required for stage(s): {string.Join(", ", stagesMissingTargetLanguage)}."]);
-        }
-
-        // --- Validation: media file must exist ONLY if a stage in this run consumes it. ---
-        // Stages such as Translation, Tts, and Export operate against cached artifacts in
-        // the project directory and do not need the original source media file to be present.
-        // For existing projects, resolve the stored source path from SQLite before failing.
-        DubbingSessionOptions effectiveOptions = options;
         bool requiresSourceMedia = stagesToRun
             .Any(stage => DubbingPipelineStages.RequiresSourceMedia(stage));
-
-        if (requiresSourceMedia
-            && !File.Exists(options.SourceMediaPath)
-            && options.ProjectOutputDirectory is not null)
-        {
-            DubbingProjectContext? projectContext = await DubbingProjectContextResolver
-                .TryOpenAsync(_sessionFactory, options.ProjectOutputDirectory, cancellationToken)
+        (DubbingSessionOptions effectiveOptions, DubbingRunResult? mediaError) =
+            await ResolveEffectiveSourceMediaAsync(
+                options, requiresSourceMedia, runId, runStart, stageOutcomes, cancellationToken)
                 .ConfigureAwait(false);
-
-            if (!string.IsNullOrWhiteSpace(projectContext?.SourceMediaPath))
-            {
-                effectiveOptions = options with { SourceMediaPath = projectContext.SourceMediaPath };
-            }
-        }
-
-        if (requiresSourceMedia && !File.Exists(effectiveOptions.SourceMediaPath))
+        if (mediaError is not null)
         {
-            return BuildErrorResult(runId, runStart, stageOutcomes,
-                DubbingRunStatus.Failed,
-                preFlightFailures: [$"Media file not found: {effectiveOptions.SourceMediaPath}"]);
+            return mediaError;
         }
 
         options = ApplyVoiceCloningDefaults(effectiveOptions);
 
         // --- Validation: create output directory if missing ---
-        string projectOutputDirectory = options.ProjectOutputDirectory
-            ?? Path.Combine(
-                Path.GetDirectoryName(options.SourceMediaPath) ?? ".",
-                Path.GetFileNameWithoutExtension(options.SourceMediaPath) + ".trackdub");
-
-        if (!Directory.Exists(projectOutputDirectory))
-        {
-            Directory.CreateDirectory(projectOutputDirectory);
-        }
+        string projectOutputDirectory = EnsureProjectDirectory(options);
 
         // --- Capture immutable ExecutionSnapshot ---
         Dictionary<string, string> executionSnapshot = CaptureExecutionSnapshot(options);
 
         // --- Create session ---
-        IDubbingSession session;
-        try
+        (IDubbingSession? session, DubbingRunResult? sessionError) = CreateSessionOrError(
+            projectOutputDirectory, options, runId, runStart, stageOutcomes, executionSnapshot);
+        if (sessionError is not null || session is null)
         {
-            StudioSettings sessionSettings = StudioSettings.Default with
-            {
-                DefaultSourceLanguage = options.SourceLanguageCode,
-                DefaultTargetLanguage = options.TargetLanguageCode,
-            };
-            session = _sessionFactory.CreateSession(projectOutputDirectory, sessionSettings);
-        }
-        catch (Exception ex)
-        {
-            return BuildErrorResult(runId, runStart, stageOutcomes,
-                DubbingRunStatus.Failed,
-                preFlightFailures: [$"Failed to create session: {ex.Message}"],
-                executionSnapshot: executionSnapshot);
+            return sessionError!;
         }
 
         await using (session.ConfigureAwait(false))
@@ -173,23 +123,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 initialProjectState = await EnsureMediaSpineCreatedAsync(session, options, cancellationToken).ConfigureAwait(false);
             }
 
-            // --- Capture projectId for transient-fault telemetry (spec §4.4 follow-up lane V2) ---
-            // Without this hoist, per-project aggregation silently drops engine-emitted faults whose
-            // ProjectId defaults to Guid.Empty (the bus's CountsByKindForProject rejects Empty).
-            // Tie the load to the ensure-media-spine path so we don't OpenAsync three times per run.
-            try
-            {
-                initialProjectState ??= await session.Workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
-                projectId = initialProjectState.ProjectState.Project.Id;
-            }
-            // OperationCanceledException naturally propagates through filter-less try-blocks; no
-            // explicit rethrow arm needed. Per AGENTS.md "Unnecessary try/catch blocks. Prefer to remove those."
-            catch (Exception ex) when (IsProjectMissingException(ex))
-            {
-                // Best-effort: Snapshot() consumers (DiagnosticsBundleExporter) still receive engine-
-                // emitted rows; per-project filter consumers see them as Guid.Empty which throws.
-                projectId = Guid.Empty;
-            }
+            (initialProjectState, projectId) = await ResolveTelemetryProjectStateAsync(
+                session, initialProjectState, cancellationToken).ConfigureAwait(false);
 
             // --- Pre-flight checks ---
             DubbingRunResult? preFlightResult = await RunPreFlightChecksAsync(
@@ -221,93 +156,300 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 TryResolveService<IModelAliasResolver>(session));
 
             // --- Execute stages ---
-            string? failedPrerequisiteStage = null;
+            await RunStageLoopAsync(
+                session,
+                options,
+                stagesToRun,
+                executionSnapshot,
+                runtimeSelections,
+                progress,
+                projectId,
+                stageOutcomes,
+                cancellationToken).ConfigureAwait(false);
 
-            foreach (string stageName in stagesToRun)
+            await RunPostLipSynthesisExportIfNeededAsync(
+                session,
+                options,
+                stagesToRun,
+                executionSnapshot,
+                runtimeSelections,
+                progress,
+                projectId,
+                stageOutcomes,
+                cancellationToken).ConfigureAwait(false);
+
+            // --- Build final result ---
+            return BuildCompletedResult(runId, runStart, stageOutcomes, executionSnapshot);
+        }
+    }
+
+    /// <summary>
+    /// Validates the stage filter and target-language selection before any I/O.
+    /// Returns an error result when validation fails, otherwise null.
+    /// </summary>
+    private static DubbingRunResult? ValidateStageSelection(
+        DubbingSessionOptions options,
+        string[] stagesToRun,
+        Guid runId,
+        DateTimeOffset runStart,
+        List<StageOutcome> stageOutcomes)
+    {
+        if (stagesToRun.Length == 0 && options.StageFilter is { Count: > 0 })
+        {
+            return BuildErrorResult(runId, runStart, stageOutcomes,
+                DubbingRunStatus.Failed,
+                preFlightFailures: [$"StageFilter did not match any known pipeline stage: {string.Join(", ", options.StageFilter)}"]);
+        }
+
+        string[] stagesMissingTargetLanguage = stagesToRun
+            .Where(DubbingPipelineStages.RequiresTargetLanguage)
+            .ToArray();
+        if (string.IsNullOrWhiteSpace(options.TargetLanguageCode)
+            && stagesMissingTargetLanguage.Length > 0)
+        {
+            return BuildErrorResult(runId, runStart, stageOutcomes,
+                DubbingRunStatus.Failed,
+                preFlightFailures:
+                [$"Target language is required for stage(s): {string.Join(", ", stagesMissingTargetLanguage)}."]);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the effective options, falling back to the stored source-media path
+    /// from SQLite for existing projects. The media file must exist ONLY if a stage
+    /// in this run consumes it. Returns an error result when the media is missing.
+    /// </summary>
+    private async Task<(DubbingSessionOptions Options, DubbingRunResult? Error)> ResolveEffectiveSourceMediaAsync(
+        DubbingSessionOptions options,
+        bool requiresSourceMedia,
+        Guid runId,
+        DateTimeOffset runStart,
+        List<StageOutcome> stageOutcomes,
+        CancellationToken cancellationToken)
+    {
+        // Stages such as Translation, Tts, and Export operate against cached artifacts in
+        // the project directory and do not need the original source media file to be present.
+        // For existing projects, resolve the stored source path from SQLite before failing.
+        DubbingSessionOptions effectiveOptions = options;
+
+        if (requiresSourceMedia
+            && !File.Exists(options.SourceMediaPath)
+            && options.ProjectOutputDirectory is not null)
+        {
+            DubbingProjectContext? projectContext = await DubbingProjectContextResolver
+                .TryOpenAsync(_sessionFactory, options.ProjectOutputDirectory, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(projectContext?.SourceMediaPath))
             {
-                // Check cancellation between stages
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    stageOutcomes.Add(BuildSkippedOutcome(stageName, "CANCELLED"));
-                    ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped, "Cancelled");
-                    continue;
-                }
+                effectiveOptions = options with { SourceMediaPath = projectContext.SourceMediaPath };
+            }
+        }
 
-                // Skip if a prerequisite stage failed
-                if (failedPrerequisiteStage is not null)
-                {
-                    stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.PrerequisiteFailed));
-                    ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
-                        $"Skipped due to failed prerequisite: {failedPrerequisiteStage}");
-                    continue;
-                }
+        if (requiresSourceMedia && !File.Exists(effectiveOptions.SourceMediaPath))
+        {
+            return (effectiveOptions, BuildErrorResult(runId, runStart, stageOutcomes,
+                DubbingRunStatus.Failed,
+                preFlightFailures: [$"Media file not found: {effectiveOptions.SourceMediaPath}"]));
+        }
 
-                // Check resumability: skip stages with valid existing artifacts
-                if (!options.ForceRerun &&
-                    await HasValidExistingArtifactsAsync(
-                        session,
-                        options,
-                        stageName,
-                        executionSnapshot,
-                        cancellationToken).ConfigureAwait(false))
-                {
-                    stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.ExistingArtifactsValid));
-                    ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
-                        "Skipped — valid artifacts from prior run");
-                    continue;
-                }
+        return (effectiveOptions, null);
+    }
 
-                // Execute the stage
-                StageOutcome outcome = await ExecuteStageAsync(
+    private static string EnsureProjectDirectory(DubbingSessionOptions options)
+    {
+        string projectOutputDirectory = options.ProjectOutputDirectory
+            ?? Path.Combine(
+                Path.GetDirectoryName(options.SourceMediaPath) ?? ".",
+                Path.GetFileNameWithoutExtension(options.SourceMediaPath) + ".trackdub");
+
+        if (!Directory.Exists(projectOutputDirectory))
+        {
+            Directory.CreateDirectory(projectOutputDirectory);
+        }
+
+        return projectOutputDirectory;
+    }
+
+    private (IDubbingSession? Session, DubbingRunResult? Error) CreateSessionOrError(
+        string projectOutputDirectory,
+        DubbingSessionOptions options,
+        Guid runId,
+        DateTimeOffset runStart,
+        List<StageOutcome> stageOutcomes,
+        Dictionary<string, string> executionSnapshot)
+    {
+        try
+        {
+            StudioSettings sessionSettings = StudioSettings.Default with
+            {
+                DefaultSourceLanguage = options.SourceLanguageCode,
+                DefaultTargetLanguage = options.TargetLanguageCode,
+            };
+            return (_sessionFactory.CreateSession(projectOutputDirectory, sessionSettings), null);
+        }
+        catch (Exception ex)
+        {
+            return (null, BuildErrorResult(runId, runStart, stageOutcomes,
+                DubbingRunStatus.Failed,
+                preFlightFailures: [$"Failed to create session: {ex.Message}"],
+                executionSnapshot: executionSnapshot));
+        }
+    }
+
+    /// <summary>
+    /// Captures the project id for transient-fault telemetry (spec §4.4 follow-up lane V2).
+    /// Without this hoist, per-project aggregation silently drops engine-emitted faults whose
+    /// ProjectId defaults to Guid.Empty (the bus's CountsByKindForProject rejects Empty).
+    /// Tied to the ensure-media-spine path so we don't OpenAsync three times per run.
+    /// </summary>
+    private static async Task<(TranscriptProjectState? State, Guid ProjectId)> ResolveTelemetryProjectStateAsync(
+        IDubbingSession session,
+        TranscriptProjectState? initialProjectState,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            initialProjectState ??= await session.Workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
+            return (initialProjectState, initialProjectState.ProjectState.Project.Id);
+        }
+        // OperationCanceledException naturally propagates through filter-less try-blocks; no
+        // explicit rethrow arm needed. Per AGENTS.md "Unnecessary try/catch blocks. Prefer to remove those."
+        catch (Exception ex) when (IsProjectMissingException(ex))
+        {
+            // Best-effort: Snapshot() consumers (DiagnosticsBundleExporter) still receive engine-
+            // emitted rows; per-project filter consumers see them as Guid.Empty which throws.
+            return (initialProjectState, Guid.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Runs each requested stage in order, honoring cancellation, failed prerequisites,
+    /// and artifact resume. Outcomes are appended to <paramref name="stageOutcomes"/>.
+    /// </summary>
+    private async Task RunStageLoopAsync(
+        IDubbingSession session,
+        DubbingSessionOptions options,
+        string[] stagesToRun,
+        Dictionary<string, string> executionSnapshot,
+        RuntimeModelSelections runtimeSelections,
+        IProgress<PipelineProgressEvent>? progress,
+        Guid projectId,
+        List<StageOutcome> stageOutcomes,
+        CancellationToken cancellationToken)
+    {
+        string? failedPrerequisiteStage = null;
+
+        foreach (string stageName in stagesToRun)
+        {
+            // Check cancellation between stages
+            if (cancellationToken.IsCancellationRequested)
+            {
+                stageOutcomes.Add(BuildSkippedOutcome(stageName, "CANCELLED"));
+                ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped, "Cancelled");
+                continue;
+            }
+
+            // Skip if a prerequisite stage failed
+            if (failedPrerequisiteStage is not null)
+            {
+                stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.PrerequisiteFailed));
+                ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
+                    $"Skipped due to failed prerequisite: {failedPrerequisiteStage}");
+                continue;
+            }
+
+            // Check resumability: skip stages with valid existing artifacts
+            if (!options.ForceRerun &&
+                await HasValidExistingArtifactsAsync(
                     session,
                     options,
                     stageName,
                     executionSnapshot,
-                    runtimeSelections,
-                    progress,
-                    projectId,
-                    cancellationToken).ConfigureAwait(false);
-                stageOutcomes.Add(outcome);
-
-                if (outcome.Status == StageStatus.Failed && DubbingPipelineStages.PrerequisiteStages.Contains(stageName))
-                {
-                    failedPrerequisiteStage = stageName;
-                }
+                    cancellationToken).ConfigureAwait(false))
+            {
+                stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.ExistingArtifactsValid));
+                ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
+                    "Skipped — valid artifacts from prior run");
+                continue;
             }
 
-            if (ShouldRunPostLipSynthesisExport(stagesToRun, stageOutcomes))
-            {
-                int priorExportIndex = stageOutcomes.FindLastIndex(static outcome =>
-                    string.Equals(outcome.StageName, StageNames.Export, StringComparison.OrdinalIgnoreCase));
-                if (priorExportIndex >= 0)
-                {
-                    stageOutcomes.RemoveAt(priorExportIndex);
-                }
+            // Execute the stage
+            StageOutcome outcome = await ExecuteStageAsync(
+                session,
+                options,
+                stageName,
+                executionSnapshot,
+                runtimeSelections,
+                progress,
+                projectId,
+                cancellationToken).ConfigureAwait(false);
+            stageOutcomes.Add(outcome);
 
-                StageOutcome postLipExportOutcome = await ExecuteStageAsync(
-                    session,
-                    options,
-                    StageNames.Export,
-                    executionSnapshot,
-                    runtimeSelections,
-                    progress,
-                    projectId,
-                    cancellationToken).ConfigureAwait(false);
-                stageOutcomes.Add(postLipExportOutcome);
+            if (outcome.Status == StageStatus.Failed && DubbingPipelineStages.PrerequisiteStages.Contains(stageName))
+            {
+                failedPrerequisiteStage = stageName;
             }
-
-            // --- Build final result ---
-            DubbingRunStatus overallStatus = DetermineOverallStatus(stageOutcomes);
-            return new DubbingRunResult
-            {
-                RunId = runId,
-                StartTime = runStart,
-                EndTime = DateTimeOffset.UtcNow,
-                OverallStatus = overallStatus,
-                StageOutcomes = stageOutcomes.AsReadOnly(),
-                ExecutionSnapshot = executionSnapshot.AsReadOnly(),
-            };
         }
+    }
+
+    /// <summary>
+    /// Re-runs Export after LipSynthesis when both were requested and lip synthesis
+    /// succeeded, replacing the earlier export outcome.
+    /// </summary>
+    private async Task RunPostLipSynthesisExportIfNeededAsync(
+        IDubbingSession session,
+        DubbingSessionOptions options,
+        string[] stagesToRun,
+        Dictionary<string, string> executionSnapshot,
+        RuntimeModelSelections runtimeSelections,
+        IProgress<PipelineProgressEvent>? progress,
+        Guid projectId,
+        List<StageOutcome> stageOutcomes,
+        CancellationToken cancellationToken)
+    {
+        if (!ShouldRunPostLipSynthesisExport(stagesToRun, stageOutcomes))
+        {
+            return;
+        }
+
+        int priorExportIndex = stageOutcomes.FindLastIndex(static outcome =>
+            string.Equals(outcome.StageName, StageNames.Export, StringComparison.OrdinalIgnoreCase));
+        if (priorExportIndex >= 0)
+        {
+            stageOutcomes.RemoveAt(priorExportIndex);
+        }
+
+        StageOutcome postLipExportOutcome = await ExecuteStageAsync(
+            session,
+            options,
+            StageNames.Export,
+            executionSnapshot,
+            runtimeSelections,
+            progress,
+            projectId,
+            cancellationToken).ConfigureAwait(false);
+        stageOutcomes.Add(postLipExportOutcome);
+    }
+
+    private static DubbingRunResult BuildCompletedResult(
+        Guid runId,
+        DateTimeOffset runStart,
+        List<StageOutcome> stageOutcomes,
+        Dictionary<string, string> executionSnapshot)
+    {
+        DubbingRunStatus overallStatus = DetermineOverallStatus(stageOutcomes);
+        return new DubbingRunResult
+        {
+            RunId = runId,
+            StartTime = runStart,
+            EndTime = DateTimeOffset.UtcNow,
+            OverallStatus = overallStatus,
+            StageOutcomes = stageOutcomes.AsReadOnly(),
+            ExecutionSnapshot = executionSnapshot.AsReadOnly(),
+        };
     }
 
     /// <summary>
