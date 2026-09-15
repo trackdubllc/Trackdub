@@ -740,7 +740,7 @@ public sealed class OrchestrationServiceTests
         // Resume scenario: a non-fallback assignment was persisted on a prior run and lives in the
         // repository, but it is not surfaced through the in-memory state map (VoiceAssignments is
         // empty). With only a fallback voice supplied, TryPersistRequestedVoiceAssignmentAsync's
-        // fallback branch runs; GetAsync returns the seeded non-fallback row. Before FEAT-004 the
+        // fallback branch runs; GetAsync returns the seeded non-fallback row. Previously, the
         // branch reused that row's primary-key Id with IsFallback=true, which collides with the
         // existing PRIMARY KEY on a real SQLite-backed save (the fake now mirrors that conflict).
         TranscriptProjectState state = CreateTranslatedProjectState() with { VoiceAssignments = [] };
