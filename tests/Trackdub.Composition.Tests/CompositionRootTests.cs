@@ -133,6 +133,25 @@ public sealed class CompositionRootTests : IDisposable
     }
 #endif
 
+    /// <summary>
+    /// Regression guard: the readiness probes must be registered as their caching decorators so
+    /// callers can invalidate the memoized result after a state-changing install (the mechanism
+    /// TrtRtxProvidersHandler and GpuRuntimeInstallOrchestrator rely on). A future DI change that
+    /// dropped the caching decorator would silently reintroduce the stale-read bug; the soft
+    /// <c>is IReadinessProbeCache</c> cast would just skip invalidation. This test fails loudly if
+    /// that happens.
+    /// </summary>
+    [Fact]
+    public void AddTrackdub_registers_caching_readiness_probes_that_support_invalidation()
+    {
+        using ServiceProvider provider = BuildProvider();
+
+        Assert.IsAssignableFrom<IReadinessProbeCache>(provider.GetRequiredService<ITensorRtRtxReadinessProbe>());
+        Assert.IsAssignableFrom<IReadinessProbeCache>(provider.GetRequiredService<IOpenVinoCatalogReadinessProbe>());
+        Assert.IsAssignableFrom<IReadinessProbeCache>(provider.GetRequiredService<IQnnCatalogReadinessProbe>());
+        Assert.IsAssignableFrom<IReadinessProbeCache>(provider.GetRequiredService<IVitisAiCatalogReadinessProbe>());
+    }
+
     [Fact]
     public void AddTrackdub_registers_update_service()
     {

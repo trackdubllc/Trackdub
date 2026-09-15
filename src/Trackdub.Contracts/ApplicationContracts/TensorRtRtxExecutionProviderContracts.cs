@@ -52,6 +52,21 @@ public interface ITensorRtRtxReadinessProbe
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Exposed by caching readiness-probe decorators so callers can discard memoized readiness
+/// results after a state-changing operation (for example an execution-provider install or
+/// registration). Invalidation forces the next probe to re-run against current state; it never
+/// fabricates a readiness value.
+/// </summary>
+public interface IReadinessProbeCache
+{
+    /// <summary>
+    /// Clears every memoized readiness result so the next <c>ProbeAsync</c> re-runs the underlying
+    /// probe against the current process state.
+    /// </summary>
+    void Invalidate();
+}
+
 public interface ITensorRtRtxProviderBootstrap
 {
     Task<TensorRtRtxBootstrapResult> EnsureRegisteredAsync(

@@ -1,5 +1,6 @@
 using Trackdub.Application.Runtime;
 using Trackdub.Contracts;
+using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Contracts.StarterPacks;
 
 namespace Trackdub.Composition.Runtime;
@@ -11,8 +12,25 @@ public sealed class GpuRuntimeInstallOrchestrator(
     IQnnCatalogEpInstaller? qnnInstaller = null,
     IVitisAiCatalogEpInstaller? vitisAiInstaller = null,
     IWindowsMlCertifiedCatalogInstaller? certifiedCatalogInstaller = null,
-    ITensorRtRtxRuntimeReadinessService? tensorRtRtxReadiness = null) : IGpuRuntimeInstallOrchestrator
+    ITensorRtRtxRuntimeReadinessService? tensorRtRtxReadiness = null,
+    ITensorRtRtxReadinessProbe? tensorRtRtxReadinessProbe = null,
+    IOpenVinoCatalogReadinessProbe? openVinoReadinessProbe = null,
+    IQnnCatalogReadinessProbe? qnnReadinessProbe = null,
+    IVitisAiCatalogReadinessProbe? vitisAiReadinessProbe = null) : IGpuRuntimeInstallOrchestrator
 {
+    // Invalidates the shared (process-wide singleton) readiness cache for a probe after a
+    // state-changing install so a later status/list/verification re-probe observes the freshly
+    // installed state instead of a stale pre-install snapshot. This forces a real re-probe via the
+    // IReadinessProbeCache soft cast; it never fabricates a ready result. A non-caching probe (or a
+    // null handle in a reduced build) is simply skipped.
+    private static void InvalidateReadinessCache(object? probe)
+    {
+        if (probe is IReadinessProbeCache cache)
+        {
+            cache.Invalidate();
+        }
+    }
+
     public async Task<GpuRuntimeInstallResult> InstallAsync(
         StarterPackGpuRuntimeKind runtimeKind,
         IProgress<string> progress,
@@ -66,6 +84,7 @@ public sealed class GpuRuntimeInstallOrchestrator(
 
         if (result.Succeeded)
         {
+            InvalidateReadinessCache(tensorRtRtxReadinessProbe);
             return new GpuRuntimeInstallResult(Succeeded: true, Detail: "TensorRT RTX GPU runtime is installed.");
         }
 
@@ -118,6 +137,7 @@ public sealed class GpuRuntimeInstallOrchestrator(
 
         if (result.Succeeded)
         {
+            InvalidateReadinessCache(openVinoReadinessProbe);
             return new GpuRuntimeInstallResult(Succeeded: true, Detail: "Intel OpenVINO GPU runtime is installed.");
         }
 
@@ -144,6 +164,7 @@ public sealed class GpuRuntimeInstallOrchestrator(
 
         if (result.Succeeded)
         {
+            InvalidateReadinessCache(qnnReadinessProbe);
             return new GpuRuntimeInstallResult(Succeeded: true, Detail: "Qualcomm QNN GPU runtime is installed.");
         }
 
@@ -170,6 +191,7 @@ public sealed class GpuRuntimeInstallOrchestrator(
 
         if (result.Succeeded)
         {
+            InvalidateReadinessCache(vitisAiReadinessProbe);
             return new GpuRuntimeInstallResult(Succeeded: true, Detail: "AMD VitisAI NPU runtime is installed.");
         }
 
@@ -201,9 +223,22 @@ public sealed class GpuRuntimeInstallOrchestrator(
                 FailureDetail: catalogResult.FailureDetail ?? catalogResult.Detail);
         }
 
+        // The certified-catalog install registers all certified catalog providers (OpenVINO, QNN,
+        // and VitisAI), so invalidate those caches before any subsequent probes to ensure later
+        // status/list operations observe the freshly registered state.
+        InvalidateReadinessCache(openVinoReadinessProbe);
+        InvalidateReadinessCache(qnnReadinessProbe);
+        InvalidateReadinessCache(vitisAiReadinessProbe);
+
         GpuRuntimeInstallResult? trtResult = null;
         if (tensorRtRtxReadiness is not null && trtRtxEpInstaller is not null)
         {
+            // The certified-catalog install may register execution providers that affect TRT RTX
+            // readiness. Invalidate the shared TRT RTX readiness cache before the gating probe so
+            // the install-or-skip decision below is made against fresh post-catalog-install state
+            // rather than a stale pre-install cached snapshot from earlier in the process.
+            InvalidateReadinessCache(tensorRtRtxReadinessProbe);
+
             TensorRtRtxRuntimeReadinessSnapshot trtSnapshot = await tensorRtRtxReadiness
                 .ProbeAsync(allowProviderDownloads: false, cancellationToken)
                 .ConfigureAwait(false);
