@@ -442,8 +442,8 @@ public static class RuntimeModelRequestFactory
         provider switch
         {
             ExecutionProviderKind.Cpu => "cpu",
-            ExecutionProviderKind.DirectMl => "directml",
-            ExecutionProviderKind.TensorRTRtx => "trt-rtx",
+            ExecutionProviderKind.DirectMl => "dml",
+            ExecutionProviderKind.TensorRTRtx => "tensorrt-rtx",
             ExecutionProviderKind.OpenVino => "openvino",
             ExecutionProviderKind.CoreMl => "coreml",
             ExecutionProviderKind.Cuda => "cuda",
