@@ -324,8 +324,12 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
     // subsequent TRT RTX plugin load; the module is intentionally never freed. Handles are
     // retained (keyed by resolved path) so repeated bootstrap attempts reuse the already
     // loaded module instead of leaking a fresh loader reference on every retry.
+    // Path comparison must match the host filesystem's case semantics: Windows and macOS are
+    // case-insensitive by default, Linux is case-sensitive. An OrdinalIgnoreCase key on Linux
+    // would conflate two distinct runtime paths differing only by case and skip loading the
+    // second one.
     private static readonly Dictionary<string, nint> LoadedNativeLibraries =
-        new(StringComparer.OrdinalIgnoreCase);
+        new(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
     private static readonly object LoadedNativeLibrariesLock = new();
 
     private static bool TryLoadNativeLibrary(string libraryPath)
