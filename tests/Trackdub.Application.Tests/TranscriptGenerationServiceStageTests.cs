@@ -103,7 +103,39 @@ public sealed class TranscriptGenerationServiceStageTests
     }
 
     [Fact]
-    public async Task GenerateTranscriptStageAsync_asr_writes_no_polish_stage_run_when_disabled()
+Remove both tests and replace with:
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task GenerateTranscriptStageAsync_asr_polish_stage_run_reflects_flag(bool enableAsrTextRefinement, bool expectRun)
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        (TranscriptGenerationService service, TranscriptArtifactWriter artifactWriter) =
+            CreateMinimalService(stageRunStore: stageRunStore);
+        TranscriptGenerationContext context = CreateContext();
+
+        await artifactWriter.WriteSpeechRegionsArtifactAsync(
+            context.Project.Id,
+            context.MediaAsset,
+            [],
+            Guid.NewGuid(),
+            TestContext.Current.CancellationToken);
+
+        await service.GenerateTranscriptStageAsync(
+            context.Project,
+            context.MediaAsset,
+            context.NormalizedAudioArtifact,
+            context.AudioRoutingPlan,
+            StageNames.Asr,
+            enableSpeakerDiarization: false,
+            new InferenceModelPreferences(EnableAsrTextRefinement: enableAsrTextRefinement),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            expectRun,
+            stageRunStore.All.Any(run => string.Equals(run.StageName, StageNames.TextRefinementAsr, StringComparison.OrdinalIgnoreCase)));
+    }
     {
         var stageRunStore = new FakeProjectStageRunStore();
         (TranscriptGenerationService service, TranscriptArtifactWriter artifactWriter) =
