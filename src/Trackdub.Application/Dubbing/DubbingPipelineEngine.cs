@@ -698,28 +698,6 @@ public sealed class DubbingPipelineEngine(
                     cancellationToken)
                 .ConfigureAwait(false);
 
-            // When LipSynthesis provisioning runs companion-model setup, it returns a new result
-            // that may drop the original skipped stages from the batched provisioning. Preserve
-            // and merge those declined stages so pre-flight carries them forward correctly.
-            bool lipSynthesisInRun = report.Stages.Any(static stage =>
-                string.Equals(stage.StageName, StageNames.LipSynthesis, StringComparison.OrdinalIgnoreCase));
-
-            if (lipSynthesisInRun && session.Workspace.RuntimeModels is not null && result.IsReady)
-            {
-                RuntimeModelSetupResult companionResult = await RuntimeModelSetupWorkflow
-                    .EnsureManifestCompanionModelsAvailableAsync(
-                        session.Workspace.RuntimeModels,
-                        LipSynthesisModelRequirements.CompanionManifestAliases,
-                        RuntimeStage.LipSynthesis,
-                        setupCallbacks,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                result = result.SkippedStages.Count > 0
-                    ? companionResult with { SkippedStages = result.SkippedStages.Concat(companionResult.SkippedStages).Distinct().ToArray() }
-                    : companionResult;
-            }
-
             RuntimeModelSetupResult provisionResult = result;
 
             if (!provisionResult.IsReady)

@@ -306,12 +306,16 @@ public sealed class RuntimeModelSetupCoordinator
             return result;
         }
 
-        return await RuntimeModelSetupWorkflow.EnsureManifestCompanionModelsAvailableAsync(
+        RuntimeModelSetupResult companionResult = await RuntimeModelSetupWorkflow.EnsureManifestCompanionModelsAvailableAsync(
             workspace.RuntimeModels,
             LipSynthesisModelRequirements.CompanionManifestAliases,
             RuntimeStage.LipSynthesis,
             callbacks,
             cancellationToken).ConfigureAwait(false);
+
+        return result.SkippedStages.Count > 0
+            ? companionResult with { SkippedStages = result.SkippedStages.Concat(companionResult.SkippedStages).Distinct().ToArray() }
+            : companionResult;
     }
 
     private static RuntimeModelRequest? BuildRequestForStage(
