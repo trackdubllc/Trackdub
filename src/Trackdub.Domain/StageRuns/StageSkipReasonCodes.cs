@@ -16,6 +16,9 @@ public static class StageSkipReasonCodes
     /// <summary>Stage was explicitly disabled by a run option or host flag.</summary>
     public const string DisabledByOption = "DISABLED_BY_OPTION";
 
+    /// <summary>User declined the stage's optional model during pre-flight provisioning.</summary>
+    public const string OptionalModelDeclined = "OPTIONAL_MODEL_DECLINED";
+
     private static readonly HashSet<string> BenignSkipReasonCodes = new(StringComparer.OrdinalIgnoreCase)
     {
         ExistingArtifactsValid,
@@ -23,6 +26,7 @@ public static class StageSkipReasonCodes
         NoTranscriptSegments,
         NoSpeechRegions,
         DisabledByOption,
+        OptionalModelDeclined,
     };
 
     /// <summary>

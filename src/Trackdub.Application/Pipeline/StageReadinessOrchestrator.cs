@@ -63,6 +63,12 @@ public sealed class StageReadinessOrchestrator(RuntimeModelSetupCoordinator coor
                     request.Selections,
                     request.Callbacks,
                     cancellationToken),
+            StageNames.SpeechEnhancement or StageNames.AudioPreparation =>
+                _coordinator.EnsureSpeechEnhancementModelAvailableAsync(
+                    request.Workspace,
+                    request.Selections,
+                    request.Callbacks,
+                    cancellationToken),
             StageNames.TextRefinementAsr =>
                 _coordinator.EnsureTextRefinementModelAvailableAsync(
                     request.Workspace,

@@ -119,17 +119,18 @@ public sealed class DubbingPipelineEngine(
                 session, initialProjectState, cancellationToken).ConfigureAwait(false);
 
             // --- Pre-flight checks ---
-            DubbingRunResult? preFlightResult = await RunPreFlightChecksAsync(
-                session,
-                options,
-                stagesToRun,
-                runId,
-                runStart,
-                stageOutcomes,
-                executionSnapshot,
-                progress,
-                cancellationToken,
-                initialProjectState).ConfigureAwait(false);
+            (DubbingRunResult? preFlightResult, IReadOnlySet<string> declinedOptionalStages) =
+                await RunPreFlightChecksAsync(
+                    session,
+                    options,
+                    stagesToRun,
+                    runId,
+                    runStart,
+                    stageOutcomes,
+                    executionSnapshot,
+                    progress,
+                    cancellationToken,
+                    initialProjectState).ConfigureAwait(false);
             if (preFlightResult is not null)
             {
                 return preFlightResult;
@@ -157,6 +158,7 @@ public sealed class DubbingPipelineEngine(
                 progress,
                 projectId,
                 stageOutcomes,
+                declinedOptionalStages,
                 cancellationToken).ConfigureAwait(false);
 
             await RunPostLipSynthesisExportIfNeededAsync(
@@ -309,7 +311,7 @@ public sealed class DubbingPipelineEngine(
         }
         // OperationCanceledException naturally propagates through filter-less try-blocks; no
         // explicit rethrow arm needed. Per AGENTS.md "Unnecessary try/catch blocks. Prefer to remove those."
-        catch (Exception ex) when (IsProjectMissingException(ex))
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Best-effort: Snapshot() consumers (DiagnosticsBundleExporter) still receive engine-
             // emitted rows; per-project filter consumers see them as Guid.Empty which throws.
@@ -330,6 +332,7 @@ public sealed class DubbingPipelineEngine(
         IProgress<PipelineProgressEvent>? progress,
         Guid projectId,
         List<StageOutcome> stageOutcomes,
+        IReadOnlySet<string> declinedOptionalStages,
         CancellationToken cancellationToken)
     {
         string? failedPrerequisiteStage = null;
@@ -350,6 +353,16 @@ public sealed class DubbingPipelineEngine(
                 stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.PrerequisiteFailed));
                 ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
                     $"Skipped due to failed prerequisite: {failedPrerequisiteStage}");
+                continue;
+            }
+
+            // Skip optional stages whose model the user declined during pre-flight
+            // provisioning; without the model they would fail mid-run.
+            if (declinedOptionalStages.Contains(stageName))
+            {
+                stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.OptionalModelDeclined));
+                ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
+                    "Skipped — optional model setup declined");
                 continue;
             }
 
@@ -452,7 +465,7 @@ public sealed class DubbingPipelineEngine(
     /// Falls back to <see cref="IPipelinePreFlightChecker"/> when the readiness service
     /// is not registered (backward-compatible).
     /// </summary>
-    private static async Task<DubbingRunResult?> RunPreFlightChecksAsync(
+    private static async Task<(DubbingRunResult? Error, IReadOnlySet<string> DeclinedStages)> RunPreFlightChecksAsync(
         IDubbingSession session,
         DubbingSessionOptions options,
         string[] stagesToRun,
@@ -466,7 +479,7 @@ public sealed class DubbingPipelineEngine(
     {
         if (session.Workspace.Project is null)
         {
-            return null; // No project yet; pre-flight not applicable.
+            return (null, EmptyDeclinedStages); // No project yet; pre-flight not applicable.
         }
 
         RuntimeModelSelections preFlightSelections = await CreateRuntimeSelectionsAsync(
@@ -506,10 +519,10 @@ public sealed class DubbingPipelineEngine(
         IPipelinePreFlightChecker? checker = TryResolveService<IPipelinePreFlightChecker>(session);
         if (checker is null)
         {
-            return null;
+            return (null, EmptyDeclinedStages);
         }
 
-        return await RunLegacyModelPreFlightAsync(
+        return (await RunLegacyModelPreFlightAsync(
             session,
             options,
             stagesToRun,
@@ -518,7 +531,7 @@ public sealed class DubbingPipelineEngine(
             stageOutcomes,
             executionSnapshot,
             checker,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken).ConfigureAwait(false), EmptyDeclinedStages);
     }
 
     /// <summary>
@@ -589,11 +602,22 @@ public sealed class DubbingPipelineEngine(
     }
 
     /// <summary>
+    /// Optional stages whose runtime degrades in place when the model is absent.
+    /// A declined model for these stages is exempt from post-provisioning re-blocking,
+    /// and the stage still executes (speech enhancement falls back to FFmpeg/AFX).
+    /// </summary>
+    private static readonly IReadOnlySet<RuntimeStage> StagesWithOptionalModelFallback =
+        new HashSet<RuntimeStage> { RuntimeStage.SpeechEnhancement };
+
+    private static readonly IReadOnlySet<string> EmptyDeclinedStages =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Pre-flight using the consolidated readiness gate.
     /// Evaluates all stages upfront, auto-provisions downloadable models before the stage loop,
     /// and fails fast with an aggregated error if anything is still blocking.
     /// </summary>
-    private static async Task<DubbingRunResult?> RunPreFlightWithReadinessServiceAsync(
+    private static async Task<(DubbingRunResult? Error, IReadOnlySet<string> DeclinedStages)> RunPreFlightWithReadinessServiceAsync(
         IDubbingSession session,
         DubbingSessionOptions options,
         string[] stageNames,
@@ -608,6 +632,8 @@ public sealed class DubbingPipelineEngine(
         CancellationToken cancellationToken,
         TranscriptProjectState? state = null)
     {
+        var declinedStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         // Map to RuntimeStage, skipping stages with valid existing artifacts (resumable).
         var enabledStages = new List<RuntimeStage>();
         foreach (string stageName in stageNames)
@@ -624,14 +650,15 @@ public sealed class DubbingPipelineEngine(
         }
 
         if (enabledStages.Count == 0)
-            return null;
+            return (null, EmptyDeclinedStages);
 
-        // Evaluate — state=null means no resume detection here (handled above via artifact check).
+        // Evaluate. The project state is passed so consent gates (voice cloning) are
+        // evaluated up front instead of failing mid-run.
         PipelineReadinessReport report = await readinessService
             .EvaluateAsync(
                 enabledStages,
                 selections,
-                state: null,
+                state,
                 cancellationToken,
                 options.SourceLanguageCode,
                 options.TargetLanguageCode)
@@ -658,13 +685,36 @@ public sealed class DubbingPipelineEngine(
 
             if (!provisionResult.IsReady)
             {
-                return BuildErrorResult(
+                return (BuildErrorResult(
                     runId,
                     runStart,
                     stageOutcomes,
                     DubbingRunStatus.PreFlightFailed,
                     ["Model provisioning was cancelled during pre-flight."],
-                    executionSnapshot);
+                    executionSnapshot), EmptyDeclinedStages);
+            }
+
+            // Stages whose optional model the user declined must not re-block on
+            // re-evaluation (the model is still absent). Stages with an in-place
+            // fallback still execute and degrade; stages without one are skipped.
+            foreach (string stageName in stageNames)
+            {
+                if (MapStageNameToRuntimeStage(stageName) is not { } skippedStage ||
+                    !provisionResult.SkippedStages.Contains(skippedStage))
+                {
+                    continue;
+                }
+
+                enabledStages.Remove(skippedStage);
+                if (!StagesWithOptionalModelFallback.Contains(skippedStage))
+                {
+                    declinedStages.Add(stageName);
+                }
+            }
+
+            if (enabledStages.Count == 0)
+            {
+                return (null, declinedStages);
             }
 
             // Re-evaluate after provisioning with refreshed selections in case settings changed.
@@ -679,7 +729,7 @@ public sealed class DubbingPipelineEngine(
                 .EvaluateAsync(
                     enabledStages,
                     selections,
-                    state: null,
+                    state,
                     cancellationToken,
                     options.SourceLanguageCode,
                     options.TargetLanguageCode)
@@ -691,15 +741,18 @@ public sealed class DubbingPipelineEngine(
             .Select(s => FormatPreFlightFailure(s))
             .ToList();
 
-        return failures.Count > 0
-            ? BuildErrorResult(
+        if (failures.Count > 0)
+        {
+            return (BuildErrorResult(
                 runId,
                 runStart,
                 stageOutcomes,
                 DubbingRunStatus.PreFlightFailed,
                 failures,
-                executionSnapshot)
-            : null;
+                executionSnapshot), declinedStages);
+        }
+
+        return (null, declinedStages);
     }
 
     private static string FormatPreFlightFailure(StageReadiness s) =>
@@ -806,8 +859,39 @@ public sealed class DubbingPipelineEngine(
     private static T? TryResolveService<T>(IDubbingSession session) where T : class
     {
         try { return session.Services.GetService<T>(); }
-        catch (Exception) { return null; } // Intentionally generic: service resolution should never fail
+        catch (Exception ex) when (IsNonFatalException(ex))
+        {
+            // A throwing factory silently disables the dependent check (pre-flight,
+            // consent, telemetry). Best-effort log so the gap is diagnosable.
+            TryLogServiceResolutionFailure<T>(session, ex);
+            return null;
+        }
     }
+
+    private static void TryLogServiceResolutionFailure<T>(IDubbingSession session, Exception ex)
+    {
+        try
+        {
+            session.Services.GetService<IApplicationLogger>()
+                ?.LogWarning(
+                    $"Service resolution failed for {typeof(T).Name}; dependent pipeline checks are disabled for this run.",
+                    ex);
+        }
+        catch (Exception logEx) when (IsNonFatalException(logEx))
+        {
+            // The logger itself may be the service that failed to resolve.
+        }
+    }
+
+    private static bool IsNonFatalException(Exception ex) =>
+        ex is not (
+            OutOfMemoryException or
+            StackOverflowException or
+            AccessViolationException or
+            AppDomainUnloadedException or
+            BadImageFormatException or
+            CannotUnloadAppDomainException or
+            InvalidProgramException);
 
     private static RuntimeStage? MapStageNameToRuntimeStage(string stageName) =>
         stageName switch

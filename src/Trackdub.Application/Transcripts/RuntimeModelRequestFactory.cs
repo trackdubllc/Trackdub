@@ -653,6 +653,7 @@ public static class RuntimeModelRequestFactory
             RuntimeStage.OverlapRescue => StageNames.OverlapRescue,
             RuntimeStage.Translation => StageNames.Translation,
             RuntimeStage.Tts => StageNames.Tts,
+            RuntimeStage.SpeechEnhancement => StageNames.SpeechEnhancement,
             RuntimeStage.TextRefinement => StageNames.TextRefinementAsr,
             RuntimeStage.LipSync => StageNames.LipSync,
             RuntimeStage.LipSynthesis => StageNames.LipSynthesis,

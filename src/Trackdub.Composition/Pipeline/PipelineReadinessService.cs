@@ -354,6 +354,7 @@ public sealed class PipelineReadinessService(
             RuntimeStage.Translation => StageNames.Translation,
             RuntimeStage.Tts => StageNames.Tts,
             RuntimeStage.Separation => StageNames.Separation,
+            RuntimeStage.SpeechEnhancement => StageNames.SpeechEnhancement,
             RuntimeStage.OverlapRescue => StageNames.OverlapRescue,
             RuntimeStage.TextRefinement => StageNames.TextRefinementAsr,
             RuntimeStage.LipSync => StageNames.LipSync,

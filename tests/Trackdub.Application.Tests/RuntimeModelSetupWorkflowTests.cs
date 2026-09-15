@@ -90,6 +90,34 @@ public sealed class RuntimeModelSetupWorkflowTests
     }
 
     [Fact]
+    public async Task EnsureModelsAvailableAsync_returns_skipped_stage_for_optional_speech_enhancement()
+    {
+        var request = new RuntimeModelRequest(RuntimeStage.SpeechEnhancement);
+        var bootstrap = new FakeRuntimeModelBootstrapService(CreateStatus(request.Stage, isAvailable: false));
+        var workflow = new RuntimeModelWorkflow(bootstrap);
+
+        RuntimeModelSetupResult result = await RuntimeModelSetupWorkflow.EnsureModelsAvailableAsync(
+            workflow,
+            [request],
+            new RuntimeModelSetupCallbacks(
+                ResolveDecisionAsync: prompt =>
+                {
+                    Assert.True(prompt.CanSkipOptionalStage);
+                    return Task.FromResult(RuntimeModelSetupDecision.SkipOptionalStage);
+                },
+                PickImportFileAsync: () => Task.FromResult<string?>(null),
+                CreateDownloadProgress: _ => new Progress<ModelDownloadProgress>(),
+                RunOperationAsync: (operation, _) => operation(TestContext.Current.CancellationToken)),
+            allowOptionalStageSkip: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsReady);
+        Assert.Equal([RuntimeStage.SpeechEnhancement], result.SkippedStages);
+        Assert.Equal(0, bootstrap.DownloadCount);
+        Assert.Equal(0, bootstrap.ImportCount);
+    }
+
+    [Fact]
     public async Task EnsureModelsAvailableAsync_imports_selected_file_when_download_is_unavailable()
     {
         var request = new RuntimeModelRequest(RuntimeStage.Tts);

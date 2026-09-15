@@ -86,6 +86,20 @@ public sealed class RuntimeModelSetupCoordinator
             allowOptionalStageSkip: false,
             cancellationToken);
 
+    public Task<RuntimeModelSetupResult> EnsureSpeechEnhancementModelAvailableAsync(
+        TranscriptWorkspace workspace,
+        RuntimeModelSelections selections,
+        RuntimeModelSetupCallbacks callbacks,
+        CancellationToken cancellationToken = default) =>
+        EnsureAvailableAsync(
+            workspace,
+            [RuntimeModelRequestFactory.CreateStageRequest(
+                RuntimeModelRequestFactory.CreateOptions(selections),
+                RuntimeStage.SpeechEnhancement)],
+            callbacks,
+            allowOptionalStageSkip: false,
+            cancellationToken);
+
     public Task<RuntimeModelSetupResult> EnsureTtsModelAvailableAsync(
         TranscriptWorkspace workspace,
         RuntimeModelSelections selections,
@@ -270,13 +284,13 @@ public sealed class RuntimeModelSetupCoordinator
             .OfType<RuntimeModelRequest>()
             .ToArray();
 
-        bool hasSeparationRequest = requests.Any(r => r.Stage == RuntimeStage.Separation);
+        bool hasOptionalStageRequest = requests.Any(r => RuntimeModelSetupWorkflow.IsOptionalRuntimeStage(r.Stage));
 
         RuntimeModelSetupResult result = await EnsureAvailableAsync(
             workspace,
             requests,
             callbacks,
-            allowOptionalStageSkip: hasSeparationRequest,
+            allowOptionalStageSkip: hasOptionalStageRequest,
             cancellationToken).ConfigureAwait(false);
 
         if (!result.IsReady)
@@ -318,6 +332,10 @@ public sealed class RuntimeModelSetupCoordinator
             StageNames.Tts => RuntimeModelRequestFactory.CreateTtsRequest(options, requiresVoiceClone),
             StageNames.TextRefinementAsr => RuntimeModelRequestFactory.CreateTextRefinementRequest(options),
             StageNames.Separation => RuntimeModelRequestFactory.CreateSeparationRequest(options),
+            StageNames.SpeechEnhancement => RuntimeModelRequestFactory.CreateStageRequest(
+                                              options,
+                                              RuntimeStage.SpeechEnhancement),
+            StageNames.OverlapRescue => RuntimeModelRequestFactory.CreateOverlapRescueRequest(options),
             StageNames.LipSync => RuntimeModelRequestFactory.CreateLipSyncRequest(options),
             StageNames.LipSynthesis => RuntimeModelRequestFactory.CreateLipSynthesisRequest(options),
             _ => null,
