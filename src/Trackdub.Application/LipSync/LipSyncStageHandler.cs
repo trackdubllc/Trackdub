@@ -1,7 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using Trackdub.Application.Artifacts;
 using Trackdub.Application.Logging;
 using Trackdub.Contracts;
-using Trackdub.Application.Transcripts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Contracts.Projects;
@@ -95,102 +95,21 @@ public sealed class LipSyncStageHandler(
         {
             if (!request.IsEnabled)
             {
-                const string skipReason = "Lip-sync stage is disabled for this run.";
-                stageRun = await StageRunHelper
-                    .SkipAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
-                        skipReason, CancellationToken.None, runtimePlanningPreferences, logger)
-                    .ConfigureAwait(false);
-
-                if (degradationWriter is not null)
-                    await degradationWriter.WriteAsync(
-                        new PipelineDegradationRecord(
-                            Stage: StageNames.LipSync,
-                            Code: "LipSyncDisabled",
-                            Message: skipReason,
-                            Detail: null,
-                            SelectedFallback: "original-tts-take",
-                            RecommendedAction: null,
-                            OccurredAtUtc: DateTimeOffset.UtcNow,
-                            StageRunId: stageRun.Id),
-                        request.ProjectId, request.MediaAsset.Id, CancellationToken.None)
-                    .ConfigureAwait(false);
-
+                stageRun = await SkipDisabledAsync(stageRun, request).ConfigureAwait(false);
                 return new LipSyncStageResult(stageRun, []);
             }
 
             var bounds = request.StretchBounds ?? DefaultStretchBounds;
-            var segments = new List<LipSyncSegment>();
-
-            foreach (var take in request.TtsTakes)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var segment = await ProcessTakeAsync(take, bounds, stageRun.Id, request, cancellationToken)
-                    .ConfigureAwait(false);
-                segments.Add(segment);
-            }
-
-            bool anyActuallyAligned = segments.Any(s => s.Status == LipSyncSegmentStatus.Aligned);
-            bool anyPartial = segments.Any(s => s.Status == LipSyncSegmentStatus.Partial);
-            bool anyFailed = segments.Any(s => s.Status == LipSyncSegmentStatus.Failed);
-            bool allSkipped = segments.All(s =>
-                s.Status is not (LipSyncSegmentStatus.Aligned or LipSyncSegmentStatus.Partial or LipSyncSegmentStatus.Failed));
+            List<LipSyncSegment> segments = await ProcessAllTakesAsync(request, stageRun.Id, bounds, cancellationToken)
+                .ConfigureAwait(false);
 
             if (segments.Count == 0)
             {
-                // No TTS takes were provided — lip-sync cannot run.
-                stageRun = await StageRunHelper
-                    .SkipAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
-                        "No TTS takes provided; lip-sync prerequisite not met.", CancellationToken.None,
-                        runtimePlanningPreferences, logger)
-                    .ConfigureAwait(false);
+                stageRun = await SkipEmptyAsync(stageRun).ConfigureAwait(false);
                 return new LipSyncStageResult(stageRun, []);
             }
-            else if (allSkipped)
-            {
-                stageRun = await StageRunHelper
-                    .SkipAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
-                        "All segments skipped during lip-sync alignment.", CancellationToken.None,
-                        runtimePlanningPreferences, logger)
-                    .ConfigureAwait(false);
-            }
-            else if (anyActuallyAligned && anyFailed)
-            {
-                // Some segments fully aligned but others failed — report as partial.
-                stageRun = await StageRunHelper
-                    .PartiallyCompleteAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
-                        $"Some segments aligned, but {segments.Count(s => s.Status == LipSyncSegmentStatus.Failed)} failed.",
-                        CancellationToken.None, runtimePlanningPreferences, logger)
-                    .ConfigureAwait(false);
-            }
-            else if (anyActuallyAligned && !anyPartial && !anyFailed)
-            {
-                // All segments fully aligned — only then complete.
-                stageRun = await StageRunHelper
-                    .CompleteAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
-                        CancellationToken.None, runtimePlanningPreferences)
-                    .ConfigureAwait(false);
-            }
-            else if (anyFailed && !anyActuallyAligned && !anyPartial)
-            {
-                // Every take failed — record as failed, not partial.
-                stageRun = await StageRunHelper
-                    .FailAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
-                        $"All {segments.Count} segments failed lip-sync.", CancellationToken.None,
-                        runtimePlanningPreferences, logger)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                // Mixed or partial outcomes — report as partial.
-                int failedCount = segments.Count(s => s.Status == LipSyncSegmentStatus.Failed);
-                int partialCount = segments.Count(s => s.Status == LipSyncSegmentStatus.Partial);
-                stageRun = await StageRunHelper
-                    .PartiallyCompleteAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
-                        $"{partialCount} partial, {failedCount} failed, {segments.Count(s => s.Status == LipSyncSegmentStatus.Aligned)} aligned.",
-                        CancellationToken.None, runtimePlanningPreferences, logger)
-                    .ConfigureAwait(false);
-            }
 
+            stageRun = await ResolveOutcomeAsync(stageRun, segments).ConfigureAwait(false);
             return new LipSyncStageResult(stageRun, segments);
         }
         catch (OperationCanceledException)
@@ -203,27 +122,139 @@ public sealed class LipSyncStageHandler(
         }
         catch (Exception ex)
         {
-            await StageRunHelper
-                .FailAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
-                    ex.Message, CancellationToken.None, runtimePlanningPreferences, logger)
-                .ConfigureAwait(false);
-
-            if (degradationWriter is not null)
-                await degradationWriter.WriteAsync(
-                    new PipelineDegradationRecord(
-                        Stage: StageNames.LipSync,
-                        Code: "LipSyncUnhandledFailure",
-                        Message: "Unhandled exception in lip-sync stage.",
-                        Detail: ex.Message,
-                        SelectedFallback: "original-tts-take",
-                        RecommendedAction: "Check aligner configuration and audio paths.",
-                        OccurredAtUtc: DateTimeOffset.UtcNow,
-                        StageRunId: stageRun.Id),
-                    request.ProjectId, request.MediaAsset.Id, CancellationToken.None)
-                .ConfigureAwait(false);
-
+            await FailWithDegradationAsync(stageRun, request, ex).ConfigureAwait(false);
             throw;
         }
+    }
+
+    private async Task<StageRunRecord> SkipDisabledAsync(StageRunRecord stageRun, LipSyncStageRequest request)
+    {
+        const string skipReason = "Lip-sync stage is disabled for this run.";
+        stageRun = await StageRunHelper
+            .SkipAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
+                skipReason, CancellationToken.None, runtimePlanningPreferences, logger)
+            .ConfigureAwait(false);
+
+        await WriteDegradationAsync(
+            request, stageRun.Id,
+            "LipSyncDisabled", skipReason, null, "original-tts-take", null)
+            .ConfigureAwait(false);
+        return stageRun;
+    }
+
+    private Task<StageRunRecord> SkipEmptyAsync(StageRunRecord stageRun)
+    {
+        return StageRunHelper.SkipAsync(
+            stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
+            "No TTS takes provided; lip-sync prerequisite not met.", CancellationToken.None,
+            runtimePlanningPreferences, logger);
+    }
+
+    private async Task<List<LipSyncSegment>> ProcessAllTakesAsync(
+        LipSyncStageRequest request,
+        Guid stageRunId,
+        PhonemeStretchBounds bounds,
+        CancellationToken cancellationToken)
+    {
+        var segments = new List<LipSyncSegment>(request.TtsTakes.Count);
+        foreach (var take in request.TtsTakes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var segment = await ProcessTakeAsync(take, bounds, stageRunId, request, cancellationToken)
+                .ConfigureAwait(false);
+            segments.Add(segment);
+        }
+
+        return segments;
+    }
+
+    private Task<StageRunRecord> ResolveOutcomeAsync(StageRunRecord stageRun, List<LipSyncSegment> segments)
+    {
+        bool anyAligned = segments.Any(s => s.Status == LipSyncSegmentStatus.Aligned);
+        bool anyPartial = segments.Any(s => s.Status == LipSyncSegmentStatus.Partial);
+        bool anyFailed = segments.Any(s => s.Status == LipSyncSegmentStatus.Failed);
+        bool allSkipped = segments.All(s =>
+            s.Status is not (LipSyncSegmentStatus.Aligned or LipSyncSegmentStatus.Partial or LipSyncSegmentStatus.Failed));
+
+        var reporter = forcedAligner as IStageRuntimeExecutionReporter;
+        if (allSkipped)
+        {
+            return StageRunHelper.SkipAsync(stageRunStore, stageRun, reporter,
+                "All segments skipped during lip-sync alignment.", CancellationToken.None,
+                runtimePlanningPreferences, logger);
+        }
+
+        if (anyAligned && anyFailed)
+        {
+            int failed = segments.Count(s => s.Status == LipSyncSegmentStatus.Failed);
+            return StageRunHelper.PartiallyCompleteAsync(stageRunStore, stageRun, reporter,
+                $"Some segments aligned, but {failed} failed.",
+                CancellationToken.None, runtimePlanningPreferences, logger);
+        }
+
+        if (anyAligned && !anyPartial && !anyFailed)
+        {
+            return StageRunHelper.CompleteAsync(stageRunStore, stageRun, reporter,
+                CancellationToken.None, runtimePlanningPreferences);
+        }
+
+        if (anyFailed && !anyAligned && !anyPartial)
+        {
+            return StageRunHelper.FailAsync(stageRunStore, stageRun, reporter,
+                $"All {segments.Count} segments failed lip-sync.", CancellationToken.None,
+                runtimePlanningPreferences, logger);
+        }
+
+        int failedCount = segments.Count(s => s.Status == LipSyncSegmentStatus.Failed);
+        int partialCount = segments.Count(s => s.Status == LipSyncSegmentStatus.Partial);
+        int alignedCount = segments.Count(s => s.Status == LipSyncSegmentStatus.Aligned);
+        return StageRunHelper.PartiallyCompleteAsync(stageRunStore, stageRun, reporter,
+            $"{partialCount} partial, {failedCount} failed, {alignedCount} aligned.",
+            CancellationToken.None, runtimePlanningPreferences, logger);
+    }
+
+    private async Task FailWithDegradationAsync(
+        StageRunRecord stageRun,
+        LipSyncStageRequest request,
+        Exception ex)
+    {
+        await StageRunHelper
+            .FailAsync(stageRunStore, stageRun, forcedAligner as IStageRuntimeExecutionReporter,
+                ex.Message, CancellationToken.None, runtimePlanningPreferences, logger)
+            .ConfigureAwait(false);
+
+        await WriteDegradationAsync(
+            request, stageRun.Id,
+            "LipSyncUnhandledFailure", "Unhandled exception in lip-sync stage.",
+            ex.Message, "original-tts-take", "Check aligner configuration and audio paths.")
+            .ConfigureAwait(false);
+    }
+
+    private Task WriteDegradationAsync(
+        LipSyncStageRequest request,
+        Guid stageRunId,
+        string code,
+        string message,
+        string? detail,
+        string fallback,
+        string? recommendedAction)
+    {
+        if (degradationWriter is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return degradationWriter.WriteAsync(
+            new PipelineDegradationRecord(
+                Stage: StageNames.LipSync,
+                Code: code,
+                Message: message,
+                Detail: detail,
+                SelectedFallback: fallback,
+                RecommendedAction: recommendedAction,
+                OccurredAtUtc: DateTimeOffset.UtcNow,
+                StageRunId: stageRunId),
+            request.ProjectId, request.MediaAsset.Id, CancellationToken.None);
     }
 
     private async Task<LipSyncSegment> ProcessTakeAsync(
@@ -233,60 +264,19 @@ public sealed class LipSyncStageHandler(
         LipSyncStageRequest request,
         CancellationToken cancellationToken)
     {
-        if (take.ArtifactId is null || take.TranslatedSegmentId is null)
+        if (TryCreateMissingReferenceSegment(take, out LipSyncSegment? missingRef))
         {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId ?? take.Id,
-                Status: LipSyncSegmentStatus.SkippedNoPhonemes,
-                SourceAlignmentId: null,
-                TtsAlignmentId: null,
-                SourceDuration: TimeSpan.Zero,
-                TtsDuration: TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: null,
-                SkipReason: "TTS take has no artifact or segment reference.",
-                FailureReason: null,
-                ProviderId: null,
-                ModelId: null,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            return missingRef!;
         }
 
-        var ttsTakeArtifact = request.ExistingArtifacts
-            .FirstOrDefault(a => a.Id == take.ArtifactId);
-
+        ProjectArtifact? ttsTakeArtifact = FindTtsArtifact(take, request);
         if (ttsTakeArtifact is null)
         {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.SkippedNoPhonemes,
-                SourceAlignmentId: null,
-                TtsAlignmentId: null,
-                SourceDuration: TimeSpan.Zero,
-                TtsDuration: take.PreStretchDurationSeconds.HasValue
-                    ? TimeSpan.FromSeconds(take.PreStretchDurationSeconds.Value)
-                    : TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: null,
-                SkipReason: "TTS artifact not found in project artifacts list.",
-                FailureReason: null,
-                ProviderId: null,
-                ModelId: null,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            return CreateMissingArtifactSegment(take, request);
         }
 
-        var ttsTakeAudioPath = artifactStore.GetPath(ttsTakeArtifact.RelativePath);
-        string transcript = request.SegmentTranscriptMap is not null
-            && request.SegmentTranscriptMap.TryGetValue(take.TranslatedSegmentId.Value, out string? text)
-            ? text
-            : string.Empty;
-        var alignmentRequest = new ForcedAlignmentRequest(
-            AudioPath: ttsTakeAudioPath,
-            NormalizedTranscript: transcript,
-            LanguageCode: request.TargetLanguageCode,
-            SegmentId: take.TranslatedSegmentId.Value.ToString(),
-            Options: new ForcedAlignmentOptions(
-                RequirePhonemeTimings: true,
-                PreferredModelAlias: request.PreferredModelAlias));
+        string ttsTakeAudioPath = artifactStore.GetPath(ttsTakeArtifact.RelativePath);
+        ForcedAlignmentRequest alignmentRequest = BuildTtsAlignmentRequest(take, request, ttsTakeAudioPath);
 
         ForcedAlignmentResult alignmentResult = await forcedAligner
             .AlignAsync(alignmentRequest, cancellationToken)
@@ -294,191 +284,266 @@ public sealed class LipSyncStageHandler(
 
         if (alignmentResult.Status == ForcedAlignmentStatus.Skipped)
         {
-            if (degradationWriter is not null)
-                await degradationWriter.WriteAsync(
-                    new PipelineDegradationRecord(
-                        Stage: StageNames.LipSync,
-                        Code: "LipSyncAlignmentSkipped",
-                        Message: alignmentResult.SkipReason ?? "Alignment skipped.",
-                        Detail: $"SegmentId={take.TranslatedSegmentId}",
-                        SelectedFallback: "original-tts-take",
-                        RecommendedAction: null,
-                        OccurredAtUtc: DateTimeOffset.UtcNow,
-                        StageRunId: stageRunId),
-                    request.ProjectId, request.MediaAsset.Id, CancellationToken.None)
+            return await CreateSkippedAlignmentSegmentAsync(take, request, stageRunId, alignmentResult)
                 .ConfigureAwait(false);
-
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.SkippedLowConfidence,
-                SourceAlignmentId: null,
-                TtsAlignmentId: null,
-                SourceDuration: TimeSpan.Zero,
-                TtsDuration: TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: null,
-                SkipReason: alignmentResult.SkipReason,
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
         }
+
+        if (TryCreateTtsGuardSegment(take, alignmentRequest, alignmentResult, out LipSyncSegment? guard))
+        {
+            return guard!;
+        }
+
+        return await ProcessSourceAndStretchAsync(
+                take, request, stageRunId, ttsTakeAudioPath, alignmentResult, bounds, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static bool TryCreateMissingReferenceSegment(TtsTake take, out LipSyncSegment? segment)
+    {
+        if (take.ArtifactId is not null && take.TranslatedSegmentId is not null)
+        {
+            segment = null;
+            return false;
+        }
+
+        segment = BuildSegment(
+            take.TranslatedSegmentId ?? take.Id,
+            LipSyncSegmentStatus.SkippedNoPhonemes,
+            ttsDuration: TimeSpan.Zero,
+            skipReason: "TTS take has no artifact or segment reference.");
+        return true;
+    }
+
+    private static ProjectArtifact? FindTtsArtifact(TtsTake take, LipSyncStageRequest request)
+    {
+        return request.ExistingArtifacts.FirstOrDefault(a => a.Id == take.ArtifactId);
+    }
+
+    private static LipSyncSegment CreateMissingArtifactSegment(TtsTake take, LipSyncStageRequest request)
+    {
+        return BuildSegment(
+            take.TranslatedSegmentId!.Value,
+            LipSyncSegmentStatus.SkippedNoPhonemes,
+            ttsDuration: ToDuration(take.PreStretchDurationSeconds),
+            skipReason: "TTS artifact not found in project artifacts list.");
+    }
+
+    private static ForcedAlignmentRequest BuildTtsAlignmentRequest(
+        TtsTake take,
+        LipSyncStageRequest request,
+        string ttsTakeAudioPath)
+    {
+        string transcript = request.SegmentTranscriptMap is not null
+            && request.SegmentTranscriptMap.TryGetValue(take.TranslatedSegmentId!.Value, out string? text)
+            ? text
+            : string.Empty;
+        return new ForcedAlignmentRequest(
+            AudioPath: ttsTakeAudioPath,
+            NormalizedTranscript: transcript,
+            LanguageCode: request.TargetLanguageCode,
+            SegmentId: take.TranslatedSegmentId!.Value.ToString(),
+            Options: new ForcedAlignmentOptions(
+                RequirePhonemeTimings: true,
+                PreferredModelAlias: request.PreferredModelAlias));
+    }
+
+    private async Task<LipSyncSegment> CreateSkippedAlignmentSegmentAsync(
+        TtsTake take,
+        LipSyncStageRequest request,
+        Guid stageRunId,
+        ForcedAlignmentResult alignmentResult)
+    {
+        await WriteDegradationAsync(
+            request, stageRunId,
+            "LipSyncAlignmentSkipped", alignmentResult.SkipReason ?? "Alignment skipped.",
+            $"SegmentId={take.TranslatedSegmentId}", "original-tts-take", null)
+            .ConfigureAwait(false);
+
+        return BuildSegment(
+            take.TranslatedSegmentId!.Value,
+            LipSyncSegmentStatus.SkippedLowConfidence,
+            skipReason: alignmentResult.SkipReason,
+            providerId: alignmentResult.ProviderId,
+            modelId: alignmentResult.ModelId);
+    }
+
+    private static bool TryCreateTtsGuardSegment(
+        TtsTake take,
+        ForcedAlignmentRequest alignmentRequest,
+        ForcedAlignmentResult alignmentResult,
+        out LipSyncSegment? segment)
+    {
+        Guid segmentId = take.TranslatedSegmentId!.Value;
 
         if (alignmentResult.Status == ForcedAlignmentStatus.Failed)
         {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.Failed,
-                SourceAlignmentId: null,
-                TtsAlignmentId: null,
-                SourceDuration: TimeSpan.Zero,
-                TtsDuration: TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: null,
-                SkipReason: null,
-                FailureReason: "Aligner returned Failed status.",
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            segment = BuildSegment(segmentId, LipSyncSegmentStatus.Failed,
+                failureReason: "Aligner returned Failed status.",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+            return true;
         }
 
         if (alignmentResult.Phonemes.Count == 0)
         {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.SkippedNoPhonemes,
-                SourceAlignmentId: null,
-                TtsAlignmentId: null,
-                SourceDuration: TimeSpan.Zero,
-                TtsDuration: TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: null,
-                SkipReason: "Aligner returned zero phonemes.",
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            segment = BuildSegment(segmentId, LipSyncSegmentStatus.SkippedNoPhonemes,
+                skipReason: "Aligner returned zero phonemes.",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+            return true;
         }
 
         if (alignmentResult.Confidence.Overall < alignmentRequest.Options.MinOverallConfidence)
         {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.SkippedLowConfidence,
-                SourceAlignmentId: null,
-                TtsAlignmentId: null,
-                SourceDuration: TimeSpan.Zero,
-                TtsDuration: TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: alignmentResult.Confidence.Overall,
-                SkipReason: $"Overall confidence {alignmentResult.Confidence.Overall:F2} below threshold {alignmentRequest.Options.MinOverallConfidence}.",
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            segment = BuildSegment(segmentId, LipSyncSegmentStatus.SkippedLowConfidence,
+                planConfidence: alignmentResult.Confidence.Overall,
+                skipReason: $"Overall confidence {alignmentResult.Confidence.Overall:F2} below threshold {alignmentRequest.Options.MinOverallConfidence}.",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+            return true;
         }
 
-        // --- Source alignment + phoneme stretch path ---
-        // Requires: source audio path, segment timing, and an audio clip extractor.
-        // Without these inputs, stretching would produce a no-op (all ratios 1.0), which
-        // violates stage-readiness semantics. Fall back to Partial with a clear reason.
-        if (_audioClipExtractor is null
-            || string.IsNullOrEmpty(request.SourceAudioPath)
-            || request.SegmentSourceTimingMap is null
-            || !request.SegmentSourceTimingMap.TryGetValue(take.TranslatedSegmentId.Value, out SegmentSourceTiming? sourceTiming))
+        segment = null;
+        return false;
+    }
+
+    private async Task<LipSyncSegment> ProcessSourceAndStretchAsync(
+        TtsTake take,
+        LipSyncStageRequest request,
+        Guid stageRunId,
+        string ttsTakeAudioPath,
+        ForcedAlignmentResult alignmentResult,
+        PhonemeStretchBounds bounds,
+        CancellationToken cancellationToken)
+    {
+        Guid segmentId = take.TranslatedSegmentId!.Value;
+
+        if (!TryGetSourceTiming(request, segmentId, out SegmentSourceTiming? sourceTiming))
         {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.Partial,
-                SourceAlignmentId: null,
-                TtsAlignmentId: alignmentResult.SegmentId,
-                SourceDuration: TimeSpan.Zero,
-                TtsDuration: take.PreStretchDurationSeconds.HasValue
-                    ? TimeSpan.FromSeconds(take.PreStretchDurationSeconds.Value)
-                    : TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: alignmentResult.Confidence.Overall,
-                SkipReason: "Source audio or timing not available; phoneme stretch skipped.",
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            return BuildSegment(segmentId, LipSyncSegmentStatus.Partial,
+                ttsAlignmentId: alignmentResult.SegmentId,
+                ttsDuration: ToDuration(take.PreStretchDurationSeconds),
+                planConfidence: alignmentResult.Confidence.Overall,
+                skipReason: "Source audio or timing not available; phoneme stretch skipped.",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
         }
 
-        // Source alignment must use the ORIGINAL (source-language) transcript: the source
-        // audio speaks the original language, while SegmentTranscriptMap holds translated
-        // text for the TTS take. Without the original text, skip the stretch path honestly.
-        string sourceTranscript = request.SourceSegmentTranscriptMap is not null
-            && request.SourceSegmentTranscriptMap.TryGetValue(take.TranslatedSegmentId.Value, out string? sourceText)
+        if (!TryGetSourceTranscript(request, segmentId, out string sourceTranscript))
+        {
+            return BuildSegment(segmentId, LipSyncSegmentStatus.Partial,
+                ttsAlignmentId: alignmentResult.SegmentId,
+                sourceDuration: SourceDuration(sourceTiming),
+                ttsDuration: ToDuration(take.PreStretchDurationSeconds),
+                planConfidence: alignmentResult.Confidence.Overall,
+                skipReason: "Source-language transcript not available; phoneme stretch skipped.",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+        }
+
+        SourceClipExtract extract = await TryExtractSourceClipAsync(
+                take, request, segmentId, sourceTiming, alignmentResult, cancellationToken)
+            .ConfigureAwait(false);
+        if (!extract.Succeeded)
+        {
+            return extract.FailureSegment!;
+        }
+
+        ForcedAlignmentResult sourceAlignmentResult = await AlignSourceClipAsync(
+                take, request, segmentId, sourceTranscript, extract.ClipPath!, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (IsSourceAlignmentUnusable(sourceAlignmentResult))
+        {
+            return BuildSegment(segmentId, LipSyncSegmentStatus.Partial,
+                sourceAlignmentId: sourceAlignmentResult.SegmentId,
+                ttsAlignmentId: alignmentResult.SegmentId,
+                sourceDuration: SourceDuration(sourceTiming),
+                ttsDuration: ToDuration(take.PreStretchDurationSeconds),
+                planConfidence: alignmentResult.Confidence.Overall,
+                skipReason: "Source alignment produced no phonemes; stretch skipped.",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+        }
+
+        return await PlanStretchAndPersistAsync(
+                take, request, stageRunId, ttsTakeAudioPath, sourceTiming,
+                alignmentResult, sourceAlignmentResult, bounds, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private bool TryGetSourceTiming(
+        LipSyncStageRequest request,
+        Guid segmentId,
+        [NotNullWhen(true)] out SegmentSourceTiming? sourceTiming)
+    {
+        sourceTiming = null;
+        return _audioClipExtractor is not null
+            && !string.IsNullOrEmpty(request.SourceAudioPath)
+            && request.SegmentSourceTimingMap is not null
+            && request.SegmentSourceTimingMap.TryGetValue(segmentId, out sourceTiming);
+    }
+
+    private static bool TryGetSourceTranscript(
+        LipSyncStageRequest request,
+        Guid segmentId,
+        out string sourceTranscript)
+    {
+        sourceTranscript = request.SourceSegmentTranscriptMap is not null
+            && request.SourceSegmentTranscriptMap.TryGetValue(segmentId, out string? sourceText)
             ? sourceText
             : string.Empty;
+        return !string.IsNullOrWhiteSpace(sourceTranscript);
+    }
 
-        if (string.IsNullOrWhiteSpace(sourceTranscript))
-        {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.Partial,
-                SourceAlignmentId: null,
-                TtsAlignmentId: alignmentResult.SegmentId,
-                SourceDuration: TimeSpan.FromSeconds(sourceTiming.EndSeconds - sourceTiming.StartSeconds),
-                TtsDuration: take.PreStretchDurationSeconds.HasValue
-                    ? TimeSpan.FromSeconds(take.PreStretchDurationSeconds.Value)
-                    : TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: alignmentResult.Confidence.Overall,
-                SkipReason: "Source-language transcript not available; phoneme stretch skipped.",
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
-        }
+    private sealed record SourceClipExtract(bool Succeeded, string? ClipPath, LipSyncSegment? FailureSegment);
 
-        // Extract source audio segment to a temporary file.
-        string tempSourceSegmentPath = Path.Combine(Path.GetTempPath(),
-            $"trackdub-src-seg-{take.TranslatedSegmentId.Value:N}.wav");
+    private async Task<SourceClipExtract> TryExtractSourceClipAsync(
+        TtsTake take,
+        LipSyncStageRequest request,
+        Guid segmentId,
+        SegmentSourceTiming sourceTiming,
+        ForcedAlignmentResult alignmentResult,
+        CancellationToken cancellationToken)
+    {
+        string tempSourceSegmentPath = Path.Combine(Path.GetTempPath(), $"trackdub-src-seg-{segmentId:N}.wav");
         try
         {
-            await _audioClipExtractor
+            await _audioClipExtractor!
                 .ExtractAsync(
-                    request.SourceAudioPath,
+                    request.SourceAudioPath!,
                     sourceTiming.StartSeconds,
                     sourceTiming.EndSeconds,
                     tempSourceSegmentPath,
                     cancellationToken)
                 .ConfigureAwait(false);
+            return new SourceClipExtract(true, tempSourceSegmentPath, null);
         }
         catch (Exception ex)
         {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.Partial,
-                SourceAlignmentId: null,
-                TtsAlignmentId: alignmentResult.SegmentId,
-                SourceDuration: TimeSpan.Zero,
-                TtsDuration: TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: alignmentResult.Confidence.Overall,
-                SkipReason: $"Source audio segment extraction failed: {ex.Message}",
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            return new SourceClipExtract(false, null, BuildSegment(segmentId, LipSyncSegmentStatus.Partial,
+                ttsAlignmentId: alignmentResult.SegmentId,
+                planConfidence: alignmentResult.Confidence.Overall,
+                skipReason: $"Source audio segment extraction failed: {ex.Message}",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId));
         }
+    }
 
-        ForcedAlignmentResult sourceAlignmentResult;
+    private async Task<ForcedAlignmentResult> AlignSourceClipAsync(
+        TtsTake take,
+        LipSyncStageRequest request,
+        Guid segmentId,
+        string sourceTranscript,
+        string tempSourceSegmentPath,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var sourceAlignmentRequest = new ForcedAlignmentRequest(
                 AudioPath: tempSourceSegmentPath,
                 NormalizedTranscript: sourceTranscript,
                 LanguageCode: request.SourceLanguageCode,
-                SegmentId: $"src-{take.TranslatedSegmentId.Value}",
+                SegmentId: $"src-{segmentId}",
                 Options: new ForcedAlignmentOptions(
                     AllowPartial: true,
                     RequirePhonemeTimings: true,
                     PreferredModelAlias: request.PreferredModelAlias));
 
-            sourceAlignmentResult = await forcedAligner
+            return await forcedAligner
                 .AlignAsync(sourceAlignmentRequest, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -486,219 +551,281 @@ public sealed class LipSyncStageHandler(
         {
             try { File.Delete(tempSourceSegmentPath); } catch { /* best-effort cleanup */ }
         }
+    }
 
-        if (sourceAlignmentResult.Status is ForcedAlignmentStatus.Failed
-            || sourceAlignmentResult.Phonemes.Count == 0)
-        {
-            // Source alignment failed or returned no phonemes — return what TTS alignment gave us.
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.Partial,
-                SourceAlignmentId: sourceAlignmentResult.SegmentId,
-                TtsAlignmentId: alignmentResult.SegmentId,
-                SourceDuration: TimeSpan.FromSeconds(sourceTiming.EndSeconds - sourceTiming.StartSeconds),
-                TtsDuration: take.PreStretchDurationSeconds.HasValue
-                    ? TimeSpan.FromSeconds(take.PreStretchDurationSeconds.Value)
-                    : TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: alignmentResult.Confidence.Overall,
-                SkipReason: "Source alignment produced no phonemes; stretch skipped.",
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
-        }
+    private static bool IsSourceAlignmentUnusable(ForcedAlignmentResult sourceAlignmentResult)
+    {
+        return sourceAlignmentResult.Status is ForcedAlignmentStatus.Failed
+            || sourceAlignmentResult.Phonemes.Count == 0;
+    }
 
-        // Plan per-phoneme stretch ratios from source vs. TTS phonemes.
+    private async Task<LipSyncSegment> PlanStretchAndPersistAsync(
+        TtsTake take,
+        LipSyncStageRequest request,
+        Guid stageRunId,
+        string ttsTakeAudioPath,
+        SegmentSourceTiming sourceTiming,
+        ForcedAlignmentResult alignmentResult,
+        ForcedAlignmentResult sourceAlignmentResult,
+        PhonemeStretchBounds bounds,
+        CancellationToken cancellationToken)
+    {
+        Guid segmentId = take.TranslatedSegmentId!.Value;
+
         IReadOnlyList<PhonemeStretchPlan> stretchPlan =
             _phonemeTimingPlanner.PlanStretches(
                 sourceAlignmentResult.Phonemes,
                 alignmentResult.Phonemes,
                 bounds);
 
-        bool allOutOfBounds = stretchPlan.Count > 0 && stretchPlan.All(static p => !p.WithinBounds);
-        if (allOutOfBounds)
+        if (IsUnsafeStretch(stretchPlan))
         {
-            if (degradationWriter is not null)
-                await degradationWriter.WriteAsync(
-                    new PipelineDegradationRecord(
-                        Stage: StageNames.LipSync,
-                        Code: "LipSyncUnsafeStretch",
-                        Message: "All phoneme stretch ratios are out of safe bounds; original TTS take preserved.",
-                        Detail: $"SegmentId={take.TranslatedSegmentId}",
-                        SelectedFallback: "original-tts-take",
-                        RecommendedAction: null,
-                        OccurredAtUtc: DateTimeOffset.UtcNow,
-                        StageRunId: stageRunId),
-                    request.ProjectId, request.MediaAsset.Id, CancellationToken.None)
+            return await CreateUnsafeStretchSegmentAsync(take, request, stageRunId, sourceTiming, alignmentResult, sourceAlignmentResult)
                 .ConfigureAwait(false);
-
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.SkippedUnsafeStretchRatio,
-                SourceAlignmentId: sourceAlignmentResult.SegmentId,
-                TtsAlignmentId: alignmentResult.SegmentId,
-                SourceDuration: TimeSpan.FromSeconds(sourceTiming.EndSeconds - sourceTiming.StartSeconds),
-                TtsDuration: take.PreStretchDurationSeconds.HasValue
-                    ? TimeSpan.FromSeconds(take.PreStretchDurationSeconds.Value)
-                    : TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: alignmentResult.Confidence.Overall,
-                SkipReason: "All phoneme stretch ratios are outside safe bounds.",
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
         }
 
-        // Apply WSOLA stretch.
-        string stretchedOutputPath = Path.Combine(Path.GetTempPath(),
-            $"trackdub-lip-stretched-{take.TranslatedSegmentId.Value:N}.wav");
+        StretchOutcome stretch = await TryStretchTtsAsync(
+                take, ttsTakeAudioPath, segmentId, sourceTiming, alignmentResult, sourceAlignmentResult,
+                stretchPlan, cancellationToken)
+            .ConfigureAwait(false);
+        if (!stretch.Succeeded)
+        {
+            return stretch.FailureSegment!;
+        }
+
+        return await PersistStretchedOutputAsync(
+                take, request, stageRunId, stretchPlan,
+                sourceTiming, alignmentResult, sourceAlignmentResult,
+                stretch.OutputPath!, stretch.AlignedDuration!.Value, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static bool IsUnsafeStretch(IReadOnlyList<PhonemeStretchPlan> stretchPlan)
+    {
+        return stretchPlan.Count > 0 && stretchPlan.All(static p => !p.WithinBounds);
+    }
+
+    private async Task<LipSyncSegment> CreateUnsafeStretchSegmentAsync(
+        TtsTake take,
+        LipSyncStageRequest request,
+        Guid stageRunId,
+        SegmentSourceTiming sourceTiming,
+        ForcedAlignmentResult alignmentResult,
+        ForcedAlignmentResult sourceAlignmentResult)
+    {
+        Guid segmentId = take.TranslatedSegmentId!.Value;
+        await WriteDegradationAsync(
+            request, stageRunId,
+            "LipSyncUnsafeStretch", "All phoneme stretch ratios are out of safe bounds; original TTS take preserved.",
+            $"SegmentId={take.TranslatedSegmentId}", "original-tts-take", null)
+            .ConfigureAwait(false);
+
+        return BuildSegment(segmentId, LipSyncSegmentStatus.SkippedUnsafeStretchRatio,
+            sourceAlignmentId: sourceAlignmentResult.SegmentId,
+            ttsAlignmentId: alignmentResult.SegmentId,
+            sourceDuration: SourceDuration(sourceTiming),
+            ttsDuration: ToDuration(take.PreStretchDurationSeconds),
+            planConfidence: alignmentResult.Confidence.Overall,
+            skipReason: "All phoneme stretch ratios are outside safe bounds.",
+            providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+    }
+
+    private sealed record StretchOutcome(bool Succeeded, string? OutputPath, TimeSpan? AlignedDuration, LipSyncSegment? FailureSegment);
+
+    private async Task<StretchOutcome> TryStretchTtsAsync(
+        TtsTake take,
+        string ttsTakeAudioPath,
+        Guid segmentId,
+        SegmentSourceTiming sourceTiming,
+        ForcedAlignmentResult alignmentResult,
+        ForcedAlignmentResult sourceAlignmentResult,
+        IReadOnlyList<PhonemeStretchPlan> stretchPlan,
+        CancellationToken cancellationToken)
+    {
+        string stretchedOutputPath = Path.Combine(Path.GetTempPath(), $"trackdub-lip-stretched-{segmentId:N}.wav");
         TimeSpan? alignedDuration;
         try
         {
             alignedDuration = await _phonemeStretchService
-                .StretchAsync(
-                    ttsTakeAudioPath,
-                    stretchedOutputPath,
-                    stretchPlan,
-                    cancellationToken)
+                .StretchAsync(ttsTakeAudioPath, stretchedOutputPath, stretchPlan, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.Failed,
-                SourceAlignmentId: sourceAlignmentResult.SegmentId,
-                TtsAlignmentId: alignmentResult.SegmentId,
-                SourceDuration: TimeSpan.FromSeconds(sourceTiming.EndSeconds - sourceTiming.StartSeconds),
-                TtsDuration: TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: alignmentResult.Confidence.Overall,
-                SkipReason: null,
-                FailureReason: $"Phoneme stretch failed: {ex.Message}",
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            var failed = BuildSegment(segmentId, LipSyncSegmentStatus.Failed,
+                sourceAlignmentId: sourceAlignmentResult.SegmentId,
+                ttsAlignmentId: alignmentResult.SegmentId,
+                sourceDuration: SourceDuration(sourceTiming),
+                planConfidence: alignmentResult.Confidence.Overall,
+                failureReason: $"Phoneme stretch failed: {ex.Message}",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+            return new StretchOutcome(false, null, null, failed);
         }
 
         if (alignedDuration is null)
         {
-            // Stretch service skipped (e.g. all ratios out of bounds at service level).
             try { File.Delete(stretchedOutputPath); } catch { /* best-effort */ }
-            return new LipSyncSegment(
-                SegmentId: take.TranslatedSegmentId.Value,
-                Status: LipSyncSegmentStatus.SkippedUnsafeStretchRatio,
-                SourceAlignmentId: sourceAlignmentResult.SegmentId,
-                TtsAlignmentId: alignmentResult.SegmentId,
-                SourceDuration: TimeSpan.FromSeconds(sourceTiming.EndSeconds - sourceTiming.StartSeconds),
-                TtsDuration: take.PreStretchDurationSeconds.HasValue
-                    ? TimeSpan.FromSeconds(take.PreStretchDurationSeconds.Value)
-                    : TimeSpan.Zero,
-                AlignedTtsDuration: null,
-                PlanConfidence: alignmentResult.Confidence.Overall,
-                SkipReason: "Stretch service skipped: all phoneme ratios out of bounds.",
-                FailureReason: null,
-                ProviderId: alignmentResult.ProviderId,
-                ModelId: alignmentResult.ModelId,
-                CreatedAtUtc: DateTimeOffset.UtcNow);
+            var skipped = BuildSegment(segmentId, LipSyncSegmentStatus.SkippedUnsafeStretchRatio,
+                sourceAlignmentId: sourceAlignmentResult.SegmentId,
+                ttsAlignmentId: alignmentResult.SegmentId,
+                sourceDuration: SourceDuration(sourceTiming),
+                ttsDuration: ToDuration(take.PreStretchDurationSeconds),
+                planConfidence: alignmentResult.Confidence.Overall,
+                skipReason: "Stretch service skipped: all phoneme ratios out of bounds.",
+                providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+            return new StretchOutcome(false, null, null, skipped);
         }
 
-        // Persist the stretched output as a LipSyncTake artifact.
-        bool anyOutOfBounds = stretchPlan.Any(static p => !p.WithinBounds);
-        string relativeOutputPath = ProjectArtifactPaths.GetLipSyncTakeRelativePath(
-            take.TranslatedSegmentId.Value, stageRunId);
+        return new StretchOutcome(true, stretchedOutputPath, alignedDuration, null);
+    }
 
-        string absOutputPath;
+    private async Task<LipSyncSegment> PersistStretchedOutputAsync(
+        TtsTake take,
+        LipSyncStageRequest request,
+        Guid stageRunId,
+        IReadOnlyList<PhonemeStretchPlan> stretchPlan,
+        SegmentSourceTiming sourceTiming,
+        ForcedAlignmentResult alignmentResult,
+        ForcedAlignmentResult sourceAlignmentResult,
+        string stretchedOutputPath,
+        TimeSpan alignedDuration,
+        CancellationToken cancellationToken)
+    {
+        Guid segmentId = take.TranslatedSegmentId!.Value;
+        bool anyOutOfBounds = stretchPlan.Any(static p => !p.WithinBounds);
+        string relativeOutputPath = ProjectArtifactPaths.GetLipSyncTakeRelativePath(segmentId, stageRunId);
+
+        string absOutputPath = await CommitStretchedFileAsync(relativeOutputPath, stretchedOutputPath, cancellationToken)
+            .ConfigureAwait(false);
+
+        await RegisterLipSyncArtifactAsync(take, request, stageRunId, relativeOutputPath, absOutputPath, alignedDuration, cancellationToken)
+            .ConfigureAwait(false);
+
+        return BuildSegment(segmentId,
+            anyOutOfBounds ? LipSyncSegmentStatus.Partial : LipSyncSegmentStatus.Aligned,
+            sourceAlignmentId: sourceAlignmentResult.SegmentId,
+            ttsAlignmentId: alignmentResult.SegmentId,
+            sourceDuration: SourceDuration(sourceTiming),
+            ttsDuration: ToDuration(take.PreStretchDurationSeconds),
+            alignedDuration: alignedDuration,
+            planConfidence: alignmentResult.Confidence.Overall,
+            skipReason: anyOutOfBounds ? "Some phoneme ratios were clamped to safe bounds." : null,
+            providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
+    }
+
+    private async Task<string> CommitStretchedFileAsync(
+        string relativeOutputPath,
+        string stretchedOutputPath,
+        CancellationToken cancellationToken)
+    {
         try
         {
             await using var tx = new ArtifactWriteTransaction(artifactStore.CreateWriteHandle(relativeOutputPath));
             File.Copy(stretchedOutputPath, tx.TemporaryPath, overwrite: true);
             await tx.CommitAsync(artifactStore, cancellationToken).ConfigureAwait(false);
-            absOutputPath = artifactStore.GetPath(relativeOutputPath);
+            return artifactStore.GetPath(relativeOutputPath);
         }
         finally
         {
             try { File.Delete(stretchedOutputPath); } catch { /* best-effort */ }
         }
+    }
 
-        // Register the stretched output as a ProjectArtifact so the mix planner
-        // can find it via BuildLipSyncByTakeId (provenance = "lipsync:take:{ttsTakeId:N}").
-        if (_mediaAssetRepository is not null)
+    private async Task RegisterLipSyncArtifactAsync(
+        TtsTake take,
+        LipSyncStageRequest request,
+        Guid stageRunId,
+        string relativeOutputPath,
+        string absOutputPath,
+        TimeSpan alignedDuration,
+        CancellationToken cancellationToken)
+    {
+        Guid segmentId = take.TranslatedSegmentId!.Value;
+        if (_mediaAssetRepository is null)
         {
-            string sha256 = "unknown";
-            long sizeBytes = 0L;
-            if (_fileFingerprintService is not null)
-            {
-                FileFingerprint fp = await _fileFingerprintService
-                    .ComputeAsync(absOutputPath, cancellationToken)
-                    .ConfigureAwait(false);
-                sha256 = fp.Sha256;
-                sizeBytes = fp.SizeBytes;
-            }
-
-            var lipSyncArtifact = new ProjectArtifact(
-                Id: Guid.NewGuid(),
-                ProjectId: request.ProjectId,
-                MediaAssetId: request.MediaAsset.Id,
-                Kind: ArtifactKind.LipSyncTake,
-                RelativePath: relativeOutputPath,
-                Sha256: sha256,
-                SizeBytes: sizeBytes,
-                DurationSeconds: alignedDuration?.TotalSeconds,
-                SampleRate: null,
-                ChannelCount: null,
-                CreatedAtUtc: DateTimeOffset.UtcNow,
-                StageRunId: stageRunId,
-                Provenance: $"lipsync:take:{take.Id:N}");
-
-            await _mediaAssetRepository
-                .SaveArtifactAsync(lipSyncArtifact, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            // File was written to disk above but metadata is not discoverable
-            // by the mix planner — record a degradation so the pipeline can
-            // fall back to the original TTS take instead of a ghost artifact.
-            if (degradationWriter is not null)
-                await degradationWriter.WriteAsync(
-                    new PipelineDegradationRecord(
-                        Stage: StageNames.LipSync,
-                        Code: "LipSyncArtifactNotRegistered",
-                        Message: "Lip-sync alignment succeeded but the LipSyncTake artifact metadata could not be registered in the project store; mix planner will not discover the aligned output.",
-                        Detail: $"SegmentId={take.TranslatedSegmentId}, ArtifactPath={relativeOutputPath}",
-                        SelectedFallback: "original-tts-take",
-                        RecommendedAction: "Ensure IMediaAssetRepository is registered in the DI container.",
-                        OccurredAtUtc: DateTimeOffset.UtcNow,
-                        StageRunId: stageRunId),
-                    request.ProjectId, request.MediaAsset.Id, CancellationToken.None)
+            await WriteDegradationAsync(
+                request, stageRunId,
+                "LipSyncArtifactNotRegistered",
+                "Lip-sync alignment succeeded but the LipSyncTake artifact metadata could not be registered in the project store; mix planner will not discover the aligned output.",
+                $"SegmentId={take.TranslatedSegmentId}, ArtifactPath={relativeOutputPath}",
+                "original-tts-take",
+                "Ensure IMediaAssetRepository is registered in the DI container.")
                 .ConfigureAwait(false);
 
             logger?.LogWarning(
                 "Lip-sync alignment succeeded but LipSyncTake artifact metadata was not registered; IMediaAssetRepository unavailable. SegmentId={SegmentId}",
                 take.TranslatedSegmentId);
+            return;
         }
 
-        TimeSpan sourceDuration = TimeSpan.FromSeconds(sourceTiming.EndSeconds - sourceTiming.StartSeconds);
-        TimeSpan ttsDuration = take.PreStretchDurationSeconds.HasValue
-            ? TimeSpan.FromSeconds(take.PreStretchDurationSeconds.Value)
-            : TimeSpan.Zero;
+        string sha256 = "unknown";
+        long sizeBytes = 0L;
+        if (_fileFingerprintService is not null)
+        {
+            FileFingerprint fp = await _fileFingerprintService
+                .ComputeAsync(absOutputPath, cancellationToken)
+                .ConfigureAwait(false);
+            sha256 = fp.Sha256;
+            sizeBytes = fp.SizeBytes;
+        }
 
+        var lipSyncArtifact = new ProjectArtifact(
+            Id: Guid.NewGuid(),
+            ProjectId: request.ProjectId,
+            MediaAssetId: request.MediaAsset.Id,
+            Kind: ArtifactKind.LipSyncTake,
+            RelativePath: relativeOutputPath,
+            Sha256: sha256,
+            SizeBytes: sizeBytes,
+            DurationSeconds: alignedDuration.TotalSeconds,
+            SampleRate: null,
+            ChannelCount: null,
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            StageRunId: stageRunId,
+            Provenance: $"lipsync:take:{take.Id:N}");
+
+        await _mediaAssetRepository
+            .SaveArtifactAsync(lipSyncArtifact, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static TimeSpan ToDuration(double? seconds)
+    {
+        return seconds.HasValue ? TimeSpan.FromSeconds(seconds.Value) : TimeSpan.Zero;
+    }
+
+    private static TimeSpan SourceDuration(SegmentSourceTiming timing)
+    {
+        return TimeSpan.FromSeconds(timing.EndSeconds - timing.StartSeconds);
+    }
+
+    private static LipSyncSegment BuildSegment(
+        Guid segmentId,
+        LipSyncSegmentStatus status,
+        string? sourceAlignmentId = null,
+        string? ttsAlignmentId = null,
+        TimeSpan? sourceDuration = null,
+        TimeSpan? ttsDuration = null,
+        TimeSpan? alignedDuration = null,
+        double? planConfidence = null,
+        string? skipReason = null,
+        string? failureReason = null,
+        string? providerId = null,
+        string? modelId = null)
+    {
         return new LipSyncSegment(
-            SegmentId: take.TranslatedSegmentId.Value,
-            Status: anyOutOfBounds ? LipSyncSegmentStatus.Partial : LipSyncSegmentStatus.Aligned,
-            SourceAlignmentId: sourceAlignmentResult.SegmentId,
-            TtsAlignmentId: alignmentResult.SegmentId,
-            SourceDuration: sourceDuration,
-            TtsDuration: ttsDuration,
+            SegmentId: segmentId,
+            Status: status,
+            SourceAlignmentId: sourceAlignmentId,
+            TtsAlignmentId: ttsAlignmentId,
+            SourceDuration: sourceDuration ?? TimeSpan.Zero,
+            TtsDuration: ttsDuration ?? TimeSpan.Zero,
             AlignedTtsDuration: alignedDuration,
-            PlanConfidence: alignmentResult.Confidence.Overall,
-            SkipReason: anyOutOfBounds ? "Some phoneme ratios were clamped to safe bounds." : null,
-            FailureReason: null,
-            ProviderId: alignmentResult.ProviderId,
-            ModelId: alignmentResult.ModelId,
+            PlanConfidence: planConfidence,
+            SkipReason: skipReason,
+            FailureReason: failureReason,
+            ProviderId: providerId,
+            ModelId: modelId,
             CreatedAtUtc: DateTimeOffset.UtcNow);
     }
 }
