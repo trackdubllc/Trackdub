@@ -102,12 +102,73 @@ public sealed class TranscriptGenerationServiceStageTests
         Assert.Equal(context.MediaAsset.DurationSeconds, fallbackRegion.EndSeconds);
     }
 
+    [Fact]
+    public async Task GenerateTranscriptStageAsync_asr_writes_no_polish_stage_run_when_disabled()
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        (TranscriptGenerationService service, TranscriptArtifactWriter artifactWriter) =
+            CreateMinimalService(stageRunStore: stageRunStore);
+        TranscriptGenerationContext context = CreateContext();
+
+        await artifactWriter.WriteSpeechRegionsArtifactAsync(
+            context.Project.Id,
+            context.MediaAsset,
+            [],
+            Guid.NewGuid(),
+            TestContext.Current.CancellationToken);
+
+        await service.GenerateTranscriptStageAsync(
+            context.Project,
+            context.MediaAsset,
+            context.NormalizedAudioArtifact,
+            context.AudioRoutingPlan,
+            StageNames.Asr,
+            enableSpeakerDiarization: false,
+            new InferenceModelPreferences(EnableAsrTextRefinement: false),
+            TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(
+            stageRunStore.All,
+            run => string.Equals(run.StageName, StageNames.TextRefinementAsr, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task GenerateTranscriptStageAsync_asr_runs_polish_stage_when_enabled()
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        (TranscriptGenerationService service, TranscriptArtifactWriter artifactWriter) =
+            CreateMinimalService(stageRunStore: stageRunStore);
+        TranscriptGenerationContext context = CreateContext();
+
+        await artifactWriter.WriteSpeechRegionsArtifactAsync(
+            context.Project.Id,
+            context.MediaAsset,
+            [],
+            Guid.NewGuid(),
+            TestContext.Current.CancellationToken);
+
+        await service.GenerateTranscriptStageAsync(
+            context.Project,
+            context.MediaAsset,
+            context.NormalizedAudioArtifact,
+            context.AudioRoutingPlan,
+            StageNames.Asr,
+            enableSpeakerDiarization: false,
+            new InferenceModelPreferences(EnableAsrTextRefinement: true),
+            TestContext.Current.CancellationToken);
+
+        Assert.Contains(
+            stageRunStore.All,
+            run => string.Equals(run.StageName, StageNames.TextRefinementAsr, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static (TranscriptGenerationService Service, TranscriptArtifactWriter ArtifactWriter) CreateMinimalService(
-        IAudioTranscriptionEngine? transcriptionEngine = null)
+        IAudioTranscriptionEngine? transcriptionEngine = null,
+        FakeProjectStageRunStore? stageRunStore = null)
     {
         var artifactStore = new FakeArtifactStore();
         var mediaRepository = new FakeMediaAssetRepository();
-        var stageRunStore = new FakeProjectStageRunStore();
+        stageRunStore ??= new FakeProjectStageRunStore();
         var artifactWriter = new TranscriptArtifactWriter(
             artifactStore,
             new FakeFileFingerprintService(new FileFingerprint("hash", 1, DateTimeOffset.UtcNow)),

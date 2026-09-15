@@ -57,6 +57,7 @@ public sealed class TranscriptGenerationService(
 
     // The pipeline is built once and cached: the stage instances are injected at construction time
     // and hold no per-run mutable state that would require a fresh builder on each call.
+    // Optional polish stays on the spine and no-ops when disabled (same pattern as diarization).
     private readonly Trackdub.Application.Transcripts.Pipeline.ITranscriptGenerationPipeline _pipeline =
         new Trackdub.Application.Transcripts.Pipeline.TranscriptPipelineBuilder(
                 degradationWriter,
@@ -219,6 +220,7 @@ public sealed class TranscriptGenerationService(
             StageNames.Vad => [vadGenerationStage],
             StageNames.Diarization => [speakerDiarizationStage],
             // ASR must be followed by persistence so the TranscriptRevision is saved to the database.
+            // Polish stays on the spine and no-ops when disabled (same pattern as diarization).
             StageNames.Asr => [asrGenerationStage, textRefinementGenerationStage, speakerAssignmentAndPersistenceStage],
             StageNames.TextRefinementAsr =>
             [

@@ -16,7 +16,7 @@ namespace Trackdub.Application.Tests;
 public sealed class TextRefinementGenerationStageTests
 {
     [Fact]
-    public async Task ExecuteAsync_skips_when_toggle_disabled()
+    public async Task ExecuteAsync_is_quiet_no_op_when_toggle_disabled()
     {
         TextRefinementGenerationStage stage = CreateStage();
         TranscriptGenerationContext context = CreateContext(enableAsrTextRefinement: false);
@@ -25,9 +25,9 @@ public sealed class TextRefinementGenerationStageTests
             context,
             TestContext.Current.CancellationToken);
 
+        Assert.Same(context, result);
         Assert.Same(context.AsrResult, result.AsrResult);
-        Assert.NotNull(result.TextRefinementResult);
-        Assert.Equal(StageRunStatus.Skipped, result.TextRefinementResult.StageRun.Status);
+        Assert.Null(result.TextRefinementResult);
     }
 
     [Fact]
