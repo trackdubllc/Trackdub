@@ -341,7 +341,7 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         float[] samples = new float[sampleCount];
         for (int i = 0; i < sampleCount; i++)
         {
-            short s = (short)(wavBytes[HeaderBytes + i * 2] | (wavBytes[HeaderBytes + i * 2 + 1] << 8));
+            short s = (short)(wavBytes[HeaderBytes + (i * 2)] | (wavBytes[HeaderBytes + (i * 2) + 1] << 8));
             samples[i] = s / 32768f;
         }
         return samples;

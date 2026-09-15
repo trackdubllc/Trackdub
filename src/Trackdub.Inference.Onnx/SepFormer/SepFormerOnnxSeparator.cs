@@ -156,7 +156,7 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
             {
                 // batch=0; offset = f * numClasses + classIdx (first term of [1,F,C] flat index)
                 float overlapProb = numClasses > OsdOverlapClassIndex
-                    ? segData[f * numClasses + OsdOverlapClassIndex]
+                    ? segData[(f * numClasses) + OsdOverlapClassIndex]
                     : 0f;
 
                 int frameSampleStart = windowStart + (int)(f * samplesPerFrame);

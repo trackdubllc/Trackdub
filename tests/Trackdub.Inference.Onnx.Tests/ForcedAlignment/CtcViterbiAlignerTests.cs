@@ -210,7 +210,7 @@ public sealed class CtcViterbiAlignerTests
         for (int p = 0; p < phonemes.Length; p++)
         {
             int peakFrame = Math.Min(p * spacing, frameCount - 1);
-            logProbs[peakFrame * vocabSize + phonemes[p]] = MathF.Log(0.9f);
+            logProbs[(peakFrame * vocabSize) + phonemes[p]] = MathF.Log(0.9f);
         }
 
         return logProbs;

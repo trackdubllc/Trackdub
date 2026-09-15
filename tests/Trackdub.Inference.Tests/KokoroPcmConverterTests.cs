@@ -127,7 +127,7 @@ public sealed class KokoroPcmConverterTests
 
         byte[] wav = KokoroPcmConverter.EncodePcm16Wav(samples, sampleRate: 24_000);
 
-        Assert.Equal(44 + sampleCount * 2, wav.Length);
+        Assert.Equal(44 + (sampleCount * 2), wav.Length);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class KokoroPcmConverterTests
         byte[] wav = KokoroPcmConverter.EncodePcm16Wav(samples, sampleRate: 24_000);
 
         int riffSize = BinaryPrimitives.ReadInt32LittleEndian(wav.AsSpan(4));
-        Assert.Equal(36 + sampleCount * 2, riffSize);
+        Assert.Equal(36 + (sampleCount * 2), riffSize);
     }
 
     // ── PCM sample encoding ───────────────────────────────────────────────────

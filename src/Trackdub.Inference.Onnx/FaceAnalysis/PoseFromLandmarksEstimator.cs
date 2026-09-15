@@ -51,7 +51,7 @@ public sealed class PoseFromLandmarksEstimator(IFaceLandmarkProvider landmarkPro
         if (faceWidth > 0.01f)
         {
             float eyeMidX = (lx + rx) / 2f;
-            float contourMid = leftMeanX + faceWidth / 2f;
+            float contourMid = leftMeanX + (faceWidth / 2f);
             // Scale deviation to ±45° assuming linear relationship.
             yawDeg = (eyeMidX - contourMid) / (faceWidth / 2f) * 45.0;
         }

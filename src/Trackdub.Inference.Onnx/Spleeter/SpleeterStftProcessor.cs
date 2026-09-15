@@ -23,7 +23,7 @@ internal sealed class SpleeterStftProcessor
 
     public (float[] Magnitude, float[] Phase, int TargetFrames) Forward(float[] input)
     {
-        int baseFrames = input.Length >= N_Fft ? 1 + (input.Length - N_Fft) / Hop : 1;
+        int baseFrames = input.Length >= N_Fft ? 1 + ((input.Length - N_Fft) / Hop) : 1;
         int remainder = baseFrames % PadTo;
         int targetFrames = remainder == 0 ? baseFrames : baseFrames + (PadTo - remainder);
 
@@ -57,7 +57,7 @@ internal sealed class SpleeterStftProcessor
 
     public float[] Inverse(float[] magnitude, float[] phase, int targetFrames, int originalLength)
     {
-        float[] output = new float[(targetFrames - 1) * Hop + N_Fft];
+        float[] output = new float[((targetFrames - 1) * Hop) + N_Fft];
         float[] windowSum = new float[output.Length];
 
         Complex[] buffer = new Complex[N_Fft];

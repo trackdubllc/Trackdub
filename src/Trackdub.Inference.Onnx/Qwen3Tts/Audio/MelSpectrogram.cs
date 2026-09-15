@@ -31,7 +31,7 @@ public static class MelSpectrogram
                                     int nMels = DefaultNMels)
     {
         // Number of frequency bins in the STFT
-        int nFreqs = nFft / 2 + 1;
+        int nFreqs = (nFft / 2) + 1;
 
         // Build Hann window
         var window = BuildHannWindow(nFft);
@@ -44,7 +44,7 @@ public static class MelSpectrogram
         var padded = ReflectPad(samples, padding, padding);
 
         // Compute STFT frames on padded signal
-        int numFrames = 1 + (padded.Length - nFft) / hopLength;
+        int numFrames = 1 + ((padded.Length - nFft) / hopLength);
         if (numFrames <= 0)
             numFrames = 1;
 
@@ -80,7 +80,7 @@ public static class MelSpectrogram
                     {
                         double real = fftBuffer[k];
                         double imag = fftImag[k];
-                        double magnitude = Math.Sqrt(real * real + imag * imag + 1e-9);
+                        double magnitude = Math.Sqrt((real * real) + (imag * imag) + 1e-9);
                         melEnergy += melFilters[m, k] * magnitude;
                     }
                 }
@@ -187,7 +187,7 @@ public static class MelSpectrogram
             int idx0 = (int)srcIdx;
             int idx1 = Math.Min(idx0 + 1, input.Length - 1);
             double frac = srcIdx - idx0;
-            output[i] = (float)(input[idx0] * (1 - frac) + input[idx1] * frac);
+            output[i] = (float)((input[idx0] * (1 - frac)) + (input[idx1] * frac));
         }
 
         return output;
@@ -247,7 +247,7 @@ public static class MelSpectrogram
         var filters = new float[nMels, nFreqs];
 
         // Convert Hz to mel scale (HTK formula, same as librosa default)
-        static double HzToMel(double hz) => 2595.0 * Math.Log10(1.0 + hz / 700.0);
+        static double HzToMel(double hz) => 2595.0 * Math.Log10(1.0 + (hz / 700.0));
         static double MelToHz(double mel) => 700.0 * (Math.Pow(10.0, mel / 2595.0) - 1.0);
 
         double melMin = HzToMel(fMin);
@@ -256,7 +256,7 @@ public static class MelSpectrogram
         // Create nMels+2 equally spaced mel points
         var melPoints = new double[nMels + 2];
         for (int i = 0; i < nMels + 2; i++)
-            melPoints[i] = melMin + (melMax - melMin) * i / (nMels + 1);
+            melPoints[i] = melMin + ((melMax - melMin) * i / (nMels + 1));
 
         // Convert mel points to Hz frequencies, then to FFT bin indices
         var hzPoints = new double[nMels + 2];
@@ -321,8 +321,8 @@ public static class MelSpectrogram
                     double cos = Math.Cos(angle * k);
                     double sin = Math.Sin(angle * k);
 
-                    double tReal = cos * real[i + k + half] - sin * imag[i + k + half];
-                    double tImag = sin * real[i + k + half] + cos * imag[i + k + half];
+                    double tReal = (cos * real[i + k + half]) - (sin * imag[i + k + half]);
+                    double tImag = (sin * real[i + k + half]) + (cos * imag[i + k + half]);
 
                     real[i + k + half] = real[i + k] - tReal;
                     imag[i + k + half] = imag[i + k] - tImag;

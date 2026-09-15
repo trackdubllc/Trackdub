@@ -685,8 +685,8 @@ internal sealed class LanguageModel : IDisposable
 
         for (int layer = 0; layer < _numLayers; layer++)
         {
-            var keySpan = outputs[2 + layer * 2].GetTensorDataAsSpan<float>();
-            var valSpan = outputs[2 + layer * 2 + 1].GetTensorDataAsSpan<float>();
+            var keySpan = outputs[2 + (layer * 2)].GetTensorDataAsSpan<float>();
+            var valSpan = outputs[2 + (layer * 2) + 1].GetTensorDataAsSpan<float>();
             keySpan.CopyTo(keys.AsSpan(layer * layerSize));
             valSpan.CopyTo(values.AsSpan(layer * layerSize));
         }

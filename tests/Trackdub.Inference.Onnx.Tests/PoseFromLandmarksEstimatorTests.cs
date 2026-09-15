@@ -23,18 +23,18 @@ public sealed class PoseFromLandmarksEstimatorTests
         var points = new (float X, float Y)[106];
         for (int i = 0; i < points.Length; i++)
         {
-            float y = -1f + 2f * i / (points.Length - 1);
+            float y = -1f + (2f * i / (points.Length - 1));
             points[i] = (0f, y);
         }
 
         for (int i = 0; i <= 8; i++)
         {
-            points[i] = (-0.8f, -0.2f + i * 0.05f);
+            points[i] = (-0.8f, -0.2f + (i * 0.05f));
         }
 
         for (int i = 16; i <= 24; i++)
         {
-            points[i] = (0.8f, -0.2f + (i - 16) * 0.05f);
+            points[i] = (0.8f, -0.2f + ((i - 16) * 0.05f));
         }
 
         for (int i = 51; i <= 60; i++)

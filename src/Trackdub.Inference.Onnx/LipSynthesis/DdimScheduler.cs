@@ -33,7 +33,7 @@ internal sealed class DdimScheduler
     /// <returns>Denoised latent x_{t-1}.</returns>
     public float[] Step(ReadOnlySpan<float> modelOutput, int timestep, ReadOnlySpan<float> sample)
     {
-        int prevTimestep = timestep - NumTrainTimesteps / _numInferenceSteps;
+        int prevTimestep = timestep - (NumTrainTimesteps / _numInferenceSteps);
 
         float alphasProdT = _alphasCumprod[timestep];
         float alphasProdTPrev = prevTimestep >= 0 ? _alphasCumprod[prevTimestep] : 1f;
@@ -49,10 +49,10 @@ internal sealed class DdimScheduler
         for (int i = 0; i < sample.Length; i++)
         {
             // predicted x_0 (denoised original)
-            float predOrigSample = (sample[i] - sqrtBetaProdT * modelOutput[i]) / sqrtAlphaProdT;
+            float predOrigSample = (sample[i] - (sqrtBetaProdT * modelOutput[i])) / sqrtAlphaProdT;
             // direction pointing to x_t
             float dirToXt = sqrtBetaProdTPrev * modelOutput[i];
-            prevSample[i] = sqrtAlphaProdTPrev * predOrigSample + dirToXt;
+            prevSample[i] = (sqrtAlphaProdTPrev * predOrigSample) + dirToXt;
         }
 
         return prevSample;
@@ -70,7 +70,7 @@ internal sealed class DdimScheduler
         var noisy = new float[original.Length];
         for (int i = 0; i < original.Length; i++)
         {
-            noisy[i] = sqrtAlphaProd * original[i] + sqrtOneMinusAlphaProd * noise[i];
+            noisy[i] = (sqrtAlphaProd * original[i]) + (sqrtOneMinusAlphaProd * noise[i]);
         }
 
         return noisy;
@@ -85,7 +85,7 @@ internal sealed class DdimScheduler
         for (int i = 0; i < NumTrainTimesteps; i++)
         {
             float t = (float)i / (NumTrainTimesteps - 1);
-            float sqrtBeta = sqrtBetaStart + t * (sqrtBetaEnd - sqrtBetaStart);
+            float sqrtBeta = sqrtBetaStart + (t * (sqrtBetaEnd - sqrtBetaStart));
             betas[i] = sqrtBeta * sqrtBeta;
         }
 
@@ -107,7 +107,7 @@ internal sealed class DdimScheduler
         var timesteps = new int[_numInferenceSteps];
         for (int i = 0; i < _numInferenceSteps; i++)
         {
-            timesteps[i] = (_numInferenceSteps - 1 - i) * stepRatio + stepRatio - 1;
+            timesteps[i] = ((_numInferenceSteps - 1 - i) * stepRatio) + stepRatio - 1;
         }
 
         return timesteps;

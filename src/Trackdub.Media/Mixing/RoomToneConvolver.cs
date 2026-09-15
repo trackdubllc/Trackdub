@@ -79,7 +79,7 @@ internal static class RoomToneConvolver
         float[] result = new float[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
-            result[i] = input[i] * DryRatio + convolved[i] * WetRatio;
+            result[i] = (input[i] * DryRatio) + (convolved[i] * WetRatio);
         }
 
         return result;

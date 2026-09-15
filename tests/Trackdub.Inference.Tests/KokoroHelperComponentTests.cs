@@ -145,7 +145,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
         float[] samples = new float[100];
         byte[] wav = KokoroPcmConverter.EncodePcm16Wav(samples, sampleRate: 24_000);
 
-        Assert.Equal(44 + 100 * sizeof(short), wav.Length);
+        Assert.Equal(44 + (100 * sizeof(short)), wav.Length);
     }
 
     [Fact]

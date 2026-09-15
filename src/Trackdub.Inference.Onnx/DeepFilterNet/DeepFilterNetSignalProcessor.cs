@@ -8,7 +8,7 @@ internal static class DeepFilterNetSignalProcessor
     internal const int SampleRate = 48000;
     internal const int HopSize = 480;
     internal const int FftSize = 960;
-    internal const int FreqBins = FftSize / 2 + 1;   // 481
+    internal const int FreqBins = (FftSize / 2) + 1;   // 481
     internal const int ErbBands = 32;
     internal const int DfOrder = 5;
     internal const int NbDf = 96;
@@ -74,7 +74,7 @@ internal static class DeepFilterNetSignalProcessor
             for (int k = 0; k < NbDf; k++)
             {
                 float magnitude = frame[k].Magnitude;
-                specUnitNorm[k] = Alpha * specUnitNorm[k] + (1f - Alpha) * magnitude;
+                specUnitNorm[k] = (Alpha * specUnitNorm[k]) + ((1f - Alpha) * magnitude);
                 float denom = MathF.Sqrt(MathF.Max(specUnitNorm[k], Eps));
                 featSpecOut[0, 0, s, k] = frame[k].Real / denom;
                 featSpecOut[0, 1, s, k] = frame[k].Imaginary / denom;
@@ -95,7 +95,7 @@ internal static class DeepFilterNetSignalProcessor
 
                 power /= width;
                 float db = 10f * MathF.Log10(power + ErbDbEps);
-                erbMeanDb[b] = Alpha * erbMeanDb[b] + (1f - Alpha) * db;
+                erbMeanDb[b] = (Alpha * erbMeanDb[b]) + ((1f - Alpha) * db);
                 featErbOut[0, 0, s, b] = (db - erbMeanDb[b]) / ErbNormDivisor;
                 binStart += width;
             }
@@ -222,7 +222,7 @@ internal static class DeepFilterNetSignalProcessor
     private static float[] InverseStft(Complex32[,] frames, int originalLength)
     {
         int numFrames = frames.GetLength(0);
-        int outputLength = (numFrames - 1) * HopSize + FftSize;
+        int outputLength = ((numFrames - 1) * HopSize) + FftSize;
         var output = new float[outputLength];
         var windowSum = new float[outputLength];
         var frame = new Complex32[FftSize];
@@ -315,7 +315,7 @@ internal static class DeepFilterNetSignalProcessor
         widths[ErbBands - 1] += FreqBins - total;
         return widths;
 
-        static float Freq2Erb(float f) => 9.265f * MathF.Log(1f + f / erbLQ);
+        static float Freq2Erb(float f) => 9.265f * MathF.Log(1f + (f / erbLQ));
         static float Erb2Freq(float e) => erbLQ * (MathF.Exp(e / 9.265f) - 1f);
     }
 }

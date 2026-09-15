@@ -142,7 +142,7 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
         // Expected output sample count.
         int expectedLength = (int)Math.Round((double)sourceLength * OutputHop / sourceHop);
 
-        int bufferSize = numFrames * OutputHop + WindowSize;
+        int bufferSize = (numFrames * OutputHop) + WindowSize;
         var outputBuffer = new float[bufferSize];
         var normBuffer = new float[bufferSize];
 
@@ -240,7 +240,7 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
         var window = new float[size];
         double factor = 2.0 * Math.PI / (size - 1);
         for (int n = 0; n < size; n++)
-            window[n] = 0.5f - 0.5f * (float)Math.Cos(factor * n);
+            window[n] = 0.5f - (0.5f * (float)Math.Cos(factor * n));
         return window;
     }
 
@@ -272,7 +272,7 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
         for (int f = 0; f < frameCount; f++)
         {
             for (int c = 0; c < channelCount; c++)
-                channels[c][f] = interleaved[f * channelCount + c];
+                channels[c][f] = interleaved[(f * channelCount) + c];
         }
 
         return channels;
@@ -287,7 +287,7 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
         for (int f = 0; f < frameCount; f++)
         {
             for (int c = 0; c < channelCount; c++)
-                result[f * channelCount + c] = outputChannels[c][f];
+                result[(f * channelCount) + c] = outputChannels[c][f];
         }
 
         return result;

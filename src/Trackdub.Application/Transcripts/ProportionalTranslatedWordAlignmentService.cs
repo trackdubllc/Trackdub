@@ -67,12 +67,12 @@ public sealed class ProportionalTranslatedWordAlignmentService : ITranslatedWord
             int cumulativeAfter = cumulativeBefore + charCounts[i];
 
             double wordStart = Math.Clamp(
-                timeStart + (double)cumulativeBefore / totalChars * totalDuration,
+                timeStart + ((double)cumulativeBefore / totalChars * totalDuration),
                 timeStart, timeEnd);
             double wordEnd = i == tokens.Length - 1
                 ? timeEnd
                 : Math.Clamp(
-                    timeStart + (double)cumulativeAfter / totalChars * totalDuration,
+                    timeStart + ((double)cumulativeAfter / totalChars * totalDuration),
                     timeStart, timeEnd);
 
             // Defensive guard: ensure end >= start regardless of floating-point edge cases.

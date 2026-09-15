@@ -29,7 +29,7 @@ internal sealed class DeepFilterNetFeatureNormState
         var values = new float[count];
         for (int i = 0; i < count; i++)
         {
-            values[i] = start + (end - start) * i / (count - 1);
+            values[i] = start + ((end - start) * i / (count - 1));
         }
 
         return values;

@@ -52,7 +52,7 @@ public sealed class GeometryLandmarkProvider(
         if (face.Width <= 0 || face.Height <= 0)
             return NoLandmarks;
 
-        TimeSpan mid = request.Start + (request.End - request.Start) / 2;
+        TimeSpan mid = request.Start + ((request.End - request.Start) / 2);
         TimeSpan sampleEnd = (request.End - mid) < TimeSpan.FromSeconds(0.5)
             ? request.End
             : mid + TimeSpan.FromSeconds(0.5);
@@ -93,7 +93,7 @@ public sealed class GeometryLandmarkProvider(
 
             var pts = new (float X, float Y)[LandmarkCount];
             for (int i = 0; i < LandmarkCount; i++)
-                pts[i] = (landmarks[i * 2], landmarks[i * 2 + 1]);
+                pts[i] = (landmarks[i * 2], landmarks[(i * 2) + 1]);
 
             return new FaceLandmarkResult(
                 LandmarksFound: true,
@@ -136,15 +136,15 @@ public sealed class GeometryLandmarkProvider(
 
         for (int y = 0; y < ModelSize; y++)
         {
-            int sy = Math.Clamp((int)(face.Y + y * scaleY), 0, imgH - 1);
+            int sy = Math.Clamp((int)(face.Y + (y * scaleY)), 0, imgH - 1);
             for (int x = 0; x < ModelSize; x++)
             {
-                int sx = Math.Clamp((int)(face.X + x * scaleX), 0, imgW - 1);
-                int srcIdx = (sy * imgW + sx) * 4;
+                int sx = Math.Clamp((int)(face.X + (x * scaleX)), 0, imgW - 1);
+                int srcIdx = ((sy * imgW) + sx) * 4;
 
-                tensor[0 * ModelSize * ModelSize + y * ModelSize + x] = (rgba[srcIdx + 2] - 127.5f) / 128.0f;
-                tensor[1 * ModelSize * ModelSize + y * ModelSize + x] = (rgba[srcIdx + 1] - 127.5f) / 128.0f;
-                tensor[2 * ModelSize * ModelSize + y * ModelSize + x] = (rgba[srcIdx] - 127.5f) / 128.0f;
+                tensor[(0 * ModelSize * ModelSize) + (y * ModelSize) + x] = (rgba[srcIdx + 2] - 127.5f) / 128.0f;
+                tensor[(1 * ModelSize * ModelSize) + (y * ModelSize) + x] = (rgba[srcIdx + 1] - 127.5f) / 128.0f;
+                tensor[(2 * ModelSize * ModelSize) + (y * ModelSize) + x] = (rgba[srcIdx] - 127.5f) / 128.0f;
             }
         }
 
@@ -194,7 +194,7 @@ public sealed class GeometryLandmarkProvider(
         for (int i = 0; i < LandmarkCount; i++)
         {
             float x = landmarks[i * 2];
-            float y = landmarks[i * 2 + 1];
+            float y = landmarks[(i * 2) + 1];
             if (x < minX) minX = x;
             if (x > maxX) maxX = x;
             if (y < minY) minY = y;

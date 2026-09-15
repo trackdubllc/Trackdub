@@ -87,7 +87,7 @@ internal static class CosyVoiceAudioFeatures
         var padded = new float[paddedLength];
         Array.Copy(pcm16Khz, padded, pcm16Khz.Length);
 
-        float[,] melFilters = BuildWhisperMelFilters(nMels, nFft / 2 + 1, CosyVoiceConstants.SpeechTokenizerSampleRate, nFft);
+        float[,] melFilters = BuildWhisperMelFilters(nMels, (nFft / 2) + 1, CosyVoiceConstants.SpeechTokenizerSampleRate, nFft);
         float[] window = BuildHann(nFft);
         int frames = 1 + Math.Max(0, (paddedLength - nFft) / hop);
         var output = new float[nMels * frames];
@@ -108,7 +108,7 @@ internal static class CosyVoiceAudioFeatures
             for (int mel = 0; mel < nMels; mel++)
             {
                 double energy = 1e-10;
-                for (int bin = 0; bin < nFft / 2 + 1; bin++)
+                for (int bin = 0; bin < (nFft / 2) + 1; bin++)
                 {
                     double magnitude = Math.Sqrt((real[bin] * real[bin]) + (imag[bin] * imag[bin])) + 1e-10;
                     energy += magnitude * melFilters[mel, bin];
@@ -153,7 +153,7 @@ internal static class CosyVoiceAudioFeatures
         int frames = 1 + Math.Max(0, (padded.Length - nFft) / hopLength);
         float[,] mel = new float[frames, nMels];
         float fMaxResolved = fMax > 0 ? fMax : sampleRate / 2f;
-        float[,] filters = BuildMelFilterBank(nMels, nFft / 2 + 1, sampleRate, fMin, fMaxResolved, nFft);
+        float[,] filters = BuildMelFilterBank(nMels, (nFft / 2) + 1, sampleRate, fMin, fMaxResolved, nFft);
         float[] window = BuildHann(nFft);
         var real = new double[nFft];
         var imag = new double[nFft];
@@ -172,7 +172,7 @@ internal static class CosyVoiceAudioFeatures
             for (int m = 0; m < nMels; m++)
             {
                 double energy = 1e-10;
-                for (int k = 0; k < nFft / 2 + 1; k++)
+                for (int k = 0; k < (nFft / 2) + 1; k++)
                 {
                     double magnitude = Math.Sqrt((real[k] * real[k]) + (imag[k] * imag[k])) + 1e-10;
                     energy += magnitude * filters[m, k];

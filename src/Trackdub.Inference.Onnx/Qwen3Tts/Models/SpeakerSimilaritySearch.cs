@@ -141,8 +141,8 @@ public sealed class SpeakerSimilaritySearch
             while (true)
             {
                 int smallest = index;
-                int left = 2 * index + 1;
-                int right = 2 * index + 2;
+                int left = (2 * index) + 1;
+                int right = (2 * index) + 2;
 
                 if (left < _size && _heap[left].Similarity < _heap[smallest].Similarity)
                     smallest = left;
