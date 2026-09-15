@@ -375,6 +375,34 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             return null;
         }
 
+        return await RunLegacyModelPreFlightAsync(
+            session,
+            options,
+            stagesToRun,
+            runId,
+            runStart,
+            stageOutcomes,
+            executionSnapshot,
+            checker,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Legacy pre-flight path: ensures models per stage via
+    /// <see cref="IPipelinePreFlightChecker"/>, deferring auto-downloadable
+    /// VAD/ASR/Diarization models to stage execution.
+    /// </summary>
+    private static async Task<DubbingRunResult?> RunLegacyModelPreFlightAsync(
+        IDubbingSession session,
+        DubbingSessionOptions options,
+        string[] stagesToRun,
+        Guid runId,
+        DateTimeOffset runStart,
+        List<StageOutcome> stageOutcomes,
+        Dictionary<string, string> executionSnapshot,
+        IPipelinePreFlightChecker checker,
+        CancellationToken cancellationToken)
+    {
         var failures = new List<string>();
 
         foreach (string stageName in stagesToRun)
@@ -804,323 +832,97 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         switch (stageName)
         {
             case StageNames.Separation:
-                if (!options.EnableStemSeparation)
-                {
-                    return new StageWorkflowResult(
-                        [],
-                        ["Stem separation is disabled for this run."],
-                        StageStatus.Skipped,
-                        StageSkipReasonCodes.DisabledByOption);
-                }
-
-                TranscriptProjectState separationState = await workspace.RunStemSeparationAsync(
-                    cancellationToken,
-                    preferredModelAlias: runtimeSelections.SeparationModelAlias,
-                    modelPreferences: modelPreferences,
-                    regenerateTranscript: options.RegenerateTranscriptOnSeparation).ConfigureAwait(false);
-
-                IReadOnlyList<string>? enhancementDegradations = ExtractSpeechEnhancementDegradations(separationState);
-                if (enhancementDegradations is { Count: > 0 })
-                {
-                    // Surface the speech-enhancement failure before the separation Completed event so
-                    // the caller sees it in the progress stream and the stage outcome DegradationRecords.
-                    ReportProgress(progress, StageNames.SpeechEnhancement, PipelineProgressEventKind.Failed,
-                        enhancementDegradations[0]);
-                }
-
-                return new StageWorkflowResult([], enhancementDegradations);
+                return await RunSeparationStageAsync(
+                    workspace,
+                    options,
+                    runtimeSelections,
+                    modelPreferences,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.Vad:
-                {
-                    string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
-                    await workspace.RunTranscriptStageAsync(
-                        stageName,
-                        enableSpeakerDiarization: false,
-                        modelPreferences,
-                        cancellationToken,
-                        progress,
-                        sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-                    return new StageWorkflowResult([], null);
-                }
+                return await RunVadStageAsync(
+                    workspace,
+                    options,
+                    modelPreferences,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.Asr:
-                {
-                    TranscriptProjectState asrOpen = await workspace.Project
-                        .OpenAsync(cancellationToken).ConfigureAwait(false);
-                    if (asrOpen.CurrentTranscriptRevision is not null &&
-                        asrOpen.TranscriptSegments.Count > 0)
-                    {
-                        // Interactive re-run: re-transcribe the existing segments in place
-                        // instead of regenerating a fresh revision from VAD regions.
-                        IReadOnlyList<Guid> segmentIds = asrOpen.TranscriptSegments
-                            .Select(static segment => segment.Id)
-                            .ToArray();
-                        TranscriptProjectState retranscribed = await workspace.RetranscribeSegmentsAsync(
-                            RuntimeModelSetupCoordinator.CreateRetranscribeRequest(
-                                runtimeSelections,
-                                asrOpen.CurrentTranscriptRevision.Id,
-                                segmentIds),
-                            cancellationToken).ConfigureAwait(false);
-                        return BuildStageWorkflowResultFromStageRun(retranscribed, StageNames.Asr);
-                    }
-
-                    string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
-                    await workspace.RunTranscriptStageAsync(
-                        stageName,
-                        enableSpeakerDiarization: false,
-                        modelPreferences,
-                        cancellationToken,
-                        progress,
-                        sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-                    return new StageWorkflowResult([], null);
-                }
+                return await RunAsrStageAsync(
+                    workspace,
+                    options,
+                    runtimeSelections,
+                    modelPreferences,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.Diarization:
-                {
-                    TranscriptProjectState diarizationOpen = await workspace.Project
-                        .OpenAsync(cancellationToken).ConfigureAwait(false);
-                    if (diarizationOpen.CurrentTranscriptRevision is not null &&
-                        diarizationOpen.TranscriptSegments.Count > 0)
-                    {
-                        // Interactive re-run: re-diarize and re-assign speaker ids on the
-                        // existing transcript segments, matching the desktop host's
-                        // "Identify speakers" semantics.
-                        TranscriptProjectState rediarized = await workspace.RerunDiarizationAsync(
-                            RuntimeModelSetupCoordinator.CreateRerunDiarizationRequest(runtimeSelections),
-                            cancellationToken).ConfigureAwait(false);
-                        return BuildStageWorkflowResultFromStageRun(rediarized, StageNames.Diarization);
-                    }
-
-                    string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
-                    await workspace.RunTranscriptStageAsync(
-                        stageName,
-                        enableSpeakerDiarization: options.EnableSpeakerDiarization,
-                        modelPreferences,
-                        cancellationToken,
-                        progress,
-                        sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-                    return new StageWorkflowResult([], null);
-                }
+                return await RunDiarizationStageAsync(
+                    workspace,
+                    options,
+                    runtimeSelections,
+                    modelPreferences,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.AudioPreparation:
-                {
-                    TranscriptProjectState audioPrepState = await workspace
-                        .RunSpeechAudioPreparationAsync(cancellationToken, progress)
-                        .ConfigureAwait(false);
-                    return BuildStageWorkflowResultFromStageRun(audioPrepState, StageNames.AudioPreparation);
-                }
+                return await RunAudioPreparationStageAsync(
+                    workspace,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.TextRefinementAsr:
-                {
-                    string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
-                    TranscriptProjectState refinementState = await workspace.RunTranscriptStageAsync(
-                        stageName,
-                        enableSpeakerDiarization: options.EnableSpeakerDiarization,
-                        modelPreferences,
-                        cancellationToken,
-                        progress,
-                        sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-                    return BuildStageWorkflowResultFromStageRun(refinementState, StageNames.TextRefinementAsr);
-                }
+                return await RunTextRefinementStageAsync(
+                    workspace,
+                    options,
+                    modelPreferences,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.OverlapRescue:
-                {
-                    TranscriptProjectState preRescueState = await workspace.Project
-                        .OpenAsync(cancellationToken).ConfigureAwait(false);
-                    StageRunRecord? diarizationRun = GetLatestStageRun(preRescueState, StageNames.Diarization);
-                    if (diarizationRun is null ||
-                        diarizationRun.Status is not (StageRunStatus.Completed
-                            or StageRunStatus.PartiallyCompleted
-                            or StageRunStatus.Skipped))
-                    {
-                        return new StageWorkflowResult(
-                            [],
-                            ["Overlap rescue requires a completed diarization run first."],
-                            StageStatus.Skipped,
-                            StageSkipReasonCodes.PrerequisiteFailed);
-                    }
-
-                    var rescueProgress = new Progress<OverlapRescueProgress>(update =>
-                        ReportProgress(
-                            progress,
-                            StageNames.OverlapRescue,
-                            PipelineProgressEventKind.Progress,
-                            update.IsPersistingArtifacts
-                                ? "Overlap rescue: saving source candidates."
-                                : string.Format(
-                                    CultureInfo.InvariantCulture,
-                                    "Overlap rescue region {0}/{1}",
-                                    update.CompletedRegions,
-                                    update.TotalRegions)));
-
-                    TranscriptProjectState rescueState = await workspace.RunOverlapRescueAsync(
-                        cancellationToken,
-                        rescueProgress,
-                        preferredModelAlias: runtimeSelections.OverlapRescueModelAlias,
-                        modelPreferences: modelPreferences,
-                        retranscribeCandidates: options.RetranscribeOverlapCandidates).ConfigureAwait(false);
-                    return BuildStageWorkflowResultFromStageRun(rescueState, StageNames.OverlapRescue);
-                }
+                return await RunOverlapRescueStageAsync(
+                    workspace,
+                    options,
+                    runtimeSelections,
+                    modelPreferences,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.Translation:
-                TranscriptProjectState translationState = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
-                if (translationState.TranscriptSegments.Count == 0)
-                {
-                    return BuildNoTranscriptSegmentsSkip(stageName);
-                }
-
-                string sourceLanguage = options.SourceLanguageCode ?? "auto";
-                await workspace.GenerateTranslationAsync(
-                    new GenerateTranslationRequest(
-                        SourceLanguage: sourceLanguage,
-                        TargetLanguage: options.TargetLanguageCode,
-                        PreferredModelAlias: runtimeSelections.TranslationModelAlias),
-                    cancellationToken,
-                    progress).ConfigureAwait(false);
-                return new StageWorkflowResult([], null);
+                return await RunTranslationStageAsync(
+                    workspace,
+                    options,
+                    runtimeSelections,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.Tts:
-                TranscriptProjectState ttsState = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
-                if (ttsState.TranscriptSegments.Count == 0)
-                {
-                    return BuildNoTranscriptSegmentsSkip(stageName);
-                }
-
-                if (RequestsVoiceCloning(options))
-                {
-                    TryResolveService<IConsentService>(session)?.GrantVoiceCloningConsent();
-                    ReportProgress(
-                        progress,
-                        StageNames.Tts,
-                        PipelineProgressEventKind.Progress,
-                        options.VoiceAssignmentOverrides is { Count: > 0 }
-                            ? "Cloning speakers without a voice override from source audio."
-                            : "Cloning each speaker from source audio.");
-                }
-
-                RuntimeExecutionProviderSelection ttsExecutionProvider =
-                    RuntimeModelSetupCoordinator.CreateExecutionProviderSelection(
-                        runtimeSelections,
-                        RuntimeStage.Tts);
-                GenerateTtsForAllSpeakersRequest ttsRequest = BuildUnattendedTtsRequest(
-                    ttsState,
+                return await RunTtsStageAsync(
+                    session,
                     options,
-                    runtimeSelections.TtsModelAlias) with
-                {
-                    PreferredExecutionProvider = ttsExecutionProvider.PreferredExecutionProvider,
-                    RequirePreferredExecutionProvider = ttsExecutionProvider.RequirePreferredExecutionProvider,
-                    PreferredModelVariantAlias = RuntimeModelSetupCoordinator.ResolvePreferredModelVariantAlias(
-                        runtimeSelections,
-                        RuntimeStage.Tts),
-                };
-                if (ttsRequest.VoiceIdsBySpeakerId is { Count: > 0 })
-                {
-                    ReportProgress(
-                        progress,
-                        StageNames.Tts,
-                        PipelineProgressEventKind.Progress,
-                        $"Applying voice override to {ttsRequest.VoiceIdsBySpeakerId.Count} speaker(s).");
-                }
-
-                if (ttsRequest.FallbackVoiceIdsBySpeakerId is { Count: > 0 })
-                {
-                    ReportProgress(
-                        progress,
-                        StageNames.Tts,
-                        PipelineProgressEventKind.Progress,
-                        $"Auto-assigning a fallback voice to {ttsRequest.FallbackVoiceIdsBySpeakerId.Count} speaker(s) without a voice assignment (unattended run).");
-                }
-
-                await workspace.GenerateTtsForAllSpeakersAsync(
-                    ttsRequest,
-                    cancellationToken,
-                    progress).ConfigureAwait(false);
-                return new StageWorkflowResult([], null);
+                    runtimeSelections,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.Export:
-                TranscriptProjectState state = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
-                bool hasTranscriptSegments = state.TranscriptSegments.Count > 0;
-                ExportOutputContainer container = ResolveExportContainer(options.ExportFormat);
-                string outputPath = !string.IsNullOrWhiteSpace(options.ExportOutputPath)
-                    ? options.ExportOutputPath
-                    : ResolveExportOutputPath(session.ProjectRootPath, container);
-                if (!hasTranscriptSegments)
-                {
-                    ReportProgress(
-                        progress,
-                        StageNames.Export,
-                        PipelineProgressEventKind.Progress,
-                        "No transcript segments were detected; exporting source media without subtitles or dubbed speech.");
-                }
-
-                ExportStageResult exportResult = await workspace.ExportAsync(
-                    state,
-                    new ExportStageRequest(
-                        ProjectId: state.ProjectState.Project.Id,
-                        OutputPath: outputPath,
-                        SubtitleFormats: ResolveSubtitleFormats(options.SubtitleFormats, hasTranscriptSegments),
-                        SubtitleSource: ResolveSubtitleSource(options.SubtitleSource),
-                        BurnInSubtitles: options.BurnInSubtitles,
-                        TargetLufs: options.ExportTargetLufs ?? ExportLoudnessTargets.OnlineLufs,
-                        Container: container,
-                        SourceGainDb: options.ExportSourceGainDb ?? 0d,
-                        DubbedSpeechGainDb: options.ExportDubbedSpeechGainDb ?? 0d,
-                        DuckingGainDb: options.ExportDuckingGainDb,
-                        ApplyTimbrePolish: options.ApplyTimbrePolish,
-                        RestoreOriginalPan: options.RestoreOriginalPan,
-                        MatchOriginalLoudness: options.MatchOriginalLoudness,
-                        VideoEncoder: options.VideoEncoder,
-                        // Carry the raw requested formats (including the null/empty distinction)
-                        // so the export-resume gate persists and compares the same token the
-                        // snapshot records, instead of the transcript-state-resolved formats.
-                        RawSubtitleFormats: options.SubtitleFormats),
+                return await RunExportStageAsync(
+                    session,
+                    options,
+                    progress,
                     cancellationToken).ConfigureAwait(false);
-                if (exportResult.IsBlocked)
-                {
-                    throw new InvalidOperationException(exportResult.BlockedReason ?? "Export blocked by tier gate.");
-                }
-
-                return new StageWorkflowResult(
-                    [exportResult.OutputPath, exportResult.ExportVideoRelativePath],
-                    null);
 
             case StageNames.LipSync:
-                {
-                    if (workspace.LipSync is null)
-                    {
-                        throw new InvalidOperationException(
-                            "Lip-sync workflow is not available in this session. Ensure CompositionRoot registered LipSyncWorkflow.");
-                    }
-
-                    TranscriptProjectState lipSyncState = await workspace.RunLipSyncAsync(
-                        new LipSyncAlignAllRequest(
-                            PreferredModelAlias: runtimeSelections.LipSyncModelAlias),
-                        cancellationToken).ConfigureAwait(false);
-                    return BuildStageWorkflowResultFromStageRun(lipSyncState, StageNames.LipSync);
-                }
+                return await RunLipSyncStageAsync(
+                    workspace,
+                    runtimeSelections,
+                    cancellationToken).ConfigureAwait(false);
 
             case StageNames.LipSynthesis:
-                {
-                    if (workspace.LipSynthesis is null)
-                    {
-                        throw new InvalidOperationException(
-                            "Lip-synthesis workflow is not available in this session. Ensure CompositionRoot registered LipSynthesisWorkflow.");
-                    }
-
-                    (bool isLicenseApproved, bool allowExperimentalExecution) =
-                        await ResolveLipSynthesisExecutionGatesAsync(
-                            session,
-                            runtimeSelections.LipSynthesisModelAlias,
-                            cancellationToken).ConfigureAwait(false);
-
-                    TranscriptProjectState lipSynthesisState = await workspace.RunLipSynthesisAsync(
-                        new LipSynthesisRunRequest(
-                            IsLicenseApproved: isLicenseApproved,
-                            AllowExperimentalExecution: allowExperimentalExecution,
-                            PreferredModelAlias: runtimeSelections.LipSynthesisModelAlias),
-                        cancellationToken).ConfigureAwait(false);
-                    return BuildStageWorkflowResultFromStageRun(lipSynthesisState, StageNames.LipSynthesis);
-                }
+                return await RunLipSynthesisStageAsync(
+                    session,
+                    runtimeSelections,
+                    cancellationToken).ConfigureAwait(false);
 
             default:
                 // A catalog stage with no registered workflow is a defect, not a no-op;
@@ -1131,6 +933,396 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                     StageStatus.Failed,
                     "STAGE_UNSUPPORTED");
         }
+    }
+
+    /// <summary>
+    /// Runs stem separation (speech enhancement surfaces as degradations, not failure).
+    /// </summary>
+    private static async Task<StageWorkflowResult> RunSeparationStageAsync(
+        TranscriptWorkspace workspace,
+        DubbingSessionOptions options,
+        RuntimeModelSelections runtimeSelections,
+        InferenceModelPreferences modelPreferences,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (!options.EnableStemSeparation)
+        {
+            return new StageWorkflowResult(
+                [],
+                ["Stem separation is disabled for this run."],
+                StageStatus.Skipped,
+                StageSkipReasonCodes.DisabledByOption);
+        }
+
+        TranscriptProjectState separationState = await workspace.RunStemSeparationAsync(
+            cancellationToken,
+            preferredModelAlias: runtimeSelections.SeparationModelAlias,
+            modelPreferences: modelPreferences,
+            regenerateTranscript: options.RegenerateTranscriptOnSeparation).ConfigureAwait(false);
+
+        IReadOnlyList<string>? enhancementDegradations = ExtractSpeechEnhancementDegradations(separationState);
+        if (enhancementDegradations is { Count: > 0 })
+        {
+            // Surface the speech-enhancement failure before the separation Completed event so
+            // the caller sees it in the progress stream and the stage outcome DegradationRecords.
+            ReportProgress(progress, StageNames.SpeechEnhancement, PipelineProgressEventKind.Failed,
+                enhancementDegradations[0]);
+        }
+
+        return new StageWorkflowResult([], enhancementDegradations);
+    }
+
+    private static async Task<StageWorkflowResult> RunVadStageAsync(
+        TranscriptWorkspace workspace,
+        DubbingSessionOptions options,
+        InferenceModelPreferences modelPreferences,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
+        await workspace.RunTranscriptStageAsync(
+            StageNames.Vad,
+            enableSpeakerDiarization: false,
+            modelPreferences,
+            cancellationToken,
+            progress,
+            sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
+        return new StageWorkflowResult([], null);
+    }
+
+    private static async Task<StageWorkflowResult> RunAsrStageAsync(
+        TranscriptWorkspace workspace,
+        DubbingSessionOptions options,
+        RuntimeModelSelections runtimeSelections,
+        InferenceModelPreferences modelPreferences,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        TranscriptProjectState asrOpen = await workspace.Project
+            .OpenAsync(cancellationToken).ConfigureAwait(false);
+        if (asrOpen.CurrentTranscriptRevision is not null &&
+            asrOpen.TranscriptSegments.Count > 0)
+        {
+            // Interactive re-run: re-transcribe the existing segments in place
+            // instead of regenerating a fresh revision from VAD regions.
+            IReadOnlyList<Guid> segmentIds = asrOpen.TranscriptSegments
+                .Select(static segment => segment.Id)
+                .ToArray();
+            TranscriptProjectState retranscribed = await workspace.RetranscribeSegmentsAsync(
+                RuntimeModelSetupCoordinator.CreateRetranscribeRequest(
+                    runtimeSelections,
+                    asrOpen.CurrentTranscriptRevision.Id,
+                    segmentIds),
+                cancellationToken).ConfigureAwait(false);
+            return BuildStageWorkflowResultFromStageRun(retranscribed, StageNames.Asr);
+        }
+
+        string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
+        await workspace.RunTranscriptStageAsync(
+            StageNames.Asr,
+            enableSpeakerDiarization: false,
+            modelPreferences,
+            cancellationToken,
+            progress,
+            sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
+        return new StageWorkflowResult([], null);
+    }
+
+    private static async Task<StageWorkflowResult> RunDiarizationStageAsync(
+        TranscriptWorkspace workspace,
+        DubbingSessionOptions options,
+        RuntimeModelSelections runtimeSelections,
+        InferenceModelPreferences modelPreferences,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        TranscriptProjectState diarizationOpen = await workspace.Project
+            .OpenAsync(cancellationToken).ConfigureAwait(false);
+        if (diarizationOpen.CurrentTranscriptRevision is not null &&
+            diarizationOpen.TranscriptSegments.Count > 0)
+        {
+            // Interactive re-run: re-diarize and re-assign speaker ids on the
+            // existing transcript segments, matching the desktop host's
+            // "Identify speakers" semantics.
+            TranscriptProjectState rediarized = await workspace.RerunDiarizationAsync(
+                RuntimeModelSetupCoordinator.CreateRerunDiarizationRequest(runtimeSelections),
+                cancellationToken).ConfigureAwait(false);
+            return BuildStageWorkflowResultFromStageRun(rediarized, StageNames.Diarization);
+        }
+
+        string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
+        await workspace.RunTranscriptStageAsync(
+            StageNames.Diarization,
+            enableSpeakerDiarization: options.EnableSpeakerDiarization,
+            modelPreferences,
+            cancellationToken,
+            progress,
+            sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
+        return new StageWorkflowResult([], null);
+    }
+
+    private static async Task<StageWorkflowResult> RunAudioPreparationStageAsync(
+        TranscriptWorkspace workspace,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        TranscriptProjectState audioPrepState = await workspace
+            .RunSpeechAudioPreparationAsync(cancellationToken, progress)
+            .ConfigureAwait(false);
+        return BuildStageWorkflowResultFromStageRun(audioPrepState, StageNames.AudioPreparation);
+    }
+
+    private static async Task<StageWorkflowResult> RunTextRefinementStageAsync(
+        TranscriptWorkspace workspace,
+        DubbingSessionOptions options,
+        InferenceModelPreferences modelPreferences,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
+        TranscriptProjectState refinementState = await workspace.RunTranscriptStageAsync(
+            StageNames.TextRefinementAsr,
+            enableSpeakerDiarization: options.EnableSpeakerDiarization,
+            modelPreferences,
+            cancellationToken,
+            progress,
+            sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
+        return BuildStageWorkflowResultFromStageRun(refinementState, StageNames.TextRefinementAsr);
+    }
+
+    private static async Task<StageWorkflowResult> RunOverlapRescueStageAsync(
+        TranscriptWorkspace workspace,
+        DubbingSessionOptions options,
+        RuntimeModelSelections runtimeSelections,
+        InferenceModelPreferences modelPreferences,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        TranscriptProjectState preRescueState = await workspace.Project
+            .OpenAsync(cancellationToken).ConfigureAwait(false);
+        StageRunRecord? diarizationRun = GetLatestStageRun(preRescueState, StageNames.Diarization);
+        if (diarizationRun is null ||
+            diarizationRun.Status is not (StageRunStatus.Completed
+                or StageRunStatus.PartiallyCompleted
+                or StageRunStatus.Skipped))
+        {
+            return new StageWorkflowResult(
+                [],
+                ["Overlap rescue requires a completed diarization run first."],
+                StageStatus.Skipped,
+                StageSkipReasonCodes.PrerequisiteFailed);
+        }
+
+        var rescueProgress = new Progress<OverlapRescueProgress>(update =>
+            ReportProgress(
+                progress,
+                StageNames.OverlapRescue,
+                PipelineProgressEventKind.Progress,
+                update.IsPersistingArtifacts
+                    ? "Overlap rescue: saving source candidates."
+                    : string.Format(
+                        CultureInfo.InvariantCulture,
+                        "Overlap rescue region {0}/{1}",
+                        update.CompletedRegions,
+                        update.TotalRegions)));
+
+        TranscriptProjectState rescueState = await workspace.RunOverlapRescueAsync(
+            cancellationToken,
+            rescueProgress,
+            preferredModelAlias: runtimeSelections.OverlapRescueModelAlias,
+            modelPreferences: modelPreferences,
+            retranscribeCandidates: options.RetranscribeOverlapCandidates).ConfigureAwait(false);
+        return BuildStageWorkflowResultFromStageRun(rescueState, StageNames.OverlapRescue);
+    }
+
+    private static async Task<StageWorkflowResult> RunTranslationStageAsync(
+        TranscriptWorkspace workspace,
+        DubbingSessionOptions options,
+        RuntimeModelSelections runtimeSelections,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        TranscriptProjectState translationState = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
+        if (translationState.TranscriptSegments.Count == 0)
+        {
+            return BuildNoTranscriptSegmentsSkip(StageNames.Translation);
+        }
+
+        string sourceLanguage = options.SourceLanguageCode ?? "auto";
+        await workspace.GenerateTranslationAsync(
+            new GenerateTranslationRequest(
+                SourceLanguage: sourceLanguage,
+                TargetLanguage: options.TargetLanguageCode,
+                PreferredModelAlias: runtimeSelections.TranslationModelAlias),
+            cancellationToken,
+            progress).ConfigureAwait(false);
+        return new StageWorkflowResult([], null);
+    }
+
+    private static async Task<StageWorkflowResult> RunTtsStageAsync(
+        IDubbingSession session,
+        DubbingSessionOptions options,
+        RuntimeModelSelections runtimeSelections,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        TranscriptWorkspace workspace = session.Workspace;
+        TranscriptProjectState ttsState = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
+        if (ttsState.TranscriptSegments.Count == 0)
+        {
+            return BuildNoTranscriptSegmentsSkip(StageNames.Tts);
+        }
+
+        if (RequestsVoiceCloning(options))
+        {
+            TryResolveService<IConsentService>(session)?.GrantVoiceCloningConsent();
+            ReportProgress(
+                progress,
+                StageNames.Tts,
+                PipelineProgressEventKind.Progress,
+                options.VoiceAssignmentOverrides is { Count: > 0 }
+                    ? "Cloning speakers without a voice override from source audio."
+                    : "Cloning each speaker from source audio.");
+        }
+
+        RuntimeExecutionProviderSelection ttsExecutionProvider =
+            RuntimeModelSetupCoordinator.CreateExecutionProviderSelection(
+                runtimeSelections,
+                RuntimeStage.Tts);
+        GenerateTtsForAllSpeakersRequest ttsRequest = BuildUnattendedTtsRequest(
+            ttsState,
+            options,
+            runtimeSelections.TtsModelAlias) with
+        {
+            PreferredExecutionProvider = ttsExecutionProvider.PreferredExecutionProvider,
+            RequirePreferredExecutionProvider = ttsExecutionProvider.RequirePreferredExecutionProvider,
+            PreferredModelVariantAlias = RuntimeModelSetupCoordinator.ResolvePreferredModelVariantAlias(
+                runtimeSelections,
+                RuntimeStage.Tts),
+        };
+        if (ttsRequest.VoiceIdsBySpeakerId is { Count: > 0 })
+        {
+            ReportProgress(
+                progress,
+                StageNames.Tts,
+                PipelineProgressEventKind.Progress,
+                $"Applying voice override to {ttsRequest.VoiceIdsBySpeakerId.Count} speaker(s).");
+        }
+
+        if (ttsRequest.FallbackVoiceIdsBySpeakerId is { Count: > 0 })
+        {
+            ReportProgress(
+                progress,
+                StageNames.Tts,
+                PipelineProgressEventKind.Progress,
+                $"Auto-assigning a fallback voice to {ttsRequest.FallbackVoiceIdsBySpeakerId.Count} speaker(s) without a voice assignment (unattended run).");
+        }
+
+        await workspace.GenerateTtsForAllSpeakersAsync(
+            ttsRequest,
+            cancellationToken,
+            progress).ConfigureAwait(false);
+        return new StageWorkflowResult([], null);
+    }
+
+    private static async Task<StageWorkflowResult> RunExportStageAsync(
+        IDubbingSession session,
+        DubbingSessionOptions options,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        TranscriptWorkspace workspace = session.Workspace;
+        TranscriptProjectState state = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
+        bool hasTranscriptSegments = state.TranscriptSegments.Count > 0;
+        ExportOutputContainer container = ResolveExportContainer(options.ExportFormat);
+        string outputPath = !string.IsNullOrWhiteSpace(options.ExportOutputPath)
+            ? options.ExportOutputPath
+            : ResolveExportOutputPath(session.ProjectRootPath, container);
+        if (!hasTranscriptSegments)
+        {
+            ReportProgress(
+                progress,
+                StageNames.Export,
+                PipelineProgressEventKind.Progress,
+                "No transcript segments were detected; exporting source media without subtitles or dubbed speech.");
+        }
+
+        ExportStageResult exportResult = await workspace.ExportAsync(
+            state,
+            new ExportStageRequest(
+                ProjectId: state.ProjectState.Project.Id,
+                OutputPath: outputPath,
+                SubtitleFormats: ResolveSubtitleFormats(options.SubtitleFormats, hasTranscriptSegments),
+                SubtitleSource: ResolveSubtitleSource(options.SubtitleSource),
+                BurnInSubtitles: options.BurnInSubtitles,
+                TargetLufs: options.ExportTargetLufs ?? ExportLoudnessTargets.OnlineLufs,
+                Container: container,
+                SourceGainDb: options.ExportSourceGainDb ?? 0d,
+                DubbedSpeechGainDb: options.ExportDubbedSpeechGainDb ?? 0d,
+                DuckingGainDb: options.ExportDuckingGainDb,
+                ApplyTimbrePolish: options.ApplyTimbrePolish,
+                RestoreOriginalPan: options.RestoreOriginalPan,
+                MatchOriginalLoudness: options.MatchOriginalLoudness,
+                VideoEncoder: options.VideoEncoder,
+                // Carry the raw requested formats (including the null/empty distinction)
+                // so the export-resume gate persists and compares the same token the
+                // snapshot records, instead of the transcript-state-resolved formats.
+                RawSubtitleFormats: options.SubtitleFormats),
+            cancellationToken).ConfigureAwait(false);
+        if (exportResult.IsBlocked)
+        {
+            throw new InvalidOperationException(exportResult.BlockedReason ?? "Export blocked by tier gate.");
+        }
+
+        return new StageWorkflowResult(
+            [exportResult.OutputPath, exportResult.ExportVideoRelativePath],
+            null);
+    }
+
+    private static async Task<StageWorkflowResult> RunLipSyncStageAsync(
+        TranscriptWorkspace workspace,
+        RuntimeModelSelections runtimeSelections,
+        CancellationToken cancellationToken)
+    {
+        if (workspace.LipSync is null)
+        {
+            throw new InvalidOperationException(
+                "Lip-sync workflow is not available in this session. Ensure CompositionRoot registered LipSyncWorkflow.");
+        }
+
+        TranscriptProjectState lipSyncState = await workspace.RunLipSyncAsync(
+            new LipSyncAlignAllRequest(
+                PreferredModelAlias: runtimeSelections.LipSyncModelAlias),
+            cancellationToken).ConfigureAwait(false);
+        return BuildStageWorkflowResultFromStageRun(lipSyncState, StageNames.LipSync);
+    }
+
+    private static async Task<StageWorkflowResult> RunLipSynthesisStageAsync(
+        IDubbingSession session,
+        RuntimeModelSelections runtimeSelections,
+        CancellationToken cancellationToken)
+    {
+        TranscriptWorkspace workspace = session.Workspace;
+        if (workspace.LipSynthesis is null)
+        {
+            throw new InvalidOperationException(
+                "Lip-synthesis workflow is not available in this session. Ensure CompositionRoot registered LipSynthesisWorkflow.");
+        }
+
+        (bool isLicenseApproved, bool allowExperimentalExecution) =
+            await ResolveLipSynthesisExecutionGatesAsync(
+                session,
+                runtimeSelections.LipSynthesisModelAlias,
+                cancellationToken).ConfigureAwait(false);
+
+        TranscriptProjectState lipSynthesisState = await workspace.RunLipSynthesisAsync(
+            new LipSynthesisRunRequest(
+                IsLicenseApproved: isLicenseApproved,
+                AllowExperimentalExecution: allowExperimentalExecution,
+                PreferredModelAlias: runtimeSelections.LipSynthesisModelAlias),
+            cancellationToken).ConfigureAwait(false);
+        return BuildStageWorkflowResultFromStageRun(lipSynthesisState, StageNames.LipSynthesis);
     }
 
     private static StageWorkflowResult BuildStageWorkflowResultFromStageRun(

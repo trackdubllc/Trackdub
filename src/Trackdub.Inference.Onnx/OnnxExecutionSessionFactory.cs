@@ -123,19 +123,6 @@ internal static class OnnxExecutionSessionFactory
             CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtDecoderOptions));
     }
 
-    private static string ResolveSingleFallbackDetail(
-        ExecutionProviderKind requestedProvider,
-        InferenceSession session,
-        SessionOptionsSelection selection,
-        WindowsMlExecutionDevicePolicy devicePolicy)
-    {
-        ExecutionProviderKind effective = ResolveEffectiveProviderKindFromSession(
-            session,
-            selection.SelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, selection.SelectedProvider));
-        return BuildSessionOptionsFallbackReason(requestedProvider, effective, selection);
-    }
-
     private static DualSessionMetadata ResolveDualSessionMetadata(
         ExecutionProviderKind requestedProvider,
         BootstrapContext bootstrap,
@@ -1020,89 +1007,115 @@ internal static class OnnxExecutionSessionFactory
                 BuildDevicePolicyFallbackReason(devicePolicy, devicePolicyApplied));
         }
 
-        if (provider is ExecutionProviderKind.DirectMl)
-        {
-            if (!TryAppendDirectMlProvider(options, out _) &&
-                !TryAppendDirectMlProviderDirect(options, out _))
-            {
-                return new SessionOptionsSelection(
-                    options,
-                    ExecutionProviderKind.Cpu,
-                    "Requested dml but DirectML append failed; CPU fallback activated.");
-            }
+        return AppendProviderSpecificSelection(options, provider, additionalTrtOptions)
+            ?? throw new ArgumentOutOfRangeException(nameof(provider), provider, "Unsupported execution provider kind.");
+    }
 
-            return new SessionOptionsSelection(options, ExecutionProviderKind.DirectMl);
-        }
-
-        if (provider is ExecutionProviderKind.Dnnl)
+    private static SessionOptionsSelection? AppendProviderSpecificSelection(
+        SessionOptions options,
+        ExecutionProviderKind provider,
+        IReadOnlyDictionary<string, string>? additionalTrtOptions)
+    {
+        return provider switch
         {
-            ExecutionProviderKind selectedProvider = DnnlSessionOptionsExtensions.AppendDnnlOrFallback(
+            ExecutionProviderKind.DirectMl => CreateDirectMlSelection(options),
+            ExecutionProviderKind.Dnnl => CreateDnnlSelection(options),
+            ExecutionProviderKind.TensorRTRtx => CreateTensorRtRtxSelection(options, additionalTrtOptions),
+            ExecutionProviderKind.Migraphx => CreateMigraphxSelection(options),
+            ExecutionProviderKind.CoreMl => CreateCoreMlSelection(options),
+            ExecutionProviderKind.OpenVinoCatalog => CreateOpenVinoCatalogSelection(options),
+            ExecutionProviderKind.Qnn => CreateQnnSelection(options),
+            ExecutionProviderKind.VitisAi => CreateVitisAiSelection(options),
+#if LINUX || WINDOWS
+            ExecutionProviderKind.Cuda => CreateCudaSelection(options),
+            ExecutionProviderKind.TensorRt => CreateTensorRtSelection(options),
+#endif
+            _ => null,
+        };
+    }
+
+    private static SessionOptionsSelection CreateDirectMlSelection(SessionOptions options)
+    {
+        if (!TryAppendDirectMlProvider(options, out _) &&
+            !TryAppendDirectMlProviderDirect(options, out _))
+        {
+            return new SessionOptionsSelection(
                 options,
-                out string? failureReason);
-            return selectedProvider is ExecutionProviderKind.Dnnl
-                ? new SessionOptionsSelection(options, selectedProvider)
-                : new SessionOptionsSelection(
-                    options,
-                    ExecutionProviderKind.Cpu,
-                    $"Requested dnnl but AppendExecutionProvider_Dnnl failed: {failureReason ?? "unknown failure"}");
+                ExecutionProviderKind.Cpu,
+                "Requested dml but DirectML append failed; CPU fallback activated.");
         }
 
-        if (provider is ExecutionProviderKind.TensorRTRtx)
-        {
-            ExecutionProviderKind selectedProvider = AppendTensorRtRtxOrFallbackProvider(options, additionalTrtOptions);
-            return new SessionOptionsSelection(options, selectedProvider);
-        }
+        return new SessionOptionsSelection(options, ExecutionProviderKind.DirectMl);
+    }
 
-        if (provider is ExecutionProviderKind.Migraphx)
-        {
-            ExecutionProviderKind selectedProvider = MigraphxSessionOptionsExtensions.AppendMigraphxOrFallback(options);
-            return new SessionOptionsSelection(options, selectedProvider);
-        }
+    private static SessionOptionsSelection CreateDnnlSelection(SessionOptions options)
+    {
+        ExecutionProviderKind selectedProvider = DnnlSessionOptionsExtensions.AppendDnnlOrFallback(
+            options,
+            out string? failureReason);
+        return selectedProvider is ExecutionProviderKind.Dnnl
+            ? new SessionOptionsSelection(options, selectedProvider)
+            : new SessionOptionsSelection(
+                options,
+                ExecutionProviderKind.Cpu,
+                $"Requested dnnl but AppendExecutionProvider_Dnnl failed: {failureReason ?? "unknown failure"}");
+    }
 
-        if (provider is ExecutionProviderKind.CoreMl)
-        {
-            if (!OperatingSystem.IsMacOS())
-                throw new InvalidOperationException("CoreML EP is only available on macOS.");
-            options.AppendExecutionProvider_CoreML(GetCoreMlFlags());
-            return new SessionOptionsSelection(options, ExecutionProviderKind.CoreMl);
-        }
+    private static SessionOptionsSelection CreateTensorRtRtxSelection(
+        SessionOptions options,
+        IReadOnlyDictionary<string, string>? additionalTrtOptions)
+    {
+        ExecutionProviderKind selectedProvider = AppendTensorRtRtxOrFallbackProvider(options, additionalTrtOptions);
+        return new SessionOptionsSelection(options, selectedProvider);
+    }
+
+    private static SessionOptionsSelection CreateMigraphxSelection(SessionOptions options)
+    {
+        ExecutionProviderKind selectedProvider = MigraphxSessionOptionsExtensions.AppendMigraphxOrFallback(options);
+        return new SessionOptionsSelection(options, selectedProvider);
+    }
+
+    private static SessionOptionsSelection CreateCoreMlSelection(SessionOptions options)
+    {
+        if (!OperatingSystem.IsMacOS())
+            throw new InvalidOperationException("CoreML EP is only available on macOS.");
+        options.AppendExecutionProvider_CoreML(GetCoreMlFlags());
+        return new SessionOptionsSelection(options, ExecutionProviderKind.CoreMl);
+    }
 
 #if LINUX || WINDOWS
-        if (provider is ExecutionProviderKind.Cuda)
-        {
-            options.AppendExecutionProvider_CUDA(deviceId: 0);
-            return new SessionOptionsSelection(options, ExecutionProviderKind.Cuda);
-        }
+    private static SessionOptionsSelection CreateCudaSelection(SessionOptions options)
+    {
+        options.AppendExecutionProvider_CUDA(deviceId: 0);
+        return new SessionOptionsSelection(options, ExecutionProviderKind.Cuda);
+    }
 
-        if (provider is ExecutionProviderKind.TensorRt)
-        {
-            options.AppendExecutionProvider_Tensorrt(deviceId: 0);
-            return new SessionOptionsSelection(options, ExecutionProviderKind.TensorRt);
-        }
+    private static SessionOptionsSelection CreateTensorRtSelection(SessionOptions options)
+    {
+        options.AppendExecutionProvider_Tensorrt(deviceId: 0);
+        return new SessionOptionsSelection(options, ExecutionProviderKind.TensorRt);
+    }
 #endif
 
-        if (provider is ExecutionProviderKind.OpenVinoCatalog)
-        {
-            ExecutionProviderKind selectedProvider =
-                WinMlCatalog.WinMlCatalogSessionOptionsExtensions.AppendOpenVinoCatalogOrFallback(options);
-            return new SessionOptionsSelection(options, selectedProvider);
-        }
+    private static SessionOptionsSelection CreateOpenVinoCatalogSelection(SessionOptions options)
+    {
+        ExecutionProviderKind selectedProvider =
+            WinMlCatalog.WinMlCatalogSessionOptionsExtensions.AppendOpenVinoCatalogOrFallback(options);
+        return new SessionOptionsSelection(options, selectedProvider);
+    }
 
-        if (provider is ExecutionProviderKind.Qnn)
-        {
-            ExecutionProviderKind selectedProvider =
-                WinMlCatalog.WinMlCatalogSessionOptionsExtensions.AppendQnnOrFallback(options);
-            return new SessionOptionsSelection(options, selectedProvider);
-        }
+    private static SessionOptionsSelection CreateQnnSelection(SessionOptions options)
+    {
+        ExecutionProviderKind selectedProvider =
+            WinMlCatalog.WinMlCatalogSessionOptionsExtensions.AppendQnnOrFallback(options);
+        return new SessionOptionsSelection(options, selectedProvider);
+    }
 
-        if (provider is ExecutionProviderKind.VitisAi)
-        {
-            ExecutionProviderKind selectedProvider =
-                WinMlCatalog.WinMlCatalogSessionOptionsExtensions.AppendVitisAiOrFallback(options);
-            return new SessionOptionsSelection(options, selectedProvider);
-        }
-
-        throw new ArgumentOutOfRangeException(nameof(provider), provider, "Unsupported execution provider kind.");
+    private static SessionOptionsSelection CreateVitisAiSelection(SessionOptions options)
+    {
+        ExecutionProviderKind selectedProvider =
+            WinMlCatalog.WinMlCatalogSessionOptionsExtensions.AppendVitisAiOrFallback(options);
+        return new SessionOptionsSelection(options, selectedProvider);
     }
 
     private static CoreMLFlags GetCoreMlFlags()
