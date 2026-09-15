@@ -61,7 +61,7 @@ public sealed class PreviewRangeRendererTests
             float[] outputSamples = ReadMonoSamples(outputPath, out int sampleRate);
             Assert.Equal(1000, sampleRate);
             Assert.Equal(2.0d, result.DurationSeconds, precision: 3);
-            Assert.InRange(Math.Abs(outputSamples.Length / (double)sampleRate - 2.0d), 0d, 0.05d);
+            Assert.InRange(Math.Abs((outputSamples.Length / (double)sampleRate) - 2.0d), 0d, 0.05d);
             Assert.InRange(outputSamples[250], 0.49f, 0.51f);
             Assert.InRange(outputSamples[600], 0.32f, 0.36f);
             Assert.InRange(outputSamples[1800], 0.49f, 0.51f);

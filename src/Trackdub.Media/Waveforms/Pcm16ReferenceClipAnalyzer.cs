@@ -73,7 +73,7 @@ public sealed class Pcm16ReferenceClipAnalyzer : IReferenceClipAnalyzer
                 double framePeak = 0d;
                 for (int channel = 0; channel < waveInfo.ChannelCount; channel++)
                 {
-                    int sampleOffset = frameOffset + channel * bytesPerSample;
+                    int sampleOffset = frameOffset + (channel * bytesPerSample);
                     short sample = BinaryPrimitives.ReadInt16LittleEndian(buffer.AsSpan(sampleOffset, bytesPerSample));
                     framePeak = Math.Max(framePeak, Math.Abs(sample / 32768d));
                 }

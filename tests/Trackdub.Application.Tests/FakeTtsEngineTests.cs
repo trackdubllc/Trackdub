@@ -130,7 +130,7 @@ public sealed class FakeTtsEngineTests
         TtsSynthesisResult result = await engine.SynthesizeAsync(request, TestContext.Current.CancellationToken);
 
         // WAV data section = DurationSamples * 2 (16-bit mono) + 44 header
-        int expectedLength = 44 + result.DurationSamples * 2;
+        int expectedLength = 44 + (result.DurationSamples * 2);
         Assert.Equal(expectedLength, result.WavBytes.Length);
     }
 

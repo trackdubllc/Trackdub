@@ -15,7 +15,7 @@ internal static class KokoroVoicepackLoader
         ArgumentOutOfRangeException.ThrowIfNegative(tokenCount);
 
         long byteOffset = (long)tokenCount * StyleVectorSize * sizeof(float);
-        long requiredBytes = byteOffset + StyleVectorSize * sizeof(float);
+        long requiredBytes = byteOffset + (StyleVectorSize * sizeof(float));
 
         using var stream = new FileStream(binPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         if (stream.Length < requiredBytes)

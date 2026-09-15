@@ -99,8 +99,8 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
 
             // v² / (v² + a² + eps)
             float eps = 1e-10f;
-            float denomL = vL * vL + aL * aL + eps;
-            float denomR = vR * vR + aR * aR + eps;
+            float denomL = (vL * vL) + (aL * aL) + eps;
+            float denomR = (vR * vR) + (aR * aR) + eps;
 
             float maskVocalsL = (vL * vL) / denomL;
             float maskVocalsR = (vR * vR) / denomR;

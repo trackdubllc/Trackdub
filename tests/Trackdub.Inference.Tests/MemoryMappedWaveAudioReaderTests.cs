@@ -23,7 +23,7 @@ public sealed class MemoryMappedWaveAudioReaderTests
             {
                 short first = (short)((frame % 1024) - 512);
                 short second = (short)(256 - (frame % 512));
-                short third = (short)((frame % 128) * 4 - 256);
+                short third = (short)(((frame % 128) * 4) - 256);
 
                 int sampleIndex = frame * channelCount;
                 interleaved[sampleIndex] = first;

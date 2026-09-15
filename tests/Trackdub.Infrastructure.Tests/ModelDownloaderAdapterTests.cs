@@ -193,7 +193,7 @@ public sealed class ModelDownloaderAdapterTests
             Assert.Equal(payloadLength, written.Length);
             Assert.Equal(payload, written);
             Assert.Equal((byte)0, written[0]);
-            Assert.Equal((byte)(payloadLength / 2 % 251), written[payloadLength / 2]);
+            Assert.Equal((byte)((payloadLength / 2) % 251), written[payloadLength / 2]);
             Assert.Equal((byte)((payloadLength - 1) % 251), written[^1]);
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(destinationPath)!, "*.partial"));
         }

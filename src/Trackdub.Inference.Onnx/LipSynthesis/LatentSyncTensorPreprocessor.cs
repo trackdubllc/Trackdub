@@ -20,7 +20,7 @@ internal static class LatentSyncTensorPreprocessor
     private const int MelFrames = 3000; // 30 s at 100 fps hop
     private const int WinLength = 400;  // Whisper n_fft
     private const int HopLength = 160;
-    private const int FreqBins = WinLength / 2 + 1; // 201
+    private const int FreqBins = (WinLength / 2) + 1; // 201
     private const int NSamples = 16000 * 30;        // 480 000
 
     private static readonly float[] HannWin = BuildHannWindow(WinLength);
@@ -43,16 +43,16 @@ internal static class LatentSyncTensorPreprocessor
             for (int x = 0; x < TargetWidth; x++)
             {
                 int sx = Math.Min((int)(x * scaleX), srcWidth - 1);
-                int srcIdx = (sy * srcWidth + sx) * 4; // RGBA
+                int srcIdx = ((sy * srcWidth) + sx) * 4; // RGBA
 
-                float r = rgba[srcIdx] / 127.5f - 1f;
-                float g = rgba[srcIdx + 1] / 127.5f - 1f;
-                float b = rgba[srcIdx + 2] / 127.5f - 1f;
+                float r = (rgba[srcIdx] / 127.5f) - 1f;
+                float g = (rgba[srcIdx + 1] / 127.5f) - 1f;
+                float b = (rgba[srcIdx + 2] / 127.5f) - 1f;
 
-                int dstBase = y * TargetWidth + x;
-                tensor[0 * TargetHeight * TargetWidth + dstBase] = r;
-                tensor[1 * TargetHeight * TargetWidth + dstBase] = g;
-                tensor[2 * TargetHeight * TargetWidth + dstBase] = b;
+                int dstBase = (y * TargetWidth) + x;
+                tensor[(0 * TargetHeight * TargetWidth) + dstBase] = r;
+                tensor[(1 * TargetHeight * TargetWidth) + dstBase] = g;
+                tensor[(2 * TargetHeight * TargetWidth) + dstBase] = b;
             }
         }
 
@@ -79,9 +79,9 @@ internal static class LatentSyncTensorPreprocessor
             {
                 int sx = Math.Min((int)(dx * scaleX), TargetWidth - 1);
 
-                float r = Math.Clamp((synTensor[0 * TargetHeight * TargetWidth + sy * TargetWidth + sx] + 1f) * 127.5f, 0f, 255f);
-                float g = Math.Clamp((synTensor[1 * TargetHeight * TargetWidth + sy * TargetWidth + sx] + 1f) * 127.5f, 0f, 255f);
-                float b = Math.Clamp((synTensor[2 * TargetHeight * TargetWidth + sy * TargetWidth + sx] + 1f) * 127.5f, 0f, 255f);
+                float r = Math.Clamp((synTensor[(0 * TargetHeight * TargetWidth) + (sy * TargetWidth) + sx] + 1f) * 127.5f, 0f, 255f);
+                float g = Math.Clamp((synTensor[(1 * TargetHeight * TargetWidth) + (sy * TargetWidth) + sx] + 1f) * 127.5f, 0f, 255f);
+                float b = Math.Clamp((synTensor[(2 * TargetHeight * TargetWidth) + (sy * TargetWidth) + sx] + 1f) * 127.5f, 0f, 255f);
 
                 int px = faceX + dx;
                 int py = faceY + dy;
@@ -90,7 +90,7 @@ internal static class LatentSyncTensorPreprocessor
                     continue;
                 }
 
-                int dstIdx = (py * fullWidth + px) * 4;
+                int dstIdx = ((py * fullWidth) + px) * 4;
                 fullFrameRgba[dstIdx] = (byte)r;
                 fullFrameRgba[dstIdx + 1] = (byte)g;
                 fullFrameRgba[dstIdx + 2] = (byte)b;
@@ -159,7 +159,7 @@ internal static class LatentSyncTensorPreprocessor
                     sum += MelFilters[m, b] * power[b, t];
                 }
 
-                output[m * MelFrames + t] = MathF.Log10((float)Math.Max(sum, 1e-10));
+                output[(m * MelFrames) + t] = MathF.Log10((float)Math.Max(sum, 1e-10));
             }
         }
 
@@ -186,7 +186,7 @@ internal static class LatentSyncTensorPreprocessor
         var w = new float[n];
         for (int i = 0; i < n; i++)
         {
-            w[i] = (float)(0.5 - 0.5 * Math.Cos(2.0 * Math.PI * i / (n - 1)));
+            w[i] = (float)(0.5 - (0.5 * Math.Cos(2.0 * Math.PI * i / (n - 1))));
         }
 
         return w;
@@ -204,7 +204,7 @@ internal static class LatentSyncTensorPreprocessor
         double[] hzPoints = new double[MelBins + 2];
         for (int i = 0; i < hzPoints.Length; i++)
         {
-            hzPoints[i] = MelToHzHtk(melMin + (melMax - melMin) * i / (MelBins + 1));
+            hzPoints[i] = MelToHzHtk(melMin + ((melMax - melMin) * i / (MelBins + 1)));
         }
 
         // FFT bin centre frequencies
@@ -240,7 +240,7 @@ internal static class LatentSyncTensorPreprocessor
         return filters;
     }
 
-    private static double HzToMelHtk(double hz) => 2595.0 * Math.Log10(1.0 + hz / 700.0);
+    private static double HzToMelHtk(double hz) => 2595.0 * Math.Log10(1.0 + (hz / 700.0));
 
     private static double MelToHzHtk(double mel) => 700.0 * (Math.Pow(10.0, mel / 2595.0) - 1.0);
 }

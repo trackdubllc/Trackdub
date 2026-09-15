@@ -393,7 +393,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             int rightOffset = batchIndex * rightSequence * hidden;
             int destinationOffset = batchIndex * (leftSequence + rightSequence) * hidden;
             Array.Copy(left.Values, leftOffset, values, destinationOffset, leftSequence * hidden);
-            Array.Copy(right.Values, rightOffset, values, destinationOffset + leftSequence * hidden, rightSequence * hidden);
+            Array.Copy(right.Values, rightOffset, values, destinationOffset + (leftSequence * hidden), rightSequence * hidden);
         }
 
         return new TensorData<float>(values, [batch, leftSequence + rightSequence, hidden]);

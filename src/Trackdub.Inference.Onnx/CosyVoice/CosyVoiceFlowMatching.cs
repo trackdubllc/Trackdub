@@ -19,7 +19,7 @@ internal static class CosyVoiceFlowMatching
         var random = new Random(0);
         for (int i = 0; i < x.Length; i++)
         {
-            x[i] = (float)(random.NextDouble() * 2d - 1d);
+            x[i] = (float)((random.NextDouble() * 2d) - 1d);
         }
 
         Span<float> tSpan = stackalloc float[CosyVoiceConstants.CfmSteps + 1];

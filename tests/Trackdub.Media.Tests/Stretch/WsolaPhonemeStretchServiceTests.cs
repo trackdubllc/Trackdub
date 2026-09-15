@@ -89,8 +89,8 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
 
         Assert.NotNull(result);
         Assert.InRange(result!.Value.TotalSeconds,
-            inputDurationSeconds * 2.0 - 0.1,
-            inputDurationSeconds * 2.0 + 0.1);
+            (inputDurationSeconds * 2.0) - 0.1,
+            (inputDurationSeconds * 2.0) + 0.1);
     }
 
     // -----------------------------------------------------------------

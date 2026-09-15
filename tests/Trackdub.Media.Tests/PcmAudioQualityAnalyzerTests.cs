@@ -47,8 +47,8 @@ public sealed class PcmAudioQualityAnalyzerTests
         try
         {
             await WriteWaveAsync(path, sample =>
-                0.18d * Math.Sin(2d * Math.PI * 220d * sample / 48000d) +
-                0.08d * Math.Sin(2d * Math.PI * 7000d * sample / 48000d));
+                (0.18d * Math.Sin(2d * Math.PI * 220d * sample / 48000d)) +
+                (0.08d * Math.Sin(2d * Math.PI * 7000d * sample / 48000d)));
             var analyzer = new PcmAudioQualityAnalyzer();
 
             AudioQualityAnalysisResult result = await analyzer.AnalyzeAsync(

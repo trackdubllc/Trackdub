@@ -49,7 +49,7 @@ public sealed class ScfrdOnnxFaceDetector(
         // Extract one frame near the midpoint of the turn for turn-level face analysis.
         // Single frame is sufficient because face position is stable within a turn; NMS handles
         // multi-face scenarios by selecting the highest-confidence detection.
-        TimeSpan mid = request.Start + (request.End - request.Start) / 2;
+        TimeSpan mid = request.Start + ((request.End - request.Start) / 2);
         TimeSpan sampleEnd = (request.End - mid) < TimeSpan.FromSeconds(0.5)
             ? request.End
             : mid + TimeSpan.FromSeconds(0.5);
@@ -138,12 +138,12 @@ public sealed class ScfrdOnnxFaceDetector(
             for (int x = 0; x < InferSize; x++)
             {
                 int sx = Math.Min((int)(x * scaleX), srcW - 1);
-                int srcIdx = (sy * srcW + sx) * 4;
+                int srcIdx = ((sy * srcW) + sx) * 4;
 
                 // CHW layout, RGB channel order (SCRFD trained with swapRB=True → expects RGB)
-                tensor[0 * InferSize * InferSize + y * InferSize + x] = (rgba[srcIdx] - 127.5f) / 128.0f;
-                tensor[1 * InferSize * InferSize + y * InferSize + x] = (rgba[srcIdx + 1] - 127.5f) / 128.0f;
-                tensor[2 * InferSize * InferSize + y * InferSize + x] = (rgba[srcIdx + 2] - 127.5f) / 128.0f;
+                tensor[(0 * InferSize * InferSize) + (y * InferSize) + x] = (rgba[srcIdx] - 127.5f) / 128.0f;
+                tensor[(1 * InferSize * InferSize) + (y * InferSize) + x] = (rgba[srcIdx + 1] - 127.5f) / 128.0f;
+                tensor[(2 * InferSize * InferSize) + (y * InferSize) + x] = (rgba[srcIdx + 2] - 127.5f) / 128.0f;
             }
         }
 
@@ -224,10 +224,10 @@ public sealed class ScfrdOnnxFaceDetector(
                             float d1 = bboxesIs3D ? bboxes[0, anchorIdx, 1] : bboxes[anchorIdx, 1];
                             float d2 = bboxesIs3D ? bboxes[0, anchorIdx, 2] : bboxes[anchorIdx, 2];
                             float d3 = bboxesIs3D ? bboxes[0, anchorIdx, 3] : bboxes[anchorIdx, 3];
-                            float x1 = cx - d0 * stride;
-                            float y1 = cy - d1 * stride;
-                            float x2 = cx + d2 * stride;
-                            float y2 = cy + d3 * stride;
+                            float x1 = cx - (d0 * stride);
+                            float y1 = cy - (d1 * stride);
+                            float x2 = cx + (d2 * stride);
+                            float y2 = cy + (d3 * stride);
                             detections.Add(new Detection(x1, y1, x2, y2, score));
                         }
 
