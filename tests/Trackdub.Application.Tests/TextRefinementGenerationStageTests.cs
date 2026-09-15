@@ -91,11 +91,11 @@ public sealed class TextRefinementGenerationStageTests
         Assert.Equal("Hello world", result.TextRefinementResult.Segments[0].DisplayedText);
     }
 
-    private static TextRefinementGenerationStage CreateStage()
     private static TextRefinementGenerationStage CreateStage(FakeProjectStageRunStore? stageRunStore = null)
-        var stageRunStore = new FakeProjectStageRunStore();
+    {
         stageRunStore ??= new FakeProjectStageRunStore();
         return new TextRefinementGenerationStage(
+            new TextRefinementStageHandler(new FakeTextRefinementEngine(), stageRunStore),
             stageRunStore);
     }
     private static TranscriptGenerationContext CreateContext(bool enableAsrTextRefinement)

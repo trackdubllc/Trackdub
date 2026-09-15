@@ -103,21 +103,22 @@ public sealed class TranscriptGenerationServiceStageTests
     }
 
     [Fact]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    public async Task GenerateTranscriptStageAsync_asr_polish_stage_run_reflects_flag(bool enableAsrTextRefinement, bool expectRun)
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GenerateTranscriptStageAsync_asr_polish_stage_run_reflects_flag(bool enableAsrTextRefinement)
     {
         var stageRunStore = new FakeProjectStageRunStore();
-        (TranscriptGenerationService service, TranscriptArtifactWriter artifactWriter) =
         var transcriptionEngine = new SegmentReturningTranscriptionEngine();
-            CreateMinimalService(stageRunStore: stageRunStore);
+        (TranscriptGenerationService service, TranscriptArtifactWriter artifactWriter) =
             CreateMinimalService(transcriptionEngine: transcriptionEngine, stageRunStore: stageRunStore);
+        TranscriptGenerationContext context = CreateContext();
 
         await artifactWriter.WriteSpeechRegionsArtifactAsync(
             context.Project.Id,
             context.MediaAsset,
-            [],
             [new SpeechRegion(0, 0.0d, 1.0d)],
+            Guid.NewGuid(),
             TestContext.Current.CancellationToken);
 
         await service.GenerateTranscriptStageAsync(
@@ -130,11 +131,9 @@ public sealed class TranscriptGenerationServiceStageTests
             new InferenceModelPreferences(EnableAsrTextRefinement: enableAsrTextRefinement),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(
         StageRunRecord? polishRun = stageRunStore.All
             .FirstOrDefault(run => string.Equals(run.StageName, StageNames.TextRefinementAsr, StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(
-        if (expectRun)
+        if (enableAsrTextRefinement)
         {
             Assert.NotNull(polishRun);
             Assert.Equal(StageRunStatus.Completed, polishRun.Status);
@@ -149,6 +148,7 @@ public sealed class TranscriptGenerationServiceStageTests
         FakeProjectStageRunStore? stageRunStore = null)
     {
         var artifactStore = new FakeArtifactStore();
+    }
         var mediaRepository = new FakeMediaAssetRepository();
         stageRunStore ??= new FakeProjectStageRunStore();
         var artifactWriter = new TranscriptArtifactWriter(

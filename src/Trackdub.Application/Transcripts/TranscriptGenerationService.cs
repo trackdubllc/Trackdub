@@ -195,7 +195,6 @@ public sealed class TranscriptGenerationService(
             await EnsureStageModelsReadyAsync(stageName, sourceLanguage, cancellationToken)
                 .ConfigureAwait(false);
         }
-            .ConfigureAwait(false);
 
         TranscriptGenerationContext context = await PrepareStageContextAsync(
             project,
