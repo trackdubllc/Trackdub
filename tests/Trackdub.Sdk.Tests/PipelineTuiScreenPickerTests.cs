@@ -42,7 +42,6 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
                 Trace.WriteLine($"Failed to delete temp directory '{dir}' due to I/O error: {ex.Message}");
             }
             catch (UnauthorizedAccessException ex)
-                Trace.WriteLine($"Failed to delete temp directory '{dir}' due to access error: {ex.Message}");
             {
                 Trace.WriteLine($"Failed to delete temp directory '{dir}' due to access error: {ex.Message}");
             }
@@ -782,7 +781,8 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
             TranscriptProjectState? state,
             CancellationToken cancellationToken = default,
             string? sourceLanguageCode = null,
-            string? targetLanguageCode = null) =>
+            string? targetLanguageCode = null,
+            bool validateRuntime = true) =>
             Task.FromResult(PipelineReadinessReport.Empty);
 
         public void InvalidateCache(IReadOnlyList<RuntimeStage>? stages = null)
