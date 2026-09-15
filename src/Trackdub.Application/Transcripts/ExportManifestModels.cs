@@ -18,7 +18,18 @@ public sealed record ExportManifest(
     IReadOnlyList<string> TtsVoices,
     IReadOnlyList<ExportManifestOutput> Outputs,
     IReadOnlyList<string> Warnings,
-    IReadOnlyList<ExportManifestSegment> Segments);
+    IReadOnlyList<ExportManifestSegment> Segments,
+    ExportManifestGating? Gating = null);
+
+/// <summary>
+/// The export-gating flag values for the run that produced this manifest, captured so the
+/// resume evaluator can detect audio/subtitle/encoder/container changes and force a rerun.
+/// Values are produced by <c>ExportResumeGating</c>, the same helper the execution snapshot
+/// uses, so capture and comparison share one normalization. Nullable on the manifest so older
+/// projects (whose manifests predate this field) deserialize with <c>Gating == null</c>.
+/// </summary>
+public sealed record ExportManifestGating(
+    IReadOnlyDictionary<string, string> Flags);
 
 public sealed record ExportManifestLoudness(
     double TargetLufs,
@@ -57,7 +68,8 @@ public sealed record ExportManifestBuildRequest(
     double? AchievedLufs = null,
     IReadOnlyList<ExportManifestOutput>? Outputs = null,
     IReadOnlyList<string>? Warnings = null,
-    IReadOnlyCollection<int>? RenderedSegmentIndices = null);
+    IReadOnlyCollection<int>? RenderedSegmentIndices = null,
+    ExportManifestGating? Gating = null);
 
 public static class ExportManifestBuilder
 {
@@ -157,7 +169,8 @@ public static class ExportManifestBuilder
             voices,
             request.Outputs ?? [],
             request.Warnings ?? [],
-            segments);
+            segments,
+            request.Gating);
     }
 
     private static string? NormalizeLanguage(string? language) =>

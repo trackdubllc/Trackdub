@@ -421,4 +421,55 @@ public partial class TranscriptProjectServiceTests
         Assert.Equal(referenceClipArtifactId, scope.VoiceAssignmentRepository.Assignments.Single().ReferenceClipArtifactId);
     }
 
+    [Fact]
+    public async Task GenerateTtsForSpeakerAsync_non_clone_run_substitutes_stock_voice_for_persisted_clone_assignment()
+    {
+        string tempDirectory = CreateTempDirectory();
+        // Use Path.Join rather than Path.Combine so a second argument is never treated as
+        // absolute and silently drops the temp directory prefix.
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
+        await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
+
+        FakeServiceScope scope = CreateScope(tempDirectory);
+        await scope.Service.CreateAsync(new CreateTranscriptProjectRequest("Transcript Demo", sourcePath), TestContext.Current.CancellationToken);
+        await scope.Service.SetTranscriptLanguageAsync(new SetTranscriptLanguageRequest("en"), TestContext.Current.CancellationToken);
+        TranscriptProjectState translated = await scope.Service.GenerateTranslationAsync(
+            new GenerateTranslationRequest("en", "es"),
+            TestContext.Current.CancellationToken);
+        Guid speakerId = translated.Speakers[0].Id;
+
+        // Simulate the state a prior voice-clone run leaves behind: a persisted, non-fallback
+        // Chatterbox (clone-model) assignment for this speaker. VoiceModelId is the clone alias
+        // 'chatterbox-turbo-onnx', which is not a stock voicepack.
+        VoiceAssignment cloneAssignment = VoiceAssignment.Create(
+            translated.ProjectState.Project.Id,
+            speakerId,
+            VoiceCloningDefaults.ChatterboxPrimaryAlias,
+            voiceVariant: null,
+            requiresConsent: true,
+            isFallback: false,
+            referenceClipArtifactId: Guid.NewGuid());
+        scope.VoiceAssignmentRepository.Assignments.Add(cloneAssignment);
+
+        // A subsequent NON-clone run for the same speaker must not throw
+        // "Voicepack 'chatterbox-turbo-onnx' is not available." and must complete on a stock voice.
+        TranscriptProjectState tts = await scope.Service.GenerateTtsForSpeakerAsync(
+            new GenerateTtsForSpeakerRequest(speakerId, UseReferenceClipForVoiceCloning: false),
+            TestContext.Current.CancellationToken);
+
+        TtsTake take = Assert.Single(scope.TtsTakeRepository.Takes);
+        Assert.Equal(TtsTakeStatus.Completed, take.Status);
+        Assert.NotNull(take.VoiceId);
+        Assert.Contains(take.VoiceId, new[] { "af_heart", "am_adam", "bf_alice" });
+        Assert.NotEqual(VoiceCloningDefaults.ChatterboxPrimaryAlias, take.VoiceId);
+
+        // The orchestration substitutes a stock (fallback) assignment for the clone-only one.
+        VoiceAssignment substituted = Assert.Single(scope.VoiceAssignmentRepository.Assignments);
+        Assert.True(substituted.IsFallback);
+        Assert.Equal(StockTtsDefaults.KokoroPrimaryAlias, substituted.VoiceModelId);
+        Assert.False(VoiceCloningDefaults.IsVoiceCloningModelAlias(substituted.VoiceModelId));
+        Assert.Null(substituted.ReferenceClipArtifactId);
+        Assert.NotNull(substituted.VoiceVariant);
+    }
+
 }

@@ -132,14 +132,30 @@ public sealed class TtsOrchestrationService(
                     continue;
                 }
 
-                assignmentsBySpeakerId.TryGetValue(speaker.Id, out VoiceAssignment? assignment);
-                if (assignment is null)
+                // An explicit --voice override in the request must take precedence over any
+                // previously persisted non-fallback assignment (e.g. on a resume run). Only when
+                // the request carries no explicit override for the speaker do we honor the
+                // pre-existing assignment, falling back to the request path otherwise.
+                VoiceAssignment? assignment;
+                if (RequestHasExplicitVoiceOverride(request, speaker.Id))
                 {
                     assignment = await TryPersistRequestedVoiceAssignmentAsync(
                         currentState,
                         speaker.Id,
                         request,
                         cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    assignmentsBySpeakerId.TryGetValue(speaker.Id, out assignment);
+                    if (assignment is null)
+                    {
+                        assignment = await TryPersistRequestedVoiceAssignmentAsync(
+                            currentState,
+                            speaker.Id,
+                            request,
+                            cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 await RunTtsForSpeakerAsync(
@@ -496,6 +512,31 @@ public sealed class TtsOrchestrationService(
                 projectArtifacts = preparedReferenceClip.ProjectArtifacts;
             }
         }
+        else if (IsCloneOnlyStockUnresolvable(assignment))
+        {
+            // A prior voice-clone run persisted a non-fallback clone assignment
+            // (VoiceModelId is a clone-model alias such as chatterbox-turbo-onnx). This is a
+            // non-clone run, so StartTtsStageHandler would attempt a stock voicepack lookup
+            // against that clone alias and throw "Voicepack '...' is not available." Route it
+            // to a valid stock voice for the target language instead.
+            VoiceAssignment substituteAssignment = await SubstituteStockVoiceForCloneOnlyAssignmentAsync(
+                currentState,
+                speaker,
+                assignment,
+                translationRevision.TargetLanguage,
+                reservedStockVoiceIds,
+                cancellationToken).ConfigureAwait(false);
+            preferredModelAlias = StockTtsVoiceMatcher.SupportsKokoro(translationRevision.TargetLanguage)
+                ? substituteAssignment.VoiceModelId
+                : null;
+            assignment = substituteAssignment;
+
+            PipelineProgressReporter.Phase(
+                progress,
+                StageNames.Tts,
+                "Using stock voice",
+                $"{speaker.DisplayName}: persisted voice-clone model is not available for a non-clone run. Using {DescribeStockFallback(assignment)}.");
+        }
 
         PipelineProgressReporter.Phase(
             progress,
@@ -522,6 +563,11 @@ public sealed class TtsOrchestrationService(
             progress).ConfigureAwait(false);
     }
 
+    private static bool RequestHasExplicitVoiceOverride(GenerateTtsForAllSpeakersRequest request, Guid speakerId) =>
+        request.VoiceIdsBySpeakerId is not null &&
+        request.VoiceIdsBySpeakerId.TryGetValue(speakerId, out string? explicitVoiceId) &&
+        !string.IsNullOrWhiteSpace(explicitVoiceId);
+
     private async Task<VoiceAssignment?> TryPersistRequestedVoiceAssignmentAsync(
         TranscriptProjectState currentState,
         Guid speakerId,
@@ -532,11 +578,30 @@ public sealed class TtsOrchestrationService(
             request.VoiceIdsBySpeakerId.TryGetValue(speakerId, out string? explicitVoiceId) &&
             !string.IsNullOrWhiteSpace(explicitVoiceId))
         {
-            VoiceAssignment assignment = VoiceAssignment.Create(
+            string normalizedVoiceId = explicitVoiceId.Trim();
+            if (!voiceCatalog.TryGetVoice(normalizedVoiceId, out _))
+            {
+                throw new InvalidOperationException($"Voicepack '{normalizedVoiceId}' is not available.");
+            }
+
+            VoiceAssignment? existing = await voiceAssignmentRepository.GetAsync(
                 currentState.ProjectState.Project.Id,
                 speakerId,
-                "kokoro-onnx",
-                explicitVoiceId);
+                cancellationToken).ConfigureAwait(false);
+            VoiceAssignment assignment = existing is null
+                ? VoiceAssignment.Create(
+                    currentState.ProjectState.Project.Id,
+                    speakerId,
+                    "kokoro-onnx",
+                    normalizedVoiceId)
+                : existing with
+                {
+                    VoiceModelId = "kokoro-onnx",
+                    VoiceVariant = normalizedVoiceId,
+                    RequiresConsent = false,
+                    IsFallback = false,
+                    ReferenceClipArtifactId = existing.ReferenceClipArtifactId
+                };
             await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
             return assignment;
         }
@@ -545,11 +610,22 @@ public sealed class TtsOrchestrationService(
             request.FallbackVoiceIdsBySpeakerId.TryGetValue(speakerId, out string? fallbackVoiceId) &&
             !string.IsNullOrWhiteSpace(fallbackVoiceId))
         {
+            string normalizedVoiceId = fallbackVoiceId.Trim();
+            if (!voiceCatalog.TryGetVoice(normalizedVoiceId, out _))
+            {
+                throw new InvalidOperationException($"Voicepack '{normalizedVoiceId}' is not available.");
+            }
+
+            // Always mint a fresh fallback assignment. voiceAssignmentRepository.GetAsync only
+            // ever returns NON-fallback rows, so reusing an existing row's primary-key Id for a
+            // fallback (is_fallback=1) row does not match the non-fallback partial-unique upsert
+            // conflict target and would collide with that row's PRIMARY KEY on a real SQLite-backed
+            // resume. CreateFallback allocates a new Id, so the fallback row inserts cleanly.
             VoiceAssignment assignment = VoiceAssignment.CreateFallback(
                 currentState.ProjectState.Project.Id,
                 speakerId,
                 "kokoro-onnx",
-                fallbackVoiceId);
+                normalizedVoiceId);
             await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
             return assignment;
         }
@@ -1065,6 +1141,96 @@ public sealed class TtsOrchestrationService(
             return keptAssignment;
         }
 
+        return await SubstituteStockVoiceAsync(
+                currentState,
+                speaker,
+                currentAssignment,
+                targetLanguage,
+                gender: insufficientSpeech.EstimatedGender,
+                reservedStockVoiceIds,
+                noKokoroMatchError: () =>
+                    $"Automatic voice clone reference capture needs at least {ReferenceClipPolicy.MinimumActiveSpeechSeconds:F1} seconds of active speech for {speaker.DisplayName}; detected {insufficientSpeech.ActiveSpeechSeconds:F2} seconds, and no Kokoro voice matched target language '{targetLanguage}'.",
+                // Short-clone fallback mints a NEW fallback assignment id rather than transitioning
+                // the current assignment in place.
+                buildKokoroAssignment: voice => VoiceAssignment.CreateFallback(
+                    currentState.ProjectState.Project.Id,
+                    speaker.Id,
+                    StockTtsDefaults.KokoroPrimaryAlias,
+                    voice.VoiceId),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private bool IsCloneOnlyStockUnresolvable(VoiceAssignment assignment)
+    {
+        // The stock lookup resolves VoiceVariant first, then VoiceModelId (see
+        // StartTtsStageHandler.ResolveVoiceId). A clone-only assignment carries a clone-model
+        // alias in VoiceModelId and no resolvable stock voice, so it must not be handed to the
+        // stock voicepack lookup on a non-clone run.
+        if (TryResolveExistingStockVoiceId(assignment) is not null)
+        {
+            return false;
+        }
+
+        // Recognize the SAME clone-only alias set (Chatterbox + CosyVoice + Qwen3-base + F5) that
+        // StartTtsStageHandler.IsVoiceCloningAlias treats as a clone model, so a persisted
+        // Qwen3-base/F5 clone assignment is substituted here instead of falling through to the
+        // stock voicepack lookup and throwing "Voicepack '...' is not available.".
+        return VoiceCloningDefaults.IsCloneOnlyModelAlias(assignment.VoiceModelId);
+    }
+
+    private async Task<VoiceAssignment> SubstituteStockVoiceForCloneOnlyAssignmentAsync(
+        TranscriptProjectState currentState,
+        ProjectSpeaker speaker,
+        VoiceAssignment currentAssignment,
+        string targetLanguage,
+        HashSet<string>? reservedStockVoiceIds,
+        CancellationToken cancellationToken)
+    {
+        return await SubstituteStockVoiceAsync(
+                currentState,
+                speaker,
+                currentAssignment,
+                targetLanguage,
+                // Gender matching is intentionally skipped here (gender: null): there is no
+                // reference-clip gender analysis on this non-clone substitution path, unlike
+                // FallBackShortCloneToStockTtsAsync.
+                gender: null,
+                reservedStockVoiceIds,
+                noKokoroMatchError: () =>
+                    $"No stock voice matched target language '{targetLanguage}' to replace the persisted voice-clone model for {speaker.DisplayName}.",
+                // Update the existing assignment in place to transition its VoiceModelId and flags
+                // without changing its Id, avoiding SQLite primary-key conflicts when SaveAsync
+                // performs an INSERT that no longer matches the partial is_fallback=0 index.
+                buildKokoroAssignment: voice => currentAssignment with
+                {
+                    VoiceModelId = StockTtsDefaults.KokoroPrimaryAlias,
+                    VoiceVariant = voice.VoiceId,
+                    RequiresConsent = false,
+                    IsFallback = true,
+                    ReferenceClipArtifactId = null
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // Shared stock-voice fallback construction and persistence workflow used by both the
+    // short-clone fallback (FallBackShortCloneToStockTtsAsync) and the clone-only substitution
+    // (SubstituteStockVoiceForCloneOnlyAssignmentAsync) paths. Extracting it keeps the two paths
+    // from drifting apart on aliases, flags, or persistence behavior. The paths differ only by the
+    // gender passed to PickClosest, the no-match error message, and the Kokoro-branch assignment
+    // policy (new-id fallback vs id-preserving in-place transition).
+    private async Task<VoiceAssignment> SubstituteStockVoiceAsync(
+        TranscriptProjectState currentState,
+        ProjectSpeaker speaker,
+        VoiceAssignment currentAssignment,
+        string targetLanguage,
+        string? gender,
+        HashSet<string>? reservedStockVoiceIds,
+        Func<string> noKokoroMatchError,
+        Func<VoiceCatalogEntry, VoiceAssignment> buildKokoroAssignment,
+        CancellationToken cancellationToken)
+    {
         if (!StockTtsVoiceMatcher.SupportsKokoro(targetLanguage))
         {
             VoiceAssignment stockAssignment = currentAssignment with
@@ -1084,22 +1250,18 @@ public sealed class TtsOrchestrationService(
         {
             catalogVoices = currentState.AvailableVoices;
         }
+
         VoiceCatalogEntry voice = StockTtsVoiceMatcher.PickClosest(
                 catalogVoices,
                 targetLanguage,
-                insufficientSpeech.EstimatedGender,
+                gender,
                 reservedStockVoiceIds)
-            ?? throw new InvalidOperationException(
-                $"Automatic voice clone reference capture needs at least {ReferenceClipPolicy.MinimumActiveSpeechSeconds:F1} seconds of active speech for {speaker.DisplayName}; detected {insufficientSpeech.ActiveSpeechSeconds:F2} seconds, and no Kokoro voice matched target language '{targetLanguage}'.");
+            ?? throw new InvalidOperationException(noKokoroMatchError());
 
         reservedStockVoiceIds?.Add(voice.VoiceId);
-        VoiceAssignment fallbackAssignment = VoiceAssignment.CreateFallback(
-            currentState.ProjectState.Project.Id,
-            speaker.Id,
-            StockTtsDefaults.KokoroPrimaryAlias,
-            voice.VoiceId);
-        await voiceAssignmentRepository.SaveAsync(fallbackAssignment, cancellationToken).ConfigureAwait(false);
-        return fallbackAssignment;
+        VoiceAssignment assignment = buildKokoroAssignment(voice);
+        await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
+        return assignment;
     }
 
     private static HashSet<string> CollectReservedStockVoiceIds(

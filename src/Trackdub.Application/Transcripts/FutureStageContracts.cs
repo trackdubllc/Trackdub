@@ -45,6 +45,14 @@ public enum ExportSubtitleSource
     Bilingual = 2
 }
 
+/// <summary>
+/// Request for an export stage run.
+/// <see cref="RawSubtitleFormats"/> carries the caller's original subtitle-format request
+/// (null when unspecified, an empty list when explicitly suppressed) before it is resolved into
+/// <see cref="SubtitleFormats"/> via the transcript-state-dependent resolution. The export-resume
+/// gate compares this raw value against the current run's snapshot so the null-default,
+/// empty-list, and explicit-format cases stay distinct without depending on transcript state.
+/// </summary>
 public sealed record ExportStageRequest(
     Guid ProjectId,
     string OutputPath,
@@ -59,7 +67,8 @@ public sealed record ExportStageRequest(
     bool MatchOriginalLoudness = false,
     bool RestoreOriginalPan = false,
     bool ApplyTimbrePolish = true,
-    VideoEncoderPreference VideoEncoder = VideoEncoderPreference.Auto);
+    VideoEncoderPreference VideoEncoder = VideoEncoderPreference.Auto,
+    IReadOnlyList<string>? RawSubtitleFormats = null);
 
 public sealed record ExportStageResult(
     StageRunRecord StageRun,
