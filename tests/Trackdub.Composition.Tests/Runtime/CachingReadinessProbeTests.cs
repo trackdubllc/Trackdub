@@ -192,7 +192,7 @@ public sealed class CachingReadinessProbeTests
         var counting = new CountingTensorRtRtxReadinessProbe(EligibleReport(), gate.Task);
         var cached = new CachingTensorRtRtxReadinessProbe(counting);
 
-        var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
 
         // Start multiple concurrent calls: the first with a token that will be cancelled mid-flight,
         // and others with valid tokens. All callers share the same underlying in-flight probe.
