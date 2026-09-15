@@ -25,20 +25,21 @@ public sealed class TextRefinementGenerationStage(
         CancellationToken cancellationToken,
         IProgress<PipelineProgressEvent>? progress = null)
     {
+        if (!context.ModelPreferences.EnableAsrTextRefinement)
+        {
+            // Quiet no-op: optional polish stays on the spine but must not write a skip
+            // record or look like a run when the user turned it off.
+            PipelineProgressReporter.Phase(
+                progress,
+                StageName,
+                "Skipping polish",
+                "ASR text refinement is disabled.");
+            return context;
+        }
+
         if (context.AsrResult is null)
         {
             throw new InvalidOperationException("ASR result is missing.");
-        }
-
-        if (!context.ModelPreferences.EnableAsrTextRefinement)
-        {
-            return await SkipAsync(
-                    context,
-                    "TEXT_REFINEMENT_DISABLED",
-                    "ASR text refinement is disabled.",
-                    cancellationToken,
-                    progress)
-                .ConfigureAwait(false);
         }
 
         if (context.AsrResult.Segments.Count == 0)

@@ -38,10 +38,10 @@ public partial class TranscriptProjectServiceTests
 
         Assert.NotNull(result.CurrentTranscriptRevision);
         Assert.Equal(1, result.CurrentTranscriptRevision!.RevisionNumber);
-        Assert.Equal(6, result.StageRuns.Count);
-        Assert.Contains(
+        Assert.Equal(5, result.StageRuns.Count);
+        Assert.DoesNotContain(
             result.StageRuns,
-            stageRun => stageRun.StageName == StageNames.TextRefinementAsr && stageRun.Status == StageRunStatus.Skipped);
+            stageRun => stageRun.StageName == StageNames.TextRefinementAsr);
         Assert.Contains(
             result.StageRuns,
             stageRun => stageRun.StageName == StageNames.SpeakerAssignment && stageRun.Status == StageRunStatus.Completed);

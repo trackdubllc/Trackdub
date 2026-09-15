@@ -102,12 +102,55 @@ public sealed class TranscriptGenerationServiceStageTests
         Assert.Equal(context.MediaAsset.DurationSeconds, fallbackRegion.EndSeconds);
     }
 
+    [Fact]
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GenerateTranscriptStageAsync_asr_polish_stage_run_reflects_flag(bool enableAsrTextRefinement)
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        var transcriptionEngine = new SegmentReturningTranscriptionEngine();
+        (TranscriptGenerationService service, TranscriptArtifactWriter artifactWriter) =
+            CreateMinimalService(transcriptionEngine: transcriptionEngine, stageRunStore: stageRunStore);
+        TranscriptGenerationContext context = CreateContext();
+
+        await artifactWriter.WriteSpeechRegionsArtifactAsync(
+            context.Project.Id,
+            context.MediaAsset,
+            [new SpeechRegion(0, 0.0d, 1.0d)],
+            Guid.NewGuid(),
+            TestContext.Current.CancellationToken);
+
+        await service.GenerateTranscriptStageAsync(
+            context.Project,
+            context.MediaAsset,
+            context.NormalizedAudioArtifact,
+            context.AudioRoutingPlan,
+            StageNames.Asr,
+            enableSpeakerDiarization: false,
+            new InferenceModelPreferences(EnableAsrTextRefinement: enableAsrTextRefinement),
+            TestContext.Current.CancellationToken);
+
+        StageRunRecord? polishRun = stageRunStore.All
+            .FirstOrDefault(run => string.Equals(run.StageName, StageNames.TextRefinementAsr, StringComparison.OrdinalIgnoreCase));
+        if (enableAsrTextRefinement)
+        {
+            Assert.NotNull(polishRun);
+            Assert.Equal(StageRunStatus.Completed, polishRun.Status);
+        }
+        else
+        {
+            Assert.Null(polishRun);
+        }
+
     private static (TranscriptGenerationService Service, TranscriptArtifactWriter ArtifactWriter) CreateMinimalService(
-        IAudioTranscriptionEngine? transcriptionEngine = null)
+        IAudioTranscriptionEngine? transcriptionEngine = null,
+        FakeProjectStageRunStore? stageRunStore = null)
     {
         var artifactStore = new FakeArtifactStore();
+    }
         var mediaRepository = new FakeMediaAssetRepository();
-        var stageRunStore = new FakeProjectStageRunStore();
+        stageRunStore ??= new FakeProjectStageRunStore();
         var artifactWriter = new TranscriptArtifactWriter(
             artifactStore,
             new FakeFileFingerprintService(new FileFingerprint("hash", 1, DateTimeOffset.UtcNow)),
@@ -236,6 +279,20 @@ public sealed class TranscriptGenerationServiceStageTests
 
     private sealed class CapturingTranscriptionEngine : IAudioTranscriptionEngine
     {
+    {
+        public IReadOnlyList<SpeechRegion> ReceivedRegions { get; private set; } = [];
+
+        public Task<IReadOnlyList<RecognizedTranscriptSegment>> TranscribeAsync(
+            string normalizedAudioPath,
+            IReadOnlyList<SpeechRegion> regions,
+            CancellationToken cancellationToken)
+        {
+            ReceivedRegions = [.. regions];
+            return Task.FromResult<IReadOnlyList<RecognizedTranscriptSegment>>([]);
+        }
+    }
+
+    private sealed class SegmentReturningTranscriptionEngine : IAudioTranscriptionEngine
         public IReadOnlyList<SpeechRegion> ReceivedRegions { get; private set; } = [];
 
         public Task<IReadOnlyList<RecognizedTranscriptSegment>> TranscribeAsync(

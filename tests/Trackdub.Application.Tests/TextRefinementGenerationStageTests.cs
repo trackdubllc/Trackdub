@@ -16,18 +16,20 @@ namespace Trackdub.Application.Tests;
 public sealed class TextRefinementGenerationStageTests
 {
     [Fact]
-    public async Task ExecuteAsync_skips_when_toggle_disabled()
+    public async Task ExecuteAsync_is_quiet_no_op_when_toggle_disabled()
     {
-        TextRefinementGenerationStage stage = CreateStage();
+        var localStageRunStore = new FakeProjectStageRunStore();
+        TextRefinementGenerationStage stage = CreateStage(localStageRunStore);
         TranscriptGenerationContext context = CreateContext(enableAsrTextRefinement: false);
 
         TranscriptGenerationContext result = await stage.ExecuteAsync(
             context,
             TestContext.Current.CancellationToken);
 
+        Assert.Same(context, result);
         Assert.Same(context.AsrResult, result.AsrResult);
-        Assert.NotNull(result.TextRefinementResult);
-        Assert.Equal(StageRunStatus.Skipped, result.TextRefinementResult.StageRun.Status);
+        Assert.Null(result.TextRefinementResult);
+        Assert.Empty(localStageRunStore.All);
     }
 
     [Fact]
@@ -89,14 +91,13 @@ public sealed class TextRefinementGenerationStageTests
         Assert.Equal("Hello world", result.TextRefinementResult.Segments[0].DisplayedText);
     }
 
-    private static TextRefinementGenerationStage CreateStage()
+    private static TextRefinementGenerationStage CreateStage(FakeProjectStageRunStore? stageRunStore = null)
     {
-        var stageRunStore = new FakeProjectStageRunStore();
+        stageRunStore ??= new FakeProjectStageRunStore();
         return new TextRefinementGenerationStage(
             new TextRefinementStageHandler(new FakeTextRefinementEngine(), stageRunStore),
             stageRunStore);
     }
-
     private static TranscriptGenerationContext CreateContext(bool enableAsrTextRefinement)
     {
         Guid projectId = Guid.NewGuid();
