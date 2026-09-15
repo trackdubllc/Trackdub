@@ -102,7 +102,6 @@ public sealed class TranscriptGenerationServiceStageTests
         Assert.Equal(context.MediaAsset.DurationSeconds, fallbackRegion.EndSeconds);
     }
 
-    [Fact]
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -142,13 +141,13 @@ public sealed class TranscriptGenerationServiceStageTests
         {
             Assert.Null(polishRun);
         }
+    }
 
     private static (TranscriptGenerationService Service, TranscriptArtifactWriter ArtifactWriter) CreateMinimalService(
         IAudioTranscriptionEngine? transcriptionEngine = null,
         FakeProjectStageRunStore? stageRunStore = null)
     {
         var artifactStore = new FakeArtifactStore();
-    }
         var mediaRepository = new FakeMediaAssetRepository();
         stageRunStore ??= new FakeProjectStageRunStore();
         var artifactWriter = new TranscriptArtifactWriter(
@@ -279,7 +278,6 @@ public sealed class TranscriptGenerationServiceStageTests
 
     private sealed class CapturingTranscriptionEngine : IAudioTranscriptionEngine
     {
-    {
         public IReadOnlyList<SpeechRegion> ReceivedRegions { get; private set; } = [];
 
         public Task<IReadOnlyList<RecognizedTranscriptSegment>> TranscribeAsync(
@@ -293,6 +291,7 @@ public sealed class TranscriptGenerationServiceStageTests
     }
 
     private sealed class SegmentReturningTranscriptionEngine : IAudioTranscriptionEngine
+    {
         public IReadOnlyList<SpeechRegion> ReceivedRegions { get; private set; } = [];
 
         public Task<IReadOnlyList<RecognizedTranscriptSegment>> TranscribeAsync(
