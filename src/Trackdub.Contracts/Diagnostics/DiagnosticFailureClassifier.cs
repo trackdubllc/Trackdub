@@ -60,7 +60,7 @@ public static class DiagnosticFailureClassifier
     {
         return typeName.Contains("OnnxRuntimeException", StringComparison.OrdinalIgnoreCase) ||
                typeName.Contains("Inference", StringComparison.OrdinalIgnoreCase) ||
-               exception is InvalidOperationException &&
+               (exception is InvalidOperationException &&
                ContainsWordOrPhrase(
                    exception.Message,
                    "inference",
@@ -72,7 +72,7 @@ public static class DiagnosticFailureClassifier
                    "transcript",
                    "translation",
                    "translate",
-                   "tts");
+                   "tts"));
     }
 
     private static bool IsPersistenceFailure(Exception exception, string typeName, string context)

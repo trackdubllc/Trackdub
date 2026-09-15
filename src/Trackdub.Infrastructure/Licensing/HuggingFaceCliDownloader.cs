@@ -273,9 +273,9 @@ internal sealed class HuggingFaceCliDownloader
         }
         catch (Exception ex) when (
             ex is OperationCanceledException or ObjectDisposedException or IOException ||
-            ex is AggregateException aggregate &&
+            (ex is AggregateException aggregate &&
             aggregate.InnerExceptions.All(static inner =>
-                inner is OperationCanceledException or ObjectDisposedException or IOException))
+                inner is OperationCanceledException or ObjectDisposedException or IOException)))
         {
             // Expected when cancel kills the process and redirected pipes close.
         }

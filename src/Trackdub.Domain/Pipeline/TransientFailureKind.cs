@@ -108,7 +108,7 @@ public static class TransientFailureClassifier
         }
 
         if (ContainsTypeName(typeName, ExtractExceptionTypeName)
-            || message.Contains("7zr", StringComparison.OrdinalIgnoreCase) && message.Contains("exit", StringComparison.OrdinalIgnoreCase)
+            || (message.Contains("7zr", StringComparison.OrdinalIgnoreCase) && message.Contains("exit", StringComparison.OrdinalIgnoreCase))
             || message.Contains("tar exited", StringComparison.OrdinalIgnoreCase))
         {
             return TransientFailureKind.StarterPackTransient;
