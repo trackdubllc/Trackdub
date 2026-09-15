@@ -109,11 +109,11 @@ public sealed class TranscriptGenerationServiceStageTests
     {
         var stageRunStore = new FakeProjectStageRunStore();
         var transcriptionEngine = new SegmentReturningTranscriptionEngine();
-        (TranscriptGenerationService service, TranscriptArtifactWriter artifactWriter) =
+        (TranscriptGenerationService service, TranscriptArtifactWriter localArtifactWriter) =
             CreateMinimalService(transcriptionEngine: transcriptionEngine, stageRunStore: stageRunStore);
         TranscriptGenerationContext context = CreateContext();
 
-        await artifactWriter.WriteSpeechRegionsArtifactAsync(
+        await localArtifactWriter.WriteSpeechRegionsArtifactAsync(
             context.Project.Id,
             context.MediaAsset,
             [new SpeechRegion(0, 0.0d, 1.0d)],
