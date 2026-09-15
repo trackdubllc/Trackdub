@@ -378,10 +378,15 @@ public sealed class ProjectWorkflow(
         // The fallback path (preparation handler unavailable) records no AudioPreparation
         // run of its own; persist a partial marker so the stage outcome reflects what
         // happened instead of surfacing a stale earlier run.
-        bool recordedPreparationRun = refreshed.StageRuns.Any(run =>
-            string.Equals(run.StageName, StageNames.AudioPreparation, StringComparison.OrdinalIgnoreCase) &&
-            run.StartedAtUtc >= stageWorkStartedUtc);
-        if (!recordedPreparationRun && stageRunStore is not null)
+        StageRunRecord? latestPreparationRun = refreshed.StageRuns
+            .Where(run =>
+                string.Equals(run.StageName, StageNames.AudioPreparation, StringComparison.OrdinalIgnoreCase) &&
+                run.StartedAtUtc >= stageWorkStartedUtc)
+            .OrderByDescending(run => run.StartedAtUtc)
+            .FirstOrDefault();
+        bool needsFallbackRun = latestPreparationRun is null
+            or { Status: StageRunStatus.Failed };
+        if (needsFallbackRun && stageRunStore is not null)
         {
             StageRunRecord fallbackRun = await StageRunHelper
                 .StartAsync(stageRunStore, currentState.ProjectState.Project.Id, StageNames.AudioPreparation, cancellationToken)
