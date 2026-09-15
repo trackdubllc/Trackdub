@@ -69,5 +69,4 @@ public sealed class LinuxNativeGpuRuntimeProbe : ILinuxNativeGpuRuntimeProbe
 
     public bool IsMigraphxOrtProviderAvailable() =>
         MigraphxOrtProbe.IsProviderListed();
-
 }

@@ -21,5 +21,4 @@ public sealed record OpenVinoComponentSettings
     /// Used as a secondary integrity check when hash is not available.
     /// </summary>
     public long? ExpectedFileSizeBytes { get; init; }
-
 }

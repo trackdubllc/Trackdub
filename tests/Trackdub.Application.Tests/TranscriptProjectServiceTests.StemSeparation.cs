@@ -496,5 +496,4 @@ public partial class TranscriptProjectServiceTests
         Assert.Contains("generated-demucs-v4-vocals", vocals.Provenance, StringComparison.Ordinal);
         Assert.Contains("engine_family=demucs-v4", vocals.Provenance, StringComparison.Ordinal);
     }
-
 }

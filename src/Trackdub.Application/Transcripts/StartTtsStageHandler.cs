@@ -943,5 +943,4 @@ public sealed class StartTtsStageHandler(
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
-
 }

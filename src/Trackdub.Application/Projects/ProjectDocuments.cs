@@ -54,7 +54,6 @@ public sealed record ProjectManifest(
             UpdatedAtUtc = DateTimeOffset.UtcNow,
             UiSettings = uiSettings?.Normalize()
         };
-
 }
 
 public sealed record ProjectPipelineSettings(

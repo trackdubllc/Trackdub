@@ -58,7 +58,6 @@ public partial class TranscriptProjectServiceTests
                 sourcePath,
                 EnableSpeakerDiarization: true),
             TestContext.Current.CancellationToken);
-
     }
 
     [Fact]
@@ -270,7 +269,6 @@ public partial class TranscriptProjectServiceTests
         _ = await scope.Service.CreateAsync(
             new CreateTranscriptProjectRequest("Transcript Demo", sourcePath),
             TestContext.Current.CancellationToken);
-
     }
 
     [Fact]

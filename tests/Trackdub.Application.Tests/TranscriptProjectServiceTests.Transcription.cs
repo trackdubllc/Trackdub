@@ -583,5 +583,4 @@ public partial class TranscriptProjectServiceTests
                 new TrimTranscriptSegmentRequest(created.CurrentTranscriptRevision!.Id, created.TranscriptSegments[0].Id, 0.0, 6.5),
                 TestContext.Current.CancellationToken));
     }
-
 }

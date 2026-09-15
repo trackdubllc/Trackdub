@@ -470,7 +470,6 @@ public sealed class TranslationLanguageRouter(
             {
                 yield return resolvedPath;
             }
-
         }
     }
 
