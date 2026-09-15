@@ -98,7 +98,6 @@ public sealed class TextRefinementGenerationStageTests
         return new TextRefinementGenerationStage(
             stageRunStore);
     }
-
     private static TranscriptGenerationContext CreateContext(bool enableAsrTextRefinement)
     {
         Guid projectId = Guid.NewGuid();
