@@ -320,22 +320,50 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
         Environment.SetEnvironmentVariable("PATH", directory + Path.PathSeparator + currentPath);
     }
 
+    // The CUDA 12 runtime is preloaded once per process so it stays resident for ORT's
+    // subsequent TRT RTX plugin load; the module is intentionally never freed. Handles are
+    // retained (keyed by resolved path) so repeated bootstrap attempts reuse the already
+    // loaded module instead of leaking a fresh loader reference on every retry.
+    private static readonly Dictionary<string, nint> LoadedNativeLibraries =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object LoadedNativeLibrariesLock = new();
+
     private static bool TryLoadNativeLibrary(string libraryPath)
     {
+        string resolvedPath;
         try
         {
-            if (NativeLibrary.TryLoad(libraryPath, out nint _))
+            resolvedPath = Path.GetFullPath(libraryPath);
+        }
+        catch (Exception ex) when (
+            ex is ArgumentException or NotSupportedException or PathTooLongException or SecurityException)
+        {
+            resolvedPath = libraryPath;
+        }
+
+        lock (LoadedNativeLibrariesLock)
+        {
+            if (LoadedNativeLibraries.ContainsKey(resolvedPath))
             {
+                // Already loaded this process; reuse the retained handle, don't reload.
                 return true;
             }
 
-            NativeLibrary.Load(libraryPath);
-            return true;
-        }
-        catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
-        {
-            // PATH mutation above is still useful for downstream native loads.
-            return false;
+            try
+            {
+                if (NativeLibrary.TryLoad(resolvedPath, out nint handle))
+                {
+                    LoadedNativeLibraries[resolvedPath] = handle;
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
+            {
+                // PATH mutation above is still useful for downstream native loads.
+                return false;
+            }
         }
     }
 }

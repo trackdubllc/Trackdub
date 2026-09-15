@@ -183,7 +183,12 @@ public sealed class StarterPackApplyService(
             if (compatibilityEntry is not null)
             {
                 variant = compatibilityEntry.ResolvedVariant;
-                packExecutionProvider = compatibilityEntry.RequestedExecutionProvider;
+                // For fallback stages the requested provider was rejected as unusable and a
+                // different one was selected; pin the resolved provider so subsequent runs
+                // request what actually works instead of re-requesting the unavailable one.
+                packExecutionProvider = compatibilityEntry.FallbackApplied
+                    ? compatibilityEntry.ResolvedExecutionProvider
+                    : compatibilityEntry.RequestedExecutionProvider;
             }
             else if (model.RuntimeDefaults.TryGetValue(hardwareKey, out StarterPackRuntimeDefaults? runtimeDefaults))
             {

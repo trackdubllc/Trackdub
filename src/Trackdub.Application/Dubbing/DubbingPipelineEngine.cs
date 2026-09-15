@@ -1,22 +1,21 @@
-using Trackdub.Contracts;
-using Trackdub.Contracts.Licensing;
-using Trackdub.Contracts.Pipeline;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
+using Microsoft.Extensions.DependencyInjection;
 using Trackdub.Application.LipSync;
 using Trackdub.Application.LipSynthesis;
 using Trackdub.Application.Pipeline;
 using Trackdub.Application.Transcripts;
 using Trackdub.Application.Transcripts.Pipeline;
+using Trackdub.Contracts;
+using Trackdub.Contracts.Dubbing;
+using Trackdub.Contracts.Licensing;
+using Trackdub.Contracts.Pipeline;
 using Trackdub.Contracts.Transcripts;
 using Trackdub.Domain;
 using Trackdub.Domain.Pipeline;
 using Trackdub.Domain.Speakers;
 using Trackdub.Domain.StageRuns;
-using Microsoft.Extensions.DependencyInjection;
-using System.Globalization;
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
-
-using Trackdub.Contracts.Dubbing;
 
 namespace Trackdub.Application.Dubbing;
 
@@ -24,10 +23,19 @@ namespace Trackdub.Application.Dubbing;
 /// Primary entry point for SDK consumers to execute the dubbing pipeline.
 /// Orchestrates validation, pre-flight checks, stage execution, and result aggregation.
 /// </summary>
-public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFaultReporting
+/// <param name="sessionFactory">Factory used to create per-run sessions.</param>
+/// <param name="transientFaultBus">
+/// Optional shared bus for transient-fault telemetry. When null the engine owns
+/// its own bus internally so the <see cref="ITransientFaultReporting"/> surface
+/// is always observable. Callers that need shared visibility across engine +
+/// diagnostics exporter should DI-register the bus as a singleton.
+/// </param>
+public sealed class DubbingPipelineEngine(
+    IDubbingSessionFactory sessionFactory,
+    PipelineTransientFaultBus? transientFaultBus = null) : IDubbingPipelineEngine, ITransientFaultReporting
 {
-    private readonly IDubbingSessionFactory _sessionFactory;
-    private readonly PipelineTransientFaultBus _transientFaultBus;
+    private readonly IDubbingSessionFactory _sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
+    private readonly PipelineTransientFaultBus _transientFaultBus = transientFaultBus ?? new PipelineTransientFaultBus();
 
     /// <summary>
     /// The bus instance this engine publishes to. Exposed as <c>internal</c> so the
@@ -38,22 +46,6 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
 
     internal static string? NormalizeAsrSourceLanguageCode(string? sourceLanguageCode) =>
         TranscriptWorkflowUtilities.NormalizeTranscriptLanguageCode(sourceLanguageCode);
-
-    /// <summary>
-    /// Creates a new <see cref="DubbingPipelineEngine"/> backed by the given session factory.
-    /// </summary>
-    /// <param name="sessionFactory">Factory used to create per-run sessions.</param>
-    /// <param name="transientFaultBus">
-    /// Optional shared bus for transient-fault telemetry. When null the engine owns
-    /// its own bus internally so the <see cref="ITransientFaultReporting"/> surface
-    /// is always observable. Callers that need shared visibility across engine +
-    /// diagnostics exporter should DI-register the bus as a singleton.
-    /// </param>
-    public DubbingPipelineEngine(IDubbingSessionFactory sessionFactory, PipelineTransientFaultBus? transientFaultBus = null)
-    {
-        _sessionFactory = sessionFactory ?? throw new ArgumentNullException(nameof(sessionFactory));
-        _transientFaultBus = transientFaultBus ?? new PipelineTransientFaultBus();
-    }
 
     /// <summary>
     /// Executes the dubbing pipeline according to the provided options.
@@ -1410,6 +1402,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 // Carry the raw requested formats (including the null/empty distinction)
                 // so the export-resume gate persists and compares the same token the
                 // snapshot records, instead of the transcript-state-resolved formats.
+
                 RawSubtitleFormats: options.SubtitleFormats),
             cancellationToken).ConfigureAwait(false);
         if (exportResult.IsBlocked)
@@ -1617,11 +1610,20 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             }
         }
 
-        if (preferences.ContainsKey(StageNames.Tts))
+        if (preferences.TryGetValue(StageNames.Tts, out string? explicitTtsAlias))
         {
-            // Preserve the explicit TTS override, but return the case-insensitive copy so that
-            // BuildModelPreferences' GetValueOrDefault(StageNames.Tts) lookup resolves regardless
-            // of the casing the caller used for the original TTS key.
+            // Preserve the explicit TTS override only when it names a clone-capable model.
+            // A stock alias (e.g. kokoro-onnx) paired with UseVoiceCloning=true would otherwise
+            // reach an incompatible voicepack lookup that throws "Voicepack '...' is not available.";
+            // pin the default Chatterbox clone model instead so the clone run stays runnable.
+            // Return the case-insensitive copy so BuildModelPreferences' GetValueOrDefault
+            // lookup resolves regardless of the casing the caller used for the original TTS key.
+            if (VoiceCloningDefaults.IsCloneOnlyModelAlias(explicitTtsAlias))
+            {
+                return options with { ModelPreferences = preferences };
+            }
+
+            preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
             return options with { ModelPreferences = preferences };
         }
 
@@ -2376,15 +2378,8 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         }
     }
 
-    private sealed class ChannelWriterObserver : IObserver<PipelineTransientFault>
+    private sealed class ChannelWriterObserver(ChannelWriter<PipelineTransientFault> writer) : IObserver<PipelineTransientFault>
     {
-        private readonly ChannelWriter<PipelineTransientFault> writer;
-
-        public ChannelWriterObserver(ChannelWriter<PipelineTransientFault> writer)
-        {
-            this.writer = writer;
-        }
-
         public void OnNext(PipelineTransientFault value) => writer.TryWrite(value);
 
         public void OnError(Exception error) => writer.TryComplete(error);
