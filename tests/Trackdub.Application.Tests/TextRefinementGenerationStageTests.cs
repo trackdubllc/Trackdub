@@ -18,7 +18,8 @@ public sealed class TextRefinementGenerationStageTests
     [Fact]
     public async Task ExecuteAsync_is_quiet_no_op_when_toggle_disabled()
     {
-        TextRefinementGenerationStage stage = CreateStage();
+        var stageRunStore = new FakeProjectStageRunStore();
+        TextRefinementGenerationStage stage = CreateStage(stageRunStore);
         TranscriptGenerationContext context = CreateContext(enableAsrTextRefinement: false);
 
         TranscriptGenerationContext result = await stage.ExecuteAsync(
@@ -28,6 +29,7 @@ public sealed class TextRefinementGenerationStageTests
         Assert.Same(context, result);
         Assert.Same(context.AsrResult, result.AsrResult);
         Assert.Null(result.TextRefinementResult);
+        Assert.Empty(stageRunStore.All);
     }
 
     [Fact]
@@ -90,10 +92,10 @@ public sealed class TextRefinementGenerationStageTests
     }
 
     private static TextRefinementGenerationStage CreateStage()
-    {
+    private static TextRefinementGenerationStage CreateStage(FakeProjectStageRunStore? stageRunStore = null)
         var stageRunStore = new FakeProjectStageRunStore();
+        stageRunStore ??= new FakeProjectStageRunStore();
         return new TextRefinementGenerationStage(
-            new TextRefinementStageHandler(new FakeTextRefinementEngine(), stageRunStore),
             stageRunStore);
     }
 

@@ -186,8 +186,15 @@ public sealed class TranscriptGenerationService(
         IReadOnlyList<ITranscriptGenerationStage> stages = ResolveTranscriptStages(stageName);
 
         PipelineProgressReporter.Phase(progress, stageName, "Checking models", "Checking transcript model readiness.");
-
-        await EnsureStageModelsReadyAsync(stageName, sourceLanguage, cancellationToken)
+        // Skip preflight for isolated TextRefinementAsr when polish is disabled so it remains a true no-op.
+        InferenceModelPreferences preferences = modelPreferences ?? InferenceModelPreferences.Empty;
+        bool shouldSkipPreflight = string.Equals(stageName, StageNames.TextRefinementAsr, StringComparison.OrdinalIgnoreCase)
+                                   && !preferences.EnableAsrTextRefinement;
+        if (!shouldSkipPreflight)
+        {
+            await EnsureStageModelsReadyAsync(stageName, sourceLanguage, cancellationToken)
+                .ConfigureAwait(false);
+        }
             .ConfigureAwait(false);
 
         TranscriptGenerationContext context = await PrepareStageContextAsync(
