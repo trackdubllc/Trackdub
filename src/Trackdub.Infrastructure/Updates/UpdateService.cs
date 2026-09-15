@@ -301,7 +301,7 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
                 .ConfigureAwait(false)) != 0)
             {
                 await fileStream
-                    .WriteAsync(buffer, 0, bytesRead, cancellationToken)
+.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken)
                     .ConfigureAwait(false);
 
                 totalBytesRead += bytesRead;

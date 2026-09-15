@@ -4,10 +4,7 @@ internal static class Qwen3AsrPromptBuilder
 {
     public static IReadOnlyList<int> BuildPromptIds(int audioTokenCount, IReadOnlyList<int>? forcedLanguageSuffix = null)
     {
-        if (audioTokenCount <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(audioTokenCount));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(audioTokenCount);
 
         var ids = new List<int>
         {

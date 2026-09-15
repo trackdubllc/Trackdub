@@ -200,7 +200,7 @@ public sealed class ModelDownloaderAdapter(
                                .ConfigureAwait(false)) != 0)
                     {
                         await fileStream
-                            .WriteAsync(buffer, 0, bytesRead, cancellationToken)
+.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken)
                             .ConfigureAwait(false);
                         totalBytesRead += bytesRead;
                         sessionBytesRead += bytesRead;

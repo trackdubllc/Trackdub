@@ -294,5 +294,4 @@ public partial class TranscriptProjectServiceTests
 
         Assert.Equal("Voice assignment save failed.", exception.Message);
     }
-
 }

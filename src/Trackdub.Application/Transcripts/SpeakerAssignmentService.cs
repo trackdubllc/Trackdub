@@ -553,7 +553,6 @@ public sealed class SpeakerAssignmentService(
 
         return candidate;
     }
-
 }
 
 public sealed record SpeakerAssignmentResult(

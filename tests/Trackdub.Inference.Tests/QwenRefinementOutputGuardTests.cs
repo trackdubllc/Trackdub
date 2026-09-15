@@ -90,6 +90,4 @@ public sealed class QwenRefinementOutputGuardTests
         Assert.Equal("Hello world.", result.DisplayedText);
         Assert.Contains(TextRefinementCorrectionCodes.ExplanationOutputRejected, result.AppliedCorrections);
     }
-
-
 }

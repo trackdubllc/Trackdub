@@ -471,5 +471,4 @@ public partial class TranscriptProjectServiceTests
         Assert.Null(substituted.ReferenceClipArtifactId);
         Assert.NotNull(substituted.VoiceVariant);
     }
-
 }

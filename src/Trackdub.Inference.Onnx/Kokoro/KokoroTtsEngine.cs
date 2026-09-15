@@ -317,5 +317,4 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         throw new InvalidOperationException(
             plan.Fallback?.Detail ?? "Runtime planner did not produce a ready TTS plan.");
     }
-
 }

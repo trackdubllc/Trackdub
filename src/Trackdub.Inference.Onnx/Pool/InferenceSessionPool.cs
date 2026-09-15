@@ -484,7 +484,7 @@ internal sealed class InferenceSessionPool : IDisposable
     public async Task<int> TrimToVramBudgetAsync(long targetVramMb, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        if (targetVramMb < 0) throw new ArgumentOutOfRangeException(nameof(targetVramMb));
+        ArgumentOutOfRangeException.ThrowIfNegative(targetVramMb);
 
         List<PoolEntry> toDispose = new();
         int count = 0;

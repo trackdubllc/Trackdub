@@ -13,10 +13,7 @@ public sealed class WaveformSummaryGenerator : IWaveformSummaryGenerator
 
     public WaveformSummaryGenerator(int bucketCount = 0)
     {
-        if (bucketCount < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(bucketCount));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(bucketCount);
 
         fixedBucketCount = bucketCount == 0 ? null : bucketCount;
     }
