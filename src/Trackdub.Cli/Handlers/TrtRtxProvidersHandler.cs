@@ -122,6 +122,15 @@ internal static class TrtRtxProvidersHandler
             .EnsureInstalledAsync(progress, cancellationToken)
             .ConfigureAwait(false);
 
+        // EnsureInstalledAsync may install/register the EP, changing process state. Invalidate the
+        // shared (process-wide singleton) readiness cache so the verification re-probe below sees
+        // the freshly installed state instead of a stale pre-install snapshot. This forces a real
+        // re-probe; it does not fabricate a ready result.
+        if (factory.GetRequiredService<ITensorRtRtxReadinessProbe>() is IReadinessProbeCache probeCache)
+        {
+            probeCache.Invalidate();
+        }
+
         ITensorRtRtxRuntimeReadinessService readinessService =
             factory.GetRequiredService<ITensorRtRtxRuntimeReadinessService>();
         TensorRtRtxRuntimeReadinessSnapshot snapshot = await readinessService
