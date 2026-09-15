@@ -895,7 +895,12 @@ public sealed class StageArtifactResumeEvaluatorTests
             StageRunId: run.Id);
 
         TtsTake take = TtsTake
-            .CreateStock(projectId, voiceAssignmentId, translatedSegmentId, segmentIndex: 0)
+            .CreateStock(
+                projectId,
+                voiceAssignmentId,
+                translatedSegmentId,
+                segmentIndex: 0,
+                translatedTextHash: TtsTextHash.Compute(0, "hola"))
             .Complete(artifactId, run.Id, durationSamples: 24000, sampleRate: 24000, provider: "test", modelId: null, voiceId: null, durationOverrunRatio: null);
 
         TranslationRevision translationRevision = TranslationRevision.Create(
@@ -977,10 +982,20 @@ public sealed class StageArtifactResumeEvaluatorTests
             StageRunId: run.Id);
 
         TtsTake take0 = TtsTake
-            .CreateStock(projectId, voiceAssignmentId, Guid.NewGuid(), segmentIndex: 0)
+            .CreateStock(
+                projectId,
+                voiceAssignmentId,
+                Guid.NewGuid(),
+                segmentIndex: 0,
+                translatedTextHash: TtsTextHash.Compute(0, "hola"))
             .Complete(artifactId0, run.Id, durationSamples: 24000, sampleRate: 24000, provider: "test", modelId: null, voiceId: null, durationOverrunRatio: null);
         TtsTake take1 = TtsTake
-            .CreateStock(projectId, voiceAssignmentId, Guid.NewGuid(), segmentIndex: 1)
+            .CreateStock(
+                projectId,
+                voiceAssignmentId,
+                Guid.NewGuid(),
+                segmentIndex: 1,
+                translatedTextHash: TtsTextHash.Compute(1, "mundo"))
             .Complete(artifactId1, run.Id, durationSamples: 24000, sampleRate: 24000, provider: "test", modelId: null, voiceId: null, durationOverrunRatio: null);
 
         TranslationRevision translationRevision = TranslationRevision.Create(
@@ -1014,6 +1029,498 @@ public sealed class StageArtifactResumeEvaluatorTests
             projectRootPath: artifactStore.GetPath(".")));
     }
 
+    [Theory]
+    [InlineData(SourceMediaStatus.Missing)]
+    [InlineData(SourceMediaStatus.Changed)]
+    public void CanResumeStage_returns_false_when_source_media_missing_or_changed(SourceMediaStatus status)
+    {
+        var artifactStore = new FakeArtifactStore();
+        Guid projectId = Guid.NewGuid();
+        StageRunRecord run = StageRunRecord
+            .Start(projectId, StageNames.Vad, DateTimeOffset.UtcNow.AddHours(-1))
+            .Complete(DateTimeOffset.UtcNow);
+
+        const string regionsPath = "artifacts/speech-regions/regions.json";
+        artifactStore.Seed(regionsPath);
+        ProjectArtifact regionsArtifact = new(
+            Guid.NewGuid(),
+            projectId,
+            Guid.NewGuid(),
+            ArtifactKind.SpeechRegions,
+            regionsPath,
+            "hash",
+            2,
+            null,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            StageRunId: run.Id);
+
+        // Source-dependent artifacts can never be resumed once the media is gone or replaced.
+        TranscriptProjectState state = CreateState(
+            projectId,
+            [run],
+            [regionsArtifact],
+            sourceStatus: status);
+
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Vad,
+            snapshot: new Dictionary<string, string>(),
+            projectRootPath: artifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_false_when_snapshot_source_path_differs_from_ingested_reference()
+    {
+        var artifactStore = new FakeArtifactStore();
+        Guid projectId = Guid.NewGuid();
+        StageRunRecord run = StageRunRecord
+            .Start(projectId, StageNames.Vad, DateTimeOffset.UtcNow.AddHours(-1))
+            .Complete(DateTimeOffset.UtcNow);
+
+        const string regionsPath = "artifacts/speech-regions/regions.json";
+        artifactStore.Seed(regionsPath);
+        ProjectArtifact regionsArtifact = new(
+            Guid.NewGuid(),
+            projectId,
+            Guid.NewGuid(),
+            ArtifactKind.SpeechRegions,
+            regionsPath,
+            "hash",
+            2,
+            null,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            StageRunId: run.Id);
+
+        var reference = new SourceMediaReference(
+            @"D:\media\original.mp4",
+            "original.mp4",
+            new FileFingerprint("hash", 1024, DateTimeOffset.UtcNow),
+            Probe: new MediaProbeSnapshot("mp4", "MP4", 30.0, BitRate: null, AudioStreams: [], VideoStreams: [], SubtitleStreams: []),
+            DateTimeOffset.UtcNow);
+
+        TranscriptProjectState state = CreateState(
+            projectId,
+            [run],
+            [regionsArtifact],
+            sourceReference: reference);
+
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SourceMediaPath"] = @"D:\media\replaced.mp4"
+        };
+
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Vad,
+            snapshot,
+            projectRootPath: artifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_true_when_source_media_available_and_path_matches()
+    {
+        var artifactStore = new FakeArtifactStore();
+        Guid projectId = Guid.NewGuid();
+        StageRunRecord run = StageRunRecord
+            .Start(projectId, StageNames.Vad, DateTimeOffset.UtcNow.AddHours(-1))
+            .Complete(DateTimeOffset.UtcNow);
+
+        const string regionsPath = "artifacts/speech-regions/regions.json";
+        artifactStore.Seed(regionsPath);
+        ProjectArtifact regionsArtifact = new(
+            Guid.NewGuid(),
+            projectId,
+            Guid.NewGuid(),
+            ArtifactKind.SpeechRegions,
+            regionsPath,
+            "hash",
+            2,
+            null,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            StageRunId: run.Id);
+
+        // Build platform-native absolute paths: "." collapse is exercised everywhere, and the
+        // case difference applies only where the evaluator compares OrdinalIgnoreCase
+        // (Windows/macOS); Linux compares Ordinal.
+        string mediaDir = OperatingSystem.IsWindows() ? @"D:\media" : "/media";
+        var reference = new SourceMediaReference(
+            Path.Combine(mediaDir, "source.mp4"),
+            "source.mp4",
+            new FileFingerprint("hash", 1024, DateTimeOffset.UtcNow),
+            Probe: new MediaProbeSnapshot("mp4", "MP4", 30.0, BitRate: null, AudioStreams: [], VideoStreams: [], SubtitleStreams: []),
+            DateTimeOffset.UtcNow);
+
+        TranscriptProjectState state = CreateState(
+            projectId,
+            [run],
+            [regionsArtifact],
+            sourceReference: reference);
+
+        // Normalization and case differences on the same file must still match.
+        string sourceMediaFileName = OperatingSystem.IsLinux() ? "source.mp4" : "SOURCE.MP4";
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SourceMediaPath"] = Path.Join(
+                mediaDir,
+                Path.GetFileName(sourceMediaFileName))
+        };
+
+        Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Vad,
+            snapshot,
+            projectRootPath: artifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void RuntimeMatchesSnapshot_returns_false_when_provider_mismatch()
+    {
+        StageRunRecord run = StageRunRecord
+            .Start(Guid.NewGuid(), StageNames.Asr, DateTimeOffset.UtcNow.AddHours(-1))
+            .WithRuntimeInfo("cpu", "cpu", modelAlias: "whisper-large")
+            .Complete(DateTimeOffset.UtcNow);
+        var snapshot = new Dictionary<string, string>
+        {
+            [$"Provider:{StageNames.Asr}"] = "dml"
+        };
+
+        Assert.False(StageArtifactResumeEvaluator.RuntimeMatchesSnapshot(run, StageNames.Asr, snapshot));
+    }
+
+    [Fact]
+    public void RuntimeMatchesSnapshot_returns_true_when_provider_matches()
+    {
+        StageRunRecord run = StageRunRecord
+            .Start(Guid.NewGuid(), StageNames.Asr, DateTimeOffset.UtcNow.AddHours(-1))
+            .WithRuntimeInfo("dml", "dml")
+            .Complete(DateTimeOffset.UtcNow);
+        var snapshot = new Dictionary<string, string>
+        {
+            [$"Provider:{StageNames.Asr}"] = "dml"
+        };
+
+        Assert.True(StageArtifactResumeEvaluator.RuntimeMatchesSnapshot(run, StageNames.Asr, snapshot));
+    }
+
+    [Fact]
+    public void RuntimeMatchesSnapshot_returns_true_when_prior_run_reported_cloud()
+    {
+        // Cloud engines report "cloud" regardless of local hardware overrides.
+        StageRunRecord run = StageRunRecord
+            .Start(Guid.NewGuid(), StageNames.Translation, DateTimeOffset.UtcNow.AddHours(-1))
+            .WithRuntimeInfo("cloud", "cloud")
+            .Complete(DateTimeOffset.UtcNow);
+        var snapshot = new Dictionary<string, string>
+        {
+            [$"Provider:{StageNames.Translation}"] = "dml"
+        };
+
+        Assert.True(StageArtifactResumeEvaluator.RuntimeMatchesSnapshot(run, StageNames.Translation, snapshot));
+    }
+
+    [Fact]
+    public void RuntimeMatchesSnapshot_returns_false_when_provider_expected_but_run_recorded_none()
+    {
+        StageRunRecord run = StageRunRecord
+            .Start(Guid.NewGuid(), StageNames.Asr, DateTimeOffset.UtcNow.AddHours(-1))
+            .Complete(DateTimeOffset.UtcNow);
+        var snapshot = new Dictionary<string, string>
+        {
+            [$"Provider:{StageNames.Asr}"] = "dml"
+        };
+
+        Assert.False(StageArtifactResumeEvaluator.RuntimeMatchesSnapshot(run, StageNames.Asr, snapshot));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_false_for_tts_when_take_text_hash_mismatches_current_text()
+    {
+        // Take was synthesized for "hola"; the current translated text differs, so the cached
+        // take must not be resumed even though the artifact still exists.
+        TtsScenario scenario = CreateTtsScenario(
+            translatedText: "adios",
+            takeTextHash: TtsTextHash.Compute(0, "hola"));
+
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            scenario.State,
+            scenario.ArtifactStore,
+            StageNames.Tts,
+            snapshot: new Dictionary<string, string>(),
+            projectRootPath: scenario.ArtifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_false_for_tts_when_voice_override_differs_from_take_voice()
+    {
+        TtsScenario scenario = CreateTtsScenario(
+            takeVoiceId: "af_heart",
+            assignmentVoiceVariant: "af_heart");
+
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Voice:Speaker 1"] = "am_michael"
+        };
+
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            scenario.State,
+            scenario.ArtifactStore,
+            StageNames.Tts,
+            snapshot,
+            projectRootPath: scenario.ArtifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_true_for_tts_when_take_voice_matches_assignment_and_no_override()
+    {
+        TtsScenario scenario = CreateTtsScenario(
+            takeVoiceId: "af_heart",
+            assignmentVoiceVariant: "af_heart");
+
+        Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
+            scenario.State,
+            scenario.ArtifactStore,
+            StageNames.Tts,
+            snapshot: new Dictionary<string, string>(),
+            projectRootPath: scenario.ArtifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_false_for_tts_when_clone_intent_but_take_is_stock()
+    {
+        // Clone is now requested for the speaker but the cached take is plain stock with no
+        // persisted fallback justification: rerun must actually clone.
+        TtsScenario scenario = CreateTtsScenario(
+            takeVoiceId: "af_heart",
+            assignmentVoiceVariant: "af_heart");
+
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [$"VoiceClone:{scenario.SpeakerId:D}"] = "True"
+        };
+
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            scenario.State,
+            scenario.ArtifactStore,
+            StageNames.Tts,
+            snapshot,
+            projectRootPath: scenario.ArtifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_true_for_tts_when_clone_intent_and_persisted_fallback()
+    {
+        // Insufficient-speech fallback persisted as IsFallback with no clip: rerunning under
+        // the same clone intent would reach the same fallback, so the take may resume.
+        TtsScenario scenario = CreateTtsScenario(
+            takeVoiceId: "af_heart",
+            assignmentVoiceVariant: "af_heart",
+            assignmentIsFallback: true);
+
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [$"VoiceClone:{scenario.SpeakerId:D}"] = "True"
+        };
+
+        Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
+            scenario.State,
+            scenario.ArtifactStore,
+            StageNames.Tts,
+            snapshot,
+            projectRootPath: scenario.ArtifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_false_for_tts_when_cloned_take_but_clone_now_disabled()
+    {
+        TtsScenario scenario = CreateTtsScenario(
+            kind: TtsTakeKind.VoiceCloned,
+            takeClipArtifactId: Guid.NewGuid(),
+            assignmentClipArtifactId: null,
+            assignmentIsFallback: false,
+            assignmentVoiceModelId: "chatterbox");
+
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            scenario.State,
+            scenario.ArtifactStore,
+            StageNames.Tts,
+            snapshot: new Dictionary<string, string>(),
+            projectRootPath: scenario.ArtifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_false_for_tts_when_cloned_take_reference_clip_changed()
+    {
+        Guid priorClip = Guid.NewGuid();
+        Guid currentClip = Guid.NewGuid();
+        TtsScenario scenario = CreateTtsScenario(
+            kind: TtsTakeKind.VoiceCloned,
+            takeClipArtifactId: priorClip,
+            assignmentClipArtifactId: currentClip,
+            assignmentVoiceModelId: "chatterbox");
+
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [$"VoiceClone:{scenario.SpeakerId:D}"] = "True"
+        };
+
+        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+            scenario.State,
+            scenario.ArtifactStore,
+            StageNames.Tts,
+            snapshot,
+            projectRootPath: scenario.ArtifactStore.GetPath(".")));
+    }
+
+    [Fact]
+    public void CanResumeStage_returns_true_for_tts_when_cloned_take_clip_still_matches()
+    {
+        Guid clipId = Guid.NewGuid();
+        TtsScenario scenario = CreateTtsScenario(
+            kind: TtsTakeKind.VoiceCloned,
+            takeClipArtifactId: clipId,
+            assignmentClipArtifactId: clipId,
+            assignmentVoiceModelId: "chatterbox");
+
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [$"VoiceClone:{scenario.SpeakerId:D}"] = "True"
+        };
+
+        Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
+            scenario.State,
+            scenario.ArtifactStore,
+            StageNames.Tts,
+            snapshot,
+            projectRootPath: scenario.ArtifactStore.GetPath(".")));
+    }
+
+    private sealed record TtsScenario(
+        TranscriptProjectState State,
+        FakeArtifactStore ArtifactStore,
+        Guid SpeakerId);
+
+    private static TtsScenario CreateTtsScenario(
+        string translatedText = "hola",
+        string? takeTextHash = null,
+        TtsTakeKind kind = TtsTakeKind.Stock,
+        string? takeVoiceId = null,
+        Guid? takeClipArtifactId = null,
+        string? assignmentVoiceVariant = null,
+        string assignmentVoiceModelId = "kokoro",
+        bool assignmentIsFallback = false,
+        Guid? assignmentClipArtifactId = null)
+    {
+        var artifactStore = new FakeArtifactStore();
+        Guid projectId = Guid.NewGuid();
+        Guid mediaAssetId = Guid.NewGuid();
+        Guid speakerId = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        StageRunRecord run = StageRunRecord
+            .Start(projectId, StageNames.Tts, now.AddHours(-1))
+            .Complete(now);
+
+        // Use the record ctor so the speaker id matches TranscriptSegment.SpeakerId;
+        // ProjectSpeaker.Create would mint a fresh id that never links to the segment.
+        var speaker = new ProjectSpeaker(speakerId, projectId, "Speaker 1", now);
+
+        var transcriptRevision = TranscriptRevision.Create(projectId, run.Id, 1, now);
+        TranscriptSegment transcriptSegment = TranscriptSegment.Create(
+            transcriptRevision.Id,
+            0,
+            0.0,
+            1.5,
+            "hello",
+            speakerId,
+            "en");
+
+        TranslationRevision translationRevision = TranslationRevision.Create(
+            projectId,
+            run.Id,
+            transcriptRevision.Id,
+            "es",
+            revisionNumber: 1,
+            now);
+        TranslatedSegment translatedSegment = TranslatedSegment.Create(
+            translationRevision.Id,
+            0,
+            0.0,
+            1.5,
+            translatedText);
+
+        VoiceAssignment assignment = VoiceAssignment.Create(
+            projectId,
+            speakerId,
+            assignmentVoiceModelId,
+            voiceVariant: assignmentVoiceVariant,
+            isFallback: assignmentIsFallback,
+            referenceClipArtifactId: assignmentClipArtifactId);
+
+        const string takePath = "artifacts/tts/run/segment-0.wav";
+        artifactStore.Seed(takePath);
+        Guid artifactId = Guid.NewGuid();
+        ProjectArtifact takeArtifact = new(
+            artifactId,
+            projectId,
+            mediaAssetId,
+            ArtifactKind.TtsTake,
+            takePath,
+            "hash",
+            64,
+            null,
+            null,
+            null,
+            now,
+            StageRunId: run.Id);
+
+        TtsTake take = (
+            kind == TtsTakeKind.VoiceCloned
+                ? TtsTake.CreateVoiceCloned(
+                    projectId,
+                    assignment.Id,
+                    takeClipArtifactId ?? Guid.NewGuid(),
+                    translatedSegment.Id,
+                    segmentIndex: 0,
+                    translatedTextHash: takeTextHash ?? TtsTextHash.Compute(0, translatedText))
+                : TtsTake.CreateStock(
+                    projectId,
+                    assignment.Id,
+                    translatedSegment.Id,
+                    segmentIndex: 0,
+                    translatedTextHash: takeTextHash ?? TtsTextHash.Compute(0, translatedText)))
+            .Complete(
+                artifactId,
+                run.Id,
+                durationSamples: 24000,
+                sampleRate: 24000,
+                provider: "test",
+                modelId: null,
+                voiceId: takeVoiceId,
+                durationOverrunRatio: null);
+
+        TranscriptProjectState state = CreateState(
+            projectId,
+            [run],
+            [takeArtifact],
+            currentTranslationRevision: translationRevision,
+            translatedSegments: [translatedSegment],
+            ttsTakes: [take],
+            currentTranscriptRevision: transcriptRevision,
+            transcriptSegments: [transcriptSegment],
+            speakers: [speaker],
+            voiceAssignments: [assignment]);
+
+        return new TtsScenario(state, artifactStore, speakerId);
+    }
+
     private static TranscriptProjectState CreateState(
         Guid projectId,
         IReadOnlyList<StageRunRecord> stageRuns,
@@ -1024,7 +1531,11 @@ public sealed class StageArtifactResumeEvaluatorTests
         IReadOnlyList<SpeakerTurn>? speakerTurns = null,
         TranscriptRevision? currentTranscriptRevision = null,
         IReadOnlyList<TranscriptSegment>? transcriptSegments = null,
-        string transcriptLanguage = "en")
+        string transcriptLanguage = "en",
+        IReadOnlyList<ProjectSpeaker>? speakers = null,
+        IReadOnlyList<VoiceAssignment>? voiceAssignments = null,
+        SourceMediaStatus sourceStatus = SourceMediaStatus.Available,
+        SourceMediaReference? sourceReference = null)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         var project = new TrackdubProject(projectId, "test", now, now);
@@ -1044,8 +1555,8 @@ public sealed class StageArtifactResumeEvaluatorTests
         var openResult = new OpenProjectResult(
             project,
             mediaAsset,
-            SourceReference: null,
-            SourceMediaStatus.Available,
+            SourceReference: sourceReference,
+            sourceStatus,
             SourceStatusMessage: null,
             Artifacts: artifacts ?? [],
             TranscriptLanguage: transcriptLanguage);
@@ -1054,7 +1565,7 @@ public sealed class StageArtifactResumeEvaluatorTests
             openResult,
             CurrentTranscriptRevision: currentTranscriptRevision,
             TranscriptSegments: transcriptSegments ?? [],
-            Speakers: [],
+            Speakers: speakers ?? [],
             SpeakerTurns: speakerTurns ?? [],
             CurrentTranslationRevision: currentTranslationRevision,
             TranslatedSegments: translatedSegments ?? [],
@@ -1066,7 +1577,7 @@ public sealed class StageArtifactResumeEvaluatorTests
             StaleTranslatedSegmentIndices: new HashSet<int>(),
             WaveformSummary: null,
             AvailableVoices: [],
-            VoiceAssignments: [],
+            VoiceAssignments: voiceAssignments ?? [],
             TtsTakes: ttsTakes ?? [],
             TtsSegmentStates: [],
             VoiceAssignmentWarnings: []);

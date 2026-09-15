@@ -13,6 +13,7 @@ using Trackdub.Contracts.Licensing;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Contracts.Transcripts;
 using Trackdub.Domain;
+using Trackdub.Domain.Artifacts;
 using Trackdub.Domain.Pipeline;
 using Trackdub.Domain.Speakers;
 using Trackdub.Domain.StageRuns;
@@ -117,6 +118,14 @@ public sealed class DubbingPipelineEngine(
 
             (initialProjectState, projectId) = await ResolveTelemetryProjectStateAsync(
                 session, initialProjectState, cancellationToken).ConfigureAwait(false);
+
+            if (initialProjectState is not null)
+            {
+                UpdateExecutionSnapshotWithSourceAudioKind(
+                    executionSnapshot,
+                    options,
+                    ResolveSourceAudioKind(initialProjectState.ProjectState.Artifacts));
+            }
 
             // --- Pre-flight checks ---
             (DubbingRunResult? preFlightResult, IReadOnlySet<string> declinedOptionalStages) =
@@ -306,15 +315,21 @@ public sealed class DubbingPipelineEngine(
     {
         try
         {
-            initialProjectState ??= await session.Workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
-            return (initialProjectState, initialProjectState.ProjectState.Project.Id);
+            if (initialProjectState is not null)
+            {
+                return (initialProjectState, initialProjectState.ProjectState.Project.Id);
+            }
+
+            TranscriptProjectState state = await session.Workspace.Project
+                .OpenAsync(cancellationToken).ConfigureAwait(false);
+            return (state, state.ProjectState.Project.Id);
         }
         // OperationCanceledException naturally propagates through filter-less try-blocks; no
         // explicit rethrow arm needed. Per AGENTS.md "Unnecessary try/catch blocks. Prefer to remove those."
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Best-effort: Snapshot() consumers (DiagnosticsBundleExporter) still receive engine-
-            // emitted rows; per-project filter consumers see them as Guid.Empty which throws.
+            // Best-effort fallback: Snapshot() consumers (DiagnosticsBundleExporter) still receive
+            // engine-emitted rows; per-project filter consumers see them as Guid.Empty.
             return (initialProjectState, Guid.Empty);
         }
     }
@@ -672,7 +687,7 @@ public sealed class DubbingPipelineEngine(
                 TryResolveService<IPipelineModelSetupInteraction>(session)
                     ?.CreateCallbacks(progress, cancellationToken)
                 ?? BuildHeadlessCallbacks(cancellationToken);
-            RuntimeModelSetupResult provisionResult = await coordinator
+            RuntimeModelSetupResult result = await coordinator
                 .EnsurePipelineModelsAvailableAsync(
                     session.Workspace,
                     selections,
@@ -682,6 +697,8 @@ public sealed class DubbingPipelineEngine(
                     options.TargetLanguageCode,
                     cancellationToken)
                 .ConfigureAwait(false);
+
+            RuntimeModelSetupResult provisionResult = result;
 
             if (!provisionResult.IsReady)
             {
@@ -2022,6 +2039,44 @@ public sealed class DubbingPipelineEngine(
             RuntimeStage.LipSynthesis,
             selections.LipSynthesisModelAlias);
         AddModelId(snapshot, StageNames.LipSynthesis, selections.LipSynthesisModelAlias, modelAliasResolver);
+
+        // Hardware/provider overrides change which execution provider a stage runs on; a
+        // prior run's artifacts were produced under the provider recorded on its stage row,
+        // so resume must compare them rather than reuse artifacts across provider changes.
+        foreach ((string stageName, RuntimeStage stage) in ProviderSnapshotStages)
+        {
+            SetSnapshotExecutionProvider(snapshot, options, stageName, stage);
+        }
+    }
+
+    private static readonly (string StageName, RuntimeStage Stage)[] ProviderSnapshotStages =
+    [
+        (StageNames.Vad, RuntimeStage.Vad),
+        (StageNames.Asr, RuntimeStage.Asr),
+        (StageNames.Diarization, RuntimeStage.Diarization),
+        (StageNames.Separation, RuntimeStage.Separation),
+        (StageNames.OverlapRescue, RuntimeStage.OverlapRescue),
+        (StageNames.Translation, RuntimeStage.Translation),
+        (StageNames.Tts, RuntimeStage.Tts),
+        (StageNames.AudioPreparation, RuntimeStage.SpeechEnhancement),
+        (StageNames.TextRefinementAsr, RuntimeStage.TextRefinement),
+        (StageNames.LipSync, RuntimeStage.LipSync),
+        (StageNames.LipSynthesis, RuntimeStage.LipSynthesis),
+    ];
+
+    private static void SetSnapshotExecutionProvider(
+        Dictionary<string, string> snapshot,
+        RuntimeModelRequestOptions options,
+        string stageName,
+        RuntimeStage stage)
+    {
+        ExecutionProviderKind? preferredProvider =
+            RuntimeModelRequestFactory.ResolvePreferredExecutionProvider(options, stage);
+        if (preferredProvider is not null)
+        {
+            snapshot[$"Provider:{stageName}"] =
+                RuntimeModelRequestFactory.FormatExecutionProviderLabel(preferredProvider.Value);
+        }
     }
 
     private static void AddModelId(
@@ -2083,15 +2138,22 @@ public sealed class DubbingPipelineEngine(
         // without requiring --force-rerun. These values are produced by ExportResumeGating so
         // capture (here) and comparison (the persisted ExportManifest, read back by
         // StageArtifactResumeEvaluator) share one normalization and cannot drift.
+        // Note: sourceAudioKind defaults to NormalizedAudio here because the project may not exist
+        // yet. The actual kind is determined at export time when BuildExportGating inspects artifacts.
         foreach ((string key, string value) in ExportResumeGating.Build(
             ResolveExportContainer(options.ExportFormat),
+            ArtifactKind.NormalizedAudio,
             options.ApplyTimbrePolish,
             options.RestoreOriginalPan,
             options.MatchOriginalLoudness,
             options.BurnInSubtitles,
             ResolveSubtitleSource(options.SubtitleSource),
             ExportResumeGating.SubtitleFormatsTokenFromRawOptions(options.SubtitleFormats),
-            options.VideoEncoder))
+            options.VideoEncoder,
+            options.ExportTargetLufs ?? ExportLoudnessTargets.OnlineLufs,
+            options.ExportSourceGainDb ?? 0d,
+            options.ExportDubbedSpeechGainDb ?? 0d,
+            options.ExportDuckingGainDb))
         {
             snapshot[key] = value;
         }
@@ -2126,6 +2188,35 @@ public sealed class DubbingPipelineEngine(
         }
 
         return snapshot;
+    }
+
+    private static ArtifactKind ResolveSourceAudioKind(IReadOnlyList<ProjectArtifact> artifacts) =>
+        TranscriptWorkflowUtilities.GetLatestAcceptedAmbianceStem(artifacts) is not null
+            ? ArtifactKind.Ambiance
+            : ArtifactKind.NormalizedAudio;
+
+    private static void UpdateExecutionSnapshotWithSourceAudioKind(
+        Dictionary<string, string> snapshot,
+        DubbingSessionOptions options,
+        ArtifactKind sourceAudioKind)
+    {
+        foreach ((string key, string value) in ExportResumeGating.Build(
+            ResolveExportContainer(options.ExportFormat),
+            sourceAudioKind,
+            options.ApplyTimbrePolish,
+            options.RestoreOriginalPan,
+            options.MatchOriginalLoudness,
+            options.BurnInSubtitles,
+            ResolveSubtitleSource(options.SubtitleSource),
+            ExportResumeGating.SubtitleFormatsTokenFromRawOptions(options.SubtitleFormats),
+            options.VideoEncoder,
+            options.ExportTargetLufs ?? ExportLoudnessTargets.OnlineLufs,
+            options.ExportSourceGainDb ?? 0d,
+            options.ExportDubbedSpeechGainDb ?? 0d,
+            options.ExportDuckingGainDb))
+        {
+            snapshot[key] = value;
+        }
     }
 
     internal static ExportOutputContainer ResolveExportContainer(string? exportFormat) =>
@@ -2226,11 +2317,28 @@ public sealed class DubbingPipelineEngine(
             return false;
         }
 
-        string? exportRelativePath = string.Equals(stageName, StageNames.Export, StringComparison.OrdinalIgnoreCase)
-            ? Path.GetRelativePath(session.ProjectRootPath, ResolveExportOutputPath(
-                session.ProjectRootPath,
-                ResolveExportContainer(options.ExportFormat)))
-            : null;
+        // The resume check must look at the path the next run would actually write to:
+        // an explicit ExportOutputPath takes precedence over the project-default exports/
+        // location, and only that effective path proves the prior export is still usable.
+        // Path.GetFullPath mirrors ExportStageHandler's normalization (relative explicit
+        // paths resolve against the current directory, same as at execution time).
+        string? exportPath = null;
+        if (string.Equals(stageName, StageNames.Export, StringComparison.OrdinalIgnoreCase))
+        {
+            string effectiveOutputPath = string.IsNullOrWhiteSpace(options.ExportOutputPath)
+                ? ResolveExportOutputPath(
+                    session.ProjectRootPath,
+                    ResolveExportContainer(options.ExportFormat))
+                : options.ExportOutputPath;
+            try
+            {
+                exportPath = Path.GetFullPath(effectiveOutputPath);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                exportPath = effectiveOutputPath;
+            }
+        }
 
         return await StageArtifactResumeEvaluator.CanResumeStageAsync(
             state,
@@ -2239,7 +2347,7 @@ public sealed class DubbingPipelineEngine(
             currentSnapshot,
             session.ProjectRootPath,
             options.TargetLanguageCode,
-            exportRelativePath,
+            exportPath,
             cancellationToken).ConfigureAwait(false);
     }
 

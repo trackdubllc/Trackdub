@@ -898,14 +898,15 @@ public sealed class ExportStageHandler(
             outputs,
             warnings,
             RenderedSegmentIndices: currentState.TranscriptSegments.Select(static segment => segment.SegmentIndex).ToArray(),
-            Gating: BuildExportGating(request)));
+            Gating: BuildExportGating(request, mixPlan?.SourceAudioKind ?? ArtifactKind.NormalizedAudio)));
 
     // Persist the export-gating flag values for this run so StageArtifactResumeEvaluator can
     // compare them against a later run's snapshot. Produced by the same ExportResumeGating helper
     // the execution snapshot uses, so capture and comparison cannot diverge.
-    private static ExportManifestGating BuildExportGating(ExportStageRequest request) =>
+    private static ExportManifestGating BuildExportGating(ExportStageRequest request, ArtifactKind sourceAudioKind) =>
         new(ExportResumeGating.Build(
             request.Container,
+            sourceAudioKind,
             request.ApplyTimbrePolish,
             request.RestoreOriginalPan,
             request.MatchOriginalLoudness,
@@ -915,7 +916,11 @@ public sealed class ExportStageHandler(
             // null (pipeline default) -> "default" on both sides, avoiding the spurious rerun that
             // resolving to [Srt] would cause for every default-subtitle export.
             ExportResumeGating.SubtitleFormatsTokenFromRawOptions(request.RawSubtitleFormats),
-            request.VideoEncoder));
+            request.VideoEncoder,
+            request.TargetLufs,
+            request.SourceGainDb,
+            request.DubbedSpeechGainDb,
+            request.DuckingGainDb));
 
     private static StageRunRecord[] GetContributingStageRuns(TranscriptProjectState currentState, MixPlan? mixPlan)
     {

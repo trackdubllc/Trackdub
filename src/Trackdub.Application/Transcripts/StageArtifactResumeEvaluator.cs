@@ -1,8 +1,11 @@
+using Trackdub.Application.Dubbing;
+using Trackdub.Application.Projects;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Contracts.Projects;
 using Trackdub.Domain.Artifacts;
+using Trackdub.Domain.Speakers;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Domain.Transcript;
 using Trackdub.Domain.Translation;
@@ -59,6 +62,26 @@ public static class StageArtifactResumeEvaluator
             }
         }
 
+        if (snapshot.TryGetValue($"Provider:{stageName}", out string? expectedProvider) &&
+            !string.IsNullOrWhiteSpace(expectedProvider))
+        {
+            string? actualProvider = run.RuntimeInfo?.RequestedProvider;
+            if (string.IsNullOrWhiteSpace(actualProvider))
+            {
+                // The snapshot requests a specific provider but the prior run recorded none,
+                // so its hardware decisions cannot be proven to match.
+                return false;
+            }
+
+            // Cloud engines report "cloud" regardless of local hardware overrides; the
+            // comparison only constrains runs that actually honored a provider selection.
+            if (!string.Equals(actualProvider, "cloud", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(actualProvider.Trim(), expectedProvider.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -68,7 +91,7 @@ public static class StageArtifactResumeEvaluator
         string stageName,
         string projectRootPath,
         string? targetLanguageCode = null,
-        string? exportRelativePath = null)
+        string? exportPath = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(artifactStore);
@@ -127,8 +150,8 @@ public static class StageArtifactResumeEvaluator
                     ArtifactKind.SpeechEnhancedAudio),
 
             _ when string.Equals(stageName, StageNames.Export, StringComparison.OrdinalIgnoreCase) =>
-                TryResolveProjectScopedPath(projectRootPath, exportRelativePath, out string? exportPath) &&
-                File.Exists(exportPath),
+                TryResolveExportPath(projectRootPath, exportPath, out string? resolvedExportPath) &&
+                File.Exists(resolvedExportPath),
 
             _ when string.Equals(stageName, StageNames.OverlapRescue, StringComparison.OrdinalIgnoreCase) =>
                 OverlapRescueOutputsPresent(state.StageRuns, artifacts, artifactStore),
@@ -144,10 +167,16 @@ public static class StageArtifactResumeEvaluator
         IReadOnlyDictionary<string, string> snapshot,
         string projectRootPath,
         string? targetLanguageCode = null,
-        string? exportRelativePath = null)
+        string? exportPath = null)
     {
         StageRunRecord? latestRun = GetLatestSuccessfulRun(state.StageRuns, stageName);
         if (latestRun is null)
+        {
+            return false;
+        }
+
+        if (DubbingPipelineStages.RequiresSourceMedia(stageName) &&
+            !SourceMediaMatchesSnapshot(state, snapshot))
         {
             return false;
         }
@@ -167,13 +196,18 @@ public static class StageArtifactResumeEvaluator
             return false;
         }
 
+        if (!TtsDecisionsMatchSnapshot(stageName, state, snapshot))
+        {
+            return false;
+        }
+
         return OutputsPresent(
             state,
             artifactStore,
             stageName,
             projectRootPath,
             targetLanguageCode,
-            exportRelativePath);
+            exportPath);
     }
 
     /// <summary>
@@ -191,7 +225,7 @@ public static class StageArtifactResumeEvaluator
         IReadOnlyDictionary<string, string> snapshot,
         string projectRootPath,
         string? targetLanguageCode = null,
-        string? exportRelativePath = null,
+        string? exportPath = null,
         CancellationToken cancellationToken = default)
     {
         if (!CanResumeStage(
@@ -201,7 +235,7 @@ public static class StageArtifactResumeEvaluator
                 snapshot,
                 projectRootPath,
                 targetLanguageCode,
-                exportRelativePath))
+                exportPath))
         {
             return false;
         }
@@ -273,34 +307,33 @@ public static class StageArtifactResumeEvaluator
         return true;
     }
 
-    private static bool TryResolveProjectScopedPath(
+    /// <summary>
+    /// Resolves the effective export destination for existence checks. The caller supplies
+    /// the path the next run would actually write: absolute paths are used verbatim (delivery
+    /// destinations legitimately live outside the project root) and relative paths resolve
+    /// against the project root.
+    /// </summary>
+    private static bool TryResolveExportPath(
         string projectRootPath,
-        string? relativePath,
+        string? exportPath,
         out string? absolutePath)
     {
         absolutePath = null;
 
-        if (string.IsNullOrWhiteSpace(relativePath))
+        if (string.IsNullOrWhiteSpace(exportPath))
         {
             return false;
         }
 
-        string normalizedRoot = Path.GetFullPath(projectRootPath);
-        string normalizedRelative = relativePath.Replace('/', Path.DirectorySeparatorChar);
-        if (Path.IsPathRooted(normalizedRelative))
+        try
+        {
+            absolutePath = Path.GetFullPath(exportPath, Path.GetFullPath(projectRootPath));
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
             return false;
         }
-
-        string candidatePath = Path.GetFullPath(normalizedRelative, normalizedRoot);
-        string rootWithSeparator = normalizedRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!candidatePath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        absolutePath = candidatePath;
-        return true;
     }
 
     private static bool OverlapRescueOutputsPresent(
@@ -389,6 +422,16 @@ public static class StageArtifactResumeEvaluator
                 return false;
             }
 
+            // A take whose persisted hash no longer matches the current translated text was
+            // synthesized for different words and must not be resumed.
+            if (!string.Equals(
+                    take.TranslatedTextHash,
+                    TtsTextHash.Compute(segment.SegmentIndex, segment.Text),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
             if (take.ArtifactId is not Guid artifactId ||
                 !artifactsById.TryGetValue(artifactId, out ProjectArtifact? artifact))
             {
@@ -457,6 +500,202 @@ public static class StageArtifactResumeEvaluator
         return latestAsrRun is not null &&
                revisionRunId == latestAsrRun.Id &&
                RuntimeMatchesSnapshot(latestAsrRun, StageNames.Asr, snapshot);
+    }
+
+    /// <summary>
+    /// Every pipeline stage derives from the project's source media, so a missing or
+    /// in-place-changed source invalidates all prior artifacts. When the caller targets a
+    /// different file than the one the project ingested, the snapshot's SourceMediaPath no
+    /// longer matches the persisted reference and resume is refused. Unknown/Available
+    /// statuses and absent keys keep the prior behavior.
+    /// </summary>
+    private static bool SourceMediaMatchesSnapshot(
+        TranscriptProjectState state,
+        IReadOnlyDictionary<string, string> snapshot)
+    {
+        if (state.ProjectState.SourceStatus is SourceMediaStatus.Changed or SourceMediaStatus.Missing)
+        {
+            return false;
+        }
+
+        if (!snapshot.TryGetValue("SourceMediaPath", out string? requestedPath) ||
+            string.IsNullOrWhiteSpace(requestedPath))
+        {
+            return true;
+        }
+
+        string? persistedPath = state.ProjectState.SourceReference?.OriginalPath;
+        if (string.IsNullOrWhiteSpace(persistedPath))
+        {
+            return true;
+        }
+
+        if (!TryNormalizePath(requestedPath, out string? normalizedRequested) ||
+            !TryNormalizePath(persistedPath, out string? normalizedPersisted))
+        {
+            return false;
+        }
+
+        StringComparison comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(normalizedRequested, normalizedPersisted, comparison);
+    }
+
+    private static bool TryNormalizePath(string path, out string? normalized)
+    {
+        try
+        {
+            string fullPath = Path.GetFullPath(path.Trim());
+
+            // Normalize path separators for cross-platform consistency
+            if (Path.DirectorySeparatorChar != Path.AltDirectorySeparatorChar)
+            {
+                fullPath = fullPath.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            }
+
+            normalized = fullPath;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            normalized = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// TTS takes persist the voice/clone decisions they were synthesized under. Resume is only
+    /// honest when those decisions still match the current run's intent: the snapshot's
+    /// Voice:/VoiceClone:/UseVoiceCloning keys are compared per take against its Kind, VoiceId,
+    /// and reference clip (resolved through the take's persisted voice assignment, which also
+    /// exposes fallback rows).
+    /// </summary>
+    private static bool TtsDecisionsMatchSnapshot(
+        string stageName,
+        TranscriptProjectState state,
+        IReadOnlyDictionary<string, string> snapshot)
+    {
+        if (!string.Equals(stageName, StageNames.Tts, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        bool useCloning = snapshot.TryGetValue("UseVoiceCloning", out string? cloningFlag) &&
+                          bool.TryParse(cloningFlag, out bool cloningRequested) &&
+                          cloningRequested;
+
+        var cloneIntentBySpeakerId = new Dictionary<Guid, bool>();
+        var voiceOverrideBySpeakerId = new Dictionary<Guid, string>();
+        foreach ((string key, string value) in snapshot)
+        {
+            if (key.StartsWith("VoiceClone:", StringComparison.Ordinal) &&
+                Guid.TryParse(key.AsSpan("VoiceClone:".Length), out Guid cloneSpeakerId) &&
+                bool.TryParse(value, out bool clone))
+            {
+                cloneIntentBySpeakerId[cloneSpeakerId] = clone;
+            }
+            else if (key.StartsWith("Voice:", StringComparison.Ordinal) &&
+                     !string.IsNullOrWhiteSpace(value) &&
+                     DubbingPipelineEngine.TryMatchSpeaker(
+                         state.Speakers,
+                         key["Voice:".Length..],
+                         out ProjectSpeaker? speaker) &&
+                     speaker is not null)
+            {
+                voiceOverrideBySpeakerId[speaker.Id] = value;
+            }
+        }
+
+        bool hasCloneMap = cloneIntentBySpeakerId.Count > 0;
+
+        var assignmentsById = new Dictionary<Guid, VoiceAssignment>();
+        foreach (VoiceAssignment assignment in state.VoiceAssignments)
+        {
+            assignmentsById[assignment.Id] = assignment;
+        }
+
+        Dictionary<int, Guid?> speakerIdBySegmentIndex = state.TranscriptSegments
+            .GroupBy(segment => segment.SegmentIndex)
+            .ToDictionary(group => group.Key, group => group.First().SpeakerId);
+
+        Dictionary<int, TtsTake> latestTakesBySegmentIndex = state.TtsTakes
+            .Where(take => !take.IsStale)
+            .GroupBy(take => take.SegmentIndex)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(take => take.CreatedAtUtc).First());
+
+        foreach (TranslatedSegment segment in state.TranslatedSegments)
+        {
+            if (!latestTakesBySegmentIndex.TryGetValue(segment.SegmentIndex, out TtsTake? take))
+            {
+                continue;
+            }
+
+            speakerIdBySegmentIndex.TryGetValue(segment.SegmentIndex, out Guid? speakerId);
+            // Mirrors GenerateTtsForAllSpeakersAsync/BuildUnattendedTtsRequest: an explicit
+            // clone-map entry wins; with no map, global cloning applies to speakers that have
+            // no explicit voice override.
+            bool wantsClone = speakerId is Guid resolvedSpeakerId &&
+                (cloneIntentBySpeakerId.TryGetValue(resolvedSpeakerId, out bool cloneIntent)
+                    ? cloneIntent
+                    : !hasCloneMap && useCloning && !voiceOverrideBySpeakerId.ContainsKey(resolvedSpeakerId));
+
+            VoiceAssignment? assignment =
+                assignmentsById.TryGetValue(take.VoiceAssignmentId, out VoiceAssignment? persisted)
+                    ? persisted
+                    : null;
+
+            if (take.Kind == TtsTakeKind.VoiceCloned)
+            {
+                if (!wantsClone)
+                {
+                    return false;
+                }
+
+                if (!string.Equals(
+                        take.ReferenceClipArtifactId?.ToString(),
+                        assignment?.ReferenceClipArtifactId?.ToString(),
+                        StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+            else if (take.Kind == TtsTakeKind.Stock)
+            {
+                if (wantsClone)
+                {
+                    // A stock take under clone intent is only honest when the prior run
+                    // persisted an explicit fallback (e.g. insufficient speech) with no clip;
+                    // anything else must rerun so the clone actually happens.
+                    if (assignment?.IsFallback != true || assignment.ReferenceClipArtifactId is not null)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    string? expectedVoiceId =
+                        speakerId is Guid stockSpeakerId &&
+                        voiceOverrideBySpeakerId.TryGetValue(stockSpeakerId, out string? overrideVoiceId)
+                            ? overrideVoiceId
+                            : assignment?.VoiceVariant;
+
+                    if (!string.IsNullOrWhiteSpace(expectedVoiceId) &&
+                        !string.Equals(take.VoiceId, expectedVoiceId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool SourceLanguageMatchesSnapshot(
