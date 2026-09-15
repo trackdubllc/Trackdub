@@ -1,5 +1,6 @@
-using Trackdub.Contracts.Projects;
+using Trackdub.Application.Projects;
 using Trackdub.Application.Transcripts.Pipeline;
+using Trackdub.Contracts.Projects;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Domain.Artifacts;
