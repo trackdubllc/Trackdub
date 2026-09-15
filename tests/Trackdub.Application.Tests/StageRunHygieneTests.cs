@@ -1147,8 +1147,12 @@ public sealed class StageArtifactResumeEvaluatorTests
             DateTimeOffset.UtcNow,
             StageRunId: run.Id);
 
+        // Build platform-native absolute paths: "." collapse is exercised everywhere, and the
+        // case difference applies only where the evaluator compares OrdinalIgnoreCase
+        // (Windows/macOS); Linux compares Ordinal.
+        string mediaDir = OperatingSystem.IsWindows() ? @"D:\media" : "/media";
         var reference = new SourceMediaReference(
-            @"D:\media\source.mp4",
+            Path.Combine(mediaDir, "source.mp4"),
             "source.mp4",
             new FileFingerprint("hash", 1024, DateTimeOffset.UtcNow),
             Probe: new MediaProbeSnapshot("mp4", "MP4", 30.0, BitRate: null, AudioStreams: [], VideoStreams: [], SubtitleStreams: []),
@@ -1163,7 +1167,10 @@ public sealed class StageArtifactResumeEvaluatorTests
         // Normalization and case differences on the same file must still match.
         var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["SourceMediaPath"] = @"d:\media\.\source.mp4"
+            ["SourceMediaPath"] = Path.Combine(
+                mediaDir,
+                ".",
+                OperatingSystem.IsLinux() ? "source.mp4" : "SOURCE.MP4")
         };
 
         Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
