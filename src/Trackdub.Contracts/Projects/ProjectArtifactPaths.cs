@@ -437,7 +437,7 @@ public static class ProjectArtifactPaths
         }
 
         string trimmed = extension.Trim().ToLowerInvariant();
-        return trimmed.StartsWith(".", StringComparison.Ordinal)
+        return trimmed.StartsWith('.')
             ? trimmed
             : $".{trimmed}";
     }

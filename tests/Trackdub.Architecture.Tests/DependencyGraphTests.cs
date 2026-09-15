@@ -475,7 +475,7 @@ public sealed class DependencyGraphTests
             var project = Normalize(parts[0]);
             var rhs = parts[1].Trim();
             var deps = new HashSet<string>();
-            if (!rhs.StartsWith("(", StringComparison.Ordinal))
+            if (!rhs.StartsWith('('))
             {
                 foreach (var raw in rhs.Split(','))
                 {
