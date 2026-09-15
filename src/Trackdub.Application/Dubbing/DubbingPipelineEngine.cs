@@ -1268,15 +1268,28 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             return options;
         }
 
-        if (options.ModelPreferences is not null &&
-            options.ModelPreferences.Keys.Any(key => key.Equals(StageNames.Tts, StringComparison.OrdinalIgnoreCase)))
+        // Callers may hand us an arbitrary IReadOnlyDictionary whose comparer is case-sensitive
+        // (e.g. StringComparer.Ordinal), so it can legitimately contain keys that differ only by
+        // case such as both "TTS" and "tts". Copying via the collection constructor with an
+        // OrdinalIgnoreCase comparer throws ArgumentException on those duplicates, so normalize
+        // by explicit enumeration. Duplicate-precedence: last write wins in the source's
+        // enumeration order (matches Dictionary enumeration, but that order is not guaranteed).
+        var preferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (options.ModelPreferences is not null)
         {
-            return options;
+            foreach (var preference in options.ModelPreferences)
+            {
+                preferences[preference.Key] = preference.Value;
+            }
         }
 
-        var preferences = options.ModelPreferences is not null
-            ? new Dictionary<string, string>(options.ModelPreferences, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (preferences.ContainsKey(StageNames.Tts))
+        {
+            // Preserve the explicit TTS override, but return the case-insensitive copy so that
+            // BuildModelPreferences' GetValueOrDefault(StageNames.Tts) lookup resolves regardless
+            // of the casing the caller used for the original TTS key.
+            return options with { ModelPreferences = preferences };
+        }
 
         preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
         return options with { ModelPreferences = preferences };
@@ -1476,7 +1489,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
     /// <summary>
     /// Builds <see cref="InferenceModelPreferences"/> from the dubbing session options.
     /// </summary>
-    private static InferenceModelPreferences? BuildModelPreferences(DubbingSessionOptions options)
+    internal static InferenceModelPreferences? BuildModelPreferences(DubbingSessionOptions options)
     {
         bool hasModelOverrides = options.ModelPreferences is { Count: > 0 };
         if (!hasModelOverrides && !options.EnableAsrTextRefinement)
