@@ -74,6 +74,7 @@ Shared:
   PLATFORM_GEN                  Platform generation: 2/3/4/5 (default: 3)
   RUN_PPL_EVAL                  Run perplexity evaluation (default: True)
   MODEL_NAME                    Model name identifier (default: llama3_1_instruct)
+  MODEL_REVISION                Pinned Hub revision (commit SHA/tag, default: None = latest cached)
   CACHE_DIR                     Cache directory path (default: ./cache_dir)
   OUTPUT_DIR                    Output directory path (default: ./output_dir)
   NUM_HIDDEN_LAYERS             Number of hidden layers, 0=use model default (default: 0)
@@ -157,6 +158,7 @@ def download_c4_dataset_if_needed(cache_dir):
         Path to the C4 dataset JSON file
     """
     import urllib.request
+    from urllib.parse import urlparse
     import gzip
     import shutil
 
@@ -177,8 +179,13 @@ def download_c4_dataset_if_needed(cache_dir):
     # Create directory if it doesn't exist
     os.makedirs(c4_dir, exist_ok=True)
 
-    # Download URL
+    # Download URL (https-only: urlretrieve must never follow file:/ or custom schemes)
     c4_url = "https://huggingface.co/datasets/allenai/c4/resolve/main/en/c4-train.00000-of-01024.json.gz"
+
+    allowed_schemes = {"https"}
+    parsed_url = urlparse(c4_url)
+    if parsed_url.scheme not in allowed_schemes:
+        raise ValueError(f"Refusing to download from disallowed URL scheme: {parsed_url.scheme!r} in {c4_url!r}")
 
     try:
         # Download the compressed file
@@ -282,6 +289,9 @@ from genai_lib.common.debug.profiler import event_marker
 
 model_name = get_config_value("MODEL_NAME", 'llama3_1_instruct')
 model_id = get_config_value("MODEL_ID", "meta-llama/Llama-3.1-8B-Instruct")
+# Pinned Hub revision for reproducible downloads. None = Hub default; set a commit
+# SHA via MODEL_REVISION (env/JSON) for reproducibility. Safe for local paths.
+model_revision = get_config_value("MODEL_REVISION", None, 'none')
 
 cache_dir = get_config_value("CACHE_DIR", './cache_dir')
 output_dir = get_config_value("OUTPUT_DIR", "./output_dir")
@@ -303,7 +313,8 @@ print("=" * 80)
 
 from transformers import AutoConfig, AutoTokenizer
 
-llm_config_adascale = AutoConfig.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True)
+llm_config_adascale = AutoConfig.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True,
+                                                     revision=model_revision)
 num_hidden_layers = get_config_value("NUM_HIDDEN_LAYERS", 0, 'int')
 llm_config_adascale.num_hidden_layers = num_hidden_layers if num_hidden_layers > 0 else llm_config_adascale.num_hidden_layers
 
@@ -312,10 +323,12 @@ print(f'num_layer: {llm_config_adascale.num_hidden_layers}, context_length: {ada
 
 with event_marker('HuggingFace FP model creation for AdaScale'):
     model_adascale = AutoModelForCausalLM.from_pretrained(model_id, config=llm_config_adascale, cache_dir=cache_dir,
+                                                           revision=model_revision,
                                                            torch_dtype=torch.bfloat16 if enable_bf16 else torch.float32)
 
     os.environ['TOKENIZERS_PARALLELISM'] = '0'
-    tokenizer_adascale = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, use_fast=True, trust_remote_code=True)
+    tokenizer_adascale = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, use_fast=True, trust_remote_code=True,
+                                                       revision=model_revision)
     # Adjust the tokenizer to limit to context_length
     tokenizer_adascale.model_max_length = adascale_context_length
 
@@ -662,7 +675,8 @@ print("=" * 80)
 
 from transformers import AutoConfig, AutoTokenizer
 
-llm_config = AutoConfig.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True)
+llm_config = AutoConfig.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True,
+                                revision=model_revision)
 
 # To help with debugging num_hidden_layers could be set to 2 to quickly verify the pipeline and export a two layer model for verification purposes
 llm_config.num_hidden_layers = num_hidden_layers if num_hidden_layers > 0 else llm_config.num_hidden_layers
@@ -671,10 +685,11 @@ print(f'num_layer: {llm_config.num_hidden_layers}, context_length: {base_context
       f'num_hidden_size: {llm_config.num_attention_heads}, num_kv_heads: {llm_config.num_key_value_heads}')
 
 with event_marker('HuggingFace FP model creation'):
-    model = modeling_llama.LlamaForCausalLM.from_pretrained(model_id, config=llm_config)
+    model = modeling_llama.LlamaForCausalLM.from_pretrained(model_id, config=llm_config, revision=model_revision)
 
     os.environ['TOKENIZERS_PARALLELISM'] = '0'
-    tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, use_fast=True, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, use_fast=True, trust_remote_code=True,
+                                              revision=model_revision)
     # Adjust the tokenizer to limit to context_length
     tokenizer.model_max_length = base_context_length
 
@@ -792,7 +807,7 @@ with event_marker("FP model adaptation configuration"):
 
     # Adapting KV$ management
     assert update_attr(cache_utils.DynamicCache, 'update', DynamicCache_update), f"Unknown DynamicCache definition: {cache_utils.DynamicCache}"
-    assert update_attr(cache_utils.DynamicCache, 'get_seq_length', DynamicCache_get_seq_length),  f"Unknown DynamicCache definition: {cache_utils.DynamicCache}"
+    assert update_attr(cache_utils.DynamicCache, 'get_seq_length', DynamicCache_get_seq_length), f"Unknown DynamicCache definition: {cache_utils.DynamicCache}"
     assert update_attr(cache_utils.DynamicCache, 'to_legacy_cache', DynamicCache_to_legacy_cache), \
     f"Unknown DynamicCache definition: {cache_utils.DynamicCache}"
 
@@ -828,7 +843,7 @@ llm_config.save_pretrained(output_dir)
 llm_lib_log_property({Property.ARN: ARN})
 
 with event_marker('Adapted FP model creation'):
-    model = modeling_llama.LlamaForCausalLM.from_pretrained(model_id, config=llm_config)
+    model = modeling_llama.LlamaForCausalLM.from_pretrained(model_id, config=llm_config, revision=model_revision)
 
 # ---
 # ### 3.3 Changes to HuggingFace model to work with the Adapted Model or Prepared Model

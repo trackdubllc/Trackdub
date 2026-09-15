@@ -60,6 +60,7 @@ Configurable Variables (via JSON config file, environment variables, or defaults
   PLATFORM_GEN              Platform generation: 3/4/5 (default: 3)
   HTP_CONFIG_FILE           Path to HTP quantsim config file (default: auto-detected)
   MODEL_NAME                Model name identifier (default: phi4)
+  MODEL_REVISION            Pinned Hub revision (commit SHA/tag, default: None = latest cached)
   CACHE_DIR                 Cache directory path (default: ./cache_dir)
   OUTPUT_DIR                Output directory path (default: ./output_dir_phi4)
   NUM_HIDDEN_LAYERS         Number of hidden layers, 0=use model default (default: 0)
@@ -243,6 +244,10 @@ model_name = get_config_value("MODEL_NAME", 'phi4')
 
 model_id = get_config_value("MODEL_ID", "microsoft/Phi-4-reasoning")
 
+# Pinned Hub revision for reproducible downloads. None = Hub default; set a commit
+# SHA via MODEL_REVISION (env/JSON) for reproducibility. Safe for local paths.
+model_revision = get_config_value("MODEL_REVISION", None, 'none')
+
 cache_dir = get_config_value("CACHE_DIR", './cache_dir')
 
 output_dir = get_config_value("OUTPUT_DIR", f"./output_dir_phi4")
@@ -269,8 +274,9 @@ print("=" * 80)
 from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM, AutoProcessor
 from transformers.models.phi3 import modeling_phi3
 
-llm_config = AutoConfig.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True)
-llm_config._attn_implementation="eager"
+llm_config = AutoConfig.from_pretrained(model_id, cache_dir=cache_dir, trust_remote_code=True,
+                                revision=model_revision)
+llm_config._attn_implementation = "eager"
 
 # To help with debugging num_hidden_layers could be set to 2 to quickly verify the pipeline and export a two layer model for verification purposes
 num_hidden_layers = get_config_value("NUM_HIDDEN_LAYERS", 0, 'int')
@@ -280,10 +286,12 @@ print(f'num_layer: {llm_config.num_hidden_layers}, context_length: {context_leng
       f'num_hidden_size: {llm_config.num_attention_heads}, num_kv_heads: {llm_config.num_key_value_heads}')
 
 with event_marker('HuggingFace FP model creation'):
-    model = modeling_phi3.Phi3ForCausalLM.from_pretrained(model_id, config=llm_config, cache_dir=cache_dir, trust_remote_code=True)
+    model = modeling_phi3.Phi3ForCausalLM.from_pretrained(model_id, config=llm_config, cache_dir=cache_dir, trust_remote_code=True,
+                                                          revision=model_revision)
 
     os.environ['TOKENIZERS_PARALLELISM'] = '0'
-    tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, use_fast=True, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, use_fast=True, trust_remote_code=True,
+                                              revision=model_revision)
     # Adjust the tokenizer to limit to context_length
     tokenizer.model_max_length = context_length
 
@@ -344,7 +352,7 @@ from genai_lib.common.debug.recipe_logger import llm_lib_log_property, Property
 from genai_lib.common.debug.recipe_logger import llm_lib_log_metric, ModelType, Metric
 
 # Recipe_logger: Log the context_length property and the metrics.
-llm_lib_log_property({Property.context_length : context_length})
+llm_lib_log_property({Property.context_length: context_length})
 
 if run_ppl_eval:
     llm_lib_log_metric(ModelType.hf_model, Metric.ppl, orig_ppl, model_name="base")
@@ -396,7 +404,7 @@ with event_marker("FP model adaptation configuration"):
 
     # Adapting KV$ management
     assert update_attr(cache_utils.DynamicCache, 'update', DynamicCache_update), f"Unknown DynamicCache definition: {cache_utils.DynamicCache}"
-    assert update_attr(cache_utils.DynamicCache, 'get_seq_length', DynamicCache_get_seq_length),  f"Unknown DynamicCache definition: {cache_utils.DynamicCache}"
+    assert update_attr(cache_utils.DynamicCache, 'get_seq_length', DynamicCache_get_seq_length), f"Unknown DynamicCache definition: {cache_utils.DynamicCache}"
     assert update_attr(cache_utils.DynamicCache, 'to_legacy_cache', DynamicCache_to_legacy_cache), \
     f"Unknown DynamicCache definition: {cache_utils.DynamicCache}"
 
@@ -424,7 +432,7 @@ setattr(llm_config, 'return_dict', False)
 setattr(llm_config, 'logits_to_keep', 0)
 setattr(llm_config, 'input_tokens_per_inference', ARN)
 
-num_slices=(context_length/8 + ARN - 1)//ARN
+num_slices = (context_length / 8 + ARN - 1) // ARN
 MASK_NEG = get_config_value("MASK_NEG", -1000, 'int')
 
 llm_config.save_pretrained(output_dir)
@@ -432,10 +440,11 @@ llm_config.save_pretrained(output_dir)
 from genai_lib.common.debug.recipe_logger import llm_lib_log_property, Property
 
 # Recipe_logger: Log the ARN of the prepared model
-llm_lib_log_property({Property.ARN : ARN})
+llm_lib_log_property({Property.ARN: ARN})
 
 with event_marker('Adapted FP model creation'):
-    model = modeling_phi3.Phi3ForCausalLM.from_pretrained(model_id, config=llm_config, cache_dir=cache_dir)
+    model = modeling_phi3.Phi3ForCausalLM.from_pretrained(model_id, config=llm_config, cache_dir=cache_dir,
+                                                          revision=model_revision)
 
 # ---
 # ### 3.3 Changes to HuggingFace model to work with the Adapted Model or Prepared Model
@@ -470,26 +479,26 @@ def get_kv_length(past_key_values):
         kv_length = past_key_values[0][1].shape[-2]
     return kv_length
 
-def adapted_model_prepare_inputs_for_dynamic_shapes(self,input_ids_slice, attn_mask_slice, position_ids_slice, outputs, **kwargs):
+def adapted_model_prepare_inputs_for_dynamic_shapes(self, input_ids_slice, attn_mask_slice, position_ids_slice, outputs, **kwargs):
     device = input_ids_slice.device
     batch_size = input_ids_slice.shape[0]
 
-    kv_length= get_kv_length(outputs['past_key_values'])
+    kv_length = get_kv_length(outputs['past_key_values'])
 
     past_kv_attn_mask = torch.ones((batch_size, kv_length), dtype=torch.long, device=device)
 
     prepared_1d_attention_mask = llm_create_1d_attn_mask(attn_mask_past_kv=past_kv_attn_mask,
                                                          attn_mask_input=attn_mask_slice)
 
-    prepared_causal_mask = llm_update_causal_mask(prepared_1d_attn_mask = prepared_1d_attention_mask,
-                                                  input_tensor = input_ids_slice,
-                                                  max_input_tokens = input_ids_slice.shape[-1],
-                                                  model_context_len = input_ids_slice.shape[-1],
-                                                  model_id_or_path = model_id,
-                                                  mask_neg = MASK_NEG)
+    prepared_causal_mask = llm_update_causal_mask(prepared_1d_attn_mask=prepared_1d_attention_mask,
+                                                  input_tensor=input_ids_slice,
+                                                  max_input_tokens=input_ids_slice.shape[-1],
+                                                  model_context_len=input_ids_slice.shape[-1],
+                                                  model_id_or_path=model_id,
+                                                  mask_neg=MASK_NEG)
 
-    prepared_position_embeddings = llm_create_position_embeddings(config = llm_config,
-                                                                  position_ids = position_ids_slice)
+    prepared_position_embeddings = llm_create_position_embeddings(config=llm_config,
+                                                                  position_ids=position_ids_slice)
 
     prepared_inputs = {
         'input_ids': input_ids_slice,
@@ -500,7 +509,7 @@ def adapted_model_prepare_inputs_for_dynamic_shapes(self,input_ids_slice, attn_m
 
     return prepared_inputs
 
-def adapted_model_prepare_inputs_for_static_shapes(self,input_ids_slice, attn_mask_slice, position_ids_slice, outputs):
+def adapted_model_prepare_inputs_for_static_shapes(self, input_ids_slice, attn_mask_slice, position_ids_slice, outputs):
     batch_size = input_ids_slice.shape[0]
     pad_token = tokenizer.eos_token_id
     device = input_ids_slice.device
@@ -649,14 +658,14 @@ def adapted_model_forward(
             cur_outputs = (self.lm_head(cur_outputs[0]),) + cur_outputs[1:]
 
 
-        outputs['past_key_values'] = llm_update_kv_cache(unpadded_past_kv = outputs['past_key_values'],
-                                                         current_key_values= cur_outputs[1],
+        outputs['past_key_values'] = llm_update_kv_cache(unpadded_past_kv=outputs['past_key_values'],
+                                                         current_key_values=cur_outputs[1],
                                                          key_concat_axis=KEY_CONCAT_AXIS,
                                                          value_concat_axis=VALUE_CONCAT_AXIS,
-                                                         input_ids_slice = input_ids_slice,
+                                                         input_ids_slice=input_ids_slice,
                                                          pad_to_left=pad_to_left)
 
-        lm_logits = llm_trim_pad_logits(cur_logits = cur_outputs[0],
+        lm_logits = llm_trim_pad_logits(cur_logits=cur_outputs[0],
                                         input_ids_slice=input_ids_slice,
                                         pad_to_left=pad_to_left)
         bsz, _, dim = lm_logits.shape
@@ -665,7 +674,7 @@ def adapted_model_forward(
                 dim=1)
 
         if output_hidden_states:
-            last_hidden_states = llm_trim_pad_logits(cur_logits = cur_outputs[2][-1],
+            last_hidden_states = llm_trim_pad_logits(cur_logits=cur_outputs[2][-1],
                                                      input_ids_slice=input_ids_slice)
             bsz, _, dim = last_hidden_states.shape
             outputs['hidden_states'] = torch.cat(

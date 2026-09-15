@@ -78,6 +78,169 @@ internal static class OnnxExecutionSessionFactory
         }
     }
 
+    private sealed record BootstrapContext(
+        ExecutionProviders.ExecutionProviderBootstrapResult Bootstrap,
+        WindowsMlExecutionDevicePolicy DevicePolicy,
+        string RequestedProviderLabel);
+
+    private sealed record DualOptionsSelections(
+        SessionOptionsSelection Encoder,
+        SessionOptionsSelection Decoder);
+
+    private sealed record DualSessionMetadata(
+        string SelectedProviderLabel,
+        string? BootstrapDetail);
+
+    private sealed record DualPooledLeasePair(
+        SessionLease EncoderLease,
+        SessionLease DecoderLease,
+        string RequestedProviderLabel,
+        string SelectedProviderLabel,
+        string? BootstrapDetail);
+
+    private static async Task<BootstrapContext> BootstrapForProviderAsync(
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken)
+    {
+        var bootstrapResult = await _bootstrapper.BootstrapAsync(provider, allowDownloads: true, cancellationToken)
+            .ConfigureAwait(false);
+        WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return new BootstrapContext(bootstrapResult, devicePolicy, FormatProviderLabel(provider));
+    }
+
+    private static DualOptionsSelections CreateDualOptionsSelections(
+        ExecutionProviderKind provider,
+        ExecutionProviders.ExecutionProviderBootstrapResult bootstrapResult,
+        WindowsMlExecutionDevicePolicy devicePolicy,
+        IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions,
+        IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions)
+    {
+        ExecutionProviderKind sessionProvider =
+            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider);
+        return new DualOptionsSelections(
+            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtEncoderOptions),
+            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtDecoderOptions));
+    }
+
+    private static string ResolveSingleFallbackDetail(
+        ExecutionProviderKind requestedProvider,
+        InferenceSession session,
+        SessionOptionsSelection selection,
+        WindowsMlExecutionDevicePolicy devicePolicy)
+    {
+        ExecutionProviderKind effective = ResolveEffectiveProviderKindFromSession(
+            session,
+            selection.SelectedProvider,
+            ShouldUseCatalogDevicePolicy(devicePolicy, selection.SelectedProvider));
+        return BuildSessionOptionsFallbackReason(requestedProvider, effective, selection);
+    }
+
+    private static DualSessionMetadata ResolveDualSessionMetadata(
+        ExecutionProviderKind requestedProvider,
+        BootstrapContext bootstrap,
+        DualOptionsSelections selections,
+        InferenceSession encoderSession,
+        InferenceSession decoderSession)
+    {
+        ExecutionProviderKind resolvedSelectedProvider = ResolveEffectiveDualSessionProvider(
+            requestedProvider,
+            encoderSession,
+            decoderSession,
+            selections.Encoder.SelectedProvider,
+            selections.Decoder.SelectedProvider,
+            bootstrap.DevicePolicy);
+        string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
+            requestedProvider,
+            ResolveEffectiveProviderKindFromSession(
+                encoderSession,
+                selections.Encoder.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Encoder.SelectedProvider)),
+            selections.Encoder);
+        string? decoderFallbackReason = BuildSessionOptionsFallbackReason(
+            requestedProvider,
+            ResolveEffectiveProviderKindFromSession(
+                decoderSession,
+                selections.Decoder.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Decoder.SelectedProvider)),
+            selections.Decoder);
+        return new DualSessionMetadata(
+            FormatProviderLabel(resolvedSelectedProvider),
+            FormatBootstrapDetail(
+                bootstrap.Bootstrap.Detail,
+                MergeFallbackReasons(encoderFallbackReason, decoderFallbackReason)));
+    }
+
+    private static (SessionPoolKey EncoderKey, SessionPoolKey DecoderKey) BuildDualPooledKeys(
+        string engineFamily,
+        string encoderModelPath,
+        string decoderModelPath,
+        DualOptionsSelections selections,
+        WindowsMlExecutionDevicePolicy devicePolicy,
+        IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions,
+        IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions,
+        string? modelId,
+        string? variant)
+    {
+        string encoderFingerprint = BuildSessionOptionsFingerprint(
+            selections.Encoder.SelectedProvider, devicePolicy, additionalTrtEncoderOptions);
+        string decoderFingerprint = BuildSessionOptionsFingerprint(
+            selections.Decoder.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
+        return (
+            SessionPoolKey.ForEncoder(
+                engineFamily, encoderModelPath, selections.Encoder.SelectedProvider,
+                modelId, variant, optionsFingerprint: encoderFingerprint),
+            SessionPoolKey.ForDecoder(
+                engineFamily, decoderModelPath, selections.Decoder.SelectedProvider,
+                modelId, variant, optionsFingerprint: decoderFingerprint));
+    }
+
+    private static async Task<DualPooledLeasePair> AcquireDualPooledSessionsAsync(
+        ExecutionProviderKind requestedProvider,
+        BootstrapContext bootstrap,
+        DualOptionsSelections selections,
+        string encoderModelPath,
+        string decoderModelPath,
+        SessionPoolKey encoderKey,
+        SessionPoolKey decoderKey,
+        InferenceSessionPool pool,
+        CancellationToken cancellationToken,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory)
+    {
+        SessionLease? encoderPoolLease = null;
+        SessionLease? decoderPoolLease = null;
+        try
+        {
+            encoderPoolLease = await pool
+                .GetLeaseAsync(
+                    encoderKey,
+                    ct => Task.FromResult(CreateSession(encoderModelPath, selections.Encoder.Options, sessionFactory, ct)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            decoderPoolLease = await pool
+                .GetLeaseAsync(
+                    decoderKey,
+                    ct => Task.FromResult(CreateSession(decoderModelPath, selections.Decoder.Options, sessionFactory, ct)),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            DualSessionMetadata metadata = ResolveDualSessionMetadata(
+                requestedProvider, bootstrap, selections,
+                encoderPoolLease.Session, decoderPoolLease.Session);
+            return new DualPooledLeasePair(
+                encoderPoolLease, decoderPoolLease,
+                bootstrap.RequestedProviderLabel,
+                metadata.SelectedProviderLabel,
+                metadata.BootstrapDetail);
+        }
+        catch
+        {
+            encoderPoolLease?.Dispose();
+            decoderPoolLease?.Dispose();
+            throw;
+        }
+    }
+
     public static async Task<SingleSessionLease> CreateSingleAsync(
         string modelPath,
         ExecutionProviderKind provider,
@@ -128,59 +291,28 @@ internal static class OnnxExecutionSessionFactory
         IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions = null,
         IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions = null)
     {
-        string requestedProvider = FormatProviderLabel(provider);
-        var bootstrapResult = await _bootstrapper.BootstrapAsync(provider, allowDownloads: true, cancellationToken)
+        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
-        WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
-            .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtDecoderOptions);
-        using SessionOptions encoderOptions = encoderOptionsSelection.Options;
-        using SessionOptions decoderOptions = decoderOptionsSelection.Options;
+        DualOptionsSelections selections = CreateDualOptionsSelections(
+            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+            additionalTrtEncoderOptions, additionalTrtDecoderOptions);
+        using SessionOptions encoderOptions = selections.Encoder.Options;
+        using SessionOptions decoderOptions = selections.Decoder.Options;
         InferenceSession? encoderSession = null;
         InferenceSession? decoderSession = null;
         try
         {
             encoderSession = new InferenceSession(encoderModelPath, encoderOptions);
             decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
-            ExecutionProviderKind resolvedSelectedProvider = ResolveEffectiveDualSessionProvider(
-                provider,
-                encoderSession,
-                decoderSession,
-                encoderOptionsSelection.SelectedProvider,
-                decoderOptionsSelection.SelectedProvider,
-                devicePolicy);
-            string selectedProvider = FormatProviderLabel(resolvedSelectedProvider);
-            string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    encoderSession,
-                    encoderOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelection.SelectedProvider)),
-                encoderOptionsSelection);
-            string? decoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderSession,
-                    decoderOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelection.SelectedProvider)),
-                decoderOptionsSelection);
-            string? bootstrapDetail = FormatBootstrapDetail(
-                bootstrapResult.Detail,
-                MergeFallbackReasons(encoderFallbackReason, decoderFallbackReason));
+            DualSessionMetadata metadata = ResolveDualSessionMetadata(
+                provider, bootstrap, selections, encoderSession, decoderSession);
 
             return new WhisperSessionLease(
                 encoderSession,
                 decoderSession,
-                requestedProvider,
-                selectedProvider,
-                bootstrapDetail);
+                bootstrap.RequestedProviderLabel,
+                metadata.SelectedProviderLabel,
+                metadata.BootstrapDetail);
         }
         catch
         {
@@ -198,59 +330,28 @@ internal static class OnnxExecutionSessionFactory
         IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions = null,
         IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions = null)
     {
-        string requestedProvider = FormatProviderLabel(provider);
-        var bootstrapResult = await _bootstrapper.BootstrapAsync(provider, allowDownloads: true, cancellationToken)
+        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
-        WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
-            .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtDecoderOptions);
-        using SessionOptions encoderOptions = encoderOptionsSelection.Options;
-        using SessionOptions decoderOptions = decoderOptionsSelection.Options;
+        DualOptionsSelections selections = CreateDualOptionsSelections(
+            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+            additionalTrtEncoderOptions, additionalTrtDecoderOptions);
+        using SessionOptions encoderOptions = selections.Encoder.Options;
+        using SessionOptions decoderOptions = selections.Decoder.Options;
         InferenceSession? encoderSession = null;
         InferenceSession? decoderSession = null;
         try
         {
             encoderSession = new InferenceSession(encoderModelPath, encoderOptions);
             decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
-            ExecutionProviderKind resolvedSelectedProvider = ResolveEffectiveDualSessionProvider(
-                provider,
-                encoderSession,
-                decoderSession,
-                encoderOptionsSelection.SelectedProvider,
-                decoderOptionsSelection.SelectedProvider,
-                devicePolicy);
-            string selectedProvider = FormatProviderLabel(resolvedSelectedProvider);
-            string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    encoderSession,
-                    encoderOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelection.SelectedProvider)),
-                encoderOptionsSelection);
-            string? decoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderSession,
-                    decoderOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelection.SelectedProvider)),
-                decoderOptionsSelection);
-            string? bootstrapDetail = FormatBootstrapDetail(
-                bootstrapResult.Detail,
-                MergeFallbackReasons(encoderFallbackReason, decoderFallbackReason));
+            DualSessionMetadata metadata = ResolveDualSessionMetadata(
+                provider, bootstrap, selections, encoderSession, decoderSession);
 
             return new OpusSessionLease(
                 encoderSession,
                 decoderSession,
-                requestedProvider,
-                selectedProvider,
-                bootstrapDetail);
+                bootstrap.RequestedProviderLabel,
+                metadata.SelectedProviderLabel,
+                metadata.BootstrapDetail);
         }
         catch
         {
@@ -349,99 +450,31 @@ internal static class OnnxExecutionSessionFactory
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
 
-        string requestedProvider = FormatProviderLabel(provider);
-        var bootstrapResult = await _bootstrapper.BootstrapAsync(provider, allowDownloads: true, cancellationToken)
+        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
-        WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
+        DualOptionsSelections selections = CreateDualOptionsSelections(
+            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+            additionalTrtEncoderOptions, additionalTrtDecoderOptions);
+        using SessionOptions encoderOptions = selections.Encoder.Options;
+        using SessionOptions decoderOptions = selections.Decoder.Options;
+        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = BuildDualPooledKeys(
+            engineFamily, encoderModelPath, decoderModelPath, selections,
+            bootstrap.DevicePolicy, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
+            modelId, variant);
+
+        DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
+            provider, bootstrap, selections,
+            encoderModelPath, decoderModelPath,
+            encoderKey, decoderKey, pool, cancellationToken, sessionFactory)
             .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtDecoderOptions);
 
-        using SessionOptions encoderOptions = encoderOptionsSelection.Options;
-        using SessionOptions decoderOptions = decoderOptionsSelection.Options;
-
-        ExecutionProviderKind encoderOptionsSelectedProvider = encoderOptionsSelection.SelectedProvider;
-        ExecutionProviderKind decoderOptionsSelectedProvider = decoderOptionsSelection.SelectedProvider;
-
-        string encoderOptionsFingerprint = BuildSessionOptionsFingerprint(encoderOptionsSelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        string decoderOptionsFingerprint = BuildSessionOptionsFingerprint(decoderOptionsSelectedProvider, devicePolicy, additionalTrtDecoderOptions);
-
-        SessionPoolKey encoderKey = SessionPoolKey.ForEncoder(
-            engineFamily,
-            encoderModelPath,
-            encoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: encoderOptionsFingerprint);
-        SessionPoolKey decoderKey = SessionPoolKey.ForDecoder(
-            engineFamily,
-            decoderModelPath,
-            decoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: decoderOptionsFingerprint);
-
-        SessionLease? encoderPoolLease = null;
-        SessionLease? decoderPoolLease = null;
-        try
+        return new WhisperSessionLease(
+            pair.EncoderLease.Session, pair.DecoderLease.Session,
+            pair.RequestedProviderLabel, pair.SelectedProviderLabel, pair.BootstrapDetail)
         {
-            encoderPoolLease = await pool
-                .GetLeaseAsync(
-                    encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            decoderPoolLease = await pool
-                .GetLeaseAsync(
-                    decoderKey,
-                    ct => Task.FromResult(CreateSession(decoderModelPath, decoderOptionsSelection.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            ExecutionProviderKind effectiveProvider = ResolveEffectiveDualSessionProvider(
-                provider,
-                encoderPoolLease.Session,
-                decoderPoolLease.Session,
-                encoderOptionsSelectedProvider,
-                decoderOptionsSelectedProvider,
-                devicePolicy);
-            string selectedProvider = FormatProviderLabel(effectiveProvider);
-            string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    encoderPoolLease.Session,
-                    encoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider)),
-                encoderOptionsSelection);
-            string? decoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderPoolLease.Session,
-                    decoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider)),
-                decoderOptionsSelection);
-            string? bootstrapDetail = FormatBootstrapDetail(
-                bootstrapResult.Detail,
-                MergeFallbackReasons(encoderFallbackReason, decoderFallbackReason));
-
-            return new WhisperSessionLease(encoderPoolLease.Session, decoderPoolLease.Session, requestedProvider, selectedProvider, bootstrapDetail)
-            {
-                EncoderPoolLease = encoderPoolLease,
-                DecoderPoolLease = decoderPoolLease
-            };
-        }
-        catch
-        {
-            encoderPoolLease?.Dispose();
-            decoderPoolLease?.Dispose();
-            throw;
-        }
+            EncoderPoolLease = pair.EncoderLease,
+            DecoderPoolLease = pair.DecoderLease
+        };
     }
 
     public static async Task<Qwen3AsrSessionLease> CreatePooledQwen3AsrAsync(
@@ -746,104 +779,34 @@ internal static class OnnxExecutionSessionFactory
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
 
-        string requestedProvider = FormatProviderLabel(provider);
-        var bootstrapResult = await _bootstrapper.BootstrapAsync(provider, allowDownloads: true, cancellationToken)
+        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
-        WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
+        DualOptionsSelections selections = CreateDualOptionsSelections(
+            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+            additionalTrtEncoderOptions, additionalTrtDecoderOptions);
+        using SessionOptions encoderOptions = selections.Encoder.Options;
+        using SessionOptions decoderOptions = selections.Decoder.Options;
+        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = BuildDualPooledKeys(
+            engineFamily, encoderModelPath, decoderJointModelPath, selections,
+            bootstrap.DevicePolicy, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
+            modelId, variant);
+
+        DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
+            provider, bootstrap, selections,
+            encoderModelPath, decoderJointModelPath,
+            encoderKey, decoderKey, pool, cancellationToken, sessionFactory)
             .ConfigureAwait(false);
-        SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtEncoderOptions);
-        SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtDecoderOptions);
 
-        using SessionOptions encoderOptions = encoderOptionsSelection.Options;
-        using SessionOptions decoderOptions = decoderOptionsSelection.Options;
-
-        ExecutionProviderKind encoderOptionsSelectedProvider = encoderOptionsSelection.SelectedProvider;
-        ExecutionProviderKind decoderOptionsSelectedProvider = decoderOptionsSelection.SelectedProvider;
-
-        string encoderOptionsFingerprint = BuildSessionOptionsFingerprint(encoderOptionsSelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        string decoderOptionsFingerprint = BuildSessionOptionsFingerprint(decoderOptionsSelectedProvider, devicePolicy, additionalTrtDecoderOptions);
-
-        SessionPoolKey encoderKey = SessionPoolKey.ForEncoder(
-            engineFamily,
-            encoderModelPath,
-            encoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: encoderOptionsFingerprint);
-        SessionPoolKey decoderKey = SessionPoolKey.ForDecoder(
-            engineFamily,
-            decoderJointModelPath,
-            decoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: decoderOptionsFingerprint);
-
-        SessionLease? encoderPoolLease = null;
-        SessionLease? decoderPoolLease = null;
-        try
+        return new NemotronAsrSessionLease(
+            pair.EncoderLease.Session,
+            pair.DecoderLease.Session,
+            pair.RequestedProviderLabel,
+            pair.SelectedProviderLabel,
+            pair.BootstrapDetail)
         {
-            encoderPoolLease = await pool
-                .GetLeaseAsync(
-                    encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            decoderPoolLease = await pool
-                .GetLeaseAsync(
-                    decoderKey,
-                    ct => Task.FromResult(CreateSession(decoderJointModelPath, decoderOptionsSelection.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            ExecutionProviderKind effectiveProvider = ResolveEffectiveDualSessionProvider(
-                provider,
-                encoderPoolLease.Session,
-                decoderPoolLease.Session,
-                encoderOptionsSelectedProvider,
-                decoderOptionsSelectedProvider,
-                devicePolicy);
-            string selectedProvider = FormatProviderLabel(effectiveProvider);
-            string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    encoderPoolLease.Session,
-                    encoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider)),
-                encoderOptionsSelection);
-            string? decoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderPoolLease.Session,
-                    decoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider)),
-                decoderOptionsSelection);
-            string? bootstrapDetail = FormatBootstrapDetail(
-                bootstrapResult.Detail,
-                MergeFallbackReasons(encoderFallbackReason, decoderFallbackReason));
-
-            return new NemotronAsrSessionLease(
-                encoderPoolLease.Session,
-                decoderPoolLease.Session,
-                requestedProvider,
-                selectedProvider,
-                bootstrapDetail)
-            {
-                EncoderPoolLease = encoderPoolLease,
-                DecoderJointPoolLease = decoderPoolLease,
-            };
-        }
-        catch
-        {
-            encoderPoolLease?.Dispose();
-            decoderPoolLease?.Dispose();
-            throw;
-        }
+            EncoderPoolLease = pair.EncoderLease,
+            DecoderJointPoolLease = pair.DecoderLease,
+        };
     }
 
     private static ExecutionProviderKind ResolveEffectiveTripleSessionProvider(
@@ -919,99 +882,31 @@ internal static class OnnxExecutionSessionFactory
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
 
-        var requestedProvider = FormatProviderLabel(provider);
-        var bootstrapResult = await _bootstrapper.BootstrapAsync(provider, allowDownloads: true, cancellationToken)
+        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
-        WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
+        DualOptionsSelections selections = CreateDualOptionsSelections(
+            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+            additionalTrtEncoderOptions, additionalTrtDecoderOptions);
+        using SessionOptions encoderOptions = selections.Encoder.Options;
+        using SessionOptions decoderOptions = selections.Decoder.Options;
+        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = BuildDualPooledKeys(
+            engineFamily, encoderModelPath, decoderModelPath, selections,
+            bootstrap.DevicePolicy, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
+            modelId, variant);
+
+        DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
+            provider, bootstrap, selections,
+            encoderModelPath, decoderModelPath,
+            encoderKey, decoderKey, pool, cancellationToken, sessionFactory)
             .ConfigureAwait(false);
-        var encoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtEncoderOptions);
-        var decoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
-            devicePolicy,
-            additionalTrtDecoderOptions);
 
-        using var encoderOptions = encoderOptionsSelection.Options;
-        using var decoderOptions = decoderOptionsSelection.Options;
-
-        var encoderOptionsSelectedProvider = encoderOptionsSelection.SelectedProvider;
-        var decoderOptionsSelectedProvider = decoderOptionsSelection.SelectedProvider;
-
-        var encoderOptionsFingerprint = BuildSessionOptionsFingerprint(encoderOptionsSelectedProvider, devicePolicy, additionalTrtEncoderOptions);
-        var decoderOptionsFingerprint = BuildSessionOptionsFingerprint(decoderOptionsSelectedProvider, devicePolicy, additionalTrtDecoderOptions);
-
-        var encoderKey = SessionPoolKey.ForEncoder(
-            engineFamily,
-            encoderModelPath,
-            encoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: encoderOptionsFingerprint);
-        var decoderKey = SessionPoolKey.ForDecoder(
-            engineFamily,
-            decoderModelPath,
-            decoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: decoderOptionsFingerprint);
-
-        SessionLease? encoderPoolLease = null;
-        SessionLease? decoderPoolLease = null;
-        try
+        return new OpusSessionLease(
+            pair.EncoderLease.Session, pair.DecoderLease.Session,
+            pair.RequestedProviderLabel, pair.SelectedProviderLabel, pair.BootstrapDetail)
         {
-            encoderPoolLease = await pool
-                .GetLeaseAsync(
-                    encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            decoderPoolLease = await pool
-                .GetLeaseAsync(
-                    decoderKey,
-                    ct => Task.FromResult(CreateSession(decoderModelPath, decoderOptionsSelection.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            ExecutionProviderKind effectiveProvider = ResolveEffectiveDualSessionProvider(
-                provider,
-                encoderPoolLease.Session,
-                decoderPoolLease.Session,
-                encoderOptionsSelectedProvider,
-                decoderOptionsSelectedProvider,
-                devicePolicy);
-            var selectedProvider = FormatProviderLabel(effectiveProvider);
-            var encoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    encoderPoolLease.Session,
-                    encoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider)),
-                encoderOptionsSelection);
-            var decoderFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderPoolLease.Session,
-                    decoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider)),
-                decoderOptionsSelection);
-            var bootstrapDetail = FormatBootstrapDetail(
-                bootstrapResult.Detail,
-                MergeFallbackReasons(encoderFallbackReason, decoderFallbackReason));
-
-            return new OpusSessionLease(encoderPoolLease.Session, decoderPoolLease.Session, requestedProvider, selectedProvider, bootstrapDetail)
-            {
-                EncoderPoolLease = encoderPoolLease,
-                DecoderPoolLease = decoderPoolLease
-            };
-        }
-        catch
-        {
-            encoderPoolLease?.Dispose();
-            decoderPoolLease?.Dispose();
-            throw;
-        }
+            EncoderPoolLease = pair.EncoderLease,
+            DecoderPoolLease = pair.DecoderLease
+        };
     }
 
     private static InferenceSession CreateSession(

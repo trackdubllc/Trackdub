@@ -77,10 +77,16 @@ def _get_rotary_embedding(dim, max_position_embeddings, rope_theta, device, conf
     return rotary_emb
 
 @functools.cache
-def _get_model(model_id_or_path):
+def _get_model(model_id_or_path, revision=None):
     from transformers import AutoConfig
     from transformers.models.phi3.modeling_phi3 import Phi3Model
-    config = AutoConfig.from_pretrained(model_id_or_path)
+    import os
+    # Only pin a Hub revision for remote Hub IDs; local paths must use revision=None.
+    if revision is None:
+        revision = os.getenv("MODEL_REVISION") or None
+    if revision is not None and os.path.isdir(str(model_id_or_path)):
+        revision = None
+    config = AutoConfig.from_pretrained(model_id_or_path, revision=revision)
     config.num_hidden_layers = 1
     model = Phi3Model(config)
     return model
