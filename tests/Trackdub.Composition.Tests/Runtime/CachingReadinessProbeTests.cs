@@ -185,6 +185,49 @@ public sealed class CachingReadinessProbeTests
         Assert.Equal(2, counting.CallCount);
     }
 
+    [Fact]
+    public async Task IndividualCallerCancellation_DoesNotPoisonConcurrentCallers()
+    {
+        var gate = new TaskCompletionSource();
+        var counting = new CountingTensorRtRtxReadinessProbe(EligibleReport(), gate.Task);
+        var cached = new CachingTensorRtRtxReadinessProbe(counting);
+
+        var cts = new CancellationTokenSource();
+
+        // Start multiple concurrent calls: the first with a token that will be cancelled mid-flight,
+        // and others with valid tokens. All callers share the same underlying in-flight probe.
+        Task<TensorRtRtxReadinessReport>[] callers =
+        [
+            cached.ProbeAsync(allowProviderDownloads: false, cts.Token),
+            cached.ProbeAsync(allowProviderDownloads: false, CancellationToken.None),
+            cached.ProbeAsync(allowProviderDownloads: false, CancellationToken.None),
+            cached.ProbeAsync(allowProviderDownloads: false, CancellationToken.None),
+        ];
+
+        // Cancel the first caller's token mid-flight, while the underlying probe is still in-progress.
+        cts.Cancel();
+
+        // Release the shared probe.
+        gate.SetResult();
+
+        // The first caller sees OperationCanceledException from WaitAsync.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => callers[0]);
+
+        // The other callers (with valid tokens) receive the successful probe result; they are not
+        // poisoned by the first caller's cancellation.
+        TensorRtRtxReadinessReport result1 = await callers[1];
+        TensorRtRtxReadinessReport result2 = await callers[2];
+        TensorRtRtxReadinessReport result3 = await callers[3];
+
+        Assert.True(result1.IsHardwareEligible);
+        Assert.True(result2.IsHardwareEligible);
+        Assert.True(result3.IsHardwareEligible);
+
+        // The underlying probe completed successfully exactly once, despite the first caller's
+        // cancellation. The shared probe was never cancelled.
+        Assert.Equal(1, counting.CallCount);
+    }
+
     private sealed class CountingTensorRtRtxReadinessProbe : ITensorRtRtxReadinessProbe
     {
         private readonly Func<bool, TensorRtRtxReadinessReport> _factory;

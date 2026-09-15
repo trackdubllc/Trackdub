@@ -69,6 +69,53 @@ public sealed class GpuRuntimeInstallOrchestratorInvalidationTests
         Assert.Equal(2, counting.CallCount);
     }
 
+    [Fact]
+    public async Task InstallTensorRtRtx_FailedInstall_DoesNotInvalidateCache()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        TensorRtRtxReadinessReport preInstall = NotPresentReport();
+        TensorRtRtxReadinessReport current = preInstall;
+
+        var counting = new CountingTensorRtRtxReadinessProbe(() => current);
+        var cachedProbe = new CachingTensorRtRtxReadinessProbe(counting);
+
+        // Prime the cache: a long-lived process (Studio) that already probed readiness once.
+        TensorRtRtxReadinessReport primed =
+            await cachedProbe.ProbeAsync(allowProviderDownloads: false, CancellationToken.None);
+        Assert.Same(preInstall, primed);
+        Assert.Equal(1, counting.CallCount);
+
+        // A failed install does not change state (the onInstall callback is never invoked).
+        var installer = new FakeTrtRtxEpInstaller(succeeded: false, onInstall: () => current = ReadyReport());
+
+        var orchestrator = new GpuRuntimeInstallOrchestrator(
+            trtRtxEpInstaller: installer,
+            tensorRtRtxReadinessProbe: cachedProbe);
+
+        GpuRuntimeInstallResult result = await orchestrator.InstallAsync(
+            StarterPackGpuRuntimeKind.NvidiaTensorRtRtx,
+            new Progress<string>(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+
+        // Because the install failed, the orchestrator must NOT invalidate the cache. A later
+        // re-probe should return the same cached pre-install snapshot without re-running the
+        // underlying probe. If the guard is removed and the cache is incorrectly invalidated on
+        // failure, CallCount would increment to 2, failing this assertion.
+        TensorRtRtxReadinessReport after =
+            await cachedProbe.ProbeAsync(allowProviderDownloads: false, CancellationToken.None);
+
+        Assert.Same(preInstall, after);
+        Assert.False(after.IsReady);
+        // The probe was never re-run; the cached result was returned.
+        Assert.Equal(1, counting.CallCount);
+    }
+
     private static TensorRtRtxReadinessReport NotPresentReport() =>
         new(
             ProviderId: TensorRtRtxProviderIds.PluginEpAbi,

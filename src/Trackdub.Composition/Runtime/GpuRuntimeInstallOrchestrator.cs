@@ -223,6 +223,13 @@ public sealed class GpuRuntimeInstallOrchestrator(
                 FailureDetail: catalogResult.FailureDetail ?? catalogResult.Detail);
         }
 
+        // The certified-catalog install registers all certified catalog providers (OpenVINO, QNN,
+        // and VitisAI), so invalidate those caches before any subsequent probes to ensure later
+        // status/list operations observe the freshly registered state.
+        InvalidateReadinessCache(openVinoReadinessProbe);
+        InvalidateReadinessCache(qnnReadinessProbe);
+        InvalidateReadinessCache(vitisAiReadinessProbe);
+
         GpuRuntimeInstallResult? trtResult = null;
         if (tensorRtRtxReadiness is not null && trtRtxEpInstaller is not null)
         {
