@@ -1,7 +1,7 @@
+using System.Collections.Concurrent;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.Migraphx;
 using Trackdub.Inference.Runtime.ModelManifest;
-using System.Collections.Concurrent;
 
 namespace Trackdub.Inference.Runtime.Planning;
 
@@ -533,7 +533,8 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         {
             ExecutionProviderKind.DirectMl or ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.Migraphx
                 or ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRt or ExecutionProviderKind.OpenVino
-                or ExecutionProviderKind.OpenVinoCatalog or ExecutionProviderKind.Qnn or ExecutionProviderKind.VitisAi =>
+                or ExecutionProviderKind.OpenVinoCatalog or ExecutionProviderKind.Qnn or ExecutionProviderKind.VitisAi
+                or ExecutionProviderKind.CoreMl =>
                 GpuVariantPreferencePolicy.GetPreferredGpuVariantAliases(requirements, hardwareProfile, provider, entry),
             _ => requirements.PreferredCpuVariants
         };

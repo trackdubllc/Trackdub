@@ -1,4 +1,8 @@
+using System.Globalization;
+using Trackdub.Application.Mixing;
+using Trackdub.Application.Projects;
 using Trackdub.Contracts;
+using Trackdub.Domain.Artifacts;
 
 namespace Trackdub.Application.Transcripts;
 
@@ -20,6 +24,10 @@ internal static class ExportResumeGating
     public const string SubtitleSourceKey = "SubtitleSource";
     public const string SubtitleFormatsKey = "SubtitleFormats";
     public const string VideoEncoderKey = "VideoEncoder";
+    public const string TargetLufsKey = "ExportTargetLufs";
+    public const string SourceGainDbKey = "ExportSourceGainDb";
+    public const string DubbedSpeechGainDbKey = "ExportDubbedSpeechGainDb";
+    public const string DuckingGainDbKey = "ExportDuckingGainDb";
 
     /// <summary>
     /// The canonical set of snapshot keys that gate an export resume. When any of these differ
@@ -36,6 +44,10 @@ internal static class ExportResumeGating
         SubtitleSourceKey,
         SubtitleFormatsKey,
         VideoEncoderKey,
+        TargetLufsKey,
+        SourceGainDbKey,
+        DubbedSpeechGainDbKey,
+        DuckingGainDbKey,
     ];
 
     /// <summary>
@@ -48,13 +60,18 @@ internal static class ExportResumeGating
     /// </summary>
     public static IReadOnlyDictionary<string, string> Build(
         ExportOutputContainer container,
+        ArtifactKind sourceAudioKind,
         bool applyTimbrePolish,
         bool restoreOriginalPan,
         bool matchOriginalLoudness,
         bool burnInSubtitles,
         ExportSubtitleSource subtitleSource,
         string subtitleFormatsToken,
-        VideoEncoderPreference videoEncoder) =>
+        VideoEncoderPreference videoEncoder,
+        double targetLufs,
+        double sourceGainDb,
+        double dubbedSpeechGainDb,
+        double? duckingGainDb) =>
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [ExportFormatKey] = ContainerKey(container),
@@ -65,6 +82,16 @@ internal static class ExportResumeGating
             [SubtitleSourceKey] = subtitleSource.ToString(),
             [SubtitleFormatsKey] = subtitleFormatsToken,
             [VideoEncoderKey] = VideoEncoderPreferenceSettings.ToKey(videoEncoder),
+            [TargetLufsKey] = FormatGain(ExportLoudnessTargets.NormalizeTargetLufs(targetLufs)),
+            [SourceGainDbKey] = FormatGain(MixGainSettings.NormalizeGainDb(sourceGainDb, 0d)),
+            [DubbedSpeechGainDbKey] = FormatGain(MixGainSettings.NormalizeGainDb(dubbedSpeechGainDb, 0d)),
+            // When ducking is unset, export applies automatic ducking based on the source audio kind
+            // (0 dB for Ambiance, -13 dB for NormalizedAudio). Persist the resolved value so the token
+            // changes when the effective ducking level changes (e.g., when separation completes after
+            // an initial export with the original mix).
+            [DuckingGainDbKey] = duckingGainDb is double explicitDuckingGainDb
+                ? FormatGain(MixGainSettings.NormalizeGainDb(explicitDuckingGainDb, 0d))
+                : FormatGain(MixPlanBuilder.ResolveAutomaticDuckingGainDb(sourceAudioKind)),
         };
 
     /// <summary>
@@ -105,4 +132,7 @@ internal static class ExportResumeGating
 
     private static string ContainerKey(ExportOutputContainer container) =>
         container == ExportOutputContainer.Mkv ? "mkv" : "mp4";
+
+    private static string FormatGain(double value) =>
+        value.ToString(CultureInfo.InvariantCulture);
 }

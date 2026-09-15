@@ -97,7 +97,7 @@ public sealed class RuntimeModelSetupCoordinator
                 RuntimeModelRequestFactory.CreateOptions(selections),
                 RuntimeStage.SpeechEnhancement)],
             callbacks,
-            allowOptionalStageSkip: false,
+            allowOptionalStageSkip: true,
             cancellationToken);
 
     public Task<RuntimeModelSetupResult> EnsureTtsModelAvailableAsync(

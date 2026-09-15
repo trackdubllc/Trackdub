@@ -236,4 +236,25 @@ public sealed class TrackdubDubbingEngineSnapshotTests
         Assert.Equal("wav2vec2-lv60-espeak-cv-ft-onnx", snapshot[$"Model:{StageNames.LipSync}"]);
         Assert.Equal("ByteDance/LatentSync-1.6", snapshot[$"Model:{StageNames.LipSynthesis}"]);
     }
+
+    [Fact]
+    public void MergeRuntimeModelSelectionsIntoSnapshot_records_provider_overrides_with_stable_labels()
+    {
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            HardwareOverrides: new Dictionary<string, ExecutionProviderKind>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Asr"] = ExecutionProviderKind.DirectMl,
+                ["Tts"] = ExecutionProviderKind.TensorRTRtx,
+            });
+
+        TrackdubDubbingEngine.MergeRuntimeModelSelectionsIntoSnapshot(snapshot, selections);
+
+        Assert.Equal("dml", snapshot[$"Provider:{StageNames.Asr}"]);
+        Assert.Equal("tensorrt-rtx", snapshot[$"Provider:{StageNames.Tts}"]);
+        Assert.False(snapshot.ContainsKey($"Provider:{StageNames.Vad}"));
+    }
 }

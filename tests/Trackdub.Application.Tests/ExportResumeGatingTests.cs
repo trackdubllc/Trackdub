@@ -34,7 +34,7 @@ public sealed class ExportResumeGatingTests
             StageNames.Export,
             BaselineSnapshot(),
             temp.Path,
-            exportRelativePath: fixture.ExportRelativePath,
+            exportPath: fixture.ExportRelativePath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(canResume);
@@ -49,6 +49,10 @@ public sealed class ExportResumeGatingTests
     [InlineData(ExportResumeGating.SubtitleSourceKey, "Transcript")]
     [InlineData(ExportResumeGating.SubtitleFormatsKey, "Vtt")]
     [InlineData(ExportResumeGating.ExportFormatKey, "mkv")]
+    [InlineData(ExportResumeGating.TargetLufsKey, "-23")]
+    [InlineData(ExportResumeGating.SourceGainDbKey, "-3")]
+    [InlineData(ExportResumeGating.DubbedSpeechGainDbKey, "2")]
+    [InlineData(ExportResumeGating.DuckingGainDbKey, "-6")]
     public async Task CanResumeStageAsync_returns_false_when_a_gating_flag_changes(string key, string changedValue)
     {
         using var temp = new TempDir();
@@ -63,7 +67,7 @@ public sealed class ExportResumeGatingTests
             StageNames.Export,
             snapshot,
             temp.Path,
-            exportRelativePath: fixture.ExportRelativePath,
+            exportPath: fixture.ExportRelativePath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(canResume);
@@ -80,13 +84,18 @@ public sealed class ExportResumeGatingTests
         // and SubtitleFormats ["SRT"] (case-insensitively == the baseline "Srt" token).
         Dictionary<string, string> snapshot = new(ExportResumeGating.Build(
             ExportOutputContainer.Mp4,
+            sourceAudioKind: ArtifactKind.NormalizedAudio,
             applyTimbrePolish: true,
             restoreOriginalPan: false,
             matchOriginalLoudness: false,
             burnInSubtitles: false,
             subtitleSource: ExportResumeGating_ResolveSubtitleSource(null),
             subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromRawOptions(["SRT"]),
-            videoEncoder: VideoEncoderPreference.Auto), StringComparer.OrdinalIgnoreCase);
+            videoEncoder: VideoEncoderPreference.Auto,
+            targetLufs: ExportLoudnessTargets.OnlineLufs,
+            sourceGainDb: 0d,
+            dubbedSpeechGainDb: 0d,
+            duckingGainDb: null), StringComparer.OrdinalIgnoreCase);
 
         bool canResume = await StageArtifactResumeEvaluator.CanResumeStageAsync(
             fixture.State,
@@ -94,7 +103,7 @@ public sealed class ExportResumeGatingTests
             StageNames.Export,
             snapshot,
             temp.Path,
-            exportRelativePath: fixture.ExportRelativePath,
+            exportPath: fixture.ExportRelativePath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(canResume);
@@ -117,7 +126,7 @@ public sealed class ExportResumeGatingTests
             StageNames.Export,
             DefaultSubtitleSnapshot(),
             temp.Path,
-            exportRelativePath: fixture.ExportRelativePath,
+            exportPath: fixture.ExportRelativePath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(canResume);
@@ -141,7 +150,7 @@ public sealed class ExportResumeGatingTests
             StageNames.Export,
             snapshot,
             temp.Path,
-            exportRelativePath: fixture.ExportRelativePath,
+            exportPath: fixture.ExportRelativePath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(canResume);
@@ -165,7 +174,7 @@ public sealed class ExportResumeGatingTests
             StageNames.Export,
             snapshot,
             temp.Path,
-            exportRelativePath: fixture.ExportRelativePath,
+            exportPath: fixture.ExportRelativePath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(canResume);
@@ -184,7 +193,7 @@ public sealed class ExportResumeGatingTests
             StageNames.Export,
             BaselineSnapshot(),
             temp.Path,
-            exportRelativePath: fixture.ExportRelativePath,
+            exportPath: fixture.ExportRelativePath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(canResume);
@@ -205,7 +214,74 @@ public sealed class ExportResumeGatingTests
             StageNames.Export,
             BaselineSnapshot(),
             temp.Path,
-            exportRelativePath: fixture.ExportRelativePath,
+            exportPath: fixture.ExportRelativePath,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(canResume);
+    }
+
+    [Fact]
+    public async Task CanResumeStageAsync_resumes_against_an_explicit_absolute_output_path()
+    {
+        using var temp = new TempDir();
+        // The prior run delivered to a custom absolute path outside the default exports/ dir;
+        // the engine passes that effective path, and resume must check it verbatim.
+        ExportResumeFixture fixture = await ExportResumeFixture.CreateAsync(temp.Path, BaselineGating());
+        string customOutput = Path.Join(temp.Path, "delivery", "final.mp4");
+        Directory.CreateDirectory(Path.GetDirectoryName(customOutput)!);
+        await File.WriteAllBytesAsync(customOutput, [1, 2, 3, 4], TestContext.Current.CancellationToken);
+
+        bool canResume = await StageArtifactResumeEvaluator.CanResumeStageAsync(
+            fixture.State,
+            fixture.ArtifactStore,
+            StageNames.Export,
+            BaselineSnapshot(),
+            temp.Path,
+            exportPath: customOutput,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(canResume);
+    }
+
+    [Fact]
+    public async Task CanResumeStageAsync_returns_false_when_the_requested_output_path_differs()
+    {
+        using var temp = new TempDir();
+        // Default-path export exists on disk, but the current run targets a different custom
+        // path: the cached artifact must not satisfy it.
+        ExportResumeFixture fixture = await ExportResumeFixture.CreateAsync(temp.Path, BaselineGating());
+        string otherOutput = Path.Join(temp.Path, "elsewhere", "other.mp4");
+
+        bool canResume = await StageArtifactResumeEvaluator.CanResumeStageAsync(
+            fixture.State,
+            fixture.ArtifactStore,
+            StageNames.Export,
+            BaselineSnapshot(),
+            temp.Path,
+            exportPath: otherOutput,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(canResume);
+    }
+
+    [Fact]
+    public async Task CanResumeStageAsync_distinguishes_unset_ducking_from_explicit_zero()
+    {
+        using var temp = new TempDir();
+        ExportResumeFixture fixture = await ExportResumeFixture.CreateAsync(temp.Path, BaselineGating());
+
+        // An explicit 0 dB ducking gain produces a different mix than no ducking; the tokens
+        // must differ ("" for unset vs "0" for explicit) so the cached export is not reused.
+        Dictionary<string, string> snapshot = BaselineSnapshot();
+        snapshot[ExportResumeGating.DuckingGainDbKey] = "0";
+
+        bool canResume = await StageArtifactResumeEvaluator.CanResumeStageAsync(
+            fixture.State,
+            fixture.ArtifactStore,
+            StageNames.Export,
+            snapshot,
+            temp.Path,
+            exportPath: fixture.ExportRelativePath,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(canResume);
@@ -224,13 +300,18 @@ public sealed class ExportResumeGatingTests
         // snapshot uses, so the explicit-request baseline matches an equivalent current snapshot.
         new(ExportResumeGating.Build(
             ExportOutputContainer.Mp4,
+            sourceAudioKind: ArtifactKind.NormalizedAudio,
             applyTimbrePolish: true,
             restoreOriginalPan: false,
             matchOriginalLoudness: false,
             burnInSubtitles: false,
             subtitleSource: ExportSubtitleSource.Translated,
             subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromRawOptions(["srt"]),
-            videoEncoder: VideoEncoderPreference.Auto));
+            videoEncoder: VideoEncoderPreference.Auto,
+            targetLufs: ExportLoudnessTargets.OnlineLufs,
+            sourceGainDb: 0d,
+            dubbedSpeechGainDb: 0d,
+            duckingGainDb: null));
 
     // The DEFAULT path: a prior run whose raw options were null (no subtitle formats specified).
     // The manifest records the "default" token, so a later default run's snapshot must match and
@@ -238,35 +319,50 @@ public sealed class ExportResumeGatingTests
     private static ExportManifestGating DefaultSubtitleGating() =>
         new(ExportResumeGating.Build(
             ExportOutputContainer.Mp4,
+            sourceAudioKind: ArtifactKind.NormalizedAudio,
             applyTimbrePolish: true,
             restoreOriginalPan: false,
             matchOriginalLoudness: false,
             burnInSubtitles: false,
             subtitleSource: ExportSubtitleSource.Translated,
             subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromRawOptions(null),
-            videoEncoder: VideoEncoderPreference.Auto));
+            videoEncoder: VideoEncoderPreference.Auto,
+            targetLufs: ExportLoudnessTargets.OnlineLufs,
+            sourceGainDb: 0d,
+            dubbedSpeechGainDb: 0d,
+            duckingGainDb: null));
 
     private static Dictionary<string, string> DefaultSubtitleSnapshot() =>
         new(ExportResumeGating.Build(
             ExportOutputContainer.Mp4,
+            sourceAudioKind: ArtifactKind.NormalizedAudio,
             applyTimbrePolish: true,
             restoreOriginalPan: false,
             matchOriginalLoudness: false,
             burnInSubtitles: false,
             subtitleSource: ExportSubtitleSource.Translated,
             subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromRawOptions(null),
-            videoEncoder: VideoEncoderPreference.Auto), StringComparer.OrdinalIgnoreCase);
+            videoEncoder: VideoEncoderPreference.Auto,
+            targetLufs: ExportLoudnessTargets.OnlineLufs,
+            sourceGainDb: 0d,
+            dubbedSpeechGainDb: 0d,
+            duckingGainDb: null), StringComparer.OrdinalIgnoreCase);
 
     private static Dictionary<string, string> BaselineSnapshot() =>
         new(ExportResumeGating.Build(
             ExportOutputContainer.Mp4,
+            sourceAudioKind: ArtifactKind.NormalizedAudio,
             applyTimbrePolish: true,
             restoreOriginalPan: false,
             matchOriginalLoudness: false,
             burnInSubtitles: false,
             subtitleSource: ExportSubtitleSource.Translated,
             subtitleFormatsToken: ExportResumeGating.SubtitleFormatsTokenFromRawOptions(["srt"]),
-            videoEncoder: VideoEncoderPreference.Auto), StringComparer.OrdinalIgnoreCase);
+            videoEncoder: VideoEncoderPreference.Auto,
+            targetLufs: ExportLoudnessTargets.OnlineLufs,
+            sourceGainDb: 0d,
+            dubbedSpeechGainDb: 0d,
+            duckingGainDb: null), StringComparer.OrdinalIgnoreCase);
 
     private sealed record ExportResumeFixture(
         TranscriptProjectState State,

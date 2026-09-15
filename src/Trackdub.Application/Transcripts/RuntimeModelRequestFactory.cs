@@ -433,6 +433,29 @@ public static class RuntimeModelRequestFactory
             RequirePreferredExecutionProvider: IsPreferredExecutionProviderRequired(options, RuntimeStage.Diarization),
             PreferredModelVariantAlias: ResolvePreferredModelVariantAlias(options, RuntimeStage.Diarization, ResolveDiarizationModelAlias(options)));
 
+    /// <summary>
+    /// Stable lowercase provider token shared by the execution snapshot and the
+    /// StageRunRecord runtime info comparison. Mirrors the labels persisted by the ONNX
+    /// session layer so a requested provider can be compared against a prior run.
+    /// </summary>
+    public static string FormatExecutionProviderLabel(ExecutionProviderKind provider) =>
+        provider switch
+        {
+            ExecutionProviderKind.Cpu => "cpu",
+            ExecutionProviderKind.DirectMl => "dml",
+            ExecutionProviderKind.TensorRTRtx => "tensorrt-rtx",
+            ExecutionProviderKind.OpenVino => "openvino",
+            ExecutionProviderKind.CoreMl => "coreml",
+            ExecutionProviderKind.Cuda => "cuda",
+            ExecutionProviderKind.TensorRt => "tensorrt",
+            ExecutionProviderKind.Migraphx => "migraphx",
+            ExecutionProviderKind.Dnnl => "dnnl",
+            ExecutionProviderKind.Qnn => "qnn",
+            ExecutionProviderKind.OpenVinoCatalog => "openvino-catalog",
+            ExecutionProviderKind.VitisAi => "vitisai",
+            _ => provider.ToString().ToLowerInvariant()
+        };
+
     public static ExecutionProviderKind? ResolvePreferredExecutionProvider(
         RuntimeModelRequestOptions options,
         RuntimeStage stage)
