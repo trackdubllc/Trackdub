@@ -1165,12 +1165,12 @@ public sealed class StageArtifactResumeEvaluatorTests
             sourceReference: reference);
 
         // Normalization and case differences on the same file must still match.
+        string sourceMediaFileName = OperatingSystem.IsLinux() ? "source.mp4" : "SOURCE.MP4";
         var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["SourceMediaPath"] = Path.Combine(
                 mediaDir,
-                ".",
-                OperatingSystem.IsLinux() ? "source.mp4" : "SOURCE.MP4")
+                Path.GetFileName(sourceMediaFileName))
         };
 
         Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
