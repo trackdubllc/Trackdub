@@ -112,28 +112,6 @@ public sealed class UnattendedVoiceCloningTests
     }
 
     [Fact]
-    public void BuildModelPreferences_WhenTtsKeyIsCaseSensitive_RuntimeSelectionRetainsAlias()
-    {
-        var options = new DubbingSessionOptions
-        {
-            SourceMediaPath = "clip.mp4",
-            TargetLanguageCode = "en",
-            ModelPreferences = new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["TTS"] = "chatterbox-multilingual",
-            },
-            UseVoiceCloning = true,
-        };
-
-        // Drive the real runtime-selection path: normalize, then feed the result through the same
-        // BuildModelPreferences lookup used by CreateSelectionsFromSettings so a regression that
-        // reverts to reading the caller's case-sensitive dictionary is caught here.
-        DubbingSessionOptions resolved = DubbingPipelineEngine.ApplyVoiceCloningDefaults(options);
-        InferenceModelPreferences? preferences = DubbingPipelineEngine.BuildModelPreferences(resolved);
-
-        Assert.NotNull(preferences);
-        Assert.Equal("chatterbox-multilingual", preferences!.TtsModelAlias);
-
     [Fact]
     public void BuildModelPreferences_WhenTtsKeyIsCaseSensitive_RuntimeSelectionRetainsAlias()
     {
