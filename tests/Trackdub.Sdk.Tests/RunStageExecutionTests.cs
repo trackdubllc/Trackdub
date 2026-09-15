@@ -8,6 +8,7 @@ using Trackdub.Contracts;
 using Trackdub.Contracts.Licensing;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
+using Trackdub.Domain.AudioQuality;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Sdk;
 using Trackdub.Sdk.Composition;
@@ -290,6 +291,14 @@ public sealed class RunStageExecutionTests : IDisposable
                 new SkipOptionalStageSetupInteraction()));
             services.Replace(ServiceDescriptor.Singleton<IRuntimeModelBootstrapService>(
                 new MissingRuntimeModelBootstrapService()));
+            // Normalization must succeed on a real WAV payload so the stage reaches the
+            // preparation path; the placeholder media file is not extractable by ffmpeg.
+            services.Replace(ServiceDescriptor.Singleton<IAudioExtractionService>(
+                new FakeAudioExtractionService()));
+            // Force the preparation handler to fail so the workflow records a failed run
+            // and then stamps the partial fallback run this test asserts on.
+            services.Replace(ServiceDescriptor.Singleton<IAudioQualityAnalyzer>(
+                new ThrowingAudioQualityAnalyzer()));
         });
 
         await using (TrackdubSession session = factory.CreateSession(projectDir))
@@ -468,5 +477,42 @@ public sealed class RunStageExecutionTests : IDisposable
         public void Dispose()
         {
         }
+    }
+
+    private sealed class FakeAudioExtractionService : IAudioExtractionService
+    {
+        public Task<AudioExtractionResult> ExtractNormalizedAudioAsync(
+            string sourcePath,
+            string destinationPath,
+            CancellationToken cancellationToken,
+            int? maxEncoderThreads = null) =>
+            WriteWavAsync(destinationPath, cancellationToken);
+
+        public Task<AudioExtractionResult> ExtractStemSeparationAudioAsync(
+            string sourcePath,
+            string destinationPath,
+            CancellationToken cancellationToken) =>
+            WriteWavAsync(destinationPath, cancellationToken);
+
+        private static async Task<AudioExtractionResult> WriteWavAsync(
+            string destinationPath,
+            CancellationToken cancellationToken)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            await File.WriteAllBytesAsync(
+                    destinationPath,
+                    FakeWavHelper.MinimalPcm16(),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return new AudioExtractionResult(destinationPath, 0.1, 16000, 1, 1600);
+        }
+    }
+
+    private sealed class ThrowingAudioQualityAnalyzer : IAudioQualityAnalyzer
+    {
+        public Task<AudioQualityAnalysisResult> AnalyzeAsync(
+            AudioQualityAnalysisRequest request,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Audio quality analysis unavailable in test host.");
     }
 }

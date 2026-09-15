@@ -45,6 +45,7 @@
     <Compile Include="..\Trackdub.TestDoubles\FakeMediaProbe.cs" Link="TestDoubles\FakeMediaProbe.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakePipelinePreFlightChecker.cs" Link="TestDoubles\FakePipelinePreFlightChecker.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeStudioSettingsService.cs" Link="TestDoubles\FakeStudioSettingsService.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeWavHelper.cs" Link="TestDoubles\FakeWavHelper.cs" />
     <ProjectReference Include="..\..\src\Trackdub.Sdk\Trackdub.Sdk.csproj" />
     <ProjectReference Include="..\..\src\Trackdub.Cli\Trackdub.Cli.csproj" />
     <ProjectReference Include="..\..\src\Trackdub.Application\Trackdub.Application.csproj" />
