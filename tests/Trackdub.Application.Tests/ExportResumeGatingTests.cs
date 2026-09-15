@@ -342,7 +342,7 @@ public sealed class ExportResumeGatingTests
             {
                 string exportDir = "exports".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 string exportFile = "dubbed.mp4".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                string exportFullPath = Path.Combine(projectRootPath, exportDir, exportFile);
+                string exportFullPath = Path.Join(projectRootPath, exportDir, exportFile);
                 Directory.CreateDirectory(Path.GetDirectoryName(exportFullPath)!);
                 await File.WriteAllBytesAsync(exportFullPath, [1, 2, 3, 4]);
             }
