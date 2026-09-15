@@ -529,9 +529,12 @@ public static class StageArtifactResumeEvaluator
         {
             return true;
         }
+        if (!TryNormalizePath(requestedPath, out string? normalizedRequested))
+        {
+            return false;
+        }
 
-        if (!TryNormalizePath(requestedPath, out string? normalizedRequested) ||
-            !TryNormalizePath(persistedPath, out string? normalizedPersisted))
+        if (!TryNormalizePath(persistedPath, out string? normalizedPersisted))
         {
             return false;
         }

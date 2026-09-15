@@ -66,7 +66,7 @@ internal static class RunPipelineHandler
         {
             string? exportedFilePath = result.StageOutcomes
                 .Where(o => string.Equals(o.StageName, "Export", StringComparison.OrdinalIgnoreCase))
-                .Where(o => o.Status == StageStatus.Succeeded)
+                .Where(o => o.Status is StageStatus.Succeeded or StageStatus.PartiallySucceeded)
                 .SelectMany(o => o.ArtifactPaths)
                 .FirstOrDefault();
 

@@ -8,6 +8,7 @@ using Trackdub.Contracts;
 using Trackdub.Contracts.Licensing;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
+using Trackdub.Domain.AudioQuality;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Sdk;
 using Trackdub.Sdk.Composition;
@@ -232,9 +233,9 @@ public sealed class RunStageExecutionTests : IDisposable
         // Regression: a user-declined optional model used to re-block on the
         // post-provisioning readiness pass and surface as PreFlightFailed.
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         using TrackdubSessionFactory factory = CreateFactory(services =>
@@ -277,9 +278,9 @@ public sealed class RunStageExecutionTests : IDisposable
         // Speech enhancement has an in-place FFmpeg/AFX fallback. A declined model
         // should still execute audio preparation, not produce OPTIONAL_MODEL_DECLINED.
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         using TrackdubSessionFactory factory = CreateFactory(services =>
@@ -290,6 +291,14 @@ public sealed class RunStageExecutionTests : IDisposable
                 new SkipOptionalStageSetupInteraction()));
             services.Replace(ServiceDescriptor.Singleton<IRuntimeModelBootstrapService>(
                 new MissingRuntimeModelBootstrapService()));
+            // Normalization must succeed on a real WAV payload so the stage reaches the
+            // preparation path; the placeholder media file is not extractable by ffmpeg.
+            services.Replace(ServiceDescriptor.Singleton<IAudioExtractionService>(
+                new FakeAudioExtractionService()));
+            // Force the preparation handler to fail so the workflow records a failed run
+            // and then stamps the partial fallback run this test asserts on.
+            services.Replace(ServiceDescriptor.Singleton<IAudioQualityAnalyzer>(
+                new ThrowingAudioQualityAnalyzer()));
         });
 
         await using (TrackdubSession session = factory.CreateSession(projectDir))
@@ -312,7 +321,7 @@ public sealed class RunStageExecutionTests : IDisposable
         StageOutcome outcome = Assert.Single(result.StageOutcomes);
         Assert.Equal(StageNames.AudioPreparation, outcome.StageName);
         // Stage executes through FFmpeg fallback; does not skip with OPTIONAL_MODEL_DECLINED.
-        Assert.NotEqual(StageStatus.Skipped, outcome.Status);
+        Assert.Equal(StageStatus.PartiallySucceeded, outcome.Status);
         Assert.NotEqual(StageSkipReasonCodes.OptionalModelDeclined, outcome.ReasonCode);
     }
 
@@ -468,5 +477,42 @@ public sealed class RunStageExecutionTests : IDisposable
         public void Dispose()
         {
         }
+    }
+
+    private sealed class FakeAudioExtractionService : IAudioExtractionService
+    {
+        public Task<AudioExtractionResult> ExtractNormalizedAudioAsync(
+            string sourcePath,
+            string destinationPath,
+            CancellationToken cancellationToken,
+            int? maxEncoderThreads = null) =>
+            WriteWavAsync(destinationPath, cancellationToken);
+
+        public Task<AudioExtractionResult> ExtractStemSeparationAudioAsync(
+            string sourcePath,
+            string destinationPath,
+            CancellationToken cancellationToken) =>
+            WriteWavAsync(destinationPath, cancellationToken);
+
+        private static async Task<AudioExtractionResult> WriteWavAsync(
+            string destinationPath,
+            CancellationToken cancellationToken)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            await File.WriteAllBytesAsync(
+                    destinationPath,
+                    FakeWavHelper.MinimalPcm16(),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return new AudioExtractionResult(destinationPath, 0.1, 16000, 1, 1600);
+        }
+    }
+
+    private sealed class ThrowingAudioQualityAnalyzer : IAudioQualityAnalyzer
+    {
+        public Task<AudioQualityAnalysisResult> AnalyzeAsync(
+            AudioQualityAnalysisRequest request,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Audio quality analysis unavailable in test host.");
     }
 }

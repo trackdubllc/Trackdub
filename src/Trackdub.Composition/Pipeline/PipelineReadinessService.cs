@@ -31,9 +31,23 @@ public sealed class PipelineReadinessService(
         consentService ?? throw new ArgumentNullException(nameof(consentService));
     private readonly IRuntimePlanningPreferences? _runtimePlanningPreferences = runtimePlanningPreferences;
 
-    // Cache key: (stage, modelAlias, sourceLanguage, targetLanguage, validateRuntime) → StageReadiness
-    // Simple in-memory cache; invalidated on selection change via InvalidateCache().
-    private readonly ConcurrentDictionary<(RuntimeStage Stage, string? ModelAlias, string? SourceLanguage, string? TargetLanguage, bool ValidateRuntime), StageReadiness> _cache = new();
+    // Cache key covers every input that reaches the runtime planner: stage, model alias,
+    // language context, validation mode, per-stage execution-provider override, the
+    // require-preferred flag (dev build / require-providers settings), model variant
+    // override, and the preferred model tier. Anything omitted would let a stale plan
+    // computed under different inputs masquerade as current readiness.
+    private readonly record struct ReadinessCacheKey(
+        RuntimeStage Stage,
+        string? ModelAlias,
+        string? SourceLanguage,
+        string? TargetLanguage,
+        bool ValidateRuntime,
+        ExecutionProviderKind? PreferredProvider,
+        bool RequirePreferredProvider,
+        string? PreferredVariantAlias,
+        string? PreferredModelTier);
+
+    private readonly ConcurrentDictionary<ReadinessCacheKey, StageReadiness> _cache = new();
 
     public async Task<PipelineReadinessReport> EvaluateAsync(
         IReadOnlyList<RuntimeStage> enabledStages,
@@ -48,6 +62,11 @@ public sealed class PipelineReadinessService(
         ArgumentNullException.ThrowIfNull(selections);
 
         var stageReadinesses = new List<StageReadiness>(enabledStages.Count);
+        string? preferredModelTier = _runtimePlanningPreferences is null
+            ? null
+            : await _runtimePlanningPreferences
+                .GetPreferredModelTierAsync(cancellationToken)
+                .ConfigureAwait(false);
 
         foreach (RuntimeStage stage in enabledStages)
         {
@@ -89,28 +108,44 @@ public sealed class PipelineReadinessService(
                 continue;
             }
 
-            // Cache hit (keyed on stage + alias + language context + validation mode).
-            var cacheKey = (stage, modelAlias, planningSourceLanguageCode, planningTargetLanguageCode, validateRuntime);
-            if (_cache.TryGetValue(cacheKey, out readiness!))
+            // The planning request carries every planner input; its fields double as the
+            // rest of the cache key so plans computed under different provider, variant,
+            // or tier inputs can never collide.
+            StageRuntimePlanningRequest planningRequest = BuildPlanningRequest(
+                stage,
+                modelAlias,
+                selections,
+                planningSourceLanguageCode,
+                planningTargetLanguageCode,
+                skipProviderSmokeTest: !validateRuntime);
+            var cacheKey = new ReadinessCacheKey(
+                stage,
+                modelAlias,
+                planningSourceLanguageCode,
+                planningTargetLanguageCode,
+                validateRuntime,
+                planningRequest.PreferredExecutionProvider,
+                planningRequest.RequirePreferredExecutionProvider,
+                planningRequest.PreferredModelVariantAlias,
+                preferredModelTier);
+
+            if (!_cache.TryGetValue(cacheKey, out readiness!))
             {
-                stageReadinesses.Add(readiness);
-                continue;
+                readiness = IsCloudAlias(stage, modelAlias)
+                    ? await EvaluateCloudStageAsync(stage, modelAlias!, cancellationToken).ConfigureAwait(false)
+                    : await EvaluateLocalStageAsync(
+                        planningRequest,
+                        stage,
+                        preferredModelTier,
+                        cancellationToken).ConfigureAwait(false);
+                _cache[cacheKey] = readiness;
             }
 
-            readiness = IsCloudAlias(stage, modelAlias)
-                ? await EvaluateCloudStageAsync(stage, modelAlias!, cancellationToken).ConfigureAwait(false)
-                : await EvaluateLocalStageAsync(
-                    stage,
-                    modelAlias,
-                    selections,
-                    planningSourceLanguageCode,
-                    planningTargetLanguageCode,
-                    validateRuntime,
-                    cancellationToken).ConfigureAwait(false);
-
             // TTS: additionally check voice-clone consent when local TTS is ready.
+            // Applied per call (never cached) so a consent change takes effect
+            // immediately without requiring cache invalidation.
             if (stage == RuntimeStage.Tts
-                && readiness.Status == ReadinessState.Ready
+                && readiness.Status is ReadinessState.Ready or ReadinessState.Unverified
                 && !_consentService.IsVoiceCloningConsentGranted
                 && HasVoiceCloneRequest(state))
             {
@@ -122,7 +157,6 @@ public sealed class PipelineReadinessService(
                 };
             }
 
-            _cache[cacheKey] = readiness;
             stageReadinesses.Add(readiness);
         }
 
@@ -181,38 +215,48 @@ public sealed class PipelineReadinessService(
     // ── Local stage evaluation ─────────────────────────────────────────────────
 
     private async Task<StageReadiness> EvaluateLocalStageAsync(
+        StageRuntimePlanningRequest request,
         RuntimeStage stage,
-        string? modelAlias,
-        RuntimeModelSelections selections,
-        string? sourceLanguageCode,
-        string? targetLanguageCode,
-        bool validateRuntime,
+        string? preferredModelTier,
         CancellationToken cancellationToken)
     {
-        StageRuntimePlanningRequest request = BuildPlanningRequest(
-            stage,
-            modelAlias,
-            selections,
-            sourceLanguageCode,
-            targetLanguageCode,
-            skipProviderSmokeTest: !validateRuntime);
-        request = await StageRuntimePlanningRequestFactory
-            .ApplyPreferredModelTierAsync(request, _runtimePlanningPreferences, cancellationToken)
-            .ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(preferredModelTier))
+        {
+            request = request with { PreferredModelTier = preferredModelTier };
+        }
 
         StageRuntimePlan plan = await _runtimePlanner
             .PlanAsync(request, cancellationToken)
             .ConfigureAwait(false);
 
-        return MapPlanToReadiness(stage, plan);
+        return MapPlanToReadiness(stage, plan, runtimeValidated: !request.SkipProviderSmokeTest);
     }
 
-    private static StageReadiness MapPlanToReadiness(RuntimeStage stage, StageRuntimePlan plan)
+    private static StageReadiness MapPlanToReadiness(
+        RuntimeStage stage,
+        StageRuntimePlan plan,
+        bool runtimeValidated)
     {
         string stageName = StageNameFor(stage);
 
         if (plan.Status is StageRuntimePlanStatus.Ready or StageRuntimePlanStatus.Verified)
         {
+            // Files/metadata passed but the caller skipped the provider smoke test.
+            // CPU plans are never smoke-tested, so Ready is already their full check.
+            bool smokeTestSkipped = plan.Status == StageRuntimePlanStatus.Ready
+                && !runtimeValidated
+                && plan.ExecutionProvider is not (null or ExecutionProviderKind.Cpu);
+            if (smokeTestSkipped)
+            {
+                return new StageReadiness(
+                    stageName,
+                    ReadinessState.Unverified,
+                    Detail: $"Model '{plan.ModelId}' is present; runtime path not verified (smoke test skipped)",
+                    plan.ModelId,
+                    plan.ModelAlias,
+                    null);
+            }
+
             return new StageReadiness(stageName, ReadinessState.Ready, null, plan.ModelId, plan.ModelAlias, null);
         }
 

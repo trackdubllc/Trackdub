@@ -43,7 +43,7 @@ public sealed class TrackdubDubbingEngineStageRunOutcomeTests
     }
 
     [Fact]
-    public void MapStageRunToSdkOutcome_PartiallyCompleted_ReturnsSucceededWithDegradation()
+    public void MapStageRunToSdkOutcome_PartiallyCompleted_ReturnsPartiallySucceededWithDegradation()
     {
         DateTimeOffset started = DateTimeOffset.UtcNow;
         var stageRun = new StageRunRecord(
@@ -58,9 +58,57 @@ public sealed class TrackdubDubbingEngineStageRunOutcomeTests
         (StageStatus status, string? reasonCode, IReadOnlyList<string>? degradations) =
             TrackdubDubbingEngine.MapStageRunToSdkOutcome(stageRun);
 
-        Assert.Equal(StageStatus.Succeeded, status);
+        Assert.Equal(StageStatus.PartiallySucceeded, status);
         Assert.Null(reasonCode);
         Assert.Equal(["2 partial, 1 failed, 3 aligned."], degradations);
+    }
+
+    [Fact]
+    public void DetermineOverallStatus_PartiallySucceededStage_ReturnsPartialSuccess()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var outcomes = new List<StageOutcome>
+        {
+            new()
+            {
+                StageName = StageNames.LipSync,
+                Status = StageStatus.PartiallySucceeded,
+                StartTime = now,
+                EndTime = now,
+                ArtifactPaths = ["lip.mp4"],
+                DegradationRecords = ["2 segments could not be aligned."],
+            },
+            new()
+            {
+                StageName = StageNames.Export,
+                Status = StageStatus.Succeeded,
+                StartTime = now,
+                EndTime = now,
+                ArtifactPaths = ["export.mp4"],
+            },
+        };
+
+        Assert.Equal(DubbingRunStatus.PartialSuccess, TrackdubDubbingEngine.DetermineOverallStatus(outcomes));
+    }
+
+    [Fact]
+    public void DetermineOverallStatus_OnlyPartiallySucceeded_ReturnsPartialSuccess()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var outcomes = new List<StageOutcome>
+        {
+            new()
+            {
+                StageName = StageNames.Tts,
+                Status = StageStatus.PartiallySucceeded,
+                StartTime = now,
+                EndTime = now,
+                ArtifactPaths = ["tts/speaker-a.wav"],
+                DegradationRecords = ["1 speaker fell back to stock voice."],
+            },
+        };
+
+        Assert.Equal(DubbingRunStatus.PartialSuccess, TrackdubDubbingEngine.DetermineOverallStatus(outcomes));
     }
 
     [Fact]

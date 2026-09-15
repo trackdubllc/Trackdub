@@ -1,8 +1,9 @@
-using Trackdub.Sdk;
-using Trackdub.Sdk.Composition;
 using FsCheck;
 using FsCheck.Xunit;
 using Microsoft.Extensions.DependencyInjection;
+using Trackdub.Contracts.Dubbing;
+using Trackdub.Sdk;
+using Trackdub.Sdk.Composition;
 
 namespace Trackdub.Sdk.Tests;
 

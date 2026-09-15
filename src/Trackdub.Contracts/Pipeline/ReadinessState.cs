@@ -49,6 +49,14 @@ public enum ReadinessState
 
     /// <summary>Stage is optional (e.g. Separation) and the user has opted to skip it.</summary>
     SkippableOptional = 102,
+
+    /// <summary>
+    /// Model metadata checks passed but the runtime/provider path was not verified
+    /// (the evaluation skipped provider smoke testing). Non-blocking: the stage may
+    /// still fail at execution time. Stages in this state are included in
+    /// <see cref="PipelineReadinessReport"/>.
+    /// </summary>
+    Unverified = 103,
 }
 
 public static class ReadinessStateExtensions

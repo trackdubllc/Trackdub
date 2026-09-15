@@ -51,6 +51,37 @@ public sealed class DubbingPipelineEngineTests
         Assert.True(IndexOf(order, StageNames.TextRefinementAsr) < IndexOf(order, StageNames.Translation));
     }
 
+    [Fact]
+    public void ApplyModelPreferenceAliases_pins_explicit_alias_over_ui_selection()
+    {
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            AsrModelAlias: "whisper-ui-pick",
+            TtsModelAlias: "kokoro-ui-pick");
+        var preferences = new InferenceModelPreferences(TtsModelAlias: "chatterbox-clone-pin");
+
+        RuntimeModelSelections merged = DubbingPipelineEngine.ApplyModelPreferenceAliases(selections, preferences);
+
+        Assert.Equal("chatterbox-clone-pin", merged.TtsModelAlias);
+        Assert.Equal("whisper-ui-pick", merged.AsrModelAlias);
+    }
+
+    [Fact]
+    public void ApplyModelPreferenceAliases_with_null_preferences_keeps_host_selections()
+    {
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: "kokoro-ui-pick");
+
+        RuntimeModelSelections merged = DubbingPipelineEngine.ApplyModelPreferenceAliases(selections, null);
+
+        Assert.Equal("kokoro-ui-pick", merged.TtsModelAlias);
+    }
+
     private static int IndexOf(IReadOnlyList<string> order, string stageName)
     {
         for (int i = 0; i < order.Count; i++)

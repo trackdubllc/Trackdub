@@ -8,7 +8,9 @@ using Trackdub.Application.Transcripts.Stages;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Domain.Artifacts;
+using Trackdub.Domain.Media;
 using Trackdub.Domain.Projects;
+using Trackdub.Domain.StageRuns;
 using Trackdub.TestDoubles;
 
 namespace Trackdub.Application.Tests;
@@ -506,6 +508,73 @@ public sealed class TranscriptWorkspacePipelineGuardTests
     }
 
     [Fact]
+    public async Task RunSpeechAudioPreparationAsync_without_handler_records_partial_run_instead_of_reusing_stale_output()
+    {
+        (TranscriptWorkspace workspace, FakeProjectStageRunStore stageRunStore, FakeMediaAssetRepository mediaRepository, Guid projectId) =
+            CreateWorkspaceWithFakes();
+        using (workspace)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            var mediaAsset = new MediaAsset(
+                Guid.NewGuid(),
+                projectId,
+                "media/source.mp4",
+                "source.mp4",
+                "abc123",
+                1024L,
+                now,
+                "mp4",
+                DurationSeconds: 30.0,
+                HasAudio: true,
+                HasVideo: true,
+                now);
+            mediaRepository.Seed(mediaAsset);
+            await mediaRepository.SaveArtifactAsync(
+                new ProjectArtifact(
+                    Guid.NewGuid(),
+                    projectId,
+                    mediaAsset.Id,
+                    ArtifactKind.NormalizedAudio,
+                    ProjectArtifactPaths.NormalizedAudioRelativePath,
+                    "hash",
+                    100,
+                    30.0,
+                    48000,
+                    1,
+                    now),
+                TestContext.Current.CancellationToken);
+            // A stale processed-audio artifact must not satisfy a dedicated run:
+            // the entry point suppresses silent reuse and records fresh evidence.
+            await mediaRepository.SaveArtifactAsync(
+                new ProjectArtifact(
+                    Guid.NewGuid(),
+                    projectId,
+                    mediaAsset.Id,
+                    ArtifactKind.SpeechProcessedAudio,
+                    "artifacts/audio/processed-stale.wav",
+                    "hash",
+                    100,
+                    30.0,
+                    48000,
+                    1,
+                    now.AddMinutes(-30)),
+                TestContext.Current.CancellationToken);
+
+            TranscriptProjectState result = await workspace.RunSpeechAudioPreparationAsync(
+                TestContext.Current.CancellationToken);
+
+            StageRunRecord run = Assert.Single(
+                result.StageRuns,
+                r => string.Equals(r.StageName, StageNames.AudioPreparation, StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(StageRunStatus.PartiallyCompleted, run.Status);
+            Assert.Contains("unavailable", run.FailureReason, StringComparison.OrdinalIgnoreCase);
+            Assert.Single(
+                stageRunStore.All,
+                r => string.Equals(r.StageName, StageNames.AudioPreparation, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
     public async Task Dispose_cancels_in_flight_guarded_operation()
     {
         TranscriptWorkspace workspace = CreateWorkspace();
@@ -527,7 +596,14 @@ public sealed class TranscriptWorkspacePipelineGuardTests
                 TestContext.Current.CancellationToken));
     }
 
-    private static TranscriptWorkspace CreateWorkspace(IApplicationLogger? logger = null)
+    private static TranscriptWorkspace CreateWorkspace(IApplicationLogger? logger = null) =>
+        CreateWorkspaceWithFakes(logger).Workspace;
+
+    private static (
+        TranscriptWorkspace Workspace,
+        FakeProjectStageRunStore StageRunStore,
+        FakeMediaAssetRepository MediaRepository,
+        Guid ProjectId) CreateWorkspaceWithFakes(IApplicationLogger? logger = null)
     {
         var projectRepository = new InMemoryProjectRepository();
         var project = new TrackdubProject(
@@ -692,8 +768,12 @@ public sealed class TranscriptWorkspacePipelineGuardTests
                 new SubtitleExportService(),
                 new FakeVideoRecomposer()));
 
-        return new TranscriptWorkspace(
-            new ProjectWorkflow(projectMediaIngestService, stateService, transcriptGenerationService),
+        TranscriptWorkspace workspace = new(
+            new ProjectWorkflow(
+                projectMediaIngestService,
+                stateService,
+                transcriptGenerationService,
+                stageRunStore: stageRunStore),
             new DiarizationModelWorkflow(diarizationStageHandler),
             new TranscriptWorkflow(stateService, segmentEditingService, transcriptGenerationService),
             new TranslationWorkflow(stateService, translationOrchestrationService),
@@ -713,6 +793,8 @@ public sealed class TranscriptWorkspacePipelineGuardTests
                 translationOrchestrationService),
             importModelProvisioner: null,
             logger);
+
+        return (workspace, stageRunStore, mediaRepository, project.Id);
     }
 
     private sealed class WritingModelDownloader : IModelDownloaderContract
