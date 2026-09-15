@@ -186,6 +186,29 @@ public sealed class PipelineReadinessServiceTests
         Assert.Equal(2, planCalls);
     }
 
+    [Fact]
+    public async Task EvaluateAsync_reports_speech_enhancement_under_canonical_stage_name()
+    {
+        var planner = new FakeRuntimePlanner
+        {
+            PlanHandler = req =>
+                new StageRuntimePlan { Stage = req.Stage, Status = StageRuntimePlanStatus.Ready }
+        };
+
+        var service = new PipelineReadinessService(planner, new NullCloudApiKeyProvider(), new FakeConsentService());
+        PipelineReadinessReport report = await service.EvaluateAsync(
+            [RuntimeStage.SpeechEnhancement],
+            new RuntimeModelSelections(
+                AsrModelOverride.Auto,
+                IsDevBuild: false,
+                HardwareOverrides: new Dictionary<string, ExecutionProviderKind>()),
+            state: null);
+
+        StageReadiness stage = Assert.Single(report.Stages);
+        Assert.Equal(StageNames.SpeechEnhancement, stage.StageName);
+        Assert.Equal(ReadinessState.Ready, stage.Status);
+    }
+
     private sealed class NullCloudApiKeyProvider : ICloudApiKeyProvider
     {
         public Task<string?> GetApiKeyAsync(string providerKey, CancellationToken cancellationToken) =>

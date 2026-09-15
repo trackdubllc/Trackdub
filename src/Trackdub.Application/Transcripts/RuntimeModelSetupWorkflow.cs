@@ -235,6 +235,8 @@ public static class RuntimeModelSetupWorkflow
         return (imported, updatedStatus);
     }
 
-    private static bool IsOptionalRuntimeStage(RuntimeStage stage) =>
-        stage is RuntimeStage.Separation;
+    // SpeechEnhancement degrades in place to FFmpeg/AFX inside the stage, so a
+    // declined model must not abort the run; Separation has no fallback.
+    internal static bool IsOptionalRuntimeStage(RuntimeStage stage) =>
+        stage is RuntimeStage.Separation or RuntimeStage.SpeechEnhancement;
 }

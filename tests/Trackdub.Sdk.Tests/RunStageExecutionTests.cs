@@ -6,6 +6,8 @@ using Trackdub.Application.Pipeline;
 using Trackdub.Application.Transcripts;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Licensing;
+using Trackdub.Contracts.Pipeline;
+using Trackdub.Domain;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Sdk;
 using Trackdub.Sdk.Composition;
@@ -224,6 +226,96 @@ public sealed class RunStageExecutionTests : IDisposable
             failure => failure.Contains("source-media", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_DeclinedOptionalSeparationModel_SkipsStageInsteadOfPreFlightFailure()
+    {
+        // Regression: a user-declined optional model used to re-block on the
+        // post-provisioning readiness pass and surface as PreFlightFailed.
+        string tempDir = CreateTempProjectDir();
+        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        Directory.CreateDirectory(projectDir);
+        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
+
+        using TrackdubSessionFactory factory = CreateFactory(services =>
+        {
+            services.Replace(ServiceDescriptor.Singleton<IPipelineReadinessService>(
+                new FakePipelineReadinessService(ReadinessState.DownloadRequired)));
+            services.Replace(ServiceDescriptor.Singleton<IPipelineModelSetupInteraction>(
+                new SkipOptionalStageSetupInteraction()));
+            services.Replace(ServiceDescriptor.Singleton<IRuntimeModelBootstrapService>(
+                new MissingRuntimeModelBootstrapService()));
+        });
+
+        await using (TrackdubSession session = factory.CreateSession(projectDir))
+        {
+            await session.Workspace.CreateMediaSpineAsync(
+                new CreateTranscriptProjectRequest("sample", mediaPath),
+                CancellationToken.None);
+        }
+
+        var engine = new TrackdubDubbingEngine(factory);
+        DubbingRunResult result = await engine.ExecuteAsync(new DubbingSessionOptions
+        {
+            SourceMediaPath = mediaPath,
+            ProjectOutputDirectory = projectDir,
+            TargetLanguageCode = "es",
+            EnableStemSeparation = true,
+            StageFilter = [StageNames.Separation],
+        });
+
+        Assert.NotEqual(DubbingRunStatus.PreFlightFailed, result.OverallStatus);
+        StageOutcome outcome = Assert.Single(result.StageOutcomes);
+        Assert.Equal(StageNames.Separation, outcome.StageName);
+        Assert.Equal(StageStatus.Skipped, outcome.Status);
+        Assert.Equal(StageSkipReasonCodes.OptionalModelDeclined, outcome.ReasonCode);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DeclinedOptionalSpeechEnhancement_RunsFallbackInsteadOfSkip()
+    {
+        // Speech enhancement has an in-place FFmpeg/AFX fallback. A declined model
+        // should still execute audio preparation, not produce OPTIONAL_MODEL_DECLINED.
+        string tempDir = CreateTempProjectDir();
+        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        Directory.CreateDirectory(projectDir);
+        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
+
+        using TrackdubSessionFactory factory = CreateFactory(services =>
+        {
+            services.Replace(ServiceDescriptor.Singleton<IPipelineReadinessService>(
+                new FakePipelineReadinessService(ReadinessState.DownloadRequired)));
+            services.Replace(ServiceDescriptor.Singleton<IPipelineModelSetupInteraction>(
+                new SkipOptionalStageSetupInteraction()));
+            services.Replace(ServiceDescriptor.Singleton<IRuntimeModelBootstrapService>(
+                new MissingRuntimeModelBootstrapService()));
+        });
+
+        await using (TrackdubSession session = factory.CreateSession(projectDir))
+        {
+            await session.Workspace.CreateMediaSpineAsync(
+                new CreateTranscriptProjectRequest("sample", mediaPath),
+                CancellationToken.None);
+        }
+
+        var engine = new TrackdubDubbingEngine(factory);
+        DubbingRunResult result = await engine.ExecuteAsync(new DubbingSessionOptions
+        {
+            SourceMediaPath = mediaPath,
+            ProjectOutputDirectory = projectDir,
+            TargetLanguageCode = "es",
+            StageFilter = [StageNames.AudioPreparation],
+        });
+
+        Assert.NotEqual(DubbingRunStatus.PreFlightFailed, result.OverallStatus);
+        StageOutcome outcome = Assert.Single(result.StageOutcomes);
+        Assert.Equal(StageNames.AudioPreparation, outcome.StageName);
+        // Stage executes through FFmpeg fallback; does not skip with OPTIONAL_MODEL_DECLINED.
+        Assert.NotEqual(StageStatus.Skipped, outcome.Status);
+        Assert.NotEqual(StageSkipReasonCodes.OptionalModelDeclined, outcome.ReasonCode);
+    }
+
     private static TrackdubSessionFactory CreateFactory(Action<IServiceCollection>? configureServices = null)
     {
         var options = new TrackdubOptions
@@ -260,6 +352,107 @@ public sealed class RunStageExecutionTests : IDisposable
             try { Directory.Delete(dir, recursive: true); }
             catch { /* best-effort cleanup */ }
         }
+    }
+
+    private sealed class FakePipelineReadinessService(ReadinessState status) : IPipelineReadinessService
+    {
+        public Task<PipelineReadinessReport> EvaluateAsync(
+            IReadOnlyList<RuntimeStage> enabledStages,
+            RuntimeModelSelections selections,
+            TranscriptProjectState? state,
+            CancellationToken cancellationToken = default,
+            string? sourceLanguageCode = null,
+            string? targetLanguageCode = null,
+            bool validateRuntime = true) =>
+            Task.FromResult(new PipelineReadinessReport(enabledStages
+                .Select(stage => new StageReadiness(
+                    StageName: StageNameFor(stage),
+                    Status: status,
+                    Detail: "fake",
+                    ModelId: "fake/model",
+                    ModelAlias: null,
+                    ResolveAction: "download"))
+                .ToArray()));
+
+        public void InvalidateCache(IReadOnlyList<RuntimeStage>? stages = null)
+        {
+        }
+
+        private static string StageNameFor(RuntimeStage stage) => stage switch
+        {
+            RuntimeStage.Vad => StageNames.Vad,
+            RuntimeStage.Asr => StageNames.Asr,
+            RuntimeStage.Translation => StageNames.Translation,
+            RuntimeStage.Tts => StageNames.Tts,
+            RuntimeStage.Diarization => StageNames.Diarization,
+            RuntimeStage.Separation => StageNames.Separation,
+            RuntimeStage.SpeechEnhancement => StageNames.SpeechEnhancement,
+            RuntimeStage.LipSync => StageNames.LipSync,
+            RuntimeStage.TextRefinement => StageNames.TextRefinementAsr,
+            RuntimeStage.OverlapRescue => StageNames.OverlapRescue,
+            RuntimeStage.LipSynthesis => StageNames.LipSynthesis,
+            _ => stage.ToString().ToLowerInvariant(),
+        };
+    }
+
+    private sealed class SkipOptionalStageSetupInteraction : IPipelineModelSetupInteraction
+    {
+        public RuntimeModelSetupCallbacks CreateCallbacks(
+            IProgress<PipelineProgressEvent>? progress,
+            CancellationToken cancellationToken) =>
+            new(
+                ResolveDecisionAsync: _ => Task.FromResult(RuntimeModelSetupDecision.SkipOptionalStage),
+                PickImportFileAsync: () => Task.FromResult<string?>(null),
+                CreateDownloadProgress: _ => new Progress<ModelDownloadProgress>(),
+                RunOperationAsync: (operation, _) => operation(cancellationToken));
+    }
+
+    private sealed class MissingRuntimeModelBootstrapService : IRuntimeModelBootstrapService
+    {
+        public Task<RequiredRuntimeModelStatus?> GetRequiredModelStatusAsync(
+            RuntimeModelRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<RequiredRuntimeModelStatus?>(new RequiredRuntimeModelStatus(
+                Stage: request.Stage,
+                StageDisplayName: request.Stage.ToString(),
+                ModelId: "fake/model",
+                ModelAlias: request.PreferredModelAlias,
+                Variant: null,
+                ExpectedFileName: "model.onnx",
+                ModelPath: "missing/model.onnx",
+                SourceUrl: "https://example.invalid/model.onnx",
+                License: "test",
+                IsAvailable: false,
+                CanAutoDownload: true,
+                CanImportSingleFile: true,
+                RequiresAttribution: false,
+                RequiresUserConsent: false,
+                HelpText: "fake"));
+
+        public Task<RequiredRuntimeModelStatus> DownloadRequiredModelAsync(
+            RuntimeModelRequest request,
+            IProgress<ModelDownloadProgress>? downloadProgress = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Test must not download.");
+
+        public Task<RequiredRuntimeModelStatus> ImportRequiredModelAsync(
+            RuntimeModelRequest request,
+            string sourceModelPath,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Test must not import.");
+
+        public Task<RequiredRuntimeModelStatus?> GetManifestCompanionModelStatusAsync(
+            string manifestAlias,
+            RuntimeStage owningStage,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<RequiredRuntimeModelStatus?>(null);
+
+        public Task<RequiredRuntimeModelStatus> DownloadManifestCompanionModelAsync(
+            string manifestAlias,
+            RuntimeStage owningStage,
+            IProgress<ModelDownloadProgress>? downloadProgress = null,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Test must not download.");
     }
 
     private sealed class ThrowingSessionFactory : IDubbingSessionFactory

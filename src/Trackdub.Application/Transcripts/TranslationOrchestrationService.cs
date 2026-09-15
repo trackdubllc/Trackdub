@@ -270,7 +270,9 @@ public sealed class TranslationOrchestrationService(
                 .CompleteAsync(stageRunStore, translationStageRun, translationEngine, cancellationToken, runtimePlanningPreferences)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        // Only the caller's token means user cancellation. A TaskCanceledException from a
+        // cloud-engine timeout must fall through to the failure arm, not read as "canceled".
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             await StageRunHelper
                 .CancelAsync(stageRunStore, translationStageRun, translationEngine, "Translation canceled.", CancellationToken.None, runtimePlanningPreferences)
@@ -606,7 +608,7 @@ public sealed class TranslationOrchestrationService(
                     sourceSegment.SegmentIndex,
                     translationStageRun.RuntimeInfo));
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             await StageRunHelper
                 .CancelAsync(stageRunStore, translationStageRun, translationEngine, "Translation canceled.", CancellationToken.None, runtimePlanningPreferences)

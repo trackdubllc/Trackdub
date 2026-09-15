@@ -33,7 +33,10 @@ public sealed class TranslationOrchestrationServiceTests
             fileFingerprintService,
             mediaAssetRepository);
 
-        var cancellingEngine = new CancellingTranslationEngine();
+        // The engine cancels the caller's token, then throws — a real user
+        // cancellation arriving mid-call.
+        using var cts = new CancellationTokenSource();
+        var cancellingEngine = new CancellingTranslationEngine(cts);
 
         var service = new TranslationOrchestrationService(
             translationRepository,
@@ -61,7 +64,7 @@ public sealed class TranslationOrchestrationServiceTests
             await service.RetranslateSegmentAsync(
                 state,
                 request,
-                TestContext.Current.CancellationToken);
+                cts.Token);
         }
         catch (OperationCanceledException ex)
         {
@@ -75,6 +78,118 @@ public sealed class TranslationOrchestrationServiceTests
         StageRunRecord stageRun = Assert.Single(stageRunStore.All);
         Assert.Equal(StageNames.Translation, stageRun.StageName);
         Assert.Equal(StageRunStatus.Canceled, stageRun.Status);
+    }
+
+    [Fact]
+    public async Task RetranslateSegmentAsync_WhenEngineTimesOutWithoutUserCancel_MarksStageAsFailed()
+    {
+        // A provider-side cancellation (e.g. HttpClient timeout) is not a user
+        // cancel: the stage run must record Failed, not Canceled.
+        var stageRunStore = new FakeProjectStageRunStore();
+        var artifactStore = new FakeArtifactStore();
+        var service = new TranslationOrchestrationService(
+            new FakeTranslationRepository(),
+            new GlossaryService(new FakeGlossaryRepository()),
+            new GlossaryTermMatcher(),
+            new FakeTranslationLanguageRouter(),
+            new TimeoutTranslationEngine(),
+            new FakeTtsTakeRepository(),
+            stageRunStore,
+            artifactStore,
+            new TranscriptArtifactWriter(
+                artifactStore,
+                new FakeFileFingerprintService(),
+                new FakeMediaAssetRepository()));
+
+        TranscriptProjectState state = BuildStateWithTranslationRevision();
+        RetranslateSegmentRequest request = new(
+            state.CurrentTranslationRevision!.Id,
+            state.TranscriptSegments[0].Id,
+            SourceLanguage: "en",
+            TargetLanguage: "es");
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
+            service.RetranslateSegmentAsync(
+                state,
+                request,
+                TestContext.Current.CancellationToken));
+
+        StageRunRecord stageRun = Assert.Single(stageRunStore.All);
+        Assert.Equal(StageNames.Translation, stageRun.StageName);
+        Assert.Equal(StageRunStatus.Failed, stageRun.Status);
+    }
+
+    [Fact]
+    public async Task RetranslateSegmentAsync_WhenEngineThrowsBareOceWithoutCancel_MarksStageAsFailed()
+    {
+        // A bare OperationCanceledException (not TaskCanceledException) without
+        // canceling the caller's token is a provider-side failure: must record Failed.
+        var stageRunStore = new FakeProjectStageRunStore();
+        var artifactStore = new FakeArtifactStore();
+        var service = new TranslationOrchestrationService(
+            new FakeTranslationRepository(),
+            new GlossaryService(new FakeGlossaryRepository()),
+            new GlossaryTermMatcher(),
+            new FakeTranslationLanguageRouter(),
+            new BareOceTranslationEngine(),
+            new FakeTtsTakeRepository(),
+            stageRunStore,
+            artifactStore,
+            new TranscriptArtifactWriter(
+                artifactStore,
+                new FakeFileFingerprintService(),
+                new FakeMediaAssetRepository()));
+
+        TranscriptProjectState state = BuildStateWithTranslationRevision();
+        RetranslateSegmentRequest request = new(
+            state.CurrentTranslationRevision!.Id,
+            state.TranscriptSegments[0].Id,
+            SourceLanguage: "en",
+            TargetLanguage: "es");
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            service.RetranslateSegmentAsync(state, request, TestContext.Current.CancellationToken));
+
+        StageRunRecord stageRun = Assert.Single(stageRunStore.All);
+        Assert.Equal(StageNames.Translation, stageRun.StageName);
+        Assert.Equal(StageRunStatus.Failed, stageRun.Status);
+    }
+
+    [Fact]
+    public async Task GenerateTranslationAsync_WhenEngineThrowsOceUnderCancelledToken_MarksStageAsCanceled()
+    {
+        using var cts = new CancellationTokenSource();
+        TranslationHarness harness = CreateTranslationHarness(
+            transcriptLanguage: "en",
+            segmentDetectedLanguage: "en",
+            engine: new CancellingTranslationEngine(cts));
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            harness.Service.GenerateTranslationAsync(
+                harness.State,
+                new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "es"),
+                cts.Token));
+
+        StageRunRecord stageRun = Assert.Single(harness.StageRunStore.All);
+        Assert.Equal(StageRunStatus.Canceled, stageRun.Status);
+    }
+
+    [Fact]
+    public async Task GenerateTranslationAsync_WhenEngineTimesOutWithoutUserCancel_MarksStageAsFailed()
+    {
+        TranslationHarness harness = CreateTranslationHarness(
+            transcriptLanguage: "en",
+            segmentDetectedLanguage: "en",
+            engine: new TimeoutTranslationEngine());
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() =>
+            harness.Service.GenerateTranslationAsync(
+                harness.State,
+                new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "es"),
+                TestContext.Current.CancellationToken));
+
+        StageRunRecord stageRun = Assert.Single(harness.StageRunStore.All);
+        Assert.Equal(StageRunStatus.Failed, stageRun.Status);
     }
 
     [Fact]
@@ -185,7 +300,8 @@ public sealed class TranslationOrchestrationServiceTests
 
     private static TranslationHarness CreateTranslationHarness(
         string? transcriptLanguage,
-        string? segmentDetectedLanguage)
+        string? segmentDetectedLanguage,
+        ITranslationEngine? engine = null)
     {
         var stageRunStore = new FakeProjectStageRunStore();
         var translationRepository = new FakeTranslationRepository();
@@ -200,7 +316,7 @@ public sealed class TranslationOrchestrationServiceTests
             mediaAssetRepository);
 
         string? capturedSourceLanguage = null;
-        var engine = new FakeTranslationEngine(
+        engine ??= new FakeTranslationEngine(
             (request, segment) =>
             {
                 capturedSourceLanguage = request.SourceLanguage;
@@ -315,14 +431,42 @@ public sealed class TranslationOrchestrationServiceTests
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// A translation engine that immediately throws <see cref="OperationCanceledException"/>
-    /// to simulate the engine being cancelled mid-run.
+    /// A translation engine that cancels the caller's token and then throws
+    /// <see cref="OperationCanceledException"/>, simulating user cancellation
+    /// arriving mid-run.
     /// </summary>
-    private sealed class CancellingTranslationEngine : ITranslationEngine
+    private sealed class CancellingTranslationEngine(CancellationTokenSource cts) : ITranslationEngine
+    {
+        public Task<IReadOnlyList<TranslatedTextSegment>> TranslateAsync(
+            TranslationRequest request,
+            CancellationToken cancellationToken)
+        {
+            cts.Cancel();
+            throw new OperationCanceledException("Translation was cancelled.");
+        }
+    }
+
+    /// <summary>
+    /// A translation engine that throws <see cref="TaskCanceledException"/>
+    /// without touching the caller's token, simulating a cloud-provider timeout.
+    /// </summary>
+    private sealed class TimeoutTranslationEngine : ITranslationEngine
     {
         public Task<IReadOnlyList<TranslatedTextSegment>> TranslateAsync(
             TranslationRequest request,
             CancellationToken cancellationToken) =>
-            throw new OperationCanceledException("Translation was cancelled.");
+            throw new TaskCanceledException("The request timed out.");
+    }
+
+    /// <summary>
+    /// A translation engine that throws a bare <see cref="OperationCanceledException"/>
+    /// without canceling the caller's token, simulating a provider-internal failure.
+    /// </summary>
+    private sealed class BareOceTranslationEngine : ITranslationEngine
+    {
+        public Task<IReadOnlyList<TranslatedTextSegment>> TranslateAsync(
+            TranslationRequest request,
+            CancellationToken cancellationToken) =>
+            throw new OperationCanceledException("Provider-side operation was cancelled.");
     }
 }
