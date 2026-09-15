@@ -20,7 +20,7 @@ public sealed class ProjectMediaIngestService(
     private readonly IApplicationLogger? logger = applicationLogger;
 
     private static MediaAsset? GetPrimaryAsset(IReadOnlyList<MediaAsset> assets) =>
-        assets.FirstOrDefault();
+        assets.Count > 0 ? assets[0] : null;
 
     public async Task<CreateProjectFromMediaResult> CreateAsync(
         CreateProjectFromMediaRequest request,

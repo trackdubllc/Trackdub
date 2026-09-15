@@ -106,7 +106,7 @@ public sealed class StarterPackPresentationService(
             return tierPackId;
         }
 
-        return runnablePackIds.FirstOrDefault() ?? tierPackId;
+        return runnablePackIds.Count > 0 ? runnablePackIds[0] : tierPackId;
     }
 
     public async Task<IReadOnlyList<string>> GetRunnablePackIdsAsync(CancellationToken cancellationToken = default)

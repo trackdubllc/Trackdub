@@ -898,7 +898,7 @@ public sealed class RuntimeModelBootstrapService(
             return nativeRuntimePath;
         }
 
-        return missingFiles.FirstOrDefault() ?? selectedEntryRelativePath;
+        return missingFiles.Count > 0 ? missingFiles[0] : selectedEntryRelativePath;
     }
 
     private static string ResolveFailureReason(

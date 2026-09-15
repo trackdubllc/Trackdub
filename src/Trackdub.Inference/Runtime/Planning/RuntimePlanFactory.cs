@@ -998,7 +998,7 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         fileExistenceCache.GetOrAdd(path, static candidatePath => File.Exists(candidatePath));
 
     private static string ResolvePrimaryAlias(BundledModelManifestEntry entry) =>
-        entry.Aliases.FirstOrDefault() ?? entry.ModelId;
+        entry.Aliases.Count > 0 ? entry.Aliases[0] : entry.ModelId;
 
     private enum ProviderGuardOutcome { Proceed, Skip, Return }
 

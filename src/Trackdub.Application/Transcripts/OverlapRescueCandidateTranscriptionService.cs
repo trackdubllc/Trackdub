@@ -51,7 +51,7 @@ public sealed class OverlapRescueCandidateTranscriptionService(
                         modelPreferences?.GetPreferredModelVariantAlias(RuntimeStage.Asr)),
                     cancellationToken).ConfigureAwait(false);
 
-                RecognizedTranscriptSegment? recognized = asrResult.Segments.FirstOrDefault();
+                RecognizedTranscriptSegment? recognized = asrResult.Segments.Count > 0 ? asrResult.Segments[0] : null;
                 var payload = new OverlapRescueCandidateTranscriptPayload(
                     region.RegionIndex,
                     candidateIndex,

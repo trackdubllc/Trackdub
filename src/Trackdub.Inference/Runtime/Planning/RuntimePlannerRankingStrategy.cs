@@ -19,7 +19,7 @@ internal sealed class RuntimePlannerRankingStrategy(BundledModelManifestRegistry
                 entry,
                 GetSelectionRank(entry, request, requirements)))
             .OrderBy(candidate => candidate.Rank)
-            .ThenBy(candidate => candidate.Entry.Aliases.FirstOrDefault() ?? candidate.Entry.ModelId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(candidate => candidate.Entry.Aliases.Count > 0 ? candidate.Entry.Aliases[0] : candidate.Entry.ModelId, StringComparer.OrdinalIgnoreCase)
             .ThenBy(candidate => candidate.Entry.ModelId, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

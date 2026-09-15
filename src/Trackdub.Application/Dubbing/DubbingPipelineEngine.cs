@@ -874,7 +874,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 _ => PipelineProgressEventKind.Completed,
             };
             string? progressMessage = workflowResult.ReasonCode
-                ?? workflowResult.DegradationRecords?.FirstOrDefault();
+                ?? (workflowResult.DegradationRecords is { Count: > 0 } records ? records[0] : null);
             ReportProgress(
                 progress,
                 stageName,
