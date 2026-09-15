@@ -1,3 +1,4 @@
+using Trackdub.Application.Dubbing;
 using Trackdub.Application.Projects;
 using Trackdub.Application.Transcripts;
 using Trackdub.Domain;
@@ -1581,6 +1582,43 @@ public sealed class StageArtifactResumeEvaluatorTests
             TtsTakes: ttsTakes ?? [],
             TtsSegmentStates: [],
             VoiceAssignmentWarnings: []);
+    }
+
+    [Fact]
+    public void GetLatestStageRun_ignores_runs_started_before_the_invocation()
+    {
+        Guid projectId = Guid.NewGuid();
+        DateTimeOffset staleStart = DateTimeOffset.UtcNow.AddMinutes(-10);
+        StageRunRecord staleRun = StageRunRecord
+            .Start(projectId, StageNames.LipSync, staleStart)
+            .Complete(staleStart.AddSeconds(30));
+        TranscriptProjectState state = CreateState(projectId, [staleRun]);
+
+        // A run that finished before the current invocation began must not stand in
+        // for this invocation's outcome.
+        Assert.Null(DubbingPipelineEngine.GetLatestStageRun(
+            state,
+            StageNames.LipSync,
+            notBeforeUtc: DateTimeOffset.UtcNow.AddMinutes(-1)));
+
+        Assert.Same(staleRun, DubbingPipelineEngine.GetLatestStageRun(state, StageNames.LipSync));
+    }
+
+    [Fact]
+    public void GetLatestStageRun_prefers_the_run_started_after_notBeforeUtc()
+    {
+        Guid projectId = Guid.NewGuid();
+        DateTimeOffset cutoff = DateTimeOffset.UtcNow;
+        StageRunRecord oldRun = StageRunRecord
+            .Start(projectId, StageNames.Translation, cutoff.AddMinutes(-5))
+            .Complete(cutoff.AddMinutes(-4).AddSeconds(30));
+        StageRunRecord newRun = StageRunRecord
+            .Start(projectId, StageNames.Translation, cutoff.AddSeconds(1))
+            .Fail(cutoff.AddSeconds(2), "persist failed");
+        TranscriptProjectState state = CreateState(projectId, [oldRun, newRun]);
+
+        Assert.Same(newRun, DubbingPipelineEngine.GetLatestStageRun(
+            state, StageNames.Translation, notBeforeUtc: cutoff));
     }
 
     [Fact]

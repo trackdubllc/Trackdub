@@ -876,10 +876,13 @@ public sealed class DubbingPipelineEngine(
     private static T? TryResolveService<T>(IDubbingSession session) where T : class
     {
         try { return session.Services.GetService<T>(); }
-        catch (Exception ex) when (IsNonFatalException(ex))
+        catch (ObjectDisposedException ex)
         {
-            // A throwing factory silently disables the dependent check (pre-flight,
-            // consent, telemetry). Best-effort log so the gap is diagnosable.
+            TryLogServiceResolutionFailure<T>(session, ex);
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
             TryLogServiceResolutionFailure<T>(session, ex);
             return null;
         }
@@ -894,21 +897,15 @@ public sealed class DubbingPipelineEngine(
                     $"Service resolution failed for {typeof(T).Name}; dependent pipeline checks are disabled for this run.",
                     ex);
         }
-        catch (Exception logEx) when (IsNonFatalException(logEx))
+        catch (ObjectDisposedException)
+        {
+            // The logger itself may be the service that failed to resolve.
+        }
+        catch (InvalidOperationException)
         {
             // The logger itself may be the service that failed to resolve.
         }
     }
-
-    private static bool IsNonFatalException(Exception ex) =>
-        ex is not (
-            OutOfMemoryException or
-            StackOverflowException or
-            AccessViolationException or
-            AppDomainUnloadedException or
-            BadImageFormatException or
-            CannotUnloadAppDomainException or
-            InvalidProgramException);
 
     private static RuntimeStage? MapStageNameToRuntimeStage(string stageName) =>
         stageName switch
@@ -964,6 +961,8 @@ public sealed class DubbingPipelineEngine(
             {
                 StageStatus.Skipped => PipelineProgressEventKind.Skipped,
                 StageStatus.Failed => PipelineProgressEventKind.Failed,
+                // PartiallySucceeded reports Completed: the stage finished, and the
+                // degradation detail is carried in the message and outcome records.
                 _ => PipelineProgressEventKind.Completed,
             };
             string? progressMessage = workflowResult.ReasonCode
@@ -1190,13 +1189,15 @@ public sealed class DubbingPipelineEngine(
                 StageSkipReasonCodes.DisabledByOption);
         }
 
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
         TranscriptProjectState separationState = await workspace.RunStemSeparationAsync(
             cancellationToken,
             preferredModelAlias: runtimeSelections.SeparationModelAlias,
             modelPreferences: modelPreferences,
             regenerateTranscript: options.RegenerateTranscriptOnSeparation).ConfigureAwait(false);
 
-        IReadOnlyList<string>? enhancementDegradations = ExtractSpeechEnhancementDegradations(separationState);
+        IReadOnlyList<string>? enhancementDegradations =
+            ExtractSpeechEnhancementDegradations(separationState, stageWorkStartedUtc);
         if (enhancementDegradations is { Count: > 0 })
         {
             // Surface the speech-enhancement failure before the separation Completed event so
@@ -1205,7 +1206,11 @@ public sealed class DubbingPipelineEngine(
                 enhancementDegradations[0]);
         }
 
-        return new StageWorkflowResult([], enhancementDegradations);
+        return BuildStageWorkflowResultFromStageRun(
+            separationState,
+            StageNames.Separation,
+            stageWorkStartedUtc,
+            enhancementDegradations);
     }
 
     private static async Task<StageWorkflowResult> RunVadStageAsync(
@@ -1216,14 +1221,15 @@ public sealed class DubbingPipelineEngine(
         CancellationToken cancellationToken)
     {
         string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
-        await workspace.RunTranscriptStageAsync(
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
+        TranscriptProjectState vadState = await workspace.RunTranscriptStageAsync(
             StageNames.Vad,
             enableSpeakerDiarization: false,
             modelPreferences,
             cancellationToken,
             progress,
             sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-        return new StageWorkflowResult([], null);
+        return BuildStageWorkflowResultFromStageRun(vadState, StageNames.Vad, stageWorkStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunAsrStageAsync(
@@ -1244,24 +1250,26 @@ public sealed class DubbingPipelineEngine(
             IReadOnlyList<Guid> segmentIds = asrOpen.TranscriptSegments
                 .Select(static segment => segment.Id)
                 .ToArray();
+            DateTimeOffset retranscribeStartedUtc = DateTimeOffset.UtcNow;
             TranscriptProjectState retranscribed = await workspace.RetranscribeSegmentsAsync(
                 RuntimeModelSetupCoordinator.CreateRetranscribeRequest(
                     runtimeSelections,
                     asrOpen.CurrentTranscriptRevision.Id,
                     segmentIds),
                 cancellationToken).ConfigureAwait(false);
-            return BuildStageWorkflowResultFromStageRun(retranscribed, StageNames.Asr);
+            return BuildStageWorkflowResultFromStageRun(retranscribed, StageNames.Asr, retranscribeStartedUtc);
         }
 
         string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
-        await workspace.RunTranscriptStageAsync(
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
+        TranscriptProjectState asrState = await workspace.RunTranscriptStageAsync(
             StageNames.Asr,
             enableSpeakerDiarization: false,
             modelPreferences,
             cancellationToken,
             progress,
             sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-        return new StageWorkflowResult([], null);
+        return BuildStageWorkflowResultFromStageRun(asrState, StageNames.Asr, stageWorkStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunDiarizationStageAsync(
@@ -1280,21 +1288,36 @@ public sealed class DubbingPipelineEngine(
             // Interactive re-run: re-diarize and re-assign speaker ids on the
             // existing transcript segments, matching the desktop host's
             // "Identify speakers" semantics.
+            DateTimeOffset rediarizeStartedUtc = DateTimeOffset.UtcNow;
             TranscriptProjectState rediarized = await workspace.RerunDiarizationAsync(
                 RuntimeModelSetupCoordinator.CreateRerunDiarizationRequest(runtimeSelections),
                 cancellationToken).ConfigureAwait(false);
-            return BuildStageWorkflowResultFromStageRun(rediarized, StageNames.Diarization);
+            return BuildStageWorkflowResultFromStageRun(rediarized, StageNames.Diarization, rediarizeStartedUtc);
+        }
+
+        if (!options.EnableSpeakerDiarization)
+        {
+            // The single-stage diarization path records no run when the option is off
+            // (the generation stage only builds a default region plan, which is then
+            // discarded). Report the skip explicitly instead of running work whose
+            // outcome cannot be observed.
+            return new StageWorkflowResult(
+                [],
+                ["Speaker diarization is disabled for this run."],
+                StageStatus.Skipped,
+                StageSkipReasonCodes.DisabledByOption);
         }
 
         string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
-        await workspace.RunTranscriptStageAsync(
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
+        TranscriptProjectState diarizationState = await workspace.RunTranscriptStageAsync(
             StageNames.Diarization,
             enableSpeakerDiarization: options.EnableSpeakerDiarization,
             modelPreferences,
             cancellationToken,
             progress,
             sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-        return new StageWorkflowResult([], null);
+        return BuildStageWorkflowResultFromStageRun(diarizationState, StageNames.Diarization, stageWorkStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunAudioPreparationStageAsync(
@@ -1302,10 +1325,17 @@ public sealed class DubbingPipelineEngine(
         IProgress<PipelineProgressEvent>? progress,
         CancellationToken cancellationToken)
     {
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
         TranscriptProjectState audioPrepState = await workspace
             .RunSpeechAudioPreparationAsync(cancellationToken, progress)
             .ConfigureAwait(false);
-        return BuildStageWorkflowResultFromStageRun(audioPrepState, StageNames.AudioPreparation);
+        // A failed speech-enhancement pass inside preparation degrades the cleanup
+        // stage even when preparation itself completes on the unenhanced audio.
+        return BuildStageWorkflowResultFromStageRun(
+            audioPrepState,
+            StageNames.AudioPreparation,
+            stageWorkStartedUtc,
+            ExtractSpeechEnhancementDegradations(audioPrepState, stageWorkStartedUtc));
     }
 
     private static async Task<StageWorkflowResult> RunTextRefinementStageAsync(
@@ -1316,6 +1346,7 @@ public sealed class DubbingPipelineEngine(
         CancellationToken cancellationToken)
     {
         string? normalizedSourceLanguage = NormalizeAsrSourceLanguageCode(options.SourceLanguageCode);
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
         TranscriptProjectState refinementState = await workspace.RunTranscriptStageAsync(
             StageNames.TextRefinementAsr,
             enableSpeakerDiarization: options.EnableSpeakerDiarization,
@@ -1323,7 +1354,7 @@ public sealed class DubbingPipelineEngine(
             cancellationToken,
             progress,
             sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-        return BuildStageWorkflowResultFromStageRun(refinementState, StageNames.TextRefinementAsr);
+        return BuildStageWorkflowResultFromStageRun(refinementState, StageNames.TextRefinementAsr, stageWorkStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunOverlapRescueStageAsync(
@@ -1362,13 +1393,14 @@ public sealed class DubbingPipelineEngine(
                         update.CompletedRegions,
                         update.TotalRegions)));
 
+        DateTimeOffset rescueStartedUtc = DateTimeOffset.UtcNow;
         TranscriptProjectState rescueState = await workspace.RunOverlapRescueAsync(
             cancellationToken,
             rescueProgress,
             preferredModelAlias: runtimeSelections.OverlapRescueModelAlias,
             modelPreferences: modelPreferences,
             retranscribeCandidates: options.RetranscribeOverlapCandidates).ConfigureAwait(false);
-        return BuildStageWorkflowResultFromStageRun(rescueState, StageNames.OverlapRescue);
+        return BuildStageWorkflowResultFromStageRun(rescueState, StageNames.OverlapRescue, rescueStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunTranslationStageAsync(
@@ -1385,14 +1417,15 @@ public sealed class DubbingPipelineEngine(
         }
 
         string sourceLanguage = options.SourceLanguageCode ?? "auto";
-        await workspace.GenerateTranslationAsync(
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
+        TranscriptProjectState translatedState = await workspace.GenerateTranslationAsync(
             new GenerateTranslationRequest(
                 SourceLanguage: sourceLanguage,
                 TargetLanguage: options.TargetLanguageCode,
                 PreferredModelAlias: runtimeSelections.TranslationModelAlias),
             cancellationToken,
             progress).ConfigureAwait(false);
-        return new StageWorkflowResult([], null);
+        return BuildStageWorkflowResultFromStageRun(translatedState, StageNames.Translation, stageWorkStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunTtsStageAsync(
@@ -1454,11 +1487,12 @@ public sealed class DubbingPipelineEngine(
                 $"Auto-assigning a fallback voice to {ttsRequest.FallbackVoiceIdsBySpeakerId.Count} speaker(s) without a voice assignment (unattended run).");
         }
 
-        await workspace.GenerateTtsForAllSpeakersAsync(
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
+        TranscriptProjectState ttsResult = await workspace.GenerateTtsForAllSpeakersAsync(
             ttsRequest,
             cancellationToken,
             progress).ConfigureAwait(false);
-        return new StageWorkflowResult([], null);
+        return BuildStageWorkflowResultFromStageRun(ttsResult, StageNames.Tts, stageWorkStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunExportStageAsync(
@@ -1511,9 +1545,17 @@ public sealed class DubbingPipelineEngine(
             throw new InvalidOperationException(exportResult.BlockedReason ?? "Export blocked by tier gate.");
         }
 
+        (StageStatus exportStatus, string? exportReasonCode, IReadOnlyList<string>? exportDegradations) =
+            MapStageRunToSdkOutcome(exportResult.StageRun);
+        IReadOnlyList<string>? degradations = exportResult.Warnings is { Count: > 0 } warnings
+            ? (exportDegradations is { Count: > 0 } existing ? warnings.Concat(existing).ToArray() : warnings)
+            : exportDegradations;
+
         return new StageWorkflowResult(
             [exportResult.OutputPath, exportResult.ExportVideoRelativePath],
-            null);
+            degradations,
+            exportStatus,
+            exportReasonCode);
     }
 
     private static async Task<StageWorkflowResult> RunLipSyncStageAsync(
@@ -1527,11 +1569,12 @@ public sealed class DubbingPipelineEngine(
                 "Lip-sync workflow is not available in this session. Ensure CompositionRoot registered LipSyncWorkflow.");
         }
 
+        DateTimeOffset lipSyncStartedUtc = DateTimeOffset.UtcNow;
         TranscriptProjectState lipSyncState = await workspace.RunLipSyncAsync(
             new LipSyncAlignAllRequest(
                 PreferredModelAlias: runtimeSelections.LipSyncModelAlias),
             cancellationToken).ConfigureAwait(false);
-        return BuildStageWorkflowResultFromStageRun(lipSyncState, StageNames.LipSync);
+        return BuildStageWorkflowResultFromStageRun(lipSyncState, StageNames.LipSync, lipSyncStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunLipSynthesisStageAsync(
@@ -1552,21 +1595,37 @@ public sealed class DubbingPipelineEngine(
                 runtimeSelections.LipSynthesisModelAlias,
                 cancellationToken).ConfigureAwait(false);
 
+        DateTimeOffset lipSynthesisStartedUtc = DateTimeOffset.UtcNow;
         TranscriptProjectState lipSynthesisState = await workspace.RunLipSynthesisAsync(
             new LipSynthesisRunRequest(
                 IsLicenseApproved: isLicenseApproved,
                 AllowExperimentalExecution: allowExperimentalExecution,
                 PreferredModelAlias: runtimeSelections.LipSynthesisModelAlias),
             cancellationToken).ConfigureAwait(false);
-        return BuildStageWorkflowResultFromStageRun(lipSynthesisState, StageNames.LipSynthesis);
+        return BuildStageWorkflowResultFromStageRun(lipSynthesisState, StageNames.LipSynthesis, lipSynthesisStartedUtc);
     }
 
     private static StageWorkflowResult BuildStageWorkflowResultFromStageRun(
         TranscriptProjectState state,
-        string stageName)
+        string stageName,
+        DateTimeOffset notBeforeUtc,
+        IReadOnlyList<string>? additionalDegradations = null)
     {
         (StageStatus status, string? reasonCode, IReadOnlyList<string>? degradations) =
-            MapStageRunToSdkOutcome(GetLatestStageRun(state, stageName));
+            MapStageRunToSdkOutcome(GetLatestStageRun(state, stageName, notBeforeUtc));
+
+        if (additionalDegradations is { Count: > 0 })
+        {
+            degradations = degradations is { Count: > 0 }
+                ? additionalDegradations.Concat(degradations).ToArray()
+                : additionalDegradations;
+            // Degraded output from a nominally successful run is a partial success,
+            // not a clean one.
+            if (status == StageStatus.Succeeded)
+            {
+                status = StageStatus.PartiallySucceeded;
+            }
+        }
 
         return new StageWorkflowResult([], degradations, status, reasonCode);
     }
@@ -1578,9 +1637,19 @@ public sealed class DubbingPipelineEngine(
             StageStatus.Skipped,
             StageSkipReasonCodes.NoTranscriptSegments);
 
-    internal static StageRunRecord? GetLatestStageRun(TranscriptProjectState state, string stageName) =>
+    /// <summary>
+    /// Returns the most recent run for a stage. When <paramref name="notBeforeUtc"/> is
+    /// supplied, only runs started at or after that instant qualify — used to bind a
+    /// stage outcome to the run produced by the current invocation instead of
+    /// reporting a stale row left by an earlier run.
+    /// </summary>
+    internal static StageRunRecord? GetLatestStageRun(
+        TranscriptProjectState state,
+        string stageName,
+        DateTimeOffset? notBeforeUtc = null) =>
         state.StageRuns
-            .Where(r => string.Equals(r.StageName, stageName, StringComparison.OrdinalIgnoreCase))
+            .Where(r => string.Equals(r.StageName, stageName, StringComparison.OrdinalIgnoreCase)
+                && (notBeforeUtc is null || r.StartedAtUtc >= notBeforeUtc))
             .OrderByDescending(static r => r.StartedAtUtc)
             .FirstOrDefault();
 
@@ -1599,7 +1668,7 @@ public sealed class DubbingPipelineEngine(
                     stageRun.FailureReason ?? "STAGE_FAILED",
                     null),
             StageRunStatus.PartiallyCompleted =>
-                (StageStatus.Succeeded,
+                (StageStatus.PartiallySucceeded,
                     null,
                     stageRun.FailureReason is not null ? [stageRun.FailureReason] : null),
             StageRunStatus.Canceled =>
@@ -1624,14 +1693,16 @@ public sealed class DubbingPipelineEngine(
     // there (fallback to unenhanced audio). Surface the failure so callers can include it in
     // StageOutcome.DegradationRecords and progress events rather than silently discarding it.
     internal static IReadOnlyList<string>? ExtractSpeechEnhancementDegradations(
-        TranscriptProjectState state)
+        TranscriptProjectState state,
+        DateTimeOffset? notBeforeUtc = null)
     {
         // Order first so we evaluate the *most recent* speech-enhancement attempt.
         // Filtering to Failed before ordering would surface stale failures even when
         // a later run succeeded, producing a false degraded outcome after a successful rerun.
         StageRunRecord? latestRun = state.StageRuns
-            .Where(static r =>
-                string.Equals(r.StageName, StageNames.SpeechEnhancement, StringComparison.OrdinalIgnoreCase))
+            .Where(r =>
+                string.Equals(r.StageName, StageNames.SpeechEnhancement, StringComparison.OrdinalIgnoreCase)
+                && (notBeforeUtc is null || r.StartedAtUtc >= notBeforeUtc))
             .OrderByDescending(static r => r.StartedAtUtc)
             .FirstOrDefault();
 
@@ -1907,7 +1978,12 @@ public sealed class DubbingPipelineEngine(
                 .ConfigureAwait(false);
             if (provided is not null)
             {
-                return provided;
+                // Explicit per-stage aliases in options.ModelPreferences are caller
+                // intent (e.g. the Chatterbox pin ApplyVoiceCloningDefaults installs for
+                // clone runs) and take precedence over the host's UI-side selections,
+                // matching the precedence the settings path applies via
+                // CreateSelectionsFromSettings.
+                return ApplyModelPreferenceAliases(provided, BuildModelPreferences(options));
             }
         }
 
@@ -1921,6 +1997,34 @@ public sealed class DubbingPipelineEngine(
         return RuntimeModelRequestFactory.CreateSelectionsFromSettings(
             settings,
             BuildModelPreferences(options));
+    }
+
+    /// <summary>
+    /// Overlays non-null per-stage model aliases from explicit
+    /// <see cref="InferenceModelPreferences"/> onto a host-provided selection set.
+    /// Fields the request did not pin keep the host's selection.
+    /// </summary>
+    internal static RuntimeModelSelections ApplyModelPreferenceAliases(
+        RuntimeModelSelections selections,
+        InferenceModelPreferences? preferences)
+    {
+        if (preferences is null)
+        {
+            return selections;
+        }
+
+        return selections with
+        {
+            DiarizationModelAlias = preferences.DiarizationModelAlias ?? selections.DiarizationModelAlias,
+            SeparationModelAlias = preferences.SeparationModelAlias ?? selections.SeparationModelAlias,
+            OverlapRescueModelAlias = preferences.OverlapRescueModelAlias ?? selections.OverlapRescueModelAlias,
+            AsrModelAlias = preferences.AsrModelAlias ?? selections.AsrModelAlias,
+            TranslationModelAlias = preferences.TranslationModelAlias ?? selections.TranslationModelAlias,
+            TtsModelAlias = preferences.TtsModelAlias ?? selections.TtsModelAlias,
+            TextRefinementModelAlias = preferences.TextRefinementModelAlias ?? selections.TextRefinementModelAlias,
+            LipSyncModelAlias = preferences.LipSyncModelAlias ?? selections.LipSyncModelAlias,
+            LipSynthesisModelAlias = preferences.LipSynthesisModelAlias ?? selections.LipSynthesisModelAlias,
+        };
     }
 
     /// <summary>
@@ -2373,7 +2477,8 @@ public sealed class DubbingPipelineEngine(
         StageOutcome? lipSynthesisOutcome = outcomes.LastOrDefault(static outcome =>
             string.Equals(outcome.StageName, StageNames.LipSynthesis, StringComparison.OrdinalIgnoreCase));
 
-        return lipSynthesisOutcome?.Status == StageStatus.Succeeded;
+        return lipSynthesisOutcome?.Status
+            is StageStatus.Succeeded or StageStatus.PartiallySucceeded;
     }
 
     private static async Task<(bool IsLicenseApproved, bool AllowExperimentalExecution)>
@@ -2409,15 +2514,16 @@ public sealed class DubbingPipelineEngine(
         }
 
         bool anyFailed = outcomes.Any(o => o.Status == StageStatus.Failed);
-        bool anySucceeded = outcomes.Any(o => o.Status == StageStatus.Succeeded);
-        bool allSucceeded = outcomes.All(o => o.Status == StageStatus.Succeeded);
+        bool anySucceededOrPartial = outcomes.Any(o =>
+            o.Status is StageStatus.Succeeded or StageStatus.PartiallySucceeded);
+        bool allFullySucceeded = outcomes.All(o => o.Status == StageStatus.Succeeded);
 
-        if (allSucceeded)
+        if (allFullySucceeded)
         {
             return DubbingRunStatus.Succeeded;
         }
 
-        if (anyFailed && anySucceeded)
+        if (anyFailed && anySucceededOrPartial)
         {
             return DubbingRunStatus.PartialSuccess;
         }
@@ -2433,7 +2539,15 @@ public sealed class DubbingPipelineEngine(
 
         if (anyNonBenignSkip)
         {
-            return anySucceeded ? DubbingRunStatus.PartialSuccess : DubbingRunStatus.Failed;
+            return anySucceededOrPartial ? DubbingRunStatus.PartialSuccess : DubbingRunStatus.Failed;
+        }
+
+        // A stage that completed with degraded output makes the run a partial success:
+        // the artifacts exist, but the result is not what a clean run would produce.
+        bool anyPartial = outcomes.Any(o => o.Status == StageStatus.PartiallySucceeded);
+        if (anyPartial)
+        {
+            return DubbingRunStatus.PartialSuccess;
         }
 
         return DubbingRunStatus.Succeeded;
