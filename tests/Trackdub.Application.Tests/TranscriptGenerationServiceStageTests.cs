@@ -163,7 +163,6 @@ Remove both tests and replace with:
             stageRunStore.All,
             run => string.Equals(run.StageName, StageNames.TextRefinementAsr, StringComparison.OrdinalIgnoreCase));
     }
-
     [Fact]
     public async Task GenerateTranscriptStageAsync_asr_runs_polish_stage_when_enabled()
     {
