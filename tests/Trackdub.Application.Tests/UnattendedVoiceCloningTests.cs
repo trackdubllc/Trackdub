@@ -112,7 +112,6 @@ public sealed class UnattendedVoiceCloningTests
     }
 
     [Fact]
-    [Fact]
     public void BuildModelPreferences_WhenTtsKeyIsCaseSensitive_RuntimeSelectionRetainsAlias()
     {
         var options = new DubbingSessionOptions

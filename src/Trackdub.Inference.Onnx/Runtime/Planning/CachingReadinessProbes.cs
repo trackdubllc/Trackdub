@@ -97,8 +97,7 @@ public abstract class CachingReadinessProbe<TReport> : IReadinessProbeCache
         // OperationCanceledException without cancelling the underlying probe or other callers.
         return started.WaitAsync(cancellationToken);
     }
-
-    /// <summary>
+}
 
 /// <summary>Caching decorator for <see cref="ITensorRtRtxReadinessProbe"/>.</summary>
 public sealed class CachingTensorRtRtxReadinessProbe(ITensorRtRtxReadinessProbe inner)
