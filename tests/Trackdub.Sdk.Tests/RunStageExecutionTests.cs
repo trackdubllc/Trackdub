@@ -312,7 +312,7 @@ public sealed class RunStageExecutionTests : IDisposable
         StageOutcome outcome = Assert.Single(result.StageOutcomes);
         Assert.Equal(StageNames.AudioPreparation, outcome.StageName);
         // Stage executes through FFmpeg fallback; does not skip with OPTIONAL_MODEL_DECLINED.
-        Assert.NotEqual(StageStatus.Skipped, outcome.Status);
+        Assert.Equal(StageStatus.PartiallySucceeded, outcome.Status);
         Assert.NotEqual(StageSkipReasonCodes.OptionalModelDeclined, outcome.ReasonCode);
     }
 

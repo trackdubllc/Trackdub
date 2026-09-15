@@ -1171,6 +1171,7 @@ public sealed class StageArtifactResumeEvaluatorTests
         {
             ["SourceMediaPath"] = Path.Join(
                 mediaDir,
+                ".",
                 Path.GetFileName(sourceMediaFileName))
         };
 
