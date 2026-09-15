@@ -1069,7 +1069,11 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                         ApplyTimbrePolish: options.ApplyTimbrePolish,
                         RestoreOriginalPan: options.RestoreOriginalPan,
                         MatchOriginalLoudness: options.MatchOriginalLoudness,
-                        VideoEncoder: options.VideoEncoder),
+                        VideoEncoder: options.VideoEncoder,
+                        // Carry the raw requested formats (including the null/empty distinction)
+                        // so the export-resume gate persists and compares the same token the
+                        // snapshot records, instead of the transcript-state-resolved formats.
+                        RawSubtitleFormats: options.SubtitleFormats),
                     cancellationToken).ConfigureAwait(false);
                 if (exportResult.IsBlocked)
                 {
@@ -1630,7 +1634,7 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
     /// <summary>
     /// Captures an immutable snapshot of provider/model/voice decisions at run start.
     /// </summary>
-    private static Dictionary<string, string> CaptureExecutionSnapshot(DubbingSessionOptions options)
+    internal static Dictionary<string, string> CaptureExecutionSnapshot(DubbingSessionOptions options)
     {
         var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -1639,8 +1643,25 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
             ["ForceRerun"] = options.ForceRerun.ToString(),
             ["EnableAsrTextRefinement"] = options.EnableAsrTextRefinement.ToString(),
             ["UseVoiceCloning"] = options.UseVoiceCloning.ToString(),
-            ["ExportFormat"] = ExportContainerKey(ResolveExportContainer(options.ExportFormat)),
         };
+
+        // Audio/subtitle/encoder flags (and the pre-existing ExportFormat) gate the Export
+        // stage's artifact resume: any change here must invalidate a cached export so it reruns
+        // without requiring --force-rerun. These values are produced by ExportResumeGating so
+        // capture (here) and comparison (the persisted ExportManifest, read back by
+        // StageArtifactResumeEvaluator) share one normalization and cannot drift.
+        foreach ((string key, string value) in ExportResumeGating.Build(
+            ResolveExportContainer(options.ExportFormat),
+            options.ApplyTimbrePolish,
+            options.RestoreOriginalPan,
+            options.MatchOriginalLoudness,
+            options.BurnInSubtitles,
+            ResolveSubtitleSource(options.SubtitleSource),
+            ExportResumeGating.SubtitleFormatsTokenFromRawOptions(options.SubtitleFormats),
+            options.VideoEncoder))
+        {
+            snapshot[key] = value;
+        }
 
         if (options.SourceLanguageCode is not null)
         {
@@ -1683,9 +1704,6 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
         string extension = container == ExportOutputContainer.Mkv ? ".mkv" : ".mp4";
         return Path.Combine(projectRootPath, "exports", "dubbed" + extension);
     }
-
-    private static string ExportContainerKey(ExportOutputContainer container) =>
-        container == ExportOutputContainer.Mkv ? "mkv" : "mp4";
 
     private static IReadOnlyList<ExportSubtitleFormat> ResolveSubtitleFormats(
         IReadOnlyList<string>? formats, bool hasTranscriptSegments)
@@ -1781,14 +1799,15 @@ public sealed class DubbingPipelineEngine : IDubbingPipelineEngine, ITransientFa
                 ResolveExportContainer(options.ExportFormat)))
             : null;
 
-        return StageArtifactResumeEvaluator.CanResumeStage(
+        return await StageArtifactResumeEvaluator.CanResumeStageAsync(
             state,
             artifactStore,
             stageName,
             currentSnapshot,
             session.ProjectRootPath,
             options.TargetLanguageCode,
-            exportRelativePath);
+            exportRelativePath,
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
