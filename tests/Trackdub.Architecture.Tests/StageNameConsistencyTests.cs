@@ -69,7 +69,7 @@ public sealed class StageNameConsistencyTests
                 int lineNumber = GetLineNumber(source, candidate.Index);
                 string trimmed = GetLineText(source, lineNumber).TrimStart();
                 if (trimmed.StartsWith("//", StringComparison.Ordinal) ||
-                    trimmed.StartsWith("*", StringComparison.Ordinal))
+                    trimmed.StartsWith('*'))
                 {
                     continue;
                 }

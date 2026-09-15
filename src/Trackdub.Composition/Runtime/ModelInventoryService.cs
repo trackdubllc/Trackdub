@@ -525,7 +525,7 @@ public sealed class ModelInventoryService(
     {
         string normalized = path.Replace('\\', '/');
         return Path.IsPathRooted(path) ||
-            normalized.StartsWith("/", StringComparison.Ordinal) ||
+            normalized.StartsWith('/') ||
             (normalized.Length >= 2 && char.IsLetter(normalized[0]) && normalized[1] == ':');
     }
 
