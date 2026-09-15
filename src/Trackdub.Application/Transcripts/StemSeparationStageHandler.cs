@@ -465,7 +465,6 @@ public sealed class StemSeparationStageHandler(
             (model.Equals("demucs-v4", StringComparison.OrdinalIgnoreCase) ||
                 model.Equals("htdemucs", StringComparison.OrdinalIgnoreCase) ||
                 model.Equals("demucs", StringComparison.OrdinalIgnoreCase))));
-
 }
 
 public sealed record StemSeparationStageRequest(

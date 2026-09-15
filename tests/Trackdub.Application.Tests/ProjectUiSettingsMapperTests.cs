@@ -109,5 +109,4 @@ public sealed class ProjectUiSettingsMapperTests
 
         Assert.True(read.EnableAsrTextRefinement);
     }
-
 }

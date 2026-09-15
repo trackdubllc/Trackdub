@@ -39,7 +39,6 @@ public sealed class RuntimePlannerTests
         Assert.Equal("balanced", plan.ModelTier);
         Assert.Equal("fp16", plan.Variant);
         Assert.Null(plan.Fallback);
-
     }
 
     [Fact]

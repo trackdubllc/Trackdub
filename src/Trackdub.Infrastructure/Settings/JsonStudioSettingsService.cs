@@ -557,5 +557,4 @@ public sealed class JsonStudioSettingsService(
             JsonSerializerOptions options) =>
             writer.WriteStringValue(WindowsMlExecutionDevicePolicySettings.ToKey(value));
     }
-
 }

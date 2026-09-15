@@ -148,7 +148,6 @@ public sealed class FfmpegMuxer : IExportRenderer
             FfmpegMuxCommandBuilder.BuildArguments(plan, encodeProfile),
             cancellationToken,
             new ProcessRunOptions(Timeout: ExportMuxTimeout));
-
 }
 
 internal static class FfmpegMuxCommandBuilder
@@ -297,5 +296,4 @@ internal static class FfmpegMuxCommandBuilder
             .Replace(";", @"\;", StringComparison.Ordinal)
             .Replace("[", @"\[", StringComparison.Ordinal)
             .Replace("]", @"\]", StringComparison.Ordinal);
-
 }

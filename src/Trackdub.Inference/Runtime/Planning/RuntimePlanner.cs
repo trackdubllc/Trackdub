@@ -429,7 +429,6 @@ public sealed class RuntimePlanner : IRuntimePlanner
 
         return filtered;
     }
-
 }
 
 /// <summary>

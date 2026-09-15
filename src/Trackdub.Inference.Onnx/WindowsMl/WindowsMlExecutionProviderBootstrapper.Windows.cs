@@ -87,5 +87,4 @@ public sealed class WindowsMlExecutionProviderBootstrapper
             "Microsoft.Windows.AI.MachineLearning.Projection.dll was not deployed next to the application. Rebuild or reinstall Trackdub so WinML managed assets are copied to the output directory.";
         return false;
     }
-
 }

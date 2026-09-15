@@ -2589,7 +2589,6 @@ public sealed class LocalModelCacheRecordStoreTests
             }
         }
     }
-
 }
 
 public sealed class LocalModelCacheRecordLookupTests

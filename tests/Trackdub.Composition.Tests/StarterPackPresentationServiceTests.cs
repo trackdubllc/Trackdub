@@ -76,5 +76,4 @@ public sealed class StarterPackPresentationServiceTests
                     ["openai"],
                     "Configure OpenAI API keys in Cloud Models before applying this pack."));
     }
-
 }
