@@ -232,9 +232,9 @@ public sealed class RunStageExecutionTests : IDisposable
         // Regression: a user-declined optional model used to re-block on the
         // post-provisioning readiness pass and surface as PreFlightFailed.
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         using TrackdubSessionFactory factory = CreateFactory(services =>

@@ -13,6 +13,9 @@ public enum StageStatus
 
     /// <summary>The stage failed with an unrecoverable error.</summary>
     Failed,
+
+    /// <summary>The stage completed but produced partial or degraded output.</summary>
+    PartiallySucceeded,
 }
 
 /// <summary>

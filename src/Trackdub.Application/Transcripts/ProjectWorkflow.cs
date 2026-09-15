@@ -18,7 +18,8 @@ public sealed class ProjectWorkflow(
     SpeechAudioPreparationStageHandler? speechAudioPreparationStageHandler = null,
     PipelineDegradationWriter? degradationWriter = null,
     SpeechAudioEnhancementStageHandler? speechAudioEnhancementStageHandler = null,
-    OverlapRescueWorkflow? overlapRescueWorkflow = null)
+    OverlapRescueWorkflow? overlapRescueWorkflow = null,
+    IProjectStageRunStore? stageRunStore = null)
 {
     private const string DialogueIsolationUnavailableCode = "DIALOGUE_ISOLATION_UNAVAILABLE";
     private const string DialogueIsolationUnavailableMessage =
@@ -29,6 +30,7 @@ public sealed class ProjectWorkflow(
     private readonly TranscriptGenerationService transcriptGenerationService = transcriptGenerationService ?? throw new ArgumentNullException(nameof(transcriptGenerationService));
     private readonly SpeechAudioEnhancementStageHandler? speechAudioEnhancementStageHandler = speechAudioEnhancementStageHandler;
     private readonly OverlapRescueWorkflow? overlapRescueWorkflow = overlapRescueWorkflow;
+    private readonly IProjectStageRunStore? stageRunStore = stageRunStore;
 
     public async Task<TranscriptProjectState> CreateAsync(
         CreateTranscriptProjectRequest request,
@@ -355,16 +357,50 @@ public sealed class ProjectWorkflow(
 
         ProjectArtifact? vocalStem = TranscriptWorkflowUtilities.GetLatestAcceptedVocalStem(artifacts);
         PipelineProgressReporter.Phase(progress, StageNames.SpeechEnhancement, "Processing speech audio", "Running speech audio preparation.");
+
+        // Dedicated stage entry point: callers invoke this only when the engine's resume
+        // gate declined prior artifacts or the run was explicitly forced, so existing
+        // processed output must not be silently reused here.
+        DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
         await TryPrepareSpeechAudioAsync(
             currentState.ProjectState.Project.Id,
             mediaAsset,
             normalizedAudio,
             vocalStem,
             artifacts,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            allowExistingReuse: false).ConfigureAwait(false);
+
+        TranscriptProjectState refreshed = await stateService
+            .RefreshArtifactsAndStageRunsAsync(currentState, cancellationToken)
+            .ConfigureAwait(false);
+
+        // The fallback path (preparation handler unavailable) records no AudioPreparation
+        // run of its own; persist a partial marker so the stage outcome reflects what
+        // happened instead of surfacing a stale earlier run.
+        bool recordedPreparationRun = refreshed.StageRuns.Any(run =>
+            string.Equals(run.StageName, StageNames.AudioPreparation, StringComparison.OrdinalIgnoreCase) &&
+            run.StartedAtUtc >= stageWorkStartedUtc);
+        if (!recordedPreparationRun && stageRunStore is not null)
+        {
+            StageRunRecord fallbackRun = await StageRunHelper
+                .StartAsync(stageRunStore, currentState.ProjectState.Project.Id, StageNames.AudioPreparation, cancellationToken)
+                .ConfigureAwait(false);
+            await StageRunHelper
+                .PartiallyCompleteAsync(
+                    stageRunStore,
+                    fallbackRun,
+                    runtimeReporter: null,
+                    "Speech audio preparation was unavailable; continuing with available source audio.",
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            refreshed = await stateService
+                .RefreshArtifactsAndStageRunsAsync(refreshed, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         PipelineProgressReporter.Completed(progress, StageNames.SpeechEnhancement, TimeSpan.Zero, "Speech audio cleanup finished.");
-        return await stateService.RefreshArtifactsAndStageRunsAsync(currentState, cancellationToken).ConfigureAwait(false);
+        return refreshed;
     }
 
     public async Task<TranscriptProjectState> RunOverlapRescueAsync(
@@ -552,7 +588,8 @@ public sealed class ProjectWorkflow(
         ProjectArtifact normalizedAudioArtifact,
         ProjectArtifact? vocalStemArtifact,
         IReadOnlyList<ProjectArtifact> existingArtifacts,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowExistingReuse = true)
     {
         ProjectArtifact selectedSource = vocalStemArtifact ?? normalizedAudioArtifact;
         SpeechAudioSourceKind sourceKind = vocalStemArtifact is null
@@ -560,10 +597,13 @@ public sealed class ProjectWorkflow(
             : SpeechAudioSourceKind.VocalStem;
 
         // If speech processed audio already exists, skip both enhancement and preparation.
-        ProjectArtifact? existingProcessed = existingArtifacts
-            .Where(a => a.Kind == ArtifactKind.SpeechProcessedAudio)
-            .OrderByDescending(a => a.CreatedAtUtc)
-            .FirstOrDefault();
+        // Reuse is suppressed when the caller requires fresh evidence of the stage's work.
+        ProjectArtifact? existingProcessed = allowExistingReuse
+            ? existingArtifacts
+                .Where(a => a.Kind == ArtifactKind.SpeechProcessedAudio)
+                .OrderByDescending(a => a.CreatedAtUtc)
+                .FirstOrDefault()
+            : null;
         if (existingProcessed is not null)
         {
             return TranscriptAudioRoutingPlan.Raw(existingProcessed, sourceKind);
@@ -571,12 +611,14 @@ public sealed class ProjectWorkflow(
 
         SpeechAudioEnhancementStageResult? enhancementResult = null;
 
-        // Skip enhancement if a SpeechEnhancedAudio artifact already exists for this project.
+        // A SpeechEnhancedAudio artifact from an earlier run stays eligible as the
+        // preparation input either way; when reuse is suppressed it must not also
+        // suppress a fresh enhancement pass.
         ProjectArtifact? existingEnhanced = existingArtifacts
             .Where(a => a.Kind == ArtifactKind.SpeechEnhancedAudio)
             .OrderByDescending(a => a.CreatedAtUtc)
             .FirstOrDefault();
-        if (speechAudioEnhancementStageHandler is not null && existingEnhanced is null)
+        if (speechAudioEnhancementStageHandler is not null && (existingEnhanced is null || !allowExistingReuse))
         {
             try
             {

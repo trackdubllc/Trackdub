@@ -287,6 +287,26 @@ public sealed class TranslationOrchestrationServiceTests
         Assert.Equal("en", manifest?.TranscriptLanguage);
     }
 
+    [Fact]
+    public async Task GenerateTranslationAsync_WhenArtifactPersistFails_MarksStageFailedNotCompleted()
+    {
+        TranslationHarness harness = CreateTranslationHarness(
+            transcriptLanguage: "en",
+            segmentDetectedLanguage: "en");
+        // The fresh repository starts empty, so the new revision lands at
+        // artifacts/translation/es/translation-revision-0001.json.
+        harness.ArtifactStore.FailingJsonWriteFileName = "translation-revision-0001.json";
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            harness.Service.GenerateTranslationAsync(
+                harness.State,
+                new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "es"),
+                TestContext.Current.CancellationToken));
+
+        StageRunRecord stageRun = Assert.Single(harness.StageRunStore.All);
+        Assert.Equal(StageRunStatus.Failed, stageRun.Status);
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
