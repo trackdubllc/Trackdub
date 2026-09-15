@@ -703,21 +703,8 @@ public sealed class DubbingPipelineEngine(
             // and merge those declined stages so pre-flight carries them forward correctly.
             bool lipSynthesisInRun = report.Stages.Any(static stage =>
                 string.Equals(stage.StageName, StageNames.LipSynthesis, StringComparison.OrdinalIgnoreCase));
-
-            if (lipSynthesisInRun && session.Workspace.RuntimeModels is not null && result.IsReady)
-            {
-                RuntimeModelSetupResult companionResult = await RuntimeModelSetupWorkflow
-                    .EnsureManifestCompanionModelsAvailableAsync(
-                        session.Workspace.RuntimeModels,
-                        LipSynthesisModelRequirements.CompanionManifestAliases,
-                        RuntimeStage.LipSynthesis,
-                        setupCallbacks,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-                result = result.SkippedStages.Count > 0
-                    ? companionResult with { SkippedStages = result.SkippedStages.Concat(companionResult.SkippedStages).Distinct().ToArray() }
-                    : companionResult;
+            // Companion provisioning is now handled within RuntimeModelSetupCoordinator
+            // which merges skipped stages automatically
             }
 
             RuntimeModelSetupResult provisionResult = result;
