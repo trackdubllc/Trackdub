@@ -701,7 +701,7 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
-    public void ResolveEffectiveProviderKindFromSession_returns_options_provider_when_catalog_policy_not_used()
+    public void ResolveEffectiveProviderKindFromSession_returns_options_provider_when_probe_not_needed()
     {
         using InferenceSession session = CreateMinimalSession();
         MethodInfo method = typeof(OnnxExecutionSessionFactory)
@@ -710,8 +710,81 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object? raw = method.Invoke(
             null,
-            [session, ExecutionProviderKind.DirectMl, false]);
-        Assert.Equal(ExecutionProviderKind.DirectMl, Assert.IsType<ExecutionProviderKind>(raw));
+            [session, ExecutionProviderKind.Cpu, false]);
+        Assert.Equal(ExecutionProviderKind.Cpu, Assert.IsType<ExecutionProviderKind>(raw));
+    }
+
+    [Fact]
+    public void ResolveEffectiveProviderKindFromSession_probes_gpu_providers_even_without_catalog_policy()
+    {
+        using InferenceSession session = CreateMinimalSession();
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("ResolveEffectiveProviderKindFromSession", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate effective provider resolver.");
+
+        object? raw = method.Invoke(
+            null,
+            [session, ExecutionProviderKind.TensorRTRtx, false]);
+        Assert.Equal(ExecutionProviderKind.Cpu, Assert.IsType<ExecutionProviderKind>(raw));
+    }
+
+    [Theory]
+    [InlineData("Kernel not found for op: Squeeze", true)]
+    [InlineData("ModelImporter failed to import graph", true)]
+    [InlineData("No graph will run on TensorRT-RTX", true)]
+    [InlineData("NvTensorRTRTXExecutionProvider registration failed", true)]
+    [InlineData("unrelated IO error", false)]
+    public void LooksLikeTrtSessionInitFailure_detects_known_trt_messages(string message, bool expected)
+    {
+        var exception = new InvalidOperationException(message);
+        Assert.Equal(expected, OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure(exception));
+    }
+
+    [Fact]
+    public void CreateInferenceSessionWithTrtInitFallback_retries_cpu_when_trt_init_fails()
+    {
+        var trtOptions = new SessionOptions();
+        var initialSelection = new OnnxExecutionSessionFactory.SessionOptionsSelection(
+            trtOptions,
+            ExecutionProviderKind.TensorRTRtx);
+
+        int createAttempts = 0;
+        (InferenceSession session, OnnxExecutionSessionFactory.SessionOptionsSelection selection) =
+            OnnxExecutionSessionFactory.CreateInferenceSessionWithTrtInitFallback(
+                "fake-model.onnx",
+                initialSelection,
+                WindowsMlExecutionDevicePolicy.Explicit,
+                additionalTrtOptions: null,
+                sessionFactory: (_, _) =>
+                {
+                    createAttempts++;
+                    if (createAttempts == 1)
+                    {
+                        throw new InvalidOperationException(
+                            "Kernel not found for op: Squeeze(13) under NvTensorRTRTXExecutionProvider");
+                    }
+
+                    return CreateMinimalSession();
+                },
+                CancellationToken.None);
+
+        try
+        {
+            // Windows tries DirectML then CPU; Linux goes straight to CPU. Fake factory succeeds on
+            // the first non-TRT attempt, so createAttempts is 2 either way.
+            Assert.Equal(2, createAttempts);
+            Assert.Equal(
+                OperatingSystem.IsWindows() ? ExecutionProviderKind.DirectMl : ExecutionProviderKind.Cpu,
+                selection.SelectedProvider);
+            Assert.NotNull(selection.FallbackReason);
+            Assert.Contains("TensorRT RTX session init failed", selection.FallbackReason, StringComparison.Ordinal);
+            Assert.Contains("fell back to", selection.FallbackReason, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            session.Dispose();
+            selection.Options.Dispose();
+        }
     }
 
     [Fact]

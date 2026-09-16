@@ -1663,6 +1663,97 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
+    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForChatterbox_PlansDirectMlWithoutTrtSmoke()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = LoadBundledRegistry();
+
+        string cacheRoot = workspace.CreateCacheRoot("ResembleAI/chatterbox-turbo-ONNX");
+        WriteBundledCacheFiles(workspace, registry, VoiceCloningDefaults.ChatterboxPrimaryAlias, cacheRoot, "q4f16");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [CreateCacheRecord(registry, "ResembleAI/chatterbox-turbo-ONNX", cacheRoot)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true),
+                new(ExecutionProviderKind.Cpu, true)
+            ],
+            request =>
+            {
+                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
+                {
+                    throw new InvalidOperationException("TensorRT families must not be smoked for chatterbox.");
+                }
+
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Tts,
+            PreferredModelAlias: VoiceCloningDefaults.ChatterboxPrimaryAlias,
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal("chatterbox", plan.EngineFamily);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal)
+                && warning.Detail.Contains("chatterbox", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PlanAsync_SoftPreferTensorRTRtxForChatterbox_SkipsTrtAndUsesDirectMl()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = LoadBundledRegistry();
+
+        string cacheRoot = workspace.CreateCacheRoot("ResembleAI/chatterbox-turbo-ONNX");
+        WriteBundledCacheFiles(workspace, registry, VoiceCloningDefaults.ChatterboxPrimaryAlias, cacheRoot, "q4f16");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [CreateCacheRecord(registry, "ResembleAI/chatterbox-turbo-ONNX", cacheRoot)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true),
+                new(ExecutionProviderKind.Cpu, true)
+            ],
+            request =>
+            {
+                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
+                {
+                    throw new InvalidOperationException("TensorRT families must not be smoked for chatterbox.");
+                }
+
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Tts,
+            PreferredModelAlias: VoiceCloningDefaults.ChatterboxPrimaryAlias,
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: false));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal("chatterbox", plan.EngineFamily);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task PlanAsync_CurrentBundledVoiceCloningCommercialSafeMode_AllowsChatterboxWithConsentWarning()
     {
         BundledModelManifestRegistry registry = LoadBundledRegistry();

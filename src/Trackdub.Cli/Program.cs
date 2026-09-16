@@ -88,14 +88,25 @@ internal static class Program
 
         var executionProviderOption = new Option<string>("--execution-provider")
         {
-            Description = "Preferred ONNX Runtime execution provider pin ("
+            Description = "Preferred ONNX Runtime execution provider ("
                 + ExecutionProviderTokens.FormatSupportedCliTags()
-                + "). Auto lets the runtime planner choose. On Windows, use trt-rtx for NVIDIA TensorRT RTX "
-                + "(cuda is accepted as a compatibility alias for trt-rtx).",
+                + "). Soft prefer: the planner tries this EP first, then falls through when the "
+                + "engine family forbids it or smoke/session init fails. Auto lets the runtime "
+                + "planner choose. On Windows, use trt-rtx for NVIDIA TensorRT RTX "
+                + "(cuda is accepted as a compatibility alias for trt-rtx). "
+                + "Pass --require-execution-provider to hard-pin instead of soft-prefer.",
             Recursive = true,
             DefaultValueFactory = _ => "auto"
         };
         executionProviderOption.AcceptOnlyFromAmong(ExecutionProviderTokens.CliAcceptedTokens.ToArray());
+
+        var requireExecutionProviderOption = new Option<bool>("--require-execution-provider")
+        {
+            Description = "Require the --execution-provider Kind pin when the stage allow-list includes it. "
+                + "Without this flag, Kind pins are soft preferences and may fall through to DirectML/CPU.",
+            Recursive = true,
+            DefaultValueFactory = _ => false
+        };
 
         var devicePolicyOption = new Option<string>("--device-policy")
         {
@@ -116,6 +127,7 @@ internal static class Program
         rootCommand.Add(progressOption);
         rootCommand.Add(skipPreflightOption);
         rootCommand.Add(executionProviderOption);
+        rootCommand.Add(requireExecutionProviderOption);
         rootCommand.Add(devicePolicyOption);
 
         // Subcommands

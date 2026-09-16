@@ -59,28 +59,46 @@ public sealed class TrackdubBuilder
     /// <summary>
     /// Sets the preferred execution provider for inference using the legacy four-value enum.
     /// On Windows, <see cref="ExecutionProviderPreference.Cuda"/> maps to TensorRT RTX.
+    /// Soft prefer: the planner may fall through to another allowed EP when the preferred
+    /// provider is unavailable or fails smoke/session init.
     /// </summary>
     /// <param name="preference">The execution provider preference.</param>
     /// <returns>This builder instance for fluent chaining.</returns>
     public TrackdubBuilder WithExecutionProvider(ExecutionProviderPreference preference)
     {
         _preferredExecutionProvider = ExecutionProviderPreferenceMapping.ToPreferredKind(preference);
-        // Legacy preference stays soft so the planner can fall back when the preferred
-        // provider is unavailable. Explicit Kind pins use the overload below.
         _requirePreferredExecutionProvider = false;
         return this;
     }
 
     /// <summary>
-    /// Pins inference to a specific <see cref="ExecutionProviderKind"/> (required when the stage allows it).
-    /// Pass nothing / use <see cref="WithExecutionProvider(ExecutionProviderPreference)"/> with Auto for planner choice.
+    /// Prefers a specific <see cref="ExecutionProviderKind"/> without requiring it.
+    /// The planner tries this EP first among stage/engine allow-lists, then falls through
+    /// (for example TensorRT RTX → DirectML → CPU) when the preferred EP is forbidden for
+    /// the engine family or fails smoke/session init.
+    /// Pass nothing / use Auto for unconstrained planner choice.
+    /// Use <see cref="WithExecutionProvider(ExecutionProviderKind, bool)"/> with
+    /// <c>require: true</c> (or CLI <c>--require-execution-provider</c>) for a hard pin.
     /// </summary>
-    /// <param name="provider">The execution provider kind to pin.</param>
+    /// <param name="provider">The execution provider kind to prefer.</param>
     /// <returns>This builder instance for fluent chaining.</returns>
-    public TrackdubBuilder WithExecutionProvider(ExecutionProviderKind provider)
+    public TrackdubBuilder WithExecutionProvider(ExecutionProviderKind provider) =>
+        WithExecutionProvider(provider, require: false);
+
+    /// <summary>
+    /// Sets the preferred execution provider kind, optionally requiring it when the stage
+    /// allow-list includes that provider.
+    /// </summary>
+    /// <param name="provider">The execution provider kind to prefer or require.</param>
+    /// <param name="require">
+    /// When <see langword="true"/>, stages that allow this provider collapse to it only and
+    /// block on smoke/init failure. When <see langword="false"/>, prefer then fall through.
+    /// </param>
+    /// <returns>This builder instance for fluent chaining.</returns>
+    public TrackdubBuilder WithExecutionProvider(ExecutionProviderKind provider, bool require)
     {
         _preferredExecutionProvider = provider;
-        _requirePreferredExecutionProvider = true;
+        _requirePreferredExecutionProvider = require;
         return this;
     }
 

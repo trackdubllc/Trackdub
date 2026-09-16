@@ -40,7 +40,7 @@ public sealed class TrackdubExecutionProviderOptionsTests
     [InlineData("openvino-catalog", ExecutionProviderKind.OpenVinoCatalog)]
     [InlineData("coreml", ExecutionProviderKind.CoreMl)]
     [InlineData("dnnl", ExecutionProviderKind.Dnnl)]
-    public async Task TryBuildFactory_VendorTags_MapToHardwareOverrides(string token, ExecutionProviderKind expected)
+    public async Task TryBuildFactory_VendorTags_MapToHardwareOverridesAsSoftPrefer(string token, ExecutionProviderKind expected)
     {
         using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
             modelDirectory: null,
@@ -52,13 +52,74 @@ public sealed class TrackdubExecutionProviderOptionsTests
         IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
         StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
 
-        Assert.True(settings.RequirePreferredExecutionProviders);
+        Assert.False(settings.RequirePreferredExecutionProviders);
         Assert.NotEmpty(settings.HardwareOverrides!);
         Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expected, v));
     }
 
     [Fact]
-    public async Task TryBuildFactory_TensorRtTag_MapsToPlatformPin()
+    public async Task TryBuildFactory_RequireExecutionProvider_HardPinsKind()
+    {
+        using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
+            modelDirectory: null,
+            executionProvider: "trt-rtx",
+            devicePolicy: null,
+            out int exitCode,
+            requireExecutionProvider: true)!;
+
+        Assert.Equal(Program.ExitSuccess, exitCode);
+        IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
+        StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
+
+        Assert.True(settings.RequirePreferredExecutionProviders);
+        Assert.NotEmpty(settings.HardwareOverrides!);
+        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.TensorRTRtx, v));
+    }
+
+    [Fact]
+    public void TryBuildFactory_RequireWithoutKindPin_ReturnsArgumentError()
+    {
+        TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(
+            modelDirectory: null,
+            executionProvider: "auto",
+            devicePolicy: null,
+            out int exitCode,
+            requireExecutionProvider: true);
+
+        Assert.Null(factory);
+        Assert.Equal(Program.ExitArgumentError, exitCode);
+    }
+
+    [Fact]
+    public async Task Build_WithExecutionProviderKind_DefaultsToSoftPrefer()
+    {
+        using TrackdubSessionFactory factory = new TrackdubBuilder()
+            .WithExecutionProvider(ExecutionProviderKind.TensorRTRtx)
+            .Build();
+
+        IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
+        StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
+
+        Assert.False(settings.RequirePreferredExecutionProviders);
+        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.TensorRTRtx, v));
+    }
+
+    [Fact]
+    public async Task Build_WithExecutionProviderKindRequireTrue_HardPins()
+    {
+        using TrackdubSessionFactory factory = new TrackdubBuilder()
+            .WithExecutionProvider(ExecutionProviderKind.DirectMl, require: true)
+            .Build();
+
+        IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
+        StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
+
+        Assert.True(settings.RequirePreferredExecutionProviders);
+        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.DirectMl, v));
+    }
+
+    [Fact]
+    public async Task TryBuildFactory_TensorRtTag_MapsToPlatformSoftPrefer()
     {
         using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
             modelDirectory: null,
@@ -73,9 +134,30 @@ public sealed class TrackdubExecutionProviderOptionsTests
         ExecutionProviderKind expected = OperatingSystem.IsWindows()
             ? ExecutionProviderKind.TensorRTRtx
             : ExecutionProviderKind.TensorRt;
-        Assert.True(settings.RequirePreferredExecutionProviders);
+        Assert.False(settings.RequirePreferredExecutionProviders);
         Assert.NotEmpty(settings.HardwareOverrides!);
         Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expected, v));
+    }
+
+    [Fact]
+    public async Task Cli_RequireExecutionProviderOption_ThreadsThroughToStudioSettings()
+    {
+        RootCommand rootCommand = Program.BuildRootCommand(isSetupInteractive: () => false);
+        ParseResult parseResult = rootCommand.Parse(
+            ["config", "show", "--execution-provider", "trt-rtx", "--require-execution-provider"]);
+
+        TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(parseResult, out int exitCode);
+        Assert.Equal(Program.ExitSuccess, exitCode);
+        Assert.NotNull(factory);
+
+        using (factory)
+        {
+            IStudioSettingsService settingsService = factory!.GetRequiredService<IStudioSettingsService>();
+            StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
+
+            Assert.True(settings.RequirePreferredExecutionProviders);
+            Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.TensorRTRtx, v));
+        }
     }
 
     [Fact]

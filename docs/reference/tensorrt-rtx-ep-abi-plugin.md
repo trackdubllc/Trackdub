@@ -137,6 +137,32 @@ Keep these states separate:
 
 Provider registration alone is not model readiness. A failed TRT RTX plugin route may fall back to DirectML, but the selected provider must be reported as DirectML, not TRT RTX.
 
+## CLI / SDK execution-provider pins (soft prefer)
+
+`--execution-provider trt-rtx` (and other Kind pins) is a **soft preference**: the planner tries TRT RTX first among stage/engine allow-lists, then falls through (for example DirectML → CPU) when the engine family forbids TRT, smoke fails, or session init fails on unsupported ops.
+
+Hard pin (collapse allow-list / block on smoke-init failure when TRT is allowed):
+
+```powershell
+trackdub dub ... --execution-provider trt-rtx --require-execution-provider
+```
+
+SDK equivalent: `WithExecutionProvider(ExecutionProviderKind.TensorRTRtx)` soft-prefers; pass `require: true` for a hard pin.
+
+Engine-family allow-lists deny TensorRT families for graphs that hard-fail session init under TRT RTX (examples: `whisper-onnx`, `opus-mt` / `madlad`, `chatterbox`, `cosyvoice`, `qwen3-tts`, `latentsync-diffusion`). Those stages still run under a global `trt-rtx` soft prefer by selecting DirectML/CPU. Do **not** treat this as hybrid VRAM spillover / `supports_partial_offload`; Trackdub does not claim partial offload for TRT RTX.
+
+Session create also retries once with DirectML (Windows) then CPU when TensorRT RTX was selected and init fails with EP/kernel/importer errors (`Kernel not found`, `ModelImporter`, `No graph will run on TensorRT`, etc.), and records that path in `FallbackReason` / bootstrap detail.
+
+## Quieter TRT capability probe logs
+
+ORT may emit per-node `SkipLayerNormalization` / unsupported-op ERROR spam while probing TRT RTX capability. That spam is ORT/NVIDIA noise, not an install failure. To reduce stderr noise without hiding real session failures:
+
+```powershell
+$env:ORT_LOG_SEVERITY_LEVEL = "3"   # 0=Verbose .. 4=Fatal; 3=Error still shows failures, raise to 4 if needed
+```
+
+Trackdub does not rewrite ORT's default log severity in session bootstrap.
+
 ## Smoke commands
 
 Readiness/probe slices:

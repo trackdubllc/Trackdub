@@ -175,7 +175,7 @@ internal static class RunPipelineCommandExecutor
         }
 
         TrackdubSessionFactory? execFactory = CliParseHelpers.TryBuildFactory(
-            context.ModelDirectory, context.ExecutionProvider, context.DevicePolicy, out int execExitCode);
+            parseResult, context.ModelDirectory, context.ExecutionProvider, context.DevicePolicy, out int execExitCode);
         if (execFactory is null)
         {
             return execExitCode;
@@ -427,7 +427,7 @@ internal static class RunPipelineCommandExecutor
         string? modelDirectory = CliParseHelpers.GetGlobalOptionValue<string?>(parseResult, "model-directory");
 
         TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(
-            modelDirectory, provider, policy, out int buildExitCode);
+            parseResult, modelDirectory, provider, policy, out int buildExitCode);
         if (factory is null)
         {
             return buildExitCode;

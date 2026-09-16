@@ -324,7 +324,7 @@ internal static class DubCommand
 
                 // Build factory for batch execution
                 TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(
-                    modelDirectory, resolvedExecutionProvider, resolvedDevicePolicy, out int buildExitCode);
+                    parseResult, modelDirectory, resolvedExecutionProvider, resolvedDevicePolicy, out int buildExitCode);
                 if (factory is null)
                 {
                     return buildExitCode;
@@ -412,7 +412,7 @@ internal static class DubCommand
             }
 
             TrackdubSessionFactory? singleFactory = CliParseHelpers.TryBuildFactory(
-                modelDirectory, resolvedExecutionProvider, resolvedDevicePolicy, out int singleBuildExitCode);
+                parseResult, modelDirectory, resolvedExecutionProvider, resolvedDevicePolicy, out int singleBuildExitCode);
             if (singleFactory is null)
             {
                 return singleBuildExitCode;
