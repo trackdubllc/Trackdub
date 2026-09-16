@@ -497,6 +497,21 @@ internal static class OnnxExecutionSessionFactory
     // Metadata (selected provider, bootstrap detail) is captured at creation
     // time and cached alongside the pool entry for subsequent pool hits.
 
+    private sealed class SessionOptionsDisposeHolder : IDisposable
+    {
+        public SessionOptionsDisposeHolder(SessionOptions current)
+        {
+            Current = current;
+        }
+
+        public SessionOptions Current { get; set; }
+
+        public void Dispose()
+        {
+            Current.Dispose();
+        }
+    }
+
     public static async Task<SingleSessionLease> CreatePooledSingleAsync(
         string engineFamily,
         string modelPath,
@@ -523,8 +538,8 @@ internal static class OnnxExecutionSessionFactory
             additionalTrtOptions);
 
         // Options ownership may transfer to a replacement SessionOptionsSelection when TRT init
-        // falls back; keep a movable dispose target instead of a fixed `using`.
-        SessionOptions? optionsToDispose = optionsSelection.Options;
+        // falls back; keep a movable dispose target managed by a `using` scope.
+        using var optionsHolder = new SessionOptionsDisposeHolder(optionsSelection.Options);
         SessionOptionsSelection leaseSelection = optionsSelection;
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, optionsSelection.SelectedProvider);
         ExecutionProviderKind optionsSelectedProvider = optionsSelection.SelectedProvider;
@@ -558,9 +573,9 @@ internal static class OnnxExecutionSessionFactory
                         leaseSelection = selection;
                         optionsSelectedProvider = selection.SelectedProvider;
                         useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, selection.SelectedProvider);
-                        if (!ReferenceEquals(selection.Options, optionsToDispose))
+                        if (!ReferenceEquals(selection.Options, optionsHolder.Current))
                         {
-                            optionsToDispose = selection.Options;
+                            optionsHolder.Current = selection.Options;
                         }
 
                         return Task.FromResult(session);
@@ -585,10 +600,6 @@ internal static class OnnxExecutionSessionFactory
         {
             poolLease?.Dispose();
             throw;
-        }
-        finally
-        {
-            optionsToDispose?.Dispose();
         }
     }
 
