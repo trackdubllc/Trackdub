@@ -60,7 +60,7 @@ public sealed class TrackdubBuilder
     /// Sets the preferred execution provider for inference using the legacy four-value enum.
     /// On Windows, <see cref="ExecutionProviderPreference.Cuda"/> maps to TensorRT RTX.
     /// Soft prefer: the planner may fall through to another allowed EP when the preferred
-    /// provider is unavailable or fails smoke/session init.
+    /// provider is unavailable, fails smoke, or TensorRT RTX session initialization fails.
     /// </summary>
     /// <param name="preference">The execution provider preference.</param>
     /// <returns>This builder instance for fluent chaining.</returns>
@@ -75,7 +75,7 @@ public sealed class TrackdubBuilder
     /// Prefers a specific <see cref="ExecutionProviderKind"/> without requiring it.
     /// The planner tries this EP first among stage/engine allow-lists, then falls through
     /// (for example TensorRT RTX → DirectML → CPU) when the preferred EP is forbidden for
-    /// the engine family or fails smoke/session init.
+    /// the engine family, fails smoke, or TensorRT RTX session initialization fails.
     /// Pass nothing / use Auto for unconstrained planner choice.
     /// Use <see cref="WithExecutionProvider(ExecutionProviderKind, bool)"/> with
     /// <c>require: true</c> (or CLI <c>--require-execution-provider</c>) for a hard pin.

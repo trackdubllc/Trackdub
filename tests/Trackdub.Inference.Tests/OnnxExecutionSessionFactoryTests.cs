@@ -48,6 +48,43 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
+    public async Task CreatePooledSingleAsync_separates_trt_init_fallback_policies()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 2);
+        int createCount = 0;
+
+        using (await OnnxExecutionSessionFactory.CreatePooledSingleAsync(
+            "test-engine",
+            "single-model.onnx",
+            ExecutionProviderKind.Cpu,
+            CancellationToken.None,
+            pool,
+            sessionFactory: CreateCountingSession,
+            allowTrtInitFallback: true))
+        {
+        }
+
+        using (await OnnxExecutionSessionFactory.CreatePooledSingleAsync(
+            "test-engine",
+            "single-model.onnx",
+            ExecutionProviderKind.Cpu,
+            CancellationToken.None,
+            pool,
+            sessionFactory: CreateCountingSession,
+            allowTrtInitFallback: false))
+        {
+        }
+
+        Assert.Equal(2, createCount);
+
+        InferenceSession CreateCountingSession(string modelPath, SessionOptions options)
+        {
+            createCount++;
+            return CreateMinimalSession();
+        }
+    }
+
+    [Fact]
     public async Task CreatePooledOpusAsync_reuses_pair_pool_hits_without_invoking_session_factory_again()
     {
         using var pool = new InferenceSessionPool(maxSessions: 4);

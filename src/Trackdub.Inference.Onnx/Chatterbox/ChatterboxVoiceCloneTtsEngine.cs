@@ -735,7 +735,8 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             string.Equals(pinnedSessions.EmbedTokensPath, modelFiles.EmbedTokensPath, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(pinnedSessions.LanguageModelPath, modelFiles.LanguageModelPath, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(pinnedSessions.ConditionalDecoderPath, modelFiles.ConditionalDecoderPath, StringComparison.OrdinalIgnoreCase) &&
-            pinnedSessions.Provider == provider)
+            pinnedSessions.Provider == provider &&
+            pinnedSessions.AllowTrtInitFallback == allowTrtInitFallback)
         {
             return pinnedSessions;
         }
@@ -815,6 +816,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             modelFiles.LanguageModelPath,
             modelFiles.ConditionalDecoderPath,
             provider,
+            allowTrtInitFallback,
             speechEncoder,
             embedTokens,
             languageModel,
@@ -843,6 +845,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         string languageModelPath,
         string conditionalDecoderPath,
         ExecutionProviderKind provider,
+        bool allowTrtInitFallback,
         OnnxExecutionSessionFactory.SingleSessionLease speechEncoder,
         OnnxExecutionSessionFactory.SingleSessionLease embedTokens,
         OnnxExecutionSessionFactory.SingleSessionLease languageModel,
@@ -856,6 +859,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         public string LanguageModelPath { get; } = languageModelPath;
         public string ConditionalDecoderPath { get; } = conditionalDecoderPath;
         public ExecutionProviderKind Provider { get; } = provider;
+        public bool AllowTrtInitFallback { get; } = allowTrtInitFallback;
         public OnnxExecutionSessionFactory.SingleSessionLease SpeechEncoder { get; } = speechEncoder;
         public OnnxExecutionSessionFactory.SingleSessionLease EmbedTokens { get; } = embedTokens;
         public OnnxExecutionSessionFactory.SingleSessionLease LanguageModel { get; } = languageModel;

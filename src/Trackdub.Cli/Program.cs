@@ -91,7 +91,7 @@ internal static class Program
             Description = "Preferred ONNX Runtime execution provider ("
                 + ExecutionProviderTokens.FormatSupportedCliTags()
                 + "). Soft prefer: the planner tries this EP first, then falls through when the "
-                + "engine family forbids it or smoke/session init fails. Auto lets the runtime "
+                + "engine family forbids it, smoke fails, or supported TensorRT RTX session initialization fails. Auto lets the runtime "
                 + "planner choose. On Windows, use trt-rtx for NVIDIA TensorRT RTX "
                 + "(cuda is accepted as a compatibility alias for trt-rtx). "
                 + "Pass --require-execution-provider to hard-pin instead of soft-prefer.",
@@ -103,7 +103,8 @@ internal static class Program
         var requireExecutionProviderOption = new Option<bool>("--require-execution-provider")
         {
             Description = "Require the --execution-provider Kind pin when the stage allow-list includes it. "
-                + "Without this flag, Kind pins are soft preferences and may fall through to DirectML/CPU.",
+                + "Without this flag, Kind pins are soft preferences and may fall through to DirectML/CPU; "
+                + "TensorRT RTX session-init fallback applies only to supported TensorRT RTX failures.",
             Recursive = true,
             DefaultValueFactory = _ => false
         };

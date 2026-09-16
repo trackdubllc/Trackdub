@@ -353,7 +353,8 @@ public sealed class TrackdubExecutionProviderOptionsTests
     public async Task Cli_PresetExecutionPreferences_FlowThroughToStudioSettings()
     {
         RootCommand rootCommand = Program.BuildRootCommand(isSetupInteractive: () => false);
-        ParseResult parseResult = rootCommand.Parse(["dub", "--media", "x.mp4", "--target-language", "es"]);
+        ParseResult parseResult = rootCommand.Parse(
+            ["dub", "--media", "x.mp4", "--target-language", "es", "--require-execution-provider"]);
 
         var preset = new PipelinePreset
         {
@@ -365,12 +366,21 @@ public sealed class TrackdubExecutionProviderOptionsTests
 
         CliParseHelpers.ResolvePresetExecutionPreferences(parseResult, preset, out string? ep, out string? dp);
 
-        using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(null, ep, dp, out int exitCode)!;
+        using TrackdubSessionFactory presetLoadFactory = CliParseHelpers.TryBuildFactoryForPresetLoad(parseResult, out int presetLoadExitCode)!;
+        Assert.Equal(Program.ExitSuccess, presetLoadExitCode);
+
+        using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
+            parseResult,
+            null,
+            ep,
+            dp,
+            out int exitCode)!;
         Assert.Equal(Program.ExitSuccess, exitCode);
 
         IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
         StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
 
         Assert.Equal(WindowsMlExecutionDevicePolicy.MaxPerformance, settings.WindowsMlExecutionDevicePolicy);
+        Assert.True(settings.RequirePreferredExecutionProviders);
     }
 }

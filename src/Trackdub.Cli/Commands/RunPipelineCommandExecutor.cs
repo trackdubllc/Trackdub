@@ -152,7 +152,7 @@ internal static class RunPipelineCommandExecutor
         PipelineRunState state,
         CancellationToken cancellationToken)
     {
-        TrackdubSessionFactory? presetFactory = CliParseHelpers.TryBuildFactory(parseResult, out int buildExitCode);
+        TrackdubSessionFactory? presetFactory = CliParseHelpers.TryBuildFactoryForPresetLoad(parseResult, out int buildExitCode);
         if (presetFactory is null)
         {
             return buildExitCode;

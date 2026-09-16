@@ -545,7 +545,8 @@ internal static class OnnxExecutionSessionFactory
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, optionsSelection.SelectedProvider);
         ExecutionProviderKind optionsSelectedProvider = optionsSelection.SelectedProvider;
 
-        string optionsFingerprint = BuildSessionOptionsFingerprint(optionsSelectedProvider, devicePolicy, additionalTrtOptions);
+        string optionsFingerprint =
+            $"{BuildSessionOptionsFingerprint(optionsSelectedProvider, devicePolicy, additionalTrtOptions)}|trt-init-fallback:{allowTrtInitFallback}";
         SessionPoolKey key = SessionPoolKey.ForSingle(
             engineFamily,
             modelPath,

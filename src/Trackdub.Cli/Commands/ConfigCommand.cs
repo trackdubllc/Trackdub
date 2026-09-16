@@ -241,7 +241,7 @@ internal static class ConfigCommand
                 EnableAsrTextRefinement = enableAsrTextRefinement,
             };
 
-            TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(parseResult, out int buildExitCode);
+            TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactoryForPresetLoad(parseResult, out int buildExitCode);
             if (factory is null)
             {
                 return buildExitCode;

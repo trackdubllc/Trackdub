@@ -136,6 +136,19 @@ internal static class CliParseHelpers
             requireExecutionProvider);
     }
 
+    internal static TrackdubSessionFactory? TryBuildFactoryForPresetLoad(ParseResult parseResult, out int exitCode)
+    {
+        string? modelDirectory = GetGlobalOptionValue<string?>(parseResult, "model-directory");
+        string? executionProvider = GetGlobalOptionValue<string?>(parseResult, "execution-provider");
+        string? devicePolicy = GetGlobalOptionValue<string?>(parseResult, "device-policy");
+        return TryBuildFactory(
+            modelDirectory,
+            executionProvider,
+            devicePolicy,
+            out exitCode,
+            requireExecutionProvider: false);
+    }
+
     internal static TrackdubSessionFactory? TryBuildFactory(string? modelDirectory, out int exitCode) =>
         TryBuildFactory(
             modelDirectory,
