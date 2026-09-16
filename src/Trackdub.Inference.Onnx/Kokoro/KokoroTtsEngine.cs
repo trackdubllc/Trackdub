@@ -133,7 +133,8 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
                 candidate.ModelPath,
                 modelRootPath,
                 plan.ExecutionProvider!.Value,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                allowTrtInitFallback: !plan.RequirePreferredExecutionProvider).ConfigureAwait(false);
 
             long[] inputIds = session.Tokenizer.Encode(phonemes);
 
@@ -204,12 +205,14 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         string modelPath,
         string modelRootPath,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         if (pinnedSession is not null &&
             string.Equals(pinnedSession.ModelPath, modelPath, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(pinnedSession.ModelRootPath, modelRootPath, StringComparison.OrdinalIgnoreCase) &&
-            pinnedSession.Provider == provider)
+            pinnedSession.Provider == provider &&
+            pinnedSession.AllowTrtInitFallback == allowTrtInitFallback)
         {
             return pinnedSession;
         }
@@ -217,7 +220,12 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         pinnedSession?.Lease.Dispose();
         pinnedSession = null;
         OnnxExecutionSessionFactory.SingleSessionLease lease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync("kokoro", modelPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(
+                "kokoro",
+                modelPath,
+                provider,
+                cancellationToken,
+                allowTrtInitFallback: allowTrtInitFallback)
             .ConfigureAwait(false);
         try
         {
@@ -230,7 +238,14 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
             KokoroVoiceCatalog voiceCatalog = await voiceCatalogCache.GetOrAddAsync(
                 modelRootPath,
                 async key => await KokoroVoiceCatalog.LoadAsync(key).ConfigureAwait(false)).ConfigureAwait(false);
-            pinnedSession = new PinnedSession(modelPath, modelRootPath, provider, lease, tokenizer, voiceCatalog);
+            pinnedSession = new PinnedSession(
+                modelPath,
+                modelRootPath,
+                provider,
+                allowTrtInitFallback,
+                lease,
+                tokenizer,
+                voiceCatalog);
         }
         catch
         {
@@ -287,6 +302,7 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         string modelPath,
         string modelRootPath,
         ExecutionProviderKind provider,
+        bool allowTrtInitFallback,
         OnnxExecutionSessionFactory.SingleSessionLease lease,
         KokoroTokenizer tokenizer,
         KokoroVoiceCatalog voiceCatalog)
@@ -295,6 +311,8 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         public string ModelPath { get; } = modelPath;
         public string ModelRootPath { get; } = modelRootPath;
         public ExecutionProviderKind Provider { get; } = provider;
+
+        public bool AllowTrtInitFallback { get; } = allowTrtInitFallback;
         public OnnxExecutionSessionFactory.SingleSessionLease Lease { get; } = lease;
         public KokoroTokenizer Tokenizer { get; } = tokenizer;
         public KokoroVoiceCatalog VoiceCatalog { get; } = voiceCatalog;

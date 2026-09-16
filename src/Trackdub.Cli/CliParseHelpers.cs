@@ -127,17 +127,70 @@ internal static class CliParseHelpers
         string? modelDirectory = GetGlobalOptionValue<string?>(parseResult, "model-directory");
         string? executionProvider = GetGlobalOptionValue<string?>(parseResult, "execution-provider");
         string? devicePolicy = GetGlobalOptionValue<string?>(parseResult, "device-policy");
-        return TryBuildFactory(modelDirectory, executionProvider, devicePolicy, out exitCode);
+        bool requireExecutionProvider = GetGlobalOptionValue<bool>(parseResult, "require-execution-provider");
+        return TryBuildFactory(
+            modelDirectory,
+            executionProvider,
+            devicePolicy,
+            out exitCode,
+            requireExecutionProvider);
+    }
+
+    internal static TrackdubSessionFactory? TryBuildFactoryForPresetLoad(ParseResult parseResult, out int exitCode)
+    {
+        string? modelDirectory = GetGlobalOptionValue<string?>(parseResult, "model-directory");
+        string? executionProvider = GetGlobalOptionValue<string?>(parseResult, "execution-provider");
+        string? devicePolicy = GetGlobalOptionValue<string?>(parseResult, "device-policy");
+        return TryBuildFactory(
+            modelDirectory,
+            executionProvider,
+            devicePolicy,
+            out exitCode,
+            requireExecutionProvider: false);
     }
 
     internal static TrackdubSessionFactory? TryBuildFactory(string? modelDirectory, out int exitCode) =>
-        TryBuildFactory(modelDirectory, executionProvider: null, devicePolicy: null, out exitCode);
+        TryBuildFactory(
+            modelDirectory,
+            executionProvider: null,
+            devicePolicy: null,
+            out exitCode,
+            requireExecutionProvider: false);
 
     internal static TrackdubSessionFactory? TryBuildFactory(
         string? modelDirectory,
         string? executionProvider,
         string? devicePolicy,
+        out int exitCode) =>
+        TryBuildFactory(
+            modelDirectory,
+            executionProvider,
+            devicePolicy,
+            out exitCode,
+            requireExecutionProvider: false);
+
+    internal static TrackdubSessionFactory? TryBuildFactory(
+        ParseResult parseResult,
+        string? modelDirectory,
+        string? executionProvider,
+        string? devicePolicy,
         out int exitCode)
+    {
+        bool requireExecutionProvider = GetGlobalOptionValue<bool>(parseResult, "require-execution-provider");
+        return TryBuildFactory(
+            modelDirectory,
+            executionProvider,
+            devicePolicy,
+            out exitCode,
+            requireExecutionProvider);
+    }
+
+    internal static TrackdubSessionFactory? TryBuildFactory(
+        string? modelDirectory,
+        string? executionProvider,
+        string? devicePolicy,
+        out int exitCode,
+        bool requireExecutionProvider)
     {
         exitCode = Program.ExitSuccess;
 
@@ -166,6 +219,16 @@ internal static class CliParseHelpers
             return null;
         }
 
+        if (requireExecutionProvider && providerKind is null)
+        {
+            CliErrorReporter.ReportValidationError(
+                ErrorCode.InvalidArgument,
+                "--require-execution-provider needs a non-auto --execution-provider Kind pin.",
+                "--require-execution-provider");
+            exitCode = Program.ExitArgumentError;
+            return null;
+        }
+
         try
         {
             TrackdubBuilder builder = ApplyModelDirectory(new TrackdubBuilder(), modelDirectory)
@@ -173,7 +236,7 @@ internal static class CliParseHelpers
 
             if (providerKind is ExecutionProviderKind kind)
             {
-                builder = builder.WithExecutionProvider(kind);
+                builder = builder.WithExecutionProvider(kind, requireExecutionProvider);
             }
 
             TrackdubSessionFactory factory = builder.Build();

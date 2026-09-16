@@ -96,7 +96,13 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
 
         string modelPath = ResolvePlannedModelPath(plan);
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync("sortformer", modelPath, plan.ExecutionProvider!.Value, cancellationToken, additionalTrtOptions: TrtOptions)
+            .CreatePooledSingleAsync(
+                "sortformer",
+                modelPath,
+                plan.ExecutionProvider!.Value,
+                cancellationToken,
+                additionalTrtOptions: TrtOptions,
+                allowTrtInitFallback: !plan.RequirePreferredExecutionProvider)
             .ConfigureAwait(false);
 
         EnsureModelSpeakerCapacity(sessionLease.Session, plan.ModelAlias);

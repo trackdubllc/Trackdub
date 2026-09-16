@@ -52,10 +52,15 @@ internal sealed class CosyVoiceOnnxSessions : IDisposable
     public static async Task<CosyVoiceOnnxSessions> CreateAsync(
         CosyVoiceModelFiles modelFiles,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         async Task<OnnxExecutionSessionFactory.SingleSessionLease> Load(string path) =>
-            await OnnxExecutionSessionFactory.CreateSingleAsync(path, provider, cancellationToken).ConfigureAwait(false);
+            await OnnxExecutionSessionFactory.CreateSingleAsync(
+                path,
+                provider,
+                cancellationToken,
+                allowTrtInitFallback: allowTrtInitFallback).ConfigureAwait(false);
 
         var campplus = await Load(modelFiles.CampPlusPath).ConfigureAwait(false);
         var speechTokenizer = await Load(modelFiles.SpeechTokenizerPath).ConfigureAwait(false);

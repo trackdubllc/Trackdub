@@ -21,6 +21,12 @@ public sealed record StageRuntimePlan
 
     public ExecutionProviderKind? ExecutionProvider { get; init; }
 
+    /// <summary>
+    /// When <see langword="true"/>, the caller required the preferred EP (hard pin).
+    /// Session factories must not soft-retry TensorRT RTX init onto DirectML/CPU.
+    /// </summary>
+    public bool RequirePreferredExecutionProvider { get; init; }
+
     public RuntimeModelIntegrityStatus ModelIntegrityStatus { get; init; }
 
     [JsonIgnore]

@@ -48,6 +48,43 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
+    public async Task CreatePooledSingleAsync_separates_trt_init_fallback_policies()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 2);
+        int createCount = 0;
+
+        using (await OnnxExecutionSessionFactory.CreatePooledSingleAsync(
+            "test-engine",
+            "single-model.onnx",
+            ExecutionProviderKind.Cpu,
+            CancellationToken.None,
+            pool,
+            sessionFactory: CreateCountingSession,
+            allowTrtInitFallback: true))
+        {
+        }
+
+        using (await OnnxExecutionSessionFactory.CreatePooledSingleAsync(
+            "test-engine",
+            "single-model.onnx",
+            ExecutionProviderKind.Cpu,
+            CancellationToken.None,
+            pool,
+            sessionFactory: CreateCountingSession,
+            allowTrtInitFallback: false))
+        {
+        }
+
+        Assert.Equal(2, createCount);
+
+        InferenceSession CreateCountingSession(string modelPath, SessionOptions options)
+        {
+            createCount++;
+            return CreateMinimalSession();
+        }
+    }
+
+    [Fact]
     public async Task CreatePooledOpusAsync_reuses_pair_pool_hits_without_invoking_session_factory_again()
     {
         using var pool = new InferenceSessionPool(maxSessions: 4);
@@ -701,7 +738,7 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
-    public void ResolveEffectiveProviderKindFromSession_returns_options_provider_when_catalog_policy_not_used()
+    public void ResolveEffectiveProviderKindFromSession_returns_options_provider_when_probe_not_needed()
     {
         using InferenceSession session = CreateMinimalSession();
         MethodInfo method = typeof(OnnxExecutionSessionFactory)
@@ -710,8 +747,128 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object? raw = method.Invoke(
             null,
-            [session, ExecutionProviderKind.DirectMl, false]);
-        Assert.Equal(ExecutionProviderKind.DirectMl, Assert.IsType<ExecutionProviderKind>(raw));
+            [session, ExecutionProviderKind.Cpu, false]);
+        Assert.Equal(ExecutionProviderKind.Cpu, Assert.IsType<ExecutionProviderKind>(raw));
+    }
+
+    [Fact]
+    public void ResolveEffectiveProviderKindFromSession_probes_gpu_providers_even_without_catalog_policy()
+    {
+        using InferenceSession session = CreateMinimalSession();
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("ResolveEffectiveProviderKindFromSession", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate effective provider resolver.");
+
+        object? raw = method.Invoke(
+            null,
+            [session, ExecutionProviderKind.TensorRTRtx, false]);
+        Assert.Equal(ExecutionProviderKind.Cpu, Assert.IsType<ExecutionProviderKind>(raw));
+    }
+
+    [Theory]
+    [InlineData("Kernel not found for op: Squeeze", true)]
+    [InlineData("ModelImporter failed to import graph", true)]
+    [InlineData("No graph will run on TensorRT-RTX", true)]
+    [InlineData("NvTensorRTRTXExecutionProvider registration failed", true)]
+    [InlineData("unrelated IO error", false)]
+    public void LooksLikeTrtSessionInitFailure_detects_known_trt_messages(string message, bool expected)
+    {
+        var exception = new InvalidOperationException(message);
+        Assert.Equal(expected, OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure(exception));
+    }
+
+    [Fact]
+    public void LooksLikeTrtSessionInitFailure_does_not_treat_bare_onnx_runtime_exception_as_trt_init()
+    {
+        // Generic ORT failures (corrupt model, OOM, etc.) must not trigger soft TRT→DML retry.
+        // Only TRT-specific importer/kernel evidence qualifies.
+        Exception ex = Assert.ThrowsAny<Exception>(() => new InferenceSession(Array.Empty<byte>()));
+        Assert.False(OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure(ex));
+    }
+
+    [Fact]
+    public void CreateInferenceSessionWithTrtInitFallback_retries_cpu_when_trt_init_fails()
+    {
+        var trtOptions = new SessionOptions();
+        var initialSelection = new OnnxExecutionSessionFactory.SessionOptionsSelection(
+            trtOptions,
+            ExecutionProviderKind.TensorRTRtx);
+
+        int createAttempts = 0;
+        (InferenceSession session, OnnxExecutionSessionFactory.SessionOptionsSelection selection) =
+            OnnxExecutionSessionFactory.CreateInferenceSessionWithTrtInitFallback(
+                "fake-model.onnx",
+                initialSelection,
+                WindowsMlExecutionDevicePolicy.Explicit,
+                additionalTrtOptions: null,
+                sessionFactory: (_, _) =>
+                {
+                    createAttempts++;
+                    if (createAttempts == 1)
+                    {
+                        throw new InvalidOperationException(
+                            "Kernel not found for op: Squeeze(13) under NvTensorRTRTXExecutionProvider");
+                    }
+
+                    return CreateMinimalSession();
+                },
+                CancellationToken.None);
+
+        using (session)
+        using (selection.Options)
+        {
+            // Windows tries DirectML then CPU; Linux goes straight to CPU. Fake factory succeeds on
+            // the first non-TRT attempt, so createAttempts is 2 either way. SelectedProvider follows
+            // CreateSessionOptions (DirectML may itself fall back to CPU when DML is unavailable).
+            Assert.Equal(2, createAttempts);
+            Assert.True(
+                selection.SelectedProvider is ExecutionProviderKind.DirectMl or ExecutionProviderKind.Cpu);
+            Assert.NotNull(selection.FallbackReason);
+            Assert.Contains("TensorRT RTX session init failed", selection.FallbackReason, StringComparison.Ordinal);
+            Assert.Contains("fell back to", selection.FallbackReason, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void CreateInferenceSessionWithTrtInitFallback_hard_pin_does_not_retry()
+    {
+        using var trtOptions = new SessionOptions();
+        var initialSelection = new OnnxExecutionSessionFactory.SessionOptionsSelection(
+            trtOptions,
+            ExecutionProviderKind.TensorRTRtx);
+
+        int createAttempts = 0;
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            OnnxExecutionSessionFactory.CreateInferenceSessionWithTrtInitFallback(
+                "fake-model.onnx",
+                initialSelection,
+                WindowsMlExecutionDevicePolicy.Explicit,
+                additionalTrtOptions: null,
+                sessionFactory: (_, _) =>
+                {
+                    createAttempts++;
+                    throw new InvalidOperationException(
+                        "Kernel not found for op: Squeeze(13) under NvTensorRTRTXExecutionProvider");
+                },
+                CancellationToken.None,
+                allowTrtInitFallback: false));
+
+        Assert.Equal(1, createAttempts);
+        Assert.Contains("Kernel not found", thrown.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveEffectiveProviderKindFromSession_keeps_native_cuda_without_catalog_probe()
+    {
+        using InferenceSession session = CreateMinimalSession();
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("ResolveEffectiveProviderKindFromSession", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate effective provider resolver.");
+
+        object? raw = method.Invoke(
+            null,
+            [session, ExecutionProviderKind.Cuda, false]);
+        Assert.Equal(ExecutionProviderKind.Cuda, Assert.IsType<ExecutionProviderKind>(raw));
     }
 
     [Fact]

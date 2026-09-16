@@ -100,7 +100,7 @@ public sealed class RuntimePlanner : IRuntimePlanner
 
         if (_planCache.TryGetValue(cacheKey, out StageRuntimePlan? cachedPlan))
         {
-            return cachedPlan;
+            return StampRequirePreferred(cachedPlan, request.RequirePreferredExecutionProvider);
         }
 
         IReadOnlyDictionary<string, IReadOnlyList<LocalModelCacheRecord>> cacheIndex = await cacheIndexBuilder.BuildAsync(cancellationToken).ConfigureAwait(false);
@@ -113,21 +113,25 @@ public sealed class RuntimePlanner : IRuntimePlanner
         RankedManifestEntry[] rankedEntries = rankingStrategy.RankEntries(request, requirements);
         if (rankedEntries.Length == 0)
         {
-            return planFactory.CreateBlockedPlan(
-                request.Stage,
-                new RuntimePlanFallback(
-                    RuntimePlanFallbackCode.NoCompatibleVariant,
-                    $"No {requirements.RequiredTask.ToManifestValue()} model is registered in the bundled model manifest."));
+            return StampRequirePreferred(
+                planFactory.CreateBlockedPlan(
+                    request.Stage,
+                    new RuntimePlanFallback(
+                        RuntimePlanFallbackCode.NoCompatibleVariant,
+                        $"No {requirements.RequiredTask.ToManifestValue()} model is registered in the bundled model manifest.")),
+                request.RequirePreferredExecutionProvider);
         }
 
         if (request.RequirePreferredModelAlias &&
             request.NormalizedPreferredModelAlias is null)
         {
-            return planFactory.CreateBlockedPlan(
-                request.Stage,
-                new RuntimePlanFallback(
-                    RuntimePlanFallbackCode.NoCompatibleVariant,
-                    "Model override requires a model alias, but no alias was provided."));
+            return StampRequirePreferred(
+                planFactory.CreateBlockedPlan(
+                    request.Stage,
+                    new RuntimePlanFallback(
+                        RuntimePlanFallbackCode.NoCompatibleVariant,
+                        "Model override requires a model alias, but no alias was provided.")),
+                request.RequirePreferredExecutionProvider);
         }
 
         if (request.RequirePreferredModelAlias)
@@ -135,11 +139,13 @@ public sealed class RuntimePlanner : IRuntimePlanner
             rankedEntries = RuntimePlannerRankingStrategy.FilterPreferredModelAliasEntries(request, rankedEntries);
             if (rankedEntries.Length == 0)
             {
-                return planFactory.CreateBlockedPlan(
-                    request.Stage,
-                    new RuntimePlanFallback(
-                        RuntimePlanFallbackCode.NoCompatibleVariant,
-                        $"Model override requires model alias '{request.NormalizedPreferredModelAlias}', but no {requirements.RequiredTask.ToManifestValue()} model with that alias is registered."));
+                return StampRequirePreferred(
+                    planFactory.CreateBlockedPlan(
+                        request.Stage,
+                        new RuntimePlanFallback(
+                            RuntimePlanFallbackCode.NoCompatibleVariant,
+                            $"Model override requires model alias '{request.NormalizedPreferredModelAlias}', but no {requirements.RequiredTask.ToManifestValue()} model with that alias is registered.")),
+                    request.RequirePreferredExecutionProvider);
             }
         }
 
@@ -159,6 +165,7 @@ public sealed class RuntimePlanner : IRuntimePlanner
             cancellationToken).ConfigureAwait(false);
         if (resolvedPlan is not null)
         {
+            resolvedPlan = StampRequirePreferred(resolvedPlan, request.RequirePreferredExecutionProvider);
             TryCachePlan(cacheKey, resolvedPlan);
             return resolvedPlan;
         }
@@ -175,7 +182,9 @@ public sealed class RuntimePlanner : IRuntimePlanner
 
             if (_planCache.TryGetValue(fallbackCacheKey, out StageRuntimePlan? cachedFallbackPlan))
             {
-                return AppendPreferredVariantFallbackWarning(cachedFallbackPlan, preferredVariantAlias);
+                return StampRequirePreferred(
+                    AppendPreferredVariantFallbackWarning(cachedFallbackPlan, preferredVariantAlias),
+                    request.RequirePreferredExecutionProvider);
             }
 
             StageRuntimePlan? fallbackPlan = await TryResolvePlanFromEntriesAsync(
@@ -190,25 +199,35 @@ public sealed class RuntimePlanner : IRuntimePlanner
                 cancellationToken).ConfigureAwait(false);
             if (fallbackPlan is not null)
             {
+                fallbackPlan = StampRequirePreferred(fallbackPlan, request.RequirePreferredExecutionProvider);
                 TryCachePlan(fallbackCacheKey, fallbackPlan);
                 return AppendPreferredVariantFallbackWarning(fallbackPlan, preferredVariantAlias);
             }
 
-            return planFactory.CreateBlockedPlan(
+            return StampRequirePreferred(
+                planFactory.CreateBlockedPlan(
+                    request.Stage,
+                    new RuntimePlanFallback(
+                        RuntimePlanFallbackCode.NoCompatibleVariant,
+                        $"Selected optimized variant '{preferredVariantAlias}' is not available for the requested model and provider. Re-optimize the model or clear the variant selection.")),
+                request.RequirePreferredExecutionProvider);
+        }
+
+        return StampRequirePreferred(
+            planFactory.CreateBlockedPlan(
                 request.Stage,
                 new RuntimePlanFallback(
                     RuntimePlanFallbackCode.NoCompatibleVariant,
-                    $"Selected optimized variant '{preferredVariantAlias}' is not available for the requested model and provider. Re-optimize the model or clear the variant selection."));
-        }
-
-        return planFactory.CreateBlockedPlan(
-            request.Stage,
-            new RuntimePlanFallback(
-                RuntimePlanFallbackCode.NoCompatibleVariant,
-                request.RequirePreferredExecutionProvider && request.PreferredExecutionProvider is ExecutionProviderKind requiredProvider
-                    ? $"No compatible {requirements.RequiredTask.ToManifestValue()} variant could be planned for required execution provider {requiredProvider}."
-                    : $"No compatible {requirements.RequiredTask.ToManifestValue()} variant could be planned for the current provider policy."));
+                    request.RequirePreferredExecutionProvider && request.PreferredExecutionProvider is ExecutionProviderKind requiredProvider
+                        ? $"No compatible {requirements.RequiredTask.ToManifestValue()} variant could be planned for required execution provider {requiredProvider}."
+                        : $"No compatible {requirements.RequiredTask.ToManifestValue()} variant could be planned for the current provider policy.")),
+            request.RequirePreferredExecutionProvider);
     }
+
+    private static StageRuntimePlan StampRequirePreferred(StageRuntimePlan plan, bool requirePreferredExecutionProvider) =>
+        plan.RequirePreferredExecutionProvider == requirePreferredExecutionProvider
+            ? plan
+            : plan with { RequirePreferredExecutionProvider = requirePreferredExecutionProvider };
 
     /// <inheritdoc />
     public void InvalidatePlanCache()

@@ -41,6 +41,7 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         ArgumentNullException.ThrowIfNull(request);
 
         ExecutionProviderKind provider = request.Plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
+        bool allowTrtInitFallback = !request.Plan.RequirePreferredExecutionProvider;
         string sepPath = Path.Combine(request.ModelRootPath, SepModelFileName);
         string osdPath = Path.Combine(request.ModelRootPath, OsdModelFileName);
 
@@ -48,13 +49,13 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
 
         // 1. OSD pass — find overlap regions in sample space
         progress?.Report(new StemSeparationProgress(0, 3, 0d, 1d));
-        List<(int Start, int End)> overlapRegions = await DetectOverlapRegionsAsync(
-            samples, osdPath, provider, cancellationToken).ConfigureAwait(false);
+        (List<(int Start, int End)> overlapRegions, string osdSelectedProvider, string? osdBootstrapDetail) = await DetectOverlapRegionsAsync(
+            samples, osdPath, provider, cancellationToken, allowTrtInitFallback).ConfigureAwait(false);
 
         // 2. Chunked SepFormer with OSD gate
         progress?.Report(new StemSeparationProgress(1, 3, 0.33d, 1d));
-        (float[] source0, float[] source1, int chunkCount, _) = await RunChunkedSepFormerAsync(
-            samples, overlapRegions, sepPath, provider, cancellationToken).ConfigureAwait(false);
+        (float[] source0, float[] source1, int chunkCount, _, string separatorSelectedProvider, string? separatorBootstrapDetail) = await RunChunkedSepFormerAsync(
+            samples, overlapRegions, sepPath, provider, cancellationToken, allowTrtInitFallback).ConfigureAwait(false);
 
         progress?.Report(new StemSeparationProgress(3, 3, 1d, 1d));
 
@@ -62,9 +63,10 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         {
             ["runner"] = "onnx",
             ["engine_family"] = SepFormerOverlapRescueEngine.EngineFamilyName,
-            ["selected_provider"] = FormatProvider(provider),
+            ["selected_provider"] = ResolveSelectedProvider(osdSelectedProvider, separatorSelectedProvider),
             ["overlap_regions"] = overlapRegions.Count.ToString(CultureInfo.InvariantCulture)
         };
+        AddBootstrapDetail(metadata, osdBootstrapDetail, separatorBootstrapDetail);
 
         return new SepFormerSeparation(source0, source1, request.SampleRate, chunkCount, false, metadata);
     }
@@ -76,22 +78,25 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         ArgumentNullException.ThrowIfNull(request);
 
         ExecutionProviderKind provider = request.Plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
+        bool allowTrtInitFallback = !request.Plan.RequirePreferredExecutionProvider;
         string sepPath = Path.Combine(request.ModelRootPath, SepModelFileName);
         float[] samples = request.Samples;
         var overlapRegions = new List<(int Start, int End)> { (0, samples.Length) };
 
-        (float[] source0, float[] source1, int chunkCount, bool permutationWarning) =
-            await RunChunkedSepFormerAsync(samples, overlapRegions, sepPath, provider, cancellationToken)
+        (float[] source0, float[] source1, int chunkCount, bool permutationWarning, string separatorSelectedProvider, string? separatorBootstrapDetail) =
+            await RunChunkedSepFormerAsync(
+                samples, overlapRegions, sepPath, provider, cancellationToken, allowTrtInitFallback)
                 .ConfigureAwait(false);
 
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["runner"] = "onnx",
             ["engine_family"] = SepFormerOverlapRescueEngine.EngineFamilyName,
-            ["selected_provider"] = FormatProvider(provider),
+            ["selected_provider"] = separatorSelectedProvider,
             ["mode"] = "region",
             ["permutation_warning"] = permutationWarning.ToString(CultureInfo.InvariantCulture)
         };
+        AddBootstrapDetail(metadata, separatorBootstrapDetail);
 
         return new SepFormerSeparation(
             source0,
@@ -102,18 +107,26 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
             metadata);
     }
 
-    private static async Task<List<(int Start, int End)>> DetectOverlapRegionsAsync(
+    private static async Task<(List<(int Start, int End)> Regions, string SelectedProvider, string? BootstrapDetail)> DetectOverlapRegionsAsync(
         float[] samples,
         string osdPath,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         var overlapRegions = new List<(int Start, int End)>();
         int totalSamples = samples.Length;
 
         using OnnxExecutionSessionFactory.SingleSessionLease osdLease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync("sepformer-osd", osdPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(
+                "sepformer-osd",
+                osdPath,
+                provider,
+                cancellationToken,
+                allowTrtInitFallback: allowTrtInitFallback)
             .ConfigureAwait(false);
+        string selectedProvider = osdLease.SelectedProvider;
+        string? bootstrapDetail = osdLease.BootstrapDetail;
 
         int windowStart = 0;
         while (windowStart < totalSamples)
@@ -189,7 +202,7 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
             windowStart += OsdWindowSamples;
         }
 
-        return MergeAdjacentRegions(overlapRegions);
+        return (MergeAdjacentRegions(overlapRegions), selectedProvider, bootstrapDetail);
     }
 
     private static List<(int Start, int End)> MergeAdjacentRegions(List<(int Start, int End)> regions)
@@ -220,12 +233,13 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         return merged;
     }
 
-    private static async Task<(float[] Source0, float[] Source1, int ChunkCount, bool PermutationWarning)> RunChunkedSepFormerAsync(
+    private static async Task<(float[] Source0, float[] Source1, int ChunkCount, bool PermutationWarning, string SelectedProvider, string? BootstrapDetail)> RunChunkedSepFormerAsync(
         float[] samples,
         List<(int Start, int End)> overlapRegions,
         string sepPath,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         int totalSamples = samples.Length;
         float[] source0 = new float[totalSamples];
@@ -243,8 +257,15 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         float[] fadeOut = BuildLinearRamp(OverlapSamples, rising: false);
 
         using OnnxExecutionSessionFactory.SingleSessionLease sepLease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync("sepformer", sepPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(
+                "sepformer",
+                sepPath,
+                provider,
+                cancellationToken,
+                allowTrtInitFallback: allowTrtInitFallback)
             .ConfigureAwait(false);
+        string selectedProvider = sepLease.SelectedProvider;
+        string? bootstrapDetail = sepLease.BootstrapDetail;
 
         while (chunkStart < totalSamples)
         {
@@ -341,7 +362,7 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
             }
         }
 
-        return (source0, source1, chunkCount, permutationWarning);
+        return (source0, source1, chunkCount, permutationWarning, selectedProvider, bootstrapDetail);
     }
 
     private static float[] BuildLinearRamp(int length, bool rising)
@@ -366,4 +387,19 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
             ExecutionProviderKind.TensorRTRtx => "tensorrt-rtx",
             _ => provider.ToString().ToLowerInvariant()
         };
+
+    private static string ResolveSelectedProvider(string first, string second) =>
+        string.Equals(first, second, StringComparison.OrdinalIgnoreCase) ? first : "cpu";
+
+    private static void AddBootstrapDetail(Dictionary<string, string> metadata, params string?[] details)
+    {
+        string[] nonEmptyDetails = details
+            .Where(static detail => !string.IsNullOrWhiteSpace(detail))
+            .Select(static detail => detail!)
+            .ToArray();
+        if (nonEmptyDetails.Length > 0)
+        {
+            metadata["bootstrap_detail"] = string.Join(" ", nonEmptyDetails);
+        }
+    }
 }

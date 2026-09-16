@@ -79,7 +79,8 @@ public sealed class CosyVoiceTtsEngine(
             PinnedRuntime runtime = await GetOrCreatePinnedRuntimeAsync(
                 modelFiles,
                 plan.ExecutionProvider!.Value,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                allowTrtInitFallback: !plan.RequirePreferredExecutionProvider).ConfigureAwait(false);
 
             float[] audioSamples = runtime.Pipeline.Synthesize(
                 request.Text,
@@ -133,10 +134,11 @@ public sealed class CosyVoiceTtsEngine(
     private async Task<PinnedRuntime> GetOrCreatePinnedRuntimeAsync(
         CosyVoiceModelFiles modelFiles,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         if (pinnedRuntime is not null &&
-            pinnedRuntime.Matches(modelFiles.ModelRootPath, modelFiles.Variant, provider))
+            pinnedRuntime.Matches(modelFiles.ModelRootPath, modelFiles.Variant, provider, allowTrtInitFallback))
         {
             return pinnedRuntime;
         }
@@ -145,11 +147,18 @@ public sealed class CosyVoiceTtsEngine(
         CosyVoiceOnnxSessions sessions = await CosyVoiceOnnxSessions.CreateAsync(
             modelFiles,
             provider,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            allowTrtInitFallback).ConfigureAwait(false);
         CosyVoiceEmbeddingTables embeddings = CosyVoiceEmbeddingTables.Load(modelFiles.ModelRootPath);
         CosyVoiceWhisperTokenizer tokenizer = CosyVoiceWhisperTokenizer.Load(modelFiles.ModelRootPath);
         var pipeline = new CosyVoiceSynthesisPipeline(sessions, embeddings, tokenizer);
-        pinnedRuntime = new PinnedRuntime(modelFiles.ModelRootPath, modelFiles.Variant, provider, sessions, pipeline);
+        pinnedRuntime = new PinnedRuntime(
+            modelFiles.ModelRootPath,
+            modelFiles.Variant,
+            provider,
+            allowTrtInitFallback,
+            sessions,
+            pipeline);
         return pinnedRuntime;
     }
 
@@ -180,12 +189,14 @@ public sealed class CosyVoiceTtsEngine(
             string modelRootPath,
             string variant,
             ExecutionProviderKind provider,
+            bool allowTrtInitFallback,
             CosyVoiceOnnxSessions sessions,
             CosyVoiceSynthesisPipeline pipeline)
         {
             ModelRootPath = modelRootPath;
             Variant = variant;
             Provider = provider;
+            AllowTrtInitFallback = allowTrtInitFallback;
             Sessions = sessions;
             Pipeline = pipeline;
         }
@@ -196,14 +207,21 @@ public sealed class CosyVoiceTtsEngine(
 
         public ExecutionProviderKind Provider { get; }
 
+        public bool AllowTrtInitFallback { get; }
+
         public CosyVoiceOnnxSessions Sessions { get; }
 
         public CosyVoiceSynthesisPipeline Pipeline { get; }
 
-        public bool Matches(string modelRootPath, string variant, ExecutionProviderKind provider) =>
+        public bool Matches(
+            string modelRootPath,
+            string variant,
+            ExecutionProviderKind provider,
+            bool allowTrtInitFallback) =>
             string.Equals(ModelRootPath, modelRootPath, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(Variant, variant, StringComparison.OrdinalIgnoreCase) &&
-            Provider == provider;
+            Provider == provider &&
+            AllowTrtInitFallback == allowTrtInitFallback;
 
         public void Dispose() => Sessions.Dispose();
     }
