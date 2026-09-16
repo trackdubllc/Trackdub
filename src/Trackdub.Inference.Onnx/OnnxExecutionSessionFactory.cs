@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Trackdub.Contracts.ApplicationContracts;
@@ -325,12 +326,12 @@ internal static class OnnxExecutionSessionFactory
             string trtError = SummarizeExceptionMessage(ex);
             Exception? lastFailure = ex;
 
-            foreach (ExecutionProviderKind fallbackProvider in EnumerateTrtInitFallbackProviders())
+            foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
+                         .Select(fallbackProvider => CreateSessionOptions(
+                             fallbackProvider,
+                             devicePolicy,
+                             additionalTrtOptions: null)))
             {
-                SessionOptionsSelection fallbackSelection = CreateSessionOptions(
-                    fallbackProvider,
-                    devicePolicy,
-                    additionalTrtOptions: null);
                 try
                 {
                     InferenceSession session = CreateSession(
