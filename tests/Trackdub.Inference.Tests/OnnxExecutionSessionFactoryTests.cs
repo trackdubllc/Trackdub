@@ -781,9 +781,14 @@ public sealed class OnnxExecutionSessionFactoryTests
     public void LooksLikeTrtSessionInitFailure_does_not_treat_bare_onnx_runtime_exception_as_trt_init()
     {
         // Generic ORT failures (corrupt model, OOM, etc.) must not trigger soft TRT→DML retry.
-        Exception ex = Assert.ThrowsAny<Exception>(
-            () => new InferenceSession(Array.Empty<byte>()));
+        // Only TRT-specific importer/kernel evidence qualifies.
+        Exception ex = Assert.ThrowsAny<Exception>(() => new InferenceSession(Array.Empty<byte>()));
         Assert.False(OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure(ex));
+    }
+
+    [Fact]
+    public void CreateInferenceSessionWithTrtInitFallback_retries_cpu_when_trt_init_fails()
+    {
         var trtOptions = new SessionOptions();
         var initialSelection = new OnnxExecutionSessionFactory.SessionOptionsSelection(
             trtOptions,

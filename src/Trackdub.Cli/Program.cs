@@ -91,7 +91,7 @@ internal static class Program
             Description = "Preferred ONNX Runtime execution provider ("
                 + ExecutionProviderTokens.FormatSupportedCliTags()
                 + "). Soft prefer: the planner tries this EP first, then falls through when the "
-                + "engine family forbids it, smoke fails, or supported TensorRT RTX session initialization fails. Auto lets the runtime "
+                + "engine family forbids it or smoke fails. TensorRT RTX session-init fallback applies only to supported TensorRT RTX failures. Auto lets the runtime "
                 + "planner choose. On Windows, use trt-rtx for NVIDIA TensorRT RTX "
                 + "(cuda is accepted as a compatibility alias for trt-rtx). "
                 + "Pass --require-execution-provider to hard-pin instead of soft-prefer.",

@@ -73,8 +73,9 @@ public sealed class TrackdubBuilder
 
     /// <summary>
     /// Prefers a specific <see cref="ExecutionProviderKind"/> without requiring it.
-    /// The planner tries this EP first among stage/engine allow-lists, then falls through
-    /// (for example TensorRT RTX → DirectML → CPU) when the preferred EP is forbidden for
+    /// (for example TensorRT RTX → DirectML → CPU) when the preferred EP is forbidden for the engine family
+    /// or fails smoke. TensorRT RTX session-init fallback applies only to supported TensorRT RTX
+    /// failures (unsupported ops/kernels); other providers do not retry on session-init failure.
     /// the engine family, fails smoke, or TensorRT RTX session initialization fails.
     /// Pass nothing / use Auto for unconstrained planner choice.
     /// Use <see cref="WithExecutionProvider(ExecutionProviderKind, bool)"/> with
