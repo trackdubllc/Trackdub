@@ -375,7 +375,6 @@ public sealed class HuggingFaceModelDownloader : IModelDownloader
         }
     }
 
-
     // Best-effort sweep of orphaned partial downloads for a just-completed target file:
     // the deterministic ".partial" and any legacy random-GUID ".{guid}.tmp" siblings left by
     // interrupted/duplicate downloads of the same file.

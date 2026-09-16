@@ -54,7 +54,6 @@ internal static class WindowsMlOnnxRuntimeNativeResolver
         return nint.Zero;
     }
 
-
     private static bool TryLoadOnnxRuntimeNative(string fileName, out nint handle)
     {
         if (TryLoadFromManagedPackageDirectory(fileName, out handle))

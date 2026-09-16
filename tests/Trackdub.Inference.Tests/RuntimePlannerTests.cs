@@ -2414,7 +2414,6 @@ public sealed class RuntimePlannerTests
                 new ManifestVariantSpec("q4", "onnx/model_q4.onnx")
             ]);
 
-
     [Fact]
     public async Task PlanAsync_WhenPreferredModelTierSpecified_SelectsMatchingTier()
     {

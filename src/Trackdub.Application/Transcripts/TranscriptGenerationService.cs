@@ -710,7 +710,6 @@ public sealed class TranscriptGenerationService(
         }
     }
 
-
     private static void AddPreferredModelVariant(
         Dictionary<string, string> snapshot,
         InferenceModelPreferences modelPreferences,

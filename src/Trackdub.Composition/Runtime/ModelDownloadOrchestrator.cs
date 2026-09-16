@@ -568,7 +568,6 @@ public sealed class ModelDownloadOrchestrator(
         return new ModelDownloadResult(modelId, false, ModelCacheState.Corrupt, reason);
     }
 
-
     // Re-maps a single file's 0-100% progress onto the model's overall progress
     // (file fileIndex of fileCount), so concurrent model downloads each show an
     // independent, monotonically advancing bar instead of a per-file 0->100 reset.

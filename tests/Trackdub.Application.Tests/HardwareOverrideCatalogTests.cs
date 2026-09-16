@@ -99,7 +99,6 @@ public sealed class HardwareOverrideCatalogTests
             choice => string.Equals(choice.StageKey, "TextRefinement", StringComparison.Ordinal));
     }
 
-
     [Fact]
     public void CreateOverrides_omits_auto_choices_and_keeps_selected_providers()
     {

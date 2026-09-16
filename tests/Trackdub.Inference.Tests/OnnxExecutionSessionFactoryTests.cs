@@ -512,7 +512,6 @@ public sealed class OnnxExecutionSessionFactoryTests
         Assert.Equal("default", Assert.IsType<string>(explicitCpu));
     }
 
-
     [Fact]
     public void BuildSessionOptionsFingerprint_includes_policy_only_for_catalog_providers_that_apply_it()
     {

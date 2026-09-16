@@ -350,7 +350,6 @@ public sealed class JsonStudioSettingsService(
             VideoDecode: videoDecode);
     }
 
-
     private void ArchiveCorruptSettingsFile(Exception exception)
     {
         string settingsPath = storagePaths.SettingsPath;
