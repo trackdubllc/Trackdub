@@ -745,15 +745,9 @@ public sealed class OnnxExecutionSessionFactoryTests
     {
         // Generic ORT failures (corrupt model, OOM, etc.) must not trigger soft TRT→DML retry.
         // Only TRT-specific importer/kernel evidence qualifies.
-        try
-        {
-            using InferenceSession _ = new InferenceSession(Array.Empty<byte>());
-            Assert.Fail("Expected an exception for empty model bytes.");
-        }
-        catch (Exception ex)
-        {
-            Assert.False(OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure(ex));
-        }
+        Exception ex = Assert.ThrowsAny<Exception>(
+            () => new InferenceSession(Array.Empty<byte>()));
+        Assert.False(OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure(ex));
     }
 
     [Fact]
