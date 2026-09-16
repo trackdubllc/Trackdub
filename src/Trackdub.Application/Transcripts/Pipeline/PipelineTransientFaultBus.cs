@@ -138,13 +138,11 @@ public sealed class PipelineTransientFaultBus : IObservable<PipelineTransientFau
             stageMap[fault.Kind] = existing + 1;
         }
 
-
         var immutableCounts = new Dictionary<string, IReadOnlyDictionary<TransientFailureKind, int>>(counts.Count, StringComparer.Ordinal);
         foreach (KeyValuePair<string, Dictionary<TransientFailureKind, int>> kv in counts)
         {
             immutableCounts[kv.Key] = new ReadOnlyDictionary<TransientFailureKind, int>(kv.Value);
         }
-
 
         return new PipelineTransientFaultRunSnapshot(
             ProjectId: projectId,

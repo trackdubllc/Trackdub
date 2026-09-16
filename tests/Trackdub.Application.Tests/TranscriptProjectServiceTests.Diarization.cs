@@ -156,7 +156,6 @@ public partial class TranscriptProjectServiceTests
         Assert.Equal(2, retranscribed.CurrentTranscriptRevision!.RevisionNumber);
     }
 
-
     [Fact]
     public async Task CreateAsync_uses_diarization_stage_handler_to_download_missing_model()
     {

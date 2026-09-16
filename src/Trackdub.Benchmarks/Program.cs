@@ -135,7 +135,6 @@ public static class Program
         }
     }
 
-
     private static async Task<int> RunAudioPrepAsync(
         string[] args,
         TextWriter output,

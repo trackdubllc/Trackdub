@@ -141,7 +141,6 @@ public sealed class GlossaryServiceTests
         Assert.Equal(projectId, entry.ProjectId);
     }
 
-
     [Fact]
     public async Task GetMergedEntriesAsync_preserves_distinct_case_sensitive_source_terms()
     {

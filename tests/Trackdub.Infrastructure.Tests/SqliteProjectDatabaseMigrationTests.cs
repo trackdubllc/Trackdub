@@ -167,8 +167,6 @@ public sealed class SqliteProjectDatabaseMigrationTests
         }
     }
 
-
-
     [Fact]
     public async Task InitializeAsync_upgrades_legacy_project_database_missing_schema_columns()
     {

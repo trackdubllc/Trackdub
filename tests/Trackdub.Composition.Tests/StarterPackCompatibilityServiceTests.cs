@@ -264,7 +264,6 @@ public sealed class StarterPackCompatibilityServiceTests
         Assert.True(capturedRequest.RequirePreferredExecutionProvider);
     }
 
-
     [Fact]
     public async Task EvaluateAsync_marks_model_not_runnable_when_vram_is_below_manifest_minimum()
     {

@@ -100,7 +100,6 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
         Assert.Equal(expected.Export.MatchOriginalLoudness, actual.Export.MatchOriginalLoudness);
     }
 
-
     private FakeServiceScope CreateScope(
         string tempDirectory,
         ISpeakerDiarizationEngine? diarizationEngine = null,

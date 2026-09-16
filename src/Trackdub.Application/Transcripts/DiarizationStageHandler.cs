@@ -251,7 +251,6 @@ public sealed class DiarizationStageHandler(
         }
     }
 
-
     private async Task<bool> TryAcceptVerifiedModelAsync(
         string modelRootPath,
         string modelPath,

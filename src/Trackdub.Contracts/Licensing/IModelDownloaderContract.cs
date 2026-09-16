@@ -36,8 +36,6 @@ public interface IModelDownloaderContract
         IProgress<ModelDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default);
 
-
-
     /// <summary>
     /// Verifies the SHA-256 hash of a file against an expected value.
     /// </summary>

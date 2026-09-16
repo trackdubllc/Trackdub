@@ -30,7 +30,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
     private const double GenAiBeamCount = 5d;
     private const double GenAiRepetitionPenalty = 1.2d;
 
-
     private readonly IRuntimePlanner runtimePlanner;
     private readonly IRuntimePlanningPreferences? runtimePlanningPreferences;
     private readonly BenchmarkModelPathResolver modelPathResolver;

@@ -1261,8 +1261,6 @@ public sealed class ModelManifestLoaderTests
         }
     }
 
-
-
     [Fact]
     public void LoadCatalog_AcceptsCommercialUseVerified_WhenDownloadFileHashesCoverBenchmarkEntry()
     {
@@ -1315,8 +1313,6 @@ public sealed class ModelManifestLoaderTests
             File.Delete(manifestPath);
         }
     }
-
-
 
     [Fact]
     public void LoadCatalog_RejectsCommercialUseVerified_WhenDownloadFileHashesMissBenchmarkEntry()
