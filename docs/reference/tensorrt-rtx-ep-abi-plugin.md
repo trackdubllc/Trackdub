@@ -151,7 +151,9 @@ SDK equivalent: `WithExecutionProvider(ExecutionProviderKind.TensorRTRtx)` soft-
 
 Engine-family allow-lists deny TensorRT families for graphs that hard-fail session init under TRT RTX (examples: `whisper-onnx`, `opus-mt` / `madlad`, `chatterbox`, `cosyvoice`, `qwen3-tts`, `latentsync-diffusion`). Those stages still run under a global `trt-rtx` soft prefer by selecting DirectML/CPU. Do **not** treat this as hybrid VRAM spillover / `supports_partial_offload`; Trackdub does not claim partial offload for TRT RTX.
 
-Session create also retries once with DirectML (Windows) then CPU when TensorRT RTX was selected and init fails with EP/kernel/importer errors (`Kernel not found`, `ModelImporter`, `No graph will run on TensorRT`, etc.), and records that path in `FallbackReason` / bootstrap detail.
+Session create also retries once with DirectML (Windows) then CPU when TensorRT RTX was selected and init fails with EP/kernel/importer errors (`Kernel not found`, `ModelImporter`, `No graph will run on TensorRT`, etc.), and records that path in `FallbackReason` / bootstrap detail. Pass `--require-execution-provider` / `allowTrtInitFallback: false` to disable that retry on hard-pin routes.
+
+This TRT session-init retry applies to **single-session** factory paths (`CreateSingleAsync` / `CreatePooledSingleAsync`). Multi-session factories (Whisper/Opus/Qwen3-ASR/LatentSync pools) still rely on planner engine-family allow-lists and soft-prefer smoke fallthrough; they do not re-run TRT→DirectML init fallback per role in this pass.
 
 ## Quieter TRT capability probe logs
 

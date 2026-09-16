@@ -133,7 +133,8 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
                 candidate.ModelPath,
                 modelRootPath,
                 plan.ExecutionProvider!.Value,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                allowTrtInitFallback: !plan.RequirePreferredExecutionProvider).ConfigureAwait(false);
 
             long[] inputIds = session.Tokenizer.Encode(phonemes);
 
@@ -204,7 +205,8 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         string modelPath,
         string modelRootPath,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         if (pinnedSession is not null &&
             string.Equals(pinnedSession.ModelPath, modelPath, StringComparison.OrdinalIgnoreCase) &&
@@ -217,7 +219,12 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         pinnedSession?.Lease.Dispose();
         pinnedSession = null;
         OnnxExecutionSessionFactory.SingleSessionLease lease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync("kokoro", modelPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(
+                "kokoro",
+                modelPath,
+                provider,
+                cancellationToken,
+                allowTrtInitFallback: allowTrtInitFallback)
             .ConfigureAwait(false);
         try
         {

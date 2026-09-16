@@ -37,6 +37,7 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
         var inputTensor = new DenseTensor<float>(inputValues, [2, numSplits, SpleeterStftProcessor.PadTo, freqs]);
 
         ExecutionProviderKind provider = request.Plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
+        bool allowTrtInitFallback = !request.Plan.RequirePreferredExecutionProvider;
 
         string vocalsModelPath = Path.Combine(request.ModelRootPath, "vocals.onnx");
         string accModelPath = Path.Combine(request.ModelRootPath, "accompaniment.onnx");
@@ -51,7 +52,12 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
 
         // 3. Run Vocals
         using (OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-                   .CreatePooledSingleAsync("spleeter-vocals", vocalsModelPath, provider, cancellationToken)
+                   .CreatePooledSingleAsync(
+                       "spleeter-vocals",
+                       vocalsModelPath,
+                       provider,
+                       cancellationToken,
+                       allowTrtInitFallback: allowTrtInitFallback)
                    .ConfigureAwait(false))
         {
             selectedProvider = sessionLease.SelectedProvider;
@@ -71,7 +77,12 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
 
         // 4. Run Accompaniment
         using (OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-                   .CreatePooledSingleAsync("spleeter-acc", accModelPath, provider, cancellationToken)
+                   .CreatePooledSingleAsync(
+                       "spleeter-acc",
+                       accModelPath,
+                       provider,
+                       cancellationToken,
+                       allowTrtInitFallback: allowTrtInitFallback)
                    .ConfigureAwait(false))
         {
             string inputName = ResolveSingleInputName(sessionLease.Session);

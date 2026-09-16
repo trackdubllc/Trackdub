@@ -741,6 +741,22 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
+    public void LooksLikeTrtSessionInitFailure_does_not_treat_bare_onnx_runtime_exception_as_trt_init()
+    {
+        // Generic ORT failures (corrupt model, OOM, etc.) must not trigger soft TRT→DML retry.
+        // Only TRT-specific importer/kernel evidence qualifies.
+        try
+        {
+            using InferenceSession _ = new InferenceSession(Array.Empty<byte>());
+            Assert.Fail("Expected an exception for empty model bytes.");
+        }
+        catch (Exception ex)
+        {
+            Assert.False(OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure(ex));
+        }
+    }
+
+    [Fact]
     public void CreateInferenceSessionWithTrtInitFallback_retries_cpu_when_trt_init_fails()
     {
         var trtOptions = new SessionOptions();
@@ -768,23 +784,61 @@ public sealed class OnnxExecutionSessionFactoryTests
                 },
                 CancellationToken.None);
 
-        try
+        using (session)
+        using (selection.Options)
         {
             // Windows tries DirectML then CPU; Linux goes straight to CPU. Fake factory succeeds on
-            // the first non-TRT attempt, so createAttempts is 2 either way.
+            // the first non-TRT attempt, so createAttempts is 2 either way. SelectedProvider follows
+            // CreateSessionOptions (DirectML may itself fall back to CPU when DML is unavailable).
             Assert.Equal(2, createAttempts);
-            Assert.Equal(
-                OperatingSystem.IsWindows() ? ExecutionProviderKind.DirectMl : ExecutionProviderKind.Cpu,
-                selection.SelectedProvider);
+            Assert.True(
+                selection.SelectedProvider is ExecutionProviderKind.DirectMl or ExecutionProviderKind.Cpu);
             Assert.NotNull(selection.FallbackReason);
             Assert.Contains("TensorRT RTX session init failed", selection.FallbackReason, StringComparison.Ordinal);
             Assert.Contains("fell back to", selection.FallbackReason, StringComparison.OrdinalIgnoreCase);
         }
-        finally
-        {
-            session.Dispose();
-            selection.Options.Dispose();
-        }
+    }
+
+    [Fact]
+    public void CreateInferenceSessionWithTrtInitFallback_hard_pin_does_not_retry()
+    {
+        using var trtOptions = new SessionOptions();
+        var initialSelection = new OnnxExecutionSessionFactory.SessionOptionsSelection(
+            trtOptions,
+            ExecutionProviderKind.TensorRTRtx);
+
+        int createAttempts = 0;
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            OnnxExecutionSessionFactory.CreateInferenceSessionWithTrtInitFallback(
+                "fake-model.onnx",
+                initialSelection,
+                WindowsMlExecutionDevicePolicy.Explicit,
+                additionalTrtOptions: null,
+                sessionFactory: (_, _) =>
+                {
+                    createAttempts++;
+                    throw new InvalidOperationException(
+                        "Kernel not found for op: Squeeze(13) under NvTensorRTRTXExecutionProvider");
+                },
+                CancellationToken.None,
+                allowTrtInitFallback: false));
+
+        Assert.Equal(1, createAttempts);
+        Assert.Contains("Kernel not found", thrown.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ResolveEffectiveProviderKindFromSession_keeps_native_cuda_without_catalog_probe()
+    {
+        using InferenceSession session = CreateMinimalSession();
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("ResolveEffectiveProviderKindFromSession", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate effective provider resolver.");
+
+        object? raw = method.Invoke(
+            null,
+            [session, ExecutionProviderKind.Cuda, false]);
+        Assert.Equal(ExecutionProviderKind.Cuda, Assert.IsType<ExecutionProviderKind>(raw));
     }
 
     [Fact]

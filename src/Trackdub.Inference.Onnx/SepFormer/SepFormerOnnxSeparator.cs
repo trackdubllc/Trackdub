@@ -41,6 +41,7 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         ArgumentNullException.ThrowIfNull(request);
 
         ExecutionProviderKind provider = request.Plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
+        bool allowTrtInitFallback = !request.Plan.RequirePreferredExecutionProvider;
         string sepPath = Path.Combine(request.ModelRootPath, SepModelFileName);
         string osdPath = Path.Combine(request.ModelRootPath, OsdModelFileName);
 
@@ -49,12 +50,12 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         // 1. OSD pass — find overlap regions in sample space
         progress?.Report(new StemSeparationProgress(0, 3, 0d, 1d));
         List<(int Start, int End)> overlapRegions = await DetectOverlapRegionsAsync(
-            samples, osdPath, provider, cancellationToken).ConfigureAwait(false);
+            samples, osdPath, provider, cancellationToken, allowTrtInitFallback).ConfigureAwait(false);
 
         // 2. Chunked SepFormer with OSD gate
         progress?.Report(new StemSeparationProgress(1, 3, 0.33d, 1d));
         (float[] source0, float[] source1, int chunkCount, _) = await RunChunkedSepFormerAsync(
-            samples, overlapRegions, sepPath, provider, cancellationToken).ConfigureAwait(false);
+            samples, overlapRegions, sepPath, provider, cancellationToken, allowTrtInitFallback).ConfigureAwait(false);
 
         progress?.Report(new StemSeparationProgress(3, 3, 1d, 1d));
 
@@ -76,12 +77,14 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         ArgumentNullException.ThrowIfNull(request);
 
         ExecutionProviderKind provider = request.Plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
+        bool allowTrtInitFallback = !request.Plan.RequirePreferredExecutionProvider;
         string sepPath = Path.Combine(request.ModelRootPath, SepModelFileName);
         float[] samples = request.Samples;
         var overlapRegions = new List<(int Start, int End)> { (0, samples.Length) };
 
         (float[] source0, float[] source1, int chunkCount, bool permutationWarning) =
-            await RunChunkedSepFormerAsync(samples, overlapRegions, sepPath, provider, cancellationToken)
+            await RunChunkedSepFormerAsync(
+                samples, overlapRegions, sepPath, provider, cancellationToken, allowTrtInitFallback)
                 .ConfigureAwait(false);
 
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -106,13 +109,19 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         float[] samples,
         string osdPath,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         var overlapRegions = new List<(int Start, int End)>();
         int totalSamples = samples.Length;
 
         using OnnxExecutionSessionFactory.SingleSessionLease osdLease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync("sepformer-osd", osdPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(
+                "sepformer-osd",
+                osdPath,
+                provider,
+                cancellationToken,
+                allowTrtInitFallback: allowTrtInitFallback)
             .ConfigureAwait(false);
 
         int windowStart = 0;
@@ -225,7 +234,8 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         List<(int Start, int End)> overlapRegions,
         string sepPath,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         int totalSamples = samples.Length;
         float[] source0 = new float[totalSamples];
@@ -243,7 +253,12 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
         float[] fadeOut = BuildLinearRamp(OverlapSamples, rising: false);
 
         using OnnxExecutionSessionFactory.SingleSessionLease sepLease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync("sepformer", sepPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(
+                "sepformer",
+                sepPath,
+                provider,
+                cancellationToken,
+                allowTrtInitFallback: allowTrtInitFallback)
             .ConfigureAwait(false);
 
         while (chunkStart < totalSamples)

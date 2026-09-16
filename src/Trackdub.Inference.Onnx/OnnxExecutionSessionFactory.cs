@@ -232,7 +232,8 @@ internal static class OnnxExecutionSessionFactory
         string modelPath,
         ExecutionProviderKind provider,
         CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, string>? additionalTrtOptions = null)
+        IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
+        bool allowTrtInitFallback = true)
     {
         string requestedProvider = FormatProviderLabel(provider);
         var bootstrapResult = await _bootstrapper.BootstrapAsync(provider, allowDownloads: true, cancellationToken)
@@ -252,7 +253,8 @@ internal static class OnnxExecutionSessionFactory
                 devicePolicy,
                 additionalTrtOptions,
                 sessionFactory: null,
-                cancellationToken);
+                cancellationToken,
+                allowTrtInitFallback);
             bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, sessionOptionsSelection.SelectedProvider);
             ExecutionProviderKind effectiveProvider = ResolveEffectiveProviderKindFromSession(
                 session,
@@ -293,7 +295,9 @@ internal static class OnnxExecutionSessionFactory
 
     /// <summary>
     /// Creates an ORT session; when TensorRT RTX was selected and init fails due to unsupported
-    /// ops/kernels, retries once with DirectML (Windows) then CPU and records FallbackReason.
+    /// ops/kernels, optionally retries once with DirectML (Windows) then CPU and records FallbackReason.
+    /// Pass <paramref name="allowTrtInitFallback"/> <see langword="false"/> for hard-pin routes
+    /// (<c>RequirePreferredExecutionProvider</c> / CLI <c>--require-execution-provider</c>).
     /// </summary>
     internal static (InferenceSession Session, SessionOptionsSelection Selection) CreateInferenceSessionWithTrtInitFallback(
         string modelPath,
@@ -301,7 +305,8 @@ internal static class OnnxExecutionSessionFactory
         WindowsMlExecutionDevicePolicy devicePolicy,
         IReadOnlyDictionary<string, string>? additionalTrtOptions,
         Func<string, SessionOptions, InferenceSession>? sessionFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         try
         {
@@ -313,7 +318,8 @@ internal static class OnnxExecutionSessionFactory
             return (session, initialSelection);
         }
         catch (Exception ex) when (
-            initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+            allowTrtInitFallback
+            && initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
             && LooksLikeTrtSessionInitFailure(ex))
         {
             string trtError = SummarizeExceptionMessage(ex);
@@ -334,17 +340,24 @@ internal static class OnnxExecutionSessionFactory
                         cancellationToken);
                     // Transfer ownership: dispose the failed TRT options; caller owns the fallback Options.
                     initialSelection.Options.Dispose();
-                    string fallbackLabel = FormatProviderLabel(fallbackProvider);
+                    string effectiveLabel = FormatProviderLabel(fallbackSelection.SelectedProvider);
+                    string trtFallbackReason =
+                        $"TensorRT RTX session init failed ({trtError}); fell back to {effectiveLabel}.";
                     return (
                         session,
                         new SessionOptionsSelection(
                             fallbackSelection.Options,
-                            fallbackProvider,
-                            $"TensorRT RTX session init failed ({trtError}); fell back to {fallbackLabel}."));
+                            fallbackSelection.SelectedProvider,
+                            MergeFallbackReasons(trtFallbackReason, fallbackSelection.FallbackReason)));
                 }
                 catch (Exception fallbackEx)
                 {
                     fallbackSelection.Options.Dispose();
+                    if (!IsRecoverableTrtFallbackInitFailure(fallbackEx))
+                    {
+                        throw;
+                    }
+
                     lastFailure = fallbackEx;
                 }
             }
@@ -374,6 +387,7 @@ internal static class OnnxExecutionSessionFactory
                 || message.Contains("No graph will run on TensorRT", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("NvTensorRTRTX", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("TensorRT-RTX", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("TensorRT RTX", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("transformer_memcpy", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("ProcessInitializers", StringComparison.OrdinalIgnoreCase))
             {
@@ -381,8 +395,15 @@ internal static class OnnxExecutionSessionFactory
             }
         }
 
-        return exception is OnnxRuntimeException;
+        return false;
     }
+
+    private static bool IsRecoverableTrtFallbackInitFailure(Exception exception) =>
+        LooksLikeTrtSessionInitFailure(exception)
+        || exception is OnnxRuntimeException
+        || exception is InvalidOperationException
+        || exception is DllNotFoundException
+        || exception is EntryPointNotFoundException;
 
     private static string SummarizeExceptionMessage(Exception exception)
     {
@@ -485,7 +506,8 @@ internal static class OnnxExecutionSessionFactory
         string? modelId = null,
         string? variant = null,
         IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
-        Func<string, SessionOptions, InferenceSession>? sessionFactory = null)
+        Func<string, SessionOptions, InferenceSession>? sessionFactory = null,
+        bool allowTrtInitFallback = true)
     {
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
@@ -500,6 +522,8 @@ internal static class OnnxExecutionSessionFactory
             devicePolicy,
             additionalTrtOptions);
 
+        // Options ownership may transfer to a replacement SessionOptionsSelection when TRT init
+        // falls back; keep a movable dispose target instead of a fixed `using`.
         SessionOptions? optionsToDispose = optionsSelection.Options;
         SessionOptionsSelection leaseSelection = optionsSelection;
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, optionsSelection.SelectedProvider);
@@ -529,7 +553,8 @@ internal static class OnnxExecutionSessionFactory
                                 devicePolicy,
                                 additionalTrtOptions,
                                 sessionFactory,
-                                ct);
+                                ct,
+                                allowTrtInitFallback);
                         leaseSelection = selection;
                         optionsSelectedProvider = selection.SelectedProvider;
                         useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, selection.SelectedProvider);
@@ -1323,6 +1348,13 @@ internal static class OnnxExecutionSessionFactory
             return ResolveDnnlEffectiveProviderFromSession(session);
         }
 
+        // Native ORT CUDA / classic TensorRT are not WinML catalog EP names. Probing
+        // GetEpDeviceForInputs through the catalog mapper would treat unmapped names as CPU.
+        if (optionsSelectedProvider is ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRt)
+        {
+            return optionsSelectedProvider;
+        }
+
         // Always probe GetEpDeviceForInputs for GPU / catalog routes so TRT sessions that
         // assigned zero nodes (or fell through) report DirectML/CPU honestly.
         if (usedCatalogDevicePolicy || ShouldProbeEffectiveEpDevices(optionsSelectedProvider))
@@ -1335,9 +1367,7 @@ internal static class OnnxExecutionSessionFactory
 
     private static bool ShouldProbeEffectiveEpDevices(ExecutionProviderKind optionsSelectedProvider) =>
         optionsSelectedProvider is ExecutionProviderKind.TensorRTRtx
-            or ExecutionProviderKind.TensorRt
             or ExecutionProviderKind.DirectMl
-            or ExecutionProviderKind.Cuda
             or ExecutionProviderKind.Migraphx
             or ExecutionProviderKind.Qnn
             or ExecutionProviderKind.OpenVinoCatalog

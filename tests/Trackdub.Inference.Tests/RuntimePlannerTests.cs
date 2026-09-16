@@ -1708,6 +1708,59 @@ public sealed class RuntimePlannerTests
                 && warning.Detail.Contains("chatterbox", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("tonythethompson/CosyVoice-300M-ONNX", "cosyvoice", "cosyvoice", "default")]
+    [InlineData("tonythethompson/Qwen3-TTS-12Hz-0.6B-CustomVoice-ONNX", "qwen3-tts", "qwen3-tts", "default")]
+    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForTtsFamilies_PlansDirectMlWithoutTrtSmoke(
+        string modelId,
+        string modelAlias,
+        string engineFamily,
+        string variant)
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = LoadBundledRegistry();
+
+        string cacheRoot = workspace.CreateCacheRoot(modelId);
+        WriteBundledCacheFiles(workspace, registry, modelAlias, cacheRoot, variant);
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [CreateCacheRecord(registry, modelId, cacheRoot)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true),
+                new(ExecutionProviderKind.Cpu, true)
+            ],
+            request =>
+            {
+                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
+                {
+                    throw new InvalidOperationException($"TensorRT families must not be smoked for {engineFamily}.");
+                }
+
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Tts,
+            PreferredModelAlias: modelAlias,
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(engineFamily, plan.EngineFamily);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.True(plan.RequirePreferredExecutionProvider);
+        Assert.Contains(
+            plan.Warnings,
+            warning =>
+                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
+                && warning.Detail is not null
+                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal)
+                && warning.Detail.Contains(engineFamily, StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public async Task PlanAsync_SoftPreferTensorRTRtxForChatterbox_SkipsTrtAndUsesDirectMl()
     {

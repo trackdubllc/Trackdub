@@ -79,7 +79,8 @@ public sealed class CosyVoiceTtsEngine(
             PinnedRuntime runtime = await GetOrCreatePinnedRuntimeAsync(
                 modelFiles,
                 plan.ExecutionProvider!.Value,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                allowTrtInitFallback: !plan.RequirePreferredExecutionProvider).ConfigureAwait(false);
 
             float[] audioSamples = runtime.Pipeline.Synthesize(
                 request.Text,
@@ -133,7 +134,8 @@ public sealed class CosyVoiceTtsEngine(
     private async Task<PinnedRuntime> GetOrCreatePinnedRuntimeAsync(
         CosyVoiceModelFiles modelFiles,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         if (pinnedRuntime is not null &&
             pinnedRuntime.Matches(modelFiles.ModelRootPath, modelFiles.Variant, provider))
@@ -145,7 +147,8 @@ public sealed class CosyVoiceTtsEngine(
         CosyVoiceOnnxSessions sessions = await CosyVoiceOnnxSessions.CreateAsync(
             modelFiles,
             provider,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            allowTrtInitFallback).ConfigureAwait(false);
         CosyVoiceEmbeddingTables embeddings = CosyVoiceEmbeddingTables.Load(modelFiles.ModelRootPath);
         CosyVoiceWhisperTokenizer tokenizer = CosyVoiceWhisperTokenizer.Load(modelFiles.ModelRootPath);
         var pipeline = new CosyVoiceSynthesisPipeline(sessions, embeddings, tokenizer);

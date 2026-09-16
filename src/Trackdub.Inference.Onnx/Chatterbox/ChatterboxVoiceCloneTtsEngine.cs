@@ -88,7 +88,10 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         {
             ThrowIfDisposed();
             PinnedSessions sessions = await GetOrCreatePinnedSessionsAsync(
-                modelFiles, plan.ExecutionProvider!.Value, cancellationToken).ConfigureAwait(false);
+                modelFiles,
+                plan.ExecutionProvider!.Value,
+                cancellationToken,
+                allowTrtInitFallback: !plan.RequirePreferredExecutionProvider).ConfigureAwait(false);
 
             string conditionedText = ApplyMultilingualLanguagePrefix(
                 request.Text,
@@ -723,7 +726,8 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
     private async Task<PinnedSessions> GetOrCreatePinnedSessionsAsync(
         ChatterboxModelFiles modelFiles,
         ExecutionProviderKind provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTrtInitFallback = true)
     {
         if (pinnedSessions is not null &&
             string.Equals(pinnedSessions.ModelRootDirectory, modelFiles.RootDirectory, StringComparison.OrdinalIgnoreCase) &&
@@ -749,16 +753,36 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             ExecutionProviderKind languageModelProvider = ResolveLanguageModelProvider(provider);
             ExecutionProviderKind conditionalDecoderProvider = ResolveConditionalDecoderProvider(provider);
             speechEncoder = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync("chatterbox", modelFiles.SpeechEncoderPath, conditioningProvider, cancellationToken)
+                .CreatePooledSingleAsync(
+                    "chatterbox",
+                    modelFiles.SpeechEncoderPath,
+                    conditioningProvider,
+                    cancellationToken,
+                    allowTrtInitFallback: allowTrtInitFallback)
                 .ConfigureAwait(false);
             embedTokens = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync("chatterbox", modelFiles.EmbedTokensPath, conditioningProvider, cancellationToken)
+                .CreatePooledSingleAsync(
+                    "chatterbox",
+                    modelFiles.EmbedTokensPath,
+                    conditioningProvider,
+                    cancellationToken,
+                    allowTrtInitFallback: allowTrtInitFallback)
                 .ConfigureAwait(false);
             languageModel = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync("chatterbox", modelFiles.LanguageModelPath, languageModelProvider, cancellationToken)
+                .CreatePooledSingleAsync(
+                    "chatterbox",
+                    modelFiles.LanguageModelPath,
+                    languageModelProvider,
+                    cancellationToken,
+                    allowTrtInitFallback: allowTrtInitFallback)
                 .ConfigureAwait(false);
             conditionalDecoder = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync("chatterbox", modelFiles.ConditionalDecoderPath, conditionalDecoderProvider, cancellationToken)
+                .CreatePooledSingleAsync(
+                    "chatterbox",
+                    modelFiles.ConditionalDecoderPath,
+                    conditionalDecoderProvider,
+                    cancellationToken,
+                    allowTrtInitFallback: allowTrtInitFallback)
                 .ConfigureAwait(false);
         }
         catch
