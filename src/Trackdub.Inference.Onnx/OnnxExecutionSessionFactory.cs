@@ -316,7 +316,6 @@ internal static class OnnxExecutionSessionFactory
             initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
             && LooksLikeTrtSessionInitFailure(ex))
         {
-            initialSelection.Options.Dispose();
             string trtError = SummarizeExceptionMessage(ex);
             Exception? lastFailure = ex;
 
@@ -333,6 +332,8 @@ internal static class OnnxExecutionSessionFactory
                         fallbackSelection.Options,
                         sessionFactory,
                         cancellationToken);
+                    // Transfer ownership: dispose the failed TRT options; caller owns the fallback Options.
+                    initialSelection.Options.Dispose();
                     string fallbackLabel = FormatProviderLabel(fallbackProvider);
                     return (
                         session,
@@ -348,6 +349,7 @@ internal static class OnnxExecutionSessionFactory
                 }
             }
 
+            // Leave initialSelection.Options for the caller to dispose.
             throw lastFailure ?? ex;
         }
     }
@@ -498,69 +500,70 @@ internal static class OnnxExecutionSessionFactory
             devicePolicy,
             additionalTrtOptions);
 
-        InferenceSession? createdSession = null;
+        SessionOptions? optionsToDispose = optionsSelection.Options;
+        SessionOptionsSelection leaseSelection = optionsSelection;
+        bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, optionsSelection.SelectedProvider);
+        ExecutionProviderKind optionsSelectedProvider = optionsSelection.SelectedProvider;
+
+        string optionsFingerprint = BuildSessionOptionsFingerprint(optionsSelectedProvider, devicePolicy, additionalTrtOptions);
+        SessionPoolKey key = SessionPoolKey.ForSingle(
+            engineFamily,
+            modelPath,
+            optionsSelection.SelectedProvider,
+            modelId,
+            variant,
+            optionsFingerprint: optionsFingerprint);
+
+        SessionLease? poolLease = null;
         try
         {
-            (createdSession, optionsSelection) = CreateInferenceSessionWithTrtInitFallback(
-                modelPath,
-                optionsSelection,
-                devicePolicy,
-                additionalTrtOptions,
-                sessionFactory,
-                cancellationToken);
-
-            bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, optionsSelection.SelectedProvider);
-            ExecutionProviderKind optionsSelectedProvider = optionsSelection.SelectedProvider;
-
-            string optionsFingerprint = BuildSessionOptionsFingerprint(optionsSelectedProvider, devicePolicy, additionalTrtOptions);
-            SessionPoolKey key = SessionPoolKey.ForSingle(
-                engineFamily,
-                modelPath,
-                optionsSelection.SelectedProvider,
-                modelId,
-                variant,
-                optionsFingerprint: optionsFingerprint);
-
-            // Prefer pooling the already-created session when the pool is empty for this key.
-            SessionLease? poolLease = null;
-            try
-            {
-                poolLease = await pool
-                    .GetLeaseAsync(
-                        key,
-                        _ =>
+            poolLease = await pool
+                .GetLeaseAsync(
+                    key,
+                    ct =>
+                    {
+                        (InferenceSession session, SessionOptionsSelection selection) =
+                            CreateInferenceSessionWithTrtInitFallback(
+                                modelPath,
+                                optionsSelection,
+                                devicePolicy,
+                                additionalTrtOptions,
+                                sessionFactory,
+                                ct);
+                        leaseSelection = selection;
+                        optionsSelectedProvider = selection.SelectedProvider;
+                        useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, selection.SelectedProvider);
+                        if (!ReferenceEquals(selection.Options, optionsToDispose))
                         {
-                            InferenceSession handoff = createdSession
-                                ?? throw new InvalidOperationException("Session handoff already consumed.");
-                            createdSession = null;
-                            return Task.FromResult(handoff);
-                        },
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                            optionsToDispose = selection.Options;
+                        }
 
-                ExecutionProviderKind effectiveProvider = ResolveEffectiveProviderKindFromSession(
-                    poolLease.Session,
-                    optionsSelectedProvider,
-                    useCatalogDevicePolicy);
-                string selectedProvider = FormatProviderLabel(effectiveProvider);
-                string? epFallbackReason = BuildSessionOptionsFallbackReason(provider, effectiveProvider, optionsSelection);
-                string? bootstrapDetail = FormatBootstrapDetail(bootstrapResult.Detail, epFallbackReason);
+                        return Task.FromResult(session);
+                    },
+                    cancellationToken)
+                .ConfigureAwait(false);
 
-                return new SingleSessionLease(poolLease.Session, requestedProvider, selectedProvider, bootstrapDetail)
-                {
-                    PoolLease = poolLease
-                };
-            }
-            catch
+            ExecutionProviderKind effectiveProvider = ResolveEffectiveProviderKindFromSession(
+                poolLease.Session,
+                optionsSelectedProvider,
+                useCatalogDevicePolicy);
+            string selectedProvider = FormatProviderLabel(effectiveProvider);
+            string? epFallbackReason = BuildSessionOptionsFallbackReason(provider, effectiveProvider, leaseSelection);
+            string? bootstrapDetail = FormatBootstrapDetail(bootstrapResult.Detail, epFallbackReason);
+
+            return new SingleSessionLease(poolLease.Session, requestedProvider, selectedProvider, bootstrapDetail)
             {
-                poolLease?.Dispose();
-                throw;
-            }
+                PoolLease = poolLease
+            };
+        }
+        catch
+        {
+            poolLease?.Dispose();
+            throw;
         }
         finally
         {
-            createdSession?.Dispose();
-            optionsSelection.Options.Dispose();
+            optionsToDispose?.Dispose();
         }
     }
 
