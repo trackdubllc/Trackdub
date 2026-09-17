@@ -259,11 +259,33 @@ public sealed class StarterPackPresentationService(
             return ["Some models need GPU-optimized variants. Use Optimize in Model Manager after GPU runtime is ready."];
         }
 
-        return compatibilityReport?.Stages
-            .Where(stage => stage.FallbackApplied)
-            .Select(static stage => stage.DescribeFallback())
-            .Where(static message => !string.IsNullOrWhiteSpace(message))
+        if (compatibilityReport is null)
+        {
+            return null;
+        }
+
+        var lines = new List<string>();
+
+        // Positive inventory: what each model will run. Avoids a wall of
+        // "path unavailable" lines when the pack is still runnable.
+        List<string> runtimeLines = compatibilityReport.Stages
+            .Where(static stage => stage.Runnable)
+            .Select(static stage => stage.DescribeResolvedRuntime())
+            .Where(static line => !string.IsNullOrWhiteSpace(line))
             .ToList();
+        if (runtimeLines.Count > 0)
+        {
+            lines.Add("Runtime plan");
+            lines.AddRange(runtimeLines);
+        }
+
+        // True exceptions only — real blockers, not every preferred-path miss.
+        lines.AddRange(compatibilityReport.Stages
+            .Where(static stage => stage is { Runnable: false } or { FallbackApplied: true })
+            .Select(static stage => stage.DescribeFallback())
+            .Where(static message => !string.IsNullOrWhiteSpace(message)));
+
+        return lines.Count == 0 ? null : lines;
     }
 
     private async Task<StarterPackCompatibilityReport?> EvaluateCompatibilityIfLocalAsync(

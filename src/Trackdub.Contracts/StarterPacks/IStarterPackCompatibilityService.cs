@@ -23,9 +23,14 @@ public sealed record StageCompatibilityEntry(
 {
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
+    /// <summary>Positive inventory line: what this stage will actually run.</summary>
+    public string DescribeResolvedRuntime() =>
+        $"{Alias}: {ResolvedVariant} on {ResolvedExecutionProvider}";
+
     /// <summary>
     /// User-facing fallback note. Does not claim "GPU unavailable" when the resolved
     /// path is still a GPU (e.g. preferred DirectML/TRT fell back to CUDA fp16).
+    /// Silent for Windows native-CUDA rewrites — the runtime plan already shows the DML path.
     /// </summary>
     public string DescribeFallback()
     {
@@ -41,12 +46,7 @@ public sealed record StageCompatibilityEntry(
 
         if (string.Equals(FallbackReason, "native_cuda_disabled_on_windows", StringComparison.OrdinalIgnoreCase))
         {
-            return $"Native CUDA is not used for starter packs on Windows. Using {ResolvedVariant} on {ResolvedExecutionProvider}.";
-        }
-
-        if (string.Equals(FallbackReason, "native_cuda_disabled_on_windows", StringComparison.OrdinalIgnoreCase))
-        {
-            return $"Native CUDA is not used for starter packs on Windows. Using {ResolvedVariant} on {ResolvedExecutionProvider}.";
+            return string.Empty;
         }
 
         if (IsCpuProvider(ResolvedExecutionProvider))

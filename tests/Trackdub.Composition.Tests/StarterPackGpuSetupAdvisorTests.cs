@@ -81,6 +81,29 @@ public sealed class StarterPackGpuSetupAdvisorTests
     }
 
     [Fact]
+    public void BuildCompatibilityWarnings_lists_runtime_plan_for_runnable_stages()
+    {
+        var report = new StarterPackCompatibilityReport(
+            "premium",
+            "default",
+            "balanced_gpu",
+            [
+                CreateStage("silero-vad", "trt-rtx", "directml", resolvedVariant: "fp16", fallbackApplied: true, reason: "native_cuda_disabled_on_windows"),
+                CreateStage("phi-4-mini", "trt-rtx", "trt-rtx", resolvedVariant: "gpu-int4", fallbackApplied: false, reason: null),
+            ],
+            AllStagesRunnable: true,
+            AnyFallbackApplied: true);
+
+        IReadOnlyList<string>? warnings = StarterPackPresentationService.BuildCompatibilityWarnings(report, gpuSetup: null);
+
+        Assert.NotNull(warnings);
+        Assert.Equal("Runtime plan", warnings![0]);
+        Assert.Contains("silero-vad: fp16 on directml", warnings);
+        Assert.Contains("phi-4-mini: gpu-int4 on trt-rtx", warnings);
+        Assert.DoesNotContain(warnings, line => line.Contains("Native CUDA", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void BuildCompatibilityWarnings_suppresses_per_stage_lines_when_gpu_setup_present()
     {
         var gpuSetup = new StarterPackGpuSetupHint(
@@ -105,15 +128,18 @@ public sealed class StarterPackGpuSetupAdvisorTests
     private static StageCompatibilityEntry CreateStage(
         string alias,
         string requestedEp,
-        string resolvedEp) =>
+        string resolvedEp,
+        string resolvedVariant = "default",
+        bool fallbackApplied = true,
+        string? reason = "ep_unavailable") =>
         new(
             StageNames.Vad,
             alias,
             "default",
             requestedEp,
-            "default",
+            resolvedVariant,
             resolvedEp,
-            FallbackApplied: true,
-            FallbackReason: "ep_unavailable",
+            FallbackApplied: fallbackApplied,
+            FallbackReason: reason,
             Runnable: true);
 }

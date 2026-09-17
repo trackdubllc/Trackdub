@@ -61,7 +61,7 @@ public sealed class StageCompatibilityEntryFallbackMessageTests
     }
 
     [Fact]
-    public void DescribeFallback_when_native_cuda_disabled_on_windows()
+    public void DescribeFallback_when_native_cuda_disabled_on_windows_is_silent()
     {
         StageCompatibilityEntry stage = Create(
             requestedEp: "cuda",
@@ -69,12 +69,21 @@ public sealed class StageCompatibilityEntryFallbackMessageTests
             resolvedVariant: "fp16",
             reason: "native_cuda_disabled_on_windows");
 
-        string message = stage.DescribeFallback();
+        Assert.Equal(string.Empty, stage.DescribeFallback());
+        Assert.Equal("silero-vad: fp16 on directml", stage.DescribeResolvedRuntime());
+    }
 
-        Assert.Equal(
-            "Native CUDA is not used for starter packs on Windows. Using fp16 on directml.",
-            message);
-        Assert.DoesNotContain("GPU path unavailable", message, StringComparison.OrdinalIgnoreCase);
+    [Fact]
+    public void DescribeResolvedRuntime_lists_alias_variant_and_provider()
+    {
+        StageCompatibilityEntry stage = Create(
+            requestedEp: "trt-rtx",
+            resolvedEp: "trt-rtx",
+            requestedVariant: "default",
+            resolvedVariant: "gpu-int4",
+            fallbackApplied: false);
+
+        Assert.Equal("silero-vad: gpu-int4 on trt-rtx", stage.DescribeResolvedRuntime());
     }
 
     [Fact]

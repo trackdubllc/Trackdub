@@ -88,8 +88,13 @@ public sealed partial class StarterPackImportExportService(
                     cancellationToken,
                     skipProviderSmokeTest: true)
                 .ConfigureAwait(false);
+            warnings.Add("Runtime plan");
             warnings.AddRange(compatibility.Stages
-                .Where(stage => stage.FallbackApplied)
+                .Where(static stage => stage.Runnable)
+                .Select(static stage => stage.DescribeResolvedRuntime())
+                .Where(static line => !string.IsNullOrWhiteSpace(line)));
+            warnings.AddRange(compatibility.Stages
+                .Where(static stage => stage is { Runnable: false } or { FallbackApplied: true })
                 .Select(static stage => stage.DescribeFallback())
                 .Where(static message => !string.IsNullOrWhiteSpace(message)));
         }
