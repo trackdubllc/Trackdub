@@ -402,7 +402,12 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
                 cancellationToken).ConfigureAwait(false);
             repetitionGuarded |= decodeResult.RepetitionGuarded;
             string decodedText = tokenizer.DecodeText(decodeResult.OutputTokens);
-            if (!string.IsNullOrWhiteSpace(decodedText))
+            if (WhisperGenAiAudioTranscriptionEngine.IsDegenerateTranscriptText(decodedText))
+            {
+                // Punctuation-only hallucination (". . .") — keep the region blank so
+                // index alignment holds, but do not surface garbage as transcript text.
+            }
+            else if (!string.IsNullOrWhiteSpace(decodedText))
             {
                 chunkTexts.Add(decodedText);
                 double chunkStartSeconds = region.StartSeconds + (offset / 16000d);

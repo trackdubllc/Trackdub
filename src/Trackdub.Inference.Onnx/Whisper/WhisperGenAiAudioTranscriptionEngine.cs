@@ -156,6 +156,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         }
 
         var segments = new List<RecognizedTranscriptSegment>(effectiveRegions.Count);
+        int droppedDegenerateChunks = 0;
 
         // Each request gets an isolated subdirectory so concurrent calls on the same engine
         // instance don't overwrite each other's chunk files or delete a live directory.
@@ -181,7 +182,9 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
                     requestTempDirectory,
                     cancellationToken).ConfigureAwait(false);
 
-                if (string.IsNullOrWhiteSpace(transcription.Text))
+                droppedDegenerateChunks += transcription.DroppedDegenerateChunks;
+
+                if (IsDegenerateTranscriptText(transcription.Text))
                 {
                     continue;
                 }
@@ -200,7 +203,14 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
             TryDeleteDirectory(requestTempDirectory);
         }
 
-        LastExecutionSummary = CreateExecutionSummary(plan, "ONNX Runtime GenAI native generator loop.");
+        string bootstrapDetail = "ONNX Runtime GenAI native generator loop.";
+        if (droppedDegenerateChunks > 0)
+        {
+            bootstrapDetail +=
+                $" Dropped {droppedDegenerateChunks} degenerate chunk(s) (punctuation-only / period hallucination).";
+        }
+
+        LastExecutionSummary = CreateExecutionSummary(plan, bootstrapDetail);
         return segments;
     }
 
@@ -229,6 +239,28 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         }
 
         return builder.ToString().Trim();
+    }
+
+    /// <summary>
+    /// True when decoded ASR text carries no alphanumeric content — Whisper's typical
+    /// punctuation-only hallucination (". . .", "。 。 。", "S S S") on bad features or non-speech.
+    /// </summary>
+    internal static bool IsDegenerateTranscriptText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return true;
+        }
+
+        foreach (char character in text)
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     internal static string GetAudioProcessorPromptForTesting() => WhisperProcessorPrompt;
@@ -338,6 +370,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         var chunkWords = new List<RecognizedTranscriptWord>();
         var detectedLanguages = new List<string>();
         int chunkIndex = 0;
+        int droppedDegenerateChunks = 0;
 
         for (double chunkStartSeconds = startSeconds;
              chunkStartSeconds < endSeconds;
@@ -369,7 +402,14 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
                 ?? InferLanguageFromTokenIds(transcriptionTokens, languageTokensById)
                 ?? TryInferDetectedLanguage(decodedText)
                 ?? detectedLanguage;
-            if (!string.IsNullOrWhiteSpace(cleanedText))
+            if (IsDegenerateTranscriptText(cleanedText))
+            {
+                // Whisper often hallucinates ".", "。", or mixed punctuation on
+                // non-speech / bad features. Dropping the chunk keeps those out of
+                // the transcript instead of polishing garbage downstream.
+                droppedDegenerateChunks++;
+            }
+            else if (!string.IsNullOrWhiteSpace(cleanedText))
             {
                 chunkTexts.Add(cleanedText);
                 chunkWords.AddRange(WhisperOnnxAudioTranscriptionEngine.BuildRecognizedWords(
@@ -390,7 +430,8 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         return new RegionTranscription(
             string.Join(" ", chunkTexts).Trim(),
             ResolveDetectedLanguage(detectedLanguages),
-            WhisperOnnxAudioTranscriptionEngine.ReindexWords(chunkWords));
+            WhisperOnnxAudioTranscriptionEngine.ReindexWords(chunkWords),
+            droppedDegenerateChunks);
     }
 
     private static async Task WriteClipAsync(
@@ -608,5 +649,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
     private sealed record RegionTranscription(
         string Text,
         string? DetectedLanguage,
-        IReadOnlyList<RecognizedTranscriptWord> Words);
+        IReadOnlyList<RecognizedTranscriptWord> Words,
+        int DroppedDegenerateChunks = 0);
 }

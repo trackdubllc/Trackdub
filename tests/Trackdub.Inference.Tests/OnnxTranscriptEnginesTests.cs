@@ -155,6 +155,25 @@ public sealed class OnnxTranscriptEnginesTests
         Assert.Equal(pattern, tokens);
     }
 
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("   ", true)]
+    [InlineData(". . .", true)]
+    [InlineData("。。。", true)]
+    [InlineData("。 。 。", true)]
+    [InlineData("...", true)]
+    [InlineData("S S S", false)]
+    [InlineData("Pas. . .", false)]
+    [InlineData("hello world", false)]
+    [InlineData("Hello, world!", false)]
+    public void WhisperGenAiAudioTranscriptionEngine_IsDegenerateTranscriptText(
+        string? text,
+        bool expectedDegenerate)
+    {
+        Assert.Equal(expectedDegenerate, WhisperGenAiAudioTranscriptionEngine.IsDegenerateTranscriptText(text));
+    }
+
 #if WINDOWS
     [Fact]
     public void WhisperGenAiAudioTranscriptionEngine_CleansSpecialTokensAndInfersLanguage()
