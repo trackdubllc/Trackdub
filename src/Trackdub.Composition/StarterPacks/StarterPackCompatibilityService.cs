@@ -122,15 +122,41 @@ public sealed class StarterPackCompatibilityService(
             .PlanAsync(planningRequest, cancellationToken)
             .ConfigureAwait(false);
 
+        // Windows starter packs must not advertise native ORT CUDA. User-facing cuda pins
+        // already map to TRT RTX; when TRT is not ready the planner may still land on the
+        // advanced native-CUDA lane, which is frequently unrunnable (CUDA 12 vs 13). Re-plan
+        // preferring DirectML so packs report DML/CPU instead of a dead cuda path.
+        string? windowsNativeCudaFallbackNote = null;
+        if (OperatingSystem.IsWindows() &&
+            plan.ExecutionProvider is ExecutionProviderKind.Cuda)
+        {
+            StageRuntimePlan directMlPlan = await runtimePlanner
+                .PlanAsync(planningRequest with
+                {
+                    PreferredExecutionProvider = ExecutionProviderKind.DirectMl,
+                    RequirePreferredExecutionProvider = false,
+                },
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (directMlPlan.ExecutionProvider is not ExecutionProviderKind.Cuda &&
+                directMlPlan.IsRunnable())
+            {
+                plan = directMlPlan;
+                windowsNativeCudaFallbackNote = "native_cuda_disabled_on_windows";
+            }
+        }
+
         string resolvedVariant = plan.Variant ?? requestedVariant;
         string resolvedEp = plan.ExecutionProvider is ExecutionProviderKind selectedProvider
             ? RuntimeProviderTokenCompatibility.ToManifestToken(selectedProvider)
             : requestedEp;
         bool fallbackApplied =
             plan.Fallback is not null ||
+            windowsNativeCudaFallbackNote is not null ||
             !string.Equals(resolvedVariant, requestedVariant, StringComparison.OrdinalIgnoreCase) ||
             (!IsAutoExecutionProvider(requestedEp) && !ExecutionProviderTokensMatch(resolvedEp, requestedEp));
-        string? fallbackReason = ResolveFallbackReason(plan);
+        string? fallbackReason = windowsNativeCudaFallbackNote ?? ResolveFallbackReason(plan);
         bool runnable = plan.IsRunnable();
 
         return new StageCompatibilityEntry(

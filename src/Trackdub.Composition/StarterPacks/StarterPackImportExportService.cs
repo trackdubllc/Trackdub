@@ -90,8 +90,8 @@ public sealed partial class StarterPackImportExportService(
                 .ConfigureAwait(false);
             warnings.AddRange(compatibility.Stages
                 .Where(stage => stage.FallbackApplied)
-                .Select(stage =>
-                    $"GPU path unavailable for {stage.Alias}. Using {stage.ResolvedVariant} on {stage.ResolvedExecutionProvider}."));
+                .Select(static stage => stage.DescribeFallback())
+                .Where(static message => !string.IsNullOrWhiteSpace(message)));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

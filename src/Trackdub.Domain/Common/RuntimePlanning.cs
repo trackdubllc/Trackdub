@@ -22,7 +22,7 @@ public enum ExecutionProviderKind
     TensorRTRtx = 3,    // Windows TensorRT RTX standalone EP ABI plugin
     OpenVino = 4,
     CoreMl = 5,          // macOS CoreML + ANE — no download required
-    Cuda = 6,            // Linux NVIDIA CUDA (native); Windows: promoted to DirectMl
+    Cuda = 6,            // Linux NVIDIA CUDA (native); Windows: pin remaps to TensorRTRtx (native CUDA is advanced-only)
     TensorRt = 7,        // Linux native TensorRT (requires libnvinfer); Windows: promoted to TensorRTRtx
     Migraphx = 8,        // AMD MIGraphX: Windows via WinML catalog EP; Linux via system ROCm ORT build
     /// <summary>

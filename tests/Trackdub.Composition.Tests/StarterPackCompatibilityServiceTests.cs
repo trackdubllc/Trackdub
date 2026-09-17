@@ -307,6 +307,56 @@ public sealed class StarterPackCompatibilityServiceTests
             stage.FallbackReason == "insufficient_vram");
     }
 
+    [Fact]
+    public async Task EvaluateAsync_on_windows_replaces_native_cuda_with_directml()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        int planCalls = 0;
+        var planner = new FakeRuntimePlanner
+        {
+            PlanHandler = request =>
+            {
+                planCalls++;
+                // First pass: planner lands on native CUDA (the dead Windows lane).
+                // Re-plan (preferred DirectML) must be used instead.
+                if (request.PreferredExecutionProvider is ExecutionProviderKind.DirectMl)
+                {
+                    return new StageRuntimePlan
+                    {
+                        Stage = request.Stage,
+                        Status = StageRuntimePlanStatus.Verified,
+                        Variant = request.PreferredModelVariantAlias,
+                        ExecutionProvider = ExecutionProviderKind.DirectMl,
+                    };
+                }
+
+                return new StageRuntimePlan
+                {
+                    Stage = request.Stage,
+                    Status = StageRuntimePlanStatus.Verified,
+                    Variant = request.PreferredModelVariantAlias,
+                    ExecutionProvider = ExecutionProviderKind.Cuda,
+                };
+            }
+        };
+        StarterPackCompatibilityService service = CreateService(runtimePlanner: planner);
+
+        StarterPackCompatibilityReport report = await service.EvaluateAsync("basic", "default");
+
+        Assert.True(planCalls > 1, "Expected a DirectML re-plan after native CUDA resolution.");
+        Assert.DoesNotContain(
+            report.Stages,
+            stage => string.Equals(stage.ResolvedExecutionProvider, "cuda", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(report.Stages, stage =>
+            stage.FallbackApplied &&
+            stage.FallbackReason == "native_cuda_disabled_on_windows" &&
+            string.Equals(stage.ResolvedExecutionProvider, "directml", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static StarterPackCompatibilityService CreateService(
         FakeRuntimePlanner? runtimePlanner = null,
         FakeHardwareProfilerService? hardwareProfiler = null,

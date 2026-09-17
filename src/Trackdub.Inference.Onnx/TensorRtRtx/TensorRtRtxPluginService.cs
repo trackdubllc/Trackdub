@@ -122,6 +122,16 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
                 cudaRuntime.Detail);
         }
 
+        // ORT loads the plugin library with an altered search path, so process PATH
+        // prepends are ignored for the plugin's dependent DLLs. Co-locate cudart64_12
+        // next to the plugin so registration can resolve it (avoids Win32 Error 126).
+        EnsureCudartBesidePlugin(
+            resolution.DirectoryPath!,
+            cudaRuntime.LoadedPath,
+            runtimeFileName: OperatingSystem.IsWindows()
+                ? TensorRtRtxCudaRuntimeBootstrap.WindowsCudaRuntimeFileName
+                : TensorRtRtxCudaRuntimeBootstrap.LinuxCudaRuntimeFileName);
+
         try
         {
             await RegistrationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -206,5 +216,43 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
 
         return (false, TensorRtRtxReadinessBlocker.PlatformUnsupported,
             "TensorRT RTX EP ABI plugin registration is supported on Windows and Linux only.");
+    }
+
+    /// <summary>
+    /// Copies the discovered CUDA 12 runtime next to the plugin when missing.
+    /// Best-effort: failure is non-fatal because bootstrap already loaded the runtime.
+    /// </summary>
+    private static void EnsureCudartBesidePlugin(
+        string pluginDirectory,
+        string? loadedCudartPath,
+        string runtimeFileName)
+    {
+        if (string.IsNullOrWhiteSpace(pluginDirectory) ||
+            string.IsNullOrWhiteSpace(loadedCudartPath))
+        {
+            return;
+        }
+
+        try
+        {
+            string destination = Path.Combine(pluginDirectory, runtimeFileName);
+            if (File.Exists(destination))
+            {
+                return;
+            }
+
+            string source = Path.GetFullPath(loadedCudartPath);
+            if (!File.Exists(source) ||
+                string.Equals(source, Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            File.Copy(source, destination, overwrite: false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // Best-effort co-location only.
+        }
     }
 }

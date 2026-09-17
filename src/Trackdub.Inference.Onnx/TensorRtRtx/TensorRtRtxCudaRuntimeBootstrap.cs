@@ -21,8 +21,8 @@ internal sealed record TensorRtRtxCudaRuntimeEnsureResult(
 /// </summary>
 internal static class TensorRtRtxCudaRuntimeBootstrap
 {
-    private const string WindowsCudaRuntimeFileName = "cudart64_12.dll";
-    private const string LinuxCudaRuntimeFileName = "libcudart.so.12";
+    internal const string WindowsCudaRuntimeFileName = "cudart64_12.dll";
+    internal const string LinuxCudaRuntimeFileName = "libcudart.so.12";
     private const string CudaRuntimeEnvironmentVariable = TensorRtRtxProviderConstants.CudaRuntimeBinDirectoryEnvironmentVariable;
 
     public static TensorRtRtxCudaRuntimeEnsureResult TryEnsureLoadedResult() =>
@@ -190,10 +190,11 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
             }
 
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             foreach (string pythonRoot in new[]
                      {
                          Path.Join(appData, "Python"),
-                         Path.Join(appData, "Local", "Programs", "Python"),
+                         Path.Join(localAppData, "Programs", "Python"),
                      })
             {
                 if (!Directory.Exists(pythonRoot))
@@ -207,6 +208,23 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
                     yield return Path.Join(pythonVersionDir, "Lib", "site-packages", "nvidia", "cuda_runtime", "bin");
                     // pip --user layout: %APPDATA%\Python\Python3X\site-packages (no Lib prefix)
                     yield return Path.Join(pythonVersionDir, "site-packages", "nvidia", "cuda_runtime", "bin");
+                }
+            }
+
+            // Co-located runtime: installer or operator may drop cudart64_12 next to the plugin.
+            string userDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string trtRtxProvidersRoot = Path.Join(userDataRoot, "Trackdub", "Providers", "trt-rtx");
+            if (Directory.Exists(trtRtxProvidersRoot))
+            {
+                foreach (string versionDir in EnumerateChildDirectoriesSafe(trtRtxProvidersRoot))
+                {
+                    foreach (string cudaVariantDir in EnumerateChildDirectoriesSafe(versionDir))
+                    {
+                        foreach (string ridDir in EnumerateChildDirectoriesSafe(cudaVariantDir))
+                        {
+                            yield return ridDir;
+                        }
+                    }
                 }
             }
         }

@@ -261,8 +261,8 @@ public sealed class StarterPackPresentationService(
 
         return compatibilityReport?.Stages
             .Where(stage => stage.FallbackApplied)
-            .Select(stage =>
-                $"GPU path unavailable for {stage.Alias}. Using {stage.ResolvedVariant} on {stage.ResolvedExecutionProvider}.")
+            .Select(static stage => stage.DescribeFallback())
+            .Where(static message => !string.IsNullOrWhiteSpace(message))
             .ToList();
     }
 
