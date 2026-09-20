@@ -35,8 +35,8 @@ public sealed class SpleeterSeparationContractTests
 
         Assert.NotNull(vocals);
         Assert.NotNull(accomp);
-        Assert.Equal("vocals.onnx", vocals!.GetValue(null));
-        Assert.Equal("accompaniment.onnx", accomp!.GetValue(null));
+        Assert.Equal("vocals.onnx", vocals.GetValue(null));
+        Assert.Equal("accompaniment.onnx", accomp.GetValue(null));
     }
 
     [Fact]
