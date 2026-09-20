@@ -166,6 +166,7 @@ public sealed class DubbingPipelineEngine(
                 runtimeSelections,
                 progress,
                 projectId,
+                runId,
                 stageOutcomes,
                 declinedOptionalStages,
                 cancellationToken).ConfigureAwait(false);
@@ -178,6 +179,7 @@ public sealed class DubbingPipelineEngine(
                 runtimeSelections,
                 progress,
                 projectId,
+                runId,
                 stageOutcomes,
                 cancellationToken).ConfigureAwait(false);
 
@@ -290,6 +292,11 @@ public sealed class DubbingPipelineEngine(
             {
                 DefaultSourceLanguage = options.SourceLanguageCode,
                 DefaultTargetLanguage = options.TargetLanguageCode,
+                // Explicit per-run TTS timing (CLI/SDK) wins over StudioSettings.Default.
+                TtsTiming = options.TtsTiming ?? StudioSettings.Default.TtsTiming,
+                // WinML catalog device policy for this run when the host pinned one.
+                WindowsMlExecutionDevicePolicy = options.WindowsMlExecutionDevicePolicy
+                    ?? StudioSettings.Default.WindowsMlExecutionDevicePolicy,
             };
             return (_sessionFactory.CreateSession(projectOutputDirectory, sessionSettings), null);
         }
@@ -346,6 +353,7 @@ public sealed class DubbingPipelineEngine(
         RuntimeModelSelections runtimeSelections,
         IProgress<PipelineProgressEvent>? progress,
         Guid projectId,
+        Guid runId,
         List<StageOutcome> stageOutcomes,
         IReadOnlySet<string> declinedOptionalStages,
         CancellationToken cancellationToken)
@@ -405,6 +413,7 @@ public sealed class DubbingPipelineEngine(
                 runtimeSelections,
                 progress,
                 projectId,
+                runId,
                 cancellationToken).ConfigureAwait(false);
             stageOutcomes.Add(outcome);
 
@@ -427,6 +436,7 @@ public sealed class DubbingPipelineEngine(
         RuntimeModelSelections runtimeSelections,
         IProgress<PipelineProgressEvent>? progress,
         Guid projectId,
+        Guid runId,
         List<StageOutcome> stageOutcomes,
         CancellationToken cancellationToken)
     {
@@ -450,6 +460,7 @@ public sealed class DubbingPipelineEngine(
             runtimeSelections,
             progress,
             projectId,
+            runId,
             cancellationToken).ConfigureAwait(false);
         stageOutcomes.Add(postLipExportOutcome);
     }
@@ -464,6 +475,7 @@ public sealed class DubbingPipelineEngine(
         return new DubbingRunResult
         {
             RunId = runId,
+            CorrelationId = runId,
             StartTime = runStart,
             EndTime = DateTimeOffset.UtcNow,
             OverallStatus = overallStatus,
@@ -927,7 +939,10 @@ public sealed class DubbingPipelineEngine(
         string? ReasonCode = null);
 
     /// <summary>
-    /// Executes a single pipeline stage, wrapping it in timing and error handling.
+    /// Executes a single pipeline stage, wrapping it in timing, transient retry, and error handling.
+    /// Transient failures (filesystem locks, SQLite busy, HF mirror 5xx) are retried up to
+    /// <see cref="StageRetryBudget.Default"/> attempts with exponential backoff before being
+    /// reported as terminal failures.
     /// </summary>
     private async Task<StageOutcome> ExecuteStageAsync(
         IDubbingSession session,
@@ -937,109 +952,133 @@ public sealed class DubbingPipelineEngine(
         RuntimeModelSelections runtimeSelections,
         IProgress<PipelineProgressEvent>? progress,
         Guid projectId,
+        Guid runId,
         CancellationToken cancellationToken)
     {
         DateTimeOffset stageStart = DateTimeOffset.UtcNow;
         ReportProgress(progress, stageName, PipelineProgressEventKind.Started, null);
 
-        try
+        StageRetryBudget retryBudget = StageRetryBudget.Default;
+        int attempt = 1;
+        while (true)
         {
-            StageWorkflowResult workflowResult = await RunStageWorkflowAsync(
-                session,
-                options,
-                stageName,
-                runtimeSelections,
-                progress,
-                cancellationToken).ConfigureAwait(false);
-
-            DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
-            PipelineProgressEventKind eventKind = workflowResult.Status switch
+            try
             {
-                StageStatus.Skipped => PipelineProgressEventKind.Skipped,
-                StageStatus.Failed => PipelineProgressEventKind.Failed,
-                // PartiallySucceeded reports Completed: the stage finished, and the
-                // degradation detail is carried in the message and outcome records.
-                _ => PipelineProgressEventKind.Completed,
-            };
-            string? progressMessage = workflowResult.ReasonCode
-                ?? (workflowResult.DegradationRecords is { Count: > 0 } records ? records[0] : null);
-            ReportProgress(
-                progress,
-                stageName,
-                eventKind,
-                progressMessage,
-                stageEnd - stageStart);
+                StageWorkflowResult workflowResult = await RunStageWorkflowAsync(
+                    session,
+                    options,
+                    stageName,
+                    runtimeSelections,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
 
-            return new StageOutcome
-            {
-                StageName = stageName,
-                Status = workflowResult.Status,
-                StartTime = stageStart,
-                EndTime = stageEnd,
-                ArtifactPaths = workflowResult.ArtifactPaths,
-                DegradationRecords = workflowResult.DegradationRecords,
-                ReasonCode = workflowResult.ReasonCode,
-            };
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
-            ReportProgress(progress, stageName, PipelineProgressEventKind.Failed, "Cancelled", stageEnd - stageStart);
+                DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
+                PipelineProgressEventKind eventKind = workflowResult.Status switch
+                {
+                    StageStatus.Skipped => PipelineProgressEventKind.Skipped,
+                    StageStatus.Failed => PipelineProgressEventKind.Failed,
+                    // PartiallySucceeded reports Completed: the stage finished, and the
+                    // degradation detail is carried in the message and outcome records.
+                    _ => PipelineProgressEventKind.Completed,
+                };
+                string? progressMessage = workflowResult.ReasonCode
+                    ?? (workflowResult.DegradationRecords is { Count: > 0 } records ? records[0] : null);
+                ReportProgress(
+                    progress,
+                    stageName,
+                    eventKind,
+                    progressMessage,
+                    stageEnd - stageStart);
 
-            return new StageOutcome
+                return new StageOutcome
+                {
+                    StageName = stageName,
+                    Status = workflowResult.Status,
+                    StartTime = stageStart,
+                    EndTime = stageEnd,
+                    ArtifactPaths = workflowResult.ArtifactPaths,
+                    DegradationRecords = workflowResult.DegradationRecords,
+                    ReasonCode = workflowResult.ReasonCode,
+                };
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                StageName = stageName,
-                Status = StageStatus.Failed,
-                StartTime = stageStart,
-                EndTime = stageEnd,
-                ArtifactPaths = [],
-                ReasonCode = "CANCELLED",
-            };
-        }
-        catch (Exception ex) when (TransientFailureClassifier.IsTransient(ex))
-        {
-            // Spec §4.4 publisher at the engine chokepoint: route transient exceptions
-            // (filesystem locks, SQLite busy, HF mirror 5xx, model download errors) to the
-            // bus surface so ITransientFaultReporting consumers see them. The engine itself
-            // has no retry loop, so the stage outcome is still Failed here; callers wishing
-            // to retry should wrap their stages in
-            // <see cref="StageRunHelper.RunStageWithTransientRetryAsync{TResult}"/>.
-            DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
-            // projectId is hoisted once via the OpenAsync call above (see the
-            // IsProjectMissingException catch near the top of this method) so per-project
-            // aggregation gets a real id instead of falling back to Guid.Empty.
-            PublishEngineTransient(projectId, stageName, TransientFailureClassifier.Classify(ex), ex, stageStart);
-            ReportProgress(progress, stageName, PipelineProgressEventKind.Failed, ex.Message, stageEnd - stageStart);
+                DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
+                ReportProgress(progress, stageName, PipelineProgressEventKind.Failed, "Cancelled", stageEnd - stageStart);
 
-            return new StageOutcome
+                return new StageOutcome
+                {
+                    StageName = stageName,
+                    Status = StageStatus.Failed,
+                    StartTime = stageStart,
+                    EndTime = stageEnd,
+                    ArtifactPaths = [],
+                    ReasonCode = "CANCELLED",
+                };
+            }
+            catch (Exception ex) when (TransientFailureClassifier.IsTransient(ex))
             {
-                StageName = stageName,
-                Status = StageStatus.Failed,
-                StartTime = stageStart,
-                EndTime = stageEnd,
-                ArtifactPaths = [],
-                ReasonCode = "STAGE_FAILED_TRANSIENT",
-                DegradationRecords = [ex.Message],
-            };
-        }
-        catch (Exception ex)
-        {
-            // Catch all exceptions from stage execution to ensure we always
-            // return a StageOutcome rather than letting exceptions propagate.
-            // This allows the pipeline to report failures gracefully.
-            DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
-            ReportProgress(progress, stageName, PipelineProgressEventKind.Failed, ex.Message, stageEnd - stageStart);
+                TransientFailureKind kind = TransientFailureClassifier.Classify(ex);
+                PublishEngineTransient(projectId, stageName, kind, ex, stageStart, attempt, runId);
 
-            return new StageOutcome
+                if (attempt >= retryBudget.MaxAttempts)
+                {
+                    DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
+                    string retryExhaustedMessage = $"{ex.GetType().Name}: {ex.Message} (transient retry exhausted after {attempt} attempts)";
+                    ReportProgress(progress, stageName, PipelineProgressEventKind.Failed, retryExhaustedMessage, stageEnd - stageStart);
+
+                    return new StageOutcome
+                    {
+                        StageName = stageName,
+                        Status = StageStatus.Failed,
+                        StartTime = stageStart,
+                        EndTime = stageEnd,
+                        ArtifactPaths = [],
+                        ReasonCode = "STAGE_FAILED_TRANSIENT",
+                        DegradationRecords = [retryExhaustedMessage],
+                    };
+                }
+
+                try
+                {
+                    await Task.Delay(retryBudget.BackoffFor(attempt), cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
+                    ReportProgress(progress, stageName, PipelineProgressEventKind.Failed, "Cancelled during retry backoff", stageEnd - stageStart);
+
+                    return new StageOutcome
+                    {
+                        StageName = stageName,
+                        Status = StageStatus.Failed,
+                        StartTime = stageStart,
+                        EndTime = stageEnd,
+                        ArtifactPaths = [],
+                        ReasonCode = "CANCELLED",
+                    };
+                }
+                attempt++;
+            }
+            catch (Exception ex)
             {
-                StageName = stageName,
-                Status = StageStatus.Failed,
-                StartTime = stageStart,
-                EndTime = stageEnd,
-                ArtifactPaths = [],
-                ReasonCode = "STAGE_FAILED",
-                DegradationRecords = [ex.Message],
-            };
+                // Catch all exceptions from stage execution to ensure we always
+                // return a StageOutcome rather than letting exceptions propagate.
+                // This allows the pipeline to report failures gracefully.
+                DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
+                ReportProgress(progress, stageName, PipelineProgressEventKind.Failed, ex.Message, stageEnd - stageStart);
+
+                return new StageOutcome
+                {
+                    StageName = stageName,
+                    Status = StageStatus.Failed,
+                    StartTime = stageStart,
+                    EndTime = stageEnd,
+                    ArtifactPaths = [],
+                    ReasonCode = "STAGE_FAILED",
+                    DegradationRecords = [ex.Message],
+                };
+            }
         }
     }
 
@@ -2233,6 +2272,13 @@ public sealed class DubbingPipelineEngine(
             ["UseVoiceCloning"] = options.UseVoiceCloning.ToString(),
         };
 
+        if (options.TtsTiming is not null)
+        {
+            snapshot["TtsTiming.EnableRubberbandStretch"] = options.TtsTiming.EnableRubberbandStretch.ToString();
+            snapshot["TtsTiming.RubberbandStretchThreshold"] =
+                options.TtsTiming.RubberbandStretchThreshold.ToString("G17", CultureInfo.InvariantCulture);
+        }
+
         // Audio/subtitle/encoder flags (and the pre-existing ExportFormat) gate the Export
         // stage's artifact resume: any change here must invalidate a cached export so it reruns
         // without requiring --force-rerun. These values are produced by ExportResumeGating so
@@ -2598,6 +2644,7 @@ public sealed class DubbingPipelineEngine(
         return new DubbingRunResult
         {
             RunId = runId,
+            CorrelationId = runId,
             StartTime = runStart,
             EndTime = DateTimeOffset.UtcNow,
             OverallStatus = status,
@@ -2619,7 +2666,9 @@ public sealed class DubbingPipelineEngine(
         string stageName,
         TransientFailureKind kind,
         Exception ex,
-        DateTimeOffset stageStart)
+        DateTimeOffset stageStart,
+        int attemptNumber = 1,
+        Guid runId = default)
     {
         try
         {
@@ -2628,12 +2677,16 @@ public sealed class DubbingPipelineEngine(
                 ["Engine"] = "DubbingPipelineEngine",
                 ["StageStart"] = stageStart.ToString("O"),
             };
+            if (runId != Guid.Empty)
+            {
+                context["RunId"] = runId.ToString("N");
+            }
             if (ex.GetType().FullName is { Length: > 0 } typeName)
             {
                 context["ExceptionType"] = typeName;
             }
             _transientFaultBus.Publish(new PipelineTransientFault(
-                projectId, stageName, kind, ex.Message, DateTimeOffset.UtcNow, 1, context));
+                projectId, stageName, kind, ex.Message, DateTimeOffset.UtcNow, attemptNumber, context));
         }
         catch
         {

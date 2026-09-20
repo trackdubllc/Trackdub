@@ -109,13 +109,33 @@ internal static class Program
             DefaultValueFactory = _ => false
         };
 
+        var preferGpuOption = new Option<bool>("--prefer-gpu")
+        {
+            Description = "Prefer GPU inference: vendor EP first (Windows NVIDIA → trt-rtx, AMD → migraphx, "
+                + "Intel → openvino-catalog; Linux NVIDIA → cuda), then DirectML, then CPU. "
+                + "Soft preference — stages may still fall through when the engine family forbids the EP or GPU is unavailable. "
+                + "Explicit --execution-provider wins over this flag.",
+            Recursive = true,
+            DefaultValueFactory = _ => false
+        };
+
+        var requireGpuOption = new Option<bool>("--require-gpu")
+        {
+            Description = "Same resolution as --prefer-gpu (vendor EP first, then DirectML) but hard-requires "
+                + "the preferred EP when a stage allows it. Conflict: cannot combine with --execution-provider cpu.",
+            Recursive = true,
+            DefaultValueFactory = _ => false
+        };
+
         var devicePolicyOption = new Option<string>("--device-policy")
         {
-            Description = "Windows ML catalog device policy (advanced, Windows-only; ignored for cpu, trt-rtx, cuda, tensorrt): "
+            Description = "Windows ML catalog device policy (advanced, Windows-only): "
                 + $"{WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys()}. "
-                + "Explicit (default) keeps Trackdub's own catalog device selection; other values "
-                + "delegate device choice to ONNX Runtime's SetEpSelectionPolicy. Applies to catalog GPU routes "
-                + "(directml, migraphx, qnn, vitisai, openvino-catalog).",
+                + "Explicit keeps Trackdub's own catalog device selection; other values "
+                + "delegate device choice to ONNX Runtime's SetEpSelectionPolicy. "
+                + "Applies to WinML catalog EPs (migraphx, qnn, vitisai, openvino-catalog). "
+                + "Ignored for cpu, directml, trt-rtx, cuda, tensorrt. "
+                + "When omitted, uses the host settings.json windowsMlExecutionDevicePolicy value.",
             Recursive = true,
             DefaultValueFactory = _ => WindowsMlExecutionDevicePolicySettings.ExplicitKey
         };
@@ -129,6 +149,8 @@ internal static class Program
         rootCommand.Add(skipPreflightOption);
         rootCommand.Add(executionProviderOption);
         rootCommand.Add(requireExecutionProviderOption);
+        rootCommand.Add(preferGpuOption);
+        rootCommand.Add(requireGpuOption);
         rootCommand.Add(devicePolicyOption);
 
         // Subcommands

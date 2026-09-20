@@ -53,7 +53,7 @@ public sealed class ProjectSessionServiceTests
     }
 
     [Fact]
-    public void CreatePendingSessionForMedia_uses_local_projects_folder_for_cloud_synced_media()
+    public void CreatePendingSessionForMedia_places_project_beside_cloud_synced_media()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -61,7 +61,10 @@ public sealed class ProjectSessionServiceTests
         }
 
         string userDataRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
-        string mediaPath = CreateCloudSyncedMediaPath("clip.mp4");
+        string mediaRoot = Path.Combine(userDataRoot, "OneDrive", "Videos");
+        Directory.CreateDirectory(mediaRoot);
+        string mediaPath = Path.Combine(mediaRoot, "clip.mp4");
+        File.WriteAllText(mediaPath, "x");
         var settings = StudioSettings.Default;
         var factory = new FakeWorkspaceSessionFactory();
         var service = new ProjectSessionService(factory, new FakeStoragePaths(userDataRoot));
@@ -71,7 +74,7 @@ public sealed class ProjectSessionServiceTests
             PendingProjectSession pending = service.CreatePendingSessionForMedia(mediaPath, "clip", settings);
 
             Assert.Equal("clip", pending.ProjectRoot.ProjectName);
-            Assert.Equal(Path.Combine(userDataRoot, "projects", "clip.trackdub"), pending.ProjectRoot.ProjectRootPath);
+            Assert.Equal(Path.Combine(mediaRoot, "clip.trackdub"), pending.ProjectRoot.ProjectRootPath);
             Assert.Equal(pending.ProjectRoot.ProjectRootPath, pending.Session.ProjectRootPath);
         }
         finally

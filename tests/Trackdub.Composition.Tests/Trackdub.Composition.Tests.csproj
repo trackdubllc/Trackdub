@@ -54,6 +54,7 @@
     <Compile Include="..\Trackdub.TestDoubles\FakeHardwareProfilerService.cs" Link="TestDoubles\FakeHardwareProfilerService.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeStudioSettingsService.cs" Link="TestDoubles\FakeStudioSettingsService.cs" />
     <Compile Include="..\Trackdub.TestDoubles\NullModelHashVerifier.cs" Link="TestDoubles\NullModelHashVerifier.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\ConfigurableModelHashVerifier.cs" Link="TestDoubles\ConfigurableModelHashVerifier.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeArtifactStore.cs" Link="TestDoubles\FakeArtifactStore.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeProjectStageRunStore.cs" Link="TestDoubles\FakeProjectStageRunStore.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeMediaAssetRepository.cs" Link="TestDoubles\FakeMediaAssetRepository.cs" />

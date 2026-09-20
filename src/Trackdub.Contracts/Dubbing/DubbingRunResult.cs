@@ -30,6 +30,12 @@ public sealed record DubbingRunResult
     public required Guid RunId { get; init; }
 
     /// <summary>
+    /// Correlation identifier for tracing across shell, engine, stage-run rows, and files.
+    /// Defaults to <see cref="RunId"/> when not explicitly set by the caller.
+    /// </summary>
+    public Guid CorrelationId { get; init; }
+
+    /// <summary>
     /// Timestamp when the pipeline run started.
     /// </summary>
     public required DateTimeOffset StartTime { get; init; }

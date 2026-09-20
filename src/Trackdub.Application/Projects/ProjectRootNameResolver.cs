@@ -36,9 +36,15 @@ public static class ProjectRootNameResolver
         "LPT9"
     };
 
+    /// <summary>
+    /// Project folders always live next to the source media file so users find
+    /// them where they put the video. Cloud-synced locations (OneDrive, etc.)
+    /// are allowed — no AppData redirect.
+    /// </summary>
     public static string ResolveProjectParentDirectory(string mediaPath, string? userDataRoot = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mediaPath);
+        _ = userDataRoot; // retained for call-site compatibility; unused
 
         string? mediaParent = Path.GetDirectoryName(mediaPath);
         if (string.IsNullOrWhiteSpace(mediaParent))
@@ -46,17 +52,7 @@ public static class ProjectRootNameResolver
             throw new InvalidOperationException("Source media path does not have a parent directory.");
         }
 
-        if (!IsLikelyCloudSyncedPath(mediaParent))
-        {
-            return mediaParent;
-        }
-
-        string trackdubRoot = string.IsNullOrWhiteSpace(userDataRoot)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Trackdub")
-            : userDataRoot;
-        string projectsDirectory = Path.Combine(trackdubRoot, "projects");
-        Directory.CreateDirectory(projectsDirectory);
-        return projectsDirectory;
+        return mediaParent;
     }
 
     public static ProjectRootNameCandidate CreateAvailableProjectRoot(
@@ -68,7 +64,6 @@ public static class ProjectRootNameResolver
 
         string directory = projectParentDirectory
             ?? ResolveProjectParentDirectory(mediaPath);
-        ThrowIfLikelyCloudSyncedProjectParent(directory);
 
         string baseName = SanitizeProjectFolderName(projectName, Path.GetFileNameWithoutExtension(mediaPath));
 
@@ -97,26 +92,6 @@ public static class ProjectRootNameResolver
         {
             return true;
         }
-    }
-
-    private static bool IsLikelyCloudSyncedPath(string path)
-    {
-        string normalized = path.Replace('/', '\\');
-        return normalized.Contains(@"\OneDrive\", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains(@"\Dropbox\", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains(@"\Google Drive\", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains(@"\iCloudDrive\", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static void ThrowIfLikelyCloudSyncedProjectParent(string path)
-    {
-        if (!IsLikelyCloudSyncedPath(path))
-        {
-            return;
-        }
-
-        throw new IOException(
-            $"Project parent directory is in a cloud-synced folder and may block filesystem metadata checks: {path}");
     }
 
     private static string SanitizeProjectFolderName(string projectName, string fallbackName)

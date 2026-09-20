@@ -24,6 +24,40 @@ public sealed class TrackdubDubbingEngineSnapshotTests
         Assert.Equal("True", snapshot["ApplyTimbrePolish"]);
         Assert.Equal("False", snapshot["RestoreOriginalPan"]);
         Assert.Equal("False", snapshot["MatchOriginalLoudness"]);
+        Assert.False(snapshot.ContainsKey("TtsTiming.EnableRubberbandStretch"));
+        Assert.False(snapshot.ContainsKey("TtsTiming.RubberbandStretchThreshold"));
+    }
+
+    [Fact]
+    public void CaptureExecutionSnapshot_records_TtsTiming_when_set()
+    {
+        Dictionary<string, string> snapshot = TrackdubDubbingEngine.CaptureExecutionSnapshot(
+            MinimalOptions() with
+            {
+                TtsTiming = new TtsTimingSettings(EnableRubberbandStretch: true, RubberbandStretchThreshold: 0.25),
+            });
+
+        Assert.Equal("True", snapshot["TtsTiming.EnableRubberbandStretch"]);
+        Assert.Equal("0.25", snapshot["TtsTiming.RubberbandStretchThreshold"]);
+    }
+
+    [Fact]
+    public void CaptureExecutionSnapshot_flipping_TtsTiming_Rubberband_changes_value()
+    {
+        Dictionary<string, string> baseline = TrackdubDubbingEngine.CaptureExecutionSnapshot(
+            MinimalOptions() with
+            {
+                TtsTiming = new TtsTimingSettings(EnableRubberbandStretch: false, RubberbandStretchThreshold: 0.15),
+            });
+        Dictionary<string, string> flipped = TrackdubDubbingEngine.CaptureExecutionSnapshot(
+            MinimalOptions() with
+            {
+                TtsTiming = new TtsTimingSettings(EnableRubberbandStretch: true, RubberbandStretchThreshold: 0.15),
+            });
+
+        Assert.Equal("False", baseline["TtsTiming.EnableRubberbandStretch"]);
+        Assert.Equal("True", flipped["TtsTiming.EnableRubberbandStretch"]);
+        Assert.NotEqual(baseline["TtsTiming.EnableRubberbandStretch"], flipped["TtsTiming.EnableRubberbandStretch"]);
     }
 
     [Fact]

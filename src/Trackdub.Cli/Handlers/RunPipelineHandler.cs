@@ -1,7 +1,9 @@
 using System.Text.Json;
 
 using Trackdub.Contracts;
+using Trackdub.Contracts.Dubbing;
 using Trackdub.Contracts.Pipeline;
+using Trackdub.Domain.StageRuns;
 using Trackdub.Sdk;
 
 namespace Trackdub.Cli.Handlers;
@@ -19,6 +21,17 @@ internal static class RunPipelineHandler
         CancellationToken cancellationToken)
     {
         var engine = new TrackdubDubbingEngine(factory);
+
+        (TtsTimingSettings? ttsTiming, int timingExitCode) = await CliTtsTimingResolver.ResolveAsync(
+            factory,
+            request.TtsRubberbandStretch,
+            request.NoTtsRubberbandStretch,
+            request.TtsRubberbandThreshold,
+            cancellationToken).ConfigureAwait(false);
+        if (timingExitCode != Program.ExitSuccess)
+        {
+            return timingExitCode;
+        }
 
         var dubbingOptions = new DubbingSessionOptions
         {
@@ -40,6 +53,7 @@ internal static class RunPipelineHandler
             SubtitleSource = request.SubtitleSource,
             BurnInSubtitles = request.BurnInSubtitles,
             VideoEncoder = request.VideoEncoder,
+            TtsTiming = ttsTiming,
         };
 
         DubbingRunResult result;
@@ -62,14 +76,16 @@ internal static class RunPipelineHandler
         await manifestWriter.WriteAsync(result, projectOutputDirectory, cancellationToken).ConfigureAwait(false);
         string manifestPath = Path.Combine(projectOutputDirectory, "run-manifest.json");
 
-        if (result.OverallStatus is DubbingRunStatus.Succeeded or DubbingRunStatus.PartialSuccess)
-        {
-            string? exportedFilePath = result.StageOutcomes
-                .Where(o => string.Equals(o.StageName, "Export", StringComparison.OrdinalIgnoreCase))
-                .Where(o => o.Status is StageStatus.Succeeded or StageStatus.PartiallySucceeded)
-                .SelectMany(o => o.ArtifactPaths)
-                .FirstOrDefault();
+        string? exportedFilePath = result.StageOutcomes
+            .Where(o => string.Equals(o.StageName, "Export", StringComparison.OrdinalIgnoreCase))
+            .Where(o => o.Status is StageStatus.Succeeded or StageStatus.PartiallySucceeded)
+            .SelectMany(o => o.ArtifactPaths)
+            .FirstOrDefault();
 
+        if (result.OverallStatus == DubbingRunStatus.Succeeded
+            || (result.OverallStatus == DubbingRunStatus.PartialSuccess
+                && IsGoalAchieved(result, request.StageFilter, exportedFilePath)))
+        {
             var payload = new RunPipelineOutput
             {
                 ExportedFilePath = exportedFilePath,
@@ -142,6 +158,9 @@ internal static class RunPipelineHandler
         public string? SubtitleSource { get; init; }
         public bool BurnInSubtitles { get; init; }
         public VideoEncoderPreference VideoEncoder { get; init; }
+        public bool? TtsRubberbandStretch { get; init; }
+        public bool NoTtsRubberbandStretch { get; init; }
+        public double? TtsRubberbandThreshold { get; init; }
     }
 
     private sealed class RunPipelineOutput
@@ -149,5 +168,24 @@ internal static class RunPipelineHandler
         public string? ExportedFilePath { get; init; }
         public string? ManifestPath { get; init; }
         public string? Status { get; init; }
+    }
+
+    internal static bool IsGoalAchieved(
+        DubbingRunResult result,
+        IReadOnlyList<string>? stageFilter,
+        string? exportedFilePath)
+    {
+        bool exportRequested = stageFilter is null
+            || stageFilter.Any(s => string.Equals(s, "Export", StringComparison.OrdinalIgnoreCase));
+        if (exportRequested && exportedFilePath is null)
+        {
+            return false;
+        }
+
+        return result.StageOutcomes
+            .Where(o => stageFilter is null
+                || stageFilter.Any(f => string.Equals(f, o.StageName, StringComparison.OrdinalIgnoreCase)))
+            .All(o => o.Status is StageStatus.Succeeded or StageStatus.PartiallySucceeded
+                || (o.Status == StageStatus.Skipped && StageSkipReasonCodes.IsBenignSkip(o.ReasonCode)));
     }
 }

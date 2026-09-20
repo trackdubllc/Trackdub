@@ -47,9 +47,13 @@ public static class DubbingPipelineStages
 
     /// <summary>
     /// Stages that block all subsequent stages when they fail.
+    /// Separation is included because downstream analysis stages (Vad, Asr, Diarization)
+    /// depend on separated speech audio; running them on a mixed signal produces incoherent
+    /// results rather than a useful degradation.
     /// </summary>
     public static readonly IReadOnlySet<string> PrerequisiteStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
+        StageNames.Separation,
         StageNames.Vad,
         StageNames.Asr,
         StageNames.Translation,

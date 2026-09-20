@@ -110,68 +110,84 @@ public sealed class ProjectRootNameResolverTests
     }
 
     [Fact]
-    public void ResolveProjectParentDirectory_uses_local_projects_folder_for_onedrive_media()
+    public void ResolveProjectParentDirectory_returns_media_parent_for_onedrive_media()
     {
         string mediaPath = CreateCloudSyncedMediaPath("Movies", "clip.mp4");
-        string userDataRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string mediaDirectory = Path.GetDirectoryName(mediaPath)!;
 
         try
         {
-            string parent = ProjectRootNameResolver.ResolveProjectParentDirectory(mediaPath, userDataRoot);
+            string parent = ProjectRootNameResolver.ResolveProjectParentDirectory(mediaPath);
 
-            Assert.Equal(Path.Combine(userDataRoot, "projects"), parent);
-            Assert.True(Directory.Exists(parent));
+            Assert.Equal(mediaDirectory, parent);
         }
         finally
         {
-            if (Directory.Exists(userDataRoot))
+            string oneDriveRoot = Path.GetDirectoryName(Path.GetDirectoryName(mediaDirectory))!;
+            if (Directory.Exists(oneDriveRoot))
             {
-                Directory.Delete(userDataRoot, recursive: true);
+                Directory.Delete(oneDriveRoot, recursive: true);
             }
         }
     }
 
     [Fact]
-    public void CreateAvailableProjectRoot_places_onedrive_media_project_under_local_projects_folder()
+    public void CreateAvailableProjectRoot_places_onedrive_media_project_beside_media()
     {
         if (!OperatingSystem.IsWindows())
         {
             return;
         }
 
-        string userDataRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
-        string mediaPath = CreateCloudSyncedMediaPath("Movies", "clip.mp4");
+        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string mediaDirectory = Path.Combine(tempRoot, "OneDrive", "Videos", "Movies");
+        Directory.CreateDirectory(mediaDirectory);
+        string mediaPath = Path.Combine(mediaDirectory, "clip.mp4");
 
         try
         {
-            string projectParent = ProjectRootNameResolver.ResolveProjectParentDirectory(mediaPath, userDataRoot);
+            string projectParent = ProjectRootNameResolver.ResolveProjectParentDirectory(mediaPath);
             ProjectRootNameCandidate candidate = ProjectRootNameResolver.CreateAvailableProjectRoot(
                 mediaPath,
                 "clip",
                 projectParent);
 
             Assert.Equal("clip", candidate.ProjectName);
-            Assert.Equal(Path.Combine(userDataRoot, "projects", "clip.trackdub"), candidate.ProjectRootPath);
+            Assert.Equal(Path.Combine(mediaDirectory, "clip.trackdub"), candidate.ProjectRootPath);
         }
         finally
         {
-            if (Directory.Exists(userDataRoot))
+            if (Directory.Exists(tempRoot))
             {
-                Directory.Delete(userDataRoot, recursive: true);
+                Directory.Delete(tempRoot, recursive: true);
             }
         }
     }
 
     [Fact]
-    public void CreateAvailableProjectRoot_rejects_explicit_cloud_synced_project_parent()
+    public void CreateAvailableProjectRoot_allows_explicit_cloud_synced_project_parent()
     {
-        string mediaPath = CreateCloudSyncedMediaPath("Movies", "clip.mp4");
-        string projectParent = Path.GetDirectoryName(mediaPath)!;
+        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string mediaDirectory = Path.Combine(tempRoot, "OneDrive", "Videos", "Movies");
+        Directory.CreateDirectory(mediaDirectory);
+        string mediaPath = Path.Combine(mediaDirectory, "clip.mp4");
 
-        IOException exception = Assert.Throws<IOException>(() =>
-            ProjectRootNameResolver.CreateAvailableProjectRoot(mediaPath, "clip", projectParent));
+        try
+        {
+            ProjectRootNameCandidate candidate = ProjectRootNameResolver.CreateAvailableProjectRoot(
+                mediaPath,
+                "clip",
+                mediaDirectory);
 
-        Assert.Contains("cloud-synced folder", exception.Message);
+            Assert.Equal(Path.Combine(mediaDirectory, "clip.trackdub"), candidate.ProjectRootPath);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
     }
 
     private static string CreateTempDirectory()

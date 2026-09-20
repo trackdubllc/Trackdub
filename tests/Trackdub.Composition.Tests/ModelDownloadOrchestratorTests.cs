@@ -572,6 +572,53 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task DownloadAsync_when_installed_but_hash_mismatch_marks_corrupt_and_redownloads()
+    {
+        // Package C joint test: files exist on disk but manifest carries hashes.
+        // When hash verification fails, the model must be marked corrupt and fall through
+        // to re-download, not return Installed.
+        string correctHash = Sha256Hex("correct-content");
+        string hashesJson =
+            $$"""
+              "download_file_hashes": {
+                "onnx/model.onnx": "{{correctHash}}"
+              },
+            """;
+        (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
+            CreateRegistryWithManifestRootOutsideConfiguredCache(
+                downloadFilesJson: "[ \"onnx/model.onnx\" ]",
+                downloadFileHashesJson: hashesJson,
+                sha256: correctHash);
+        var store = new LocalModelCacheRecordStore(storagePaths);
+        var downloader = new HashMatchingDownloader();
+
+        string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
+        Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
+        // File exists but with wrong content (simulating corruption)
+        await File.WriteAllTextAsync(benchmarkPath, "wrong-content", TestContext.Current.CancellationToken);
+
+        await store.SaveAsync(
+            [new LocalModelCacheRecord("example/model", cacheRoot, "main", correctHash, DateTimeOffset.UtcNow)],
+            TestContext.Current.CancellationToken);
+
+        // Use real hash verifier - it will compute actual SHA-256 and detect the mismatch
+        var orchestrator = new ModelDownloadOrchestrator(registry, store, downloader, storagePaths);
+
+        ModelDownloadResult result = await orchestrator.DownloadAsync("example/model", cancellationToken: TestContext.Current.CancellationToken);
+
+        // Must not return Installed - should fall through to download path
+        Assert.True(result.Success, result.FailureReason);
+        Assert.Equal(ModelCacheState.Installed, result.NewState);
+        // The file should have been re-downloaded
+        Assert.Single(downloader.HubDownloads);
+        Assert.Equal("onnx/model.onnx", downloader.HubDownloads[0]);
+        // After successful re-download, IntegrityFailed should be false again
+        IReadOnlyList<LocalModelCacheRecord> recordsAfterDownload = await store.LoadAsync(TestContext.Current.CancellationToken);
+        Assert.False(Assert.Single(recordsAfterDownload).IntegrityFailed);
+    }
+
+    [Fact]
     public async Task RepairAsync_preserves_optimized_variants_in_cache_index()
     {
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, _) =
@@ -1215,5 +1262,59 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             string filePath,
             string expectedHash,
             CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    private sealed class HashMatchingDownloader : IModelDownloaderContract
+    {
+        public List<string> HubDownloads { get; } = [];
+
+        public Task<bool> DownloadAsync(
+            string modelId,
+            string fileName,
+            string destinationPath,
+            IProgress<ModelDownloadProgress>? progress = null,
+            CancellationToken cancellationToken = default,
+            string? revision = null)
+        {
+            HubDownloads.Add(fileName.Replace('\\', '/'));
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            // Write content that matches the expected hash in the test
+            File.WriteAllText(destinationPath, "correct-content");
+            progress?.Report(new ModelDownloadProgress(1, 1, 100, null));
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> DownloadUriAsync(
+            Uri sourceUri,
+            string destinationPath,
+            IProgress<ModelDownloadProgress>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.WriteAllText(destinationPath, "correct-content");
+            progress?.Report(new ModelDownloadProgress(1, 1, 100, null));
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> VerifyHashAsync(
+            string filePath,
+            string expectedHash,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || string.IsNullOrWhiteSpace(expectedHash) || !File.Exists(filePath))
+                return Task.FromResult(false);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            byte[] bytes = File.ReadAllBytes(filePath);
+            byte[] hashBytes = SHA256.HashData(bytes);
+            string actualHex = Convert.ToHexString(hashBytes).ToLowerInvariant();
+
+            string normalizedExpected = expectedHash.Trim().ToLowerInvariant();
+            if (normalizedExpected.StartsWith("sha256:"))
+                normalizedExpected = normalizedExpected["sha256:".Length..];
+
+            return Task.FromResult(actualHex == normalizedExpected);
+        }
     }
 }

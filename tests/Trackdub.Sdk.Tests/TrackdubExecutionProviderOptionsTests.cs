@@ -224,15 +224,41 @@ public sealed class TrackdubExecutionProviderOptionsTests
     }
 
     [Fact]
-    public async Task Build_DefaultOptions_UseExplicitPolicyAndNoHardwareOverrides()
+    public async Task Build_DefaultOptions_InheritsHostHardwarePrefs_WhenPresent()
+    {
+        using TrackdubSessionFactory factory = new TrackdubBuilder()
+            .WithLogDirectory(Path.Combine(Path.GetTempPath(), "trackdub-empty-host-" + Guid.NewGuid()))
+            .Build();
+
+        IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
+        StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
+
+        // Isolated storage: no host settings.json → Explicit policy, no hardware overrides.
+        Assert.Equal(WindowsMlExecutionDevicePolicy.Explicit, settings.WindowsMlExecutionDevicePolicy);
+        Assert.True(settings.HardwareOverrides is null || settings.HardwareOverrides.Count == 0);
+    }
+
+    [Fact]
+    public async Task Build_DefaultOptions_MayInheritDiskHardwareOverrides_FromUserSettings()
     {
         using TrackdubSessionFactory factory = new TrackdubBuilder().Build();
 
         IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
         StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
 
-        Assert.Equal(WindowsMlExecutionDevicePolicy.Explicit, settings.WindowsMlExecutionDevicePolicy);
-        Assert.Empty(settings.HardwareOverrides!);
+        // Headless overlay may carry host settings.json hardware pins (e.g. Asr → DirectML).
+        // Builder options (null EP / Explicit policy) must not wipe those when present.
+        string settingsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Trackdub",
+            "settings.json");
+        if (!File.Exists(settingsPath) || settings.HardwareOverrides is not { Count: > 0 })
+        {
+            Assert.Equal(WindowsMlExecutionDevicePolicy.Explicit, settings.WindowsMlExecutionDevicePolicy);
+            return;
+        }
+
+        Assert.All(settings.HardwareOverrides.Values, v => Assert.NotEqual(ExecutionProviderKind.Cpu, v));
     }
 
     [Fact]
@@ -268,9 +294,82 @@ public sealed class TrackdubExecutionProviderOptionsTests
 
         string? executionProvider = CliParseHelpers.GetGlobalOptionValue<string?>(parseResult, "execution-provider");
         string? devicePolicy = CliParseHelpers.GetGlobalOptionValue<string?>(parseResult, "device-policy");
+        bool preferGpu = CliParseHelpers.GetGlobalOptionValue<bool>(parseResult, "prefer-gpu");
+        bool requireGpu = CliParseHelpers.GetGlobalOptionValue<bool>(parseResult, "require-gpu");
 
         Assert.Equal("auto", executionProvider);
         Assert.Equal(WindowsMlExecutionDevicePolicySettings.ExplicitKey, devicePolicy);
+        Assert.False(preferGpu);
+        Assert.False(requireGpu);
+    }
+
+    [Theory]
+    [InlineData(false, false, null, false, null, false)]
+    [InlineData(true, false, null, false, "vendor-or-dml", false)]
+    [InlineData(false, true, null, false, "vendor-or-dml", true)]
+    [InlineData(true, false, "directml", false, "directml", false)]
+    [InlineData(false, true, "trt-rtx", false, "trt-rtx", true)]
+    [InlineData(false, true, "cpu", false, "cpu", true)] // conflict flagged via exit code path separately
+    public void CliGpuPreference_Apply_ResolvesVendorThenDml(
+        bool preferGpu,
+        bool requireGpu,
+        string? explicitEp,
+        bool explicitRequire,
+        string? expectedEpTokenOrSentinel,
+        bool expectedRequire)
+    {
+        (string? ep, bool require, int? error) = CliGpuPreference.Apply(
+            explicitEp,
+            explicitRequire,
+            preferGpu,
+            requireGpu);
+
+        if (explicitEp == "cpu" && requireGpu)
+        {
+            Assert.Equal(Program.ExitArgumentError, error);
+            Assert.Equal("cpu", ep);
+            return;
+        }
+
+        Assert.Null(error);
+        Assert.Equal(expectedRequire, require);
+        if (expectedEpTokenOrSentinel == "vendor-or-dml")
+        {
+            Assert.False(string.IsNullOrWhiteSpace(ep));
+            Assert.NotEqual("auto", ep);
+            Assert.NotEqual("cpu", ep);
+            string expected = Trackdub.Domain.ExecutionProviderTokens.ToCanonicalTag(
+                CliGpuPreference.ResolvePreferredGpuKind());
+            Assert.Equal(expected, ep);
+        }
+        else if (expectedEpTokenOrSentinel is not null)
+        {
+            Assert.Equal(expectedEpTokenOrSentinel, ep);
+        }
+        else
+        {
+            Assert.Equal(explicitEp, ep);
+        }
+    }
+
+    [Fact]
+    public void CliGpuPreference_ResolvePreferredGpuKind_OnWindowsNvidia_IsVendorThenPlannerFallsThroughToDml()
+    {
+        ExecutionProviderKind kind = CliGpuPreference.ResolvePreferredGpuKind();
+
+        if (OperatingSystem.IsWindows() && CliGpuPreference.DetectVendor() == CliGpuPreference.GpuVendor.Nvidia)
+        {
+            Assert.Equal(ExecutionProviderKind.TensorRTRtx, kind);
+        }
+        else if (OperatingSystem.IsWindows() && CliGpuPreference.DetectVendor() == CliGpuPreference.GpuVendor.Unknown)
+        {
+            // No vendor detected: still prefer a GPU lane (DirectML) rather than CPU.
+            Assert.Equal(ExecutionProviderKind.DirectMl, kind);
+        }
+        else
+        {
+            Assert.NotEqual(ExecutionProviderKind.Cpu, kind);
+        }
     }
 
     [Fact]
@@ -346,7 +445,19 @@ public sealed class TrackdubExecutionProviderOptionsTests
         CliParseHelpers.ResolvePresetExecutionPreferences(parseResult, null, out string? ep, out string? dp);
 
         Assert.Null(ep);
-        Assert.Null(dp);
+        // Device policy falls back to studio settings.json when present; otherwise null/explicit at factory.
+        string settingsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Trackdub",
+            "settings.json");
+        if (File.Exists(settingsPath) && dp is not null)
+        {
+            Assert.True(WindowsMlExecutionDevicePolicySettings.TryParseKey(dp, out _));
+        }
+        else
+        {
+            Assert.True(dp is null || dp == WindowsMlExecutionDevicePolicySettings.ExplicitKey);
+        }
     }
 
     [Fact]

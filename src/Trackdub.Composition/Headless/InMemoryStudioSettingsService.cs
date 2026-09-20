@@ -22,12 +22,19 @@ public sealed class InMemoryStudioSettingsService : IStudioSettingsService
         ArgumentNullException.ThrowIfNull(options);
 
         StudioSettings persisted = persistedSettings ?? StudioSettings.Default;
+        IReadOnlyDictionary<string, ExecutionProviderKind> effectiveHardwareOverrides =
+            options.HardwareOverrides is { Count: > 0 }
+                ? new Dictionary<string, ExecutionProviderKind>(options.HardwareOverrides)
+                : persisted.HardwareOverrides is { Count: > 0 }
+                    ? new Dictionary<string, ExecutionProviderKind>(persisted.HardwareOverrides)
+                    : new Dictionary<string, ExecutionProviderKind>();
         _settings = StudioSettings.Default with
         {
-            HardwareOverrides = options.HardwareOverrides is not null
-                ? new Dictionary<string, ExecutionProviderKind>(options.HardwareOverrides)
-                : new Dictionary<string, ExecutionProviderKind>(),
-            RequirePreferredExecutionProviders = options.RequirePreferredExecutionProviders,
+            HardwareOverrides = effectiveHardwareOverrides,
+            // Process-local CLI pin wins; otherwise honor desktop settings.json hardware prefs.
+            RequirePreferredExecutionProviders =
+                options.RequirePreferredExecutionProviders
+                || (options.HardwareOverrides is null && persisted.RequirePreferredExecutionProviders),
             WindowsMlExecutionDevicePolicy = options.WindowsMlExecutionDevicePolicy,
             NvidiaTensorRtRtxLicenseAccepted =
                 options.NvidiaTensorRtRtxLicenseAccepted || persisted.NvidiaTensorRtRtxLicenseAccepted,
@@ -36,6 +43,8 @@ public sealed class InMemoryStudioSettingsService : IStudioSettingsService
             QualcommQnnLicenseAccepted = persisted.QualcommQnnLicenseAccepted,
             TensorRtRtxPluginDirectory =
                 options.TensorRtRtxPluginDirectory ?? persisted.TensorRtRtxPluginDirectory,
+            // Preserve host/user timing prefs so CLI/SDK runs honor settings.json.
+            TtsTiming = persisted.TtsTiming ?? StudioSettings.Default.TtsTiming,
         };
     }
 

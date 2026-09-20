@@ -1873,8 +1873,18 @@ internal static class OnnxExecutionSessionFactory
         ExecutionProviderKind provider) =>
         OperatingSystem.IsWindows() &&
         devicePolicy != WindowsMlExecutionDevicePolicy.Explicit &&
-        IsCatalogGpuProvider(provider) &&
-        provider is not ExecutionProviderKind.DirectMl;
+        IsWindowsMlCatalogProvider(provider);
+
+    /// <summary>
+    /// WinML catalog EPs that can take ORT <c>SetEpSelectionPolicy</c> (device auto-select among
+    /// registered catalog devices). DirectML stays on the legacy explicit-append path; native
+    /// CUDA/TensorRT/TensorRT RTX/DNNL/CoreML are not Windows ML catalog routes.
+    /// </summary>
+    private static bool IsWindowsMlCatalogProvider(ExecutionProviderKind provider) =>
+        provider is ExecutionProviderKind.Migraphx
+            or ExecutionProviderKind.Qnn
+            or ExecutionProviderKind.VitisAi
+            or ExecutionProviderKind.OpenVinoCatalog;
 
     private sealed class NullWindowsMlEpDevicePolicyProvider : IWindowsMlEpDevicePolicyProvider
     {

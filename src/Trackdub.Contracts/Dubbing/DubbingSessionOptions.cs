@@ -1,4 +1,8 @@
+using Trackdub.Contracts;
+
 namespace Trackdub.Contracts.Dubbing;
+
+using Trackdub.Contracts.ApplicationContracts;
 
 /// <summary>
 /// Immutable configuration snapshot capturing all inputs required to execute
@@ -181,4 +185,16 @@ public sealed record DubbingSessionOptions
     /// Preferred video encoder for the export. Defaults to Auto.
     /// </summary>
     public VideoEncoderPreference VideoEncoder { get; init; }
+
+    /// <summary>
+    /// Optional per-run TTS timing reconciliation overrides (Rubberband stretch on/off
+    /// and mismatch threshold). When null, the session host settings apply
+    /// (desktop Settings / <c>settings.json</c> / <see cref="TtsTimingSettings.Default"/>).
+    /// </summary>
+    public TtsTimingSettings? TtsTiming { get; init; }
+
+    /// <summary>
+    /// Optional Windows ML catalog device policy for this run. When null, host settings apply.
+    /// </summary>
+    public WindowsMlExecutionDevicePolicy? WindowsMlExecutionDevicePolicy { get; init; }
 }

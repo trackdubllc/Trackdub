@@ -4,6 +4,7 @@ using System.CommandLine.Parsing;
 using Trackdub.Cli.Interactive;
 using Trackdub.Cli.Handlers;
 using Trackdub.Contracts;
+using Trackdub.Contracts.Dubbing;
 using Trackdub.Sdk;
 
 namespace Trackdub.Cli.Commands;
@@ -152,6 +153,22 @@ internal static class DubCommand
             DefaultValueFactory = _ => false,
         };
 
+        var ttsRubberbandStretchOption = new Option<bool?>("--tts-rubberband-stretch")
+        {
+            Description = "Force-enable Rubberband time-stretch when fitting dubbed TTS to source segment pace. Optional; overrides host TTS timing settings for this run.",
+        };
+
+        var noTtsRubberbandStretchOption = new Option<bool>("--no-tts-rubberband-stretch")
+        {
+            Description = "Force-disable Rubberband stretch (use ffmpeg atempo). Optional; overrides host TTS timing settings for this run.",
+            DefaultValueFactory = _ => false,
+        };
+
+        var ttsRubberbandThresholdOption = new Option<double?>("--tts-rubberband-threshold")
+        {
+            Description = "Rubberband stretch mismatch threshold in 0..1 (fraction of source duration). Optional; overrides host settings when Rubberband stretch is on.",
+        };
+
         var command = new Command("dub", """
             Execute a full dubbing pipeline from media ingest through export.
 
@@ -160,6 +177,7 @@ internal static class DubCommand
               trackdub dub --media ./video.mp4 --target-language fr --export-format mkv
               trackdub dub --media ./video.mp4 --target-language de --model asr:whisper-small --model tts:kokoro-onnx
               trackdub dub --media ./video.mp4 --target-language en --voice-clone
+              trackdub dub --media ./video.mp4 --target-language en --voice-clone --tts-rubberband-stretch --tts-rubberband-threshold 0.2
               trackdub dub --preset my-preset --input-dir ./videos
               trackdub dub --preset my-preset --input-glob "**/*.mp4"
             """)
@@ -186,6 +204,9 @@ internal static class DubCommand
             inputGlobOption,
             recursiveOption,
             continueOnErrorOption,
+            ttsRubberbandStretchOption,
+            noTtsRubberbandStretchOption,
+            ttsRubberbandThresholdOption,
         };
 
         command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
@@ -211,6 +232,9 @@ internal static class DubCommand
             string? inputGlob = parseResult.GetValue(inputGlobOption);
             bool recursive = parseResult.GetValue(recursiveOption);
             bool continueOnError = parseResult.GetValue(continueOnErrorOption);
+            bool? ttsRubberbandStretch = parseResult.GetValue(ttsRubberbandStretchOption);
+            bool noTtsRubberbandStretch = parseResult.GetValue(noTtsRubberbandStretchOption);
+            double? ttsRubberbandThreshold = parseResult.GetValue(ttsRubberbandThresholdOption);
 
             Dictionary<string, string>? voiceOverrides = CliModelOverrides.ParseVoiceOverrides(voiceOverrideTokens);
             if (voiceOverrides is null)
@@ -313,7 +337,10 @@ internal static class DubCommand
                     subtitleFormats,
                     subtitleSource,
                     burnInSubtitles,
-                    videoEncoderKey);
+                    videoEncoderKey,
+                    ttsRubberbandStretch: ttsRubberbandStretch,
+                    noTtsRubberbandStretch: noTtsRubberbandStretch,
+                    ttsRubberbandThreshold: ttsRubberbandThreshold);
 
                 // Build BatchOptions
                 var batchOptions = new BatchOptions
@@ -334,6 +361,19 @@ internal static class DubCommand
 
                 using (factory)
                 {
+                    (TtsTimingSettings? resolvedTiming, int timingExitCode) = await CliTtsTimingResolver.ResolveAsync(
+                        factory,
+                        ttsRubberbandStretch,
+                        noTtsRubberbandStretch,
+                        ttsRubberbandThreshold,
+                        cancellationToken).ConfigureAwait(false);
+                    if (timingExitCode != Program.ExitSuccess)
+                    {
+                        return timingExitCode;
+                    }
+
+                    templateOptions = templateOptions with { TtsTiming = resolvedTiming };
+
                     return await BatchHandler.ExecuteAsync(
                         factory,
                         mediaFiles,
@@ -442,7 +482,10 @@ internal static class DubCommand
                             subtitleFormats,
                             subtitleSource,
                             burnInSubtitles,
-                            videoEncoderKey),
+                            videoEncoderKey,
+                            ttsRubberbandStretch: ttsRubberbandStretch,
+                            noTtsRubberbandStretch: noTtsRubberbandStretch,
+                            ttsRubberbandThreshold: ttsRubberbandThreshold),
                         progress,
                         Console.Out,
                         ct).ConfigureAwait(false),

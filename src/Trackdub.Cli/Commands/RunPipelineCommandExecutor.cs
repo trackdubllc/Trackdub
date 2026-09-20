@@ -4,6 +4,7 @@ using System.CommandLine.Parsing;
 using Trackdub.Cli.Handlers;
 using Trackdub.Cli.Interactive;
 using Trackdub.Contracts;
+using Trackdub.Contracts.Dubbing;
 using Trackdub.Sdk;
 
 namespace Trackdub.Cli.Commands;
@@ -37,6 +38,9 @@ internal sealed class PipelineRunState
     public Dictionary<string, string>? VoiceOverrides;
     public IReadOnlyList<string>? SubtitleFormats;
     public bool IsBatchMode;
+    public bool? TtsRubberbandStretch;
+    public bool NoTtsRubberbandStretch;
+    public double? TtsRubberbandThreshold;
 }
 
 internal sealed record BatchExecutionContext(
@@ -102,6 +106,9 @@ internal static class RunPipelineCommandExecutor
         state.BurnInSubtitles = parseResult.GetValue(options.BurnInSubtitles);
         state.VideoEncoderKey = parseResult.GetValue(options.VideoEncoder);
         state.PresetName = parseResult.GetValue(options.Preset);
+        state.TtsRubberbandStretch = parseResult.GetValue(options.TtsRubberbandStretch);
+        state.NoTtsRubberbandStretch = parseResult.GetValue(options.NoTtsRubberbandStretch);
+        state.TtsRubberbandThreshold = parseResult.GetValue(options.TtsRubberbandThreshold);
     }
 
     private static void ParseBatchInputs(ParseResult parseResult, PipelineCommandOptions options, PipelineRunState state)
@@ -248,7 +255,7 @@ internal static class RunPipelineCommandExecutor
             .ConfigureAwait(false);
     }
 
-    private static Task<int> ExecuteBatchFilesAsync(
+    private static async Task<int> ExecuteBatchFilesAsync(
         ParseResult parseResult,
         PipelineRunState state,
         TrackdubSessionFactory factory,
@@ -266,7 +273,8 @@ internal static class RunPipelineCommandExecutor
             refinement, state.VoiceClone, state.TimbrePolish, state.RestorePan,
             state.MatchLoudness, state.VoiceOverrides, state.SubtitleFormats,
             state.SubtitleSource, state.BurnInSubtitles, state.VideoEncoderKey,
-            stageFilter, state.ForceRerun);
+            stageFilter, state.ForceRerun,
+            state.TtsRubberbandStretch, state.NoTtsRubberbandStretch, state.TtsRubberbandThreshold);
 
         var batchOptions = new BatchOptions
         {
@@ -275,9 +283,23 @@ internal static class RunPipelineCommandExecutor
         };
 
         string progressFormat = CliParseHelpers.GetGlobalOptionValue<string>(parseResult, "progress") ?? "text";
-        return BatchHandler.ExecuteAsync(
+
+        (TtsTimingSettings? resolvedTiming, int timingExitCode) = await CliTtsTimingResolver.ResolveAsync(
+            factory,
+            state.TtsRubberbandStretch,
+            state.NoTtsRubberbandStretch,
+            state.TtsRubberbandThreshold,
+            cancellationToken).ConfigureAwait(false);
+        if (timingExitCode != Program.ExitSuccess)
+        {
+            return timingExitCode;
+        }
+
+        templateOptions = templateOptions with { TtsTiming = resolvedTiming };
+
+        return await BatchHandler.ExecuteAsync(
             factory, mediaFiles, templateOptions, batchOptions,
-            state.PresetName, progressFormat, Console.Out, cancellationToken);
+            state.PresetName, progressFormat, Console.Out, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<int> ExecuteSingleAsync(
@@ -610,7 +632,8 @@ internal static class RunPipelineCommandExecutor
                     state.EnableAsrTextRefinement ?? false, state.VoiceClone,
                     state.TimbrePolish, state.RestorePan, state.MatchLoudness,
                     state.VoiceOverrides, state.SubtitleFormats, state.SubtitleSource,
-                    state.BurnInSubtitles, state.VideoEncoderKey, stageFilter, state.ForceRerun),
+                    state.BurnInSubtitles, state.VideoEncoderKey, stageFilter, state.ForceRerun,
+                    state.TtsRubberbandStretch, state.NoTtsRubberbandStretch, state.TtsRubberbandThreshold),
                 progress, Console.Out, ct),
             cancellationToken);
     }

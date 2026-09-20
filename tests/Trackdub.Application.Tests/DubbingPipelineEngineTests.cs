@@ -82,6 +82,65 @@ public sealed class DubbingPipelineEngineTests
         Assert.Equal("kokoro-ui-pick", merged.TtsModelAlias);
     }
 
+    [Fact]
+    public void PrerequisiteStages_contains_Separation()
+    {
+        Assert.Contains(StageNames.Separation, DubbingPipelineStages.PrerequisiteStages);
+    }
+
+    [Fact]
+    public void PrerequisiteStages_contains_expected_core_stages()
+    {
+        var expected = new[]
+        {
+            StageNames.Separation,
+            StageNames.Vad,
+            StageNames.Asr,
+            StageNames.Translation,
+            StageNames.Tts,
+        };
+
+        foreach (string stage in expected)
+        {
+            Assert.Contains(stage, DubbingPipelineStages.PrerequisiteStages);
+        }
+    }
+
+    [Fact]
+    public void DubbingRunResult_CorrelationId_defaults_to_empty()
+    {
+        var result = new DubbingRunResult
+        {
+            RunId = Guid.NewGuid(),
+            StartTime = DateTimeOffset.UtcNow,
+            EndTime = DateTimeOffset.UtcNow,
+            OverallStatus = DubbingRunStatus.Succeeded,
+            StageOutcomes = [],
+        };
+
+        Assert.Equal(Guid.Empty, result.CorrelationId);
+    }
+
+    [Fact]
+    public void DubbingRunResult_CorrelationId_can_be_set_independently_of_RunId()
+    {
+        var runId = Guid.NewGuid();
+        var correlationId = Guid.NewGuid();
+        var result = new DubbingRunResult
+        {
+            RunId = runId,
+            CorrelationId = correlationId,
+            StartTime = DateTimeOffset.UtcNow,
+            EndTime = DateTimeOffset.UtcNow,
+            OverallStatus = DubbingRunStatus.Succeeded,
+            StageOutcomes = [],
+        };
+
+        Assert.Equal(runId, result.RunId);
+        Assert.Equal(correlationId, result.CorrelationId);
+        Assert.NotEqual(result.RunId, result.CorrelationId);
+    }
+
     private static int IndexOf(IReadOnlyList<string> order, string stageName)
     {
         for (int i = 0; i < order.Count; i++)

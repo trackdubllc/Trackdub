@@ -1,4 +1,5 @@
 using Trackdub.Contracts;
+using Trackdub.Contracts.Dubbing;
 using Trackdub.Sdk;
 
 namespace Trackdub.Cli;
@@ -29,7 +30,10 @@ internal static class PipelineOptionBuilder
         bool burnInSubtitles,
         string? videoEncoderKey,
         IReadOnlyList<string>? stageFilter = null,
-        bool forceRerun = false)
+        bool forceRerun = false,
+        bool? ttsRubberbandStretch = null,
+        bool noTtsRubberbandStretch = false,
+        double? ttsRubberbandThreshold = null)
     {
         return new DubbingSessionOptions
         {
@@ -51,6 +55,7 @@ internal static class PipelineOptionBuilder
             VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
             StageFilter = stageFilter,
             ForceRerun = forceRerun,
+            TtsTiming = BuildTtsTimingPlaceholder(ttsRubberbandStretch, noTtsRubberbandStretch, ttsRubberbandThreshold),
         };
     }
 
@@ -75,7 +80,10 @@ internal static class PipelineOptionBuilder
         bool burnInSubtitles,
         string? videoEncoderKey,
         IReadOnlyList<string>? stageFilter = null,
-        bool forceRerun = false)
+        bool forceRerun = false,
+        bool? ttsRubberbandStretch = null,
+        bool noTtsRubberbandStretch = false,
+        double? ttsRubberbandThreshold = null)
     {
         return new Handlers.RunPipelineHandler.RunPipelineRequest
         {
@@ -97,7 +105,35 @@ internal static class PipelineOptionBuilder
             SubtitleSource = subtitleSource,
             BurnInSubtitles = burnInSubtitles,
             VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
+            TtsRubberbandStretch = ttsRubberbandStretch,
+            NoTtsRubberbandStretch = noTtsRubberbandStretch,
+            TtsRubberbandThreshold = ttsRubberbandThreshold,
         };
+    }
+
+    /// <summary>
+    /// Batch path still carries raw flags on the template; handlers resolve host baselines.
+    /// Returns null when no timing flags were provided so host defaults apply.
+    /// </summary>
+    private static TtsTimingSettings? BuildTtsTimingPlaceholder(
+        bool? ttsRubberbandStretch,
+        bool noTtsRubberbandStretch,
+        double? ttsRubberbandThreshold)
+    {
+        if (ttsRubberbandStretch is null && !noTtsRubberbandStretch && ttsRubberbandThreshold is null)
+        {
+            return null;
+        }
+
+        bool enable = ttsRubberbandStretch ?? !noTtsRubberbandStretch;
+        if (noTtsRubberbandStretch)
+        {
+            enable = false;
+        }
+
+        return new TtsTimingSettings(
+            EnableRubberbandStretch: enable,
+            RubberbandStretchThreshold: ttsRubberbandThreshold ?? TtsTimingSettings.Default.RubberbandStretchThreshold);
     }
 }
 

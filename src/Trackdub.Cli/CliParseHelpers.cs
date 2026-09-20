@@ -61,7 +61,70 @@ internal static class CliParseHelpers
             && !string.IsNullOrWhiteSpace(cliDevicePolicy);
 
         executionProvider = executionProviderExplicit ? cliExecutionProvider : preset?.ExecutionProvider;
-        devicePolicy = devicePolicyExplicit ? cliDevicePolicy : preset?.DevicePolicy;
+        devicePolicy = devicePolicyExplicit
+            ? cliDevicePolicy
+            : preset?.DevicePolicy ?? TryReadDiskDevicePolicyKey();
+
+        // --prefer-gpu / --require-gpu fill auto/empty EP when CLI/preset did not pin one.
+        bool requireGpu = false;
+        try
+        {
+            requireGpu = GetGlobalOptionValue<bool>(parseResult, "require-gpu");
+        }
+        catch
+        {
+            // Option not registered (some unit-test parse graphs); leave false.
+        }
+
+        bool preferGpu = false;
+        try
+        {
+            preferGpu = GetGlobalOptionValue<bool>(parseResult, "prefer-gpu");
+        }
+        catch
+        {
+            // ignore
+        }
+
+        (executionProvider, _, _) = CliGpuPreference.Apply(
+            executionProvider,
+            requireExecutionProvider: false,
+            preferGpu,
+            requireGpu);
+    }
+
+    /// <summary>
+    /// Reads <c>windowsMlExecutionDevicePolicy</c> from studio <c>settings.json</c> so headless
+    /// runs honor desktop WinML policy prefs when no explicit <c>--device-policy</c> / preset is set.
+    /// </summary>
+    internal static string? TryReadDiskDevicePolicyKey()
+    {
+        try
+        {
+            string settingsPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Trackdub",
+                "settings.json");
+            if (!File.Exists(settingsPath))
+            {
+                return null;
+            }
+
+            using FileStream stream = File.OpenRead(settingsPath);
+            using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(stream);
+            if (doc.RootElement.TryGetProperty("windowsMlExecutionDevicePolicy", out System.Text.Json.JsonElement value)
+                && value.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                string? key = value.GetString();
+                return string.IsNullOrWhiteSpace(key) ? null : key.Trim();
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            // Disk prefs are best-effort; factory defaults remain Explicit.
+        }
+
+        return null;
     }
 
     private static Option? FindGlobalOption(ParseResult parseResult, string optionName)
@@ -128,6 +191,18 @@ internal static class CliParseHelpers
         string? executionProvider = GetGlobalOptionValue<string?>(parseResult, "execution-provider");
         string? devicePolicy = GetGlobalOptionValue<string?>(parseResult, "device-policy");
         bool requireExecutionProvider = GetGlobalOptionValue<bool>(parseResult, "require-execution-provider");
+
+        (executionProvider, requireExecutionProvider, int? gpuError) = CliGpuPreference.Apply(
+            parseResult,
+            executionProvider,
+            requireExecutionProvider);
+        if (gpuError is int code)
+        {
+            ReportGpuPreferenceConflict();
+            exitCode = code;
+            return null;
+        }
+
         return TryBuildFactory(
             modelDirectory,
             executionProvider,
@@ -136,11 +211,30 @@ internal static class CliParseHelpers
             requireExecutionProvider);
     }
 
+    private static void ReportGpuPreferenceConflict()
+    {
+        CliErrorReporter.ReportValidationError(
+            ErrorCode.InvalidArgument,
+            "Options '--require-gpu' and '--execution-provider cpu' cannot both be set.",
+            "--require-gpu");
+    }
+
     internal static TrackdubSessionFactory? TryBuildFactoryForPresetLoad(ParseResult parseResult, out int exitCode)
     {
         string? modelDirectory = GetGlobalOptionValue<string?>(parseResult, "model-directory");
         string? executionProvider = GetGlobalOptionValue<string?>(parseResult, "execution-provider");
         string? devicePolicy = GetGlobalOptionValue<string?>(parseResult, "device-policy");
+        // Preset-load factories do not need GPU hard-require; still honor --prefer-gpu soft pin.
+        (executionProvider, _, int? gpuError) = CliGpuPreference.Apply(
+            parseResult,
+            executionProvider,
+            requireExecutionProvider: false);
+        if (gpuError is int code)
+        {
+            exitCode = code;
+            return null;
+        }
+
         return TryBuildFactory(
             modelDirectory,
             executionProvider,
@@ -177,6 +271,17 @@ internal static class CliParseHelpers
         out int exitCode)
     {
         bool requireExecutionProvider = GetGlobalOptionValue<bool>(parseResult, "require-execution-provider");
+        (executionProvider, requireExecutionProvider, int? gpuError) = CliGpuPreference.Apply(
+            parseResult,
+            executionProvider,
+            requireExecutionProvider);
+        if (gpuError is int code)
+        {
+            ReportGpuPreferenceConflict();
+            exitCode = code;
+            return null;
+        }
+
         return TryBuildFactory(
             modelDirectory,
             executionProvider,
@@ -209,11 +314,17 @@ internal static class CliParseHelpers
             Console.Error.WriteLine(parseWarning);
         }
 
-        if (!TryParseDevicePolicy(devicePolicy, out WindowsMlExecutionDevicePolicy resolvedDevicePolicy))
+        // CLI/preset already merged by ResolvePresetExecutionPreferences; when still empty,
+        // fall through to studio settings.json WinML device policy.
+        string? effectiveDevicePolicy = string.IsNullOrWhiteSpace(devicePolicy)
+            ? TryReadDiskDevicePolicyKey()
+            : devicePolicy;
+
+        if (!TryParseDevicePolicy(effectiveDevicePolicy, out WindowsMlExecutionDevicePolicy resolvedDevicePolicy))
         {
             CliErrorReporter.ReportValidationError(
                 ErrorCode.InvalidArgument,
-                $"Unknown device policy: '{devicePolicy}'. Expected one of: {WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys()}.",
+                $"Unknown device policy: '{effectiveDevicePolicy}'. Expected one of: {WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys()}.",
                 "--device-policy");
             exitCode = Program.ExitArgumentError;
             return null;

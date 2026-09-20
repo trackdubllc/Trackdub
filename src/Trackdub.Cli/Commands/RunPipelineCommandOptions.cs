@@ -28,7 +28,10 @@ internal sealed record PipelineCommandOptions(
     Option<string?> InputDir,
     Option<string?> InputGlob,
     Option<bool> Recursive,
-    Option<bool> ContinueOnError);
+    Option<bool> ContinueOnError,
+    Option<bool?> TtsRubberbandStretch,
+    Option<bool> NoTtsRubberbandStretch,
+    Option<double?> TtsRubberbandThreshold);
 
 internal static class RunPipelineCommandOptions
 {
@@ -55,12 +58,14 @@ internal static class RunPipelineCommandOptions
         var videoEncoder = CreateVideoEncoderOption();
         var preset = CreatePresetOption();
         var batch = CreateBatchOptions(out Option<string?> inputGlob, out Option<bool> recursive, out Option<bool> continueOnError);
+        var ttsRubberband = CreateTtsRubberbandOptions(out Option<bool> noTtsRubberband, out Option<double?> ttsRubberbandThreshold);
 
         return new PipelineCommandOptions(
             media, targetLanguage, sourceLanguage, output, model, exportFormat,
             fromStage, only, forceRerun, refinement, voiceClone, timbre, noTimbre,
             restorePan, matchLoudness, voice, subtitleFormat, subtitleSource,
-            burnIn, videoEncoder, preset, batch, inputGlob, recursive, continueOnError);
+            burnIn, videoEncoder, preset, batch, inputGlob, recursive, continueOnError,
+            ttsRubberband, noTtsRubberband, ttsRubberbandThreshold);
     }
 
     public static void AddTo(Command command, PipelineCommandOptions options)
@@ -90,6 +95,9 @@ internal static class RunPipelineCommandOptions
         command.Add(options.InputGlob);
         command.Add(options.Recursive);
         command.Add(options.ContinueOnError);
+        command.Add(options.TtsRubberbandStretch);
+        command.Add(options.NoTtsRubberbandStretch);
+        command.Add(options.TtsRubberbandThreshold);
     }
 
     private static Option<string?> CreateMediaOption() => new("--media")
@@ -279,5 +287,25 @@ internal static class RunPipelineCommandOptions
             DefaultValueFactory = _ => false,
         };
         return inputDir;
+    }
+
+    private static Option<bool?> CreateTtsRubberbandOptions(
+        out Option<bool> noTtsRubberband,
+        out Option<double?> ttsRubberbandThreshold)
+    {
+        var ttsRubberbandStretch = new Option<bool?>("--tts-rubberband-stretch")
+        {
+            Description = "Force-enable Rubberband time-stretch when fitting dubbed TTS to source segment pace. Optional; overrides host TTS timing settings for this run.",
+        };
+        noTtsRubberband = new Option<bool>("--no-tts-rubberband-stretch")
+        {
+            Description = "Force-disable Rubberband stretch (use ffmpeg atempo). Optional; overrides host TTS timing settings for this run.",
+            DefaultValueFactory = _ => false,
+        };
+        ttsRubberbandThreshold = new Option<double?>("--tts-rubberband-threshold")
+        {
+            Description = "Rubberband stretch mismatch threshold in 0..1 (fraction of source duration). Optional; overrides host settings when Rubberband stretch is on.",
+        };
+        return ttsRubberbandStretch;
     }
 }

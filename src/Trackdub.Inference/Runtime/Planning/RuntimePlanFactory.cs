@@ -778,6 +778,14 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
 
         foreach (LocalModelCacheRecord cacheRecord in cacheRecords)
         {
+            if (cacheRecord.IntegrityFailed)
+            {
+                integrityFallback ??= new RuntimePlanFallback(
+                    RuntimePlanFallbackCode.ModelIntegrityMismatch,
+                    $"Cached model '{entry.ModelId}' is marked as integrity-failed. Re-download the model.");
+                continue;
+            }
+
             string candidatePath = Path.GetFullPath(Path.Combine(cacheRecord.RootPath, variant.RelativeEntryPath));
             if (RequiredFilesExist(cacheRecord.RootPath, variant.RequiredRelativePaths, fileExistenceCache))
             {

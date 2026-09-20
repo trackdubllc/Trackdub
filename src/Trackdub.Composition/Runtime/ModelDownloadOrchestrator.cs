@@ -94,11 +94,33 @@ public sealed class ModelDownloadOrchestrator(
                 IReadOnlyList<string> missingFiles = ResolveMissingRequiredFiles(modelRootDirectory, precomputedRequiredFiles);
                 if (missingFiles.Count == 0)
                 {
-                    return new ModelDownloadResult(modelId, true, gatedState, null);
+                    // Files exist on disk, but the manifest may carry per-file hashes.
+                    // Re-verify so a corrupt-but-present model falls through to re-download
+                    // rather than being served as Installed.
+                    var (failedPath, hashResult) = await VerifyRequiredFilesAsync(
+                        entry, modelRootDirectory, precomputedRequiredFiles, cancellationToken).ConfigureAwait(false);
+
+                    if (hashResult.WasVerified && !hashResult.IsValid)
+                    {
+                        await SetModelIntegrityStateAsync(
+                            modelId, integrityFailed: true, entry, modelRootDirectory, cancellationToken).ConfigureAwait(false);
+                        logger?.LogWarning(
+                            $"Model '{modelId}' file '{failedPath}' failed hash verification (expected {hashResult.ExpectedSha256}, actual {hashResult.ActualSha256}). Marking corrupt and re-downloading.");
+                        // Fall through to the download path below.
+                        // Reset deltaFiles to null so all required files are re-downloaded, not just the empty delta.
+                        deltaFiles = null;
+                    }
+                    else
+                    {
+                        return new ModelDownloadResult(modelId, true, gatedState, null);
+                    }
                 }
-                // Manifest has grown since first install (e.g. new voice packs added).
-                // Only fetch the files that are absent on disk.
-                deltaFiles = missingFiles;
+                else
+                {
+                    // Manifest has grown since first install (e.g. new voice packs added).
+                    // Only fetch the files that are absent on disk.
+                    deltaFiles = missingFiles;
+                }
             }
 
             EmitStateChange(modelId, gatedState, ModelCacheState.Downloading);
