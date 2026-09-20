@@ -60,7 +60,11 @@ internal static class SpleeterModelConstants
         maskAccompaniment = ((accompanimentMagnitude * accompanimentMagnitude) + halfEps) / denom;
     }
 
-    /// <summary>Builds a non-rooted model path under <paramref name="modelRootPath"/>.</summary>
+    /// <summary>
+    /// Builds a model path under <paramref name="modelRootPath"/> for a known
+    /// Spleeter 2stems file name only. Rejects rooted names and any name that is
+    /// not one of the two shipping ONNX files (blocks <c>../</c> traversal).
+    /// </summary>
     public static string ResolveModelPath(string modelRootPath, string modelFileName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelRootPath);
@@ -72,6 +76,28 @@ internal static class SpleeterModelConstants
                 nameof(modelFileName));
         }
 
-        return Path.Combine(modelRootPath, modelFileName);
+        bool known = string.Equals(modelFileName, VocalsModelFileName, StringComparison.Ordinal)
+            || string.Equals(modelFileName, AccompanimentModelFileName, StringComparison.Ordinal);
+        if (!known)
+        {
+            throw new ArgumentException(
+                $"Unknown Spleeter model file name '{modelFileName}'. Expected '{VocalsModelFileName}' or '{AccompanimentModelFileName}'.",
+                nameof(modelFileName));
+        }
+
+        string combined = Path.Combine(modelRootPath, modelFileName);
+        string rootFull = Path.GetFullPath(modelRootPath);
+        string resolvedFull = Path.GetFullPath(combined);
+        string rootPrefix = rootFull.EndsWith(Path.DirectorySeparatorChar) || rootFull.EndsWith(Path.AltDirectorySeparatorChar)
+            ? rootFull
+            : rootFull + Path.DirectorySeparatorChar;
+        if (!resolvedFull.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Resolved model path '{resolvedFull}' escapes model root '{rootFull}'.",
+                nameof(modelFileName));
+        }
+
+        return combined;
     }
 }

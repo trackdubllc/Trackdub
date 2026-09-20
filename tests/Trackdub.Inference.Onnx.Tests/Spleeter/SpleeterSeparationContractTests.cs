@@ -31,15 +31,14 @@ public sealed class SpleeterSeparationContractTests
     [Fact]
     public void Production_model_paths_use_shared_relative_file_names()
     {
-        // Same helper SpleeterOnnxSeparator uses; rooted names are rejected.
+        // Independent oracle: literal ONNX file names + platform separator.
         string root = Path.Combine("cache", "csukuangfj", "sherpa-onnx-spleeter-2stems");
-        string vocals = SpleeterModelConstants.ResolveModelPath(
-            root, SpleeterModelConstants.VocalsModelFileName);
-        string acc = SpleeterModelConstants.ResolveModelPath(
-            root, SpleeterModelConstants.AccompanimentModelFileName);
+        string sep = Path.DirectorySeparatorChar.ToString();
+        string vocals = SpleeterModelConstants.ResolveModelPath(root, "vocals.onnx");
+        string acc = SpleeterModelConstants.ResolveModelPath(root, "accompaniment.onnx");
 
-        Assert.Equal(SpleeterModelConstants.ResolveModelPath(root, "vocals.onnx"), vocals);
-        Assert.Equal(SpleeterModelConstants.ResolveModelPath(root, "accompaniment.onnx"), acc);
+        Assert.Equal(root + sep + "vocals.onnx", vocals);
+        Assert.Equal(root + sep + "accompaniment.onnx", acc);
     }
 
     [Fact]

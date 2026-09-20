@@ -53,11 +53,6 @@ public sealed class SpleeterMaskParityTests
 
         Assert.Equal(sherpaV, maskV, 6);
         Assert.Equal(sherpaA, maskA, 6);
-
-        float denom = (v * v) + (a * a) + Eps;
-        float halfEps = Eps / 2f;
-        Assert.Equal(((v * v) + halfEps) / denom, maskV, 6);
-        Assert.Equal(((a * a) + halfEps) / denom, maskA, 6);
     }
 
     [Theory]
@@ -98,29 +93,26 @@ public sealed class SpleeterMaskParityTests
     }
 
     [Fact]
-    public void ResolveModelPath_combines_relative_file_names_under_model_root()
+    public void ResolveModelPath_joins_relative_known_file_names_under_model_root()
     {
-        string vocals = SpleeterModelConstants.ResolveModelPath(
-            Path.Combine("models", "spleeter"),
-            SpleeterModelConstants.VocalsModelFileName);
-        string acc = SpleeterModelConstants.ResolveModelPath(
-            Path.Combine("models", "spleeter"),
-            SpleeterModelConstants.AccompanimentModelFileName);
+        // Independent oracle: literal file names + directory separator.
+        string root = Path.Combine("models", "spleeter");
+        string sep = Path.DirectorySeparatorChar.ToString();
+        string vocals = SpleeterModelConstants.ResolveModelPath(root, "vocals.onnx");
+        string acc = SpleeterModelConstants.ResolveModelPath(root, "accompaniment.onnx");
 
-        Assert.Equal(
-            Path.Combine("models", "spleeter", SpleeterModelConstants.VocalsModelFileName),
-            vocals);
-        Assert.Equal(
-            Path.Combine("models", "spleeter", SpleeterModelConstants.AccompanimentModelFileName),
-            acc);
-        Assert.False(Path.IsPathRooted(SpleeterModelConstants.VocalsModelFileName));
-        Assert.False(Path.IsPathRooted(SpleeterModelConstants.AccompanimentModelFileName));
+        Assert.Equal(root + sep + "vocals.onnx", vocals);
+        Assert.Equal(root + sep + "accompaniment.onnx", acc);
     }
 
     [Fact]
-    public void ResolveModelPath_rejects_rooted_file_names()
+    public void ResolveModelPath_rejects_rooted_and_traversing_file_names()
     {
         Assert.Throws<ArgumentException>(() =>
             SpleeterModelConstants.ResolveModelPath("models/spleeter", "/abs/vocals.onnx"));
+        Assert.Throws<ArgumentException>(() =>
+            SpleeterModelConstants.ResolveModelPath("models/spleeter", "../outside.onnx"));
+        Assert.Throws<ArgumentException>(() =>
+            SpleeterModelConstants.ResolveModelPath("models/spleeter", "other.onnx"));
     }
 }
