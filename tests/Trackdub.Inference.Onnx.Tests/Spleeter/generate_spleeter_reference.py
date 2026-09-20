@@ -42,7 +42,7 @@ def stft_mag_phase(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
     else:
         base = 1
     rem = base % PAD_TO
-target = base + (PAD_TO - rem)
+    target = base + (PAD_TO - rem)
     win = periodic_hann(NFFT)
     mag = np.zeros((target, MAX_FREQS), dtype=np.float32)
     phase = np.zeros((target, MAX_FREQS), dtype=np.float32)
@@ -96,7 +96,7 @@ def main() -> None:
         max_freqs=np.int32(MAX_FREQS),
         pad_to=np.int32(PAD_TO),
     )
-write_wav_pcm16(out / "sine_440_mono_2s_44k.wav", sine)
+    write_wav_pcm16(out / "sine_440_mono_2s_44k.wav", sine)
     write_wav_pcm16(out / "noise_burst_2s_44k.wav", noise)
 
     v = np.float32(0.3)
