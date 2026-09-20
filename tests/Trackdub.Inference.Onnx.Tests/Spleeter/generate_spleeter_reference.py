@@ -19,7 +19,6 @@ Requires: numpy only (no kaldi-native_fbank / ONNX for the basic fixtures).
 
 from __future__ import annotations
 
-import math
 import struct
 from pathlib import Path
 
