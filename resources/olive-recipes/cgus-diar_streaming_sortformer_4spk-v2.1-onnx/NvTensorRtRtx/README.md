@@ -20,8 +20,8 @@ match the effective provider (`cpu`).
 This recipe applies two pre-fusion passes **before** fp16 conversion so the
 TRT-RTX parser sees the standard ops it knows how to compile:
 
-1. `OnnxBlockWiseRMSN` — replaces `SkipLayerNormalization` with `LayerNormalization` + `Add`.
-2. `OnnxGraphSurgeries` — replaces `BiasGelu` with `Add` + `Gelu`.
+1. `OnnxGraphSurgeries` (ReplaceNodePatternByNode) — decomposes `SkipLayerNormalization` into `Add` + `LayerNormalization`.
+2. `OnnxGraphSurgeries` (ReplaceNodePatternByNode) — decomposes `BiasGelu` into `Add` + `Gelu`.
 
 ## Usage
 
