@@ -8,7 +8,9 @@ public sealed class OliveRecipeResolver
     {
         "whisper-genai",
         "whisper-onnx",
-        "phi-genai"
+        "phi-genai",
+        "sortformer",
+        "nemotron-asr"
     };
 
     public OliveRecipeResolution Resolve(

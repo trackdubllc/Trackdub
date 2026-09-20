@@ -195,6 +195,8 @@ try {
     $decoderOnnxSrc   = Get-ChildItem $decoderOutputDir -Filter "decoder_joint.onnx" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($decoderOnnxSrc) {
         Copy-Item $decoderOnnxSrc.FullName (Join-Path $StagingDir "decoder_joint.onnx") -Force
+        Get-ChildItem $decoderOnnxSrc.Directory -Filter "decoder_joint.onnx.data" -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName (Join-Path $StagingDir "decoder_joint.onnx.data") -Force }
     } else {
         Write-Warning "No decoder_joint.onnx found in $decoderOutputDir - staging incomplete."
     }
