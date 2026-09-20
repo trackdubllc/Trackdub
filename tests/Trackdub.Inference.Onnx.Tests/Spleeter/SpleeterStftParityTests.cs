@@ -22,7 +22,7 @@ public sealed class SpleeterStftParityTests
     {
         int baseFrames = ExpectedBaseFrames(sampleCount);
         int remainder = baseFrames % PadTo;
-        return remainder == 0 ? baseFrames : baseFrames + (PadTo - remainder);
+return baseFrames + (PadTo - remainder);
     }
 
     private static float[] MakeSine(int sampleCount, double frequencyHz, double amplitude = 0.5)
