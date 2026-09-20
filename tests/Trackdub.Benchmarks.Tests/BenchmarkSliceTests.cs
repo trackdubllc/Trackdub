@@ -226,15 +226,16 @@ public sealed class BenchmarkOptionsTests
             TrtRtxSmokeCatalog.RemainingOnnxGpu,
             target => target.ModelReference.Contains("Phi-3.5-mini-instruct-onnx", StringComparison.OrdinalIgnoreCase));
 
-        // phi-4 must map to the gpu-int4 variant, never cpu-int4.
-        Assert.Contains(
-            TrtRtxSmokeCatalog.RemainingOnnxGpu,
-            target => target.ModelReference.Equals("microsoft/phi-4-onnx", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(target.Variant, "gpu-int4", StringComparison.Ordinal));
+        // microsoft/phi-4-onnx was dropped from RemainingOnnxGpu (superseded by the
+        // starter-pack Phi-4-mini-instruct-onnx gpu-int4 target). Remaining must not
+        // resurrect it as a cpu-int4 entry.
         Assert.DoesNotContain(
             TrtRtxSmokeCatalog.RemainingOnnxGpu,
-            target => target.ModelReference.Equals("microsoft/phi-4-onnx", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(target.Variant, "cpu-int4", StringComparison.Ordinal));
+            target => target.ModelReference.Equals("microsoft/phi-4-onnx", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            target => target.ModelReference.Contains("Phi-4-mini-instruct-onnx", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(target.Variant, "gpu-int4", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
