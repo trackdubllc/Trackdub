@@ -96,7 +96,7 @@ def main() -> None:
         max_freqs=np.int32(MAX_FREQS),
         pad_to=np.int32(PAD_TO),
     )
-    write_wav_pcm16(out / "sine_440_stereo_2s_44k.wav", sine)
+write_wav_pcm16(out / "sine_440_mono_2s_44k.wav", sine)
     write_wav_pcm16(out / "noise_burst_2s_44k.wav", noise)
 
     v = np.float32(0.3)
