@@ -4,6 +4,7 @@ using System.CommandLine.Parsing;
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
+using Trackdub.Inference.Onnx;
 using Trackdub.Sdk;
 
 namespace Trackdub.Cli;
@@ -312,6 +313,15 @@ internal static class CliParseHelpers
         if (!string.IsNullOrWhiteSpace(parseWarning))
         {
             Console.Error.WriteLine(parseWarning);
+        }
+
+        if (providerKind is ExecutionProviderKind requestedKind
+            && !OnnxRuntimeBuildCapabilities.IsProviderSupportedInThisBuild(requestedKind))
+        {
+            Console.Error.WriteLine(
+                $"Warning: execution provider '{ExecutionProviderTokens.ToCanonicalTag(requestedKind)}' "
+                + "cannot run in this build. DirectML and Windows ML catalog providers require the "
+                + "net10.0-windows10.0.19041.0 target; this build supports trt-rtx and cpu.");
         }
 
         // CLI/preset already merged by ResolvePresetExecutionPreferences; when still empty,

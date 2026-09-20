@@ -118,12 +118,15 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
         bool tensorRtRtxEnabled = await _isTensorRtRtxEnabled(cancellationToken).ConfigureAwait(false);
 
         // Windows providers
-        bool directMlAvailable = isWindows && hardwareProfile.HasGpu;
+        bool directMlAvailable = isWindows && hardwareProfile.HasGpu
+            && OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes;
         availabilities.Add(directMlAvailable
             ? new(ExecutionProviderKind.DirectMl, true,
                 "Windows ML legacy DirectML route can be probed on this machine.")
             : new(ExecutionProviderKind.DirectMl, false,
-                "DirectML legacy GPU probing requires Windows with a GPU-capable Windows ML path."));
+                isWindows && hardwareProfile.HasGpu
+                    ? "DirectML requires the net10.0-windows10.0.19041.0 build; this build supports TensorRT RTX and CPU."
+                    : "DirectML legacy GPU probing requires Windows with a GPU-capable Windows ML path."));
 
         TensorRtRtxReadinessReport? tensorRtRtxReport = null;
         bool tensorRtAvailable = false;
@@ -353,6 +356,14 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
                 "MIGraphX is available on Windows (WinML catalog) and Linux (system ROCm ORT build) only.");
         }
 
+        if (isWindows && !OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes)
+        {
+            return new(
+                ExecutionProviderKind.Migraphx,
+                false,
+                "MIGraphX requires the net10.0-windows10.0.19041.0 build on Windows, or Linux with a ROCm/MIGraphX-capable ONNX Runtime build.");
+        }
+
         if (isWindows && !isAmdGpu)
         {
             return new(
@@ -388,6 +399,12 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
         if (!isWindows)
         {
             return new(provider, false, $"{provider} WinML catalog route is Windows-only.");
+        }
+
+        if (!OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes)
+        {
+            return new(provider, false,
+                $"{provider} requires the net10.0-windows10.0.19041.0 build for the Windows ML catalog route.");
         }
 
         WinMlCatalogReadinessReport report = await probeAsync(false, cancellationToken).ConfigureAwait(false);

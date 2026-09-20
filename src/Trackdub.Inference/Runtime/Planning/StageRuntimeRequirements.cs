@@ -50,7 +50,9 @@ internal static class StageRuntimeRequirementsCatalog
                 RuntimeStage.Vad,
                 ModelTask.Vad,
                 ["silero-vad", "silero"],
-                WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                // TensorRT RTX is allowed again for VAD; the per-model smoke test gates it
+                // (silero-vad previously passed a TRT RTX smoke run) and DirectML remains the fallback.
+                DefaultOnnxStageAllowedProviders,
                 ["fp16", "q4f16"],
                 ["int8", "quantized", "uint8", "q4"]),
             [RuntimeStage.Asr] = new(
