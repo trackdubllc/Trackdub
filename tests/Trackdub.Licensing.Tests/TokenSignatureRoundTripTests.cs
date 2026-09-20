@@ -90,7 +90,9 @@ internal static class TestTokenBuilder
         long? exp,
         bool devUnlimited = false,
         string? keyId = null,
-        ECDsa? signingKey = null)
+        ECDsa? signingKey = null,
+        string? iss = null,
+        string? aud = null)
     {
         var header = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(new { alg = "ES256", typ = "JWT" }));
         var payloadObj = new Dictionary<string, object?>
@@ -108,6 +110,14 @@ internal static class TestTokenBuilder
         if (keyId is not null)
         {
             payloadObj["kid"] = keyId;
+        }
+        if (iss is not null)
+        {
+            payloadObj["iss"] = iss;
+        }
+        if (aud is not null)
+        {
+            payloadObj["aud"] = aud;
         }
         var payload = Base64UrlEncode(JsonSerializer.SerializeToUtf8Bytes(payloadObj));
         var signingInput = $"{header}.{payload}";

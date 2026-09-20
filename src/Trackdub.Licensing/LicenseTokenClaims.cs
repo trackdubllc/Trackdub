@@ -10,4 +10,6 @@ internal sealed record LicenseTokenClaims(
     long Iat,
     long? Exp,
     bool DevUnlimited = false,
-    string? KeyId = null);
+    string? KeyId = null,
+    string? Iss = null,
+    string? Aud = null);

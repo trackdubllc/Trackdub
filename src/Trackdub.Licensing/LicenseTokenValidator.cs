@@ -57,12 +57,23 @@ internal sealed class LicenseTokenValidator
     /// The unverified key id from the token's claims. Ignored when this validator
     /// was constructed without a trust store; the embedded key is used in that case.
     /// </param>
-    public bool VerifySignature(string? keyId, byte[] signingInput, byte[] signature)
+    /// <param name="iss">
+    /// The issuer claim from the token. Checked against the trust store when present.
+    /// </param>
+    /// <param name="aud">
+    /// The audience claim from the token. Checked against the trust store when present.
+    /// </param>
+    public bool VerifySignature(string? keyId, byte[] signingInput, byte[] signature, string? iss = null, string? aud = null)
     {
         if (_trustStore is not null)
         {
             var publicKeyPem = _trustStore.ResolvePublicKeyPem(keyId);
             if (publicKeyPem is null)
+            {
+                return false;
+            }
+
+            if (!_trustStore.ValidateTokenIssuerAndAudience(keyId, iss, aud))
             {
                 return false;
             }

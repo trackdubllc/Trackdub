@@ -91,7 +91,7 @@ public sealed class LicenseService : ILicenseInitializer, ILicenseTierProvider
 
             // 3. Verify signature
             var sigParts = _parser.GetSignatureParts(token);
-            if (sigParts is null || !_validator.VerifySignature(claims.KeyId, sigParts.Value.SigningInput, sigParts.Value.Signature))
+            if (sigParts is null || !_validator.VerifySignature(claims.KeyId, sigParts.Value.SigningInput, sigParts.Value.Signature, claims.Iss, claims.Aud))
             {
                 _logger.LogWarning("License token signature verification failed.");
                 _validationResult = new LicenseValidationResult(LicenseTier.Free, claims.Sub, 0, 0, null, "Invalid signature");

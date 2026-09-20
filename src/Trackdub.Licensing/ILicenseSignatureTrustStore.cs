@@ -26,4 +26,19 @@ public interface ILicenseSignatureTrustStore
     /// key or is rejected.
     /// </param>
     string? ResolvePublicKeyPem(string? keyId);
+
+    /// <summary>
+    /// Validates the token's issuer and audience claims against what the trust ring
+    /// expects for the resolved key. Returns true if the claims are acceptable,
+    /// false to reject the token.
+    /// </summary>
+    /// <remarks>
+    /// Default implementation accepts any values, preserving backward compatibility
+    /// for trust stores that are not iss/aud-aware. Production trust stores should
+    /// override this to enforce environment separation.
+    /// </remarks>
+    /// <param name="keyId">The key id from the token's unverified claims.</param>
+    /// <param name="iss">The issuer claim from the token, or null if absent.</param>
+    /// <param name="aud">The audience claim from the token, or null if absent.</param>
+    bool ValidateTokenIssuerAndAudience(string? keyId, string? iss, string? aud) => true;
 }
