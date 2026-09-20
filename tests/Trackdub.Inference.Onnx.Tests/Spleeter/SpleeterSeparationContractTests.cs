@@ -38,8 +38,8 @@ public sealed class SpleeterSeparationContractTests
         string acc = SpleeterModelConstants.ResolveModelPath(
             root, SpleeterModelConstants.AccompanimentModelFileName);
 
-        Assert.Equal(Path.Combine(root, "vocals.onnx"), vocals);
-        Assert.Equal(Path.Combine(root, "accompaniment.onnx"), acc);
+        Assert.Equal(SpleeterModelConstants.ResolveModelPath(root, "vocals.onnx"), vocals);
+        Assert.Equal(SpleeterModelConstants.ResolveModelPath(root, "accompaniment.onnx"), acc);
     }
 
     [Fact]
