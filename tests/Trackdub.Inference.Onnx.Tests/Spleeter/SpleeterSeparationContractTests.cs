@@ -22,7 +22,7 @@ public sealed class SpleeterSeparationContractTests
         var field = typeof(SpleeterStemSeparationEngine)
             .GetField("TargetSampleRate", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(field);
-        Assert.Equal(44100, field!.GetValue(null));
+        Assert.Equal(44100, field.GetValue(null));
     }
 
     [Fact]
