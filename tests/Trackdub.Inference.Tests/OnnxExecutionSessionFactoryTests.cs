@@ -445,6 +445,118 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
+    public void BuildTensorRtRtxOptions_round_trips_whisper_encoder_trt_profile_shapes()
+    {
+        // Mirrors WhisperOnnxAudioTranscriptionEngine.TrtEncoderOptions. If this test ever fails,
+        // the Whisper TRT-RTX smoke failures will not be fixable by editing the engine code alone —
+        // the C# -> ORT options translation is broken.
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
+
+        object? rawResult = method.Invoke(
+            null,
+            [
+                new Dictionary<string, string>
+                {
+                    ["trt_profile_min_shapes"] = "input_features:1x80x1",
+                    ["trt_profile_max_shapes"] = "input_features:1x80x3000",
+                    ["trt_profile_opt_shapes"] = "input_features:1x80x3000",
+                }
+            ]);
+        var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
+
+        Assert.Equal("input_features:1x80x1", options["nv_profile_min_shapes"]);
+        Assert.Equal("input_features:1x80x3000", options["nv_profile_max_shapes"]);
+        Assert.Equal("input_features:1x80x3000", options["nv_profile_opt_shapes"]);
+    }
+
+    [Fact]
+    public void BuildTensorRtRtxOptions_round_trips_sortformer_trt_profile_shapes()
+    {
+        // Mirrors SortFormerDiarizationEngine.TrtOptions. The streaming feature path uses
+        // "chunk" / "spkcache" / "fifo" instead of "waveform"; both must reach ORT as nv_profile_*.
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
+
+        object? rawResult = method.Invoke(
+            null,
+            [
+                new Dictionary<string, string>
+                {
+                    ["trt_profile_min_shapes"] = "waveform:1x16000",
+                    ["trt_profile_max_shapes"] = "waveform:1x57600000",
+                    ["trt_profile_opt_shapes"] = "waveform:1x160000",
+                }
+            ]);
+        var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
+
+        Assert.Equal("waveform:1x16000", options["nv_profile_min_shapes"]);
+        Assert.Equal("waveform:1x57600000", options["nv_profile_max_shapes"]);
+        Assert.Equal("waveform:1x160000", options["nv_profile_opt_shapes"]);
+        Assert.False(options.ContainsKey("trt_profile_min_shapes"));
+        Assert.False(options.ContainsKey("trt_profile_max_shapes"));
+        Assert.False(options.ContainsKey("trt_profile_opt_shapes"));
+    }
+
+    [Fact]
+    public void BuildTensorRtRtxOptions_round_trips_nemotron_encoder_trt_profile_shapes()
+    {
+        // Mirrors NemotronAsrEncoderTrtProfiles.ProfileWithoutPromptIndex / PromptIndexSuffix.
+        // The encoder uses five dynamic inputs plus a prompt index; all six names must survive.
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
+
+        object? rawResult = method.Invoke(
+            null,
+            [
+                new Dictionary<string, string>
+                {
+                    ["trt_profile_min_shapes"] =
+                        "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1",
+                    ["trt_profile_max_shapes"] =
+                        "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1",
+                    ["trt_profile_opt_shapes"] =
+                        "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1",
+                }
+            ]);
+        var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
+
+        string expectedShapes =
+            "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1";
+        Assert.Equal(expectedShapes, options["nv_profile_min_shapes"]);
+        Assert.Equal(expectedShapes, options["nv_profile_max_shapes"]);
+        Assert.Equal(expectedShapes, options["nv_profile_opt_shapes"]);
+    }
+
+    [Fact]
+    public void BuildTensorRtRtxOptions_preserves_arbitrary_caller_keys()
+    {
+        // TRT-RTX accepts more than just nv_profile_*. Engine code may pass extra hints like
+        // nv_cuda_graph_enable, nv_max_workspace_size, or custom EP options; BuildTensorRtRtxOptions
+        // must pass them through verbatim rather than whitelist-dropping unknown keys.
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
+
+        object? rawResult = method.Invoke(
+            null,
+            [
+                new Dictionary<string, string>
+                {
+                    ["nv_max_workspace_size"] = "2147483648",
+                    ["trt_profile_min_shapes"] = "waveform:1x16000",
+                }
+            ]);
+        var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
+
+        Assert.Equal("2147483648", options["nv_max_workspace_size"]);
+        Assert.Equal("waveform:1x16000", options["nv_profile_min_shapes"]);
+    }
+
+    [Fact]
     public void BuildSessionOptionsFingerprint_distinguishes_tensorrt_option_overrides()
     {
         MethodInfo method = typeof(OnnxExecutionSessionFactory)

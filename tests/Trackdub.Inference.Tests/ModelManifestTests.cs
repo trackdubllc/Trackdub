@@ -2016,6 +2016,13 @@ public sealed class ModelManifestLoaderTests
         Assert.Equal(
             ["encoder.onnx", "decoder_joint.onnx"],
             manifest.Optimization!.Olive!.Components);
+        Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);
+        Assert.Contains(
+            manifest.Optimization.Olive.RecipeBindings,
+            binding => binding.Provider == "trt-rtx" &&
+                       binding.ConfigRelativePath.Contains(
+                           "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
+                           StringComparison.Ordinal));
     }
 
     [Fact]

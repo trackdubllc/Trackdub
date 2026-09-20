@@ -1,14 +1,15 @@
 # AGENTS.md
 
-Guidance for contributors and agents working on the Trackdub public core.
+Guidance for contributors and agents working on the Trackdub public core (`trackdubllc/Trackdub`).
 
-## Project
+## Core Principles
+1. Strict dependency direction: **Domain depends on nothing**. No inference leaking upward.
+2. Conflict order: source code/tests > task instructions > Linear > documentation.
+3. **Never fake readiness:** Provider registered != model downloaded != stage ran != stage succeeded.
+4. Cross-platform is required. Portable .NET 10 APIs by default. Extended operations: `docs/operations/cloud-operations.md`.
+5. Linear (workspace `trackdubllc`, team **TS**): track work autonomously (`repo:core`). Never mark Done without proof.
 
-Cross-platform, local-first AI dubbing engine, SDK, CLI, and pipeline.
-.NET 10 / C# (LangVersion=latest). Apache-2.0 licensed.
-
-**Strict dependency direction — Domain depends on nothing:**
-
+## Dependency Architecture
 ```
 Application → Contracts, Domain, Licensing
 Infrastructure → Application, Contracts, Domain
@@ -23,119 +24,44 @@ DubBench → Benchmarks, Domain, Inference, Inference.Onnx
 Benchmarks → Application, Composition, Domain, Inference, Inference.Onnx, Infrastructure
 Tools → Application, Domain, Infrastructure, Media
 Contracts → Domain
-Licensing → (nothing)
-Analyzers → (nothing)
-OnnxRuntime.Dnnl.Native → (nothing)
-Domain → (nothing)
+Licensing / Analyzers / OnnxRuntime.Dnnl.Native / Domain → (nothing)
 ```
 
-Implementation projects: `DubBench`, `Trackdub.Analyzers`, `Trackdub.Application`,
-`Trackdub.Benchmarks`, `Trackdub.Cli`, `Trackdub.Composition`, `Trackdub.Contracts`,
-`Trackdub.Domain`, `Trackdub.Inference`, `Trackdub.Inference.Onnx`,
-`Trackdub.Infrastructure`, `Trackdub.Licensing`, `Trackdub.Media`,
-`Trackdub.Media.Playback`, `Trackdub.Sdk`, `Trackdub.Tools`.
-Native/package-only: `Trackdub.OnnxRuntime.Dnnl.Native`.
-`Trackdub.Analyzers` is a Roslyn analyzer (`netstandard2.0`), compile-time only.
-
 ## Commands
-
 ```bash
-# Build
+# Build & Test
 dotnet build Trackdub.slnx -m:1
-
-# Test (all)
 dotnet test Trackdub.slnx -m:1
 
-# Single test project
+# Single test project or filter
 dotnet test tests/Trackdub.<Area>.Tests --no-restore -m:1
-
-# Single test
 dotnet test tests/Trackdub.Application.Tests --filter "FullyQualifiedName~<TestName>" -m:1
 
-# CI build (Release, warnings as errors)
+# CI validation (Release, warnings as errors)
 dotnet restore Trackdub.slnx -m:1
 dotnet build Trackdub.slnx --configuration Release --no-restore -m:1 -warnaserror
 dotnet test Trackdub.slnx --configuration Release --no-build -m:1
 
-# Run headless CLI
-# On Windows, Trackdub.Cli is multi-targeted (net10.0 + net10.0-windows10.0.19041.0),
-# so dotnet run needs an explicit --framework flag; on non-Windows a plain run works.
-# GPU note: net10.0 runs CPU + TensorRT RTX (NVIDIA EP ABI plugin); DirectML and
-# Windows ML catalog EPs require net10.0-windows10.0.19041.0.
+# Headless CLI
 dotnet run --project src/Trackdub.Cli -- --help
-dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows
+dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows (multi-targeted)
 
-# Solution filter builds
+# Filter builds & benchmarks
 dotnet build Trackdub.Inference.slnx -m:1
 dotnet build Trackdub.Sdk.slnx -m:1
-
-# Benchmarks
 dotnet run --project src/Trackdub.Benchmarks -- --help
 ```
 
-## Configuration
-
-- **NuGet.config** adds `dotnet-libraries` Azure Artifacts feed for `Microsoft.ML.Tokenizers` 3.x preview.
-- **Package versions** centrally managed in `Directory.Packages.props`. Never add Version in `.csproj`.
-- **Package lock files** via `RestorePackagesWithLockFile=true`.
-- **ONNX DLL dedup** in `Directory.Build.targets`.
-- Shared build props: `Nullable=enable`, `TreatWarningsAsErrors=true`, `ImplicitUsings=enable`.
-
-## Coding Style
-
-- File-scoped namespaces, `sealed` where extension not intended, `Async` suffix on async methods.
-- Immutable `record` types in Domain.
-- Don't suppress warnings casually. Fix or add targeted `<NoWarn>` with comment.
-- Cross-platform is a requirement. Use portable .NET APIs by default.
-
-## Testing
-
-- xUnit, `dotnet test`
-- Domain tests: fast, pure, no I/O.
+## Coding Style & Testing
+- Style: File-scoped namespaces, `sealed` where extension not intended, `Async` on async methods, immutable `record` in Domain.
+- Treat warnings as errors (`TreatWarningsAsErrors=true`). Do not suppress casually.
+- Domain tests: fast, pure, zero I/O.
 - Application tests: fakes from `tests/Trackdub.TestDoubles/` (shared source via `<Compile Include>`).
-- SDK tests: headless session factory + CLI integration surface; deterministic, offline.
-- Infrastructure tests: may use temp SQLite.
-- Pipeline changes: cover success, disabled/skipped, missing-prerequisite, and failure paths.
-- Architecture tests: enforce dependency direction and structural invariants.
+- Pipeline tests: must cover success, disabled/skipped, missing-prerequisite, and failure paths.
+- Commits: imperative titles (`Add ...`, `Fix ...`, `Remove ...`). Always use `git commit -m`.
 
 ## Model Governance
-
-- Bundled inventory: `src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.manifest.json`
-- Commercial licenses only. Unknown license = unsafe.
-- Provider registered ≠ model downloaded ≠ stage ran ≠ stage succeeded.
-- Don't add end-user runtime deps (Python, Conda, Docker, CUDA Toolkit).
-
-## Commit Style
-
-Imperative title: `Add ...`, `Remove ...`, `Fix ...`, `Revise ...`
-
-## Key Rules
-
-1. Domain depends on nothing. No inference code leaking upward.
-2. Preserve original artifacts on skip/fail stages. Log exact skip reasons.
-3. Prefer immutable execution snapshots for pipeline stages.
-4. Cross-platform is a requirement. Don't assume any single OS.
-5. Never fake readiness. Each state (registered, downloaded, ran, succeeded) is distinct.
-
-## Repository Policy
-
-See [docs/repository-policy.md](docs/repository-policy.md) for organization and governance details.
-
-## Cursor Cloud specific instructions
-
-No long-running services. The product entrypoint is the headless CLI (`src/Trackdub.Cli`). Standard build/test/run commands are in [AGENTS.md Commands](#commands) and README.
-
-### Cloud agent gotchas
-
-- Always pass `-m:1` to `dotnet restore`, `dotnet build`, and `dotnet test` (matches CI and avoids restore/build races).
-- NuGet restore needs network access to both `nuget.org` and the Azure Artifacts `dotnet-libraries` feed (see `NuGet.config`) for `Microsoft.ML.Tokenizers` 3.x.
-- `dotnet format Trackdub.slnx --verify-no-changes` is the lint/format gate (CI `format` job).
-- FFmpeg/ffprobe are required for media stages; playback natives (libmpv/LibVLC) are optional for CLI pipeline runs. Readiness: `dotnet run --project src/Trackdub.Cli -- doctor`.
-- Full `dub` / ASR / TTS / translation need ONNX models downloaded into the model cache (`dotnet run --project src/Trackdub.Cli -- models bundle-needed`, then `dotnet run --project src/Trackdub.Cli -- models download <id>`). Tests that need models skip cleanly when missing.
-- Prefer `dotnet run --project src/Trackdub.Cli -- <args>` over a global tool install. Use `--no-build` after a fresh Debug build.
-- On Windows, `Trackdub.Cli` is multi-targeted (`net10.0` and `net10.0-windows10.0.19041.0`), so `dotnet run` fails without an explicit framework; pass `--framework net10.0` (or `--framework net10.0-windows10.0.19041.0`), e.g. `dotnet run --project src/Trackdub.Cli --framework net10.0 -- <args>`. On non-Windows the project targets only `net10.0`, so no flag is needed. GPU: portable `net10.0` supports CPU + TensorRT RTX only; DirectML and Windows ML catalog EPs need the `net10.0-windows10.0.19041.0` build.
-- Default data/cache roots land under `~/.local/share/Trackdub` (override with `TRACKDUB_DATA_ROOT` / `TRACKDUB_CACHE_ROOT` if needed).
-
-## Documentation
-
-See [docs/index.md](docs/index.md) for the categorized documentation index (ADRs, architecture, specs, audits, operations, and more).
+- Bundled inventory: `src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.manifest.json`.
+- Commercial license only. Unknown license = unsafe.
+- Do not add end-user runtime dependencies (Python, Conda, Docker, CUDA Toolkit).
+- Preserve original artifacts on skipped or failed stages; record explicit skip/failure reasons.

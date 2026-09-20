@@ -1,0 +1,53 @@
+{
+  "input_model": {
+    "type": "OnnxModel",
+    "model_path": "build/sortformer-4spk-onnx_encoder_trtrtx_fp16"
+  },
+  "data_configs": [
+    {
+      "name": "sortformer_synthetic",
+      "type": "SyntheticDataContainer",
+      "params": {
+        "input_shapes": [
+          { "name": "waveform", "shape": [1, 160000] }
+        ]
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "encoder_latency",
+      "type": "accuracy",
+      "data_config": "sortformer_synthetic",
+      "sub_types": [
+        {
+          "name": "rtfx",
+          "priority": 1,
+          "higher_is_better": true
+        }
+      ]
+    }
+  ],
+  "evaluators": {
+    "common_evaluator": {
+      "metrics": [
+        "encoder_latency"
+      ]
+    }
+  },
+  "systems": {
+    "local_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        {
+          "device": "gpu",
+          "execution_providers": [
+            "NvTensorRTRTXExecutionProvider"
+          ]
+        }
+      ]
+    }
+  },
+  "host": "local_system",
+  "target": "local_system"
+}
