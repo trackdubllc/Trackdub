@@ -135,6 +135,33 @@ public sealed class RuntimePlannerTests
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
 
         string cacheRoot = workspace.CreateCacheRoot("onnx-community/silero-vad");
+        workspace.WriteCacheFile(cacheRoot, "onnx/model_fp16.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("onnx-community/silero-vad", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request => new ExecutionProviderSmokeTestResult(
+                request.ExecutionProvider != ExecutionProviderKind.TensorRTRtx));
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+    }
+
+    [Fact]
+    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesTensorRtBeforeCuda()
+    {
+        // Global probe order lists TensorRT before Cuda; VAD allows both (non-RTX TensorRT).
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/silero-vad");
         workspace.WriteCacheFile(cacheRoot, "onnx/model_int8.onnx");
 
         RuntimePlanner planner = CreatePlanner(

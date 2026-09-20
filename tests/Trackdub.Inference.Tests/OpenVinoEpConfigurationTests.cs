@@ -167,9 +167,19 @@ public sealed class OpenVinoEpConfigurationTests : IDisposable
         // Act
         IReadOnlyList<ExecutionProviderAvailability> result = await discovery.DiscoverAsync(profile);
 
-        // Assert: DirectML is only available when the build can host Windows ML routes
+        // Assert
+        // Production: directMlAvailable = profile.OS==windows && HasGpu && SupportsWindowsMlRoutes.
+        // This test fixes profile to windows+GPU, so the expected value is exactly
+        // OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes (TFM/build capability).
         ExecutionProviderAvailability directMlEntry = result.Single(r => r.Provider == ExecutionProviderKind.DirectMl);
         Assert.Equal(OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes, directMlEntry.IsAvailable);
+        if (!directMlEntry.IsAvailable)
+        {
+            Assert.Contains(
+                "DirectML",
+                directMlEntry.Detail ?? string.Empty,
+                StringComparison.Ordinal);
+        }
     }
 
     [Fact]
