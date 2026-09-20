@@ -39,8 +39,8 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
         ExecutionProviderKind provider = request.Plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
         bool allowTrtInitFallback = !request.Plan.RequirePreferredExecutionProvider;
 
-        string vocalsModelPath = Path.Combine(request.ModelRootPath, "vocals.onnx");
-        string accModelPath = Path.Combine(request.ModelRootPath, "accompaniment.onnx");
+        string vocalsModelPath = Path.Combine(request.ModelRootPath, SpleeterModelConstants.VocalsModelFileName);
+        string accModelPath = Path.Combine(request.ModelRootPath, SpleeterModelConstants.AccompanimentModelFileName);
 
         string selectedProvider;
         string? bootstrapDetail;
@@ -108,16 +108,9 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
             float aL = accMaskMag[i];
             float aR = accMaskMag[channelStride + i];
 
-            // v² / (v² + a² + eps)
-            float eps = 1e-10f;
-            float denomL = (vL * vL) + (aL * aL) + eps;
-            float denomR = (vR * vR) + (aR * aR) + eps;
-
-            float maskVocalsL = (vL * vL) / denomL;
-            float maskVocalsR = (vR * vR) / denomR;
-
-            float maskAccL = (aL * aL) / denomL;
-            float maskAccR = (aR * aR) / denomR;
+            // Production mask math lives in SpleeterModelConstants (parity tests lock that helper).
+            SpleeterModelConstants.ComputeSoftMasks(vL, aL, out float maskVocalsL, out float maskAccL);
+            SpleeterModelConstants.ComputeSoftMasks(vR, aR, out float maskVocalsR, out float maskAccR);
 
             vocalsLeftMasked[i] = leftMag[i] * maskVocalsL;
             vocalsRightMasked[i] = rightMag[i] * maskVocalsR;

@@ -15,9 +15,9 @@ namespace Trackdub.Inference.Onnx.Spleeter;
 public sealed class SpleeterStemSeparationEngine : IStemSeparationEngineAdapter, IStageRuntimeExecutionReporter
 {
     public const string EngineFamilyName = "spleeter";
-    private const string VocalsModelFileName = "vocals.onnx";
-    private const string AccompanimentModelFileName = "accompaniment.onnx";
-    private const int TargetSampleRate = 44100;
+    private const string VocalsModelFileName = SpleeterModelConstants.VocalsModelFileName;
+    private const string AccompanimentModelFileName = SpleeterModelConstants.AccompanimentModelFileName;
+    private const int TargetSampleRate = SpleeterModelConstants.TargetSampleRate;
 
     private readonly ISpleeterSeparator separator;
     private readonly IRuntimePlanner? runtimePlanner;

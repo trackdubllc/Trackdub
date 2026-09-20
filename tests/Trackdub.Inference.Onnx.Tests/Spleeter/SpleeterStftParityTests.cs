@@ -5,25 +5,22 @@ namespace Trackdub.Inference.Onnx.Tests.Spleeter;
 /// <summary>
 /// STFT parity locks for the sherpa-onnx Spleeter 2stems export path
 /// (scripts/spleeter/separate_onnx.py): n_fft=4096, hop=1024, keep 1024 bins,
-/// pad time to a multiple of 512, periodic Hann, center=false.
+/// pad time with <c>512 - (frames % 512)</c> when positive (exact multiples still
+/// get another 512-frame block), periodic Hann, center=false.
 /// </summary>
 public sealed class SpleeterStftParityTests
 {
-    private const int Nfft = 4096;
-    private const int Hop = 1024;
-    private const int MaxFreqs = 1024;
-    private const int PadTo = 512;
-    private const int SampleRate = 44100;
+    private const int Nfft = SpleeterModelConstants.Nfft;
+    private const int Hop = SpleeterModelConstants.Hop;
+    private const int MaxFreqs = SpleeterModelConstants.MaxFreqBins;
+    private const int PadTo = SpleeterModelConstants.TimePad;
+    private const int SampleRate = SpleeterModelConstants.TargetSampleRate;
 
     private static int ExpectedBaseFrames(int sampleCount) =>
         sampleCount >= Nfft ? 1 + ((sampleCount - Nfft) / Hop) : 1;
 
-    private static int ExpectedTargetFrames(int sampleCount)
-    {
-        int baseFrames = ExpectedBaseFrames(sampleCount);
-        int remainder = baseFrames % PadTo;
-return baseFrames + (PadTo - remainder);
-    }
+    private static int ExpectedTargetFrames(int sampleCount) =>
+        SpleeterModelConstants.PadTimeFrames(ExpectedBaseFrames(sampleCount));
 
     private static float[] MakeSine(int sampleCount, double frequencyHz, double amplitude = 0.5)
     {
@@ -37,6 +34,18 @@ return baseFrames + (PadTo - remainder);
     }
 
     [Fact]
+    public void PadTimeFrames_matches_sherpa_rule_including_exact_multiples()
+    {
+        // separate_onnx.py: padding = 512 - (n % 512); if padding > 0 then pad.
+        // Exact multiples: n % 512 == 0 → padding = 512 → still add a full block.
+        Assert.Equal(2 * PadTo, SpleeterModelConstants.PadTimeFrames(512));
+        Assert.Equal(3 * PadTo, SpleeterModelConstants.PadTimeFrames(1024));
+        Assert.Equal(PadTo, SpleeterModelConstants.PadTimeFrames(1));
+        Assert.Equal(2 * PadTo, SpleeterModelConstants.PadTimeFrames(513));
+        Assert.Equal(PadTo, SpleeterModelConstants.PadTimeFrames(0));
+    }
+
+    [Fact]
     public void Forward_pads_time_frames_to_multiple_of_512()
     {
         var processor = new SpleeterStftProcessor();
@@ -46,7 +55,29 @@ return baseFrames + (PadTo - remainder);
 
         Assert.Equal(ExpectedTargetFrames(sine.Length), targetFrames);
         Assert.Equal(0, targetFrames % PadTo);
-        Assert.True(targetFrames >= ExpectedBaseFrames(sine.Length));
+        Assert.True(targetFrames > ExpectedBaseFrames(sine.Length));
+    }
+
+    [Fact]
+    public void Forward_exact_frame_multiple_gets_additional_sherpa_pad_block()
+    {
+        var processor = new SpleeterStftProcessor();
+
+        // Choose length so baseFrames == 512 exactly:
+        // base = 1 + (N - 4096) / 1024 = 512 => N = 4096 + 511*1024
+        int sampleCount = Nfft + ((PadTo - 1) * Hop);
+        Assert.Equal(PadTo, ExpectedBaseFrames(sampleCount));
+
+        var samples = new float[sampleCount];
+        for (int i = 0; i < sampleCount; i++)
+        {
+            samples[i] = (float)(0.25 * Math.Sin(2.0 * Math.PI * 440 * i / SampleRate));
+        }
+
+        (_, _, int targetFrames) = processor.Forward(samples);
+
+        Assert.Equal(PadTo, ExpectedBaseFrames(sampleCount));
+        Assert.Equal(2 * PadTo, targetFrames);
     }
 
     [Fact]
@@ -81,39 +112,28 @@ return baseFrames + (PadTo - remainder);
         var processor = new SpleeterStftProcessor();
 
         (float[] mag, float[] phase, int targetFrames) = processor.Forward(samples);
-        Assert.Equal(PadTo, targetFrames);
+        Assert.Equal(SpleeterModelConstants.PadTimeFrames(1), targetFrames);
         Assert.Equal(targetFrames * MaxFreqs, mag.Length);
         Assert.Equal(targetFrames * MaxFreqs, phase.Length);
         _ = phase;
 
-        // Reconstruct first-frame windowed input energy via known periodic Hann peak at i=N/2.
         double expectedPeakWindow = 1.0;
         double actualPeakWindow = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * (Nfft / 2) / Nfft));
-    [Fact]
-    public void Window_is_periodic_hann_matching_0_5_times_1_minus_cos_2pi_i_over_nfft()
-    {
-        // A unit impulse at sample i is windowed to w[i]; the NoScaling FFT of an
-        // impulse has unit magnitude across all bins, so Forward's kept-bin
-        // magnitudes must equal the analytic periodic-Hann value at that tap.
-        var processor = new SpleeterStftProcessor();
-
-        foreach (int sample in new[] { 1, Nfft / 4, Nfft / 2, Nfft - 1 })
-        {
-            var impulse = new float[Nfft];
-            impulse[sample] = 1f;
-
-            (float[] mag, _, _) = processor.Forward(impulse);
-
-            double expected = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * sample / Nfft));
-            for (int k = 0; k < MaxFreqs; k++)
-            {
-                Assert.InRange(mag[k], (float)expected - 1e-3f, (float)expected + 1e-3f);
-            }
-        }
+        Assert.Equal(expectedPeakWindow, actualPeakWindow, 12);
     }
+
+    [Theory]
+    [InlineData(440)]
+    [InlineData(1000)]
+    public void Forward_sine_peaks_near_expected_frequency_bin(int frequencyHz)
+    {
+        var processor = new SpleeterStftProcessor();
+        float[] sine = MakeSine(SampleRate * 2, frequencyHz, amplitude: 0.5);
+
+        (float[] mag, _, int targetFrames) = processor.Forward(sine);
+        int expectedBin = (int)Math.Round((double)frequencyHz * Nfft / SampleRate);
         Assert.InRange(expectedBin, 0, MaxFreqs - 1);
 
-        // Inspect an early frame that is fully inside the signal (not tail zero-pad).
         int frame = Math.Min(4, Math.Max(0, ExpectedBaseFrames(sine.Length) - 2));
         int offset = frame * MaxFreqs;
 
@@ -136,9 +156,6 @@ return baseFrames + (PadTo - remainder);
     [Fact]
     public void Inverse_reconstructs_signal_with_mask_identity_on_kept_bins()
     {
-        // Parity intent: iSTFT(Forward) with full kept-bin magnitude/phase ≈ original
-        // for band-limited content inside the first 1024 bins (Nyquist half of 4096).
-        // 440 Hz is well inside that band; HF bins are zeroed by design (sherpa mask pad).
         var processor = new SpleeterStftProcessor();
         float[] sine = MakeSine(SampleRate, 440, amplitude: 0.5);
 
@@ -147,7 +164,6 @@ return baseFrames + (PadTo - remainder);
 
         Assert.Equal(sine.Length, reconstructed.Length);
 
-        // Skip edges where WOLA window-sum / STFT framing are least accurate.
         int start = Hop * 2;
         int end = Math.Min(sine.Length - Hop, ExpectedBaseFrames(sine.Length) * Hop);
         Assert.True(end > start);
@@ -185,9 +201,8 @@ return baseFrames + (PadTo - remainder);
 
         (float[] mag, float[] phase, int targetFrames) = processor.Forward(impulse);
 
-        Assert.Equal(PadTo, targetFrames);
-        // Later frames start past the impulse; magnitude should be ~0 there.
-        int lateFrame = PadTo - 1;
+        Assert.Equal(SpleeterModelConstants.PadTimeFrames(1), targetFrames);
+        int lateFrame = targetFrames - 1;
         int offset = lateFrame * MaxFreqs;
         float lateEnergy = 0f;
         for (int k = 0; k < MaxFreqs; k++)

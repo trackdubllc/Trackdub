@@ -5,10 +5,10 @@ namespace Trackdub.Inference.Onnx.Spleeter;
 
 internal sealed class SpleeterStftProcessor
 {
-    private const int N_Fft = 4096;
-    private const int Hop = 1024;
-    private const int MaxFreqs = 1024;
-    public const int PadTo = 512;
+    private const int N_Fft = SpleeterModelConstants.Nfft;
+    private const int Hop = SpleeterModelConstants.Hop;
+    private const int MaxFreqs = SpleeterModelConstants.MaxFreqBins;
+    public const int PadTo = SpleeterModelConstants.TimePad;
 
     private readonly float[] window;
 
@@ -24,8 +24,9 @@ internal sealed class SpleeterStftProcessor
     public (float[] Magnitude, float[] Phase, int TargetFrames) Forward(float[] input)
     {
         int baseFrames = input.Length >= N_Fft ? 1 + ((input.Length - N_Fft) / Hop) : 1;
-        int remainder = baseFrames % PadTo;
-        int targetFrames = remainder == 0 ? baseFrames : baseFrames + (PadTo - remainder);
+        // sherpa-onnx separate_onnx.py: padding = 512 - (num_frames % 512) when > 0.
+        // Exact multiples still receive another full pad block.
+        int targetFrames = SpleeterModelConstants.PadTimeFrames(baseFrames);
 
         float[] magnitude = new float[targetFrames * MaxFreqs];
         float[] phase = new float[targetFrames * MaxFreqs];
