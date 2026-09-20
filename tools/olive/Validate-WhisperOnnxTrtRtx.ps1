@@ -61,8 +61,13 @@ $decoderSrc = Join-Path $modelRoot 'onnx\decoder_model.onnx'
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $OliveExe)) {
-    Write-Error "olive.exe not found at $OliveExe. Ensure the TRT-RTX olive venv is set up at $VenvPath."
-    exit 1
+    Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (olive-ai[nvmo])..."
+    & (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1')
+    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to bootstrap olive-ai[nvmo] venv."; exit 1 }
+    if (-not (Test-Path $OliveExe)) {
+        Write-Error "olive.exe still not found at $OliveExe after bootstrap."
+        exit 1
+    }
 }
 
 if (-not (Test-Path $encoderSrc)) {
