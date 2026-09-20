@@ -23,19 +23,15 @@ public sealed class TensorRtRtxReadinessProbe : ITensorRtRtxReadinessProbe
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-#if WINDOWS
         if (OperatingSystem.IsWindows())
         {
             return await ProbeWindowsAsync(allowProviderDownloads, cancellationToken).ConfigureAwait(false);
         }
-#endif
 
-#if LINUX
         if (OperatingSystem.IsLinux())
         {
             return await ProbeLinuxAsync(allowProviderDownloads, cancellationToken).ConfigureAwait(false);
         }
-#endif
 
         return new TensorRtRtxReadinessReport(
             ProviderId: string.Empty,
@@ -47,7 +43,6 @@ public sealed class TensorRtRtxReadinessProbe : ITensorRtRtxReadinessProbe
             Detail: "TensorRT RTX EP ABI plugin is supported on Windows and Linux with an NVIDIA GPU.");
     }
 
-#if WINDOWS
     private async Task<TensorRtRtxReadinessReport> ProbeWindowsAsync(
         bool allowProviderDownloads,
         CancellationToken cancellationToken)
@@ -87,9 +82,7 @@ public sealed class TensorRtRtxReadinessProbe : ITensorRtRtxReadinessProbe
             IsRegisteredWithOrt: ortListed && bootstrap.Succeeded,
             Detail: bootstrap.Detail);
     }
-#endif
 
-#if LINUX
     private async Task<TensorRtRtxReadinessReport> ProbeLinuxAsync(
         bool allowProviderDownloads,
         CancellationToken cancellationToken)
@@ -129,5 +122,4 @@ public sealed class TensorRtRtxReadinessProbe : ITensorRtRtxReadinessProbe
             IsRegisteredWithOrt: ortListed && bootstrap.Succeeded,
             Detail: bootstrap.Detail);
     }
-#endif
 }

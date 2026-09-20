@@ -1,25 +1,69 @@
+using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
 
 namespace Trackdub.Inference.Onnx.ExecutionProviders;
 
 public sealed class PortableExecutionProviderBootstrapper : IExecutionProviderBootstrapper
 {
-    public Task<ExecutionProviderBootstrapResult> BootstrapAsync(
+    private readonly ITensorRtRtxProviderBootstrap? _tensorRtRtxBootstrap;
+
+    public PortableExecutionProviderBootstrapper()
+        : this(null)
+    {
+    }
+
+    public PortableExecutionProviderBootstrapper(ITensorRtRtxProviderBootstrap? tensorRtRtxBootstrap)
+    {
+        _tensorRtRtxBootstrap = tensorRtRtxBootstrap;
+    }
+
+    public async Task<ExecutionProviderBootstrapResult> BootstrapAsync(
         ExecutionProviderKind provider,
         bool allowDownloads,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(CreateResult(provider));
+
+        if (provider is ExecutionProviderKind.TensorRTRtx && CanBootstrapTensorRtRtx())
+        {
+            TensorRtRtxBootstrapResult bootstrap = await _tensorRtRtxBootstrap!
+                .EnsureRegisteredAsync(allowDownloads, cancellationToken)
+                .ConfigureAwait(false);
+            return CreateTensorRtRtxResult(provider, bootstrap);
+        }
+
+        return CreateResult(provider);
     }
 
-    public Task<ExecutionProviderBootstrapResult> CheckReadinessAsync(
+    public async Task<ExecutionProviderBootstrapResult> CheckReadinessAsync(
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(CreateResult(provider));
+
+        if (provider is ExecutionProviderKind.TensorRTRtx && CanBootstrapTensorRtRtx())
+        {
+            TensorRtRtxBootstrapResult bootstrap = await _tensorRtRtxBootstrap!
+                .EnsureRegisteredAsync(allowProviderDownloads: false, cancellationToken)
+                .ConfigureAwait(false);
+            return CreateTensorRtRtxResult(provider, bootstrap);
+        }
+
+        return CreateResult(provider);
     }
+
+    private bool CanBootstrapTensorRtRtx() =>
+        _tensorRtRtxBootstrap is not null
+        && (OperatingSystem.IsWindows() || OperatingSystem.IsLinux());
+
+    private static ExecutionProviderBootstrapResult CreateTensorRtRtxResult(
+        ExecutionProviderKind provider,
+        TensorRtRtxBootstrapResult bootstrap) =>
+        bootstrap.Succeeded
+            ? new(provider, provider, Succeeded: true, Detail: bootstrap.Detail)
+            : new(provider, ExecutionProviderKind.Cpu, Succeeded: false,
+                Detail: bootstrap.Detail,
+                FailureReason: $"TensorRT RTX bootstrap failed: {bootstrap.Detail}");
 
     private static ExecutionProviderBootstrapResult CreateResult(ExecutionProviderKind provider) =>
         provider switch

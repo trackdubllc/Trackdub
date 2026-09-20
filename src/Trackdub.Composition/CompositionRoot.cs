@@ -769,10 +769,12 @@ public static class CompositionRoot
             }
             else
             {
-                bootstrapper = new PortableExecutionProviderBootstrapper();
+                bootstrapper = new PortableExecutionProviderBootstrapper(
+                    sp.GetRequiredService<ITensorRtRtxProviderBootstrap>());
             }
 #else
-            bootstrapper = new PortableExecutionProviderBootstrapper();
+            bootstrapper = new PortableExecutionProviderBootstrapper(
+                sp.GetRequiredService<ITensorRtRtxProviderBootstrap>());
 #endif
 #endif
             OnnxExecutionProviderBootstrapperRegistry.Initialize(

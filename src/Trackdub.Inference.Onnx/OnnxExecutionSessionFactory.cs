@@ -1910,7 +1910,11 @@ internal static class OnnxExecutionSessionFactory
         return new ExecutionProviders.Linux.LinuxExecutionProviderBootstrapper(
             NullOpenVinoAvailabilityProvider.Instance);
 #else
-        return new ExecutionProviders.PortableExecutionProviderBootstrapper();
+        return new ExecutionProviders.PortableExecutionProviderBootstrapper(
+            TensorRtRtx.TensorRtRtxProviderBootstrapFactory.CreateWithDefaultInstallPath(
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Trackdub")));
 #endif
     }
 

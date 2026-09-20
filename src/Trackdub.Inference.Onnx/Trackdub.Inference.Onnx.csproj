@@ -91,7 +91,6 @@
     <Compile Remove="WindowsMl\**" />
     <Compile Remove="Migraphx\WindowsMlMigraphxCatalogService.cs" />
     <Compile Remove="Migraphx\WindowsMigraphxHardwareGate.cs" />
-    <Compile Remove="TensorRtRtx\WindowsNvidiaHardwareGate.cs" />
     <Compile Remove="NativeCudaTensorRt\**" />
     <Compile Remove="Runtime\WindowsDeviceEnumerator.cs" />
     <Compile Remove="Runtime\WindowsVramMonitor.cs" />

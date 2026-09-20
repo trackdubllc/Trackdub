@@ -200,19 +200,15 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
 
     private static (bool Eligible, TensorRtRtxReadinessBlocker Blocker, string Detail) EvaluateHardwareEligibility()
     {
-#if WINDOWS
         if (OperatingSystem.IsWindows())
         {
             return WindowsNvidiaHardwareGate.Evaluate();
         }
-#endif
 
-#if LINUX
         if (OperatingSystem.IsLinux())
         {
             return LinuxNvidiaHardwareGate.Evaluate();
         }
-#endif
 
         return (false, TensorRtRtxReadinessBlocker.PlatformUnsupported,
             "TensorRT RTX EP ABI plugin registration is supported on Windows and Linux only.");
