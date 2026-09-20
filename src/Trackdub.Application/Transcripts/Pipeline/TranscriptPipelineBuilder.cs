@@ -261,10 +261,41 @@ public sealed class TranscriptGenerationPipeline : ITranscriptGenerationPipeline
         TranscriptGenerationContext context,
         TimeSpan elapsed)
     {
-        if (string.Equals(stage.StageName, StageNames.Asr, StringComparison.OrdinalIgnoreCase) &&
-            context.AsrResult?.StageRun.Status == StageRunStatus.Skipped)
+        if (string.Equals(stage.StageName, StageNames.Asr, StringComparison.OrdinalIgnoreCase))
         {
-            PipelineProgressReporter.Skipped(progress, stage.StageName, "ASR skipped.", elapsed);
+            StageRunStatus? asrStatus = context.AsrResult?.StageRun.Status;
+            string? modelAlias = context.AsrResult?.StageRun.RuntimeInfo?.ModelAlias;
+            string? provider = context.AsrResult?.StageRun.RuntimeInfo?.SelectedProvider;
+            string runtimeLabel = string.IsNullOrWhiteSpace(modelAlias)
+                ? string.IsNullOrWhiteSpace(provider) ? "auto" : provider
+                : string.IsNullOrWhiteSpace(provider) ? modelAlias : $"{modelAlias} @ {provider}";
+
+            if (asrStatus == StageRunStatus.Skipped)
+            {
+                PipelineProgressReporter.Skipped(
+                    progress,
+                    stage.StageName,
+                    $"ASR skipped ({context.AsrResult?.StageRun.FailureReason ?? "no speech"}).",
+                    elapsed);
+                return;
+            }
+
+            int segmentCount = context.AsrResult?.Segments.Count ?? 0;
+            if (asrStatus is StageRunStatus.Completed or StageRunStatus.PartiallyCompleted && segmentCount == 0)
+            {
+                PipelineProgressReporter.Failed(
+                    progress,
+                    stage.StageName,
+                    $"ASR '{runtimeLabel}' finished with 0 transcript segments — translation/TTS cannot start.",
+                    elapsed);
+                return;
+            }
+
+            PipelineProgressReporter.Completed(
+                progress,
+                stage.StageName,
+                elapsed,
+                $"ASR '{runtimeLabel}': {segmentCount} segment(s).");
             return;
         }
 

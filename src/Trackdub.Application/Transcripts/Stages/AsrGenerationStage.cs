@@ -117,11 +117,11 @@ public sealed class AsrGenerationStage(
             return context with { AsrResult = new AsrStageResult(skippedStageRun, []) };
         }
 
-        PipelineProgressReporter.Phase(
-            progress,
-            StageName,
-            "Recognizing speech",
-            $"Running ASR on {regionPlan.Regions.Count} region(s).");
+        string? preferredAsrAlias = context.ModelPreferences.AsrModelAlias;
+        string asrPhaseDetail = string.IsNullOrWhiteSpace(preferredAsrAlias)
+            ? $"Running ASR on {regionPlan.Regions.Count} region(s)."
+            : $"Running ASR on {regionPlan.Regions.Count} region(s) with '{preferredAsrAlias}'.";
+        PipelineProgressReporter.Phase(progress, StageName, "Recognizing speech", asrPhaseDetail);
         AsrStageResult asrResult = await asrStageHandler.HandleAsync(
             new AsrStageRequest(
                 context.Project.Id,
@@ -135,11 +135,72 @@ public sealed class AsrGenerationStage(
                 context.ModelPreferences.GetPreferredModelVariantAlias(RuntimeStage.Asr)),
             cancellationToken).ConfigureAwait(false);
 
+        // Empty ASR after a real speech-region pass is not a usable success. Retry once with
+        // the shipping fallback alias so quality-tier/legacy Nemotron picks don't leave an
+        // empty transcript that forces the whole spine to re-run with no output.
+        if (asrResult.Segments.Count == 0 &&
+            !string.Equals(preferredAsrAlias, TranscriptPipelineConstants.FallbackAsrModelAlias, StringComparison.OrdinalIgnoreCase))
+        {
+            string usedAlias = asrResult.StageRun.RuntimeInfo?.ModelAlias ?? preferredAsrAlias ?? "auto";
+            PipelineProgressReporter.Phase(
+                progress,
+                StageName,
+                "ASR empty — retrying",
+                $"'{usedAlias}' produced 0 segments; retrying with '{TranscriptPipelineConstants.FallbackAsrModelAlias}'.");
+            asrResult = await asrStageHandler.HandleAsync(
+                new AsrStageRequest(
+                    context.Project.Id,
+                    artifactStore.GetPath(context.AudioRoutingPlan.AsrAudioArtifact.RelativePath),
+                    regionPlan.Regions,
+                    TranscriptPipelineConstants.FallbackAsrModelAlias,
+                    RequirePreferredModelAlias: true,
+                    context.SourceLanguage,
+                    context.ModelPreferences.GetPreferredExecutionProvider(RuntimeStage.Asr),
+                    context.ModelPreferences.RequiresPreferredExecutionProvider(RuntimeStage.Asr),
+                    PreferredModelVariantAlias: null),
+                cancellationToken).ConfigureAwait(false);
+
+            if (degradationWriter is not null)
+            {
+                try
+                {
+                    await degradationWriter.WriteAsync(
+                        new PipelineDegradationRecord(
+                            StageNames.Asr,
+                            "ASR_EMPTY_RESULT_FALLBACK",
+                            $"'{usedAlias}' produced no transcript segments; retried with '{TranscriptPipelineConstants.FallbackAsrModelAlias}'.",
+                            Detail: asrResult.Segments.Count == 0
+                                ? "Fallback ASR also produced 0 segments."
+                                : $"Fallback produced {asrResult.Segments.Count} segment(s).",
+                            SelectedFallback: TranscriptPipelineConstants.FallbackAsrModelAlias,
+                            RecommendedAction: asrResult.Segments.Count == 0
+                                ? "Inspect audio quality or choose another ASR model in Settings."
+                                : "Review the fallback transcript before export.",
+                            DateTimeOffset.UtcNow,
+                            asrResult.StageRun.Id),
+                        context.Project.Id,
+                        context.MediaAsset.Id,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Degradation write is best-effort; fallback result must still be used.
+                }
+            }
+        }
+
+        string usedModelAlias = asrResult.StageRun.RuntimeInfo?.ModelAlias
+            ?? preferredAsrAlias
+            ?? "auto";
+        string selectedProvider = asrResult.StageRun.RuntimeInfo?.SelectedProvider ?? "unknown";
+        string recognitionMessage = asrResult.Segments.Count == 0
+            ? $"ASR '{usedModelAlias}' @ {selectedProvider}: 0 segments."
+            : $"ASR '{usedModelAlias}' @ {selectedProvider}: {asrResult.Segments.Count} segment(s).";
         PipelineProgressReporter.Phase(
             progress,
             StageName,
             "Recognition complete",
-            $"Recognized {asrResult.Segments.Count} segment(s).");
+            recognitionMessage);
 
         if (asrResult.DeviceDegradation is DeviceDegradationReport degradation && degradationWriter is not null)
         {

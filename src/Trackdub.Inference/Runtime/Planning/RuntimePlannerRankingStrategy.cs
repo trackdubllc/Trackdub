@@ -12,7 +12,7 @@ internal sealed class RuntimePlannerRankingStrategy(BundledModelManifestRegistry
     {
         return manifestRegistry.Entries
             .Where(entry => string.Equals(entry.Task, requirements.RequiredTask.ToManifestValue(), StringComparison.OrdinalIgnoreCase))
-            .Where(entry => IsEngineFamilyAllowed(entry, requirements))
+            .Where(entry => IsEngineFamilyAllowed(entry, requirements, request))
             .Where(entry => HasRequiredCapabilities(entry, requirements))
             .Where(entry => IsLanguageCompatible(entry, request))
             .Select(entry => new RankedManifestEntry(
@@ -26,11 +26,22 @@ internal sealed class RuntimePlannerRankingStrategy(BundledModelManifestRegistry
 
     private static bool IsEngineFamilyAllowed(
         BundledModelManifestEntry entry,
-        StageRuntimeRequirements requirements) =>
-        requirements.AllowedEngineFamilies is null ||
-        requirements.AllowedEngineFamilies.Count == 0 ||
-        requirements.AllowedEngineFamilies.Any(engineFamily =>
-            entry.EngineFamily.Equals(engineFamily, StringComparison.OrdinalIgnoreCase));
+        StageRuntimeRequirements requirements,
+        StageRuntimePlanningRequest request)
+    {
+        if (requirements.AllowedEngineFamilies is null ||
+            requirements.AllowedEngineFamilies.Count == 0 ||
+            requirements.AllowedEngineFamilies.Any(engineFamily =>
+                entry.EngineFamily.Equals(engineFamily, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // Explicit preferred alias may still target a model outside the auto-planning
+        // allowlist (e.g. diagnostic Nemotron). Auto/quality ranking must not.
+        return !string.IsNullOrWhiteSpace(request.NormalizedPreferredModelAlias) &&
+            ManifestEntryMatchesPreferredAlias(entry, request.NormalizedPreferredModelAlias);
+    }
 
     private static bool HasRequiredCapabilities(
         BundledModelManifestEntry entry,

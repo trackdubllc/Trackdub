@@ -39,14 +39,55 @@ public sealed class AsrGenerationStageTests
 
         Assert.NotNull(result.AsrResult);
         Assert.Empty(result.AsrResult!.Segments);
-        ProjectArtifact degradationArtifact = Assert.Single(
-            mediaAssetRepository.Artifacts,
-            artifact => artifact.Kind == ArtifactKind.PipelineDegradation);
-        Assert.Equal("ASR_EMPTY_RESULT", degradationArtifact.DegradationCode);
-        Assert.Equal(StageNames.Asr, degradationArtifact.DegradationStage);
+        ProjectArtifact[] degradationArtifacts = [.. mediaAssetRepository.Artifacts
+            .Where(artifact => artifact.Kind == ArtifactKind.PipelineDegradation)];
+        Assert.Contains(
+            degradationArtifacts,
+            artifact => artifact.DegradationCode == "ASR_EMPTY_RESULT_FALLBACK");
+        Assert.Contains(
+            degradationArtifacts,
+            artifact => artifact.DegradationCode == "ASR_EMPTY_RESULT");
+        Assert.All(
+            degradationArtifacts,
+            artifact => Assert.Equal(StageNames.Asr, artifact.DegradationStage));
     }
 
-    private static TranscriptGenerationContext CreateContext()
+    [Fact]
+    public async Task ExecuteAsync_empty_primary_asr_retries_with_fallback_alias_and_uses_fallback_segments()
+    {
+        var artifactStore = new FakeArtifactStore();
+        var mediaAssetRepository = new FakeMediaAssetRepository();
+        var stageRunStore = new FakeProjectStageRunStore();
+        var degradationWriter = new PipelineDegradationWriter(
+            artifactStore,
+            new FakeFileFingerprintService(new FileFingerprint("hash", 1, DateTimeOffset.UtcNow)),
+            mediaAssetRepository);
+        var transcriptionEngine = new FallbackOnlyTranscriptionEngine();
+        var asrHandler = new AsrStageHandler(transcriptionEngine, stageRunStore);
+        var stage = new AsrGenerationStage(asrHandler, artifactStore, stageRunStore, degradationWriter);
+
+        TranscriptGenerationContext context = CreateContext(
+            new InferenceModelPreferences(
+                AsrModelAlias: "nemotron-3.5-asr",
+                RequireAsrModelAlias: true)) with
+        {
+            RegionPlan = new TranscriptRegionPlan(
+                [new SpeechRegion(0, 0.0, 2.0)],
+                new Dictionary<int, Guid>())
+        };
+
+        TranscriptGenerationContext result = await stage.ExecuteAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result.AsrResult);
+        Assert.Single(result.AsrResult!.Segments);
+        Assert.Equal(2, transcriptionEngine.CallCount);
+        Assert.Equal("qwen3-asr-0.6b", transcriptionEngine.LastPreferredAlias);
+        Assert.Contains(
+            mediaAssetRepository.Artifacts,
+            artifact => artifact.DegradationCode == "ASR_EMPTY_RESULT_FALLBACK");
+    }
+
+    private static TranscriptGenerationContext CreateContext(InferenceModelPreferences? modelPreferences = null)
     {
         Guid projectId = Guid.NewGuid();
         Guid mediaAssetId = Guid.NewGuid();
@@ -84,7 +125,44 @@ public sealed class AsrGenerationStageTests
             audioArtifact,
             TranscriptAudioRoutingPlan.Raw(audioArtifact, SpeechAudioSourceKind.FullMix),
             enableSpeakerDiarization: false,
-            sourceLanguage: "en");
+            sourceLanguage: "en",
+            modelPreferences);
+    }
+
+    private sealed class FallbackOnlyTranscriptionEngine : IAudioTranscriptionEngine
+    {
+        public int CallCount { get; private set; }
+
+        public string? LastPreferredAlias { get; private set; }
+
+        public Task<IReadOnlyList<RecognizedTranscriptSegment>> TranscribeAsync(
+            string normalizedAudioPath,
+            IReadOnlyList<SpeechRegion> regions,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RecognizedTranscriptSegment>>([]);
+
+        public Task<IReadOnlyList<RecognizedTranscriptSegment>> TranscribeAsync(
+            AudioTranscriptionRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastPreferredAlias = request.Options?.PreferredModelAlias;
+            CallCount++;
+            if (CallCount == 1)
+            {
+                return Task.FromResult<IReadOnlyList<RecognizedTranscriptSegment>>([]);
+            }
+
+            IReadOnlyList<RecognizedTranscriptSegment> segments =
+            [
+                new RecognizedTranscriptSegment(
+                    0,
+                    0.0,
+                    2.0,
+                    "fallback transcript",
+                    DetectedLanguage: "en")
+            ];
+            return Task.FromResult(segments);
+        }
     }
 
     private sealed class EmptyResultTranscriptionEngine : IAudioTranscriptionEngine
@@ -92,6 +170,11 @@ public sealed class AsrGenerationStageTests
         public Task<IReadOnlyList<RecognizedTranscriptSegment>> TranscribeAsync(
             string normalizedAudioPath,
             IReadOnlyList<SpeechRegion> regions,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RecognizedTranscriptSegment>>([]);
+
+        public Task<IReadOnlyList<RecognizedTranscriptSegment>> TranscribeAsync(
+            AudioTranscriptionRequest request,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<RecognizedTranscriptSegment>>([]);
     }

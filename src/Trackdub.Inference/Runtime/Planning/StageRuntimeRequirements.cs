@@ -79,7 +79,11 @@ internal static class StageRuntimeRequirementsCatalog
                 {
                     ["whisper-onnx"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["whisper-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                }),
+                },
+                // Nemotron ASR is not in the shipping auto-planning lane: quality-tier ranking
+                // previously selected it ahead of working ONNX models and produced empty
+                // transcripts. Explicit Nemotron override still resolves by alias if needed.
+                AllowedEngineFamilies: ["qwen3-asr", "whisper-onnx", "whisper-genai"]),
             [RuntimeStage.Translation] = new(
                 RuntimeStage.Translation,
                 ModelTask.Translation,
