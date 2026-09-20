@@ -145,7 +145,15 @@ internal static class ProvidersCommand
 
             Examples:
               trackdub providers trt-rtx smoke
+              trackdub providers trt-rtx smoke --model nemotron
             """);
+
+        var modelFilterOption = new Option<string[]>("--model")
+        {
+            Description = "Limit smoke targets to labels or model references containing this value (repeatable, case-insensitive).",
+            AllowMultipleArgumentsPerToken = true,
+        };
+        command.Options.Add(modelFilterOption);
 
         command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
         {
@@ -160,7 +168,12 @@ internal static class ProvidersCommand
             using (factory)
             {
                 return await TrtRtxProvidersHandler
-                    .SmokeAsync(factory, Console.Out, Console.Error, cancellationToken)
+                    .SmokeAsync(
+                        factory,
+                        parseResult.GetValue(modelFilterOption),
+                        Console.Out,
+                        Console.Error,
+                        cancellationToken)
                     .ConfigureAwait(false);
             }
         });

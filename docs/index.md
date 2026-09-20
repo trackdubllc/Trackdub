@@ -11,6 +11,8 @@
 - [development/](development/) — Developer procedures and guides
 - [reference/](reference/) — Technical reference material
   - [reference/design-standards.md](reference/design-standards.md) — Canonical visual design tokens; Figma Design System + Qodo Design Review
+  - [reference/gpu-execution-providers.md](reference/gpu-execution-providers.md) - GPU provider routing per build (TRT RTX → DirectML → CPU), pins, exclusions
+  - [reference/tensorrt-rtx-ep-abi-plugin.md](reference/tensorrt-rtx-ep-abi-plugin.md) - TensorRT RTX EP ABI plugin install, registration, smoke
 - [legal/](legal/) — Legal and attribution material
 - [strategy/](strategy/) — Roadmap and strategic direction
 - [plans/](plans/) — Active cross-cutting implementation plans

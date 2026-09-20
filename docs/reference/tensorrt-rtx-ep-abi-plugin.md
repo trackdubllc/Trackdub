@@ -2,6 +2,23 @@
 
 TensorRT RTX is a runtime provider plugin, not a model and not a Windows ML catalog EP.
 
+## Build targets
+
+TRT RTX works on **both** Windows target frameworks because the EP ABI plugin is
+plain ONNX Runtime extensibility: it does not need the Windows ML packages:
+
+| Build | TRT RTX | DirectML / WinML catalog EPs |
+|-------|---------|------------------------------|
+| `net10.0` (portable) | Yes: `NvTensorRTRTXExecutionProvider` via `RegisterExecutionProviderLibrary` | No; unavailable in discovery, CLI warns at parse time |
+| `net10.0-windows10.0.19041.0` | Yes | Yes |
+
+On Linux `net10.0` the plugin bundle (`libonnxruntime_providers_nv_tensorrt_rtx.so` +
+`libtensorrt_rtx.so` set) registers the same way.
+
+Effective NVIDIA Windows fallback chain: **TRT RTX → DirectML → CPU**. On the
+portable build the chain is TRT RTX → CPU, since DirectML requires the
+Windows-targeted build.
+
 Trackdub registers the standalone ONNX Runtime EP ABI plugin before creating TRT RTX sessions, then selects the GPU `OrtEpDevice` whose EP name is:
 
 ```text
@@ -151,6 +168,8 @@ SDK equivalent: `WithExecutionProvider(ExecutionProviderKind.TensorRTRtx)` soft-
 
 Engine-family allow-lists deny TensorRT families for graphs that hard-fail session init under TRT RTX (examples: `whisper-onnx`, `opus-mt` / `madlad`, `chatterbox`, `cosyvoice`, `qwen3-tts`, `latentsync-diffusion`). Those stages still run under a global `trt-rtx` soft prefer by selecting DirectML/CPU. Do **not** treat this as hybrid VRAM spillover / `supports_partial_offload`; Trackdub does not claim partial offload for TRT RTX.
 
+**ORT GenAI loads are excluded from TensorRT entirely** (`whisper-genai`, `phi-genai`, `qwen-instruct` engine-family overrides). ORT GenAI's `NvTensorRtRtx` device can terminate the host process with a native stack overflow during model init/generation (observed on `qwen-instruct`, Qwen2.5-1.5B). A fatal crash cannot surface as a catchable smoke failure, so the planner never offers TensorRT to GenAI-loaded families and the smoke tester refuses the combination before touching native code.
+
 Session create also retries once with DirectML (Windows) then CPU when TensorRT RTX was selected and init fails with EP/kernel/importer errors (`Kernel not found`, `ModelImporter`, `No graph will run on TensorRT`, etc.), and records that path in `FallbackReason` / bootstrap detail. Pass `--require-execution-provider` / `allowTrtInitFallback: false` to disable that retry on hard-pin routes.
 
 This TRT session-init retry applies to **single-session** factory paths (`CreateSingleAsync` / `CreatePooledSingleAsync`). Multi-session factories (Whisper/Opus/Qwen3-ASR/LatentSync pools) still rely on planner engine-family allow-lists and soft-prefer smoke fallthrough; they do not re-run TRT→DirectML init fallback per role in this pass.
@@ -166,6 +185,14 @@ $env:ORT_LOG_SEVERITY_LEVEL = "3"   # 0=Verbose .. 4=Fatal; 3=Error still shows 
 Trackdub does not rewrite ORT's default log severity in session bootstrap.
 
 ## Smoke commands
+
+Catalog sweep (planner-style smoke over every cached bundled GPU target; prints
+`PASS`/`FAIL`/`SKIP` per target as each completes so a native crash mid-catalog
+does not lose earlier results):
+
+```powershell
+trackdub providers trt-rtx smoke
+```
 
 Readiness/probe slices:
 

@@ -69,8 +69,8 @@ public sealed class RuntimePlannerTests
     [Fact]
     public async Task PlanAsync_WhenTensorRTRtxAvailableForVad_UsesTensorRtRtxWhenSmokePasses()
     {
-        // VAD allow-list includes TensorRT RTX again; smoke gates it. DirectML remains fallback
-        // when TRT is unavailable or smoke fails.
+        // VAD allows TensorRT RTX again (silero-vad passed a TRT RTX smoke run); the
+        // milestone order prefers it over DirectML when the smoke gate passes.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -101,6 +101,35 @@ public sealed class RuntimePlannerTests
     [Fact]
     public async Task PlanAsync_WhenTensorRTRtxSmokeFailsForVad_FallsBackToDirectMl()
     {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/silero-vad");
+        workspace.WriteCacheFile(cacheRoot, "onnx/model_fp16.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("onnx-community/silero-vad", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request => new ExecutionProviderSmokeTestResult(
+                request.ExecutionProvider is not ExecutionProviderKind.TensorRTRtx
+                    and not ExecutionProviderKind.TensorRt));
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Equal("silero-vad", plan.ModelAlias);
+    }
+
+    [Fact]
+    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesTensorRtWhenSmokePasses()
+    {
+        // Milestone order probes TensorRt before Cuda; both are allowed for VAD now.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -448,9 +477,10 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_RequiredTensorRtRtxForVad_UsesTensorRtRtxWhenAllowedAndSmokePasses()
+    public async Task PlanAsync_RequiredTensorRTRtxForVad_PlansTensorRtRtx()
     {
-        // VAD allow-list includes TensorRT RTX (smoke-gated); a required TRT pin is honored.
+        // VAD no longer excludes TensorRT families, so a required TRT RTX pin is honored
+        // (smoke-gated) rather than demoted to DirectML with a skip warning.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));

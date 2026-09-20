@@ -114,6 +114,29 @@ Operational detail: [windows-ml-phase-5-catalog-eps.md](../internal/windows-ml-p
 
 ORT native load order prefers the managed ONNX Runtime package before app-base DLLs; session pool eviction and policy-cache invalidation run when hardware settings change. Operational checklist: [windows-ml-phase-4-closeout.md](../internal/windows-ml-phase-4-closeout.md).
 
+## Phase 6: portable-build TRT RTX and GenAI exclusions (2026-09)
+
+Two corrections to the original layering assumptions:
+
+- **TRT RTX is not Windows-ML-bound.** The EP ABI plugin route uses plain ONNX
+  Runtime extensibility (`RegisterExecutionProviderLibrary` + `GetEpDevices`),
+  so the portable `net10.0` build now bootstraps TRT RTX on Windows and Linux.
+  `OnnxRuntimeBuildCapabilities` records per-TFM reach: portable `net10.0`
+  supports CPU + TRT RTX; DirectML and WinML catalog EPs still require
+  `net10.0-windows10.0.19041.0`. Discovery reports unrunnable providers as
+  unavailable (with the required TFM named), and the CLI warns when a requested
+  provider cannot run in the current build.
+- **ORT GenAI model loads never see TensorRT.** GenAI's `NvTensorRtRtx` device
+  terminated the host process (native stack overflow) on a bundled
+  `qwen-instruct` model; a fatal crash cannot be gated by a smoke test, so
+  `whisper-genai`, `phi-genai`, and `qwen-instruct` have engine-family provider
+  overrides excluding TensorRT, and the smoke tester refuses the combination
+  outright. This mirrors the existing `opus-mt`/`madlad` InferenceSession ctor
+  stack-overflow exclusion.
+
+See [gpu-execution-providers.md](../reference/gpu-execution-providers.md) for the
+operator-facing build/provider matrix.
+
 ## Phase 5 licensing policy (2026-05-23)
 
 Vendor EPs and plugin bundles carry third-party licenses that require explicit user acceptance before installation/registration. The following policy is now enforced:
