@@ -11,7 +11,7 @@ STFT contract locked by C# tests:
 
 Usage (optional; C# unit tests do not require these files):
   python generate_spleeter_reference.py
-Writes sine/noise npz next to this script for offline C# golden comparisons
+Writes a sine npz and sine/noise WAVs next to this script for offline C# golden comparisons
 if you extend tests to load them.
 
 Requires: numpy only (no kaldi-native_fbank / ONNX for the basic fixtures).
