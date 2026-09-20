@@ -51,7 +51,7 @@ def stft_mag_phase(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
         buf = np.zeros(NFFT, dtype=np.float64)
         seg = x[start : start + NFFT]
         buf[: seg.shape[0]] = seg
-        windowed = buf * win
+        windowed = buf.astype(np.float32) * win
         spec = np.fft.fft(windowed)
         mag[frame] = np.abs(spec[:MAX_FREQS]).astype(np.float32)
         phase[frame] = np.angle(spec[:MAX_FREQS]).astype(np.float32)
