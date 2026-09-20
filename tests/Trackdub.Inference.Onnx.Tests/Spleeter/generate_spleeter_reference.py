@@ -82,7 +82,6 @@ def main() -> None:
     out = Path(__file__).resolve().parent
     t = np.arange(SR * 2, dtype=np.float64) / SR
     sine = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
-    noise = (0.1 * np.random.default_rng(0).standard_normal(sine.shape[0])).astype(np.float32)
 
     mag, phase, target = stft_mag_phase(sine)
     np.savez_compressed(
