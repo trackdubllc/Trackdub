@@ -10,11 +10,11 @@
       "params": {
         "input_shapes": [
           { "name": "processed_signal", "shape": [1, 128, 65] },
-          { "name": "processed_signal_length", "shape": [1] },
+          { "name": "processed_signal_length", "shape": [1], "dtype": "int64" },
           { "name": "cache_last_channel", "shape": [24, 1, 56, 1024] },
           { "name": "cache_last_time", "shape": [24, 1, 1024, 8] },
-          { "name": "cache_last_channel_len", "shape": [1] },
-          { "name": "prompt_index", "shape": [1] }
+          { "name": "cache_last_channel_len", "shape": [1], "dtype": "int64" },
+          { "name": "prompt_index", "shape": [1], "dtype": "int64" }
         ]
       }
     }

@@ -44,7 +44,7 @@
             "precision": "mxfp8",
             "calibration_method": "max",
             "calibrate_per_node": true,
-            "calibration_providers": ["NvTensorRtRtx"]
+            "calibration_providers": ["NvTensorRTRTXExecutionProvider"]
         },
         "session_params": {
             "type": "OrtSessionParamsTuning",
