@@ -54,7 +54,7 @@ public sealed class SpleeterMaskParityTests
     }
 
     [Fact]
-    public void Trackdub_mask_sums_to_one_when_both_stems_zero()
+    public void Trackdub_masks_are_zero_when_both_stems_zero()
     {
         (float maskV, float maskA) = TrackdubMask(0f, 0f);
         // denom = eps; v^2/denom = 0; both masks 0 — documented Trackdub behavior
