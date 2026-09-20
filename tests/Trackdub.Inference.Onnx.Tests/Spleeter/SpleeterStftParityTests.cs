@@ -4,17 +4,18 @@ namespace Trackdub.Inference.Onnx.Tests.Spleeter;
 
 /// <summary>
 /// STFT parity locks for the sherpa-onnx Spleeter 2stems export path
-/// (scripts/spleeter/separate_onnx.py): n_fft=4096, hop=1024, keep 1024 bins,
-/// pad time with <c>512 - (frames % 512)</c> when positive (exact multiples still
-/// get another 512-frame block), periodic Hann, center=false.
+/// (scripts/spleeter/separate_onnx.py). Absolute contract values are asserted
+/// on <see cref="SpleeterModelConstants"/> so a constants regression cannot
+/// silently pass by changing both implementation and test oracle together.
 /// </summary>
 public sealed class SpleeterStftParityTests
 {
-    private const int Nfft = SpleeterModelConstants.Nfft;
-    private const int Hop = SpleeterModelConstants.Hop;
-    private const int MaxFreqs = SpleeterModelConstants.MaxFreqBins;
-    private const int PadTo = SpleeterModelConstants.TimePad;
-    private const int SampleRate = SpleeterModelConstants.TargetSampleRate;
+    // Literals lock the sherpa contract independently of SpleeterModelConstants.
+    private const int Nfft = 4096;
+    private const int Hop = 1024;
+    private const int MaxFreqs = 1024;
+    private const int PadTo = 512;
+    private const int SampleRate = 44100;
 
     private static int ExpectedBaseFrames(int sampleCount) =>
         sampleCount >= Nfft ? 1 + ((sampleCount - Nfft) / Hop) : 1;
@@ -34,14 +35,24 @@ public sealed class SpleeterStftParityTests
     }
 
     [Fact]
+    public void Constants_match_sherpa_onnx_stft_literals()
+    {
+        Assert.Equal(Nfft, SpleeterModelConstants.Nfft);
+        Assert.Equal(Hop, SpleeterModelConstants.Hop);
+        Assert.Equal(MaxFreqs, SpleeterModelConstants.MaxFreqBins);
+        Assert.Equal(PadTo, SpleeterModelConstants.TimePad);
+        Assert.Equal(SampleRate, SpleeterModelConstants.TargetSampleRate);
+        Assert.Equal(PadTo, SpleeterStftProcessor.PadTo);
+    }
+
+    [Fact]
     public void PadTimeFrames_matches_sherpa_rule_including_exact_multiples()
     {
-        // separate_onnx.py: padding = 512 - (n % 512); if padding > 0 then pad.
-        // Exact multiples: n % 512 == 0 → padding = 512 → still add a full block.
-        Assert.Equal(2 * PadTo, SpleeterModelConstants.PadTimeFrames(512));
-        Assert.Equal(3 * PadTo, SpleeterModelConstants.PadTimeFrames(1024));
+        // separate_onnx.py: padding = 512 - (n % 512); always > 0 for n > 0.
+        Assert.Equal(2 * PadTo, SpleeterModelConstants.PadTimeFrames(PadTo));
+        Assert.Equal(3 * PadTo, SpleeterModelConstants.PadTimeFrames(2 * PadTo));
         Assert.Equal(PadTo, SpleeterModelConstants.PadTimeFrames(1));
-        Assert.Equal(2 * PadTo, SpleeterModelConstants.PadTimeFrames(513));
+        Assert.Equal(2 * PadTo, SpleeterModelConstants.PadTimeFrames(PadTo + 1));
         Assert.Equal(PadTo, SpleeterModelConstants.PadTimeFrames(0));
     }
 
@@ -62,21 +73,12 @@ public sealed class SpleeterStftParityTests
     public void Forward_exact_frame_multiple_gets_additional_sherpa_pad_block()
     {
         var processor = new SpleeterStftProcessor();
-
-        // Choose length so baseFrames == 512 exactly:
-        // base = 1 + (N - 4096) / 1024 = 512 => N = 4096 + 511*1024
         int sampleCount = Nfft + ((PadTo - 1) * Hop);
         Assert.Equal(PadTo, ExpectedBaseFrames(sampleCount));
 
-        var samples = new float[sampleCount];
-        for (int i = 0; i < sampleCount; i++)
-        {
-            samples[i] = (float)(0.25 * Math.Sin(2.0 * Math.PI * 440 * i / SampleRate));
-        }
-
+        float[] samples = MakeSine(sampleCount, 440, amplitude: 0.25);
         (_, _, int targetFrames) = processor.Forward(samples);
 
-        Assert.Equal(PadTo, ExpectedBaseFrames(sampleCount));
         Assert.Equal(2 * PadTo, targetFrames);
     }
 
@@ -104,22 +106,28 @@ public sealed class SpleeterStftParityTests
         Assert.Equal(targetFrames * MaxFreqs, phase.Length);
     }
 
-    [Fact]
-    public void Window_is_periodic_hann_matching_0_5_times_1_minus_cos_2pi_i_over_nfft()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1024)]
+    [InlineData(2048)]
+    [InlineData(3072)]
+    public void Forward_unit_impulse_mag_at_bin_zero_matches_periodic_hann_tap(int sampleIndex)
     {
-        // Spleeter / sherpa-onnx use periodic Hann (period N, not N-1).
-        var samples = MakeSine(Nfft, 440, amplitude: 1.0);
+        // Locks the production window via STFT output, not a standalone formula.
+        // FFT of windowed impulse e[sampleIndex] → X[k] = w[sampleIndex] for all k;
+        // kept-bin magnitude at k=0 is |w[sampleIndex]|.
         var processor = new SpleeterStftProcessor();
+        var impulse = new float[Nfft];
+        impulse[sampleIndex] = 1f;
 
-        (float[] mag, float[] phase, int targetFrames) = processor.Forward(samples);
+        (float[] mag, float[] phase, int targetFrames) = processor.Forward(impulse);
         Assert.Equal(SpleeterModelConstants.PadTimeFrames(1), targetFrames);
-        Assert.Equal(targetFrames * MaxFreqs, mag.Length);
-        Assert.Equal(targetFrames * MaxFreqs, phase.Length);
-        _ = phase;
 
-        double expectedPeakWindow = 1.0;
-        double actualPeakWindow = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * (Nfft / 2) / Nfft));
-        Assert.Equal(expectedPeakWindow, actualPeakWindow, 12);
+        double expectedWindow =
+            0.5 * (1.0 - Math.Cos(2.0 * Math.PI * sampleIndex / Nfft));
+        float actual = mag[0];
+        Assert.InRange(actual, (float)expectedWindow - 1e-3f, (float)expectedWindow + 1e-3f);
+        Assert.Equal(0f, phase[0], 3);
     }
 
     [Theory]

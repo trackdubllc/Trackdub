@@ -5,8 +5,9 @@ namespace Trackdub.Inference.Onnx.Tests.Spleeter;
 /// <summary>
 /// Soft-mask math parity for Spleeter 2stems ONNX post-process.
 /// Tests call production <see cref="SpleeterModelConstants.ComputeSoftMasks"/>
-/// (the same helper <c>SpleeterOnnxSeparator</c> uses) so epsilon/formula
-/// regressions in the engine fail this suite.
+/// (the same helper <c>SpleeterOnnxSeparator</c> uses).
+/// Formula target: sherpa-onnx separate_onnx.py
+/// <c>(stem² + ε/2) / (vocals² + accomp² + ε)</c>.
 /// </summary>
 public sealed class SpleeterMaskParityTests
 {
@@ -25,54 +26,63 @@ public sealed class SpleeterMaskParityTests
         return (((v * v) + halfEps) / denom, ((a * a) + halfEps) / denom);
     }
 
+    [Fact]
+    public void Constants_lock_sherpa_onnx_stft_contract_literals()
+    {
+        // Independent of SpleeterStftProcessor aliases — absolute parity values.
+        Assert.Equal(44100, SpleeterModelConstants.TargetSampleRate);
+        Assert.Equal(4096, SpleeterModelConstants.Nfft);
+        Assert.Equal(1024, SpleeterModelConstants.Hop);
+        Assert.Equal(1024, SpleeterModelConstants.MaxFreqBins);
+        Assert.Equal(512, SpleeterModelConstants.TimePad);
+        Assert.Equal(1e-10f, SpleeterModelConstants.MaskEpsilon);
+        Assert.Equal("vocals.onnx", SpleeterModelConstants.VocalsModelFileName);
+        Assert.Equal("accompaniment.onnx", SpleeterModelConstants.AccompanimentModelFileName);
+    }
+
     [Theory]
     [InlineData(1f, 0f)]
     [InlineData(0f, 1f)]
     [InlineData(0.3f, 0.7f)]
     [InlineData(2f, 2f)]
     [InlineData(0.01f, 0.5f)]
-    public void Production_mask_is_power_ratio_over_sum_plus_eps(float v, float a)
+    public void Production_mask_matches_sherpa_power_ratio_plus_half_eps(float v, float a)
     {
         (float maskV, float maskA) = ProductionMask(v, a);
-        float denom = (v * v) + (a * a) + Eps;
+        (float sherpaV, float sherpaA) = SherpaMask(v, a);
 
-        Assert.Equal((v * v) / denom, maskV, 7);
-        Assert.Equal((a * a) / denom, maskA, 7);
+        Assert.Equal(sherpaV, maskV, 6);
+        Assert.Equal(sherpaA, maskA, 6);
+
+        float denom = (v * v) + (a * a) + Eps;
+        float halfEps = Eps / 2f;
+        Assert.Equal(((v * v) + halfEps) / denom, maskV, 6);
+        Assert.Equal(((a * a) + halfEps) / denom, maskA, 6);
     }
 
     [Theory]
     [InlineData(0.3f, 0.7f)]
     [InlineData(2f, 2f)]
     [InlineData(0.5f, 0.1f)]
-    public void Production_masks_are_complementary_for_nonzero_stems(float v, float a)
+    [InlineData(0f, 0f)]
+    public void Production_masks_sum_to_one(float v, float a)
     {
+        // sherpa: (v²+ε/2 + a²+ε/2) / (v²+a²+ε) = 1 exactly in real arithmetic.
         (float maskV, float maskA) = ProductionMask(v, a);
         Assert.Equal(1f, maskV + maskA, 4);
     }
 
     [Fact]
-    public void Production_mask_sums_to_zero_when_both_stems_zero()
-    {
-        // Documented Trackdub behavior (sherpa adds eps/2 so each mask is ~0.5).
-        (float maskV, float maskA) = ProductionMask(0f, 0f);
-        Assert.Equal(0f, maskV);
-        Assert.Equal(0f, maskA);
-    }
-
-    [Fact]
-    public void Sherpa_eps_half_delta_is_small_for_typical_magnitudes()
+    public void Production_mask_equals_sherpa_reference_formula()
     {
         const float v = 0.4f;
         const float a = 0.6f;
-        (float trackdubV, float trackdubA) = ProductionMask(v, a);
+        (float productionV, float productionA) = ProductionMask(v, a);
         (float sherpaV, float sherpaA) = SherpaMask(v, a);
 
-        Assert.True(Math.Abs(trackdubV - sherpaV) < 1e-5f,
-            $"Production vocals mask {trackdubV} vs sherpa {sherpaV}.");
-        Assert.True(Math.Abs(trackdubA - sherpaA) < 1e-5f,
-            $"Production accomp mask {trackdubA} vs sherpa {sherpaA}.");
-        Assert.True(sherpaV + sherpaA >= 1f);
-        Assert.True(sherpaV + sherpaA < 1f + 1e-6f);
+        Assert.Equal(sherpaV, productionV, 7);
+        Assert.Equal(sherpaA, productionA, 7);
+        Assert.Equal(1f, productionV + productionA, 5);
     }
 
     [Fact]
@@ -88,31 +98,25 @@ public sealed class SpleeterMaskParityTests
     }
 
     [Fact]
-    public void High_frequency_mask_window_is_zero_beyond_first_1024_bins()
+    public void ResolveModelPath_combines_relative_file_names_under_model_root()
     {
-        // Contract: model sees bins [0,1024); inverse zeros FFT bins >= 1024
-        // (sherpa pads mask to 2049 with zeros — same effective HF drop on both stems).
-        int nFft = SpleeterModelConstants.Nfft;
-        int maxFreqs = SpleeterModelConstants.MaxFreqBins;
+        string vocals = SpleeterModelConstants.ResolveModelPath(
+            Path.Combine("models", "spleeter"),
+            SpleeterModelConstants.VocalsModelFileName);
+        string acc = SpleeterModelConstants.ResolveModelPath(
+            Path.Combine("models", "spleeter"),
+            SpleeterModelConstants.AccompanimentModelFileName);
 
-        (float maskV, float maskA) = ProductionMask(1f, 1f);
-        Assert.Equal(0.5f, maskV, 5);
-        Assert.Equal(0.5f, maskA, 5);
+        Assert.EndsWith(SpleeterModelConstants.VocalsModelFileName, vocals);
+        Assert.EndsWith(SpleeterModelConstants.AccompanimentModelFileName, acc);
+        Assert.False(Path.IsPathRooted(SpleeterModelConstants.VocalsModelFileName));
+        Assert.False(Path.IsPathRooted(SpleeterModelConstants.AccompanimentModelFileName));
+    }
 
-        var kept = new bool[nFft];
-        for (int k = 0; k < maxFreqs; k++)
-        {
-            kept[k] = true;
-        }
-
-        for (int k = 1; k < maxFreqs; k++)
-        {
-            kept[nFft - k] = true;
-        }
-
-        for (int k = maxFreqs; k < nFft - (maxFreqs - 1); k++)
-        {
-            Assert.False(kept[k], $"FFT bin {k} must not be treated as model-backed energy.");
-        }
+    [Fact]
+    public void ResolveModelPath_rejects_rooted_file_names()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            SpleeterModelConstants.ResolveModelPath("models/spleeter", "/abs/vocals.onnx"));
     }
 }

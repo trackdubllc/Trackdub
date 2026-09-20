@@ -3,6 +3,7 @@ namespace Trackdub.Inference.Onnx.Spleeter;
 /// <summary>
 /// Shared constants and soft-mask math for the sherpa-onnx Spleeter 2stems path.
 /// Production separator/engine and parity tests must use these so contracts cannot drift.
+/// Parity target: k2-fsa/sherpa-onnx <c>scripts/spleeter/separate_onnx.py</c>.
 /// </summary>
 internal static class SpleeterModelConstants
 {
@@ -16,7 +17,7 @@ internal static class SpleeterModelConstants
     /// <summary>STFT hop (sherpa-onnx / Deezer 2stems).</summary>
     public const int Hop = 1024;
 
-    /// <summary>Frequency bins kept for the ONNX UNet (first half of rFFT usable band for this export).</summary>
+    /// <summary>Frequency bins kept for the ONNX UNet (export keeps the first 1024 bins).</summary>
     public const int MaxFreqBins = 1024;
 
     /// <summary>Time-frame pad / ONNX chunk height (num_splits granularity).</summary>
@@ -25,9 +26,9 @@ internal static class SpleeterModelConstants
     public const float MaskEpsilon = 1e-10f;
 
     /// <summary>
-    /// Frame count after sherpa-onnx-style time padding:
-    /// <c>padding = TimePad - (baseFrames % TimePad)</c> applied when positive.
-    /// An exact multiple still receives another full pad block (matches separate_onnx.py).
+    /// Frame count after sherpa-onnx time padding:
+    /// <c>padding = TimePad - (baseFrames % TimePad)</c> (always in 1..TimePad for baseFrames&gt;0).
+    /// Exact multiples still receive another full pad block (matches separate_onnx.py).
     /// </summary>
     public static int PadTimeFrames(int baseFrames)
     {
@@ -37,13 +38,13 @@ internal static class SpleeterModelConstants
         }
 
         int remainder = baseFrames % TimePad;
-        int padding = TimePad - remainder;
-        return padding > 0 ? baseFrames + padding : baseFrames;
+        return baseFrames + (TimePad - remainder);
     }
 
     /// <summary>
-    /// Soft mask used by <see cref="SpleeterOnnxSeparator"/>:
-    /// <c>stem² / (vocals² + accompaniment² + ε)</c>.
+    /// Soft mask matching sherpa-onnx separate_onnx.py:
+    /// <c>(stem² + ε/2) / (vocals² + accompaniment² + ε)</c>.
+    /// Vocals + accomp masks sum to 1 in exact arithmetic.
     /// </summary>
     public static void ComputeSoftMasks(
         float vocalsMagnitude,
@@ -51,10 +52,26 @@ internal static class SpleeterModelConstants
         out float maskVocals,
         out float maskAccompaniment)
     {
+        float halfEps = MaskEpsilon / 2f;
         float denom = (vocalsMagnitude * vocalsMagnitude)
             + (accompanimentMagnitude * accompanimentMagnitude)
             + MaskEpsilon;
-        maskVocals = (vocalsMagnitude * vocalsMagnitude) / denom;
-        maskAccompaniment = (accompanimentMagnitude * accompanimentMagnitude) / denom;
+        maskVocals = ((vocalsMagnitude * vocalsMagnitude) + halfEps) / denom;
+        maskAccompaniment = ((accompanimentMagnitude * accompanimentMagnitude) + halfEps) / denom;
+    }
+
+    /// <summary>Builds a non-rooted model path under <paramref name="modelRootPath"/>.</summary>
+    public static string ResolveModelPath(string modelRootPath, string modelFileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelRootPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelFileName);
+        if (Path.IsPathRooted(modelFileName))
+        {
+            throw new ArgumentException(
+                $"Spleeter model file name must be relative, but '{modelFileName}' is rooted.",
+                nameof(modelFileName));
+        }
+
+        return Path.Combine(modelRootPath, modelFileName);
     }
 }

@@ -13,7 +13,10 @@ STFT contract locked by C# tests:
 
 Usage (optional; C# unit tests do not require these files):
   python generate_spleeter_reference.py
-Writes sine/noise wav + npz next to this script.
+Writes:
+  spleeter_stft_sine_440.npz — sine samples + STFT mag/phase
+  spleeter_stft_noise.npz — noise samples + STFT mag/phase
+  sine_440_mono_2s_44k.wav, noise_burst_mono_2s_44k.wav — mono PCM16
 
 Requires: numpy only (no kaldi-native_fbank / ONNX for the basic fixtures).
 """
@@ -42,8 +45,7 @@ def pad_time_frames(base_frames: int) -> int:
     if base_frames <= 0:
         return PAD_TO
     remainder = base_frames % PAD_TO
-    padding = PAD_TO - remainder
-    return base_frames + padding if padding > 0 else base_frames
+    return base_frames + (PAD_TO - remainder)
 
 
 def stft_mag_phase(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
@@ -57,7 +59,8 @@ def stft_mag_phase(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
         buf = np.zeros(NFFT, dtype=np.float64)
         seg = x[start : start + NFFT]
         buf[: seg.shape[0]] = seg
-        windowed = buf * win
+        # float32 product before FFT — matches C# Complex(val * window[i], 0)
+        windowed = (buf * win).astype(np.float32).astype(np.float64)
         spec = np.fft.fft(windowed)
         mag[frame] = np.abs(spec[:MAX_FREQS]).astype(np.float32)
         phase[frame] = np.angle(spec[:MAX_FREQS]).astype(np.float32)
@@ -65,9 +68,11 @@ def stft_mag_phase(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
 
 
 def soft_mask(v: np.ndarray, a: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """sherpa-onnx separate_onnx.py: (stem^2 + eps/2) / (v^2 + a^2 + eps)."""
     eps = np.float32(1e-10)
+    half = eps / np.float32(2)
     denom = v * v + a * a + eps
-    return v * v / denom, a * a / denom
+    return (v * v + half) / denom, (a * a + half) / denom
 
 
 def write_wav_pcm16_mono(path: Path, samples: np.ndarray, sample_rate: int = SR) -> None:
@@ -85,16 +90,10 @@ def write_wav_pcm16_mono(path: Path, samples: np.ndarray, sample_rate: int = SR)
         f.write(raw)
 
 
-def main() -> None:
-    out = Path(__file__).resolve().parent
-    t = np.arange(SR * 2, dtype=np.float64) / SR
-    sine = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
-    noise = (0.1 * np.random.default_rng(0).standard_normal(sine.shape[0])).astype(np.float32)
-
-    mag, phase, target = stft_mag_phase(sine)
+def save_stft_npz(path: Path, samples: np.ndarray, mag: np.ndarray, phase: np.ndarray, target: int) -> None:
     np.savez_compressed(
-        out / "spleeter_stft_sine_440.npz",
-        sine=sine,
+        path,
+        samples=samples,
         mag=mag,
         phase=phase,
         target_frames=np.int32(target),
@@ -103,6 +102,18 @@ def main() -> None:
         max_freqs=np.int32(MAX_FREQS),
         pad_to=np.int32(PAD_TO),
     )
+
+
+def main() -> None:
+    out = Path(__file__).resolve().parent
+    t = np.arange(SR * 2, dtype=np.float64) / SR
+    sine = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+    noise = (0.1 * np.random.default_rng(0).standard_normal(sine.shape[0])).astype(np.float32)
+
+    sine_mag, sine_phase, sine_target = stft_mag_phase(sine)
+    noise_mag, noise_phase, noise_target = stft_mag_phase(noise)
+    save_stft_npz(out / "spleeter_stft_sine_440.npz", sine, sine_mag, sine_phase, sine_target)
+    save_stft_npz(out / "spleeter_stft_noise.npz", noise, noise_mag, noise_phase, noise_target)
     write_wav_pcm16_mono(out / "sine_440_mono_2s_44k.wav", sine)
     write_wav_pcm16_mono(out / "noise_burst_mono_2s_44k.wav", noise)
 
@@ -110,9 +121,10 @@ def main() -> None:
     a = np.float32(0.7)
     mv, ma = soft_mask(np.array([v]), np.array([a]))
     base = 1 + (sine.shape[0] - NFFT) // HOP
-    print("mask production-style", float(mv[0]), float(ma[0]), "sum", float(mv[0] + ma[0]))
+    print("mask sherpa-style", float(mv[0]), float(ma[0]), "sum", float(mv[0] + ma[0]))
     print("wrote fixtures to", out)
-    print(f"sine frames base={base} target={target} pad_rule=sherpa")
+    print(f"sine frames base={base} target={sine_target} pad_rule=sherpa")
+    print(f"noise frames base={1 + (noise.shape[0] - NFFT) // HOP} target={noise_target}")
 
 
 if __name__ == "__main__":

@@ -4,8 +4,8 @@ namespace Trackdub.Inference.Onnx.Tests.Spleeter;
 
 /// <summary>
 /// Product / engine contract tests for the commercial-safe Spleeter 2stems lane.
-/// Asserts against <see cref="SpleeterModelConstants"/> — the same source the
-/// separator and engine use for model filenames, sample rate, and STFT pad.
+/// Asserts absolute sherpa-onnx literals and production path construction
+/// (no reflection on private engine fields).
 /// </summary>
 public sealed class SpleeterSeparationContractTests
 {
@@ -16,7 +16,7 @@ public sealed class SpleeterSeparationContractTests
     }
 
     [Fact]
-    public void Target_sample_rate_matches_deezer_spleeter_2stems_44k1()
+    public void Target_sample_rate_matches_sherpa_onnx_spleeter_export()
     {
         Assert.Equal(44100, SpleeterModelConstants.TargetSampleRate);
     }
@@ -29,32 +29,24 @@ public sealed class SpleeterSeparationContractTests
     }
 
     [Fact]
-    public void Engine_private_constants_alias_shared_model_constants()
+    public void Production_model_paths_use_shared_relative_file_names()
     {
-        // Engine must not keep independent private literals that can drift from the separator.
-        var vocals = typeof(SpleeterStemSeparationEngine).GetField(
-            "VocalsModelFileName",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-            ?? throw new InvalidOperationException("VocalsModelFileName constant missing on engine.");
-        var accomp = typeof(SpleeterStemSeparationEngine).GetField(
-            "AccompanimentModelFileName",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-            ?? throw new InvalidOperationException("AccompanimentModelFileName constant missing on engine.");
-        var sampleRate = typeof(SpleeterStemSeparationEngine).GetField(
-            "TargetSampleRate",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-            ?? throw new InvalidOperationException("TargetSampleRate constant missing on engine.");
+        // Same helper SpleeterOnnxSeparator uses; rooted names are rejected.
+        string root = Path.Combine("cache", "csukuangfj", "sherpa-onnx-spleeter-2stems");
+        string vocals = SpleeterModelConstants.ResolveModelPath(
+            root, SpleeterModelConstants.VocalsModelFileName);
+        string acc = SpleeterModelConstants.ResolveModelPath(
+            root, SpleeterModelConstants.AccompanimentModelFileName);
 
-        Assert.Equal(SpleeterModelConstants.VocalsModelFileName, vocals.GetValue(null));
-        Assert.Equal(SpleeterModelConstants.AccompanimentModelFileName, accomp.GetValue(null));
-        Assert.Equal(SpleeterModelConstants.TargetSampleRate, sampleRate.GetValue(null));
+        Assert.Equal(Path.Combine(root, "vocals.onnx"), vocals);
+        Assert.Equal(Path.Combine(root, "accompaniment.onnx"), acc);
     }
 
     [Fact]
     public void Stft_processor_pad_block_matches_onnx_export_time_dimension()
     {
-        Assert.Equal(SpleeterModelConstants.TimePad, SpleeterStftProcessor.PadTo);
         Assert.Equal(512, SpleeterModelConstants.TimePad);
+        Assert.Equal(SpleeterModelConstants.TimePad, SpleeterStftProcessor.PadTo);
     }
 
     [Fact]
