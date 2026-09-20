@@ -107,8 +107,12 @@ public sealed class SpleeterMaskParityTests
             Path.Combine("models", "spleeter"),
             SpleeterModelConstants.AccompanimentModelFileName);
 
-        Assert.EndsWith(SpleeterModelConstants.VocalsModelFileName, vocals);
-        Assert.EndsWith(SpleeterModelConstants.AccompanimentModelFileName, acc);
+        Assert.Equal(
+            Path.Combine("models", "spleeter", SpleeterModelConstants.VocalsModelFileName),
+            vocals);
+        Assert.Equal(
+            Path.Combine("models", "spleeter", SpleeterModelConstants.AccompanimentModelFileName),
+            acc);
         Assert.False(Path.IsPathRooted(SpleeterModelConstants.VocalsModelFileName));
         Assert.False(Path.IsPathRooted(SpleeterModelConstants.AccompanimentModelFileName));
     }
