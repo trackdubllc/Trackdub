@@ -67,8 +67,10 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_WhenTensorRTRtxAvailableForVad_UsesDirectMlInstead()
+    public async Task PlanAsync_WhenTensorRTRtxAvailableForVad_UsesTensorRtRtxWhenSmokePasses()
     {
+        // VAD allow-list includes TensorRT RTX again; smoke gates it. DirectML remains fallback
+        // when TRT is unavailable or smoke fails.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -88,7 +90,7 @@ public sealed class RuntimePlannerTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
         Assert.Equal("silero-vad", plan.ModelAlias);
         Assert.Equal("silero-vad", plan.EngineFamily);
         Assert.Equal("balanced", plan.ModelTier);
@@ -97,8 +99,35 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesCudaWhenSmokePasses()
+    public async Task PlanAsync_WhenTensorRTRtxSmokeFailsForVad_FallsBackToDirectMl()
     {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/silero-vad");
+        workspace.WriteCacheFile(cacheRoot, "onnx/model_fp16.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("onnx-community/silero-vad", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request => new ExecutionProviderSmokeTestResult(
+                request.ExecutionProvider != ExecutionProviderKind.TensorRTRtx));
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+    }
+
+    [Fact]
+    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesTensorRtBeforeCuda()
+    {
+        // Global probe order lists TensorRT before Cuda; VAD allows both (non-RTX TensorRT).
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -118,7 +147,7 @@ public sealed class RuntimePlannerTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.Cuda, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.TensorRt, plan.ExecutionProvider);
         Assert.Equal("int8", plan.Variant);
     }
 
@@ -419,8 +448,9 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForVad_PlansDirectMlWithSkipWarning()
+    public async Task PlanAsync_RequiredTensorRtRtxForVad_UsesTensorRtRtxWhenAllowedAndSmokePasses()
     {
+        // VAD allow-list includes TensorRT RTX (smoke-gated); a required TRT pin is honored.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -443,13 +473,10 @@ public sealed class RuntimePlannerTests
             RequirePreferredExecutionProvider: true));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
-        Assert.Contains(
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
+        Assert.DoesNotContain(
             plan.Warnings,
-            warning =>
-                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
-                && warning.Detail is not null
-                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+            warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
     }
 
     [Fact]
