@@ -1,7 +1,7 @@
 {
   "input_model": {
     "type": "OnnxModel",
-    "model_path": "build/sortformer-4spk-onnx_encoder_trtrtx_fp16"
+    "model_path": "${ENCODER_OUTPUT_DIR}"
   },
   "data_configs": [
     {

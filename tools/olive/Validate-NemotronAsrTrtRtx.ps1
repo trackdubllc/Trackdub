@@ -41,12 +41,16 @@ $VenvPath       = Join-Path $env:LOCALAPPDATA 'Trackdub\tools\olive-env-tensorrt
 $OliveExe       = Join-Path $VenvPath 'Scripts\olive.exe'
 $BuildDir       = Join-Path $RepoRoot 'build'
 $Precision      = if ($Mxfp8) { 'mxfp8' } else { 'fp16' }
-$ResultFile     = Join-Path $BuildDir "nemotron-3.5-asr-trtrtx-$Precision-validation.json"
+$ResultFile     = Join-Path $BuildDir "nemotron-3.5-asr-trtrtx-validation.json"
 
 # ---------------------------------------------------------------------------
 # Model layout (matches bundled-models.manifest.json nemotron-asr entry)
 # ---------------------------------------------------------------------------
-$modelRoot      = Join-Path $RepoRoot 'models\nemotron-3.5-asr-onnx'
+# Path matches where Trackdub.Cli lands the model when TRACKDUB_MODEL_CACHE=$RepoRoot\models:
+# the model id "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx" gets split on "/" into two
+# path segments. The bundled-models.manifest.json `root_path` resolves to a different layout
+# (../../../../models/nemotron-3.5-asr-onnx); for the validate step we follow the download layout.
+$modelRoot      = Join-Path $RepoRoot 'models\tonythethompson\nemotron-3.5-asr-streaming-0.6b-onnx'
 $encoderSrc     = Join-Path $modelRoot 'encoder.onnx'
 $decoderSrc     = Join-Path $modelRoot 'decoder_joint.onnx'
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes\nemotron-3.5-asr-streaming-0.6b-onnx\NvTensorRtRtx'
@@ -94,6 +98,7 @@ function Resolve-Recipe {
     param([string] $SrcPath, [string] $DestPath)
     $content = Get-Content -Raw $SrcPath
     $content = $content -replace '\$\{MODEL_ROOT\}', ($modelRoot -replace '\\', '/')
+    $content = $content -replace '\$\{ENCODER_OUTPUT_DIR\}', ("build/$encoderOutputDirName" -replace '\\', '/')
     Set-Content -Path $DestPath -Value $content -Encoding UTF8
 }
 
@@ -102,7 +107,7 @@ $decoderRecipeDst = Join-Path $TempDir "decoder_joint_trtrtx_$Precision.json"
 $latencyRecipeDst = Join-Path $TempDir 'eval_latency.json'
 Resolve-Recipe $encoderRecipe $encoderRecipeDst
 Resolve-Recipe $decoderRecipe $decoderRecipeDst
-Copy-Item (Join-Path $recipeDir 'eval_latency.json') $latencyRecipeDst
+Resolve-Recipe (Join-Path $recipeDir 'eval_latency.json') $latencyRecipeDst
 
 $origDir = Get-Location
 Set-Location $RepoRoot

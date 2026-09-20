@@ -40,7 +40,7 @@ $VenvPath       = Join-Path $env:LOCALAPPDATA 'Trackdub\tools\olive-env-tensorrt
 $OliveExe       = Join-Path $VenvPath 'Scripts\olive.exe'
 $BuildDir       = Join-Path $RepoRoot 'build'
 $Precision      = if ($Mxfp8) { 'mxfp8' } else { 'fp16' }
-$ResultFile     = Join-Path $BuildDir "sortformer-4spk-trtrtx-$Precision-validation.json"
+$ResultFile     = Join-Path $BuildDir "sortformer-4spk-trtrtx-validation.json"
 
 # ---------------------------------------------------------------------------
 # Model layout (matches bundled-models.manifest.json sortformer entry)
@@ -85,13 +85,14 @@ function Resolve-Recipe {
     param([string] $SrcPath, [string] $DestPath)
     $content = Get-Content -Raw $SrcPath
     $content = $content -replace '\$\{MODEL_ROOT\}', ($modelRoot -replace '\\', '/')
+    $content = $content -replace '\$\{ENCODER_OUTPUT_DIR\}', ("build/$encoderOutputDirName" -replace '\\', '/')
     Set-Content -Path $DestPath -Value $content -Encoding UTF8
 }
 
 $encoderRecipeDst = Join-Path $TempDir "encoder_trtrtx_$Precision.json"
 $latencyRecipeDst = Join-Path $TempDir 'eval_latency.json'
 Resolve-Recipe $recipeSrc $encoderRecipeDst
-Copy-Item (Join-Path $recipeDir 'eval_latency.json') $latencyRecipeDst
+Resolve-Recipe (Join-Path $recipeDir 'eval_latency.json') $latencyRecipeDst
 
 $origDir = Get-Location
 Set-Location $RepoRoot
