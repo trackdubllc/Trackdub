@@ -158,6 +158,7 @@ internal static class TrtRtxProvidersHandler
 
     public static async Task<int> SmokeAsync(
         TrackdubSessionFactory factory,
+        IReadOnlyList<string>? modelFilter,
         TextWriter output,
         TextWriter progressOutput,
         CancellationToken cancellationToken)
@@ -165,6 +166,10 @@ internal static class TrtRtxProvidersHandler
         IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
         ITensorRtRtxRuntimeReadinessService readinessService =
             factory.GetRequiredService<ITensorRtRtxRuntimeReadinessService>();
+
+        IReadOnlyList<TrtRtxSmokeCatalog.Target> targets = FilterTargets(
+            TrtRtxSmokeCatalog.RemainingOnnxGpu,
+            modelFilter);
 
         TensorRtRtxRuntimeReadinessSnapshot snapshot = await readinessService
             .ProbeAsync(allowProviderDownloads: false, cancellationToken)
@@ -180,7 +185,7 @@ internal static class TrtRtxProvidersHandler
                 Attempted = 0,
                 Passed = 0,
                 Failed = 0,
-                Skipped = TrtRtxSmokeCatalog.RemainingOnnxGpu.Count,
+                Skipped = targets.Count,
                 Targets = [],
             };
 
@@ -191,13 +196,26 @@ internal static class TrtRtxProvidersHandler
             return Program.ExitPipelineFailure;
         }
 
+        if (targets.Count == 0)
+        {
+            await progressOutput.WriteLineAsync(
+                    $"No TRT RTX smoke targets matched --model filter: {string.Join(", ", modelFilter ?? [])}")
+                .ConfigureAwait(false);
+            return Program.ExitPipelineFailure;
+        }
+
+        // Emit each target result as it completes so a fatal native crash mid-catalog
+        // does not lose the per-model evidence gathered up to that point.
+        var progress = new ImmediateTargetProgress(progressOutput);
+
         TrtRtxStarterPackSmokeReport report;
         try
         {
             report = await TrtRtxStarterPackSmokeRunner
                 .RunAsync(
                     storagePaths.ModelCacheDirectory,
-                    TrtRtxSmokeCatalog.RemainingOnnxGpu,
+                    targets,
+                    progress,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -244,22 +262,6 @@ internal static class TrtRtxProvidersHandler
 
         await output.WriteLineAsync(JsonSerializer.Serialize(payload, SmokeJsonOptions)).ConfigureAwait(false);
 
-        foreach (TrtRtxStarterPackSmokeTargetResult target in report.Targets)
-        {
-            string line = target.Status switch
-            {
-                TrtRtxStarterPackSmokeTargetStatus.Passed =>
-                    $"PASS {target.Label} ({target.ModelReference})",
-                TrtRtxStarterPackSmokeTargetStatus.Skipped =>
-                    $"SKIP {target.Label}: {target.Detail ?? "model not cached locally"}",
-                TrtRtxStarterPackSmokeTargetStatus.Failed =>
-                    $"FAIL {target.Label}: {target.Detail ?? "smoke test failed"}",
-                _ => $"{target.Label}: {target.Status}",
-            };
-
-            await progressOutput.WriteLineAsync(line).ConfigureAwait(false);
-        }
-
         await progressOutput.WriteLineAsync(
                 $"TRT RTX smoke summary: passed={report.Passed}, failed={report.Failed}, skipped={report.Skipped}.")
             .ConfigureAwait(false);
@@ -273,6 +275,23 @@ internal static class TrtRtxProvidersHandler
         }
 
         return report.HasFailures ? Program.ExitPipelineFailure : Program.ExitSuccess;
+    }
+
+    private static IReadOnlyList<TrtRtxSmokeCatalog.Target> FilterTargets(
+        IReadOnlyList<TrtRtxSmokeCatalog.Target> targets,
+        IReadOnlyList<string>? modelFilter)
+    {
+        if (modelFilter is null || modelFilter.Count == 0)
+        {
+            return targets;
+        }
+
+        return targets
+            .Where(target => modelFilter.Any(filter =>
+                !string.IsNullOrWhiteSpace(filter)
+                && (target.Label.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || target.ModelReference.Contains(filter, StringComparison.OrdinalIgnoreCase))))
+            .ToArray();
     }
 
     private static readonly JsonSerializerOptions SmokeJsonOptions = new()
@@ -376,5 +395,28 @@ internal static class TrtRtxProvidersHandler
         public string ModelReference { get; init; } = string.Empty;
         public string Status { get; init; } = string.Empty;
         public string? Detail { get; init; }
+    }
+
+    // Writes synchronously rather than via Progress<T> (which queues to the thread pool) so
+    // the line is flushed even if the next target crashes the process in native code.
+    private sealed class ImmediateTargetProgress(TextWriter progressOutput)
+        : IProgress<TrtRtxStarterPackSmokeTargetResult>
+    {
+        public void Report(TrtRtxStarterPackSmokeTargetResult target)
+        {
+            string line = target.Status switch
+            {
+                TrtRtxStarterPackSmokeTargetStatus.Passed =>
+                    $"PASS {target.Label} ({target.ModelReference})",
+                TrtRtxStarterPackSmokeTargetStatus.Skipped =>
+                    $"SKIP {target.Label}: {target.Detail ?? "model not cached locally"}",
+                TrtRtxStarterPackSmokeTargetStatus.Failed =>
+                    $"FAIL {target.Label}: {target.Detail ?? "smoke test failed"}",
+                _ => $"{target.Label}: {target.Status}",
+            };
+
+            progressOutput.WriteLine(line);
+            progressOutput.Flush();
+        }
     }
 }

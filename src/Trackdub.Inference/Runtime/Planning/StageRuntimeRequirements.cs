@@ -73,9 +73,12 @@ internal static class StageRuntimeRequirementsCatalog
                 ["default", "int8", "quantized", "uint8", "q4"],
                 // Stock Olive whisper-onnx graphs omit trt-rtx in supported_providers and use
                 // fused contrib ops TensorRT RTX cannot import. Keep qwen3-asr on TRT RTX.
+                // whisper-genai loads through ORT GenAI, whose NvTensorRtRtx device can
+                // terminate the process (native stack overflow) during model init/generation.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["whisper-onnx"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["whisper-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 }),
             [RuntimeStage.Translation] = new(
                 RuntimeStage.Translation,
@@ -85,10 +88,13 @@ internal static class StageRuntimeRequirementsCatalog
                 ["merged-decoder", "quantized", "fp16"],
                 ["merged-decoder", "quantized", "int8", "fp16"],
                 // Encoder-decoder InferenceSession ctor stack-overflows under TensorRT RTX (ORT 1.24.5).
+                // phi-genai loads through ORT GenAI, whose NvTensorRtRtx device can terminate
+                // the process (native stack overflow) during model init/generation.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["opus-mt"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["madlad"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["phi-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 }),
             [RuntimeStage.Diarization] = new(
                 RuntimeStage.Diarization,
@@ -159,7 +165,15 @@ internal static class StageRuntimeRequirementsCatalog
                 ["qwen2.5-1.5b-instruct", "qwen-polisher", "text-refiner"],
                 DefaultOnnxStageAllowedProviders,
                 ["default", "fp16"],
-                ["default", "int8", "quantized"]),
+                ["default", "int8", "quantized"],
+                // ORT GenAI NvTensorRtRtx terminates the process (native stack overflow) when
+                // loading/running bundled GenAI models, e.g. qwen-instruct (Qwen2.5-1.5B). A
+                // smoke failure cannot gate a fatal crash, so GenAI families never see TRT RTX.
+                new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["qwen-instruct"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["phi-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                }),
             [RuntimeStage.LipSynthesis] = new(
                 RuntimeStage.LipSynthesis,
                 ModelTask.LipSynthesis,

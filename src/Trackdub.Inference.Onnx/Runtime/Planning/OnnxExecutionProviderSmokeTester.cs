@@ -85,6 +85,8 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
+        ThrowIfGenAiTensorRtProvider(provider);
+
         string genAiRoot = RequireGenAiConfigRoot(
             modelRootPath,
             entryPath,
@@ -222,6 +224,8 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
+        ThrowIfGenAiTensorRtProvider(provider);
+
         string genAiRoot = RequireGenAiConfigRoot(
             modelRootPath,
             entryPath,
@@ -234,6 +238,37 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             {
             }
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    // ORT GenAI's NvTensorRtRtx device terminates the host process (native stack overflow) on
+    // bundled GenAI models such as qwen-instruct (Qwen2.5-1.5B). A fatal crash cannot be caught
+    // and reported as a smoke failure, so the attempt must be refused before touching native code.
+    private static void ThrowIfGenAiTensorRtProvider(ExecutionProviderKind provider)
+    {
+        if (provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
+        {
+            throw new NotSupportedException(
+                "ORT GenAI NvTensorRtRtx is excluded for GenAI model loads: it terminates the host "
+                + "process (native stack overflow) on bundled GenAI models. Use dml or cpu.");
+        }
+    }
+
+    // Encoder-decoder InferenceSession construction for these families terminates the host
+    // process (stack overflow) under TensorRT providers; the reason their stage allow-list
+    // overrides exist. The smoke sweep bypasses stage allow-lists, so refuse the attempt
+    // before session creation; a fatal crash cannot be caught and reported.
+    private static void ThrowIfFatalTensorRtFamily(string? engineFamily, ExecutionProviderKind provider)
+    {
+        if (provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt
+            && engineFamily is not null
+            && (engineFamily.Equals("opus-mt", StringComparison.OrdinalIgnoreCase)
+                || engineFamily.Equals("madlad", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new NotSupportedException(
+                $"Engine family '{engineFamily}' is excluded from TensorRT providers: "
+                + "encoder-decoder InferenceSession construction terminates the host process "
+                + "(native stack overflow). Use dml or cpu.");
+        }
     }
 
     private static string RequireGenAiConfigRoot(
@@ -409,10 +444,10 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         int[] timeDims = ResolveMetadataDims(inputMetadata, "cache_last_time", [24, 1, 1024, 8]);
         int channelCount = channelDims.Aggregate(1, static (product, dimension) => checked(product * dimension));
         int timeCount = timeDims.Aggregate(1, static (product, dimension) => checked(product * dimension));
-        // Bundled Nemotron export expects time-major [B,T,mel]; transpose from C# mel-major.
+        // Bundled Nemotron export expects mel-major [B,mel,T], same layout the engine feeds.
         var values = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("processed_signal", new DenseTensor<float>(new float[65 * 128], [1, 65, 128])),
+            NamedOnnxValue.CreateFromTensor("processed_signal", new DenseTensor<float>(new float[128 * 65], [1, 128, 65])),
             NamedOnnxValue.CreateFromTensor("processed_signal_length", new DenseTensor<long>(new long[] { 65 }, [1])),
             NamedOnnxValue.CreateFromTensor("cache_last_channel", new DenseTensor<float>(new float[channelCount], channelDims)),
             NamedOnnxValue.CreateFromTensor("cache_last_time", new DenseTensor<float>(new float[timeCount], timeDims)),
@@ -431,15 +466,21 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         IReadOnlyDictionary<string, NodeMetadata> inputMetadata,
         Tensor<float> encoded)
     {
-        // Encoder output is time-major [batch, time, hidden]; hidden is Dimensions[2].
-        int hiddenSize = encoded.Dimensions.Length >= 3 ? encoded.Dimensions[2] : 1024;
+        // The encoder output may be time-major [B,T,H] or hidden-major [B,H,T] depending on
+        // the provider's graph; resolve the layout the same way the engine does. The decoder's
+        // encoder_outputs metadata declares hidden at index 1 ([batch, hidden, time]).
+        int hiddenDim = inputMetadata.TryGetValue("encoder_outputs", out NodeMetadata? encoderOutputsMetadata)
+            && encoderOutputsMetadata.Dimensions.Length == 3
+            && encoderOutputsMetadata.Dimensions[1] > 0
+                ? encoderOutputsMetadata.Dimensions[1]
+                : 1024;
+        NemotronAsrEncodedTensorLayout.EncodedLayout layout = NemotronAsrEncodedTensorLayout.Resolve(
+            encoded.Dimensions,
+            encodedLength: int.MaxValue,
+            hiddenDim);
+        DenseTensor<float> frame = NemotronAsrEncodedTensorLayout.SliceFrame(encoded, layout, frameIndex: 0);
         int[] stateDims = ResolveMetadataDims(inputMetadata, "input_states_1", [2, 1, 640]);
         int stateCount = stateDims.Aggregate(1, static (product, dimension) => checked(product * dimension));
-        var frame = new DenseTensor<float>(new float[hiddenSize], [1, hiddenSize, 1]);
-        for (int hiddenIndex = 0; hiddenIndex < hiddenSize && encoded.Dimensions.Length >= 3; hiddenIndex++)
-        {
-            frame[0, hiddenIndex, 0] = encoded[0, 0, hiddenIndex];
-        }
 
         return new InputSet(
         [
@@ -825,6 +866,8 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
+        ThrowIfFatalTensorRtFamily(request.EngineFamily, request.ExecutionProvider);
+
         if (UsesOrtGenAiTranslationSmoke(request.EngineFamily))
         {
             await SmokeTestTextRefinementGenAiAsync(

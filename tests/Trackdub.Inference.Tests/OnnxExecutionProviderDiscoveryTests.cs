@@ -1,5 +1,6 @@
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
+using Trackdub.Inference.Onnx;
 using Trackdub.Inference.Onnx.Runtime.Planning;
 using Trackdub.Inference.Runtime.Planning;
 using Xunit;
@@ -76,6 +77,79 @@ public sealed class OnnxExecutionProviderDiscoveryTests
         Assert.Contains(availabilities, a => a.Provider == ExecutionProviderKind.Qnn);
         Assert.Contains(availabilities, a => a.Provider == ExecutionProviderKind.OpenVinoCatalog);
         Assert.Contains(availabilities, a => a.Provider == ExecutionProviderKind.VitisAi);
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_Windows_DirectMlFollowsBuildCapabilities()
+    {
+        var discovery = new OnnxExecutionProviderDiscovery(
+            new StubOpenVinoProvider(false),
+            new StubLinuxNativeGpuRuntimeProbe(nvidiaDriverLoaded: false, nativeTensorRtAvailable: false),
+            new StubNativeCudaTensorRtWindowsPolicy(allowed: false),
+            new StubMigraphxReadinessProbe(),
+            new StubDnnlReadinessProbe(isReady: false),
+            new StubTensorRtRtxReadinessProbe(),
+            new StubWinMlCatalogReadinessProbe(),
+            new StubWinMlCatalogReadinessProbe(),
+            new StubWinMlCatalogReadinessProbe());
+
+        IReadOnlyList<ExecutionProviderAvailability> availabilities = await discovery.DiscoverAsync(
+            new HardwareProfile("windows", "x64", HasGpu: true, GpuDescription: "NVIDIA RTX 5070"),
+            CancellationToken.None);
+
+        ExecutionProviderAvailability directMl = Assert.Single(
+            availabilities, a => a.Provider == ExecutionProviderKind.DirectMl);
+        if (OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes)
+        {
+            Assert.True(directMl.IsAvailable);
+        }
+        else
+        {
+            Assert.False(directMl.IsAvailable);
+            Assert.Contains("net10.0-windows10.0.19041.0", directMl.Detail);
+        }
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_Windows_WinMlCatalogProvidersFollowBuildCapabilities()
+    {
+        var openVinoCatalogProbe = new StubWinMlCatalogReadinessProbe();
+        var qnnProbe = new StubWinMlCatalogReadinessProbe();
+        var vitisAiProbe = new StubWinMlCatalogReadinessProbe();
+        var discovery = new OnnxExecutionProviderDiscovery(
+            new StubOpenVinoProvider(false),
+            new StubLinuxNativeGpuRuntimeProbe(nvidiaDriverLoaded: false, nativeTensorRtAvailable: false),
+            new StubNativeCudaTensorRtWindowsPolicy(allowed: false),
+            new StubMigraphxReadinessProbe(),
+            new StubDnnlReadinessProbe(isReady: false),
+            new StubTensorRtRtxReadinessProbe(),
+            openVinoCatalogProbe,
+            qnnProbe,
+            vitisAiProbe);
+
+        IReadOnlyList<ExecutionProviderAvailability> availabilities = await discovery.DiscoverAsync(
+            new HardwareProfile("windows", "x64", HasGpu: true, GpuDescription: "NVIDIA RTX 5070"),
+            CancellationToken.None);
+
+        if (OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes)
+        {
+            Assert.True(openVinoCatalogProbe.CallCount > 0);
+        }
+        else
+        {
+            // The portable build cannot load the WinML catalog route; probes must not run.
+            Assert.Equal(0, openVinoCatalogProbe.CallCount);
+            Assert.Equal(0, qnnProbe.CallCount);
+            Assert.Equal(0, vitisAiProbe.CallCount);
+            foreach (ExecutionProviderAvailability availability in availabilities.Where(
+                         a => a.Provider is ExecutionProviderKind.OpenVinoCatalog
+                             or ExecutionProviderKind.Qnn
+                             or ExecutionProviderKind.VitisAi))
+            {
+                Assert.False(availability.IsAvailable);
+                Assert.Contains("net10.0-windows10.0.19041.0", availability.Detail);
+            }
+        }
     }
 
     [Fact]
@@ -192,10 +266,14 @@ public sealed class OnnxExecutionProviderDiscoveryTests
         IQnnCatalogReadinessProbe,
         IVitisAiCatalogReadinessProbe
     {
+        public int CallCount { get; private set; }
+
         public Task<WinMlCatalogReadinessReport> ProbeAsync(
             bool allowProviderDownloads,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new WinMlCatalogReadinessReport(
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(new WinMlCatalogReadinessReport(
                 ProviderId: string.Empty,
                 WinMlCatalogPlatformRoute.WinMlCatalog,
                 WinMlCatalogReadinessBlocker.EpNotPresent,
@@ -203,6 +281,7 @@ public sealed class OnnxExecutionProviderDiscoveryTests
                 IsOrtProviderListed: false,
                 IsRegisteredWithOrt: false,
                 Detail: "Catalog fake not installed."));
+        }
     }
 
     private sealed class StubOpenVinoProvider(bool isAvailable) : IOpenVinoAvailabilityProvider

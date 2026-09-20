@@ -1,4 +1,5 @@
 using Trackdub.Domain;
+using Trackdub.Inference.Onnx;
 using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Onnx.Runtime.Planning;
 using Trackdub.Inference.Runtime.Planning;
@@ -166,9 +167,9 @@ public sealed class OpenVinoEpConfigurationTests : IDisposable
         // Act
         IReadOnlyList<ExecutionProviderAvailability> result = await discovery.DiscoverAsync(profile);
 
-        // Assert
+        // Assert: DirectML is only available when the build can host Windows ML routes
         ExecutionProviderAvailability directMlEntry = result.Single(r => r.Provider == ExecutionProviderKind.DirectMl);
-        Assert.True(directMlEntry.IsAvailable);
+        Assert.Equal(OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes, directMlEntry.IsAvailable);
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 # Windows ML stage provider matrix (Phase 2)
 
-Internal audit companion for [ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md) stage catalog alignment.
+Internal audit companion for [ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md) stage catalog alignment.
 
 ## Planner intersection
 
@@ -16,17 +16,17 @@ Milestone probe order (2026-06): `TensorRTRtx` → `Migraphx` → `OpenVinoCatal
 
 |Stage|Default allow-list|Engine-family overrides|
 |-|-|-|
-|VAD|Milestone default|—|
-|ASR|Milestone default|`whisper-genai` keeps GenAI-oriented list|
-|Translation|Milestone default|`madlad`, `phi-genai`|
+|VAD|Milestone default (TensorRT RTX allowed)|—|
+|ASR|Milestone default|`whisper-onnx`, `whisper-genai` → no TensorRT|
+|Translation|Milestone default|`opus-mt`, `madlad`, `phi-genai` → no TensorRT|
 |Diarization|Milestone default|—|
-|Separation|Milestone default|`spleeter`|
-|OverlapRescue|Milestone default|`sepformer`|
-|SpeechEnhancement|Milestone default|`deepfilternet3`|
-|LipSync|Milestone default|`onnx-ctc-phoneme-aligner`|
-|LipSynthesis|Milestone default|`latentsync-diffusion`|
-|TextRefinement|Milestone default|—|
-|TTS|Milestone default|**`kokoro` → CPU only** (ConvTranspose / DirectML incompatible)|
+|Separation|Milestone default|`spleeter` (family allow-list)|
+|OverlapRescue|Milestone default|`sepformer` (family allow-list)|
+|SpeechEnhancement|Milestone default|`deepfilternet3` (family allow-list)|
+|LipSync|Milestone default|`onnx-ctc-phoneme-aligner` (family allow-list)|
+|LipSynthesis|Milestone default|`latentsync-diffusion` → no TensorRT|
+|TextRefinement|Milestone default|`qwen-instruct`, `phi-genai` → no TensorRT (ORT GenAI `NvTensorRtRtx` terminates the process)|
+|TTS|Milestone default|**`kokoro` → CPU only** (ConvTranspose / DirectML incompatible); `chatterbox`, `cosyvoice`, `qwen3-tts` → no TensorRT|
 
 ## Windows manual smoke checklist
 
@@ -54,7 +54,7 @@ Run on a machine with the relevant catalog EP installed before claiming GPU read
 Suggested commands:
 
 ```powershell
-dotnet build Trackdub.sln
+dotnet build Trackdub.slnx -m:1
 dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~RuntimePlanner"
 dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --help
 ```
@@ -90,9 +90,22 @@ TRT RTX is **not** a Windows ML catalog EP and is **not** selected by `WindowsMl
 | Stage | Representative model | Command / surface | Pass/fail | Actual EP | Notes |
 |-------|---------------------|-------------------|-----------|-----------|-------|
 | VAD | `onnx-community/silero-vad` | `Trackdub.Benchmarks --provider trt-rtx` | pending | *pending local GPU run* | Requires NVIDIA GPU + plugin bundle |
-| Headless status | — | `trackdub providers trt-rtx status` | pending | JSON `isOrtProviderListed` | Probe-only; no download |
+| Headless status | — | `trackdub providers trt-rtx status` | pass | `tensorrt-rtx-plugin-ep-abi` | ready=true on net10.0 + net10.0-windows (RTX 5070 host) |
 | Headless install | — | `trackdub providers trt-rtx install --accept-license` | pending | — | License-gated bundle download |
 | DubBench | same as benchmark | DubBench ONNX run after shared bootstrap | pending | — | Uses `BenchmarkOnnxExecutionBootstrap` |
+
+`trackdub providers trt-rtx smoke` (net10.0, RTX 5070, plugin 0.3.0 cu12) per-target results:
+
+| Target family | Result | Notes |
+|---------------|--------|-------|
+| whisper-onnx (tiny/base/small/medium/large-v3) | pass | `Profile kMAX not self-consistent ... 1500 != 16384` warnings on `/Add_2` are non-fatal TRT-RTX auto-profile noise from the models' dynamic dims; sessions still run |
+| whisper-genai (openai/whisper-*) | fail (refused) | ORT GenAI `NvTensorRtRtx` load terminates the process; guard refuses before native call |
+| nemotron | shape fixes applied | encoder `processed_signal` is `[B,128,T]` mel-major; decoder `encoder_outputs` is `[B,H,T]`; layout now resolved via `NemotronAsrEncodedTensorLayout` |
+| qwen-instruct (Qwen2.5-1.5B) | fail (refused) | Same GenAI fatal-crash guard |
+| phi-genai (`microsoft/Phi-4-mini-instruct-onnx` gpu-int4) | fail (refused) | Same GenAI fatal-crash guard |
+| opus-mt (9 pairs), madlad | fail (refused) | InferenceSession ctor stack overflow under TRT; guard refuses before native call |
+| chatterbox (onnx-community) | model-dependent | stage exclusion stands for real runs; smoke probe subgraphs may still pass |
+| cosyvoice, qwen3-tts | pass on smoke probe | stage exclusions remain; probe coverage is partial |
 
 Prerequisites: [tensorrt-rtx-ep-abi-plugin.md](tensorrt-rtx-ep-abi-plugin.md) (Model Manager, `Fetch-TrtRtxEp.ps1`, or license-accepted auto-download). Optional CI: `.github/workflows/trt-rtx-smoke.yml` when repository variable `TRACKDUB_TRT_RTX_SMOKE=true`.
 

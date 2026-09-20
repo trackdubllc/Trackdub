@@ -12,8 +12,11 @@ public sealed class RuntimePlannerBlackwellVariantTests
     [Fact]
     public async Task PlanAsync_OnBlackwellWithMxfp8Cached_PrefersMxfp8ForTextRefinement()
     {
+        // mxfp8 is pinned to trt-rtx, so it is only reachable for a family that is allowed
+        // TensorRT providers; qwen-instruct itself is excluded (fatal GenAI crash class).
         using var workspace = new RuntimePlannerBlackwellTestWorkspace();
-        BundledModelManifestRegistry registry = workspace.WriteTextRefinerManifest();
+        BundledModelManifestRegistry registry = workspace.WriteTextRefinerManifest(
+            engineFamily: "text-refiner-onnx");
 
         string cacheRoot = workspace.CreateCacheRoot("tonythethompson/Qwen2.5-1.5B-Instruct");
         WriteBundledCacheFiles(workspace, registry, "text-refiner", cacheRoot, "mxfp8");
@@ -113,10 +116,50 @@ public sealed class RuntimePlannerBlackwellVariantTests
     }
 
     [Fact]
+    public async Task PlanAsync_OnBlackwell_QwenInstructFamily_SelectsDirectMlNotTensorRtRtx()
+    {
+        // qwen-instruct loads through ORT GenAI, whose NvTensorRtRtx device terminates the
+        // process (native stack overflow), so the planner must not even smoke TRT RTX.
+        using var workspace = new RuntimePlannerBlackwellTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteTextRefinerManifest();
+
+        string cacheRoot = workspace.CreateCacheRoot("tonythethompson/Qwen2.5-1.5B-Instruct");
+        WriteBundledCacheFiles(workspace, registry, "text-refiner", cacheRoot, "mxfp8");
+
+        var hardware = new HardwareProfile(
+            "windows",
+            "x64",
+            HasGpu: true,
+            GpuDescription: "NVIDIA GeForce RTX 5090",
+            NvidiaGpuArchitecture: NvidiaGpuArchitectureBucket.Blackwell);
+
+        var smokeRequests = new List<ExecutionProviderKind>();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            cacheRoot,
+            new FakeHardwareProfileProvider(hardware),
+            new FakeExecutionProviderSmokeTester(request =>
+            {
+                smokeRequests.Add(request.ExecutionProvider);
+                return new ExecutionProviderSmokeTestResult(true);
+            }));
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.TextRefinement));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Equal("default", plan.Variant);
+        Assert.DoesNotContain(
+            smokeRequests,
+            provider => provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt);
+    }
+
+    [Fact]
     public async Task PlanAsync_AfterInvalidatePlanCache_ReplansForUpdatedGpuArchitecture()
     {
         using var workspace = new RuntimePlannerBlackwellTestWorkspace();
-        BundledModelManifestRegistry registry = workspace.WriteTextRefinerManifest();
+        BundledModelManifestRegistry registry = workspace.WriteTextRefinerManifest(
+            engineFamily: "text-refiner-onnx");
 
         string cacheRoot = workspace.CreateCacheRoot("tonythethompson/Qwen2.5-1.5B-Instruct");
         WriteBundledCacheFiles(workspace, registry, "text-refiner", cacheRoot, "mxfp8");
@@ -296,16 +339,18 @@ public sealed class RuntimePlannerBlackwellVariantTests
 
         public string RootPath { get; }
 
-        public BundledModelManifestRegistry WriteTextRefinerManifest(bool includeMxfp8Hashes = true)
+        public BundledModelManifestRegistry WriteTextRefinerManifest(
+            bool includeMxfp8Hashes = true,
+            string engineFamily = "qwen-instruct")
         {
             string manifestPath = Path.Combine(RootPath, "bundled-models.manifest.json");
-            string json = """
+            string json = $$"""
                 {
                   "models": [
                     {
                       "model_id": "tonythethompson/Qwen2.5-1.5B-Instruct",
                       "task": "text-refinement",
-                      "engine_family": "qwen-instruct",
+                      "engine_family": "{{engineFamily}}",
                       "capabilities": ["transcript-polishing"],
                       "tier": "balanced",
                       "license": "Apache-2.0",

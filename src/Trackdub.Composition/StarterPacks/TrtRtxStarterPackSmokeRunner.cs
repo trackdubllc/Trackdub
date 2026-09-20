@@ -43,6 +43,7 @@ public static class TrtRtxStarterPackSmokeRunner
             modelCacheDirectory,
             new OnnxExecutionProviderSmokeTester(),
             TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            progress: null,
             cancellationToken);
 
     public static Task<TrtRtxStarterPackSmokeReport> RunAsync(
@@ -53,6 +54,19 @@ public static class TrtRtxStarterPackSmokeRunner
             modelCacheDirectory,
             new OnnxExecutionProviderSmokeTester(),
             targets,
+            progress: null,
+            cancellationToken);
+
+    public static Task<TrtRtxStarterPackSmokeReport> RunAsync(
+        string? modelCacheDirectory,
+        IReadOnlyList<TrtRtxSmokeCatalog.Target> targets,
+        IProgress<TrtRtxStarterPackSmokeTargetResult>? progress,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(
+            modelCacheDirectory,
+            new OnnxExecutionProviderSmokeTester(),
+            targets,
+            progress,
             cancellationToken);
 
     public static Task<TrtRtxStarterPackSmokeReport> RunAsync(
@@ -63,12 +77,14 @@ public static class TrtRtxStarterPackSmokeRunner
             modelCacheDirectory,
             smokeTester,
             TrtRtxSmokeCatalog.StarterPackTurboGpu,
+            progress: null,
             cancellationToken);
 
     public static async Task<TrtRtxStarterPackSmokeReport> RunAsync(
         string? modelCacheDirectory,
         IExecutionProviderSmokeTester smokeTester,
         IReadOnlyList<TrtRtxSmokeCatalog.Target> targets,
+        IProgress<TrtRtxStarterPackSmokeTargetResult>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(smokeTester);
@@ -86,6 +102,14 @@ public static class TrtRtxStarterPackSmokeRunner
         int failed = 0;
         int skipped = 0;
 
+        // Results are reported as they complete so a fatal native crash mid-catalog
+        // (e.g. a provider that terminates the process) does not lose earlier results.
+        void AddResult(TrtRtxStarterPackSmokeTargetResult result)
+        {
+            results.Add(result);
+            progress?.Report(result);
+        }
+
         foreach (TrtRtxSmokeCatalog.Target target in targets)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -98,7 +122,7 @@ public static class TrtRtxStarterPackSmokeRunner
             catch (FileNotFoundException ex)
             {
                 skipped++;
-                results.Add(new TrtRtxStarterPackSmokeTargetResult(
+                AddResult(new TrtRtxStarterPackSmokeTargetResult(
                     target.Label,
                     target.ModelReference,
                     TrtRtxStarterPackSmokeTargetStatus.Skipped,
@@ -111,7 +135,7 @@ public static class TrtRtxStarterPackSmokeRunner
             if (entry is null)
             {
                 failed++;
-                results.Add(new TrtRtxStarterPackSmokeTargetResult(
+                AddResult(new TrtRtxStarterPackSmokeTargetResult(
                     target.Label,
                     target.ModelReference,
                     TrtRtxStarterPackSmokeTargetStatus.Failed,
@@ -133,7 +157,7 @@ public static class TrtRtxStarterPackSmokeRunner
             catch (ArgumentOutOfRangeException ex)
             {
                 failed++;
-                results.Add(new TrtRtxStarterPackSmokeTargetResult(
+                AddResult(new TrtRtxStarterPackSmokeTargetResult(
                     target.Label,
                     target.ModelReference,
                     TrtRtxStarterPackSmokeTargetStatus.Failed,
@@ -161,7 +185,7 @@ public static class TrtRtxStarterPackSmokeRunner
                 if (smokeResult.Passed)
                 {
                     passed++;
-                    results.Add(new TrtRtxStarterPackSmokeTargetResult(
+                    AddResult(new TrtRtxStarterPackSmokeTargetResult(
                         target.Label,
                         target.ModelReference,
                         TrtRtxStarterPackSmokeTargetStatus.Passed));
@@ -169,7 +193,7 @@ public static class TrtRtxStarterPackSmokeRunner
                 else
                 {
                     failed++;
-                    results.Add(new TrtRtxStarterPackSmokeTargetResult(
+                    AddResult(new TrtRtxStarterPackSmokeTargetResult(
                         target.Label,
                         target.ModelReference,
                         TrtRtxStarterPackSmokeTargetStatus.Failed,
@@ -183,7 +207,7 @@ public static class TrtRtxStarterPackSmokeRunner
             catch (Exception ex)
             {
                 failed++;
-                results.Add(new TrtRtxStarterPackSmokeTargetResult(
+                AddResult(new TrtRtxStarterPackSmokeTargetResult(
                     target.Label,
                     target.ModelReference,
                     TrtRtxStarterPackSmokeTargetStatus.Failed,

@@ -5,8 +5,10 @@ namespace Trackdub.Inference.Onnx.NemotronAsr;
 
 internal static class NemotronAsrEncoderTrtProfiles
 {
+    // Shapes must match the bundled encoder.onnx inputs: processed_signal is mel-major
+    // [B,128,T=65] and caches are layers-first ([24,1,56,1024] / [24,1,1024,8]).
     private const string ProfileWithoutPromptIndex =
-        "processed_signal:1x65x128,processed_signal_length:1,cache_last_channel:1x24x70x1024,cache_last_time:1x24x1024x8,cache_last_channel_len:1";
+        "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1";
 
     private const string PromptIndexSuffix = ",prompt_index:1";
 
@@ -27,7 +29,7 @@ internal static class NemotronAsrEncoderTrtProfiles
 
         return new Dictionary<string, string>
         {
-            // Bundled Nemotron export expects time-major [B,T,mel]; TRT profiles must match encoder inputs.
+            // Bundled Nemotron export expects mel-major [B,mel,T]; TRT profiles must match encoder inputs.
             ["trt_profile_min_shapes"] = shapes,
             ["trt_profile_max_shapes"] = shapes,
             ["trt_profile_opt_shapes"] = shapes,

@@ -67,8 +67,10 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_WhenTensorRTRtxAvailableForVad_UsesDirectMlInstead()
+    public async Task PlanAsync_WhenTensorRTRtxAvailableForVad_UsesTensorRtRtxWhenSmokePasses()
     {
+        // VAD allows TensorRT RTX again (silero-vad passed a TRT RTX smoke run); the
+        // milestone order prefers it over DirectML when the smoke gate passes.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -88,7 +90,7 @@ public sealed class RuntimePlannerTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
         Assert.Equal("silero-vad", plan.ModelAlias);
         Assert.Equal("silero-vad", plan.EngineFamily);
         Assert.Equal("balanced", plan.ModelTier);
@@ -97,8 +99,37 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesCudaWhenSmokePasses()
+    public async Task PlanAsync_WhenTensorRTRtxSmokeFailsForVad_FallsBackToDirectMl()
     {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/silero-vad");
+        workspace.WriteCacheFile(cacheRoot, "onnx/model_fp16.onnx");
+
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("onnx-community/silero-vad", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true)
+            ],
+            request => new ExecutionProviderSmokeTestResult(
+                request.ExecutionProvider is not ExecutionProviderKind.TensorRTRtx
+                    and not ExecutionProviderKind.TensorRt));
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Equal("silero-vad", plan.ModelAlias);
+    }
+
+    [Fact]
+    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesTensorRtWhenSmokePasses()
+    {
+        // Milestone order probes TensorRt before Cuda; both are allowed for VAD now.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -118,7 +149,7 @@ public sealed class RuntimePlannerTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.Cuda, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.TensorRt, plan.ExecutionProvider);
         Assert.Equal("int8", plan.Variant);
     }
 
@@ -419,8 +450,10 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForVad_PlansDirectMlWithSkipWarning()
+    public async Task PlanAsync_RequiredTensorRTRtxForVad_PlansTensorRtRtx()
     {
+        // VAD no longer excludes TensorRT families, so a required TRT RTX pin is honored
+        // (smoke-gated) rather than demoted to DirectML with a skip warning.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -443,13 +476,10 @@ public sealed class RuntimePlannerTests
             RequirePreferredExecutionProvider: true));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
-        Assert.Contains(
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
+        Assert.DoesNotContain(
             plan.Warnings,
-            warning =>
-                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
-                && warning.Detail is not null
-                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+            warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
     }
 
     [Fact]

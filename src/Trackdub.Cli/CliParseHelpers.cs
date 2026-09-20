@@ -4,7 +4,6 @@ using System.CommandLine.Parsing;
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
-using Trackdub.Inference.Onnx;
 using Trackdub.Sdk;
 
 namespace Trackdub.Cli;
@@ -316,7 +315,7 @@ internal static class CliParseHelpers
         }
 
         if (providerKind is ExecutionProviderKind requestedKind
-            && !OnnxRuntimeBuildCapabilities.IsProviderSupportedInThisBuild(requestedKind))
+            && !IsProviderSupportedInThisBuild(requestedKind))
         {
             Console.Error.WriteLine(
                 $"Warning: execution provider '{ExecutionProviderTokens.ToCanonicalTag(requestedKind)}' "
@@ -374,6 +373,27 @@ internal static class CliParseHelpers
             return null;
         }
     }
+
+    // Mirrors OnnxRuntimeBuildCapabilities in Trackdub.Inference.Onnx; kept local because the
+    // layering rules keep Inference.Onnx compile-private to Composition. WINDOWS is defined by
+    // this project for the net10.0-windows10.0.19041.0 target only.
+    private static bool IsProviderSupportedInThisBuild(ExecutionProviderKind kind) =>
+        kind switch
+        {
+            ExecutionProviderKind.DirectMl or
+            ExecutionProviderKind.OpenVinoCatalog or
+            ExecutionProviderKind.Qnn or
+            ExecutionProviderKind.VitisAi => BuildHasWindowsMlRoutes,
+            ExecutionProviderKind.Migraphx => BuildHasWindowsMlRoutes || OperatingSystem.IsLinux(),
+            ExecutionProviderKind.CoreMl => OperatingSystem.IsMacOS(),
+            _ => true,
+        };
+
+#if WINDOWS
+    private static bool BuildHasWindowsMlRoutes { get; } = true;
+#else
+    private static bool BuildHasWindowsMlRoutes { get; } = false;
+#endif
 
     internal static bool TryParseDevicePolicy(string? value, out WindowsMlExecutionDevicePolicy policy)
     {

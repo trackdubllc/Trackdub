@@ -283,6 +283,56 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
         Assert.Equal(1L, targetLength.AsTensor<long>().Single());
     }
 
+    [Fact]
+    public void CreateNemotronDecoderInputs_resolves_hidden_major_encoded_layout()
+    {
+        // TRT RTX returned the bundled encoder's output as [1, 1024, 7] (hidden-major);
+        // the decoder's encoder_outputs input expects [batch, hidden, time].
+        MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
+            .GetMethod("CreateNemotronDecoderInputs", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate Nemotron smoke decoder input builder.");
+        var encoded = new DenseTensor<float>(new float[1024 * 7], [1, 1024, 7]);
+        encoded[0, 5, 0] = 42f;
+
+        using var inputSet = Assert.IsAssignableFrom<IDisposable>(method.Invoke(
+            null,
+            [
+                new Dictionary<string, NodeMetadata>(),
+                encoded
+            ]));
+        object values = inputSet.GetType().GetProperty("Values")!.GetValue(inputSet)!;
+        IReadOnlyList<NamedOnnxValue> namedValues = Assert.IsAssignableFrom<IReadOnlyList<NamedOnnxValue>>(values);
+        NamedOnnxValue encoderOutputs = namedValues.Single(static value => value.Name == "encoder_outputs");
+        Tensor<float> frame = encoderOutputs.AsTensor<float>();
+
+        Assert.Equal([1, 1024, 1], frame.Dimensions.ToArray());
+        Assert.Equal(42f, frame[0, 5, 0]);
+    }
+
+    [Fact]
+    public void CreateNemotronDecoderInputs_resolves_time_major_encoded_layout()
+    {
+        MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
+            .GetMethod("CreateNemotronDecoderInputs", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate Nemotron smoke decoder input builder.");
+        var encoded = new DenseTensor<float>(new float[7 * 1024], [1, 7, 1024]);
+        encoded[0, 0, 5] = 42f;
+
+        using var inputSet = Assert.IsAssignableFrom<IDisposable>(method.Invoke(
+            null,
+            [
+                new Dictionary<string, NodeMetadata>(),
+                encoded
+            ]));
+        object values = inputSet.GetType().GetProperty("Values")!.GetValue(inputSet)!;
+        IReadOnlyList<NamedOnnxValue> namedValues = Assert.IsAssignableFrom<IReadOnlyList<NamedOnnxValue>>(values);
+        NamedOnnxValue encoderOutputs = namedValues.Single(static value => value.Name == "encoder_outputs");
+        Tensor<float> frame = encoderOutputs.AsTensor<float>();
+
+        Assert.Equal([1, 1024, 1], frame.Dimensions.ToArray());
+        Assert.Equal(42f, frame[0, 5, 0]);
+    }
+
     [Theory]
     [InlineData(ExecutionProviderKind.Cpu, "cpu")]
     [InlineData(ExecutionProviderKind.DirectMl, "dml")]
