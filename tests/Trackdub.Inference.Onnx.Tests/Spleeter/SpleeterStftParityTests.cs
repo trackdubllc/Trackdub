@@ -89,19 +89,28 @@ return baseFrames + (PadTo - remainder);
         // Reconstruct first-frame windowed input energy via known periodic Hann peak at i=N/2.
         double expectedPeakWindow = 1.0;
         double actualPeakWindow = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * (Nfft / 2) / Nfft));
-        Assert.Equal(expectedPeakWindow, actualPeakWindow, 12);
-    }
-
-    [Theory]
-    [InlineData(440)]
-    [InlineData(1000)]
-    public void Forward_sine_peaks_near_expected_frequency_bin(int frequencyHz)
+    [Fact]
+    public void Window_is_periodic_hann_matching_0_5_times_1_minus_cos_2pi_i_over_nfft()
     {
+        // A unit impulse at sample i is windowed to w[i]; the NoScaling FFT of an
+        // impulse has unit magnitude across all bins, so Forward's kept-bin
+        // magnitudes must equal the analytic periodic-Hann value at that tap.
         var processor = new SpleeterStftProcessor();
-        float[] sine = MakeSine(SampleRate * 2, frequencyHz, amplitude: 0.5);
 
-        (float[] mag, _, int targetFrames) = processor.Forward(sine);
-        int expectedBin = (int)Math.Round((double)frequencyHz * Nfft / SampleRate);
+        foreach (int sample in new[] { 1, Nfft / 4, Nfft / 2, Nfft - 1 })
+        {
+            var impulse = new float[Nfft];
+            impulse[sample] = 1f;
+
+            (float[] mag, _, _) = processor.Forward(impulse);
+
+            double expected = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * sample / Nfft));
+            for (int k = 0; k < MaxFreqs; k++)
+            {
+                Assert.InRange(mag[k], (float)expected - 1e-3f, (float)expected + 1e-3f);
+            }
+        }
+    }
         Assert.InRange(expectedBin, 0, MaxFreqs - 1);
 
         // Inspect an early frame that is fully inside the signal (not tail zero-pad).
