@@ -85,7 +85,7 @@ internal static class SpleeterModelConstants
                 nameof(modelFileName));
         }
 
-        string combined = Path.Combine(modelRootPath, modelFileName);
+        string combined = Path.Join(modelRootPath, modelFileName);
         string rootFull = Path.GetFullPath(modelRootPath);
         string resolvedFull = Path.GetFullPath(combined);
         string rootPrefix = rootFull.EndsWith(Path.DirectorySeparatorChar) || rootFull.EndsWith(Path.AltDirectorySeparatorChar)
