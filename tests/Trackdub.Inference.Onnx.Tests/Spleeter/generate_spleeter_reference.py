@@ -42,7 +42,7 @@ def stft_mag_phase(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
     else:
         base = 1
     rem = base % PAD_TO
-    target = base if rem == 0 else base + (PAD_TO - rem)
+target = base + (PAD_TO - rem)
     win = periodic_hann(NFFT)
     mag = np.zeros((target, MAX_FREQS), dtype=np.float32)
     phase = np.zeros((target, MAX_FREQS), dtype=np.float32)
