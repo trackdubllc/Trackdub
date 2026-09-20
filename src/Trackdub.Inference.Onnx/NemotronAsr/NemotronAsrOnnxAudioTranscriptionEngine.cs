@@ -19,7 +19,6 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
 
     private readonly IRuntimePlanner runtimePlanner = runtimePlanner ?? throw new ArgumentNullException(nameof(runtimePlanner));
     private readonly BenchmarkModelPathResolver modelPathResolver = modelPathResolver ?? throw new ArgumentNullException(nameof(modelPathResolver));
-    private readonly NemotronAsrMelFeatureExtractor featureExtractor = new();
 
     public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
 
@@ -76,6 +75,10 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
         NemotronAsrPromptDictionary promptDictionary = await NemotronAsrLanguagePrompts
             .LoadAsync(modelPaths.ConfigPath, cancellationToken)
             .ConfigureAwait(false);
+        NemotronAsrExportConfig exportConfig = NemotronAsrExportConfig.Load(
+            modelPaths.ConfigPath,
+            hasPromptInput: true);
+        var featureExtractor = new NemotronAsrMelFeatureExtractor(exportConfig.ApplyPerFeatureNormalization);
 
         IAudioSamples audio = await WaveAudioReader.ReadMonoPcm16Async(request.NormalizedAudioPath, cancellationToken)
             .ConfigureAwait(false);
@@ -130,6 +133,8 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
             RegionTranscription regionResult = TranscribeRegion(
                 sessionLease,
                 vocab,
+                exportConfig,
+                featureExtractor,
                 targetAudio,
                 region,
                 promptIndex,
@@ -156,6 +161,8 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
     private RegionTranscription TranscribeRegion(
         OnnxExecutionSessionFactory.NemotronAsrSessionLease sessionLease,
         NemotronAsrSentencePieceVocab vocab,
+        NemotronAsrExportConfig exportConfig,
+        NemotronAsrMelFeatureExtractor featureExtractor,
         IAudioSamples targetAudio,
         SpeechRegion region,
         long promptIndex,
@@ -178,7 +185,7 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
             return new RegionTranscription(string.Empty, null, []);
         }
 
-        var decoder = new NemotronAsrGreedyDecoder(sessionLease, vocab);
+        var decoder = new NemotronAsrGreedyDecoder(sessionLease, vocab, exportConfig);
         IReadOnlyList<int> tokens = decoder.Decode(mel, promptIndex);
         string text = decoder.DecodeText(tokens);
 

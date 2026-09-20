@@ -6,16 +6,16 @@ namespace Trackdub.Inference.Onnx.NemotronAsr;
 
 internal sealed class NemotronAsrGreedyDecoder(
     OnnxExecutionSessionFactory.NemotronAsrSessionLease sessionLease,
-    NemotronAsrSentencePieceVocab vocab)
+    NemotronAsrSentencePieceVocab vocab,
+    NemotronAsrExportConfig exportConfig)
 {
     private const int MaxSymbolsPerStep = 10;
-    // NeMo greedy decode seeds the predictor with BOS (0), not the RNNT blank id.
-    private const int DecoderStartTokenId = 0;
 
     private readonly NemotronAsrModelConfig config = NemotronAsrModelConfig.FromSessions(
         sessionLease.EncoderSession,
         sessionLease.DecoderJointSession,
-        vocab.Count);
+        vocab.Count,
+        exportConfig);
 
     public string? DetectedLanguage { get; private set; }
 
@@ -217,7 +217,8 @@ internal sealed class NemotronAsrGreedyDecoder(
         state2 = new DenseTensor<float>(
             new float[checked(config.DecoderLstmLayers * config.DecoderLstmDim)],
             [config.DecoderLstmLayers, 1, config.DecoderLstmDim]);
-        lastToken = DecoderStartTokenId;
+        // NeMo RNNT seeds the predictor with blank_id from config.json — not token 0.
+        lastToken = config.BlankId;
         DetectedLanguage = null;
     }
 
@@ -290,7 +291,8 @@ internal sealed class NemotronAsrGreedyDecoder(
         public static NemotronAsrModelConfig FromSessions(
             InferenceSession encoderSession,
             InferenceSession decoderJointSession,
-            int vocabSize)
+            int vocabSize,
+            NemotronAsrExportConfig exportConfig)
         {
             int numEncoderLayers = 24;
             int hiddenDim = 1024;
@@ -321,6 +323,14 @@ internal sealed class NemotronAsrGreedyDecoder(
                 decoderDim = PositiveOrDefault(stateMetadata.Dimensions[2], decoderDim);
             }
 
+            // blank_id comes from the export config. This package uses blank_id == vocab_size
+            // (joint logits = vocab_size + 1); vocab_size - 1 is a real SentencePiece piece.
+            int blankId = exportConfig.BlankId;
+            if (blankId < 0)
+            {
+                blankId = exportConfig.VocabSize > 0 ? exportConfig.VocabSize : checked(vocabSize);
+            }
+
             return new NemotronAsrModelConfig(
                 numEncoderLayers,
                 hiddenDim,
@@ -328,7 +338,7 @@ internal sealed class NemotronAsrGreedyDecoder(
                 convContext,
                 decoderDim,
                 decoderLayers,
-                checked(vocabSize - 1),
+                blankId,
                 hasPromptInput);
         }
 

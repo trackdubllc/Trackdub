@@ -20,6 +20,14 @@ internal sealed class NemotronAsrMelFeatureExtractor
 
     private readonly float[] hannWindow = BuildHannWindow(WinLength);
     private readonly float[,] melFilters = BuildMelFilterBank();
+    private readonly bool applyPerFeatureNormalization;
+
+    public NemotronAsrMelFeatureExtractor(bool applyPerFeatureNormalization = false)
+    {
+        // Bundled Nemotron export config sets preprocessor.normalize = "NA" (no per-feature
+        // mean/std). Default false so callers that skip config stay aligned with the model.
+        this.applyPerFeatureNormalization = applyPerFeatureNormalization;
+    }
 
     public float[,] Extract(ReadOnlySpan<float> inputSamples)
     {
@@ -52,9 +60,10 @@ internal sealed class NemotronAsrMelFeatureExtractor
             }
         }
 
-        // NeMo normalize="per_feature": subtract mean and divide by std per mel bin.
-        // The Nemotron ONNX export was validated against this normalization.
-        NormalizePerFeature(mel, MelBins, frameCount);
+        if (applyPerFeatureNormalization)
+        {
+            NormalizePerFeature(mel, MelBins, frameCount);
+        }
 
         return mel;
     }
