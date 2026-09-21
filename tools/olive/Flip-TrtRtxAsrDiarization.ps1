@@ -57,7 +57,7 @@ if (-not $Force) {
         }
         $result = Get-Content -Raw $resultPath | ConvertFrom-Json
         if (-not $result.pass) {
-            Write-Error "Last validation run did not pass (pass=false in $resultPath).`nRe-run the validate script or use -Force."
+            Write-Error "Validation result has pass=false in $resultPath.`nThe validators set pass=false until a real trt-rtx provider smoke check exists. After verifying on hardware that the effective provider is trt-rtx (not cpu), re-run with -Force."
             exit 1
         }
         # This script only writes fp16 recipe bindings. The validators share one result filename

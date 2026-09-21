@@ -17,7 +17,7 @@
           models/sortformer/cgus-diar_streaming_sortformer_4spk-v2.1-onnx/onnx/model.onnx
       - olive-ai[nvmo] + nvidia-modelopt[onnx] installed (Bootstrap-TrtRtxOliveVenv.ps1 auto-runs)
 
-    On success, records results to build/sortformer-4spk-trtrtx-validation.json.
+    Records results (pass stays false until a provider smoke check exists) to build/sortformer-4spk-trtrtx-validation.json.
     Run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to apply manifest + test changes.
 
 .EXAMPLE
@@ -111,6 +111,7 @@ $results = [ordered]@{
     encoder        = $null
     latency        = $null
     staging_dir    = $null
+    staged         = $false
     pass           = $false
 }
 
@@ -163,7 +164,11 @@ try {
     }
 
     $results.staging_dir = $StagingDir
-    $results.pass = ($null -ne $encoderOnnxSrc)
+    $results.staged = ($null -ne $encoderOnnxSrc)
+    # pass stays false: nothing here loads the staged model or checks the effective provider is
+    # trt-rtx (not cpu). Flip-TrtRtxAsrDiarization.ps1 gates on pass; set it only after a real
+    # provider smoke check exists, or run the smoke test manually and use Flip -Force.
+    $results.pass = $false
 
 } finally {
     Set-Location $origDir
@@ -178,8 +183,8 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 $results | ConvertTo-Json -Depth 4 | Set-Content -Path $ResultFile -Encoding UTF8
 
 Write-Host ""
-if ($results.pass) {
-    Write-Host "PASS - TRT-RTX ($Precision) optimization succeeded for SortFormer 4-spk." -ForegroundColor Green
+if ($results.staged) {
+    Write-Host "STAGED - TRT-RTX ($Precision) optimization output staged for SortFormer 4-spk. Provider NOT verified (pass=false in the result file)." -ForegroundColor Yellow
     Write-Host "Results written to: $ResultFile"
     Write-Host ""
     Write-Host "Staging directory: $($results.staging_dir)"
