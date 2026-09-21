@@ -27,10 +27,11 @@ jobs:
       pull-requests: write
       id-token: write
       actions: read
-      models: read
-    uses: tonythethompson/opencode-review-threads/.github/workflows/opencode-bot.yml@253dbb69357b545738f4c8c8c64cb9f7e8fbe284  # v1.0.0
+    uses: tonythethompson/opencode-review-threads/.github/workflows/opencode-bot.yml@79a0cc2eafb6f510a2555e223445cb7e0c78b792  # v1.1.0
     with:
       prompt: ${{ inputs.prompt }}
+      models-review: cf:@cf/zai-org/glm-5.2,zen:big-pickle,zen:glm-5-free
+      models-fix: cf:@cf/deepseek-ai/deepseek-v4-flash-0731,zen:nemotron-3.5-lightning-free,zen:big-pickle
     secrets:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
