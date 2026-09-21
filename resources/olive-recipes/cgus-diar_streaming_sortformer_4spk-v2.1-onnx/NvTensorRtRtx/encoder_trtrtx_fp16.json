@@ -1,0 +1,83 @@
+{
+    "input_model": {
+        "type": "OnnxModel",
+        "model_path": "${MODEL_ROOT}/onnx/model.onnx"
+    },
+    "systems": {
+        "local_system": {
+            "type": "LocalSystem",
+            "accelerators": [
+                {
+                    "device": "gpu",
+                    "execution_providers": [
+                        "NvTensorRTRTXExecutionProvider"
+                    ]
+                }
+            ]
+        }
+    },
+    "passes": {
+        "fuse_skip_layer_norm": {
+            "type": "GraphSurgeries",
+            "surgeries": [
+                {
+                    "surgeon": "ReplaceNodePatternByNode",
+                    "pattern": [
+                        { "op_type": "SkipLayerNormalization", "inputs": ["x", "skip", "gamma", "beta"], "outputs": ["y"] }
+                    ],
+                    "replacement": [
+                        { "op_type": "Add", "inputs": ["x", "skip"], "outputs": ["add_out"] },
+                        { "op_type": "LayerNormalization", "inputs": ["add_out", "gamma", "beta"], "outputs": ["y"] }
+                    ]
+                }
+            ]
+        },
+        "fuse_bias_gelu": {
+            "type": "GraphSurgeries",
+            "surgeries": [
+                {
+                    "surgeon": "RemoveIdentityAndCastNodes"
+                },
+                {
+                    "surgeon": "ReplaceNodePatternByNode",
+                    "pattern": [
+                        { "op_type": "BiasGelu", "inputs": ["x", "bias"], "outputs": ["y"] }
+                    ],
+                    "replacement": [
+                        { "op_type": "Add", "inputs": ["x", "bias"], "outputs": ["add_out"] },
+                        { "op_type": "Gelu", "inputs": ["add_out"], "outputs": ["y"] }
+                    ]
+                }
+            ]
+        },
+        "fp16": {
+            "type": "OnnxFloatToFloat16",
+            "save_as_external_data": true
+        },
+        "session_params": {
+            "type": "OrtSessionParamsTuning",
+            "io_bind": true,
+            "execution_provider": "NvTensorRTRTXExecutionProvider"
+        }
+    },
+    "evaluators": {
+        "latency_evaluator": {
+            "metrics": [
+                {
+                    "name": "latency",
+                    "type": "latency",
+                    "sub_types": [
+                        {"name": "avg", "priority": 1, "higher_is_better": false},
+                        {"name": "max"},
+                        {"name": "min"}
+                    ]
+                }
+            ]
+        }
+    },
+    "target": "local_system",
+    "evaluator": "latency_evaluator",
+    "cache_dir": "cache",
+    "output_dir": "build/sortformer-4spk-onnx_encoder_trtrtx_fp16",
+    "log_severity_level": 1
+}

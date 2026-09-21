@@ -1,0 +1,58 @@
+{
+  "input_model": {
+    "type": "OnnxModel",
+    "model_path": "${ENCODER_OUTPUT_DIR}"
+  },
+  "data_configs": [
+    {
+      "name": "nemotron_synthetic",
+      "type": "SyntheticDataContainer",
+      "params": {
+        "input_shapes": [
+          { "name": "processed_signal", "shape": [1, 128, 65] },
+          { "name": "processed_signal_length", "shape": [1], "dtype": "int64" },
+          { "name": "cache_last_channel", "shape": [24, 1, 56, 1024] },
+          { "name": "cache_last_time", "shape": [24, 1, 1024, 8] },
+          { "name": "cache_last_channel_len", "shape": [1], "dtype": "int64" },
+          { "name": "prompt_index", "shape": [1], "dtype": "int64" }
+        ]
+      }
+    }
+  ],
+  "metrics": [
+    {
+      "name": "encoder_latency",
+      "type": "accuracy",
+      "data_config": "nemotron_synthetic",
+      "sub_types": [
+        {
+          "name": "rtfx",
+          "priority": 1,
+          "higher_is_better": true
+        }
+      ]
+    }
+  ],
+  "evaluators": {
+    "common_evaluator": {
+      "metrics": [
+        "encoder_latency"
+      ]
+    }
+  },
+  "systems": {
+    "local_system": {
+      "type": "LocalSystem",
+      "accelerators": [
+        {
+          "device": "gpu",
+          "execution_providers": [
+            "NvTensorRTRTXExecutionProvider"
+          ]
+        }
+      ]
+    }
+  },
+  "host": "local_system",
+  "target": "local_system"
+}

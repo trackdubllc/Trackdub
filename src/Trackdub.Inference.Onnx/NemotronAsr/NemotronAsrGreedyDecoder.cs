@@ -103,15 +103,14 @@ internal sealed class NemotronAsrGreedyDecoder(
 
                 Tensor<float> logits = GetTensor<float>(decoderResults, "outputs");
                 int nextToken = ArgMax(logits);
-                // Update LSTM state unconditionally — carry state through blank frames
-                // so subsequent frames decode from the correct predictor state.
-                state1 = CloneTensor<float>(GetTensor<float>(decoderResults, "output_states_1"));
-                state2 = CloneTensor<float>(GetTensor<float>(decoderResults, "output_states_2"));
                 if (nextToken == config.BlankId)
                 {
+                    // RNNT: blank consumes no token, so the predictor state must not advance.
                     break;
                 }
 
+                state1 = CloneTensor<float>(GetTensor<float>(decoderResults, "output_states_1"));
+                state2 = CloneTensor<float>(GetTensor<float>(decoderResults, "output_states_2"));
                 lastToken = nextToken;
                 tokens.Add(nextToken);
             }

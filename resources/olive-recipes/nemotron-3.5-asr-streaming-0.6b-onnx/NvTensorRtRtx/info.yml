@@ -1,0 +1,10 @@
+name: nemotron-3.5-asr-streaming-0.6b-onnx
+recipe_format_version: "1.0"
+target_hardware:
+  - accelerator: NvTensorRtRtx
+    execution_provider: NvTensorRTRTXExecutionProvider
+    precision: fp16
+    device: gpu
+operations:
+  - provider_optimization
+expected_output: onnx_components
