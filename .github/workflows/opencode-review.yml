@@ -9,15 +9,6 @@ on:
       - ready_for_review
 
 jobs:
-  debug-event:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "event_name=${{ github.event_name }}"
-          echo "action=${{ github.event.action }}"
-          echo "assoc=${{ github.event.pull_request.author_association }}"
-          echo "draft=${{ github.event.pull_request.draft }}"
-          echo "user_type=${{ github.event.pull_request.user.type }}"
   review:
     permissions:
       contents: read
@@ -25,7 +16,7 @@ jobs:
       pull-requests: write
       id-token: write
       actions: read
-    uses: tonythethompson/opencode-action/.github/workflows/opencode-review.yml@be9f348feb20e2e065e402e3947847060b6b4795  # v0.8.1
+    uses: tonythethompson/opencode-action/.github/workflows/opencode-review.yml@95e649111ed92c7885c2aef3f83087643637d732  # v0.8.2
     secrets:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
