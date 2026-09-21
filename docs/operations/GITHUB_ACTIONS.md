@@ -60,17 +60,19 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### OpenCode review (`opencode-review.yml`)
 
-- **Trigger:** `pull_request` (opened/reopened/synchronize/ready_for_review); runs only for OWNER/MEMBER/COLLABORATOR/CONTRIBUTOR-authored non-draft PRs
+- **Trigger:** `pull_request` (opened/reopened/synchronize/ready_for_review)
 - **Runs:** `ubuntu-latest`
-- **Tasks:** calls the `tonythethompson/opencode-action` reusable `opencode-review.yml` (`/review-pr`); posts one structured GitHub review (summary body plus inline resolvable threads) as `opencode-agent[bot]`
+- **Tasks:** calls the `tonythethompson/opencode-review-threads` reusable `opencode-review.yml` (`/review-pr`); posts one structured GitHub review (summary body plus inline resolvable threads) as `opencode-agent[bot]`. After a submitted review, later pushes only diff commits since that review, so unchanged findings are not re-raised
+- **Gate (enforced inside the called reusable workflow, not in this repo):** same-repository PRs only, so fork PRs receive no secrets; author must be `OWNER`/`MEMBER`/`COLLABORATOR`/`CONTRIBUTOR`, non-draft, and not a bot; a `model` input is an explicit opt-in bypass
 - **Secrets:** `OPENCODE_API_KEY` (zen: probe chain) and `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (cf: Workers AI probe chain)
 - **Requirement:** the OpenCode GitHub App must be installed on the repo for the `opencode-agent[bot]` token exchange; otherwise reviews fail or need `use-github-token: true` (posts as `github-actions[bot]`)
 
 ### OpenCode on demand (`opencode.yml`)
 
-- **Trigger:** PR comment `/oc` or `/opencode` (OWNER/MEMBER/COLLABORATOR/CONTRIBUTOR commenters only), or manual (`workflow_dispatch` with `prompt`)
+- **Trigger:** issue comments and pull request review comments (`created`), or manual (`workflow_dispatch` with `prompt`)
 - **Runs:** `ubuntu-latest`
-- **Tasks:** calls the `tonythethompson/opencode-action` reusable `opencode-bot.yml` with the comment or supplied prompt; replies as `opencode-agent[bot]`
+- **Tasks:** calls the `tonythethompson/opencode-review-threads` reusable `opencode-bot.yml` with the comment or supplied prompt; replies as `opencode-agent[bot]`
+- **Gate (enforced inside the called reusable workflow; the caller also pre-filters commenter association):** non-bot commenters with `OWNER`/`MEMBER`/`COLLABORATOR`/`CONTRIBUTOR` association whose comment starts with or contains ` /oc` or ` /opencode`; `workflow_dispatch` requires `prompt`
 
 ### TRT RTX smoke (`trt-rtx-smoke.yml`)
 
