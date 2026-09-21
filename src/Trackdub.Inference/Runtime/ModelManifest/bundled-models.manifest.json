@@ -99,34 +99,7 @@
       },
       "hash_verification": {
         "mode": "required"
-      },
-      "optimization": {
-        "olive": {
-          "mode": "existing-onnx-components",
-          "components": [
-            "onnx/model.onnx"
-          ],
-          "supported_providers": [
-            "cpu",
-            "dml",
-            "cuda",
-            "tensorrt",
-            "trt-rtx"
-          ],
-          "recipe_bindings": [
-            {
-              "provider": "trt-rtx",
-              "precision": "fp16",
-              "config_relative_path": "cgus-diar_streaming_sortformer_4spk-v2.1-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
-              "operations": [
-                "provider_optimization"
-              ],
-              "expected_output": "onnx_components"
-            }
-          ]
-        }
-      },
-      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml"
+      }
     },
     {
       "model_id": "csukuangfj/sherpa-onnx-spleeter-2stems",
@@ -1256,32 +1229,11 @@
             "cpu",
             "dml",
             "cuda",
-            "tensorrt",
-            "trt-rtx"
-          ],
-          "recipe_bindings": [
-            {
-              "provider": "trt-rtx",
-              "precision": "fp16",
-              "config_relative_path": "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
-              "operations": [
-                "provider_optimization"
-              ],
-              "expected_output": "onnx_components"
-            },
-            {
-              "provider": "trt-rtx",
-              "precision": "fp16",
-              "config_relative_path": "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json",
-              "operations": [
-                "provider_optimization"
-              ],
-              "expected_output": "onnx_components"
-            }
+            "tensorrt"
           ]
         }
       },
-      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml",
+      "expected_runtime": "windows-ml|onnxruntime-migraphx|onnxruntime-directml",
       "provider_id": "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx",
       "variants": []
     },

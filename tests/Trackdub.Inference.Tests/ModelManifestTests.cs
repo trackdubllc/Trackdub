@@ -2016,41 +2016,6 @@ public sealed class ModelManifestLoaderTests
         Assert.Equal(
             ["encoder.onnx", "decoder_joint.onnx"],
             manifest.Optimization!.Olive!.Components);
-        Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);
-        Assert.Contains(
-            manifest.Optimization.Olive.RecipeBindings,
-            binding => binding.Provider == "trt-rtx" &&
-                       binding.ConfigRelativePath.Contains(
-                           "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
-                           StringComparison.Ordinal));
-        Assert.Contains(
-            manifest.Optimization.Olive.RecipeBindings,
-            binding => binding.Provider == "trt-rtx" &&
-                       binding.ConfigRelativePath.Contains(
-                           "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json",
-                           StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void LoadCatalog_SortFormerEntryHasTrtRtxRecipeBinding()
-    {
-        string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Join(
-            repoRoot,
-            "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
-
-        ModelManifestCatalog catalog = ModelManifestLoader.LoadCatalog(manifestPath);
-        ModelManifest manifest = Assert.Single(catalog.Models, model =>
-            model.ModelId.Equals("cgus/diar_streaming_sortformer_4spk-v2.1-onnx", StringComparison.OrdinalIgnoreCase));
-
-        Assert.Equal("sortformer", manifest.EngineFamily);
-        Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization!.Olive!.SupportedProviders);
-        Assert.Contains(
-            manifest.Optimization.Olive.RecipeBindings,
-            binding => binding.Provider == "trt-rtx" &&
-                       binding.ConfigRelativePath.Contains(
-                           "cgus-diar_streaming_sortformer_4spk-v2.1-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
-                           StringComparison.Ordinal));
     }
 
     [Fact]
