@@ -27,7 +27,7 @@ jobs:
       pull-requests: write
       id-token: write
       actions: read
-    uses: tonythethompson/opencode-review-threads/.github/workflows/opencode-bot.yml@79a0cc2eafb6f510a2555e223445cb7e0c78b792  # v1.1.0
+    uses: tonythethompson/opencode-review-threads/.github/workflows/opencode-bot.yml@802a4d78c2b8ba92c2375d98d3aa482e8576b925  # v1.3.0
     with:
       prompt: ${{ inputs.prompt }}
       models-review: cf:@cf/zai-org/glm-5.2,zen:big-pickle,zen:glm-5-free
