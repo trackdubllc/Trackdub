@@ -14,8 +14,8 @@
     Requires:
       - NVIDIA GPU with TRT-RTX (NvTensorRTRTXExecutionProvider) support
       - Model files already downloaded:
-          models/nemotron-3.5-asr-onnx/encoder.onnx
-          models/nemotron-3.5-asr-onnx/decoder_joint.onnx
+          models/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/encoder.onnx
+          models/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/decoder_joint.onnx
       - olive-ai[nvmo] + nvidia-modelopt[onnx] installed (Bootstrap-TrtRtxOliveVenv.ps1 auto-runs)
 
     On success, records results to build/nemotron-3.5-asr-trtrtx-validation.json.
@@ -64,11 +64,14 @@ $stagingDirName       = "nemotron-3.5-asr-onnx-trtrtx-validated-$Precision"
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $OliveExe)) {
+    $bootstrapScript = Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1'
     for ($attempt = 1; $attempt -le 2; $attempt++) {
         Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (attempt $attempt/2)..."
-        try { & (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1') }
-        catch { Write-Host "Bootstrap attempt $attempt failed: $_" -ForegroundColor Red }
-        if (Test-Path $OliveExe) { break }
+        # Run in a child pwsh process: Bootstrap-TrtRtxOliveVenv.ps1 calls exit on failure, which
+        # would terminate this whole process (not just the child script) if invoked in-process.
+        & pwsh -NoProfile -File $bootstrapScript
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $OliveExe)) { break }
+        Write-Host "Bootstrap attempt $attempt failed (exit $LASTEXITCODE)." -ForegroundColor Red
     }
     if (-not (Test-Path $OliveExe)) {
         Write-Error "olive.exe still not found at $OliveExe after 2 bootstrap attempts."

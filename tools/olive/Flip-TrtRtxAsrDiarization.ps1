@@ -60,15 +60,20 @@ if (-not $Force) {
             Write-Error "Last validation run did not pass (pass=false in $resultPath).`nRe-run the validate script or use -Force."
             exit 1
         }
+        # This script only writes fp16 recipe bindings. The validators share one result filename
+        # across -Mxfp8 and fp16 runs, so an mxfp8-only pass must not be accepted as fp16 evidence.
+        if ($result.precision -ne 'fp16') {
+            Write-Error "Last validation run in $resultPath was precision='$($result.precision)', not fp16.`nRe-run the validate script without -Mxfp8, or use -Force."
+            exit 1
+        }
     }
     Write-Host "Validation results OK for sortformer + nemotron-asr." -ForegroundColor Green
 }
 
 # ---------------------------------------------------------------------------
-# 1. Patch bundled-models.manifest.json via Python json manipulation
+# 1. Build the Python manifest-patch script (executed in step 2b, after the
+#    ModelManifestTests.cs pre-check below confirms the flip can complete atomically)
 # ---------------------------------------------------------------------------
-Write-Host "Patching bundled-models.manifest.json..."
-
 $VenvPath  = Join-Path $env:LOCALAPPDATA 'Trackdub\tools\olive-env-tensorrtrtx'
 $PythonExe = Join-Path $VenvPath 'Scripts\python.exe'
 
@@ -188,34 +193,16 @@ if not sortformer_found or not nemotron_found:
     sys.exit(1)
 
 with open(manifest_path, "w", encoding="utf-8", newline="\n") as f:
-    json.dump(catalog, f, indent=6, ensure_ascii=False)
+    json.dump(catalog, f, indent=2, ensure_ascii=False)
     f.write("\n")
 
 print(f"Done. sortformer_changed={sortformer_changed} nemotron_changed={nemotron_changed}")
 '@
 
-$tmpPy = Join-Path $env:TEMP "flip_trtrtx_asr_diarization_$([System.Diagnostics.Process]::GetCurrentProcess().Id).py"
-Set-Content -Path $tmpPy -Value $pythonScript -Encoding UTF8
-
-try {
-    & $PythonExe $tmpPy $ManifestPath
-    if ($LASTEXITCODE -ne 0) { Write-Error "Python manifest patch failed."; exit 1 }
-} finally {
-    Remove-Item -Force $tmpPy -ErrorAction SilentlyContinue
-}
-
 # ---------------------------------------------------------------------------
-# 2. Patch ModelManifestTests.cs: flip Nemotron trt-rtx assertion
+# 2a. Pre-check ModelManifestTests.cs BEFORE touching the manifest, so a missing
+#     or already-edited test block aborts before any file is written (no partial flip).
 # ---------------------------------------------------------------------------
-# The LoadCatalog_NemotronAsrEntryMatchesPinnedOnnxBundle test currently asserts only the
-# shape of the optimization block. After flipping, it must additionally assert that:
-#   - trt-rtx is listed in supported_providers, AND
-#   - a recipe binding pointing at the new NvTensorRtRtx encoder recipe is present.
-#
-# The block this script expects to flip is the one we maintain in source. If the test
-# already includes these checks, the script will report the test is up-to-date.
-Write-Host "Patching ModelManifestTests.cs..."
-
 $testContent = Get-Content -Raw $TestPath
 
 $oldBlock = @'
@@ -245,16 +232,41 @@ $newBlock = @'
     public void LoadCatalog_LoadsNewestOliveProvidersAndRecipeMetadata()
 '@
 
-if ($testContent.Contains($oldBlock)) {
+$testNeedsPatch = $testContent.Contains($oldBlock)
+$testAlreadyFlipped = $testContent.Contains("Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);") -and
+                      $testContent.Contains("nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json")
+
+if (-not $testNeedsPatch -and -not $testAlreadyFlipped) {
+    Write-Error "Expected Nemotron-ASR assertion block not found in $TestPath -- refusing to touch the manifest. Manual edit required: in LoadCatalog_NemotronAsrEntryMatchesPinnedOnnxBundle, after the components assertion, add:`n    Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);`n    Assert.Contains(manifest.Optimization.Olive.RecipeBindings, binding => binding.Provider == `"trt-rtx`" && binding.ConfigRelativePath.Contains(`"nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json`", StringComparison.Ordinal));"
+    exit 1
+}
+
+# ---------------------------------------------------------------------------
+# 2b. Patch bundled-models.manifest.json via Python json manipulation
+# ---------------------------------------------------------------------------
+Write-Host "Patching bundled-models.manifest.json..."
+
+$tmpPy = Join-Path $env:TEMP "flip_trtrtx_asr_diarization_$([System.Diagnostics.Process]::GetCurrentProcess().Id).py"
+Set-Content -Path $tmpPy -Value $pythonScript -Encoding UTF8
+
+try {
+    & $PythonExe $tmpPy $ManifestPath
+    if ($LASTEXITCODE -ne 0) { Write-Error "Python manifest patch failed."; exit 1 }
+} finally {
+    Remove-Item -Force $tmpPy -ErrorAction SilentlyContinue
+}
+
+# ---------------------------------------------------------------------------
+# 3. Patch ModelManifestTests.cs: flip Nemotron trt-rtx assertion
+# ---------------------------------------------------------------------------
+Write-Host "Patching ModelManifestTests.cs..."
+
+if ($testNeedsPatch) {
     $testContent = $testContent.Replace($oldBlock, $newBlock)
     Set-Content -Path $TestPath -Value $testContent -Encoding UTF8 -NoNewline
     Write-Host "Test assertion flipped for Nemotron-ASR trt-rtx presence." -ForegroundColor Green
-} elseif ($testContent.Contains("Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);") -and
-          $testContent.Contains("nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json")) {
-    Write-Host "Test assertion already flipped for Nemotron-ASR trt-rtx presence." -ForegroundColor Green
 } else {
-    Write-Error "Expected Nemotron-ASR assertion block not found in $TestPath -- manifest was already patched but the test was not. Manual edit required: in LoadCatalog_NemotronAsrEntryMatchesPinnedOnnxBundle, after the components assertion, add:`n    Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);`n    Assert.Contains(manifest.Optimization.Olive.RecipeBindings, binding => binding.Provider == `"trt-rtx`" && binding.ConfigRelativePath.Contains(`"nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json`", StringComparison.Ordinal));"
-    exit 1
+    Write-Host "Test assertion already flipped for Nemotron-ASR trt-rtx presence." -ForegroundColor Green
 }
 
 # ---------------------------------------------------------------------------

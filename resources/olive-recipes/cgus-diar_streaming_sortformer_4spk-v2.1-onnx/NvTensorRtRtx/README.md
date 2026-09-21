@@ -30,15 +30,15 @@ TRT-RTX parser sees the standard ops it knows how to compile:
 ```
 
 This runs the encoder recipe, copies the optimized model into
-`build/sortformer-4spk-onnx-trtrtx-validated/onnx/model.onnx`, and writes
-`build/sortformer-4spk-trtrtx-validation.json`. After that, remove the
-`Skip = "Pending TRT-RTX validation"` attribute from
-`tests/Trackdub.Inference.Tests/SortFormerDiarizationEngineTests.cs` (the
-test scaffolding already exists; see the Whisper equivalent for the
-convention).
+`build/sortformer-4spk-onnx-trtrtx-validated-<precision>/` (`fp16` by default,
+`mxfp8` with `-Mxfp8`), and writes `build/sortformer-4spk-trtrtx-validation.json`.
+`SortFormerDiarizationEngineTests.cs` has no TRT-RTX smoke test yet — one should
+be added (mirroring `WhisperOnnxTrtRtxValidationTests.cs`'s
+`[Fact(Skip = "Pending TRT-RTX validation ...")]` pattern) once this recipe is
+hardware-validated.
 
 ## Staging output
 
-`build/sortformer-4spk-onnx-trtrtx-validated/onnx/model.onnx` is what
-`SortFormerDiarizationEngine` loads. The C# engine auto-derives the
+`build/sortformer-4spk-onnx-trtrtx-validated-<precision>/onnx/model.onnx` is
+what `SortFormerDiarizationEngine` loads. The C# engine auto-derives the
 `benchmark_entry` from the staging directory.

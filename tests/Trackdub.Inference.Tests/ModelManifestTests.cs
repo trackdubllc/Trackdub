@@ -2035,7 +2035,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_SortFormerEntryHasTrtRtxRecipeBinding()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
