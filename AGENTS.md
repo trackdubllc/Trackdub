@@ -24,7 +24,10 @@ DubBench → Benchmarks, Domain, Inference, Inference.Onnx
 Benchmarks → Application, Composition, Domain, Inference, Inference.Onnx, Infrastructure
 Tools → Application, Domain, Infrastructure, Media
 Contracts → Domain
-Licensing / Analyzers / OnnxRuntime.Dnnl.Native / Domain → (nothing)
+Licensing → (nothing)
+Analyzers → (nothing)
+OnnxRuntime.Dnnl.Native → (nothing)
+Domain → (nothing)
 ```
 
 ## Commands
