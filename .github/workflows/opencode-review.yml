@@ -21,7 +21,7 @@ jobs:
       id-token: write
       actions: read
       models: read
-    uses: tonythethompson/opencode-review-threads/.github/workflows/opencode-review.yml@253dbb69357b545738f4c8c8c64cb9f7e8fbe284  # v0.9.1
+    uses: tonythethompson/opencode-review-threads/.github/workflows/opencode-review.yml@253dbb69357b545738f4c8c8c64cb9f7e8fbe284  # v1.0.0
     secrets:
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
