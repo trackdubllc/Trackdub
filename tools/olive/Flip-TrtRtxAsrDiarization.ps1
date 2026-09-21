@@ -138,6 +138,8 @@ with open(manifest_path, "r", encoding="utf-8") as f:
 
 sortformer_changed = False
 nemotron_changed = False
+sortformer_found = False
+nemotron_found = False
 
 for model in catalog.get("models", []):
     model_id = model.get("model_id")
@@ -146,6 +148,7 @@ for model in catalog.get("models", []):
     # Has no optimization block today; we create one in existing-onnx-components mode
     # pointing at onnx/model.onnx, matching what the bundled model ships with.
     if model_id == SORTFORMER_MODEL_ID:
+        sortformer_found = True
         optimization = model.setdefault("optimization", {})
         olive = optimization.setdefault("olive", {})
         olive.setdefault("mode", "existing-onnx-components")
@@ -162,6 +165,7 @@ for model in catalog.get("models", []):
     # ---- Nemotron ASR -------------------------------------------------------
     # Already has an optimization block (existing-onnx-components) but trt-rtx is not yet listed.
     elif model_id == NEMOTRON_MODEL_ID:
+        nemotron_found = True
         optimization = model.setdefault("optimization", {})
         olive = optimization.setdefault("olive", {})
         olive.setdefault("mode", "existing-onnx-components")
@@ -173,6 +177,15 @@ for model in catalog.get("models", []):
             ensure_provider(providers, p)
         if ensure_recipe_binding(olive, "trt-rtx", nemotron_recipe_bindings()):
             nemotron_changed = True
+
+if not sortformer_found or not nemotron_found:
+    missing = []
+    if not sortformer_found:
+        missing.append(SORTFORMER_MODEL_ID)
+    if not nemotron_found:
+        missing.append(NEMOTRON_MODEL_ID)
+    print(f"ERROR: model_id(s) not found in manifest, refusing to write: {missing}", file=sys.stderr)
+    sys.exit(1)
 
 with open(manifest_path, "w", encoding="utf-8", newline="\n") as f:
     json.dump(catalog, f, indent=6, ensure_ascii=False)
@@ -240,10 +253,8 @@ if ($testContent.Contains($oldBlock)) {
           $testContent.Contains("nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json")) {
     Write-Host "Test assertion already flipped for Nemotron-ASR trt-rtx presence." -ForegroundColor Green
 } else {
-    Write-Warning "Expected Nemotron-ASR assertion block not found in $TestPath -- may have already been edited."
-    Write-Warning "Manual edit required: in LoadCatalog_NemotronAsrEntryMatchesPinnedOnnxBundle, after the components assertion, add:"
-    Write-Warning "    Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);"
-    Write-Warning "    Assert.Contains(manifest.Optimization.Olive.RecipeBindings, binding => binding.Provider == \`"trt-rtx\`" && binding.ConfigRelativePath.Contains(\`"nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json\`", StringComparison.Ordinal));"
+    Write-Error "Expected Nemotron-ASR assertion block not found in $TestPath -- manifest was already patched but the test was not. Manual edit required: in LoadCatalog_NemotronAsrEntryMatchesPinnedOnnxBundle, after the components assertion, add:`n    Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);`n    Assert.Contains(manifest.Optimization.Olive.RecipeBindings, binding => binding.Provider == `"trt-rtx`" && binding.ConfigRelativePath.Contains(`"nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json`", StringComparison.Ordinal));"
+    exit 1
 }
 
 # ---------------------------------------------------------------------------

@@ -56,11 +56,14 @@ $stagingDirName      = "sortformer-4spk-onnx-trtrtx-validated-$Precision"
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $OliveExe)) {
-    Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (olive-ai[nvmo])..."
-    try { & (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1') }
-    catch { Write-Host "Failed to bootstrap olive-ai[nvmo] venv: $_" -ForegroundColor Red; exit 1 }
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (attempt $attempt/2)..."
+        try { & (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1') }
+        catch { Write-Host "Bootstrap attempt $attempt failed: $_" -ForegroundColor Red }
+        if (Test-Path $OliveExe) { break }
+    }
     if (-not (Test-Path $OliveExe)) {
-        Write-Error "olive.exe still not found at $OliveExe after bootstrap."
+        Write-Error "olive.exe still not found at $OliveExe after 2 bootstrap attempts."
         exit 1
     }
 }
