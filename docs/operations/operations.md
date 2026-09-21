@@ -90,11 +90,10 @@ Expect four matrix jobs: `actions`, `csharp` (Windows), `javascript-typescript`,
 
 CI/CD lives in `.github/workflows/`. Windows jobs use self-hosted runners; Linux jobs use `self-hosted`.
 
-**Workflows do not auto-run on push or pull request.** Start them manually or from PR comments:
+`ci.yml`, `codeql.yml`, `model-audit.yml`, `dependabot-auto-merge.yml`, and `opencode-review.yml` run automatically on their triggers. Everything else is manual (`workflow_dispatch`) or PR-comment triggered:
 
 | Command (PR comment) | Workflow |
 |----------------------|----------|
-| `/ci` | Full CI (format + Windows/Linux build/test) |
 | `/oc` or `/opencode` | OpenCode bot |
 
 Manual dispatch still works:
@@ -110,7 +109,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### CI (`ci.yml`)
 
-- **Trigger:** PR comment `/ci`, or manual (`workflow_dispatch`)
+- **Trigger:** Push/PR to `main`, or manual (`workflow_dispatch`)
 - **Jobs:**
   - **Verify Code Format** (self-hosted): `dotnet format Trackdub.sln --verify-no-changes`
   - **Build & Test (Windows):** restore/build/test `Trackdub.sln` (Release, `-m:1`)
@@ -136,7 +135,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### Model manifest audit (`model-audit.yml`)
 
-- **Trigger:** Manual (`workflow_dispatch`)
+- **Trigger:** push/PR to `main` touching `src/Trackdub.Inference/Runtime/ModelManifest/**`, `tools/ci/**`, or the workflow itself; weekly schedule (Mon 06:00 UTC); manual (`workflow_dispatch`)
 - **Runs:** self-hosted
 - **Tasks:** `tools/ci/audit-bundled-model-manifest.py`
 
@@ -149,16 +148,19 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### OpenCode review (`opencode-review.yml`)
 
-- **Trigger:** Manual (`workflow_dispatch`, required `pull_request_number`)
-- **Runs:** self-hosted
-- **Tasks:** `anomalyco/opencode/github` reviews the PR via OpenRouter (comment-only prompt; must not commit/push)
-- **Secret:** `OPENROUTER_API_KEY` (repository secret); uses `GITHUB_TOKEN` for GitHub API
+- **Trigger:** `pull_request` (opened/reopened/synchronize/ready_for_review)
+- **Runs:** `ubuntu-latest`
+- **Tasks:** calls the `tonythethompson/opencode-review-threads` reusable `opencode-review.yml` (`/review-pr`); posts one structured GitHub review (summary body plus inline resolvable threads) as `opencode-agent[bot]`. After a submitted review, later pushes only diff commits since that review, so unchanged findings are not re-raised
+- **Gate (enforced inside the called reusable workflow, not in this repo):** same-repository PRs only, so fork PRs receive no secrets; author must be `OWNER`/`MEMBER`/`COLLABORATOR`/`CONTRIBUTOR`, non-draft, and not a bot; a `model` input is an explicit opt-in bypass
+- **Secrets:** `OPENCODE_API_KEY` (zen: probe chain) and `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (cf: Workers AI probe chain)
+- **Requirement:** the OpenCode GitHub App must be installed on the repo for the `opencode-agent[bot]` token exchange; otherwise reviews fail or need `use-github-token: true` (posts as `github-actions[bot]`)
 
 ### OpenCode on demand (`opencode.yml`)
 
-- **Trigger:** PR comment `/oc` or `/opencode`, or manual (`workflow_dispatch` with `prompt`)
-- **Runs:** ubuntu-latest
-- **Tasks:** Runs OpenCode with the supplied prompt
+- **Trigger:** issue comments and pull request review comments (`created`), or manual (`workflow_dispatch` with `prompt`)
+- **Runs:** `ubuntu-latest`
+- **Tasks:** calls the `tonythethompson/opencode-review-threads` reusable `opencode-bot.yml` with the comment or supplied prompt; replies as `opencode-agent[bot]`
+- **Gate (enforced inside the called reusable workflow; the caller also pre-filters commenter association):** non-bot commenters with `OWNER`/`MEMBER`/`COLLABORATOR`/`CONTRIBUTOR` association whose comment starts with or contains ` /oc` or ` /opencode`; `workflow_dispatch` requires `prompt`
 
 ### TRT RTX smoke (`trt-rtx-smoke.yml`)
 
@@ -199,7 +201,8 @@ gh run list --workflow=codeql.yml --limit 3
 | `ECS_EXECUTION_ROLE_ARN` / `ECS_TASK_ROLE_ARN` | ECS task definition |
 | `AWS_ACCOUNT_ID` / `EFS_FILE_SYSTEM_ID` | Task definition substitution |
 | `CURSOR_API_KEY` | Cursor SDK PR review (`cursor-code-review.yml`) |
-| `OPENROUTER_API_KEY` | OpenCode PR review (`opencode-review.yml`, `opencode.yml`) |
+| `OPENCODE_API_KEY` | OpenCode review/bot zen: probe chain (`opencode-review.yml`, `opencode.yml`) |
+| `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | OpenCode review/bot cf: Workers AI probe chain |
 
 ## Local parity
 
