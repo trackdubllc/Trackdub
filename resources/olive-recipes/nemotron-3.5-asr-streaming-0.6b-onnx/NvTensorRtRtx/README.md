@@ -23,8 +23,16 @@ shapes (B × 1 cache state, sequence-by-sequence greedy decoding).
 
 Same as the SortFormer recipe:
 
-1. `OnnxGraphSurgeries` (ReplaceNodePatternByNode) — decomposes `SkipLayerNormalization` into `Add` + `LayerNormalization`.
-2. `OnnxGraphSurgeries` (ReplaceNodePatternByNode) — decomposes `BiasGelu` into `Add` + `Gelu`.
+1. `GraphSurgeries` (surgeon: `ReplaceNodePatternByNode`) — decomposes `SkipLayerNormalization` into `Add` + `LayerNormalization`.
+2. `GraphSurgeries` (surgeon: `ReplaceNodePatternByNode`) — decomposes `BiasGelu` into `Add` + `Gelu`.
+
+**Known issue:** `ReplaceNodePatternByNode` and `RemoveIdentityAndCastNodes` are not
+surgeons that exist in olive-ai's `Surgeon` registry (checked against the installed
+0.13.0 source: `olive/passes/onnx/graph_surgeries.py`). Both passes above will fail
+at run time (`Surgeon '...' does not exist`) until a real decomposition pass is
+written — either a custom Olive pass or an equivalent using `onnxscript.rewriter` /
+`onnx-graphsurgeon`. Do not treat this recipe as validated until that pass exists
+and has been run against the real model.
 
 After fusion, fp16 conversion and `OrtSessionParamsTuning` produce an
 encoder + decoder_joint pair that TRT-RTX can parse and compile.
