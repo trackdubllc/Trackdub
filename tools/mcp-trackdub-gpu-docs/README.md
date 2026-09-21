@@ -1,0 +1,61 @@
+# Local FastMCP for Trackdub GPU / TensorRT-RTX agent docs (v0).
+#
+# Complements NVIDIA CUDA MCP. Pin: runtime/trt-rtx-ep.manifest.json 0.3.0/cu12.
+
+## Layout
+
+```text
+tools/mcp-trackdub-gpu-docs/
+  corpus/manifest.v0.json     # allowlist keyed to EP ABI 0.3.0
+  src/trackdub_gpu_docs_mcp/  # FastMCP server + keyword search
+  .data/chunks/               # ingested remote pages (gitignored)
+  pyproject.toml
+  README.md
+```
+
+## Tools
+
+| Tool | Purpose |
+|------|---------|
+| `list_corpus` | Allowlist + live pin check vs `runtime/trt-rtx-ep.manifest.json` |
+| `search_trackdub_gpu_docs` | Keyword search (Trackdub local always; remotes after ingest) |
+| `get_doc` | Full text for one source id |
+
+Policy precedence: Trackdub local > ORT plugin EP docs > NVIDIA TRT-RTX `/latest/` > WinML catalog docs.
+
+## Setup
+
+```powershell
+cd tools/mcp-trackdub-gpu-docs
+uv sync
+uv run trackdub-gpu-docs-ingest   # optional; fetches allowlisted remote URLs
+```
+
+Repo-local sources work with zero ingest (ADR-0002, EP ABI plugin doc, manifest).
+
+## Cursor `mcp.json` entry
+
+```json
+"trackdub-gpu-docs": {
+  "command": "uv",
+  "args": [
+    "--directory",
+    "D:/Dev/Trackdub_Workspace/Trackdub/tools/mcp-trackdub-gpu-docs",
+    "run",
+    "trackdub-gpu-docs-mcp"
+  ]
+}
+```
+
+Adjust `--directory` to your checkout path.
+
+## Pin notes
+
+- EP ABI **0.3.0** / **cu12** from `NVIDIA/TensorRT-RTX-EP-ABI`
+- Windows bundle libs include `tensorrt_rtx_1_5.dll` (TRT-RTX 1.5 lineage)
+- NVIDIA `/latest/` docs may describe newer product releases; do not treat them as the shipped pin
+
+## Not in v0
+
+- Embeddings / Vectorize / Cloudflare hosting
+- Full `docs.nvidia.com` crawl

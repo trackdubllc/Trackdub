@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "corpusId": "trackdub-gpu-docs",
+  "corpusVersion": "v0",
+  "description": "Curated GPU/inference docs for Trackdub agents. Complements NVIDIA CUDA MCP; does not replace it.",
+  "pin": {
+    "sourceManifest": "runtime/trt-rtx-ep.manifest.json",
+    "epAbiVersion": "0.3.0",
+    "cudaVariant": "cu12",
+    "bundledWindowsLibs": [
+      "onnxruntime_providers_nv_tensorrt_rtx.dll",
+      "tensorrt_rtx_1_5.dll",
+      "tensorrt_onnxparser_rtx_1_5.dll"
+    ],
+    "epDeviceName": "NvTensorRTRTXExecutionProvider",
+    "releaseAssets": {
+      "win-x64": "https://github.com/NVIDIA/TensorRT-RTX-EP-ABI/releases/download/v0.3.0/TensorRT-RTX-EP-ABI-v0.3.0-cu12.zip",
+      "linux-x64": "https://github.com/NVIDIA/TensorRT-RTX-EP-ABI/releases/download/v0.3.0/TensorRT-RTX-EP-ABI-v0.3.0-cu12-linux-x64.tar.gz"
+    },
+    "notes": [
+      "Trackdub ships the standalone ORT EP ABI plugin, not the Windows ML catalog EP.",
+      "DLL suffix _1_5 means TensorRT-RTX library lineage 1.5 inside EP ABI 0.3.0.",
+      "docs.nvidia.com/deeplearning/tensorrt-rtx/latest/ currently tracks newer product docs (1.6+). Prefer Trackdub reference docs for pin-specific behavior; treat /latest/ as upstream context, not a pin guarantee.",
+      "Versioned NVIDIA doc trees for 1.5 were not published at ingest time; GitHub EP ABI release notes are the pin-accurate changelog."
+    ]
+  },
+  "policyPrecedence": [
+    "trackdub-local",
+    "ort-plugin-ep",
+    "nvidia-tensorrt-rtx",
+    "microsoft-winml"
+  ],
+  "sources": [
+    {
+      "id": "td-trt-rtx-ep-abi-plugin",
+      "kind": "repo-file",
+      "tags": ["trackdub-local", "trt-rtx", "ep-abi", "pin"],
+      "path": "docs/reference/tensorrt-rtx-ep-abi-plugin.md",
+      "title": "Trackdub TensorRT RTX EP ABI plugin",
+      "priority": 100
+    },
+    {
+      "id": "td-adr-0002-windows-ml",
+      "kind": "repo-file",
+      "tags": ["trackdub-local", "windows-ml", "strategy"],
+      "path": "docs/decisions/ADR-0002-windows-ml-provider-strategy.md",
+      "title": "ADR-0002 Windows ML provider strategy",
+      "priority": 95
+    },
+    {
+      "id": "td-winml-phase-5-catalog",
+      "kind": "repo-file",
+      "tags": ["trackdub-local", "windows-ml", "catalog"],
+      "path": "docs/reference/windows-ml-phase-5-catalog-eps.md",
+      "title": "Windows ML Phase 5 catalog EPs",
+      "priority": 80
+    },
+    {
+      "id": "td-winml-phase-3-device-policy",
+      "kind": "repo-file",
+      "tags": ["trackdub-local", "windows-ml", "device-policy"],
+      "path": "docs/reference/windows-ml-phase-3-device-policies.md",
+      "title": "Windows ML Phase 3 device policies",
+      "priority": 75
+    },
+    {
+      "id": "td-winml-stage-provider-matrix",
+      "kind": "repo-file",
+      "tags": ["trackdub-local", "windows-ml", "matrix"],
+      "path": "docs/reference/windows-ml-stage-provider-matrix.md",
+      "title": "Windows ML stage provider matrix",
+      "priority": 70
+    },
+    {
+      "id": "td-trt-rtx-ep-manifest",
+      "kind": "repo-file",
+      "tags": ["trackdub-local", "trt-rtx", "pin", "manifest"],
+      "path": "runtime/trt-rtx-ep.manifest.json",
+      "title": "TRT-RTX EP bundle manifest (0.3.0 cu12)",
+      "priority": 90
+    },
+    {
+      "id": "gh-ep-abi-v030",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "ep-abi", "pin", "release"],
+      "url": "https://github.com/NVIDIA/TensorRT-RTX-EP-ABI/releases/tag/v0.3.0",
+      "title": "TensorRT-RTX-EP-ABI v0.3.0 release notes",
+      "priority": 85
+    },
+    {
+      "id": "gh-ep-abi-readme",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "ep-abi"],
+      "url": "https://github.com/NVIDIA/TensorRT-RTX-EP-ABI",
+      "title": "TensorRT-RTX-EP-ABI repository",
+      "priority": 60
+    },
+    {
+      "id": "nv-trt-rtx-index",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "upstream-latest"],
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/index.html",
+      "title": "NVIDIA TensorRT for RTX docs index (latest)",
+      "priority": 50,
+      "pinWarning": "latest may be newer than EP ABI 0.3.0 / tensorrt_rtx_1_5"
+    },
+    {
+      "id": "nv-trt-rtx-arch-overview",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "architecture", "upstream-latest"],
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/architecture/architecture-overview.html",
+      "title": "TensorRT-RTX architecture overview",
+      "priority": 55
+    },
+    {
+      "id": "nv-trt-rtx-how-it-works",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "aot", "jit", "runtime-cache", "upstream-latest"],
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/architecture/how-trt-rtx-works.html",
+      "title": "How TensorRT-RTX works (AOT/JIT)",
+      "priority": 55
+    },
+    {
+      "id": "nv-trt-rtx-inference-library",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "api", "upstream-latest"],
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/index.html",
+      "title": "TensorRT-RTX inference library overview",
+      "priority": 45
+    },
+    {
+      "id": "nv-trt-rtx-c-api",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "api", "cpp", "upstream-latest"],
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/c-api-docs.html",
+      "title": "TensorRT-RTX C++ API",
+      "priority": 40
+    },
+    {
+      "id": "nv-trt-rtx-python-api",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "api", "python", "upstream-latest"],
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/python-api-docs.html",
+      "title": "TensorRT-RTX Python API",
+      "priority": 40
+    },
+    {
+      "id": "nv-trt-rtx-porting",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "porting", "upstream-latest"],
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/porting.html",
+      "title": "Porting guide for TensorRT applications",
+      "priority": 45
+    },
+    {
+      "id": "nv-trt-rtx-sla",
+      "kind": "url",
+      "tags": ["nvidia-tensorrt-rtx", "license", "pin"],
+      "url": "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/reference/sla.html",
+      "title": "TensorRT-RTX software license agreement",
+      "priority": 30
+    },
+    {
+      "id": "ort-tensorrt-rtx-ep",
+      "kind": "url",
+      "tags": ["ort-plugin-ep", "trt-rtx"],
+      "url": "https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html",
+      "title": "ONNX Runtime TensorRT RTX Execution Provider",
+      "priority": 80
+    },
+    {
+      "id": "ort-plugin-ep-usage",
+      "kind": "url",
+      "tags": ["ort-plugin-ep", "register", "ep-abi"],
+      "url": "https://onnxruntime.ai/docs/execution-providers/plugin-ep-libraries/usage.html",
+      "title": "ONNX Runtime plugin EP library usage",
+      "priority": 85
+    },
+    {
+      "id": "ms-winml-overview",
+      "kind": "url",
+      "tags": ["microsoft-winml", "catalog"],
+      "url": "https://learn.microsoft.com/windows/ai/new-windows-ml/overview",
+      "title": "Windows ML overview",
+      "priority": 35
+    },
+    {
+      "id": "ms-winml-supported-eps",
+      "kind": "url",
+      "tags": ["microsoft-winml", "catalog"],
+      "url": "https://learn.microsoft.com/windows/ai/new-windows-ml/supported-execution-providers",
+      "title": "Windows ML supported execution providers",
+      "priority": 40
+    },
+    {
+      "id": "ms-winml-select-eps",
+      "kind": "url",
+      "tags": ["microsoft-winml", "catalog", "device-policy"],
+      "url": "https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers",
+      "title": "Windows ML provider selection",
+      "priority": 40
+    },
+    {
+      "id": "ms-winml-initialize-eps",
+      "kind": "url",
+      "tags": ["microsoft-winml", "catalog", "register"],
+      "url": "https://learn.microsoft.com/windows/ai/new-windows-ml/initialize-execution-providers",
+      "title": "Installing and registering Windows ML EPs",
+      "priority": 40
+    },
+    {
+      "id": "ms-directml",
+      "kind": "url",
+      "tags": ["microsoft-winml", "directml", "fallback"],
+      "url": "https://learn.microsoft.com/windows/ai/directml/dml",
+      "title": "DirectML overview (legacy GPU fallback)",
+      "priority": 25
+    }
+  ]
+}
