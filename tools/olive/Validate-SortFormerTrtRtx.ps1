@@ -193,7 +193,7 @@ if ($results.staged) {
     Write-Host "  1. Add a TRT-RTX smoke test in tests/Trackdub.Inference.Tests/SortFormerDiarizationEngineTests.cs"
     Write-Host "     (mirror WhisperOnnxTrtRtxValidationTests.cs; load the staging dir via Discover())."
     Write-Host "  2. dotnet test tests/Trackdub.Inference.Tests --filter 'FullyQualifiedName~SortFormer'"
-    Write-Host "  3. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to enable trt-rtx in the manifest and tests."
+    Write-Host "  3. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 -Force to enable trt-rtx in the manifest and tests (pass=false requires -Force)."
 } else {
     Write-Host "FAIL - see errors above." -ForegroundColor Red
     exit 1
