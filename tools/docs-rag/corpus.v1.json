@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "bucket": "trackdub-docs-corpus",
+  "aiSearchInstance": "trackdub-docs",
+  "maxBytes": 3500000,
+  "repos": [
+    {
+      "id": "trackdub",
+      "prefix": "first-party/trackdub",
+      "rootEnv": "TRACKDUB_ROOT",
+      "defaultFromTrackdub": ".",
+      "include": [
+        "docs/**/*.md",
+        "AGENTS.md",
+        "runtime/trt-rtx-ep.manifest.json",
+        "resources/olive-recipes/**/NvTensorRtRtx/README.md"
+      ]
+    },
+    {
+      "id": "trackdub-gated",
+      "prefix": "first-party/trackdub-gated",
+      "rootEnv": "TRACKDUB_GATED_ROOT",
+      "defaultFromTrackdub": "../Trackdub-gated",
+      "include": ["docs/**/*.md", "AGENTS.md", "AGENT_CONTEXT.md"]
+    },
+    {
+      "id": "api",
+      "prefix": "first-party/api",
+      "rootEnv": "API_TRACKDUB_ROOT",
+      "defaultFromTrackdub": "../api.trackdub",
+      "include": ["docs/**/*.md", "AGENTS.md", "README.md"]
+    }
+  ],
+  "vendors": [
+    {
+      "id": "nvidia",
+      "prefix": "vendor/nvidia",
+      "sources": [
+        ["ep-abi-v030", "https://github.com/NVIDIA/TensorRT-RTX-EP-ABI/releases/tag/v0.3.0"],
+        ["ep-abi-readme", "https://github.com/NVIDIA/TensorRT-RTX-EP-ABI"],
+        ["trt-rtx-index", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/index.html"],
+        ["trt-rtx-arch", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/architecture/architecture-overview.html"],
+        ["trt-rtx-how", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/architecture/how-trt-rtx-works.html"],
+        ["trt-rtx-porting", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/porting.html"]
+      ]
+    },
+    {
+      "id": "microsoft",
+      "prefix": "vendor/microsoft",
+      "sources": [
+        ["winml-overview", "https://learn.microsoft.com/windows/ai/new-windows-ml/overview"],
+        ["winml-eps", "https://learn.microsoft.com/windows/ai/new-windows-ml/supported-execution-providers"],
+        ["winml-select", "https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers"],
+        ["winml-init", "https://learn.microsoft.com/windows/ai/new-windows-ml/initialize-execution-providers"],
+        ["directml", "https://learn.microsoft.com/windows/ai/directml/dml"]
+      ]
+    },
+    {
+      "id": "onnxruntime",
+      "prefix": "vendor/onnxruntime",
+      "sources": [
+        ["trt-rtx-ep", "https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html"],
+        ["plugin-ep", "https://onnxruntime.ai/docs/execution-providers/plugin-ep-libraries/usage.html"],
+        ["openvino-ep", "https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html"],
+        ["qnn-ep", "https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html"],
+        ["migraphx-ep", "https://onnxruntime.ai/docs/execution-providers/MIGraphX-ExecutionProvider.html"]
+      ]
+    },
+    {
+      "id": "amd",
+      "prefix": "vendor/amd",
+      "sources": [
+        ["migraphx", "https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/"]
+      ]
+    },
+    {
+      "id": "intel",
+      "prefix": "vendor/intel",
+      "sources": [
+        ["openvino", "https://docs.openvino.ai/2025/index.html"]
+      ]
+    },
+    {
+      "id": "qualcomm",
+      "prefix": "vendor/qualcomm",
+      "sources": [
+        ["qnn", "https://docs.qualcomm.com/bundle/publicresource/topics/80-63442-50/overview.html"]
+      ]
+    },
+    {
+      "id": "qwen",
+      "prefix": "vendor/qwen",
+      "sources": [
+        ["qwen2.5", "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/main/README.md"]
+      ]
+    },
+    {
+      "id": "whisper",
+      "prefix": "vendor/whisper",
+      "sources": [
+        ["openai-whisper", "https://raw.githubusercontent.com/openai/whisper/main/README.md"]
+      ]
+    }
+  ]
+}
