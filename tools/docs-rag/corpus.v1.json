@@ -41,7 +41,18 @@
         ["trt-rtx-index", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/index.html"],
         ["trt-rtx-arch", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/architecture/architecture-overview.html"],
         ["trt-rtx-how", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/architecture/how-trt-rtx-works.html"],
-        ["trt-rtx-porting", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/porting.html"]
+        ["trt-rtx-porting", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/porting.html"],
+        ["trt-rtx-inference-library", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/index.html"],
+        ["trt-rtx-c-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/c-api-docs.html"],
+        ["trt-rtx-python-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/python-api-docs.html"],
+        ["trt-rtx-advanced", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/inference-library/advanced.html"],
+        ["trt-rtx-quick-start", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/getting-started/quick-start-guide.html"],
+        ["trt-rtx-first-engine", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/getting-started/build-your-first-engine.html"],
+        ["trt-rtx-support-matrix", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/getting-started/support-matrix.html"],
+        ["trt-rtx-best-practices", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/performance/best-practices.html"],
+        ["trt-rtx-troubleshooting", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/reference/troubleshooting.html"],
+        ["sortformer-diar", "https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1"],
+        ["nemotron-asr", "https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b"]
       ]
     },
     {
@@ -59,46 +70,77 @@
       "id": "onnxruntime",
       "prefix": "vendor/onnxruntime",
       "sources": [
+        ["ep-overview", "https://onnxruntime.ai/docs/execution-providers/"],
         ["trt-rtx-ep", "https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html"],
         ["plugin-ep", "https://onnxruntime.ai/docs/execution-providers/plugin-ep-libraries/usage.html"],
+        ["cuda-ep", "https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html"],
+        ["directml-ep", "https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html"],
         ["openvino-ep", "https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html"],
         ["qnn-ep", "https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html"],
-        ["migraphx-ep", "https://onnxruntime.ai/docs/execution-providers/MIGraphX-ExecutionProvider.html"]
+        ["migraphx-ep", "https://onnxruntime.ai/docs/execution-providers/MIGraphX-ExecutionProvider.html"],
+        ["ort-genai", "https://onnxruntime.ai/docs/genai/"],
+        ["tune-performance", "https://onnxruntime.ai/docs/performance/tune-performance/"],
+        ["graph-optimizations", "https://onnxruntime.ai/docs/performance/graph-optimizations.html"],
+        ["quantization", "https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html"]
       ]
     },
     {
       "id": "amd",
       "prefix": "vendor/amd",
       "sources": [
-        ["migraphx", "https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/"]
+        ["migraphx", "https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/"],
+        ["migraphx-install", "https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/install/install-migraphx.html"],
+        ["migraphx-driver", "https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/migraphx-driver.html"],
+        ["migraphx-cpp", "https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/reference/MIGraphX-cpp.html"],
+        ["migraphx-operators", "https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/dev/operators.html"],
+        ["migraphx-quantization", "https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/dev/quantization.html"]
       ]
     },
     {
       "id": "intel",
       "prefix": "vendor/intel",
       "sources": [
-        ["openvino", "https://docs.openvino.ai/2025/index.html"]
+        ["openvino", "https://docs.openvino.ai/2025/index.html"],
+        ["openvino-get-started", "https://docs.openvino.ai/2025/get-started.html"],
+        ["openvino-workflow", "https://docs.openvino.ai/2025/openvino-workflow.html"],
+        ["openvino-generative", "https://docs.openvino.ai/2025/openvino-workflow-generative.html"],
+        ["openvino-about", "https://docs.openvino.ai/2025/about-openvino.html"],
+        ["openvino-documentation", "https://docs.openvino.ai/2025/documentation.html"]
       ]
     },
     {
       "id": "qualcomm",
       "prefix": "vendor/qualcomm",
       "sources": [
-        ["qnn", "https://docs.qualcomm.com/bundle/publicresource/topics/80-63442-50/overview.html"]
+        ["qnn", "https://docs.qualcomm.com/bundle/publicresource/topics/80-63442-50/overview.html"],
+        ["qnn-integration", "https://docs.qualcomm.com/bundle/publicresource/topics/80-63442-50/qnn_integration_guide.html"],
+        ["qnn-backends", "https://docs.qualcomm.com/bundle/publicresource/topics/80-63442-50/backend_details.html"]
       ]
     },
     {
       "id": "qwen",
       "prefix": "vendor/qwen",
       "sources": [
-        ["qwen2.5", "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/main/README.md"]
+        ["qwen2.5", "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/main/README.md"],
+        ["qwen3-embedding", "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/raw/main/README.md"]
       ]
     },
     {
       "id": "whisper",
       "prefix": "vendor/whisper",
       "sources": [
-        ["openai-whisper", "https://raw.githubusercontent.com/openai/whisper/main/README.md"]
+        ["openai-whisper", "https://raw.githubusercontent.com/openai/whisper/main/README.md"],
+        ["faster-whisper", "https://github.com/SYSTRAN/faster-whisper"]
+      ]
+    },
+    {
+      "id": "speech-models",
+      "prefix": "vendor/speech-models",
+      "sources": [
+        ["kokoro-tts", "https://huggingface.co/hexgrad/Kokoro-82M"],
+        ["opus-mt", "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/raw/main/README.md"],
+        ["madlad400", "https://huggingface.co/google/madlad400-3b-mt/raw/main/README.md"],
+        ["spleeter", "https://github.com/deezer/spleeter"]
       ]
     }
   ]

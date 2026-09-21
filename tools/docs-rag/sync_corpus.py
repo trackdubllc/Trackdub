@@ -8,6 +8,7 @@ import os
 import subprocess
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -151,13 +152,23 @@ def stage_pin(staging: Path) -> None:
     )
 
 
-def upload(staging: Path, bucket: str, api_root: Path) -> int:
-    files = [path for path in staging.rglob("*") if path.is_file()]
-    wrangler = api_root / "node_modules" / ".bin" / "wrangler"
-    command_prefix = [str(wrangler)] if wrangler.exists() else ["npx", "wrangler"]
+def wrangler_prefix(api_root: Path) -> list[str]:
+    """Resolve a Win32-safe wrangler invocation (`.bin/wrangler` is a POSIX shim)."""
+    js = api_root / "node_modules" / "wrangler" / "bin" / "wrangler.js"
+    if js.is_file():
+        return ["node", str(js)]
+    cmd = api_root / "node_modules" / ".bin" / "wrangler.cmd"
+    if cmd.is_file():
+        return [str(cmd)]
+    return ["npx", "wrangler"]
+
+
+def upload(staging: Path, bucket: str, api_root: Path, workers: int = 8) -> int:
+    files = sorted(path for path in staging.rglob("*") if path.is_file())
+    command_prefix = wrangler_prefix(api_root)
     config = api_root / "wrangler.docs-rag.jsonc"
-    failed = 0
-    for path in files:
+
+    def put_one(path: Path) -> tuple[str, bool, str]:
         key = path.relative_to(staging).as_posix()
         cmd = [
             *command_prefix,
@@ -171,40 +182,75 @@ def upload(staging: Path, bucket: str, api_root: Path) -> int:
             "--config",
             str(config),
         ]
-        result = subprocess.run(cmd, cwd=api_root, check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd,
+            cwd=api_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         if result.returncode != 0:
-            failed += 1
-            print(f"FAIL upload {key}: {result.stderr.strip() or result.stdout.strip()}")
-        else:
-            print(f"put {key}")
-    print(f"upload done: {len(files) - failed}/{len(files)}")
+            return key, False, result.stderr.strip() or result.stdout.strip()
+        return key, True, ""
+
+    failed = 0
+    done = 0
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = [pool.submit(put_one, path) for path in files]
+        for future in as_completed(futures):
+            key, ok, message = future.result()
+            done += 1
+            if ok:
+                print(f"put ({done}/{len(files)}) {key}", flush=True)
+            else:
+                failed += 1
+                print(f"FAIL ({done}/{len(files)}) {key}: {message}", flush=True)
+    print(f"upload done: {len(files) - failed}/{len(files)}", flush=True)
     return 0 if failed == 0 else 1
+
+
+def clear_staging(staging: Path) -> None:
+    if not staging.exists():
+        return
+    for child in sorted(staging.rglob("*"), reverse=True):
+        if child.is_file():
+            child.unlink()
+        elif child.is_dir():
+            child.rmdir()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stage and optionally upload the Trackdub docs corpus")
     parser.add_argument("--upload", action="store_true", help="Put staged objects into R2")
     parser.add_argument("--skip-fetch", action="store_true", help="Stage repo files only")
+    parser.add_argument(
+        "--reuse-staging",
+        action="store_true",
+        help="Upload existing .staging without re-fetching or clearing",
+    )
+    parser.add_argument("--workers", type=int, default=8, help="Parallel R2 upload workers")
     args = parser.parse_args()
     manifest = load_manifest()
-    if STAGING.exists():
-        for child in sorted(STAGING.rglob("*"), reverse=True):
-            if child.is_file():
-                child.unlink()
-            elif child.is_dir():
-                child.rmdir()
-    STAGING.mkdir(parents=True, exist_ok=True)
-    copied, skipped = stage_repos(manifest, STAGING)
-    stage_pin(STAGING)
-    vendor_ok, vendor_fail = (0, 0)
-    if not args.skip_fetch:
-        vendor_ok, vendor_fail = stage_vendors(manifest, STAGING)
-    print(f"staged repo files={copied} skipped={skipped} vendor_ok={vendor_ok} vendor_fail={vendor_fail}")
+    if not args.reuse_staging:
+        clear_staging(STAGING)
+        STAGING.mkdir(parents=True, exist_ok=True)
+        copied, skipped = stage_repos(manifest, STAGING)
+        stage_pin(STAGING)
+        vendor_ok, vendor_fail = (0, 0)
+        if not args.skip_fetch:
+            vendor_ok, vendor_fail = stage_vendors(manifest, STAGING)
+        print(f"staged repo files={copied} skipped={skipped} vendor_ok={vendor_ok} vendor_fail={vendor_fail}")
+    else:
+        if not STAGING.is_dir() or not any(STAGING.rglob("*")):
+            raise SystemExit(f"no staging tree at {STAGING}; run without --reuse-staging first")
+        print(f"reusing staging at {STAGING}")
     if not args.upload:
         print(f"dry-run staging at {STAGING}")
         return
     api_root = Path(os.environ.get("API_TRACKDUB_ROOT", TRACKDUB_ROOT.parent / "api.trackdub")).resolve()
-    raise SystemExit(upload(STAGING, manifest["bucket"], api_root))
+    raise SystemExit(upload(STAGING, manifest["bucket"], api_root, workers=args.workers))
 
 
 if __name__ == "__main__":
