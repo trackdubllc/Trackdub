@@ -4,13 +4,14 @@ Date: 2026-09-21
 This file is the quick handoff. Full architecture, agent onboarding, rate
 limits, and token rotation live in [SPEC.md](SPEC.md). Ingest usage lives in
 [README.md](README.md).
+
 ## State at handoff: LIVE
 
 Everything below is deployed, verified, and committed.
 
 | Component | State |
 |---|---|
-| R2 `trackdub-docs-corpus` | 183 objects (126 first-party + 38 vendor), indexed |
+| R2 `trackdub-docs-corpus` | 197 objects (Olive docs added), indexed |
 | AI Search `trackdub-docs` | Live, hybrid + reranking, ~6h auto-reindex |
 | Worker `trackdub-docs-rag` | Live at `https://trackdub-docs-rag.trackdub.workers.dev` |
 | MCP tools | `search_trackdub_docs`, `ask_trackdub_docs`, `get_trackdub_doc` — all verified |
