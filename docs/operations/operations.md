@@ -148,7 +148,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### OpenCode review (`opencode-review.yml`)
 
-- **Trigger:** `pull_request` (opened/reopened/synchronize/ready_for_review); runs only for OWNER/MEMBER/COLLABORATOR-authored non-draft PRs
+- **Trigger:** `pull_request` (opened/reopened/synchronize/ready_for_review); runs only for OWNER/MEMBER/COLLABORATOR/CONTRIBUTOR-authored non-draft PRs
 - **Runs:** `ubuntu-latest`
 - **Tasks:** calls the `tonythethompson/opencode-action` reusable `opencode-review.yml` (`/review-pr`); posts one structured GitHub review (summary body plus inline resolvable threads) as `opencode-agent[bot]`
 - **Secrets:** `OPENCODE_API_KEY` (zen: probe chain) and `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (cf: Workers AI probe chain)
@@ -156,7 +156,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### OpenCode on demand (`opencode.yml`)
 
-- **Trigger:** PR comment `/oc` or `/opencode` (OWNER/MEMBER/COLLABORATOR commenters only), or manual (`workflow_dispatch` with `prompt`)
+- **Trigger:** PR comment `/oc` or `/opencode` (OWNER/MEMBER/COLLABORATOR/CONTRIBUTOR commenters only), or manual (`workflow_dispatch` with `prompt`)
 - **Runs:** `ubuntu-latest`
 - **Tasks:** calls the `tonythethompson/opencode-action` reusable `opencode-bot.yml` with the comment or supplied prompt; replies as `opencode-agent[bot]`
 
