@@ -9,6 +9,15 @@ on:
       - ready_for_review
 
 jobs:
+  debug-event:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "action=${{ github.event.action }}"
+          echo "assoc=${{ github.event.pull_request.author_association }}"
+          echo "draft=${{ github.event.pull_request.draft }}"
+          echo "user_type=${{ github.event.pull_request.user.type }}"
   review:
     permissions:
       contents: read
