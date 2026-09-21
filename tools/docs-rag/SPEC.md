@@ -1,6 +1,6 @@
 # Trackdub Docs RAG — Spec
 
-Version: 1.2 (2026-09-21)
+Version: 1.3 (2026-09-21)
 Status: Live
 Endpoint: `https://trackdub-docs-rag.trackdub.workers.dev`
 Owner: Tony Thompson
@@ -46,9 +46,29 @@ Two credentials, different jobs:
 
 ## 3. The corpus
 
-R2 bucket `trackdub-docs-corpus`, currently **197 documents**, indexed by
-instance `trackdub-docs` (embedding `@cf/qwen/qwen3-embedding-0.6b`, hybrid
-search + reranking, ~6h auto-sync).
+R2 bucket `trackdub-docs-corpus` contains **197 uploaded documents**. Instance
+`trackdub-docs` indexes them with `@cf/qwen/qwen3-embedding-0.6b`, hybrid search
+and reranking, 24h scheduled sync, and a job request after successful uploads.
+An uploaded object or ended job does not prove the index is current; inspect
+item status and metadata as well. See [HANDOFF.md](HANDOFF.md) for dated verification.
+
+### Instance settings
+
+| Setting | Value |
+|---|---|
+| Scheduled sync | `sync_interval: 86400` (24h) |
+| Keyword tokenizer | `trigram`, for code identifier substrings |
+| Keyword match mode | `and`; Worker retries `or` once only on an empty successful search |
+| Custom metadata | `is_first_party`, boolean |
+| Relevance boost | `is_first_party`, direction `exists` |
+| Chunking | 1024 tokens, 10% overlap (unchanged) |
+| Similarity cache | `close_enough`, 172800 seconds (48h, unchanged) |
+
+First-party objects carry R2 custom metadata `is_first_party: "true"`;
+vendors omit that field entirely. Setting `false` would still match the
+existence boost. Boosting biases candidates before reranking; it is not a
+hard guarantee that every first-party hit outranks every vendor hit. Changing
+the tokenizer or metadata schema requires full reindexing.
 
 | Folder | Contents |
 |---|---|
@@ -80,26 +100,46 @@ upstream wiki, DeepFilterNet3, SepFormer, CosyVoice/Chatterbox HF cards
 From the Trackdub repo root:
 
 ```bash
-python tools/docs-rag/sync_corpus.py --upload          # fetch + upload all
-python tools/docs-rag/sync_corpus.py --skip-fetch --upload  # repo files only
-python tools/docs-rag/sync_corpus.py --reuse-staging --upload  # retry failed puts
+python tools/docs-rag/sync_corpus.py --upload          # fetch + upload + request reindex
+python tools/docs-rag/sync_corpus.py --skip-fetch --upload  # repo files only + request reindex
+python tools/docs-rag/sync_corpus.py --reuse-staging --upload  # cached tree + request reindex
 ```
 
-Then trigger reindex (or wait ~6h):
+Uploads use a temporary remote R2 binding through installed Wrangler's
+`getPlatformProxy`, with metadata attached through the R2 Workers API.
+Wrangler 4.114.0 does not implement the `r2 object put --header` option
+shown in AI Search documentation. The helper disposes its proxy and temporary
+configuration after each run; no persistent service or new credentials are needed.
+
+Automatic reindex runs only after all staged objects upload successfully.
+Missing repository roots and vendor-fetch failures do not block uploading the
+remaining staged files or a successful exit. Check the staging summary for
+skips and failures; upload success alone does not establish a complete refresh.
+Upload or job-request failure exits nonzero. Job creation is asynchronous;
+verify completion separately. A timeout can occur after the job has started,
+so inspect jobs before retrying the request:
 
 ```bash
 cd ../api.trackdub
-export AI_SEARCH_API_TOKEN="<from Windows user env or dashboard>"
+npx wrangler ai-search jobs list trackdub-docs
+# Only if no job was created:
 npx wrangler ai-search jobs create trackdub-docs
 ```
 
+Wrangler uses `CLOUDFLARE_API_TOKEN` or its existing OAuth login, not
+`AI_SEARCH_API_TOKEN`. Unset stale `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_API_KEY`
+overrides in the calling shell when using OAuth. No environment settings or
+credentials are changed by the sync script.
+
 Adding a vendor page: add `[id, url]` under the vendor in
-`corpus.v1.json`, run sync. Adding a new scope (agent-visible filter): add to
-`DOC_SCOPES` + `FOLDER` in `api.trackdub/src/docs-rag/scopes.ts` + a test row.
+`corpus.v1.json`, run sync. Adding a new scope (agent-visible filter): update
+`DOC_SCOPES`, `FOLDER`, and the `filterForScope` switch in
+`api.trackdub/src/docs-rag/scopes.ts`, then add a scope test row.
 
 Windows notes: the script invokes Wrangler via
-`node node_modules/wrangler/bin/wrangler.js` (the `.bin` shim is POSIX-only)
-and forces UTF-8 subprocess decode (Wrangler emoji breaks cp1252).
+`node node_modules/wrangler/bin/wrangler.js` (the `.bin` shim is POSIX-only).
+Child output streams directly to the terminal without Python decoding;
+use `PYTHONUTF8=1` for Python's own output.
 
 ## 4. Agent tools
 
@@ -114,13 +154,33 @@ Stateless agents-SDK MCP server (`createMcpHandler`, streamable HTTP at
 
 `scope` values: `all`, `first-party`, `trackdub`, `trackdub-gated`, `api`,
 `vendor`, `nvidia`, `microsoft`, `amd`, `intel`, `qualcomm`, `qwen`,
-`whisper`, `speech-models`, `olive`, `onnxruntime`.
+`whisper`, `speech-models`, `onnxruntime`. Olive documents are available through
+`vendor` or `all`; a dedicated Olive scope is not implemented.
 
 Scope enforcement: filters are ASCII range queries on the AI Search `folder`
 metadata (`$gte: "vendor/nvidia/", $lt: "vendor/nvidia0"` — note the stripped
 trailing slash; `"vendor/nvidia/0"` would sort above every real value and
 match nothing). Retrieval always goes through the REST API for this; the
 legacy `aiSearch` binding rejects folder range filters.
+
+`search` explicitly requests keyword mode `and`, then retries once with `or`
+only if the successful response contains no chunks. Both requests keep the
+same scope and result limit. Responses include `matchMode: "and"` or
+`"or-fallback"`. Upstream errors and rate limits are propagated, never retried
+as empty results. With hybrid search, this fallback relaxes only the keyword
+candidate requirement, not vector similarity thresholds.
+
+`ask` makes one REST chat-completions call with system/user `messages`,
+`ai_search_options.query_rewrite.enabled: true`, and scope/limit inside
+`ai_search_options.retrieval`. Returned hits are the same chunks supplied to
+generation, not a separate search's results. `searchQuery` is null when the
+upstream chat response does not expose `search_query`.
+
+**Query rewriting limitation:** Cloudflare rewrites follow-up messages, not
+the first user message. This stateless, single-query tool does not supply
+conversation history, so enabling the option does not establish that a rewrite
+occurred. Do not fabricate history or report the original query as evidence of
+rewriting. See [Cloudflare query rewriting](https://developers.cloudflare.com/ai-search/configuration/retrieval/query-rewriting/).
 
 ## 5. Rate limits
 
@@ -193,11 +253,10 @@ cd api.trackdub && npm run deploy:docs-rag
 # Health check
 curl https://trackdub-docs-rag.trackdub.workers.dev/health
 
-# Refresh corpus + reindex (full sequence)
+# Refresh corpus + automatically request reindex (from Trackdub)
 python tools/docs-rag/sync_corpus.py --upload
-npx wrangler ai-search jobs create trackdub-docs
 
-# Inspect index state
+# Inspect index state (from api.trackdub)
 npx wrangler ai-search get trackdub-docs
 npx wrangler ai-search jobs list trackdub-docs
 
@@ -216,7 +275,8 @@ npx wrangler ai-search jobs list trackdub-docs
 | `AutoRAGNotFoundError` | Instance name mismatch | `AI_SEARCH_INSTANCE` var must equal dashboard name |
 | Model 404 on `ask` | Model retired | `npx wrangler ai models`, update `AI_SEARCH_MODEL` |
 | Upload `WinError 193` | POSIX `.bin` shim | Fixed in script (uses `node wrangler.js`); if regressed, see section 3 |
-| Upload `UnicodeDecodeError` | cp1252 locale | Fixed (UTF-8 decode); run with `PYTHONUTF8=1` if needed |
+| Upload `UnicodeDecodeError` | cp1252 locale | Child output is inherited; run with `PYTHONUTF8=1` for Python output |
+| Reindex request HTTP 524 | Cloudflare timed out before acknowledging the request | Check `jobs list` and job logs first; the job may already have started |
 
 ## 9. Related docs in the repos
 

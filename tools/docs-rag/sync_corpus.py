@@ -8,7 +8,6 @@ import os
 import subprocess
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -164,51 +163,26 @@ def wrangler_prefix(api_root: Path) -> list[str]:
 
 
 def upload(staging: Path, bucket: str, api_root: Path, workers: int = 8) -> int:
-    files = sorted(path for path in staging.rglob("*") if path.is_file())
-    command_prefix = wrangler_prefix(api_root)
-    config = api_root / "wrangler.docs-rag.jsonc"
+    # Wrangler's object CLI cannot set custom metadata; use its remote R2 binding.
+    result = subprocess.run(
+        ["node", str(TOOL_ROOT / "upload_corpus.mjs"), str(api_root), str(staging), bucket, str(max(1, workers))],
+        cwd=api_root,
+        check=False,
+    )
+    return result.returncode
 
-    def put_one(path: Path) -> tuple[str, bool, str]:
-        key = path.relative_to(staging).as_posix()
-        cmd = [
-            *command_prefix,
-            "r2",
-            "object",
-            "put",
-            f"{bucket}/{key}",
-            "--file",
-            str(path),
-            "--remote",
-            "--config",
-            str(config),
-        ]
-        result = subprocess.run(
-            cmd,
-            cwd=api_root,
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if result.returncode != 0:
-            return key, False, result.stderr.strip() or result.stdout.strip()
-        return key, True, ""
 
-    failed = 0
-    done = 0
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-        futures = [pool.submit(put_one, path) for path in files]
-        for future in as_completed(futures):
-            key, ok, message = future.result()
-            done += 1
-            if ok:
-                print(f"put ({done}/{len(files)}) {key}", flush=True)
-            else:
-                failed += 1
-                print(f"FAIL ({done}/{len(files)}) {key}: {message}", flush=True)
-    print(f"upload done: {len(files) - failed}/{len(files)}", flush=True)
-    return 0 if failed == 0 else 1
+def reindex(api_root: Path, instance: str) -> int:
+    result = subprocess.run(
+        [*wrangler_prefix(api_root), "ai-search", "jobs", "create", instance, "--json"],
+        cwd=api_root,
+        check=False,
+    )
+    if result.returncode:
+        print("Upload succeeded but reindex request failed; check ai-search jobs list before retrying because the job may have started.", flush=True)
+    else:
+        print("Reindex requested; check ai-search jobs list for completion.", flush=True)
+    return result.returncode
 
 
 def clear_staging(staging: Path) -> None:
@@ -222,8 +196,8 @@ def clear_staging(staging: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Stage and optionally upload the Trackdub docs corpus")
-    parser.add_argument("--upload", action="store_true", help="Put staged objects into R2")
+    parser = argparse.ArgumentParser(description="Stage and optionally upload and reindex the Trackdub docs corpus")
+    parser.add_argument("--upload", action="store_true", help="Put staged objects with metadata into R2, then request reindex")
     parser.add_argument("--skip-fetch", action="store_true", help="Stage repo files only")
     parser.add_argument(
         "--reuse-staging",
@@ -250,7 +224,10 @@ def main() -> None:
         print(f"dry-run staging at {STAGING}")
         return
     api_root = Path(os.environ.get("API_TRACKDUB_ROOT", TRACKDUB_ROOT.parent / "api.trackdub")).resolve()
-    raise SystemExit(upload(STAGING, manifest["bucket"], api_root, workers=args.workers))
+    uploaded = upload(STAGING, manifest["bucket"], api_root, workers=args.workers)
+    if uploaded:
+        raise SystemExit(uploaded)
+    raise SystemExit(reindex(api_root, manifest["aiSearchInstance"]))
 
 
 if __name__ == "__main__":
