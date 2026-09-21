@@ -142,6 +142,26 @@
         ["madlad400", "https://huggingface.co/google/madlad400-3b-mt/raw/main/README.md"],
         ["spleeter", "https://github.com/deezer/spleeter"]
       ]
+    },
+    {
+      "id": "olive",
+      "prefix": "vendor/olive",
+      "sources": [
+        ["olive-landing", "https://microsoft.github.io/Olive/0.13.0/"],
+        ["olive-why", "https://microsoft.github.io/Olive/0.13.0/why-olive.html"],
+        ["olive-getting-started", "https://microsoft.github.io/Olive/0.13.0/getting-started/getting-started.html"],
+        ["olive-installation", "https://microsoft.github.io/Olive/0.13.0/how-to/installation.html"],
+        ["olive-python-api", "https://microsoft.github.io/Olive/0.13.0/how-to/python-api.html"],
+        ["olive-cli-optimize", "https://microsoft.github.io/Olive/0.13.0/how-to/cli/cli-optimize.html"],
+        ["olive-cli-quantize", "https://microsoft.github.io/Olive/0.13.0/how-to/cli/cli-quantize.html"],
+        ["olive-build-workflow", "https://microsoft.github.io/Olive/0.13.0/how-to/configure-workflows/build-workflow.html"],
+        ["olive-pass-configuration", "https://microsoft.github.io/Olive/0.13.0/how-to/configure-workflows/pass-configuration.html"],
+        ["olive-features-index", "https://microsoft.github.io/Olive/0.13.0/features/index.html"],
+        ["olive-quantization", "https://microsoft.github.io/Olive/0.13.0/features/quantization.html"],
+        ["olive-onnx-transformations", "https://microsoft.github.io/Olive/0.13.0/features/onnx-transformations.html"],
+        ["olive-huggingface-integration", "https://microsoft.github.io/Olive/0.13.0/features/huggingface-integration.html"],
+        ["olive-reference", "https://microsoft.github.io/Olive/0.13.0/reference/index.html"]
+      ]
     }
   ]
 }

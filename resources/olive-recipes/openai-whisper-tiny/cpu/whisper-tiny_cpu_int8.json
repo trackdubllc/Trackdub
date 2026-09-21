@@ -26,7 +26,7 @@
             "precision": "fp32"
         },
         "onnx_kquant_quantization": {
-            "type": "OnnxKQuantQuantization",
+            "type": "OnnxKquantQuantization",
             "bits": 8,
             "block_size": 32,
             "accuracy_level": 4,

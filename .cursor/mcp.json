@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "trackdub-docs-rag": {
+      "url": "https://trackdub-docs-rag.trackdub.workers.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer 16abb5bbc62c90ff94a69f9df796c23ddb4fc95af1af02fe"
+      }
+    }
+  }
+}

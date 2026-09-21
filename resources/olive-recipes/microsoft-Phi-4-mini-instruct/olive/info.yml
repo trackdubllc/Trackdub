@@ -10,3 +10,11 @@ recipes:
     file: mixed-tied.json
     device: gpu
     ep: CUDAExecutionProvider
+  - name: microsoft-Phi-4-mini-instruct-cpu-int4-rtn
+    file: cpu-int4-rtn.json
+    device: cpu
+    ep: CPUExecutionProvider
+  - name: microsoft-Phi-4-mini-instruct-cpu-int8-static
+    file: cpu-int8-static.json
+    device: cpu
+    ep: CPUExecutionProvider

@@ -6,22 +6,33 @@
     "systems": {
         "local_system": {
             "type": "LocalSystem",
-            "accelerators": [ { "execution_providers": [ "CUDAExecutionProvider" ] } ]
+            "accelerators": [
+                {
+                    "execution_providers": [
+                        "CUDAExecutionProvider"
+                    ]
+                }
+            ]
         }
     },
     "evaluators": {
         "evaluator": {
             "type": "LMEvaluator",
-            "tasks": [ "arc_challenge", "arc_easy", "mmlu", "hellaswag", "mmlu_stem", "openbookqa" ],
+            "tasks": [
+                "arc_challenge",
+                "arc_easy",
+                "mmlu",
+                "hellaswag",
+                "mmlu_stem",
+                "openbookqa"
+            ],
             "batch_size": 32,
-            "provider_options": { "enable_skip_layer_norm_strict_mode": "1" }
+            "provider_options": {
+                "enable_skip_layer_norm_strict_mode": "1"
+            }
         }
     },
     "passes": {
-        "s": {
-            "type": "SelectiveMixedPrecision",
-            "algorithm": "k_quant_down"
-        },
         "g": {
             "type": "gptq",
             "bits": 4,
@@ -32,6 +43,10 @@
         "m": {
             "type": "ModelBuilder",
             "precision": "int4"
+        },
+        "s": {
+            "type": "SelectiveMixedPrecision",
+            "algorithm": "k_quant_down"
         }
     },
     "evaluator": "evaluator",
