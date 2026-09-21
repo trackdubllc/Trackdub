@@ -90,11 +90,10 @@ Expect four matrix jobs: `actions`, `csharp` (Windows), `javascript-typescript`,
 
 CI/CD lives in `.github/workflows/`. Windows jobs use self-hosted runners; Linux jobs use `self-hosted`.
 
-Most workflows do not auto-run on push or pull request (exceptions: `opencode-review.yml` reviews PRs automatically; `codeql.yml`, `code-coverage.yml`, and `dependabot-auto-merge.yml` run on their own triggers). Start the rest manually or from PR comments:
+`ci.yml`, `codeql.yml`, `model-audit.yml`, `dependabot-auto-merge.yml`, and `opencode-review.yml` run automatically on their triggers. Everything else is manual (`workflow_dispatch`) or PR-comment triggered:
 
 | Command (PR comment) | Workflow |
 |----------------------|----------|
-| `/ci` | Full CI (format + Windows/Linux build/test) |
 | `/oc` or `/opencode` | OpenCode bot |
 
 Manual dispatch still works:
@@ -110,7 +109,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### CI (`ci.yml`)
 
-- **Trigger:** PR comment `/ci`, or manual (`workflow_dispatch`)
+- **Trigger:** Push/PR to `main`, or manual (`workflow_dispatch`)
 - **Jobs:**
   - **Verify Code Format** (self-hosted): `dotnet format Trackdub.sln --verify-no-changes`
   - **Build & Test (Windows):** restore/build/test `Trackdub.sln` (Release, `-m:1`)
