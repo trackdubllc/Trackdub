@@ -47,7 +47,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### Model manifest audit (`model-audit.yml`)
 
-- **Trigger:** push/PR to `main` touching `src/Trackdub.Inference/Runtime/ModelManifest/**`, `tools/ci/**`, or the workflow itself; manual (`workflow_dispatch`)
+- **Trigger:** push/PR to `main` touching `src/Trackdub.Inference/Runtime/ModelManifest/**`, `tools/ci/**`, or the workflow itself; weekly schedule (Mon 06:00 UTC); manual (`workflow_dispatch`)
 - **Runs:** self-hosted
 - **Tasks:** `tools/ci/audit-bundled-model-manifest.py`
 
