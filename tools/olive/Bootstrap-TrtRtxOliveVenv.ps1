@@ -129,9 +129,12 @@ else {
 Write-Host ""
 Write-Host "Verifying install..."
 & $PythonExe -c "import olive; print('olive:', olive.__version__)" 2>&1 | ForEach-Object { Write-Host "  $_" }
+if ($LASTEXITCODE -ne 0) { Write-Error "olive import verification failed."; exit 1 }
 if (-not $SkipModelopt) {
     & $PythonExe -c "import modelopt; print('modelopt:', modelopt.__version__)" 2>&1 | ForEach-Object { Write-Host "  $_" }
+    if ($LASTEXITCODE -ne 0) { Write-Warning "modelopt import verification failed. MXFP8 / NVMO PTQ recipes will not work; fp16 recipes still do." }
     & $PythonExe -c "from modelopt.onnx.quantization.int4 import quantize as q4; print('modelopt.onnx.quantization.int4: importable')" 2>&1 | ForEach-Object { Write-Host "  $_" }
+    if ($LASTEXITCODE -ne 0) { Write-Warning "modelopt int4 quantization import failed." }
 }
 
 if (-not (Test-Path $OliveExe)) {

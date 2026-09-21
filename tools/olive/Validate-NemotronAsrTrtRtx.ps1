@@ -18,7 +18,7 @@
           models/nemotron-3.5-asr-onnx/decoder_joint.onnx
       - olive-ai[nvmo] + nvidia-modelopt[onnx] installed (Bootstrap-TrtRtxOliveVenv.ps1 auto-runs)
 
-    On success, records results to build/nemotron-3.5-asr-trtrtx-<precision>-validation.json.
+    On success, records results to build/nemotron-3.5-asr-trtrtx-validation.json.
     Run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to apply manifest + test changes.
 
 .EXAMPLE
@@ -65,8 +65,8 @@ $stagingDirName       = "nemotron-3.5-asr-onnx-trtrtx-validated-$Precision"
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $OliveExe)) {
     Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (olive-ai[nvmo])..."
-    & (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1')
-    if ($LASTEXITCODE -ne 0) { Write-Error "Failed to bootstrap olive-ai[nvmo] venv."; exit 1 }
+    try { & (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1') }
+    catch { Write-Host "Failed to bootstrap olive-ai[nvmo] venv: $_" -ForegroundColor Red; exit 1 }
     if (-not (Test-Path $OliveExe)) {
         Write-Error "olive.exe still not found at $OliveExe after bootstrap."
         exit 1

@@ -18,8 +18,19 @@
     },
     "passes": {
         "fuse_skip_layer_norm": {
-            "type": "OnnxBlockWiseRMSN",
-            "num_heads": 0
+            "type": "OnnxGraphSurgeries",
+            "surgeries": [
+                {
+                    "surgeon_type": "ReplaceNodePatternByNode",
+                    "pattern": [
+                        { "op_type": "SkipLayerNormalization", "inputs": ["x", "skip", "gamma", "beta"], "outputs": ["y"] }
+                    ],
+                    "replacement": [
+                        { "op_type": "Add", "inputs": ["x", "skip"], "outputs": ["add_out"] },
+                        { "op_type": "LayerNormalization", "inputs": ["add_out", "gamma", "beta"], "outputs": ["y"] }
+                    ]
+                }
+            ]
         },
         "fuse_bias_gelu": {
             "type": "OnnxGraphSurgeries",

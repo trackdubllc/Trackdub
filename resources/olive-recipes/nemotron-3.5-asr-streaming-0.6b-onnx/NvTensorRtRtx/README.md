@@ -23,8 +23,8 @@ shapes (B × 1 cache state, sequence-by-sequence greedy decoding).
 
 Same as the SortFormer recipe:
 
-1. `OnnxBlockWiseRMSN` — replaces `SkipLayerNormalization` with `LayerNormalization` + `Add`.
-2. `OnnxGraphSurgeries` — replaces `BiasGelu` with `Add` + `Gelu`.
+1. `OnnxGraphSurgeries` (ReplaceNodePatternByNode) — decomposes `SkipLayerNormalization` into `Add` + `LayerNormalization`.
+2. `OnnxGraphSurgeries` (ReplaceNodePatternByNode) — decomposes `BiasGelu` into `Add` + `Gelu`.
 
 After fusion, fp16 conversion and `OrtSessionParamsTuning` produce an
 encoder + decoder_joint pair that TRT-RTX can parse and compile.
@@ -36,7 +36,7 @@ encoder + decoder_joint pair that TRT-RTX can parse and compile.
 ```
 
 This runs both encoder and decoder_joint recipes, stages them under
-`build/nemotron-3.5-asr-onnx-trtrtx-validated/`, and writes
+`build/nemotron-3.5-asr-onnx-trtrtx-validated-<precision>/` (`fp16` by default, `mxfp8` with `-Mxfp8`), and writes
 `build/nemotron-3.5-asr-trtrtx-validation.json`. After that, remove the
 `Skip = "Pending TRT-RTX validation"` attribute from
 `tests/Trackdub.Inference.Onnx.Tests/NemotronAsrEncoderTrtRtxValidationTests.cs`
