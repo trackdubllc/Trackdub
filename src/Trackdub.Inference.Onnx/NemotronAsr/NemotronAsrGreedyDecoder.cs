@@ -1,5 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Pool;
 
 namespace Trackdub.Inference.Onnx.NemotronAsr;
@@ -17,71 +18,110 @@ internal sealed class NemotronAsrGreedyDecoder(
         vocab.Count,
         exportConfig);
 
+    // The session's effective execution provider, as a retry-policy hint. Resolved once from the
+    // lease's already-known SelectedProvider label instead of re-detecting it per call.
+    private readonly ExecutionProviderKind? providerHint = ResolveProviderHint(sessionLease.SelectedProvider);
+
     public string? DetectedLanguage { get; private set; }
+
+    private static readonly string[] EncoderUnboundOutputNames =
+        ["encoded", "encoded_len", "cache_last_channel_len_next"];
 
     public IReadOnlyList<int> Decode(float[,] mel, long promptIndex)
     {
         ArgumentNullException.ThrowIfNull(mel);
-        ResetState(out DenseTensor<float> cacheLastChannel, out DenseTensor<float> cacheLastTime,
+        ResetState(out CachePingPongBuffer cacheLastChannel, out CachePingPongBuffer cacheLastTime,
             out DenseTensor<long> cacheLastChannelLength, out DenseTensor<float> state1,
             out DenseTensor<float> state2, out int lastToken);
-
-        int totalFrames = mel.GetLength(1);
-        var allTokens = new List<int>();
-        var featureExtractor = new NemotronAsrMelFeatureExtractor();
-        int chunkIndex = 0;
-
-        // BuildChunk is a pure function of `mel` and the frame offset, and `mel` is fully
-        // materialized before this loop, so the next chunk's features can be assembled on a
-        // worker thread while the current chunk still occupies the GPU.
-        Task<float[]>? prefetchedChunk = null;
-
-        for (int frameOffset = 0; frameOffset < totalFrames; frameOffset += NemotronAsrMelFeatureExtractor.ChunkFrames)
+        try
         {
-            int mainFrameCount = Math.Min(NemotronAsrMelFeatureExtractor.ChunkFrames, totalFrames - frameOffset);
-            float[] chunkData = prefetchedChunk is null
-                ? featureExtractor.BuildChunk(mel, frameOffset, mainFrameCount, includePreEncodeCache: chunkIndex > 0)
-                : prefetchedChunk.GetAwaiter().GetResult();
+            using OrtIoBinding encoderBinding = sessionLease.EncoderSession.CreateIoBinding();
+            using RunOptions encoderRunOptions = new();
 
-            int nextFrameOffset = frameOffset + NemotronAsrMelFeatureExtractor.ChunkFrames;
-            if (nextFrameOffset < totalFrames)
+            int totalFrames = mel.GetLength(1);
+            var allTokens = new List<int>();
+            var featureExtractor = new NemotronAsrMelFeatureExtractor();
+            int chunkIndex = 0;
+
+            // BuildChunk is a pure function of `mel` and the frame offset, and `mel` is fully
+            // materialized before this loop, so the next chunk's features can be assembled on a
+            // worker thread while the current chunk still occupies the GPU.
+            Task<float[]>? prefetchedChunk = null;
+
+            for (int frameOffset = 0; frameOffset < totalFrames; frameOffset += NemotronAsrMelFeatureExtractor.ChunkFrames)
             {
-                int nextFrameCount = Math.Min(
-                    NemotronAsrMelFeatureExtractor.ChunkFrames,
-                    totalFrames - nextFrameOffset);
-                // A prefetched chunk is never the first one, so it always carries the pre-encode cache.
-                prefetchedChunk = Task.Run(() => featureExtractor.BuildChunk(
-                    mel,
-                    nextFrameOffset,
-                    nextFrameCount,
-                    includePreEncodeCache: true));
+                int mainFrameCount = Math.Min(NemotronAsrMelFeatureExtractor.ChunkFrames, totalFrames - frameOffset);
+                float[] chunkData = prefetchedChunk is null
+                    ? featureExtractor.BuildChunk(mel, frameOffset, mainFrameCount, includePreEncodeCache: chunkIndex > 0)
+                    : prefetchedChunk.GetAwaiter().GetResult();
+
+                int nextFrameOffset = frameOffset + NemotronAsrMelFeatureExtractor.ChunkFrames;
+                if (nextFrameOffset < totalFrames)
+                {
+                    int nextFrameCount = Math.Min(
+                        NemotronAsrMelFeatureExtractor.ChunkFrames,
+                        totalFrames - nextFrameOffset);
+                    // A prefetched chunk is never the first one, so it always carries the pre-encode cache.
+                    prefetchedChunk = Task.Run(() => featureExtractor.BuildChunk(
+                        mel,
+                        nextFrameOffset,
+                        nextFrameCount,
+                        includePreEncodeCache: true));
+                }
+                else
+                {
+                    prefetchedChunk = null;
+                }
+
+                encoderBinding.ClearBoundInputs();
+                encoderBinding.ClearBoundOutputs();
+                OrtValue[] transientInputs = BindEncoderInputs(
+                    encoderBinding,
+                    chunkData,
+                    NemotronAsrMelFeatureExtractor.PreEncodeCacheFrames + mainFrameCount,
+                    cacheLastChannel,
+                    cacheLastTime,
+                    cacheLastChannelLength,
+                    promptIndex);
+                try
+                {
+                    // cache_last_channel_next / cache_last_time_next are bound directly to the ping-pong
+                    // buffer's output slot (see BindEncoderInputs) and read from there after Swap() below —
+                    // they are deliberately NOT in EncoderUnboundOutputNames, so no CloneTensor round-trip.
+                    using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
+                        sessionLease.EncoderSession.RunWithBindingAndNamesRetry(
+                            encoderRunOptions,
+                            encoderBinding,
+                            EncoderUnboundOutputNames,
+                            provider: providerHint);
+
+                    Tensor<float> encoded = GetTensor<float>(encoderResults, "encoded");
+                    int encodedLength = (int)GetTensor<long>(encoderResults, "encoded_len").FirstOrDefault();
+                    cacheLastChannelLength = CloneTensor<long>(
+                        GetTensor<long>(encoderResults, "cache_last_channel_len_next"));
+
+                    DecodeEncoderFrames(encoded, encodedLength, allTokens, ref state1, ref state2, ref lastToken);
+                    cacheLastChannel.Swap();
+                    cacheLastTime.Swap();
+                }
+                finally
+                {
+                    foreach (OrtValue transientInput in transientInputs)
+                    {
+                        transientInput.Dispose();
+                    }
+                }
+
+                chunkIndex++;
             }
-            else
-            {
-                prefetchedChunk = null;
-            }
 
-            using NemotronAsrInputSet encoderInputs = BuildEncoderInputs(
-                chunkData,
-                NemotronAsrMelFeatureExtractor.PreEncodeCacheFrames + mainFrameCount,
-                cacheLastChannel,
-                cacheLastTime,
-                cacheLastChannelLength,
-                promptIndex);
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
-                sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values);
-
-            Tensor<float> encoded = GetTensor<float>(encoderResults, "encoded");
-            int encodedLength = (int)GetTensor<long>(encoderResults, "encoded_len").FirstOrDefault();
-            cacheLastChannel = CloneTensor<float>(GetTensor<float>(encoderResults, "cache_last_channel_next"));
-            cacheLastTime = CloneTensor<float>(GetTensor<float>(encoderResults, "cache_last_time_next"));
-            cacheLastChannelLength = CloneTensor<long>(GetTensor<long>(encoderResults, "cache_last_channel_len_next"));
-
-            DecodeEncoderFrames(encoded, encodedLength, allTokens, ref state1, ref state2, ref lastToken);
-            chunkIndex++;
+            return allTokens;
         }
-
-        return allTokens;
+        finally
+        {
+            cacheLastChannel.Dispose();
+            cacheLastTime.Dispose();
+        }
     }
 
     public string DecodeText(IReadOnlyList<int> tokens)
@@ -125,7 +165,7 @@ internal sealed class NemotronAsrGreedyDecoder(
             {
                 using NemotronAsrInputSet decoderInputs = BuildDecoderInputs(frame, lastToken, state1, state2);
                 using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults =
-                    sessionLease.DecoderJointSession.RunWithRetry(decoderInputs.Values);
+                    sessionLease.DecoderJointSession.RunWithRetry(decoderInputs.Values, provider: providerHint);
 
                 Tensor<float> logits = GetTensor<float>(decoderResults, "outputs");
                 int nextToken = ArgMax(logits);
@@ -143,37 +183,48 @@ internal sealed class NemotronAsrGreedyDecoder(
         }
     }
 
-    private NemotronAsrInputSet BuildEncoderInputs(
+    private static readonly long[] ProcessedSignalShape =
+        [1, NemotronAsrMelFeatureExtractor.MelBins, NemotronAsrMelFeatureExtractor.ChunkInputFrames];
+    private static readonly long[] ScalarShape = [1];
+
+    /// <summary>
+    /// Binds every encoder input for one chunk into <paramref name="binding"/> and binds the
+    /// cache_last_channel_next / cache_last_time_next outputs directly to the ping-pong buffers'
+    /// output slot. Returns the transient (per-chunk) bound values the caller must dispose once
+    /// the Run completes — the cache buffers themselves are owned by the ping-pong buffers and
+    /// must not be disposed here.
+    /// </summary>
+    private OrtValue[] BindEncoderInputs(
+        OrtIoBinding binding,
         float[] chunkData,
         int chunkLength,
-        DenseTensor<float> cacheLastChannel,
-        DenseTensor<float> cacheLastTime,
+        CachePingPongBuffer cacheLastChannel,
+        CachePingPongBuffer cacheLastTime,
         DenseTensor<long> cacheLastChannelLength,
         long promptIndex)
     {
-        var values = new List<NamedOnnxValue>
-        {
-            NamedOnnxValue.CreateFromTensor(
-                "processed_signal",
-                new DenseTensor<float>(
-                    chunkData,
-                    [1, NemotronAsrMelFeatureExtractor.MelBins, NemotronAsrMelFeatureExtractor.ChunkInputFrames])),
-            NamedOnnxValue.CreateFromTensor(
-                "processed_signal_length",
-                new DenseTensor<long>(new[] { (long)chunkLength }, [1])),
-            NamedOnnxValue.CreateFromTensor("cache_last_channel", cacheLastChannel),
-            NamedOnnxValue.CreateFromTensor("cache_last_time", cacheLastTime),
-            NamedOnnxValue.CreateFromTensor("cache_last_channel_len", cacheLastChannelLength)
-        };
+        OrtValue processedSignal = OrtValue.CreateTensorValueFromMemory(chunkData, ProcessedSignalShape);
+        OrtValue processedSignalLength = OrtValue.CreateTensorValueFromMemory(
+            new[] { (long)chunkLength }, ScalarShape);
+        OrtValue cacheLastChannelLenValue = OrtValue.CreateTensorValueFromMemory(
+            cacheLastChannelLength.ToArray(), ScalarShape);
 
-        if (config.HasPromptInput)
+        binding.BindInput("processed_signal", processedSignal);
+        binding.BindInput("processed_signal_length", processedSignalLength);
+        binding.BindInput("cache_last_channel", cacheLastChannel.CurrentInput);
+        binding.BindInput("cache_last_time", cacheLastTime.CurrentInput);
+        binding.BindInput("cache_last_channel_len", cacheLastChannelLenValue);
+        binding.BindOutput("cache_last_channel_next", cacheLastChannel.CurrentOutput);
+        binding.BindOutput("cache_last_time_next", cacheLastTime.CurrentOutput);
+
+        if (!config.HasPromptInput)
         {
-            values.Add(NamedOnnxValue.CreateFromTensor(
-                "prompt_index",
-                new DenseTensor<long>(new[] { promptIndex }, [1])));
+            return [processedSignal, processedSignalLength, cacheLastChannelLenValue];
         }
 
-        return new NemotronAsrInputSet(values);
+        OrtValue promptIndexValue = OrtValue.CreateTensorValueFromMemory(new[] { promptIndex }, ScalarShape);
+        binding.BindInput("prompt_index", promptIndexValue);
+        return [processedSignal, processedSignalLength, cacheLastChannelLenValue, promptIndexValue];
     }
 
     private NemotronAsrInputSet BuildDecoderInputs(
@@ -211,8 +262,8 @@ internal sealed class NemotronAsrGreedyDecoder(
     }
 
     private void ResetState(
-        out DenseTensor<float> cacheLastChannel,
-        out DenseTensor<float> cacheLastTime,
+        out CachePingPongBuffer cacheLastChannel,
+        out CachePingPongBuffer cacheLastTime,
         out DenseTensor<long> cacheLastChannelLength,
         out DenseTensor<float> state1,
         out DenseTensor<float> state2,
@@ -227,13 +278,11 @@ internal sealed class NemotronAsrGreedyDecoder(
 
         int[] chShape = ResolveCacheShape(encMeta, "cache_last_channel",
             [config.NumEncoderLayers, 1, config.LeftContext, config.HiddenDim]);
-        int chCount = chShape.Aggregate(1, static (prod, d) => checked(prod * d));
-        cacheLastChannel = new DenseTensor<float>(new float[chCount], chShape);
+        cacheLastChannel = new CachePingPongBuffer(chShape);
 
         int[] tmShape = ResolveCacheShape(encMeta, "cache_last_time",
             [config.NumEncoderLayers, 1, config.HiddenDim, config.ConvContext]);
-        int tmCount = tmShape.Aggregate(1, static (prod, d) => checked(prod * d));
-        cacheLastTime = new DenseTensor<float>(new float[tmCount], tmShape);
+        cacheLastTime = new CachePingPongBuffer(tmShape);
 
         cacheLastChannelLength = new DenseTensor<long>(new long[] { 0 }, [1]);
         state1 = new DenseTensor<float>(
@@ -246,6 +295,18 @@ internal sealed class NemotronAsrGreedyDecoder(
         lastToken = config.BlankId;
         DetectedLanguage = null;
     }
+
+    // sessionLease.SelectedProvider is the formatted label of the *effective* provider the
+    // session ended up on (post TRT-init-fallback), which is exactly what the retry policy needs
+    // to know. Only TensorRTRtx currently changes retry behavior; every other label maps to null
+    // (the retry policy's permissive default) rather than guessing at the rest of the enum.
+    private static ExecutionProviderKind? ResolveProviderHint(string selectedProviderLabel) =>
+        string.Equals(
+            selectedProviderLabel,
+            OnnxExecutionSessionFactory.FormatProviderLabel(ExecutionProviderKind.TensorRTRtx),
+            StringComparison.Ordinal)
+            ? ExecutionProviderKind.TensorRTRtx
+            : null;
 
     private static int[] ResolveCacheShape(
         IReadOnlyDictionary<string, NodeMetadata> meta,

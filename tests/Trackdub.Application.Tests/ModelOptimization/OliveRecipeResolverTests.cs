@@ -134,6 +134,69 @@ public sealed class OliveRecipeResolverTests : IDisposable
         Assert.Contains("outside the recipe pilot", resolution.FallbackReason, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("sortformer")]
+    [InlineData("nemotron-asr")]
+    public void Resolve_treats_sortformer_and_nemotron_asr_as_pilot_families(string engineFamily)
+    {
+        string configPath = WriteRecipe("model/NvTensorRtRtx/encoder_trtrtx_fp16.json", "{}");
+        var bindings = new[]
+        {
+            new ModelOptimizationRecipeBinding("model/NvTensorRtRtx/encoder_trtrtx_fp16.json", "trt-rtx", "fp16")
+        };
+
+        OliveRecipeResolution resolution = _resolver.Resolve(
+            "example/model",
+            engineFamily,
+            bindings,
+            OliveExecutionProvider.TensorRtRtx,
+            "fp16",
+            _recipesRoot);
+
+        Assert.True(resolution.UseRecipe);
+        Assert.Equal(configPath, resolution.RecipeConfigPath);
+    }
+
+    [Fact]
+    public void Resolve_disambiguates_same_provider_and_precision_bindings_by_component()
+    {
+        string encoderPath = WriteRecipe("nemotron/NvTensorRtRtx/encoder_trtrtx_fp16.json", "{}");
+        string decoderJointPath = WriteRecipe("nemotron/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json", "{}");
+        var bindings = new[]
+        {
+            new ModelOptimizationRecipeBinding(
+                "nemotron/NvTensorRtRtx/encoder_trtrtx_fp16.json", "trt-rtx", "fp16", Component: "encoder.onnx"),
+            new ModelOptimizationRecipeBinding(
+                "nemotron/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json", "trt-rtx", "fp16", Component: "decoder_joint.onnx"),
+        };
+
+        OliveRecipeResolution encoderResolution = _resolver.Resolve(
+            "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx",
+            "nemotron-asr",
+            bindings,
+            OliveExecutionProvider.TensorRtRtx,
+            "fp16",
+            _recipesRoot,
+            component: "encoder.onnx");
+        Assert.True(encoderResolution.UseRecipe);
+        Assert.Equal(encoderPath, encoderResolution.RecipeConfigPath);
+
+        OliveRecipeResolution decoderJointResolution = _resolver.Resolve(
+            "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx",
+            "nemotron-asr",
+            bindings,
+            OliveExecutionProvider.TensorRtRtx,
+            "fp16",
+            _recipesRoot,
+            component: "decoder_joint.onnx");
+        Assert.True(decoderJointResolution.UseRecipe);
+        Assert.Equal(decoderJointPath, decoderJointResolution.RecipeConfigPath);
+
+        // Distinct components must not collide under FirstOrDefault: each call above must
+        // resolve to its own component's config, not silently return the encoder's for both.
+        Assert.NotEqual(encoderResolution.RecipeConfigPath, decoderJointResolution.RecipeConfigPath);
+    }
+
     private string WriteRecipe(string relativePath, string contents)
     {
         string fullPath = Path.Combine(_recipesRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));

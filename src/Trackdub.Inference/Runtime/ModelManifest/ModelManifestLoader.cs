@@ -795,6 +795,7 @@ public static class ModelManifestLoader
             string? adapterRelativePath = ReadOptionalNullableString(bindingElement, "adapter_relative_path", bindingPath, sourceName);
             string? adapterMode = ReadOptionalNullableString(bindingElement, "adapter_mode", bindingPath, sourceName);
             string? outputManifestRelativePath = ReadOptionalNullableString(bindingElement, "output_manifest_relative_path", bindingPath, sourceName);
+            string? component = ReadOptionalNullableString(bindingElement, "component", bindingPath, sourceName);
 
             bindings.Add(new OliveRecipeBinding(
                 provider,
@@ -812,7 +813,8 @@ public static class ModelManifestLoader
                 costModelRelativePath,
                 adapterRelativePath,
                 adapterMode,
-                outputManifestRelativePath));
+                outputManifestRelativePath,
+                component));
             index++;
         }
 
