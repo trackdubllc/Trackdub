@@ -3,8 +3,9 @@
 Date: 2026-09-21
 Full architecture and agent onboarding: [SPEC.md](SPEC.md).
 Ingest setup and commands: [README.md](README.md).
+Plan milestones and accepted deficiencies: [execution status](../../docs/plans/AI%20Search%20config%20tune-up.md).
 
-## State: live, tune-up verification incomplete
+## State: implementation delivered, known verification deficiencies open
 
 | Component | Verified state |
 |---|---|
