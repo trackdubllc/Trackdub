@@ -1,7 +1,19 @@
 {
     "input_model": {
         "type": "OnnxModel",
-        "model_path": "${MODEL_ROOT}/encoder.onnx"
+        "model_path": "${MODEL_ROOT}/encoder.onnx",
+        "inference_settings": {
+            "execution_provider": [
+                "NvTensorRTRTXExecutionProvider"
+            ],
+            "provider_options": [
+                {
+                    "nv_profile_min_shapes": "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1",
+                    "nv_profile_opt_shapes": "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1",
+                    "nv_profile_max_shapes": "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1"
+                }
+            ]
+        }
     },
     "systems": {
         "local_system": {
@@ -10,7 +22,10 @@
                 {
                     "device": "gpu",
                     "execution_providers": [
-                        "NvTensorRTRTXExecutionProvider"
+                        [
+                            "NvTensorRTRTXExecutionProvider",
+                            "${TRT_RTX_EP_PATH}"
+                        ]
                     ]
                 }
             ]
@@ -19,39 +34,11 @@
     "passes": {
         "fp16": {
             "type": "OnnxFloatToFloat16",
-            "save_as_external_data": true
-        },
-        "session_params": {
-            "type": "OrtSessionParamsTuning",
-            "io_bind": true,
-            "execution_provider": "NvTensorRTRTXExecutionProvider"
-        }
-    },
-    "evaluators": {
-        "latency_evaluator": {
-            "metrics": [
-                {
-                    "name": "latency",
-                    "type": "latency",
-                    "sub_types": [
-                        {
-                            "name": "avg",
-                            "priority": 1,
-                            "higher_is_better": false
-                        },
-                        {
-                            "name": "max"
-                        },
-                        {
-                            "name": "min"
-                        }
-                    ]
-                }
-            ]
+            "save_as_external_data": true,
+            "keep_io_types": true
         }
     },
     "target": "local_system",
-    "evaluator": "latency_evaluator",
     "cache_dir": "cache",
     "output_dir": "build/nemotron-3.5-asr-onnx_encoder_trtrtx_fp16",
     "log_severity_level": 1

@@ -10,21 +10,74 @@
                 {
                     "device": "gpu",
                     "execution_providers": [
-                        "NvTensorRTRTXExecutionProvider"
+                        [
+                            "NvTensorRTRTXExecutionProvider",
+                            "${TRT_RTX_EP_PATH}"
+                        ]
                     ]
                 }
             ]
         }
     },
+    "data_configs": [
+        {
+            "name": "nemotron_decoder_joint_step",
+            "type": "DummyDataContainer",
+            "load_dataset_config": {
+                "params": {
+                    "input_names": [
+                        "encoder_outputs",
+                        "targets",
+                        "target_length",
+                        "input_states_1",
+                        "input_states_2"
+                    ],
+                    "input_shapes": [
+                        [
+                            1,
+                            1024,
+                            1
+                        ],
+                        [
+                            1,
+                            1
+                        ],
+                        [
+                            1
+                        ],
+                        [
+                            2,
+                            1,
+                            640
+                        ],
+                        [
+                            2,
+                            1,
+                            640
+                        ]
+                    ],
+                    "input_types": [
+                        "float32",
+                        "int32",
+                        "int32",
+                        "float32",
+                        "float32"
+                    ]
+                }
+            }
+        }
+    ],
     "passes": {
         "fp16": {
             "type": "OnnxFloatToFloat16",
-            "save_as_external_data": true
+            "save_as_external_data": true,
+            "keep_io_types": true
         },
         "session_params": {
             "type": "OrtSessionParamsTuning",
             "io_bind": false,
-            "execution_provider": "NvTensorRTRTXExecutionProvider"
+            "providers_list": "NvTensorRTRTXExecutionProvider",
+            "data_config": "nemotron_decoder_joint_step"
         }
     },
     "evaluators": {
@@ -45,7 +98,8 @@
                         {
                             "name": "min"
                         }
-                    ]
+                    ],
+                    "data_config": "nemotron_decoder_joint_step"
                 }
             ]
         }

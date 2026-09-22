@@ -300,9 +300,9 @@ public sealed class OnnxExecutionSessionFactoryTests
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Trackdub", "EngineCache"),
                 options["nv_runtime_cache_path"]);
             // Cuda-graph capture requires stable device buffer addresses across Run() calls; most
-            // call sites build fresh input tensors every call, so the flag must default to off
-            // (absent, not "0") rather than assuming it's safe.
-            Assert.False(options.ContainsKey("enable_cuda_graph"));
+            // call sites build fresh input tensors every call, so the flag must default to off.
+            // It has to be an explicit "0": the TensorRT RTX EP treats a missing key as true.
+            Assert.Equal("0", options["enable_cuda_graph"]);
         }
         finally
         {

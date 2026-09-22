@@ -1722,10 +1722,9 @@ internal static class OnnxExecutionSessionFactory
             ["nv_runtime_cache_path"] = ResolveTensorRtRtxRuntimeCachePath(),
         };
 
-        if (enableCudaGraph)
-        {
-            trtOptions["enable_cuda_graph"] = "1";
-        }
+        // Always write the flag explicitly: the TensorRT RTX EP defaults enable_cuda_graph to
+        // true, so omitting it leaves capture on rather than off.
+        trtOptions["enable_cuda_graph"] = enableCudaGraph ? "1" : "0";
 
         if (additionalTrtOptions is null)
         {

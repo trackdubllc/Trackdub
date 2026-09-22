@@ -5,11 +5,8 @@
 
 .DESCRIPTION
     Runs the Olive TRT-RTX recipe for the SortFormer 4-speaker diarization encoder
-    (fp16/mxfp8 conversion + TRT-RTX session param tuning), then stages the result
+    (fp16 conversion with float32 I/O kept + TRT-RTX session param tuning), then stages the result
     for the C# SortFormerDiarizationEngine to load.
-
-    Pass -Mxfp8 to select the MXFP8-quantized recipe (Hopper/Ada + Blackwell).
-    Without it, the fp16 recipe is used (works on every TensorRT-RTX-capable GPU).
 
     Requires:
       - NVIDIA GPU with TRT-RTX (NvTensorRTRTXExecutionProvider) support
@@ -18,18 +15,16 @@
           <model cache>/cgus/diar_streaming_sortformer_4spk-v2.1-onnx/onnx/model.onnx
       - olive-ai[nvmo] + nvidia-modelopt[onnx] installed (Bootstrap-TrtRtxOliveVenv.ps1 auto-runs)
 
-    Records results (pass stays false until a provider smoke check exists) to build/sortformer-4spk-trtrtx-validation.json.
+    Records results (pass = staged model verified on TensorRT RTX via `trackdub providers trt-rtx verify`) to build/sortformer-4spk-trtrtx-validation.json.
     Run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to apply manifest + test changes.
 
 .EXAMPLE
     .\tools\olive\Validate-SortFormerTrtRtx.ps1
     .\tools\olive\Validate-SortFormerTrtRtx.ps1 -SkipLatency
-    .\tools\olive\Validate-SortFormerTrtRtx.ps1 -Mxfp8 -SkipLatency
 #>
 
 param(
-    [switch] $SkipLatency,
-    [switch] $Mxfp8
+    [switch] $SkipLatency
 )
 
 Set-StrictMode -Version Latest
@@ -40,7 +35,7 @@ $RepoRoot       = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 $VenvPath       = Join-Path $env:LOCALAPPDATA 'Trackdub\tools\olive-env-tensorrtrtx'
 $OliveExe       = Join-Path $VenvPath 'Scripts\olive.exe'
 $BuildDir       = Join-Path $RepoRoot 'build'
-$Precision      = if ($Mxfp8) { 'mxfp8' } else { 'fp16' }
+$Precision      = 'fp16'
 $ResultFile     = Join-Path $BuildDir "sortformer-4spk-trtrtx-validation.json"
 
 # ---------------------------------------------------------------------------
@@ -49,6 +44,14 @@ $ResultFile     = Join-Path $BuildDir "sortformer-4spk-trtrtx-validation.json"
 # the cache's owner/repo directory segments)
 # ---------------------------------------------------------------------------
 $ModelCacheRoot = if ($env:TRACKDUB_MODEL_CACHE) { $env:TRACKDUB_MODEL_CACHE } else { Join-Path $env:LOCALAPPDATA 'Trackdub\model-cache' }
+
+# TensorRT RTX EP ABI plugin DLL, resolved like TensorRtRtxPluginLocator: TRACKDUB_TRT_RTX_EP_DIR,
+# then the default install. Olive registers it via the recipe accelerator's (name, path) pair.
+$TrtRtxEpDir    = if ($env:TRACKDUB_TRT_RTX_EP_DIR) { $env:TRACKDUB_TRT_RTX_EP_DIR } else { Join-Path $env:LOCALAPPDATA 'Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64' }
+$TrtRtxEpPath   = Join-Path $TrtRtxEpDir 'onnxruntime_providers_nv_tensorrt_rtx.dll'
+# The plugin's companion DLLs (cudart64_12.dll, tensorrt_rtx_1_5.dll) live beside it but are
+# resolved through the normal DLL search path, so the bundle dir must be on PATH for olive.
+$env:PATH = "$TrtRtxEpDir;$env:PATH"
 $modelRoot      = Join-Path $ModelCacheRoot 'cgus\diar_streaming_sortformer_4spk-v2.1-onnx'
 $modelSrc       = Join-Path $modelRoot 'onnx\model.onnx'
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes\cgus-diar_streaming_sortformer_4spk-v2.1-onnx\NvTensorRtRtx'
@@ -95,6 +98,7 @@ function Resolve-Recipe {
     param([string] $SrcPath, [string] $DestPath)
     $content = Get-Content -Raw $SrcPath
     $content = $content -replace '\$\{MODEL_ROOT\}', ($modelRoot -replace '\\', '/')
+    $content = $content -replace '\$\{TRT_RTX_EP_PATH\}', ($TrtRtxEpPath -replace '\\', '/')
     $content = $content -replace '\$\{ENCODER_OUTPUT_DIR\}', ("build/$encoderOutputDirName" -replace '\\', '/')
     Set-Content -Path $DestPath -Value $content -Encoding UTF8
 }
@@ -121,7 +125,7 @@ $results = [ordered]@{
 
 try {
     # ---------------------------------------------------------------------------
-    # Step 1: Optimize encoder (fp16 or mxfp8 + TRT-RTX session params)
+    # Step 1: Optimize encoder (fp16 + TRT-RTX session params)
     # ---------------------------------------------------------------------------
     Write-Host ""
     Write-Host "=== SortFormer encoder optimization ($Precision + TRT-RTX session params) ===" -ForegroundColor Cyan
@@ -180,7 +184,7 @@ try {
         Write-Host ""
         Write-Host "=== Verifying staged model on TensorRT RTX (trackdub providers trt-rtx verify) ===" -ForegroundColor Cyan
         $stagedModelPath = Join-Path $StagingOnnxDir "model.onnx"
-        $verifyOutput = & dotnet run --project (Join-Path $RepoRoot "src\Trackdub.Cli") -c Release -- `
+        $verifyOutput = & dotnet run --project (Join-Path $RepoRoot "src\Trackdub.Cli") -c Release -f net10.0-windows10.0.19041.0 -- `
             providers trt-rtx verify --model "cgus/diar_streaming_sortformer_4spk-v2.1-onnx" --entry $stagedModelPath 2>&1
         $verifyExitCode = $LASTEXITCODE
         $verifyJsonLine = $verifyOutput | Where-Object { $_ -match '^\s*\{.*"passed"\s*:' } | Select-Object -Last 1
