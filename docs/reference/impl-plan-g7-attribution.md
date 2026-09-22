@@ -44,7 +44,7 @@ Extend ExportManifest + builder.
 - (extend) src/Trackdub.Application/Transcripts/ExportStageHandler.cs
 
 **Logic:**
-- ExportManifest: add ContributingModels: IReadOnlyList<ExportManifestModel>, AttributionRequired: IReadOnlyList<ExportAttributionRequirement>
+- ExportManifest: add `ContributingModels: IReadOnlyList<ExportManifestModel>`, `AttributionRequired: IReadOnlyList<ExportAttributionRequirement>`
 - ExportManifestBuilder.Build(): call BuildContributingModels(request, catalog); filter RequiresAttribution=true → AttributionRequired
 
 ---

@@ -28,7 +28,7 @@ Throughput tracker + extend context.
 **Logic:**
 - StageThroughputTracker: Report(itemsComplete, totalItems) → TimeSpan? ETA
   - Simple ms/item avg; suppress before 200ms elapsed
-- TranscriptGenerationContext: add IProgress<StageProgressReport>? StageProgress field (optional, backward-compatible)
+- TranscriptGenerationContext: add `IProgress<StageProgressReport>?`; StageProgress field (optional, backward-compatible)
 
 ---
 
@@ -58,7 +58,7 @@ Connect stage progress to pipeline events.
 
 **Logic:**
 - StageProgressAdapter: convert StageProgressReport → PipelineProgressEvent(kind=Progress)
-- Thread IProgress<StageProgressReport> into TranscriptGenerationContext
+- Thread `IProgress<StageProgressReport>` into TranscriptGenerationContext
 - Download bridge (temporary until G5 lands): wrap ModelDownloadProgress → PipelineProgressEvent(Progress)
 - Black-box stages (VAD/Diar/Sep): emit Progress event + optional periodic heartbeat
 

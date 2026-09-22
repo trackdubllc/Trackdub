@@ -1,0 +1,137 @@
+{
+  "name": "Trackdub Documentation",
+  "colors": {
+    "primary": "#00BFA5"
+  },
+  "filterSidebar": true,
+  "navigation": {
+    "groups": [
+      {
+        "group": "Start here",
+        "pages": [
+          "index",
+          "docs",
+          "repository-policy"
+        ]
+      },
+      {
+        "group": "Architecture",
+        "pages": [
+          "architecture/ARCHITECTURE",
+          "architecture/ARCHITECTURE-source",
+          "architecture/P0-pipeline-audit-2026-06-01",
+          "architecture/local-pipeline-audit-unified-2026-07-08",
+          "architecture/pipeline-principles-review-grok-2026-07-08"
+        ]
+      },
+      {
+        "group": "Decisions",
+        "pages": [
+          "decisions/decisions",
+          "decisions/ADR-0001-winui3-windows-ml",
+          "decisions/ADR-0002-sqlite-project-persistence",
+          "decisions/ADR-0002-windows-ml-provider-strategy",
+          "decisions/ADR-0003-whisper-license-investigation",
+          "decisions/ADR-0004-transcript-service-decomposition",
+          "decisions/ADR-0005-kokoro-tts-architecture",
+          "decisions/ADR-0006-chatterbox-commercial-use-verification",
+          "decisions/ADR-0007-managed-glossary-analyzers",
+          "decisions/ADR-0008-inference-retry-circuit-breaker",
+          "decisions/ADR-0009-gpu-memory-budget-planner",
+          "decisions/ADR-0010-event-sourced-pipeline",
+          "decisions/ADR-0011-contracts-domain-coupling",
+          "decisions/ADR-0012-wave-pcm16-loudness-policy",
+          "decisions/ADR-0015-pipeline-transient-telemetry"
+        ]
+      },
+      {
+        "group": "Specifications",
+        "pages": [
+          "specs/specs",
+          "specs/bundled-models-manifest-architecture",
+          "specs/design-g3-cloud-egress-visibility",
+          "specs/design-g4-run-progress-eta",
+          "specs/design-g5-readiness-gate",
+          "specs/design-g6-g7-attribution-provenance",
+          "specs/pipeline-readiness-spec",
+          "specs/premade-hf-variants",
+          "specs/service-blueprint-first-dub",
+          "specs/starter-packs-v1-design"
+        ]
+      },
+      {
+        "group": "Operations",
+        "pages": [
+          "operations/operations",
+          "operations/cloud-operations",
+          "operations/codeql-advanced-setup",
+          "operations/GITHUB_ACTIONS",
+          "operations/linear-workflow",
+          "operations/macos-deployment-notes",
+          "operations/playback-native-layout"
+        ]
+      },
+      {
+        "group": "Development",
+        "pages": [
+          "development/development",
+          "development/adding-a-new-language",
+          "development/TROUBLESHOOTING"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/reference",
+          "reference/design-standards",
+          "reference/gpu-execution-providers",
+          "reference/impl-plan-g3-cloud-consent",
+          "reference/impl-plan-g4-progress-eta",
+          "reference/impl-plan-g5-readiness-gate",
+          "reference/impl-plan-g7-attribution",
+          "reference/migraphx-phase0-seams",
+          "reference/olive-recipe-pilot",
+          "reference/profiling-report",
+          "reference/tensorrt-rtx-ep-abi-plugin",
+          "reference/windows-ml-phase-3-device-policies",
+          "reference/windows-ml-phase-4-closeout",
+          "reference/windows-ml-phase-5-catalog-eps",
+          "reference/windows-ml-stage-provider-matrix"
+        ]
+      },
+      {
+        "group": "Audits",
+        "pages": [
+          "audits/audit-summary",
+          "audits/Code_Quality_Security_Scan_Audit",
+          "audits/pipeline-full-walk-audit-2026-07-08",
+          "audits/Trackdub-dead-code-audit-review",
+          "audits/Trackdub-dead-code-audit-verification",
+          "audits/Trackdub-simplification-audit-kiro",
+          "audits/Trackdub-simplification-audit-review"
+        ]
+      },
+      {
+        "group": "Plans and strategy",
+        "pages": [
+          "plans/AI Search config tune-up",
+          "plans/open-core-split-continuation",
+          "plans/open-core-split-handoff",
+          "plans/phase-3-validation-report",
+          "strategy/strategy",
+          "strategy/LONGTERM-ROADMAP",
+          "strategy/V22-V26_Visual_Dubbing"
+        ]
+      },
+      {
+        "group": "Legal and attribution",
+        "pages": [
+          "legal/legal",
+          "legal/LICENSE-HISTORY",
+          "legal/MODEL_LICENSE_POLICY",
+          "legal/THIRD_PARTY_NOTICES"
+        ]
+      }
+    ]
+  }
+}
