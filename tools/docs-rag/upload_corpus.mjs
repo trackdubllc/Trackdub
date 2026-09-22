@@ -1,7 +1,9 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 export async function uploadFiles(bucket, staging, workers) {
@@ -20,7 +22,7 @@ export async function uploadFiles(bucket, staging, workers) {
       const file = files[next++];
       const key = path.relative(staging, file).split(path.sep).join("/");
       try {
-        await bucket.put(key, await readFile(file), {
+        await bucket.put(key, Readable.toWeb(createReadStream(file)), {
           httpMetadata: { contentType: key.endsWith(".json") ? "application/json" : "text/markdown; charset=utf-8" },
           customMetadata: key.startsWith("first-party/") ? { is_first_party: "true" } : {},
         });

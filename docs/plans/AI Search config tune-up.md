@@ -116,7 +116,10 @@ and API task worktrees. No follow-up Worker deployment has occurred.
   older script versions is not retroactively certified. Remote uploads are not
   transactional; already uploaded objects remain changed after partial failure.
 - **Operational follow-up:** Linear access was unavailable; no issue was marked
-  Done. No cloud security scan or cloud code review was performed.
+  Done. When access is available, search team `TS` for a matching issue and update
+  it, or create one if none exists; apply `repo:*`, `area:*`, and `agent-owned`
+  labels, and keep the issue In Progress while the remaining acceptance work is
+  active. No cloud security scan or cloud code review was performed.
 
 Detailed commands and rebuild evidence:
 [docs-rag handoff](../../tools/docs-rag/HANDOFF.md).

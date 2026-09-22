@@ -17,6 +17,11 @@ class UploadTests(unittest.TestCase):
         self.assertEqual(Path(command[1]).name, "upload_corpus.mjs")
         self.assertEqual(command[2:], ["api", "staging", "corpus", "3"])
 
+    def test_upload_propagates_failure_returncode(self):
+        with patch.object(sync_corpus.subprocess, "run", return_value=subprocess.CompletedProcess([], 3)) as run:
+            self.assertEqual(sync_corpus.upload(Path("staging"), "corpus", Path("api"), workers=3), 3)
+        run.assert_called_once()
+
     def test_upload_reindexes_only_after_success(self):
         self.run_main(upload_status=0, reindex_status=0, expected=0)
 
@@ -26,7 +31,7 @@ class UploadTests(unittest.TestCase):
     def test_failed_reindex_fails_command(self):
         self.run_main(upload_status=0, reindex_status=1, expected=1)
 
-    def test_failed_reindex_checks_job_state_before_retry(self):
+    def test_failed_reindex_prints_job_state_advice(self):
         with patch.object(sync_corpus.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)), \
              patch("builtins.print") as output:
             self.assertEqual(sync_corpus.reindex(Path("api"), "corpus"), 1)
