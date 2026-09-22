@@ -11,7 +11,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 TOOL_ROOT = Path(__file__).resolve().parent
@@ -72,6 +72,8 @@ def stage_repos(manifest: dict, staging: Path) -> tuple[int, int]:
         if root is None:
             raise RuntimeError(f"repo {repo['id']}: root missing")
         prefix = repo["prefix"]
+        exclude = repo.get("exclude", [])
+        matched_excludes: set[str] = set()
         repo_copied = copied
         seen: set[Path] = set()
         for pattern in repo["include"]:
@@ -81,17 +83,24 @@ def stage_repos(manifest: dict, staging: Path) -> tuple[int, int]:
                 if any(part in {".git", "node_modules", ".venv"} for part in path.parts):
                     continue
                 seen.add(path)
+                rel = path.relative_to(root).as_posix()
+                excluded = [glob for glob in exclude if PurePosixPath(rel).full_match(glob)]
+                if excluded:
+                    matched_excludes.update(excluded)
+                    continue
                 if path.stat().st_size > max_bytes:
                     print(f"skip large {path}")
                     skipped += 1
                     continue
-                rel = path.relative_to(root).as_posix()
                 dest = staging / prefix / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(path.read_bytes())
                 copied += 1
         if copied == repo_copied:
             raise RuntimeError(f"repo {repo['id']}: no eligible documents")
+        unmatched = sorted(set(exclude) - matched_excludes)
+        if unmatched:
+            raise RuntimeError(f"repo {repo['id']}: exclude patterns matched no document: {unmatched}")
     return copied, skipped
 
 
@@ -166,13 +175,12 @@ def wrangler_prefix(api_root: Path) -> list[str]:
     return ["npx", "wrangler"]
 
 
-def upload(staging: Path, bucket: str, api_root: Path, workers: int = 8) -> int:
+def upload(staging: Path, bucket: str, api_root: Path, workers: int = 8, prune: bool = False) -> int:
     # Wrangler's object CLI cannot set custom metadata; use its remote R2 binding.
-    result = subprocess.run(
-        ["node", str(TOOL_ROOT / "upload_corpus.mjs"), str(api_root), str(staging), bucket, str(max(1, workers))],
-        cwd=api_root,
-        check=False,
-    )
+    command = ["node", str(TOOL_ROOT / "upload_corpus.mjs"), str(api_root), str(staging), bucket, str(max(1, workers))]
+    if prune:
+        command.append("--prune")
+    result = subprocess.run(command, cwd=api_root, check=False)
     return result.returncode
 
 
@@ -224,7 +232,24 @@ def main() -> None:
         help="Upload existing .staging without re-fetching or clearing",
     )
     parser.add_argument("--workers", type=int, default=8, help="Parallel R2 upload workers")
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="After a successful upload, delete bucket objects missing from staging; requires a full refresh",
+    )
     args = parser.parse_args()
+    blocking = [
+        name
+        for name, refused in (
+            ("--skip-fetch", args.skip_fetch),
+            ("--reuse-staging", args.reuse_staging),
+            ("missing --upload", not args.upload),
+        )
+        if refused
+    ]
+    if args.prune and blocking:
+        print(f"--prune deletes bucket objects missing from staging; refusing because of {', '.join(blocking)}", flush=True)
+        raise SystemExit(2)
     manifest = load_manifest()
     if not args.reuse_staging:
         try:
@@ -240,7 +265,7 @@ def main() -> None:
         print(f"dry-run staging at {STAGING}")
         return
     api_root = Path(os.environ.get("API_TRACKDUB_ROOT", TRACKDUB_ROOT.parent / "api.trackdub")).resolve()
-    uploaded = upload(STAGING, manifest["bucket"], api_root, workers=args.workers)
+    uploaded = upload(STAGING, manifest["bucket"], api_root, workers=args.workers, prune=args.prune)
     if uploaded:
         raise SystemExit(uploaded)
     raise SystemExit(reindex(api_root, manifest["aiSearchInstance"]))
