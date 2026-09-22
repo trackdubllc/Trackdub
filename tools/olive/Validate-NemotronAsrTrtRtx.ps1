@@ -4,18 +4,19 @@
     Validate TRT-RTX optimization of the Nemotron 3.5 ASR streaming model using Microsoft Olive.
 
 .DESCRIPTION
-    Runs the Olive TRT-RTX recipes for the Nemotron ASR encoder and decoder_joint,
-    each with SkipLayerNormalization + BiasGelu fusion pre-passes, then stages
-    the result for the C# NemotronAsrOnnxAudioTranscriptionEngine to load.
+    Runs the Olive TRT-RTX recipes for the Nemotron ASR encoder and decoder_joint
+    (fp16/mxfp8 conversion + TRT-RTX session param tuning), then stages the result
+    for the C# NemotronAsrOnnxAudioTranscriptionEngine to load.
 
     Pass -Mxfp8 to select the MXFP8-quantized recipes (Hopper/Ada + Blackwell).
     Without it, the fp16 recipes are used (works on every TensorRT-RTX-capable GPU).
 
     Requires:
       - NVIDIA GPU with TRT-RTX (NvTensorRTRTXExecutionProvider) support
-      - Model files already downloaded:
-          models/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/encoder.onnx
-          models/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/decoder_joint.onnx
+      - Model files already downloaded to the model cache (TRACKDUB_MODEL_CACHE, or
+        %LOCALAPPDATA%\Trackdub\model-cache by default):
+          <model cache>/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/encoder.onnx
+          <model cache>/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/decoder_joint.onnx
       - olive-ai[nvmo] + nvidia-modelopt[onnx] installed (Bootstrap-TrtRtxOliveVenv.ps1 auto-runs)
 
     Records results (pass stays false until a provider smoke check exists) to build/nemotron-3.5-asr-trtrtx-validation.json.
@@ -44,13 +45,13 @@ $Precision      = if ($Mxfp8) { 'mxfp8' } else { 'fp16' }
 $ResultFile     = Join-Path $BuildDir "nemotron-3.5-asr-trtrtx-validation.json"
 
 # ---------------------------------------------------------------------------
-# Model layout (matches bundled-models.manifest.json nemotron-asr entry)
+# Model layout (matches the download-cache layout, not bundled-models.manifest.json's
+# root_path): the model id "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx" splits on
+# "/" into the cache's owner/repo directory segments.
 # ---------------------------------------------------------------------------
-# Path matches where Trackdub.Cli lands the model when TRACKDUB_MODEL_CACHE=$RepoRoot\models:
-# the model id "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx" gets split on "/" into two
-# path segments. The bundled-models.manifest.json `root_path` resolves to a different layout
-# (../../../../models/nemotron-3.5-asr-onnx); for the validate step we follow the download layout.
-$modelRoot      = Join-Path $RepoRoot 'models\tonythethompson\nemotron-3.5-asr-streaming-0.6b-onnx'
+$ModelCacheRoot = if ($env:TRACKDUB_MODEL_CACHE) { $env:TRACKDUB_MODEL_CACHE } else { Join-Path $env:LOCALAPPDATA 'Trackdub\model-cache' }
+$modelRoot      = Join-Path $ModelCacheRoot 'tonythethompson
+emotron-3.5-asr-streaming-0.6b-onnx'
 $encoderSrc     = Join-Path $modelRoot 'encoder.onnx'
 $decoderSrc     = Join-Path $modelRoot 'decoder_joint.onnx'
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes\nemotron-3.5-asr-streaming-0.6b-onnx\NvTensorRtRtx'
@@ -80,7 +81,7 @@ if (-not (Test-Path $OliveExe)) {
 }
 
 if (-not (Test-Path $encoderSrc)) {
-    Write-Error "Nemotron encoder model not found: $encoderSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx"
+    Write-Error "Nemotron encoder model not found: $encoderSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx`nSearched model cache root: $ModelCacheRoot (override with `$env:TRACKDUB_MODEL_CACHE)"
     exit 1
 }
 
@@ -136,7 +137,7 @@ try {
     # Step 1: Optimize encoder
     # ---------------------------------------------------------------------------
     Write-Host ""
-    Write-Host "=== Nemotron encoder optimization ($Precision + fusion + TRT-RTX session params) ===" -ForegroundColor Cyan
+    Write-Host "=== Nemotron encoder optimization ($Precision + TRT-RTX session params) ===" -ForegroundColor Cyan
     & $OliveExe run --config $encoderRecipeDst
     if ($LASTEXITCODE -ne 0) { Write-Error "Encoder optimization failed (exit $LASTEXITCODE)."; exit 1 }
     $results.encoder = @{ status = 'ok'; output = "build/$encoderOutputDirName"; precision = $Precision }
@@ -145,7 +146,7 @@ try {
     # Step 2: Optimize decoder_joint
     # ---------------------------------------------------------------------------
     Write-Host ""
-    Write-Host "=== Nemotron decoder_joint optimization ($Precision + fusion + TRT-RTX session params) ===" -ForegroundColor Cyan
+    Write-Host "=== Nemotron decoder_joint optimization ($Precision + TRT-RTX session params) ===" -ForegroundColor Cyan
     & $OliveExe run --config $decoderRecipeDst
     if ($LASTEXITCODE -ne 0) { Write-Error "Decoder_joint optimization failed (exit $LASTEXITCODE)."; exit 1 }
     $results.decoder = @{ status = 'ok'; output = "build/$decoderOutputDirName"; precision = $Precision }

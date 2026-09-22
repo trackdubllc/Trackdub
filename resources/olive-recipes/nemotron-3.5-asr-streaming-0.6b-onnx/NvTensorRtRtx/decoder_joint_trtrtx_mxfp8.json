@@ -17,45 +17,14 @@
         }
     },
     "passes": {
-        "fuse_skip_layer_norm": {
-            "type": "GraphSurgeries",
-            "surgeries": [
-                {
-                    "surgeon": "ReplaceNodePatternByNode",
-                    "pattern": [
-                        { "op_type": "SkipLayerNormalization", "inputs": ["x", "skip", "gamma", "beta"], "outputs": ["y"] }
-                    ],
-                    "replacement": [
-                        { "op_type": "Add", "inputs": ["x", "skip"], "outputs": ["add_out"] },
-                        { "op_type": "LayerNormalization", "inputs": ["add_out", "gamma", "beta"], "outputs": ["y"] }
-                    ]
-                }
-            ]
-        },
-        "fuse_bias_gelu": {
-            "type": "GraphSurgeries",
-            "surgeries": [
-                {
-                    "surgeon": "RemoveIdentityAndCastNodes"
-                },
-                {
-                    "surgeon": "ReplaceNodePatternByNode",
-                    "pattern": [
-                        { "op_type": "BiasGelu", "inputs": ["x", "bias"], "outputs": ["y"] }
-                    ],
-                    "replacement": [
-                        { "op_type": "Add", "inputs": ["x", "bias"], "outputs": ["add_out"] },
-                        { "op_type": "Gelu", "inputs": ["add_out"], "outputs": ["y"] }
-                    ]
-                }
-            ]
-        },
         "mxfp8_quantization": {
             "type": "NVModelOptQuantization",
             "precision": "mxfp8",
             "calibration_method": "max",
             "calibrate_per_node": true,
-            "calibration_providers": ["NvTensorRTRTXExecutionProvider"]
+            "calibration_providers": [
+                "NvTensorRTRTXExecutionProvider"
+            ]
         },
         "session_params": {
             "type": "OrtSessionParamsTuning",
@@ -70,9 +39,17 @@
                     "name": "latency",
                     "type": "latency",
                     "sub_types": [
-                        {"name": "avg", "priority": 1, "higher_is_better": false},
-                        {"name": "max"},
-                        {"name": "min"}
+                        {
+                            "name": "avg",
+                            "priority": 1,
+                            "higher_is_better": false
+                        },
+                        {
+                            "name": "max"
+                        },
+                        {
+                            "name": "min"
+                        }
                     ]
                 }
             ]

@@ -5,16 +5,17 @@
 
 .DESCRIPTION
     Runs the Olive TRT-RTX recipe for the SortFormer 4-speaker diarization encoder
-    (with SkipLayerNormalization + BiasGelu fusion pre-passes), then stages the
-    result for the C# SortFormerDiarizationEngine to load.
+    (fp16/mxfp8 conversion + TRT-RTX session param tuning), then stages the result
+    for the C# SortFormerDiarizationEngine to load.
 
     Pass -Mxfp8 to select the MXFP8-quantized recipe (Hopper/Ada + Blackwell).
     Without it, the fp16 recipe is used (works on every TensorRT-RTX-capable GPU).
 
     Requires:
       - NVIDIA GPU with TRT-RTX (NvTensorRTRTXExecutionProvider) support
-      - Model files already downloaded:
-          models/sortformer/cgus-diar_streaming_sortformer_4spk-v2.1-onnx/onnx/model.onnx
+      - Model files already downloaded to the model cache (TRACKDUB_MODEL_CACHE, or
+        %LOCALAPPDATA%\Trackdub\model-cache by default):
+          <model cache>/cgus/diar_streaming_sortformer_4spk-v2.1-onnx/onnx/model.onnx
       - olive-ai[nvmo] + nvidia-modelopt[onnx] installed (Bootstrap-TrtRtxOliveVenv.ps1 auto-runs)
 
     Records results (pass stays false until a provider smoke check exists) to build/sortformer-4spk-trtrtx-validation.json.
@@ -43,9 +44,12 @@ $Precision      = if ($Mxfp8) { 'mxfp8' } else { 'fp16' }
 $ResultFile     = Join-Path $BuildDir "sortformer-4spk-trtrtx-validation.json"
 
 # ---------------------------------------------------------------------------
-# Model layout (matches bundled-models.manifest.json sortformer entry)
+# Model layout (matches the download-cache layout, not bundled-models.manifest.json's
+# root_path: model_id "cgus/diar_streaming_sortformer_4spk-v2.1-onnx" splits on "/" into
+# the cache's owner/repo directory segments)
 # ---------------------------------------------------------------------------
-$modelRoot      = Join-Path $RepoRoot 'models\sortformer\cgus-diar_streaming_sortformer_4spk-v2.1-onnx'
+$ModelCacheRoot = if ($env:TRACKDUB_MODEL_CACHE) { $env:TRACKDUB_MODEL_CACHE } else { Join-Path $env:LOCALAPPDATA 'Trackdub\model-cache' }
+$modelRoot      = Join-Path $ModelCacheRoot 'cgus\diar_streaming_sortformer_4spk-v2.1-onnx'
 $modelSrc       = Join-Path $modelRoot 'onnx\model.onnx'
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes\cgus-diar_streaming_sortformer_4spk-v2.1-onnx\NvTensorRtRtx'
 $recipeSrc      = Join-Path $recipeDir "encoder_trtrtx_$Precision.json"
@@ -72,7 +76,7 @@ if (-not (Test-Path $OliveExe)) {
 }
 
 if (-not (Test-Path $modelSrc)) {
-    Write-Error "SortFormer encoder model not found: $modelSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model cgus/diar_streaming_sortformer_4spk-v2.1-onnx"
+    Write-Error "SortFormer encoder model not found: $modelSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model cgus/diar_streaming_sortformer_4spk-v2.1-onnx`nSearched model cache root: $ModelCacheRoot (override with `$env:TRACKDUB_MODEL_CACHE)"
     exit 1
 }
 
@@ -117,10 +121,10 @@ $results = [ordered]@{
 
 try {
     # ---------------------------------------------------------------------------
-    # Step 1: Optimize encoder (fp16 or mxfp8 + SkipLayerNorm/BiasGelu fusion + TRT-RTX session params)
+    # Step 1: Optimize encoder (fp16 or mxfp8 + TRT-RTX session params)
     # ---------------------------------------------------------------------------
     Write-Host ""
-    Write-Host "=== SortFormer encoder optimization ($Precision + fusion + TRT-RTX session params) ===" -ForegroundColor Cyan
+    Write-Host "=== SortFormer encoder optimization ($Precision + TRT-RTX session params) ===" -ForegroundColor Cyan
     & $OliveExe run --config $encoderRecipeDst
     if ($LASTEXITCODE -ne 0) { Write-Error "Encoder optimization failed (exit $LASTEXITCODE)."; exit 1 }
     $results.encoder = @{ status = 'ok'; output = "build/$encoderOutputDirName"; precision = $Precision }

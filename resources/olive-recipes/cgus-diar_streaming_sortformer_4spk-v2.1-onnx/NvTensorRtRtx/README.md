@@ -2,34 +2,31 @@
 
 Olive recipe for compiling the SortFormer diarization encoder for TensorRT RTX.
 
-## Why this exists
+## Status
 
-The bundled SortFormer ONNX export contains two op types that TensorRT RTX
-v0.3.0 cu12 cannot parse:
+The bundled SortFormer ONNX export (`onnx/model.onnx`) was inspected directly
+(onnx 1.22, `load_external_data=False`) against the installed model file: **it
+contains zero `com.microsoft::SkipLayerNormalization` and zero
+`com.microsoft::BiasGelu` nodes.** It is a plain PyTorch export at opset
+`ai.onnx=17` using standard `LayerNormalization` (121 nodes) throughout.
 
-- `com.microsoft::SkipLayerNormalization`
-- `com.microsoft::BiasGelu`
+An earlier version of this recipe carried two `GraphSurgeries` pre-passes
+that decomposed those `com.microsoft` ops before fp16/mxfp8 conversion, on
+the premise that TensorRT RTX v0.3.0 cu12 could not parse them. That premise
+does not hold for this model — the ops the passes targeted are not present —
+so the passes were removed. They also referenced `ReplaceNodePatternByNode`
+and `RemoveIdentityAndCastNodes`, neither of which exists in olive-ai
+0.13.0's `Surgeon` registry (`olive/passes/onnx/graph_surgeries.py`), so they
+would have failed at run time regardless.
 
-Both come from the FastSpeech-style Conformer blocks and appear in every
-encoder layer (17+ layers). Until the model is re-exported with these ops
-fused to their TRT-RTX-compatible equivalents (`LayerNormalization + Add`
-and `Gelu + Add`), TRT-RTX falls through to CPU and the smoke gate fires
-`preFlightFailed` because the requested provider (`tensorrt-rtx`) does not
-match the effective provider (`cpu`).
+**The actual cause of the `preFlightFailed` / CPU-fallback smoke-gate
+failure (requested provider `tensorrt-rtx` != effective provider `cpu`) is
+still open.** It is not the `com.microsoft` ops described above. Re-run the
+smoke gate against the un-fused model and inspect which op(s) TRT-RTX
+actually rejects before adding any new pre-pass here.
 
-This recipe applies two pre-fusion passes **before** fp16 conversion so the
-TRT-RTX parser sees the standard ops it knows how to compile:
-
-1. `GraphSurgeries` (surgeon: `ReplaceNodePatternByNode`) — decomposes `SkipLayerNormalization` into `Add` + `LayerNormalization`.
-2. `GraphSurgeries` (surgeon: `ReplaceNodePatternByNode`) — decomposes `BiasGelu` into `Add` + `Gelu`.
-
-**Known issue:** `ReplaceNodePatternByNode` and `RemoveIdentityAndCastNodes` are not
-surgeons that exist in olive-ai's `Surgeon` registry (checked against the installed
-0.13.0 source: `olive/passes/onnx/graph_surgeries.py`). Both passes above will fail
-at run time (`Surgeon '...' does not exist`) until a real decomposition pass is
-written — either a custom Olive pass or an equivalent using `onnxscript.rewriter` /
-`onnx-graphsurgeon`. Do not treat this recipe as validated until that pass exists
-and has been run against the real model.
+This recipe now only applies fp16 (or mxfp8) conversion and TRT-RTX session
+param tuning — no graph surgery.
 
 ## Usage
 
