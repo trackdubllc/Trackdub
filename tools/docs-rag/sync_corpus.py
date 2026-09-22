@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
@@ -68,9 +70,9 @@ def stage_repos(manifest: dict, staging: Path) -> tuple[int, int]:
     for repo in manifest["repos"]:
         root = repo_root(repo)
         if root is None:
-            print(f"skip repo {repo['id']}: root missing")
-            continue
+            raise RuntimeError(f"repo {repo['id']}: root missing")
         prefix = repo["prefix"]
+        repo_copied = copied
         seen: set[Path] = set()
         for pattern in repo["include"]:
             for path in root.glob(pattern):
@@ -88,6 +90,8 @@ def stage_repos(manifest: dict, staging: Path) -> tuple[int, int]:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(path.read_bytes())
                 copied += 1
+        if copied == repo_copied:
+            raise RuntimeError(f"repo {repo['id']}: no eligible documents")
     return copied, skipped
 
 
@@ -185,14 +189,29 @@ def reindex(api_root: Path, instance: str) -> int:
     return result.returncode
 
 
-def clear_staging(staging: Path) -> None:
-    if not staging.exists():
-        return
-    for child in sorted(staging.rglob("*"), reverse=True):
-        if child.is_file():
-            child.unlink()
-        elif child.is_dir():
-            child.rmdir()
+def refresh_staging(manifest: dict, staging: Path, skip_fetch: bool) -> None:
+    previous = staging.with_name(staging.name + ".previous")
+    if previous.exists():
+        raise RuntimeError(f"recover previous staging at {previous} before refreshing")
+    with tempfile.TemporaryDirectory(prefix=".corpus-refresh-", dir=staging.parent) as temporary:
+        candidate = Path(temporary) / "candidate"
+        candidate.mkdir()
+        copied, skipped = stage_repos(manifest, candidate)
+        stage_pin(candidate)
+        vendor_ok, vendor_fail = (0, 0) if skip_fetch else stage_vendors(manifest, candidate)
+        print(f"staged repo files={copied} skipped={skipped} vendor_ok={vendor_ok} vendor_fail={vendor_fail}")
+        if vendor_fail:
+            raise RuntimeError(f"{vendor_fail} vendor documents failed")
+        if staging.exists():
+            staging.rename(previous)
+        try:
+            candidate.rename(staging)
+        except OSError:
+            if previous.exists():
+                previous.rename(staging)
+            raise
+        if previous.exists():
+            shutil.rmtree(previous)
 
 
 def main() -> None:
@@ -208,16 +227,13 @@ def main() -> None:
     args = parser.parse_args()
     manifest = load_manifest()
     if not args.reuse_staging:
-        clear_staging(STAGING)
-        STAGING.mkdir(parents=True, exist_ok=True)
-        copied, skipped = stage_repos(manifest, STAGING)
-        stage_pin(STAGING)
-        vendor_ok, vendor_fail = (0, 0)
-        if not args.skip_fetch:
-            vendor_ok, vendor_fail = stage_vendors(manifest, STAGING)
-        print(f"staged repo files={copied} skipped={skipped} vendor_ok={vendor_ok} vendor_fail={vendor_fail}")
+        try:
+            refresh_staging(manifest, STAGING, args.skip_fetch)
+        except (OSError, RuntimeError) as exc:
+            print(f"Refresh failed; previous staging preserved; nothing uploaded: {exc}", flush=True)
+            raise SystemExit(1) from exc
     else:
-        if not STAGING.is_dir() or not any(STAGING.rglob("*")):
+        if not STAGING.is_dir() or not any(path.is_file() for path in STAGING.rglob("*")):
             raise SystemExit(f"no staging tree at {STAGING}; run without --reuse-staging first")
         print(f"reusing staging at {STAGING}")
     if not args.upload:

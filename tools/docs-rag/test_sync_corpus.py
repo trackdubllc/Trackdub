@@ -57,5 +57,127 @@ class UploadTests(unittest.TestCase):
                 self.assertEqual(command[-4:], ["jobs", "create", "instance-from-manifest", "--json"])
 
 
+class RefreshTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        (self.repo / "guide.md").write_text("new guide", encoding="utf-8")
+        self.staging = self.root / ".staging"
+        self.staging.mkdir()
+        (self.staging / "old.md").write_text("last complete snapshot", encoding="utf-8")
+        self.manifest = {
+            "bucket": "corpus", "aiSearchInstance": "docs", "maxBytes": 3500000,
+            "repos": [{"id": "core", "rootEnv": "TEST_DOCS_ROOT",
+                       "defaultFromTrackdub": str(self.repo),
+                       "prefix": "first-party/core", "include": ["*.md"]}],
+            "vendors": [{"id": "vendor", "prefix": "vendor/example",
+                         "sources": [["guide", "https://example.com/guide"]]}],
+        }
+
+    def run_refresh(self, *args, fetch_result="vendor guide", fetch_error=None):
+        with patch.object(sync_corpus, "STAGING", self.staging), \
+             patch.object(sync_corpus, "load_manifest", return_value=self.manifest), \
+             patch.dict(sync_corpus.os.environ, {"TEST_DOCS_ROOT": str(self.repo)}), \
+             patch.object(sync_corpus, "fetch_url", return_value=fetch_result, side_effect=fetch_error) as fetch, \
+             patch.object(sync_corpus, "upload", return_value=0) as upload, \
+             patch.object(sync_corpus, "reindex", return_value=0) as reindex, \
+             patch("sys.argv", ["sync_corpus.py", *args]):
+            try:
+                sync_corpus.main()
+                code = 0
+            except SystemExit as stopped:
+                code = stopped.code
+        return code, fetch, upload, reindex
+
+    def assert_failed_refresh(self, **kwargs):
+        code, _, upload, reindex = self.run_refresh("--upload", **kwargs)
+        self.assertNotEqual(code, 0)
+        upload.assert_not_called()
+        reindex.assert_not_called()
+        self.assertEqual(sorted(p.name for p in self.staging.iterdir()), ["old.md"])
+        self.assertEqual((self.staging / "old.md").read_text(encoding="utf-8"), "last complete snapshot")
+
+    def test_missing_repo_preserves_cache_and_prevents_upload(self):
+        self.repo = self.root / "missing"
+        self.assert_failed_refresh()
+
+    def test_repo_without_matching_docs_prevents_partial_refresh(self):
+        self.manifest["repos"][0]["include"] = ["*.missing"]
+        self.assert_failed_refresh()
+
+    def test_failed_vendor_fetch_preserves_cache_and_prevents_upload(self):
+        self.assert_failed_refresh(fetch_error=TimeoutError("fetch timed out"))
+
+    def test_empty_vendor_document_preserves_cache_and_prevents_upload(self):
+        self.assert_failed_refresh(fetch_result="")
+
+    def test_failed_first_refresh_leaves_no_reusable_partial_cache(self):
+        self.staging = self.root / "fresh-cache"
+        code, _, upload, reindex = self.run_refresh("--upload", fetch_error=TimeoutError())
+        self.assertNotEqual(code, 0)
+        self.assertFalse(self.staging.exists())
+        upload.assert_not_called()
+        reindex.assert_not_called()
+
+    def test_successful_refresh_replaces_snapshot(self):
+        code, _, upload, reindex = self.run_refresh("--upload")
+        self.assertEqual(code, 0)
+        self.assertFalse((self.staging / "old.md").exists())
+        self.assertEqual((self.staging / "first-party/core/guide.md").read_text(), "new guide")
+        self.assertEqual((self.staging / "vendor/example/guide.md").read_text(),
+                         "Source: https://example.com/guide\n\nvendor guide\n")
+        self.assertTrue((self.staging / "first-party/trackdub/docs/reference/docs-rag-pin.md").is_file())
+        upload.assert_called_once()
+        self.assertEqual(upload.call_args.args[0], self.staging)
+        reindex.assert_called_once()
+
+    def test_skip_fetch_intentionally_promotes_repo_only_snapshot(self):
+        code, fetch, upload, reindex = self.run_refresh("--skip-fetch", "--upload")
+        self.assertEqual(code, 0)
+        fetch.assert_not_called()
+        self.assertTrue((self.staging / "first-party/core/guide.md").is_file())
+        self.assertFalse((self.staging / "vendor").exists())
+        upload.assert_called_once()
+        reindex.assert_called_once()
+
+    def test_failed_promotion_restores_previous_snapshot(self):
+        original = Path.rename
+
+        def rename(path, target):
+            if path.name == "candidate":
+                raise OSError("promotion failed")
+            return original(path, target)
+
+        with patch.object(Path, "rename", rename):
+            self.assert_failed_refresh()
+
+    def test_failed_rollback_does_not_delete_previous_snapshot(self):
+        original = Path.rename
+
+        def rename(path, target):
+            if Path(target) == self.staging:
+                raise OSError("target unavailable")
+            return original(path, target)
+
+        with patch.object(Path, "rename", rename):
+            code, _, upload, reindex = self.run_refresh("--upload")
+        self.assertNotEqual(code, 0)
+        preserved = list(self.root.rglob("old.md"))
+        self.assertEqual(len(preserved), 1)
+        self.assertEqual(preserved[0].read_text(), "last complete snapshot")
+        upload.assert_not_called()
+        reindex.assert_not_called()
+
+    def test_staging_only_refresh_also_fails_for_missing_sources(self):
+        code, _, upload, reindex = self.run_refresh(fetch_error=TimeoutError())
+        self.assertNotEqual(code, 0)
+        self.assertEqual((self.staging / "old.md").read_text(), "last complete snapshot")
+        upload.assert_not_called()
+        reindex.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

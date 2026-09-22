@@ -1,9 +1,9 @@
 ---
 name: AI Search config tune-up
-overview: Implementation delivered; known live acceptance deficiencies remain open and do not block this handoff.
+overview: Original delivery published; follow-up fixes verified locally and metadata repaired live. Capacity errors and follow-up deployment remain open.
 todos:
   - id: fix-rewrite
-    content: Use one scoped messages-format REST chat request with query rewriting enabled; preserve null when upstream omits search_query.
+    content: Use one scoped messages-format REST chat request; preserve null when upstream omits search_query and document stateless first-message limitation.
     status: completed
   - id: auto-reindex
     content: Request indexing automatically after all staged uploads succeed.
@@ -12,74 +12,111 @@ todos:
     content: Upload first-party R2 objects with is_first_party=true and omit the field for vendors.
     status: completed
   - id: instance-config
-    content: Apply 24h sync, trigram tokenizer, boolean metadata schema and existence boost; request indexing.
+    content: Apply 24h sync, trigram tokenizer, boolean metadata schema and existence boost.
     status: completed
   - id: search-fallback
     content: Retry successful empty AND retrieval once with OR, preserving scope and limit and reporting matchMode.
     status: completed
+  - id: repair-metadata
+    content: Rebuild indexed metadata, remove temporary schema field and verify all 126 flags and vendor omission.
+    status: completed
+  - id: reject-partial-refresh
+    content: Fail incomplete source staging before upload and preserve previous reusable cache, including failed promotion recovery.
+    status: completed
+  - id: verify-index-tool
+    content: Implement bounded read-only source/index verifier with key, metadata, folder, status, size, timestamp and content-canary checks.
+    status: completed
+  - id: symbol-recovery
+    content: Implement scoped literal-prefix fallback and test modified local function against live Cloudflare without global ranking changes.
+    status: completed
   - id: verify
-    content: Resolve known indexed-metadata and partial-symbol deficiencies and establish first-party preference.
+    content: Resolve remaining Cloudflare capacity errors and pass full index verification; retain first-party ordering caveat.
     status: pending
   - id: docs-commit
-    content: Update README, SPEC and HANDOFF; commit and push core and API separately.
+    content: Publish original implementation and handoff in separate core/API commits.
     status: completed
+  - id: followup-publish
+    content: Commit/push and deploy local follow-up only when authorized.
+    status: pending
 isProject: false
 ---
 
 # AI Search config tune-up: execution status
 
-This is the tracked execution record for the supplied plan from
+Tracked record for the supplied plan from
 `Trackdub-gated/external/Trackdub/docs/plans/AI Search config tune-up.md`.
-The pinned submodule is unchanged. Known deficiencies are accepted for the
-implementation handoff, not represented as passing acceptance checks.
+The pinned submodule is unchanged. Known deficiencies remain explicit rather
+than being represented as passing acceptance checks.
 
-## Delivered implementation
+## Original published implementation
 
 | Plan step | Implementation and evidence |
 |---|---|
-| Messages-format ask | API `src/docs-rag/query.ts`: one scoped REST chat-completions call supplies both answer and citations; query rewriting enabled; limit nested under retrieval. |
-| First-party metadata | Core `tools/docs-rag/upload_corpus.mjs`: temporary Wrangler remote R2 binding preserves source bytes and attaches metadata only to `first-party/**`. All 197 source objects verified: 126 first-party flags, 71 vendors without flags. |
-| Automatic indexing | Core `tools/docs-rag/sync_corpus.py`: uploads must all succeed before requesting the manifest-selected instance's indexing job. Failures exit nonzero; uncertain job acknowledgments direct operators to inspect existing jobs. |
-| Instance settings | Live readback: `sync_interval=86400`, `keyword_tokenizer=trigram`, boolean `is_first_party` schema, `boost_by=[{field:is_first_party,direction:exists}]`. |
-| Empty-search fallback | API `searchDocs`: explicit AND, one OR retry only on empty successful retrieval, unchanged query/scope/limit, `matchMode` returned. Upstream errors are not mistaken for empty results. |
-| Publish | Core implementation `a3e3f18`, verification handoff `c751d4a`; API `59037f8`. Both repositories pushed to `agent/rag-tuneup`; no merge to main or PR. |
-| Deploy | Worker version `27a4fccc-6c5d-4d0a-8fc7-e64206653515` serves API commit `59037f8`. |
+| Messages-format ask | One scoped REST chat-completions call supplies answer and citations; query rewriting enabled; limit nested under retrieval. |
+| First-party metadata | Remote-binding uploader preserves bytes and attaches metadata only to first-party objects. All 197 source objects checked: 126 flags, 71 vendors without flags. |
+| Automatic indexing | All uploads must succeed before requesting an indexing job. Ambiguous timeouts require inspecting existing jobs before retrying. |
+| Instance settings | 86400-second sync, trigram tokenizer, boolean `is_first_party` schema and existence boost. |
+| Empty-search fallback | AND then one OR request only after successful empty retrieval; same scope and limit. Errors propagate. |
+| Publish | Core `a3e3f18`, `c751d4a`, plan record `c747acf`; API `59037f8`, on respective `agent/rag-tuneup` branches. No merge or PR. |
+| Deploy | Worker version `27a4fccc-6c5d-4d0a-8fc7-e64206653515` still serves API `59037f8`, not the follow-up below. |
 
-## Verified behavior
+## Follow-up implemented and verified
 
-- API typecheck and 76 RAG tests pass; core 5 Python and 3 Node tests pass.
-- Exact provider/registration-symbol search returns the EP ABI reference and
-  ADR-0002 within exactly three scoped results.
-- Scoped ask correctly rejects session-bootstrap downloads and names
-  `NvTensorRTRTXExecutionProvider`, with exactly three supporting Trackdub chunks.
-- Latest index readback, `2026-09-22T03:09:33Z`: all 197 items completed.
-- Full API run: 125 main-suite tests and 20 activation tests passed, with two
-  baseline Better Auth unhandled rejections. Existing error suppression allowed
-  exit 0; this was not a clean full-suite result.
+Follow-up code and documentation are local, uncommitted and unpushed in the core
+and API task worktrees. No follow-up Worker deployment has occurred.
 
-## Known deficiencies and corrected assumptions
+- **Complete staging gate:** separate candidate snapshot; missing/empty repos
+  or failed/empty vendor fetches abort before upload/reindex. Previous staging
+  survives; `.staging.previous` retains the backup if promotion and rollback
+  both fail. Intentional repo-only staging and existing size limits remain.
+- **Read-only verifier:** `tools/docs-rag/verify_index.mjs` compares complete
+  source/index inventories, unique keys, metadata flags and scope folders,
+  status/errors, pending actions, chunks, sizes and last-seen timestamps. It
+  refuses active/changing jobs, detects source changes and requires an uncached
+  symbol content canary after inventory passes. It never requests a job.
+- **Partial identifiers:** after empty AND and OR, code-like identifiers get at
+  most 20 same-scope hybrid candidates without cache/reranking for that request.
+  Only literal identifier-prefix matches within returned text survive; requested
+  output limit is enforced. `matchMode: "symbol-fallback"` identifies this path.
+  Global models/thresholds are unchanged; this is not exhaustive substring search.
+- **Metadata repair:** temporary boolean schema field triggered a full rebuild;
+  removing it triggered a second rebuild, ending 2026-09-22 at 04:05:51 UTC.
+  Post-cleanup verification found all 126 indexed boolean flags, no vendor flags,
+  and correct folders for all 197 keys. Source bytes were unchanged by repair.
 
-- [ ] **Indexed metadata:** 83 of 126 first-party index items still lack the flag,
-  despite correct source metadata; all vendor index items omit it correctly.
-  Source sync and targeted `INDEX` did not establish recovery. Investigate the
-  interrupted configuration-triggered rebuild with Cloudflare; no documented
-  force-reingestion flag or guaranteed identical-config retrigger was found.
-- [ ] **Partial identifiers:** `RegisterExec` returned no hits after OR fallback.
-  Cache-disabled keyword-only retrieval found none; hybrid retrieval without
-  reranking found candidates that default reranking removed. No model or
-  threshold changes were made to hide this failure.
-- [ ] **First-party preference:** `runtime cache` ranked a vendor result first
-  and Trackdub second. Existence boost biases candidates before reranking; it is
-  not a hard first-party ordering guarantee. Recheck after metadata recovery.
+## Evidence
+
+- Core: 15 Python tests and 32 Node tests pass, including failed-refresh rollback,
+  real R2 terminal-page pagination shape, and missing/wrong scope-folder cases.
+- API: typecheck and 87 RAG tests pass. Local modified `searchDocs` against live
+  Cloudflare returned three literal `RegisterExec` hits in `all`, and the EP ABI
+  reference alone for `first-party`, limit 1. Both used `symbol-fallback`.
+- Exact two-symbol query still returns exactly three first-party hits with `and`,
+  led by the EP ABI reference and ADR-0002.
+- Post-cleanup live verifier: 197 source objects, 197 unique indexed items, 126
+  first-party flags, **25 outdated capacity-error items**. Exit 1 correctly
+  reports incomplete index readiness; no other inventory issues were reported.
+- Full API run: 136 main-suite tests plus 20 activation tests passed, but two
+  baseline Better Auth unhandled rejections remain. Existing suppression permits
+  exit 0; this is not a clean full-suite result.
+
+## Remaining limits
+
+- [ ] **Index readiness:** resolve 25 `workers_ai_out_of_capacity_error` items,
+  then require a clean full verifier run including its content canary. Do not
+  use the earlier 197-completed observation from before rebuilding as current.
+- **First-party preference:** uncached `runtime cache` still ranks an NVIDIA
+  result first and Trackdub second after metadata recovery. Existence boost
+  biases candidates before reranking; it is not a hard ordering guarantee.
 - **First-message rewriting:** Cloudflare uses the first user message as-is.
-  This stateless interface has no follow-up history, so the plan's requirement
-  to demonstrate an actual rewrite is not achievable merely by enabling it.
+  Stateless ask supplies no history and demonstrates no rewrite benefit.
   `searchQuery: null` truthfully reports omitted upstream `search_query`.
-- **Wrangler upload interface:** installed Wrangler 4.114.0 does not support
-  `r2 object put --header`; the remote-binding uploader replaces that plan step.
-  Vendor `false` would still satisfy an existence boost, so the field is omitted.
+- **Verification boundaries:** same-size content freshness is not proven for
+  every chunk, and the content canary covers one document. Cached staging from
+  older script versions is not retroactively certified. Remote uploads are not
+  transactional; already uploaded objects remain changed after partial failure.
 - **Operational follow-up:** Linear access was unavailable; no issue was marked
-  Done. No cloud security scan was performed.
+  Done. No cloud security scan or cloud code review was performed.
 
-Detailed commands, job evidence and recovery notes:
+Detailed commands and rebuild evidence:
 [docs-rag handoff](../../tools/docs-rag/HANDOFF.md).

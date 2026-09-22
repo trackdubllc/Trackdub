@@ -112,9 +112,11 @@ shown in AI Search documentation. The helper disposes its proxy and temporary
 configuration after each run; no persistent service or new credentials are needed.
 
 Automatic reindex runs only after all staged objects upload successfully.
-Missing repository roots and vendor-fetch failures do not block uploading the
-remaining staged files or a successful exit. Check the staging summary for
-skips and failures; upload success alone does not establish a complete refresh.
+Refresh builds a candidate snapshot and promotes it only after required source
+staging succeeds. Missing/empty repositories and failed/empty vendor fetches exit
+nonzero without upload or reindex, preserving the previous reusable snapshot.
+`--skip-fetch` intentionally creates a repo-only snapshot; existing size limits
+still apply. `--reuse-staging` resends a cache, not a fresh source inventory.
 Upload or job-request failure exits nonzero. Job creation is asynchronous;
 verify completion separately. A timeout can occur after the job has started,
 so inspect jobs before retrying the request:
@@ -125,6 +127,14 @@ npx wrangler ai-search jobs list trackdub-docs
 # Only if no job was created:
 npx wrangler ai-search jobs create trackdub-docs
 ```
+
+From core, `node tools/docs-rag/verify_index.mjs --account <account-id> --api-root ../api.trackdub`
+performs bounded read-only source/index verification. It checks unique keys, item
+status, source/index first-party flags, indexed scope folders, chunks, sizes and
+last-seen time, refuses active or changing jobs, and requires an uncached
+canonical-symbol content canary. It does not equate job completion with metadata
+readiness or prove every chunk's bytes.
+See [README](README.md#verify-indexing-separately) for exit semantics and limits.
 
 Wrangler uses `CLOUDFLARE_API_TOKEN` or its existing OAuth login, not
 `AI_SEARCH_API_TOKEN`. Unset stale `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_API_KEY`
@@ -148,7 +158,7 @@ Stateless agents-SDK MCP server (`createMcpHandler`, streamable HTTP at
 
 | Tool | Input | Returns |
 |---|---|---|
-| `search_trackdub_docs` | `query`, `scope?`, `limit?` (1-20, default 8) | Ranked chunks: `score`, `key` (R2 path), `text` (<=4000 chars). Hybrid vector+keyword, reranked. |
+| `search_trackdub_docs` | `query`, `scope?`, `limit?` (1-20, default 8) | Chunks: `score`, `key` (R2 path), `text` (<=4000 chars), plus `matchMode`. Hybrid vector+keyword, reranked except the bounded symbol fallback below. |
 | `ask_trackdub_docs` | `query`, `scope?`, `limit?` | AI answer + scope-enforced source chunks. Prompt prefers first-party over vendor; refuses to invent readiness/APIs. |
 | `get_trackdub_doc` | `key`, `max_chars?` (default 50000) | Full document text straight from R2 (4MB cap). Use when chunks are truncated. |
 
@@ -165,10 +175,17 @@ legacy `aiSearch` binding rejects folder range filters.
 
 `search` explicitly requests keyword mode `and`, then retries once with `or`
 only if the successful response contains no chunks. Both requests keep the
-same scope and result limit. Responses include `matchMode: "and"` or
-`"or-fallback"`. Upstream errors and rate limits are propagated, never retried
-as empty results. With hybrid search, this fallback relaxes only the keyword
-candidate requirement, not vector similarity thresholds.
+same scope and result limit. If both are empty and the query is one code-like
+identifier (4-128 ASCII characters, camel-case, dotted, colon-qualified or snake-case),
+one additional hybrid search disables cache and reranking for that request only.
+It fetches at most 20 candidates in the same scope, retains literal case-insensitive
+identifier-prefix matches in the returned text, and caps output at the requested
+limit. Ordinary prose never takes this fallback. This is bounded candidate recovery,
+not exhaustive substring search; candidates outside the top 20 remain unavailable.
+Responses identify `matchMode: "and"`, `"or-fallback"`, or `"symbol-fallback"`.
+Symbol scores are unreranked retrieval scores, not comparable to reranked scores.
+Upstream errors and rate limits propagate at every step. Global models, thresholds,
+and reranking configuration are unchanged.
 
 `ask` makes one REST chat-completions call with system/user `messages`,
 `ai_search_options.query_rewrite.enabled: true`, and scope/limit inside
