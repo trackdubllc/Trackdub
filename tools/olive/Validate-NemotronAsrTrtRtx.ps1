@@ -50,8 +50,7 @@ $ResultFile     = Join-Path $BuildDir "nemotron-3.5-asr-trtrtx-validation.json"
 # "/" into the cache's owner/repo directory segments.
 # ---------------------------------------------------------------------------
 $ModelCacheRoot = if ($env:TRACKDUB_MODEL_CACHE) { $env:TRACKDUB_MODEL_CACHE } else { Join-Path $env:LOCALAPPDATA 'Trackdub\model-cache' }
-$modelRoot      = Join-Path $ModelCacheRoot 'tonythethompson
-emotron-3.5-asr-streaming-0.6b-onnx'
+$modelRoot      = Join-Path $ModelCacheRoot 'tonythethompson\nemotron-3.5-asr-streaming-0.6b-onnx'
 $encoderSrc     = Join-Path $modelRoot 'encoder.onnx'
 $decoderSrc     = Join-Path $modelRoot 'decoder_joint.onnx'
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes\nemotron-3.5-asr-streaming-0.6b-onnx\NvTensorRtRtx'
