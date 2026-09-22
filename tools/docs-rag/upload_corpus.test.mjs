@@ -60,8 +60,6 @@ function lengthCheckingBucket() {
       const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
       stored.set(key, bytes);
     },
-    list: emptyList,
-    head: async () => null,
   };
 }
 
