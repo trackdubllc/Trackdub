@@ -50,8 +50,6 @@ function lengthCheckingBucket() {
   const stored = new Map();
   return {
     stored,
-    list: emptyList,
-    head: async () => null,
     put: async (key, value) => {
       const length = knownLength(value);
       if (length === undefined) {
