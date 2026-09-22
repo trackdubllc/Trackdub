@@ -31,10 +31,36 @@ internal sealed class NemotronAsrGreedyDecoder(
         var featureExtractor = new NemotronAsrMelFeatureExtractor();
         int chunkIndex = 0;
 
+        // BuildChunk is a pure function of `mel` and the frame offset, and `mel` is fully
+        // materialized before this loop, so the next chunk's features can be assembled on a
+        // worker thread while the current chunk still occupies the GPU.
+        Task<float[]>? prefetchedChunk = null;
+
         for (int frameOffset = 0; frameOffset < totalFrames; frameOffset += NemotronAsrMelFeatureExtractor.ChunkFrames)
         {
             int mainFrameCount = Math.Min(NemotronAsrMelFeatureExtractor.ChunkFrames, totalFrames - frameOffset);
-            float[] chunkData = featureExtractor.BuildChunk(mel, frameOffset, mainFrameCount, includePreEncodeCache: chunkIndex > 0);
+            float[] chunkData = prefetchedChunk is null
+                ? featureExtractor.BuildChunk(mel, frameOffset, mainFrameCount, includePreEncodeCache: chunkIndex > 0)
+                : prefetchedChunk.GetAwaiter().GetResult();
+
+            int nextFrameOffset = frameOffset + NemotronAsrMelFeatureExtractor.ChunkFrames;
+            if (nextFrameOffset < totalFrames)
+            {
+                int nextFrameCount = Math.Min(
+                    NemotronAsrMelFeatureExtractor.ChunkFrames,
+                    totalFrames - nextFrameOffset);
+                // A prefetched chunk is never the first one, so it always carries the pre-encode cache.
+                prefetchedChunk = Task.Run(() => featureExtractor.BuildChunk(
+                    mel,
+                    nextFrameOffset,
+                    nextFrameCount,
+                    includePreEncodeCache: true));
+            }
+            else
+            {
+                prefetchedChunk = null;
+            }
+
             using NemotronAsrInputSet encoderInputs = BuildEncoderInputs(
                 chunkData,
                 NemotronAsrMelFeatureExtractor.PreEncodeCacheFrames + mainFrameCount,

@@ -1,11 +1,22 @@
 using Microsoft.ML.OnnxRuntime;
+using Trackdub.Inference.Runtime.Planning;
 
 namespace Trackdub.Inference.Onnx.Pool;
 
 /// <summary>
 /// Provides retry-with-backoff around ONNX Runtime inference calls for transient
-/// ONNX Runtime failures (GPU memory pressure, driver hiccups on DML/TRT-RTX).
+/// ONNX Runtime failures that re-running the <em>same</em> session can actually clear
+/// (for example a momentary DirectML scheduling hiccup).
 /// </summary>
+/// <remarks>
+/// This policy re-runs the existing session; it never recreates it. Device-level
+/// conditions — memory exhaustion and device removed/lost/hung — survive a bare
+/// re-run, so they are deliberately not retried here. They propagate immediately to
+/// the device-fallback path (<see cref="DeviceOomExceptionHelper"/> +
+/// <c>DeviceFallbackSessionCreator</c>), which can exclude the device and rebuild the
+/// session on another one. Retrying them here would only add latency before the same
+/// failure resurfaced.
+/// </remarks>
 internal static class InferenceRetryPolicy
 {
     private const int DefaultMaxAttempts = 3;
@@ -67,9 +78,18 @@ internal static class InferenceRetryPolicy
 
     private static bool IsTransient(OnnxRuntimeException ex)
     {
+        // A device that is out of memory or has been removed/lost stays that way for a
+        // re-run against the same session, so hand those straight to the device-fallback
+        // path instead of burning the backoff budget on them.
+        if (DeviceOomExceptionHelper.ClassifyDeviceException(ex) is not null)
+        {
+            return false;
+        }
+
         // OnnxRuntimeException embeds the error code in its message as "[ErrorCode:XXX]".
-        // Transient/recoverable codes: RuntimeException (GPU OOM, driver timeout), Fail (generic).
-        // Permanent codes (InvalidArgument, InvalidGraph, etc.) should not be retried.
+        // What is left that a bare re-run can clear: a generic RuntimeException or Fail with
+        // no device-level cause. Permanent codes (InvalidArgument, InvalidGraph, etc.) are
+        // not retried.
         string message = ex.Message;
         return message.Contains("[ErrorCode:RuntimeException]", StringComparison.OrdinalIgnoreCase)
             || message.Contains("[ErrorCode:Fail]", StringComparison.OrdinalIgnoreCase);
