@@ -39,7 +39,7 @@ python tools/docs-rag/sync_corpus.py --upload
 
 Run from the Trackdub repo. Sibling checkouts `../Trackdub-gated` and `../api.trackdub` are picked up automatically. Override with `TRACKDUB_ROOT`, `TRACKDUB_GATED_ROOT`, `API_TRACKDUB_ROOT`.
 
-Requires Node.js and installed Wrangler in `api.trackdub`, plus Python for staging. `upload_corpus.mjs` opens a temporary Wrangler remote R2 binding, uploads bytes with `customMetadata.is_first_party: "true"` only for `first-party/**`, then disposes the proxy. Vendors omit the field, including `false`, because the boost tests existence. Wrangler 4.114.0's `r2 object put` does not support the `--header` flag shown in AI Search docs.
+Requires Node.js 22.16.0+ (the `mise.toml` baseline; `upload_corpus.mjs` uses `Dirent.parentPath`, unavailable before 18.20/20.12) and installed Wrangler in `api.trackdub`, plus Python for staging. `upload_corpus.mjs` opens a temporary Wrangler remote R2 binding, uploads bytes with `customMetadata.is_first_party: "true"` only for `first-party/**`, then disposes the proxy. Vendors omit the field, including `false`, because the boost tests existence. Wrangler 4.114.0's `r2 object put` does not support the `--header` flag shown in AI Search docs.
 
 Both upload and reindex use Wrangler authentication. For an existing OAuth login, unset stale `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_API_KEY` overrides in the calling shell. `AI_SEARCH_API_TOKEN` is a Worker secret, not a Wrangler authentication variable. No secrets are passed as CLI arguments.
 
