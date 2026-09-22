@@ -76,12 +76,19 @@ internal static class InferenceRetryPolicy
         }
     }
 
-    private static bool IsTransient(OnnxRuntimeException ex)
+    private static bool IsTransient(OnnxRuntimeException ex) => IsTransientMessage(ex.Message);
+
+    internal static bool IsTransientMessage(string message)
     {
+        if (string.IsNullOrEmpty(message))
+        {
+            return false;
+        }
+
         // A device that is out of memory or has been removed/lost stays that way for a
         // re-run against the same session, so hand those straight to the device-fallback
         // path instead of burning the backoff budget on them.
-        if (DeviceOomExceptionHelper.ClassifyDeviceException(ex) is not null)
+        if (DeviceOomExceptionHelper.ClassifyDeviceExceptionMessage(message) is not null)
         {
             return false;
         }
@@ -90,7 +97,6 @@ internal static class InferenceRetryPolicy
         // What is left that a bare re-run can clear: a generic RuntimeException or Fail with
         // no device-level cause. Permanent codes (InvalidArgument, InvalidGraph, etc.) are
         // not retried.
-        string message = ex.Message;
         return message.Contains("[ErrorCode:RuntimeException]", StringComparison.OrdinalIgnoreCase)
             || message.Contains("[ErrorCode:Fail]", StringComparison.OrdinalIgnoreCase);
     }

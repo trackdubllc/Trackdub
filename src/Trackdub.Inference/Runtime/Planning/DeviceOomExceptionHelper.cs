@@ -106,7 +106,15 @@ public static class DeviceOomExceptionHelper
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        string message = exception.Message;
+        return ClassifyDeviceExceptionMessage(exception.Message);
+    }
+
+    /// <summary>
+    /// Message-only overload of <see cref="ClassifyDeviceException"/>, for callers that hold
+    /// the ONNX Runtime error text rather than the exception instance.
+    /// </summary>
+    public static DeviceDegradationKind? ClassifyDeviceExceptionMessage(string? message)
+    {
         if (string.IsNullOrEmpty(message)
             || !message.Contains("[ErrorCode:RuntimeException]", StringComparison.OrdinalIgnoreCase))
         {
