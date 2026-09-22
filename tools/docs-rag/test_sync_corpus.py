@@ -1,7 +1,9 @@
+import inspect
 import subprocess
+import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import patch
 
 import sync_corpus
@@ -228,6 +230,23 @@ class RefreshTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         upload.assert_not_called()
 
+    @unittest.skipUnless(sys.version_info >= (3, 13), "pathlib glob matching needs Python 3.13")
+    def test_glob_matches_agrees_with_the_pathlib_matcher(self):
+        cases = [
+            ("docs/specs/specs.md", "docs/specs/specs.md"),
+            ("docs/specs/other.md", "docs/specs/specs.md"),
+            ("docs/specs/specs.md", "docs/*/specs.md"),
+            ("docs/a/b/specs.md", "docs/*/specs.md"),
+            ("docs/strategy/strategy.md", "docs/strategy/**"),
+            ("docs/strategy/a/b/plan.md", "docs/strategy/**"),
+            ("docs/strategy/a/b/plan.md", "docs/**/plan.md"),
+            ("docs/plan.md", "docs/**/plan.md"),
+            ("docs/strategy/strategy.md", "docs/reference/**"),
+        ]
+        for rel, pattern in cases:
+            with self.subTest(rel=rel, pattern=pattern):
+                self.assertEqual(sync_corpus.glob_matches(rel, pattern), PurePosixPath(rel).full_match(pattern))
+
     def test_skip_fetch_intentionally_promotes_repo_only_snapshot(self):
         code, fetch, upload, reindex = self.run_refresh("--skip-fetch", "--upload")
         self.assertEqual(code, 0)
@@ -271,6 +290,30 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual((self.staging / "old.md").read_text(), "last complete snapshot")
         upload.assert_not_called()
         reindex.assert_not_called()
+
+
+class ExcludeGlobTests(unittest.TestCase):
+    """Exclude patterns are matched with a portable glob: PurePath.full_match needs Python 3.13."""
+
+    def test_literal_pattern_matches_only_itself(self):
+        self.assertTrue(sync_corpus.glob_matches("docs/specs/specs.md", "docs/specs/specs.md"))
+        self.assertFalse(sync_corpus.glob_matches("docs/specs/other.md", "docs/specs/specs.md"))
+
+    def test_star_stays_inside_one_path_segment(self):
+        self.assertTrue(sync_corpus.glob_matches("docs/specs/specs.md", "docs/*/specs.md"))
+        self.assertFalse(sync_corpus.glob_matches("docs/nested/specs/specs.md", "docs/*/specs.md"))
+        self.assertFalse(sync_corpus.glob_matches("docs/specs/specs.md", "docs/specs/*.md/extra"))
+
+    def test_double_star_matches_any_depth_below_a_directory(self):
+        self.assertTrue(sync_corpus.glob_matches("docs/strategy/strategy.md", "docs/strategy/**"))
+        self.assertTrue(sync_corpus.glob_matches("docs/strategy/a/b/plan.md", "docs/strategy/**"))
+        self.assertFalse(sync_corpus.glob_matches("docs/reference/reference.md", "docs/strategy/**"))
+        self.assertTrue(sync_corpus.glob_matches("docs/architecture/ADR-1.md", "docs/**/ADR-*.md"))
+        self.assertTrue(sync_corpus.glob_matches("docs/ADR-1.md", "docs/**/ADR-*.md"))
+
+    def test_refresh_avoids_python_3_13_only_path_api(self):
+        source = inspect.getsource(sync_corpus)
+        self.assertNotIn("full_match", source)
 
 
 if __name__ == "__main__":
