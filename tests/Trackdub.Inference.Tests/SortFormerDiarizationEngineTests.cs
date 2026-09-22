@@ -129,6 +129,97 @@ public sealed class SortFormerDiarizationEngineTests
         }
     }
 
+    /// <summary>
+    /// Hardware validation for TRT-RTX optimization of the SortFormer encoder.
+    ///
+    /// Prerequisites before removing the Skip attribute:
+    ///   1. Download the model:
+    ///      dotnet run --project src/Trackdub.Tools -- ingest --model cgus/diar_streaming_sortformer_4spk-v2.1-onnx
+    ///   2. Run Olive TRT-RTX optimization and staging:
+    ///      .\tools\olive\Validate-SortFormerTrtRtx.ps1
+    ///   3. Verify build/sortformer-4spk-onnx-trtrtx-validated-fp16/ was created and the script
+    ///      printed PASS (its own provider check already confirmed trt-rtx on hardware).
+    ///   4. Remove the Skip attribute, run:
+    ///      dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~SortFormerDiarizationEngineTests.DiarizeAsync_with_trtrtx_staged_model"
+    ///   5. If it passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to apply manifest+test changes.
+    ///
+    /// This test never runs in CI (guarded by Skip and by staging dir absence).
+    /// </summary>
+    [Fact(Skip = "Pending TRT-RTX validation — run tools/olive/Validate-SortFormerTrtRtx.ps1, then remove this Skip")]
+    public async Task DiarizeAsync_with_trtrtx_staged_model_selects_tensorrt_rtx_provider()
+    {
+        string stagingDir = Path.Combine(FindRepoRoot(), "build", "sortformer-4spk-onnx-trtrtx-validated-fp16", "onnx");
+        string stagedModelPath = Path.Combine(stagingDir, "model.onnx");
+
+        Assert.True(
+            File.Exists(stagedModelPath),
+            $"Staged model not found: {stagedModelPath}\n" +
+            "Run: .\\tools\\olive\\Validate-SortFormerTrtRtx.ps1");
+
+        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDirectory);
+        string wavePath = Path.Combine(tempDirectory, "sortformer-trtrtx.wav");
+
+        try
+        {
+            await WriteTestWaveAsync(wavePath, durationSeconds: 1.0, sampleRate: 16000, CancellationToken.None);
+
+            // No manifest registry needed: BenchmarkModelPathResolver.Discover falls through to
+            // an absolute-path lookup when given one directly, matching the staging layout the
+            // validate script produces (mirrors WhisperOnnxTrtRtxValidationTests).
+            var engine = new SortFormerDiarizationEngine(
+                new StubRuntimePlanner(new StageRuntimePlan
+                {
+                    Stage = RuntimeStage.Diarization,
+                    Status = StageRuntimePlanStatus.Ready,
+                    ModelId = "cgus/diar_streaming_sortformer_4spk-v2.1-onnx",
+                    ModelAlias = "sortformer-diarizer-4spk-v2.1",
+                    Variant = "default",
+                    ExecutionProvider = ExecutionProviderKind.TensorRTRtx,
+                    ModelEntryPath = stagedModelPath
+                }),
+                new BenchmarkModelPathResolver());
+
+            IReadOnlyList<DiarizedSpeakerTurn> turns = await engine.DiarizeAsync(
+                wavePath,
+                1.0,
+                [new SpeechRegion(0, 0.0, 1.0)],
+                CancellationToken.None);
+
+            Assert.NotNull(turns);
+            Assert.NotNull(engine.LastExecutionSummary);
+
+            // Confirm TRT-RTX (or its documented DirectML fallback on non-NVIDIA hardware) was
+            // actually selected — not a silent CPU fallback the caller never notices.
+            Assert.False(
+                string.IsNullOrWhiteSpace(engine.LastExecutionSummary!.SelectedProvider),
+                "SelectedProvider must not be empty — session provider resolution failed.");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    private static string FindRepoRoot()
+    {
+        DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "Trackdub.slnx")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the repository root.");
+    }
+
     private static float[] CreateSineWave(double durationSeconds, int sampleRate)
     {
         int sampleCount = (int)(durationSeconds * sampleRate);

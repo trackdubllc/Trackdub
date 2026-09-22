@@ -30,6 +30,7 @@ internal static class ProvidersCommand
         trtRtxCommand.Add(CreateStatusCommand());
         trtRtxCommand.Add(CreateInstallCommand());
         trtRtxCommand.Add(CreateSmokeCommand());
+        trtRtxCommand.Add(CreateVerifyCommand());
         providersCommand.Add(trtRtxCommand);
 
         return providersCommand;
@@ -173,6 +174,63 @@ internal static class ProvidersCommand
                         parseResult.GetValue(modelFilterOption),
                         Console.Out,
                         Console.Error,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        });
+
+        return command;
+    }
+
+    private static Command CreateVerifyCommand()
+    {
+        var command = new Command("verify", """
+            Run the real TRT RTX smoke path against an explicit ONNX entry path (e.g. an
+            Olive-recipe-staged output directory) instead of the model cache. Confirms the
+            model loads and the effective provider is TensorRT RTX, not a silent CPU/DirectML
+            fallback. Used by Olive validator scripts before trusting staged output.
+
+            Examples:
+              trackdub providers trt-rtx verify --model cgus/diar_streaming_sortformer_4spk-v2.1-onnx --entry build/sortformer-4spk-onnx-trtrtx-validated-fp16/onnx/model.onnx
+            """);
+
+        var modelOption = new Option<string>("--model")
+        {
+            Description = "Bundled manifest model id whose engine family/stage govern the smoke test.",
+            Required = true,
+        };
+        var entryOption = new Option<string>("--entry")
+        {
+            Description = "Path to the ONNX entry file to verify (typically an Olive-staged output).",
+            Required = true,
+        };
+        var variantOption = new Option<string?>("--variant")
+        {
+            Description = "Variant alias to record in the smoke request. Defaults to 'default'.",
+        };
+        command.Options.Add(modelOption);
+        command.Options.Add(entryOption);
+        command.Options.Add(variantOption);
+
+        command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(parseResult, out int buildExitCode);
+            if (factory is null)
+            {
+                return buildExitCode;
+            }
+
+            using (factory)
+            {
+                return await TrtRtxProvidersHandler
+                    .VerifyAsync(
+                        factory,
+                        parseResult.GetValue(modelOption)!,
+                        parseResult.GetValue(entryOption)!,
+                        parseResult.GetValue(variantOption),
+                        Console.Out,
                         cancellationToken)
                     .ConfigureAwait(false);
             }

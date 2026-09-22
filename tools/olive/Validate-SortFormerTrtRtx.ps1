@@ -169,10 +169,37 @@ try {
 
     $results.staging_dir = $StagingDir
     $results.staged = ($null -ne $encoderOnnxSrc)
-    # pass stays false: nothing here loads the staged model or checks the effective provider is
-    # trt-rtx (not cpu). Flip-TrtRtxAsrDiarization.ps1 gates on pass; set it only after a real
-    # provider smoke check exists, or run the smoke test manually and use Flip -Force.
-    $results.pass = $false
+
+    # ---------------------------------------------------------------------------
+    # Step 4: Verify the staged model actually loads on TensorRT RTX, not a silent
+    # CPU/DirectML fallback. Uses the real production smoke path (`trackdub providers
+    # trt-rtx verify`), not a file-existence check.
+    # ---------------------------------------------------------------------------
+    $results.provider_check = $null
+    if ($results.staged) {
+        Write-Host ""
+        Write-Host "=== Verifying staged model on TensorRT RTX (trackdub providers trt-rtx verify) ===" -ForegroundColor Cyan
+        $stagedModelPath = Join-Path $StagingOnnxDir "model.onnx"
+        $verifyOutput = & dotnet run --project (Join-Path $RepoRoot "src\Trackdub.Cli") -c Release -- `
+            providers trt-rtx verify --model "cgus/diar_streaming_sortformer_4spk-v2.1-onnx" --entry $stagedModelPath 2>&1
+        $verifyExitCode = $LASTEXITCODE
+        $verifyJsonLine = $verifyOutput | Where-Object { $_ -match '^\s*\{.*"passed"\s*:' } | Select-Object -Last 1
+        if ($verifyJsonLine) {
+            $verifyResult = $verifyJsonLine | ConvertFrom-Json
+            $results.provider_check = @{
+                ready  = $verifyResult.ready
+                passed = $verifyResult.passed
+                detail = $verifyResult.detail
+            }
+            $results.pass = [bool]$verifyResult.passed
+        } else {
+            Write-Warning "Could not parse 'trackdub providers trt-rtx verify' output (exit $verifyExitCode); provider not confirmed."
+            $results.provider_check = @{ ready = $null; passed = $false; detail = "verify command produced no parseable JSON (exit $verifyExitCode)" }
+            $results.pass = $false
+        }
+    } else {
+        $results.pass = $false
+    }
 
 } finally {
     Set-Location $origDir
@@ -187,17 +214,20 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 $results | ConvertTo-Json -Depth 4 | Set-Content -Path $ResultFile -Encoding UTF8
 
 Write-Host ""
-if ($results.staged) {
-    Write-Host "STAGED - TRT-RTX ($Precision) optimization output staged for SortFormer 4-spk. Provider NOT verified (pass=false in the result file)." -ForegroundColor Yellow
+if ($results.pass) {
+    Write-Host "PASS - TRT-RTX ($Precision) optimization output staged and verified on hardware for SortFormer 4-spk." -ForegroundColor Green
     Write-Host "Results written to: $ResultFile"
     Write-Host ""
     Write-Host "Staging directory: $($results.staging_dir)"
     Write-Host ""
     Write-Host "Next steps:"
-    Write-Host "  1. Add a TRT-RTX smoke test in tests/Trackdub.Inference.Tests/SortFormerDiarizationEngineTests.cs"
-    Write-Host "     (mirror WhisperOnnxTrtRtxValidationTests.cs; load the staging dir via Discover())."
-    Write-Host "  2. dotnet test tests/Trackdub.Inference.Tests --filter 'FullyQualifiedName~SortFormer'"
-    Write-Host "  3. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 -Force to enable trt-rtx in the manifest and tests (pass=false requires -Force)."
+    Write-Host "  1. dotnet test tests/Trackdub.Inference.Tests --filter 'FullyQualifiedName~SortFormer'"
+    Write-Host "  2. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to enable trt-rtx in the manifest and tests."
+} elseif ($results.staged) {
+    Write-Host "STAGED BUT NOT VERIFIED - TRT-RTX ($Precision) output staged for SortFormer 4-spk, but the real provider check failed." -ForegroundColor Yellow
+    Write-Host "Detail: $($results.provider_check.detail)"
+    Write-Host "Results written to: $ResultFile"
+    exit 1
 } else {
     Write-Host "FAIL - see errors above." -ForegroundColor Red
     exit 1

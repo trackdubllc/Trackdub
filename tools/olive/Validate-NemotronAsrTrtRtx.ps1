@@ -210,10 +210,38 @@ try {
 
     $results.staging_dir = $StagingDir
     $results.staged = ($null -ne $encoderOnnxSrc) -and ($null -ne $decoderOnnxSrc)
-    # pass stays false: nothing here loads the staged model or checks the effective provider is
-    # trt-rtx (not cpu). Flip-TrtRtxAsrDiarization.ps1 gates on pass; set it only after a real
-    # provider smoke check exists, or run the smoke test manually and use Flip -Force.
-    $results.pass = $false
+
+    # ---------------------------------------------------------------------------
+    # Step 5: Verify the staged encoder + decoder_joint pair actually loads and runs on
+    # TensorRT RTX, not a silent CPU/DirectML fallback. Uses the real production smoke
+    # path (`trackdub providers trt-rtx verify`), which exercises both components with
+    # the pinned NemotronAsrEncoderTrtProfiles shape profile — not a file-existence check.
+    # ---------------------------------------------------------------------------
+    $results.provider_check = $null
+    if ($results.staged) {
+        Write-Host ""
+        Write-Host "=== Verifying staged encoder + decoder_joint on TensorRT RTX (trackdub providers trt-rtx verify) ===" -ForegroundColor Cyan
+        $stagedEncoderPath = Join-Path $StagingDir "encoder.onnx"
+        $verifyOutput = & dotnet run --project (Join-Path $RepoRoot "src\Trackdub.Cli") -c Release -- `
+            providers trt-rtx verify --model "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx" --entry $stagedEncoderPath 2>&1
+        $verifyExitCode = $LASTEXITCODE
+        $verifyJsonLine = $verifyOutput | Where-Object { $_ -match '^\s*\{.*"passed"\s*:' } | Select-Object -Last 1
+        if ($verifyJsonLine) {
+            $verifyResult = $verifyJsonLine | ConvertFrom-Json
+            $results.provider_check = @{
+                ready  = $verifyResult.ready
+                passed = $verifyResult.passed
+                detail = $verifyResult.detail
+            }
+            $results.pass = [bool]$verifyResult.passed
+        } else {
+            Write-Warning "Could not parse 'trackdub providers trt-rtx verify' output (exit $verifyExitCode); provider not confirmed."
+            $results.provider_check = @{ ready = $null; passed = $false; detail = "verify command produced no parseable JSON (exit $verifyExitCode)" }
+            $results.pass = $false
+        }
+    } else {
+        $results.pass = $false
+    }
 
 } finally {
     Set-Location $origDir
@@ -228,17 +256,20 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 $results | ConvertTo-Json -Depth 4 | Set-Content -Path $ResultFile -Encoding UTF8
 
 Write-Host ""
-if ($results.staged) {
-    Write-Host "STAGED - TRT-RTX ($Precision) optimization output staged for Nemotron 3.5 ASR. Provider NOT verified (pass=false in the result file)." -ForegroundColor Yellow
+if ($results.pass) {
+    Write-Host "PASS - TRT-RTX ($Precision) optimization output staged and verified on hardware for Nemotron 3.5 ASR." -ForegroundColor Green
     Write-Host "Results written to: $ResultFile"
     Write-Host ""
     Write-Host "Staging directory: $($results.staging_dir)"
     Write-Host ""
     Write-Host "Next steps:"
-    Write-Host "  1. Add a TRT-RTX smoke test in tests/Trackdub.Inference.Onnx.Tests/NemotronAsrEncoderTrtRtxValidationTests.cs"
-    Write-Host "     (mirror WhisperOnnxTrtRtxValidationTests.cs; load the staging dir via Discover())."
-    Write-Host "  2. dotnet test tests/Trackdub.Inference.Onnx.Tests --filter 'FullyQualifiedName~NemotronAsrEncoderTrtRtx'"
-    Write-Host "  3. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 -Force to enable trt-rtx in the manifest and tests (pass=false requires -Force)."
+    Write-Host "  1. dotnet test tests/Trackdub.Inference.Onnx.Tests --filter 'FullyQualifiedName~NemotronAsrEncoderTrtRtx'"
+    Write-Host "  2. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to enable trt-rtx in the manifest and tests."
+} elseif ($results.staged) {
+    Write-Host "STAGED BUT NOT VERIFIED - TRT-RTX ($Precision) output staged for Nemotron 3.5 ASR, but the real provider check failed." -ForegroundColor Yellow
+    Write-Host "Detail: $($results.provider_check.detail)"
+    Write-Host "Results written to: $ResultFile"
+    exit 1
 } else {
     Write-Host "FAIL - see errors above." -ForegroundColor Red
     exit 1
