@@ -1,8 +1,9 @@
 import inspect
 import subprocess
+import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import patch
 
 import sync_corpus
@@ -228,6 +229,23 @@ class RefreshTests(unittest.TestCase):
 
         self.assertNotEqual(code, 0)
         upload.assert_not_called()
+
+    @unittest.skipUnless(sys.version_info >= (3, 13), "pathlib glob matching needs Python 3.13")
+    def test_glob_matches_agrees_with_the_pathlib_matcher(self):
+        cases = [
+            ("docs/specs/specs.md", "docs/specs/specs.md"),
+            ("docs/specs/other.md", "docs/specs/specs.md"),
+            ("docs/specs/specs.md", "docs/*/specs.md"),
+            ("docs/a/b/specs.md", "docs/*/specs.md"),
+            ("docs/strategy/strategy.md", "docs/strategy/**"),
+            ("docs/strategy/a/b/plan.md", "docs/strategy/**"),
+            ("docs/strategy/a/b/plan.md", "docs/**/plan.md"),
+            ("docs/plan.md", "docs/**/plan.md"),
+            ("docs/strategy/strategy.md", "docs/reference/**"),
+        ]
+        for rel, pattern in cases:
+            with self.subTest(rel=rel, pattern=pattern):
+                self.assertEqual(sync_corpus.glob_matches(rel, pattern), PurePosixPath(rel).full_match(pattern))
 
     def test_skip_fetch_intentionally_promotes_repo_only_snapshot(self):
         code, fetch, upload, reindex = self.run_refresh("--skip-fetch", "--upload")

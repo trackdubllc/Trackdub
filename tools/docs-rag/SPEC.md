@@ -101,9 +101,22 @@ From the Trackdub repo root:
 
 ```bash
 python tools/docs-rag/sync_corpus.py --upload          # fetch + upload + request reindex
+python tools/docs-rag/sync_corpus.py --upload --prune  # also delete bucket objects absent from staging
 python tools/docs-rag/sync_corpus.py --skip-fetch --upload  # repo files only + request reindex
 python tools/docs-rag/sync_corpus.py --reuse-staging --upload  # cached tree + request reindex
 ```
+
+Uploads list the bucket once and skip a document whose stored size, MD5 `etag`,
+content type and custom metadata already match, so a small change re-embeds a few
+documents instead of the corpus. Re-embedding everything at once overruns Workers
+AI capacity and leaves items `outdated`.
+
+`--prune` deletes objects and therefore requires a complete refresh: it is refused
+with `--skip-fetch`, with `--reuse-staging`, and without `--upload`, because those
+trees are knowingly incomplete and would delete every vendor document. Deletions
+start only after every upload succeeds, and take their keys from the same list pass
+that drove the skips. Objects already indexed from a deleted key stay retrievable
+until the next reindex.
 
 Uploads use a temporary remote R2 binding through installed Wrangler's
 `getPlatformProxy`, with metadata attached through the R2 Workers API.
