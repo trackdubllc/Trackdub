@@ -119,7 +119,7 @@ ReSharper flags it because a lambda/async continuation *could* outlive the `usin
 
 ## 5. PARTIALLY WRONG: `MemberCanBePrivate.Global` (519 items) + `AutoPropertyCanBeMadeGetOnly.Global` (160 items)
 
-These flag properties on **IOptions<T> configuration classes** which ASP.NET binds from `appsettings.json`:
+These flag properties on **`IOptions<T>` configuration classes** which ASP.NET binds from `appsettings.json`:
 
 ```csharp
 // CognitoOptions.cs -- bound via builder.Services.Configure<CognitoOptions>(config)

@@ -193,8 +193,8 @@ Every stage handler follows an identical pattern:
 | File | Current | Opportunity |
 |------|---------|-------------|
 | `Inference.Onnx/Qwen3Tts/Models/NpyReader.cs:91` | `byte[] headerBytes = new byte[10]` | `Span<byte> headerBytes = stackalloc byte[10]` (small fixed-size header read) |
-| `Media/Waveforms/WavePcm16.cs` | Various `byte[]` for WAV header parsing | stackalloc for 44-byte WAV headers |
-| `Media/Extraction/Pcm16WaveClipExtractor.cs` | Buffer allocations for audio chunks | ArrayPool<byte>.Shared for large buffers |
+| `Media/Waveforms/WavePcm16.cs` | Various `byte[]` for WAV header parsing | `stackalloc` for 44-byte WAV headers |
+| `Media/Extraction/Pcm16WaveClipExtractor.cs` | Buffer allocations for audio chunks | `ArrayPool<byte>.Shared` for large buffers |
 
 **Impact:** Low-medium. Only matters in hot paths (batch TTS, waveform generation).
 
