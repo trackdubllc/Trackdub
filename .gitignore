@@ -79,6 +79,7 @@ temp/
 tmp/
 *.tmp
 **/*.*.tmp.*
+*_tmp.json
 *.log
 /diff.txt
 /test_output.txt
@@ -252,6 +253,8 @@ output/unused-code-audit/
 .cursor/babysit-pr
 /.cursor/hooks/*
 !.cursor/hooks/check-pr-threads.ps1
+/.cursor/settings.json
+/.cursor/plans/
 
 # Local git hooks (use repo scripts under tools/ instead)
 /.githooks
