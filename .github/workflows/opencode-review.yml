@@ -1,0 +1,30 @@
+---
+name: OpenCode review
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      id-token: write
+      actions: read
+    uses: tonythethompson/opencode-review-threads/.github/workflows/opencode-review.yml@802a4d78c2b8ba92c2375d98d3aa482e8576b925  # v1.3.0
+    with:
+      models-review: cf:@cf/zai-org/glm-5.2,zen:big-pickle,zen:glm-5-free
+      models-fix: cf:@cf/deepseek-ai/deepseek-v4-flash-0731,zen:nemotron-3.5-lightning-free,zen:big-pickle
+    secrets:
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
