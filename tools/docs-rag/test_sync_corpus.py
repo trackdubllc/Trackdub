@@ -1,3 +1,4 @@
+import inspect
 import subprocess
 import tempfile
 import unittest
@@ -271,6 +272,30 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual((self.staging / "old.md").read_text(), "last complete snapshot")
         upload.assert_not_called()
         reindex.assert_not_called()
+
+
+class ExcludeGlobTests(unittest.TestCase):
+    """Exclude patterns are matched with a portable glob: PurePath.full_match needs Python 3.13."""
+
+    def test_literal_pattern_matches_only_itself(self):
+        self.assertTrue(sync_corpus.glob_matches("docs/specs/specs.md", "docs/specs/specs.md"))
+        self.assertFalse(sync_corpus.glob_matches("docs/specs/other.md", "docs/specs/specs.md"))
+
+    def test_star_stays_inside_one_path_segment(self):
+        self.assertTrue(sync_corpus.glob_matches("docs/specs/specs.md", "docs/*/specs.md"))
+        self.assertFalse(sync_corpus.glob_matches("docs/nested/specs/specs.md", "docs/*/specs.md"))
+        self.assertFalse(sync_corpus.glob_matches("docs/specs/specs.md", "docs/specs/*.md/extra"))
+
+    def test_double_star_matches_any_depth_below_a_directory(self):
+        self.assertTrue(sync_corpus.glob_matches("docs/strategy/strategy.md", "docs/strategy/**"))
+        self.assertTrue(sync_corpus.glob_matches("docs/strategy/a/b/plan.md", "docs/strategy/**"))
+        self.assertFalse(sync_corpus.glob_matches("docs/reference/reference.md", "docs/strategy/**"))
+        self.assertTrue(sync_corpus.glob_matches("docs/architecture/ADR-1.md", "docs/**/ADR-*.md"))
+        self.assertTrue(sync_corpus.glob_matches("docs/ADR-1.md", "docs/**/ADR-*.md"))
+
+    def test_refresh_avoids_python_3_13_only_path_api(self):
+        source = inspect.getsource(sync_corpus)
+        self.assertNotIn("full_match", source)
 
 
 if __name__ == "__main__":

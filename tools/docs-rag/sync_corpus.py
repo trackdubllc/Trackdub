@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
 import shutil
@@ -11,7 +12,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 
 TOOL_ROOT = Path(__file__).resolve().parent
@@ -63,6 +64,27 @@ def repo_root(entry: dict) -> Path | None:
     return path if path.is_dir() else None
 
 
+def glob_matches(rel: str, pattern: str) -> bool:
+    """Match a repo-relative path against a manifest glob on any supported Python.
+
+    Pathlib's pattern matcher needs 3.13 and fnmatch's star crosses ``/``, so the
+    corpus manifests are matched segment by segment instead.
+    """
+    parts = rel.split("/")
+    segments = [segment for segment in pattern.split("/") if segment]
+
+    def walk(index: int, rule: int) -> bool:
+        if rule == len(segments):
+            return index == len(parts)
+        if segments[rule] == "**":
+            return any(walk(depth, rule + 1) for depth in range(index, len(parts) + 1))
+        if index >= len(parts) or not fnmatch.fnmatchcase(parts[index], segments[rule]):
+            return False
+        return walk(index + 1, rule + 1)
+
+    return walk(0, 0)
+
+
 def stage_repos(manifest: dict, staging: Path) -> tuple[int, int]:
     copied = 0
     skipped = 0
@@ -84,7 +106,7 @@ def stage_repos(manifest: dict, staging: Path) -> tuple[int, int]:
                     continue
                 seen.add(path)
                 rel = path.relative_to(root).as_posix()
-                excluded = [glob for glob in exclude if PurePosixPath(rel).full_match(glob)]
+                excluded = [glob for glob in exclude if glob_matches(rel, glob)]
                 if excluded:
                     matched_excludes.update(excluded)
                     continue
