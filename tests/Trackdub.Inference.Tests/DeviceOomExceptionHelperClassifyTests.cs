@@ -54,6 +54,11 @@ public sealed class DeviceOomExceptionHelperClassifyTests
     [InlineData("[ErrorCode:EPFail] device-side assert triggered")]
     [InlineData("[ErrorCode:RuntimeException] unspecified launch failure")]
     [InlineData("[ErrorCode:EPFail] CUDA_ERROR_CONTAINED")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_HARDWARE_STACK_ERROR")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_ILLEGAL_INSTRUCTION")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_MISALIGNED_ADDRESS")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_INVALID_ADDRESS_SPACE")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_INVALID_PC")]
     public void ClassifyDeviceExceptionMessage_StickyCudaError_ReturnsDeviceFailedRegardlessOfOrtErrorCode(string message)
     {
         Assert.Equal(

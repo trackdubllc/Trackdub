@@ -38,6 +38,9 @@ $BuildDir       = Join-Path $RepoRoot 'build'
 $Precision      = 'fp16'
 $ResultFile     = Join-Path $BuildDir "sortformer-4spk-trtrtx-validation.json"
 
+# A previous pass cannot authorize a later failed or incomplete run.
+Remove-Item -LiteralPath $ResultFile -Force -ErrorAction SilentlyContinue
+
 # ---------------------------------------------------------------------------
 # Model layout (matches the download-cache layout, not bundled-models.manifest.json's
 # root_path: model_id "cgus/diar_streaming_sortformer_4spk-v2.1-onnx" splits on "/" into
@@ -63,21 +66,7 @@ $stagingDirName      = "sortformer-4spk-onnx-trtrtx-validated-$Precision"
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
-if (-not (Test-Path $OliveExe)) {
-    $bootstrapScript = Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1'
-    for ($attempt = 1; $attempt -le 2; $attempt++) {
-        Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (attempt $attempt/2)..."
-        # Run in a child pwsh process: Bootstrap-TrtRtxOliveVenv.ps1 calls exit on failure, which
-        # would terminate this whole process (not just the child script) if invoked in-process.
-        & pwsh -NoProfile -File $bootstrapScript
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $OliveExe)) { break }
-        Write-Host "Bootstrap attempt $attempt failed (exit $LASTEXITCODE)." -ForegroundColor Red
-    }
-    if (-not (Test-Path $OliveExe)) {
-        Write-Error "olive.exe still not found at $OliveExe after 2 bootstrap attempts."
-        exit 1
-    }
-}
+Ensure-TrtRtxOliveEnvironment -VenvPath $VenvPath -BootstrapScript (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1')
 
 if (-not (Test-Path $modelSrc)) {
     Write-Error "SortFormer encoder model not found: $modelSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model cgus/diar_streaming_sortformer_4spk-v2.1-onnx`nSearched model cache root: $ModelCacheRoot (override with `$env:TRACKDUB_MODEL_CACHE)"

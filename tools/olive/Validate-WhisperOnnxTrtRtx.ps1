@@ -42,6 +42,9 @@ $OliveExe   = Join-Path $VenvPath 'Scripts\olive.exe'
 $BuildDir   = Join-Path $RepoRoot 'build'
 $ResultFile = Join-Path $BuildDir 'whisper-onnx-trtrtx-validation.json'
 
+# A previous pass cannot authorize a later failed or incomplete run.
+Remove-Item -LiteralPath $ResultFile -Force -ErrorAction SilentlyContinue
+
 # ---------------------------------------------------------------------------
 # Model-size lookup (owner/repo match the model cache's download layout, i.e. the
 # model id split on "/" into directory segments — not bundled-models.manifest.json's
@@ -66,21 +69,7 @@ $decoderSrc = Join-Path $modelRoot 'onnx\decoder_model.onnx'
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
-if (-not (Test-Path $OliveExe)) {
-    $bootstrapScript = Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1'
-    for ($attempt = 1; $attempt -le 2; $attempt++) {
-        Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (attempt $attempt/2)..."
-        # Run in a child pwsh process: Bootstrap-TrtRtxOliveVenv.ps1 calls exit on failure, which
-        # would terminate this whole process (not just the child script) if invoked in-process.
-        & pwsh -NoProfile -File $bootstrapScript
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $OliveExe)) { break }
-        Write-Host "Bootstrap attempt $attempt failed (exit $LASTEXITCODE)." -ForegroundColor Red
-    }
-    if (-not (Test-Path $OliveExe)) {
-        Write-Error "olive.exe still not found at $OliveExe after 2 bootstrap attempts."
-        exit 1
-    }
-}
+Ensure-TrtRtxOliveEnvironment -VenvPath $VenvPath -BootstrapScript (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1')
 
 if (-not (Test-Path $encoderSrc)) {
     Write-Error "Encoder model not found: $encoderSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model $($entry.Owner)/$($entry.Repo)`nSearched model cache root: $ModelCacheRoot (override with `$env:TRACKDUB_MODEL_CACHE)"

@@ -47,7 +47,8 @@ $PythonExe  = Join-Path $VenvPath 'Scripts\python.exe'
 $PipExe     = Join-Path $VenvPath 'Scripts\pip.exe'
 $OliveExe   = Join-Path $VenvPath 'Scripts\olive.exe'
 # Keep in step with the Microsoft.ML.OnnxRuntime version the C# runtime ships.
-$OnnxRuntimeVersion = '1.30.0'
+. (Join-Path $PSScriptRoot 'TrtRtxOliveCommon.ps1')
+$OnnxRuntimeVersion = $TrtRtxOliveOnnxRuntimeVersion
 
 # ---------------------------------------------------------------------------
 # 1. Ensure we have a system Python 3.10+ to bootstrap with
@@ -152,6 +153,10 @@ Write-Host ""
 Write-Host "Verifying install..."
 & $PythonExe -c "import olive; print('olive:', olive.__version__)" 2>&1 | ForEach-Object { Write-Host "  $_" }
 if ($LASTEXITCODE -ne 0) { Write-Error "olive import verification failed."; exit 1 }
+if (-not (Test-TrtRtxOliveEnvironment -VenvPath $VenvPath)) {
+    Write-Error "onnxruntime==$OnnxRuntimeVersion is missing required TRT-RTX EP ABI APIs after install."
+    exit 1
+}
 if (-not $SkipModelopt) {
     & $PythonExe -c "import modelopt; print('modelopt:', modelopt.__version__)" 2>&1 | ForEach-Object { Write-Host "  $_" }
     if ($LASTEXITCODE -ne 0) { Write-Warning "modelopt import verification failed. NVMO PTQ recipes will not work; fp16 recipes still do." }

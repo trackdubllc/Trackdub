@@ -58,8 +58,8 @@
                     ],
                     "input_types": [
                         "float32",
-                        "int32",
-                        "int32",
+                        "int64",
+                        "int64",
                         "float32",
                         "float32"
                     ]

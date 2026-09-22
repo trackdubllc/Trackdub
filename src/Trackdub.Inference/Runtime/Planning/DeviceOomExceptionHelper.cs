@@ -150,9 +150,9 @@ public static class DeviceOomExceptionHelper
 
     // CUDA errors that leave the whole process's CUDA state unusable: every later CUDA call
     // returns the same error until the process restarts, so neither a re-run nor a new CUDA
-    // session in this process can recover (CUDA Runtime/Driver API "Error Types"). Both the
-    // cudaGetErrorName and cudaGetErrorString forms are listed, taken from the cudart shipped in
-    // the TensorRT RTX bundle, since ORT and EP messages quote one or the other.
+    // session in this process can recover (CUDA Runtime/Driver API "Error Types"). Runtime names,
+    // descriptions, and Driver API names that ORT/EP messages report are listed, taken from the
+    // cudart shipped in the TensorRT RTX bundle.
     private static readonly string[] StickyCudaErrorMarkers =
     [
         "cudaErrorIllegalAddress", "an illegal memory access was encountered",
@@ -167,6 +167,9 @@ public static class DeviceOomExceptionHelper
         "cudaErrorTensorMemoryLeak", "tensor memory not completely freed",
         "cudaErrorContained", "Invalid access of peer GPU memory over nvlink or a hardware error",
         "CUDA_ERROR_ILLEGAL_ADDRESS", "CUDA_ERROR_LAUNCH_TIMEOUT", "CUDA_ERROR_ASSERT",
+        "CUDA_ERROR_HARDWARE_STACK_ERROR", "CUDA_ERROR_ILLEGAL_INSTRUCTION",
+        "CUDA_ERROR_MISALIGNED_ADDRESS", "CUDA_ERROR_INVALID_ADDRESS_SPACE",
+        "CUDA_ERROR_INVALID_PC",
         "CUDA_ERROR_CONTAINED", "CUDA_ERROR_LAUNCH_FAILED",
     ];
 

@@ -1,5 +1,56 @@
 # Shared helpers for the Olive TRT-RTX validator scripts. Dot-source this file.
 
+$script:TrtRtxOliveOnnxRuntimeVersion = '1.30.0'
+
+function Test-TrtRtxOliveEnvironment {
+    param(
+        [Parameter(Mandatory)]
+        [string] $VenvPath
+    )
+
+    $pythonExe = Join-Path $VenvPath 'Scripts\python.exe'
+    $oliveExe = Join-Path $VenvPath 'Scripts\olive.exe'
+    if (-not (Test-Path $pythonExe) -or -not (Test-Path $oliveExe)) {
+        return $false
+    }
+
+    $probe = @"
+import onnxruntime as ort
+expected = "$TrtRtxOliveOnnxRuntimeVersion"
+required = ("register_execution_provider_library", "get_ep_devices")
+if ort.__version__ != expected or not all(hasattr(ort, name) for name in required):
+    raise RuntimeError(f"onnxruntime {ort.__version__} lacks required TRT-RTX EP ABI support")
+"@
+
+    & $pythonExe -c $probe 2>$null | Out-Null
+    return $LASTEXITCODE -eq 0
+}
+
+function Ensure-TrtRtxOliveEnvironment {
+    param(
+        [Parameter(Mandatory)]
+        [string] $VenvPath,
+        [Parameter(Mandatory)]
+        [string] $BootstrapScript
+    )
+
+    if (Test-TrtRtxOliveEnvironment -VenvPath $VenvPath) {
+        return
+    }
+
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        Write-Warning "TRT-RTX Olive environment missing or lacks ONNX Runtime $TrtRtxOliveOnnxRuntimeVersion EP ABI support. Bootstrapping (attempt $attempt/2)..."
+        # The bootstrap script calls exit on failure, so run it in a child process.
+        & pwsh -NoProfile -File $BootstrapScript
+        if ($LASTEXITCODE -eq 0 -and (Test-TrtRtxOliveEnvironment -VenvPath $VenvPath)) {
+            return
+        }
+        Write-Host "Bootstrap attempt $attempt failed (exit $LASTEXITCODE)." -ForegroundColor Red
+    }
+
+    throw "TRT-RTX Olive environment is unavailable or lacks required ONNX Runtime EP ABI support after 2 bootstrap attempts."
+}
+
 <#
 .SYNOPSIS
     Resolves the model cache directory the way the Trackdub CLI/app does.
