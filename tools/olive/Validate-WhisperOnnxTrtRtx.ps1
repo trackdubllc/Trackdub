@@ -7,7 +7,9 @@
     Runs the Olive TRT-RTX recipes for whisper-onnx encoder and decoder, then
     optionally measures encoder latency (rtfx) on Librispeech test.clean. Requires:
       - NVIDIA GPU with TRT-RTX (NvTensorRTRTXExecutionProvider) support
-      - Model files already downloaded (run `dotnet run --project src/Trackdub.Tools -- ingest ...`)
+      - Model files already downloaded to the model cache (TRACKDUB_MODEL_CACHE, or
+        %LOCALAPPDATA%\Trackdub\model-cache by default; run
+        `dotnet run --project src/Trackdub.Tools -- ingest ...`)
       - olive-ai installed (run `.\tools\trackdub-optimize.ps1 -- --help` once to bootstrap venv)
 
     On success, records results to build/whisper-onnx-trtrtx-validation.json.
@@ -41,19 +43,22 @@ $BuildDir   = Join-Path $RepoRoot 'build'
 $ResultFile = Join-Path $BuildDir 'whisper-onnx-trtrtx-validation.json'
 
 # ---------------------------------------------------------------------------
-# Model-size lookup
+# Model-size lookup (owner/repo match the model cache's download layout, i.e. the
+# model id split on "/" into directory segments — not bundled-models.manifest.json's
+# root_path)
 # ---------------------------------------------------------------------------
 $modelTable = @{
-    'tiny'      = @{ ModelRoot = 'models\whisper-tiny-onnx';  RecipeDir = 'onnx-community-whisper-tiny'  }
-    'base'      = @{ ModelRoot = 'models\whisper-base';       RecipeDir = 'onnx-community-whisper-base'  }
-    'small'     = @{ ModelRoot = 'models\whisper-small';      RecipeDir = 'onnx-community-whisper-small' }
-    'medium'    = @{ ModelRoot = 'models\whisper-medium';     RecipeDir = 'Xenova-whisper-medium'         }
-    'large-v3'  = @{ ModelRoot = 'models\whisper-large-v3';   RecipeDir = 'Xenova-whisper-large-v3'       }
+    'tiny'      = @{ Owner = 'onnx-community'; Repo = 'whisper-tiny';     RecipeDir = 'onnx-community-whisper-tiny'  }
+    'base'      = @{ Owner = 'onnx-community'; Repo = 'whisper-base';     RecipeDir = 'onnx-community-whisper-base'  }
+    'small'     = @{ Owner = 'onnx-community'; Repo = 'whisper-small';    RecipeDir = 'onnx-community-whisper-small' }
+    'medium'    = @{ Owner = 'Xenova';         Repo = 'whisper-medium';   RecipeDir = 'Xenova-whisper-medium'         }
+    'large-v3'  = @{ Owner = 'Xenova';         Repo = 'whisper-large-v3'; RecipeDir = 'Xenova-whisper-large-v3'       }
 }
 
-$entry      = $modelTable[$ModelSize]
-$modelRoot  = Join-Path $RepoRoot $entry.ModelRoot
-$recipeDir  = Join-Path $RepoRoot 'resources\olive-recipes' $entry.RecipeDir 'NvTensorRtRtx'
+$entry          = $modelTable[$ModelSize]
+$ModelCacheRoot = if ($env:TRACKDUB_MODEL_CACHE) { $env:TRACKDUB_MODEL_CACHE } else { Join-Path $env:LOCALAPPDATA 'Trackdub\model-cache' }
+$modelRoot      = Join-Path $ModelCacheRoot (Join-Path $entry.Owner $entry.Repo)
+$recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes' $entry.RecipeDir 'NvTensorRtRtx'
 $encoderSrc = Join-Path $modelRoot 'onnx\encoder_model.onnx'
 $decoderSrc = Join-Path $modelRoot 'onnx\decoder_model.onnx'
 
@@ -77,7 +82,7 @@ if (-not (Test-Path $OliveExe)) {
 }
 
 if (-not (Test-Path $encoderSrc)) {
-    Write-Error "Encoder model not found: $encoderSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model onnx-community/whisper-$ModelSize"
+    Write-Error "Encoder model not found: $encoderSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model $($entry.Owner)/$($entry.Repo)`nSearched model cache root: $ModelCacheRoot (override with `$env:TRACKDUB_MODEL_CACHE)"
     exit 1
 }
 
