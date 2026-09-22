@@ -22,6 +22,56 @@ class UploadTests(unittest.TestCase):
             self.assertEqual(sync_corpus.upload(Path("staging"), "corpus", Path("api"), workers=3), 3)
         run.assert_called_once()
 
+    def test_prune_asks_the_uploader_to_delete_absent_objects(self):
+        with patch.object(sync_corpus.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            self.assertEqual(sync_corpus.upload(Path("staging"), "corpus", Path("api"), workers=3, prune=True), 0)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0][2:], ["api", "staging", "corpus", "3", "--prune"])
+
+    def test_prune_refused_for_incomplete_refresh(self):
+        self.assert_prune_refused(["--skip-fetch", "--upload", "--prune"], "--skip-fetch")
+
+    def test_prune_refused_for_reused_staging(self):
+        self.assert_prune_refused(["--reuse-staging", "--upload", "--prune"], "--reuse-staging")
+
+    def test_prune_refused_without_upload(self):
+        self.assert_prune_refused(["--prune"], "missing --upload")
+
+    def test_full_refresh_passes_prune_to_upload(self):
+        with tempfile.TemporaryDirectory() as root:
+            staging = Path(root) / ".staging"
+            staging.mkdir()
+            with patch.object(sync_corpus, "STAGING", staging), \
+                 patch.object(sync_corpus, "load_manifest", return_value={"bucket": "corpus", "aiSearchInstance": "instance"}), \
+                 patch.object(sync_corpus, "refresh_staging") as refresh, \
+                 patch.object(sync_corpus, "upload", return_value=0) as upload, \
+                 patch.object(sync_corpus, "reindex", return_value=0), \
+                 patch("sys.argv", ["sync_corpus.py", "--upload", "--prune"]):
+                with self.assertRaises(SystemExit) as stopped:
+                    sync_corpus.main()
+            self.assertEqual(stopped.exception.code, 0)
+        refresh.assert_called_once()
+        self.assertTrue(upload.call_args.kwargs["prune"])
+
+    def assert_prune_refused(self, flags, reason):
+        with patch.object(sync_corpus, "load_manifest") as manifest, \
+             patch.object(sync_corpus, "refresh_staging") as refresh, \
+             patch.object(sync_corpus, "upload") as upload, \
+             patch.object(sync_corpus, "reindex") as reindex, \
+             patch("builtins.print") as output, \
+             patch("sys.argv", ["sync_corpus.py", *flags]):
+            with self.assertRaises(SystemExit) as stopped:
+                sync_corpus.main()
+        self.assertNotEqual(stopped.exception.code, 0)
+        output.assert_called_once_with(
+            f"--prune deletes bucket objects missing from staging; refusing because of {reason}",
+            flush=True,
+        )
+        refresh.assert_not_called()
+        manifest.assert_not_called()
+        upload.assert_not_called()
+        reindex.assert_not_called()
+
     def test_upload_reindexes_only_after_success(self):
         self.run_main(upload_status=0, reindex_status=0, expected=0)
 
@@ -138,6 +188,45 @@ class RefreshTests(unittest.TestCase):
         upload.assert_called_once()
         self.assertEqual(upload.call_args.args[0], self.staging)
         reindex.assert_called_once()
+
+    def test_exclude_drops_only_listed_repo_files(self):
+        (self.repo / "mirror.md").write_text("mirror aggregate", encoding="utf-8")
+        self.manifest["repos"][0]["exclude"] = ["mirror.md"]
+
+        code, _, upload, _ = self.run_refresh("--upload")
+
+        self.assertEqual(code, 0)
+        upload.assert_called_once()
+        self.assertTrue((self.staging / "first-party/core/guide.md").is_file())
+        self.assertFalse((self.staging / "first-party/core/mirror.md").exists())
+
+    def test_exclude_supports_nested_paths_and_globs(self):
+        (self.repo / "docs" / "reference").mkdir(parents=True)
+        (self.repo / "docs" / "specs").mkdir(parents=True)
+        (self.repo / "docs" / "index.md").write_text("keep", encoding="utf-8")
+        (self.repo / "docs" / "reference" / "reference.md").write_text("keep", encoding="utf-8")
+        (self.repo / "docs" / "specs" / "specs.md").write_text("mirror aggregate", encoding="utf-8")
+        (self.repo / "docs" / "strategy").mkdir()
+        (self.repo / "docs" / "strategy" / "strategy.md").write_text("mirror aggregate", encoding="utf-8")
+        self.manifest["repos"][0]["include"] = ["docs/**/*.md"]
+        self.manifest["repos"][0]["exclude"] = ["docs/*/specs.md", "docs/strategy/**"]
+
+        code, _, upload, _ = self.run_refresh("--upload")
+
+        self.assertEqual(code, 0)
+        upload.assert_called_once()
+        self.assertTrue((self.staging / "first-party/core/docs/index.md").is_file())
+        self.assertTrue((self.staging / "first-party/core/docs/reference/reference.md").is_file())
+        self.assertFalse((self.staging / "first-party/core/docs/specs/specs.md").exists())
+        self.assertFalse((self.staging / "first-party/core/docs/strategy/strategy.md").exists())
+
+    def test_exclude_pattern_matching_nothing_fails_refresh(self):
+        self.manifest["repos"][0]["exclude"] = ["docs/specs/typo.md"]
+
+        code, _, upload, _ = self.run_refresh("--upload")
+
+        self.assertNotEqual(code, 0)
+        upload.assert_not_called()
 
     def test_skip_fetch_intentionally_promotes_repo_only_snapshot(self):
         code, fetch, upload, reindex = self.run_refresh("--skip-fetch", "--upload")
