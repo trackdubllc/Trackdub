@@ -52,6 +52,13 @@ A targeted `INDEX` request for the EP ABI document also returned success without
 showing the missing metadata on readback. Re-uploading identical source files or
 accepting another job is not proof of metadata refresh.
 
+Cloudflare documents full reindexing when the metadata schema or tokenizer
+changes, but no force-reingestion flag or guaranteed retrigger from an identical
+configuration update. Ordinary source sync does not guarantee rebuilding unchanged
+objects. Recovery requires Cloudflare investigation of the interrupted
+configuration-triggered reindex; no items were deleted and no model or threshold
+changes were used to mask the failure.
+
 ## Verification commands
 
 From the core task worktree:
@@ -69,12 +76,14 @@ From the API task worktree:
 ```bash
 npm run typecheck
 npx vitest run test/docs-rag.test.ts
+npm run test:all
 ```
 
-Fresh results: typecheck passed; 76 docs-rag tests passed. Earlier activation
-verification passed 20 tests. The earlier full API run passed 125 tests but also
-reported two baseline Better Auth unhandled rejections; it was not a clean full
-suite. No full .NET build was run for this tooling-only change.
+Fresh results: typecheck passed; 76 docs-rag tests passed. The full `test:all`
+run passed 125 main-suite tests and 20 activation tests, but the main suite also
+reported two baseline Better Auth unhandled rejections. Its existing
+`dangerouslyIgnoreUnhandledErrors` setting allowed exit 0; this was not a clean
+full suite. No full .NET build was run for this tooling-only change.
 
 ## Recurring operations
 
