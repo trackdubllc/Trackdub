@@ -954,15 +954,13 @@ internal static class OnnxExecutionSessionFactory
 
         BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
-        // The encoder's cache_last_channel / cache_last_time cache tensors are bound via
-        // CachePingPongBuffer (see NemotronAsrGreedyDecoder), giving the encoder session stable,
-        // reused device buffers across Run calls instead of a fresh allocation per chunk — the
-        // precondition CUDA graph capture needs. The decoder-joint session still builds fresh
-        // inputs every step, so it stays off. NOT hardware-verified: no NvTensorRTRTXExecutionProvider
-        // device was available to confirm the replayed graph doesn't read a stale cache address
-        // across the per-chunk ClearBoundInputs/BindInput rebind. Verify on TRT-RTX hardware before
-        // relying on this for production transcription accuracy.
-        const bool enableEncoderCudaGraph = true;
+        // CUDA graph replay reads and writes the device addresses captured on the first run, so every
+        // binding must stay at a fixed address across runs. The encoder does not meet that yet:
+        // NemotronAsrGreedyDecoder rebinds fresh processed_signal / length / prompt OrtValues every
+        // chunk, and CachePingPongBuffer alternates the cache input/output buffers between two
+        // host allocations. Keep capture off for both sessions until the full binding set uses fixed
+        // device buffers and is validated across multiple chunks on TRT-RTX hardware.
+        const bool enableEncoderCudaGraph = false;
         DualOptionsSelections selections = CreateDualOptionsSelections(
             provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
             additionalTrtEncoderOptions, additionalTrtDecoderOptions, enableEncoderCudaGraph);

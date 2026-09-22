@@ -134,29 +134,6 @@ public sealed class OliveRecipeResolverTests : IDisposable
         Assert.Contains("outside the recipe pilot", resolution.FallbackReason, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Theory]
-    [InlineData("sortformer")]
-    [InlineData("nemotron-asr")]
-    public void Resolve_treats_sortformer_and_nemotron_asr_as_pilot_families(string engineFamily)
-    {
-        string configPath = WriteRecipe("model/NvTensorRtRtx/encoder_trtrtx_fp16.json", "{}");
-        var bindings = new[]
-        {
-            new ModelOptimizationRecipeBinding("model/NvTensorRtRtx/encoder_trtrtx_fp16.json", "trt-rtx", "fp16")
-        };
-
-        OliveRecipeResolution resolution = _resolver.Resolve(
-            "example/model",
-            engineFamily,
-            bindings,
-            OliveExecutionProvider.TensorRtRtx,
-            "fp16",
-            _recipesRoot);
-
-        Assert.True(resolution.UseRecipe);
-        Assert.Equal(configPath, resolution.RecipeConfigPath);
-    }
-
     [Fact]
     public void Resolve_disambiguates_same_provider_and_precision_bindings_by_component()
     {
@@ -171,8 +148,8 @@ public sealed class OliveRecipeResolverTests : IDisposable
         };
 
         OliveRecipeResolution encoderResolution = _resolver.Resolve(
-            "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx",
-            "nemotron-asr",
+            "example/two-component-model",
+            "whisper-onnx",
             bindings,
             OliveExecutionProvider.TensorRtRtx,
             "fp16",
@@ -182,8 +159,8 @@ public sealed class OliveRecipeResolverTests : IDisposable
         Assert.Equal(encoderPath, encoderResolution.RecipeConfigPath);
 
         OliveRecipeResolution decoderJointResolution = _resolver.Resolve(
-            "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx",
-            "nemotron-asr",
+            "example/two-component-model",
+            "whisper-onnx",
             bindings,
             OliveExecutionProvider.TensorRtRtx,
             "fp16",

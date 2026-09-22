@@ -2018,58 +2018,64 @@ public sealed class ModelManifestLoaderTests
             manifest.Optimization!.Olive!.Components);
     }
 
-    [Fact]
-    public void LoadCatalog_NemotronAsrEntryHasTrtRtxBindingsPerComponent()
+    [Theory]
+    [InlineData("encoder.onnx", true)]
+    [InlineData("encoder_typo.onnx", false)]
+    public void LoadCatalog_RecipeBindingComponentMustBeADeclaredComponent(string component, bool valid)
     {
-        string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
-            repoRoot,
-            "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
+        string manifestPath = WriteTempManifest(
+            $$"""
+            {
+              "models": [
+                {
+                  "model_id": "example/two-component",
+                  "task": "asr",
+                  "engine_family": "whisper-onnx",
+                  "capabilities": [ "asr" ],
+                  "license": "MIT",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_safe_mode": true,
+                  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "root_path": "../../../../models/example-two-component",
+                  "download_files": [ "encoder.onnx", "decoder.onnx" ],
+                  "variants": [],
+                  "hash_verification": { "mode": "verify-if-sha-present", "algorithm": "SHA-256" },
+                  "optimization": {
+                    "olive": {
+                      "mode": "existing-onnx-components",
+                      "components": [ "encoder.onnx", "decoder.onnx" ],
+                      "supported_providers": [ "trt-rtx" ],
+                      "recipe_bindings": [
+                        {
+                          "provider": "trt-rtx",
+                          "precision": "fp16",
+                          "component": "{{component}}",
+                          "config_relative_path": "example/encoder_fp16.json",
+                          "operations": [ "provider_optimization" ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+            """);
 
-        ModelManifestCatalog catalog = ModelManifestLoader.LoadCatalog(manifestPath);
-        ModelManifest manifest = Assert.Single(catalog.Models, model =>
-            model.ModelId.Equals("tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx", StringComparison.OrdinalIgnoreCase));
-
-        ModelOliveOptimizationProfile olive = manifest.Optimization!.Olive!;
-        Assert.Contains(OliveOptimizationProvider.TensorRtRtx, olive.SupportedProviders);
-
-        OliveRecipeBinding encoderFp16 = Assert.Single(olive.RecipeBindings, b =>
-            b.Component == "encoder.onnx" && b.Provider == "trt-rtx" && b.Precision == "fp16");
-        Assert.Equal(
-            "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
-            encoderFp16.ConfigRelativePath);
-
-        OliveRecipeBinding decoderJointFp16 = Assert.Single(olive.RecipeBindings, b =>
-            b.Component == "decoder_joint.onnx" && b.Provider == "trt-rtx" && b.Precision == "fp16");
-        Assert.Equal(
-            "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json",
-            decoderJointFp16.ConfigRelativePath);
-
-        // Distinct components must not collide: the two fp16 bindings above share provider and
-        // precision but resolve to different config files because Component disambiguates them.
-        Assert.NotEqual(encoderFp16.ConfigRelativePath, decoderJointFp16.ConfigRelativePath);
-    }
-
-    [Fact]
-    public void LoadCatalog_SortFormerEntryHasTrtRtxBinding()
-    {
-        string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
-            repoRoot,
-            "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
-
-        ModelManifestCatalog catalog = ModelManifestLoader.LoadCatalog(manifestPath);
-        ModelManifest manifest = Assert.Single(catalog.Models, model =>
-            model.ModelId.Equals("cgus/diar_streaming_sortformer_4spk-v2.1-onnx", StringComparison.OrdinalIgnoreCase));
-
-        ModelOliveOptimizationProfile olive = manifest.Optimization!.Olive!;
-        Assert.Contains(OliveOptimizationProvider.TensorRtRtx, olive.SupportedProviders);
-
-        OliveRecipeBinding fp16Binding = Assert.Single(olive.RecipeBindings, b =>
-            b.Provider == "trt-rtx" && b.Precision == "fp16");
-        Assert.Equal(
-            "cgus-diar_streaming_sortformer_4spk-v2.1-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
-            fp16Binding.ConfigRelativePath);
+        if (valid)
+        {
+            ModelManifest manifest = Assert.Single(ModelManifestLoader.LoadCatalog(manifestPath).Models);
+            Assert.Equal(component, Assert.Single(manifest.Optimization!.Olive!.RecipeBindings).Component);
+        }
+        else
+        {
+            ModelManifestValidationException ex = Assert.Throws<ModelManifestValidationException>(
+                () => ModelManifestLoader.LoadCatalog(manifestPath));
+            Assert.Contains("encoder_typo.onnx", ex.Message, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

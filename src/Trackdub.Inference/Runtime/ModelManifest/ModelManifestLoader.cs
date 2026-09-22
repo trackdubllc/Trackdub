@@ -705,7 +705,7 @@ public static class ModelManifestLoader
         IReadOnlyList<string> supportedPrecisions = ReadStringArray(element, "supported_precisions", path, sourceName);
         IReadOnlyList<OliveOpsetPolicy> opsetPolicies = ReadOliveOpsetPolicies(element, path, sourceName);
         bool requireOpsetMetadata = ReadOptionalBoolean(element, "require_opset_metadata", path, sourceName, defaultValue: false);
-        IReadOnlyList<OliveRecipeBinding> recipeBindings = ReadOliveRecipeBindings(element, path, sourceName);
+        IReadOnlyList<OliveRecipeBinding> recipeBindings = ReadOliveRecipeBindings(element, path, sourceName, components);
         OliveRecipeFallbackPolicy fallbackPolicy = ReadOliveFallbackPolicy(
             element, "fallback_policy", path, sourceName, defaultValue: OliveRecipeFallbackPolicy.None);
 
@@ -723,7 +723,8 @@ public static class ModelManifestLoader
     private static IReadOnlyList<OliveRecipeBinding> ReadOliveRecipeBindings(
         JsonElement element,
         string path,
-        string sourceName)
+        string sourceName,
+        IReadOnlyList<string> components)
     {
         if (!element.TryGetProperty("recipe_bindings", out JsonElement bindingsElement))
         {
@@ -796,6 +797,13 @@ public static class ModelManifestLoader
             string? adapterMode = ReadOptionalNullableString(bindingElement, "adapter_mode", bindingPath, sourceName);
             string? outputManifestRelativePath = ReadOptionalNullableString(bindingElement, "output_manifest_relative_path", bindingPath, sourceName);
             string? component = ReadOptionalNullableString(bindingElement, "component", bindingPath, sourceName);
+            // The resolver matches a component-scoped binding only by exact name, so a typo would
+            // leave the binding silently unused; reject it here instead.
+            if (component is not null && !components.Contains(component, StringComparer.OrdinalIgnoreCase))
+            {
+                throw new ModelManifestValidationException(
+                    $"Manifest '{sourceName}' field '{bindingPath}.component' value '{component}' is not one of '{path}.components'.");
+            }
 
             bindings.Add(new OliveRecipeBinding(
                 provider,

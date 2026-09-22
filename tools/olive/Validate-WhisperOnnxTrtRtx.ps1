@@ -56,7 +56,8 @@ $modelTable = @{
 }
 
 $entry          = $modelTable[$ModelSize]
-$ModelCacheRoot = if ($env:TRACKDUB_MODEL_CACHE) { $env:TRACKDUB_MODEL_CACHE } else { Join-Path $env:LOCALAPPDATA 'Trackdub\model-cache' }
+. (Join-Path $PSScriptRoot 'TrtRtxOliveCommon.ps1')
+$ModelCacheRoot = Resolve-TrackdubModelCacheRoot
 $modelRoot      = Join-Path $ModelCacheRoot (Join-Path $entry.Owner $entry.Repo)
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes' $entry.RecipeDir 'NvTensorRtRtx'
 $encoderSrc = Join-Path $modelRoot 'onnx\encoder_model.onnx'

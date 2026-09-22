@@ -6,26 +6,27 @@ namespace Trackdub.Inference.Onnx.Tests;
 public sealed class InferenceRetryPolicyTests
 {
     [Theory]
-    [InlineData("[ErrorCode:RuntimeException] CUDA error: out of memory")]
-    [InlineData("[ErrorCode:RuntimeException] D3D12 allocation failed")]
-    [InlineData("[ErrorCode:RuntimeException] insufficient memory for allocation")]
     [InlineData("[ErrorCode:RuntimeException] DXGI_ERROR_DEVICE_REMOVED")]
     [InlineData("[ErrorCode:RuntimeException] CUDA driver reported device lost")]
     [InlineData("[ErrorCode:RuntimeException] GPU device hung")]
-    public void Device_level_failures_are_not_retried(string message)
+    [InlineData("[ErrorCode:Fail] CUDA failure 700: an illegal memory access was encountered")]
+    [InlineData("[ErrorCode:EPFail] unspecified launch failure")]
+    public void Device_failures_are_not_retried(string message)
     {
-        // These survive a re-run against the same session, so they must reach the
-        // device-fallback path immediately rather than consume the backoff budget.
+        // A removed device or a sticky CUDA error can never be cleared by re-running the
+        // same session, so retrying only delays the failure.
         Assert.False(InferenceRetryPolicy.IsTransientMessage(message));
     }
 
     [Theory]
-    [InlineData(ExecutionProviderKind.TensorRTRtx)]
-    [InlineData(null)]
-    public void Device_level_failures_are_not_retried_regardless_of_provider(ExecutionProviderKind? provider)
+    [InlineData("[ErrorCode:RuntimeException] CUDA error: out of memory", ExecutionProviderKind.TensorRTRtx)]
+    [InlineData("[ErrorCode:RuntimeException] D3D12 allocation failed", ExecutionProviderKind.DirectMl)]
+    [InlineData("[ErrorCode:RuntimeException] insufficient memory for allocation", null)]
+    public void Memory_exhaustion_is_retried_for_every_provider(string message, ExecutionProviderKind? provider)
     {
-        Assert.False(InferenceRetryPolicy.IsTransientMessage(
-            "[ErrorCode:RuntimeException] CUDA error: out of memory", provider));
+        // No inference-time handler re-plans onto another device, so memory pressure keeps its
+        // retries; it can clear as concurrent work frees memory.
+        Assert.True(InferenceRetryPolicy.IsTransientMessage(message, provider));
     }
 
     [Theory]

@@ -43,7 +43,8 @@ $ResultFile     = Join-Path $BuildDir "sortformer-4spk-trtrtx-validation.json"
 # root_path: model_id "cgus/diar_streaming_sortformer_4spk-v2.1-onnx" splits on "/" into
 # the cache's owner/repo directory segments)
 # ---------------------------------------------------------------------------
-$ModelCacheRoot = if ($env:TRACKDUB_MODEL_CACHE) { $env:TRACKDUB_MODEL_CACHE } else { Join-Path $env:LOCALAPPDATA 'Trackdub\model-cache' }
+. (Join-Path $PSScriptRoot 'TrtRtxOliveCommon.ps1')
+$ModelCacheRoot = Resolve-TrackdubModelCacheRoot
 
 # TensorRT RTX EP ABI plugin DLL, resolved like TensorRtRtxPluginLocator: TRACKDUB_TRT_RTX_EP_DIR,
 # then the default install. Olive registers it via the recipe accelerator's (name, path) pair.

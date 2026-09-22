@@ -12,7 +12,7 @@ R2 key rules (from `tools/docs-rag/sync_corpus.py`):
 - `first-party/trackdub/docs/reference/docs-rag-pin.md` exists only in the corpus: `sync_corpus.py` synthesizes it at sync time. It is not repo drift.
 
 HTTP fallback (when the MCP is not connected):
-- Doc fetch: `POST https://trackdub-docs-rag.trackdub.workers.dev/mcp` with the `Authorization` header from `Trackdub/.mcp.json`, `Content-Type: application/json`, `Accept: application/json, text/event-stream`, body `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_trackdub_doc","arguments":{"key":"<r2-key>","max_chars":200000}}}`. Stateless — no initialize needed. Parse the JSON after the `data: ` line; `result.content[0].text` is the doc payload (`found`/`size`/`truncated`/`text`). `max_chars` minimum 500.
+- Doc fetch: `POST https://trackdub-docs-rag.trackdub.workers.dev/mcp` with the `Authorization` header from `.mcp.json`, `Content-Type: application/json`, `Accept: application/json, text/event-stream`, body `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_trackdub_doc","arguments":{"key":"<r2-key>","max_chars":200000}}}`. Stateless — no initialize needed. Parse the JSON after the `data: ` line; `result.content[0].text` is the doc payload (`found`/`size`/`truncated`/`text`). `max_chars` minimum 500.
 - Retrieval: `POST /v1/search` with `{"query","scope","limit"}` — plain JSON with `hits[].key/text/score`.
 - Rate limits: 30 req/10s, 300/min, `ask` 5/10s. Write the report incrementally so an interruption cannot lose completed work.
 

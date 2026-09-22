@@ -44,7 +44,8 @@ $ResultFile     = Join-Path $BuildDir "nemotron-3.5-asr-trtrtx-validation.json"
 # root_path): the model id "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx" splits on
 # "/" into the cache's owner/repo directory segments.
 # ---------------------------------------------------------------------------
-$ModelCacheRoot = if ($env:TRACKDUB_MODEL_CACHE) { $env:TRACKDUB_MODEL_CACHE } else { Join-Path $env:LOCALAPPDATA 'Trackdub\model-cache' }
+. (Join-Path $PSScriptRoot 'TrtRtxOliveCommon.ps1')
+$ModelCacheRoot = Resolve-TrackdubModelCacheRoot
 
 # TensorRT RTX EP ABI plugin DLL, resolved like TensorRtRtxPluginLocator: TRACKDUB_TRT_RTX_EP_DIR,
 # then the default install. Olive registers it via the recipe accelerator's (name, path) pair.

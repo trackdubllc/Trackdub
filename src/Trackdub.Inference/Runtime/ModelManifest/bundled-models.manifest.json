@@ -93,34 +93,6 @@
       "download_file_sources": {
         "onnx/model.onnx": "https://huggingface.co/cgus/diar_streaming_sortformer_4spk-v2.1-onnx/resolve/main/diar_streaming_sortformer_4spk-v2.1.onnx"
       },
-      "optimization": {
-        "olive": {
-          "mode": "existing-onnx-components",
-          "components": [
-            "onnx/model.onnx"
-          ],
-          "supported_providers": [
-            "cpu",
-            "dml",
-            "trt-rtx"
-          ],
-          "supported_precisions": [
-            "fp32",
-            "fp16"
-          ],
-          "recipe_bindings": [
-            {
-              "provider": "trt-rtx",
-              "precision": "fp16",
-              "config_relative_path": "cgus-diar_streaming_sortformer_4spk-v2.1-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
-              "operations": [
-                "provider_optimization"
-              ],
-              "expected_output": "onnx_components"
-            }
-          ]
-        }
-      },
       "variants": [],
       "download_file_hashes": {
         "onnx/model.onnx": "82b9c735e1cfc6b36b4ff8a994d9a0573e922d0e80a58a8553b2c58f7aff0c00"
@@ -1257,34 +1229,7 @@
             "cpu",
             "dml",
             "cuda",
-            "tensorrt",
-            "trt-rtx"
-          ],
-          "supported_precisions": [
-            "fp32",
-            "fp16"
-          ],
-          "recipe_bindings": [
-            {
-              "provider": "trt-rtx",
-              "precision": "fp16",
-              "component": "encoder.onnx",
-              "config_relative_path": "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
-              "operations": [
-                "provider_optimization"
-              ],
-              "expected_output": "onnx_components"
-            },
-            {
-              "provider": "trt-rtx",
-              "precision": "fp16",
-              "component": "decoder_joint.onnx",
-              "config_relative_path": "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json",
-              "operations": [
-                "provider_optimization"
-              ],
-              "expected_output": "onnx_components"
-            }
+            "tensorrt"
           ]
         }
       },
