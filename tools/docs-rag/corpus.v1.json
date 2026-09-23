@@ -65,7 +65,9 @@
         ["trt-rtx-best-practices", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/performance/best-practices.html"],
         ["trt-rtx-troubleshooting", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/reference/troubleshooting.html"],
         ["sortformer-diar", "https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1"],
-        ["nemotron-asr", "https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b"]
+        ["nemotron-asr", "https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b"],
+        ["parakeet-tdt-v3", "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"],
+        ["parakeet-tdt-v2", "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2"]
       ]
     },
     {
@@ -135,7 +137,8 @@
       "prefix": "vendor/qwen",
       "sources": [
         ["qwen2.5", "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/main/README.md"],
-        ["qwen3-embedding", "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/raw/main/README.md"]
+        ["qwen3-embedding", "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B/raw/main/README.md"],
+        ["qwen3-asr", "https://huggingface.co/Qwen/Qwen3-ASR-1.7B/raw/main/README.md"]
       ]
     },
     {
