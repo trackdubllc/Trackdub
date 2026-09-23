@@ -152,6 +152,7 @@ public static class Program
         }
         string? outputDirectory = null, stage = null, model = null, provider = null;
         string? sourceLanguage = null, modelDirectory = null, ffmpeg = null, ffprobe = null;
+        string? expectedSha256 = null;
         string language = "es", mode = "fresh-process";
         bool reuseCache = false;
         for (int index = 1; index < args.Length; index++)
@@ -179,6 +180,7 @@ public static class Program
                 case "--model-directory": modelDirectory = value; break;
                 case "--ffmpeg": ffmpeg = value; break;
                 case "--ffprobe": ffprobe = value; break;
+                case "--sha256": expectedSha256 = value; break;
                 default:
                     error.WriteLine($"Unknown option {args[index - 1]}.");
                     return 1;
@@ -195,6 +197,7 @@ public static class Program
                 new ControlledDubbingBenchmarkOptions
                 {
                     FixturePath = args[0],
+                    ExpectedFixtureSha256 = expectedSha256,
                     OutputDirectory = outputDirectory,
                     Stage = stage,
                     Model = model,

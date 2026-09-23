@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Trackdub.Contracts;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Projects;
 using Trackdub.Infrastructure.Logging;
 using Trackdub.Infrastructure.Retry;
@@ -61,6 +62,7 @@ public sealed class FileSystemArtifactStore : IArtifactStore
 
     public async Task CommitAsync(ArtifactWriteHandle handle, CancellationToken cancellationToken)
     {
+        using var phase = BenchmarkPhaseCapture.Start("artifact-commit");
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!File.Exists(handle.TemporaryPath))
@@ -87,6 +89,7 @@ public sealed class FileSystemArtifactStore : IArtifactStore
 
     public async Task WriteJsonAsync<T>(string relativePath, T value, CancellationToken cancellationToken)
     {
+        using var phase = BenchmarkPhaseCapture.Start("artifact-json-write");
         logger.LogDebug($"Writing JSON artifact: '{relativePath}'");
 
         await using ArtifactWriteHandle handle = CreateWriteHandle(relativePath);
@@ -107,6 +110,7 @@ public sealed class FileSystemArtifactStore : IArtifactStore
 
     public async Task<T?> ReadJsonAsync<T>(string relativePath, CancellationToken cancellationToken)
     {
+        using var phase = BenchmarkPhaseCapture.Start("artifact-json-read");
         string path = GetPath(relativePath);
         if (!File.Exists(path))
         {

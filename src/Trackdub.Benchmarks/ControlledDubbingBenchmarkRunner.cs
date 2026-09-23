@@ -8,6 +8,7 @@ using Trackdub.Contracts.Dubbing;
 using Trackdub.Contracts.Persistence;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
+using Trackdub.Domain.Tts;
 using Trackdub.Infrastructure.Persistence.Repositories;
 using Trackdub.Infrastructure.Persistence.Sqlite;
 using Trackdub.Infrastructure.Settings;
@@ -16,11 +17,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Trackdub.Benchmarks;
 
 /// <summary>Runs an isolated fixture through a real pipeline, preserving terminal evidence.</summary>
-public sealed class ControlledDubbingBenchmarkRunner
+public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 {
     private readonly IBenchmarkEvidenceRepository _history;
     private readonly Action<IServiceCollection>? _serviceConfigurator;
     private HeadlessDubbingHost? _warmHost;
+    private string? _warmHostKey;
 
     public ControlledDubbingBenchmarkRunner(
         IBenchmarkEvidenceRepository? history = null,
@@ -29,6 +31,13 @@ public sealed class ControlledDubbingBenchmarkRunner
         _history = history ?? new BenchmarkEvidenceRepository(
             new SqliteUserBenchmarkDatabase(new TrackdubStoragePaths().UserDataRoot));
         _serviceConfigurator = serviceConfigurator;
+    }
+
+    public void Dispose()
+    {
+        _warmHost?.Dispose();
+        _warmHost = null;
+        _warmHostKey = null;
     }
 
     public async Task<BenchmarkEvidenceReport> RunAsync(
@@ -91,6 +100,13 @@ public sealed class ControlledDubbingBenchmarkRunner
                     .ConfigureAwait(false)).ToLowerInvariant();
             }
             timings["fixturePreparation"] = Stopwatch.GetElapsedTime(preparationStart).TotalMilliseconds;
+            if (options.ExpectedFixtureSha256 is not null &&
+                !fixtureHash.Equals(options.ExpectedFixtureSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                status = BenchmarkEvidenceStatus.Failed;
+                reason = "Fixture checksum differs from the expected SHA-256.";
+                throw new PreparationIncompleteException();
+            }
 
             if (options.Mode == "fresh-process" && !options.ReuseEngineCache)
             {
@@ -103,6 +119,14 @@ public sealed class ControlledDubbingBenchmarkRunner
             long hostStart = Stopwatch.GetTimestamp();
             if (options.Mode == "warm-host")
             {
+                string key = string.Join("|", options.ModelDirectory, options.Provider,
+                    options.Stage, options.FfmpegPath, options.FfprobePath);
+                if (_warmHostKey != key)
+                {
+                    _warmHost?.Dispose();
+                    _warmHost = null;
+                    _warmHostKey = key;
+                }
                 _warmHost ??= CreateHost(options);
                 host = _warmHost;
             }
@@ -167,16 +191,29 @@ public sealed class ControlledDubbingBenchmarkRunner
             }
 
             long runStart = Stopwatch.GetTimestamp();
-            var stageClock = new StageTimingCollector();
-            DubbingRunResult result = await ExecuteAsync(
-                host, fixtureCopy, projectPath, options, filter, options.Mode != "artifact-resume", cancellationToken,
-                stageClock)
-                .ConfigureAwait(false);
+            var stageClock = new StageTimingCollector(runStart);
+            var phases = new BenchmarkPhaseCapture();
+            DubbingRunResult result;
+            using (BenchmarkPhaseCapture.Activate(phases))
+            {
+                result = await ExecuteAsync(
+                    host, fixtureCopy, projectPath, options, filter, options.Mode != "artifact-resume", cancellationToken,
+                    stageClock).ConfigureAwait(false);
+            }
             timings["pipeline"] = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
+            foreach ((string name, double? duration) in phases.SnapshotMilliseconds())
+                timings[name] = duration;
+            timings["import"] = timings.GetValueOrDefault("phase:import");
+            timings["preflight"] = timings.GetValueOrDefault("phase:preflight");
+            timings["export"] = stageClock.GetMilliseconds("Export");
             runId = result.RunId;
-            IReadOnlyList<StageRunRecord> stageRuns = await ReadStageRunsAsync(host, projectPath, options, cancellationToken)
+            RunArtifacts artifacts = await ReadRunArtifactsAsync(host, projectPath, options, cancellationToken)
                 .ConfigureAwait(false);
-            stages = MapStages(result, stageRuns, options.Model, stageClock);
+            stages = MapStages(result, artifacts.StageRuns, options.Model, stageClock);
+            if (artifacts.HasUsableTranscript)
+                timings["firstUsableTranscript"] = stageClock.GetCompletionMilliseconds("Asr");
+            if (artifacts.HasPlayableTake)
+                timings["firstPlayableAudio"] = stageClock.GetCompletionMilliseconds("Tts");
             BenchmarkEvidenceStage? requestedStage = stage is null
                 ? null
                 : stages.LastOrDefault(x => x.Name.Equals(stage, StringComparison.OrdinalIgnoreCase));
@@ -240,6 +277,33 @@ public sealed class ControlledDubbingBenchmarkRunner
             memory["processWorkingSetEnd"] = Process.GetCurrentProcess().WorkingSet64;
             memory["managedAllocatedBytes"] = GC.GetTotalAllocatedBytes(precise: true) - allocatedStart;
             timings["total"] = clock.Elapsed.TotalMilliseconds;
+            var configuration = new Dictionary<string, string>
+            {
+                ["targetLanguage"] = options.TargetLanguage,
+                ["sourceLanguage"] = options.SourceLanguage ?? "auto",
+                ["stage"] = stage ?? "all",
+                ["hardware"] = BenchmarkHardwareInfo.Capture(),
+            };
+            foreach (BenchmarkEvidenceStage measuredStage in stages)
+            {
+                if (measuredStage.ActualModel is not null)
+                    configuration[$"stage:{measuredStage.Name}:model"] = measuredStage.ActualModel;
+                if (measuredStage.ActualProvider is not null)
+                    configuration[$"stage:{measuredStage.Name}:provider"] = measuredStage.ActualProvider;
+            }
+            var runtimeVersions = new Dictionary<string, string>
+            {
+                ["dotnet"] = Environment.Version.ToString(),
+                ["os"] = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+                ["processArchitecture"] = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
+            };
+            foreach (System.Reflection.Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                string? name = assembly.GetName().Name;
+                if (name is "Microsoft.ML.OnnxRuntime" or "Microsoft.ML.OnnxRuntimeGenAI" or
+                    "Microsoft.ML.OnnxRuntimeGenAI.Managed")
+                    runtimeVersions[name] = assembly.GetName().Version?.ToString() ?? "unknown";
+            }
             var report = new BenchmarkEvidenceReport
             {
                 RunId = runId,
@@ -257,18 +321,8 @@ public sealed class ControlledDubbingBenchmarkRunner
                 ActualModel = actualModel,
                 RequestedProvider = options.Provider,
                 ActualProvider = actualProvider,
-                Configuration = new Dictionary<string, string>
-                {
-                    ["targetLanguage"] = options.TargetLanguage,
-                    ["sourceLanguage"] = options.SourceLanguage ?? "auto",
-                    ["stage"] = stage ?? "all",
-                },
-                RuntimeVersions = new Dictionary<string, string>
-                {
-                    ["dotnet"] = Environment.Version.ToString(),
-                    ["os"] = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
-                    ["processArchitecture"] = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
-                },
+                Configuration = configuration,
+                RuntimeVersions = runtimeVersions,
                 TimingsMilliseconds = timings,
                 MemoryBytes = memory,
                 Stages = stages,
@@ -286,6 +340,10 @@ public sealed class ControlledDubbingBenchmarkRunner
             throw new ArgumentException("Mode must be fresh-process, warm-host, or artifact-resume.");
         if (options.Provider is not null && !Enum.TryParse<ExecutionProviderKind>(options.Provider, true, out _))
             throw new ArgumentException("Unknown provider.");
+        if (options.ExpectedFixtureSha256 is not null &&
+            (options.ExpectedFixtureSha256.Length != 64 ||
+             !options.ExpectedFixtureSha256.All(Uri.IsHexDigit)))
+            throw new ArgumentException("Expected fixture SHA-256 must be 64 hexadecimal characters.");
     }
 
     private static string? ResolveStage(string? requested)
@@ -345,7 +403,7 @@ public sealed class ControlledDubbingBenchmarkRunner
         }, progress, cancellationToken);
     }
 
-    private static async Task<IReadOnlyList<StageRunRecord>> ReadStageRunsAsync(
+    private static async Task<RunArtifacts> ReadRunArtifactsAsync(
         HeadlessDubbingHost host, string project, ControlledDubbingBenchmarkOptions options,
         CancellationToken cancellationToken)
     {
@@ -356,7 +414,15 @@ public sealed class ControlledDubbingBenchmarkRunner
                 DefaultTargetLanguage = options.TargetLanguage,
             });
         var state = await session.Workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
-        return state.StageRuns;
+        bool playableTake = state.TtsTakes.Any(take =>
+            take.Status == TtsTakeStatus.Completed && take.ArtifactId is Guid id &&
+            state.ProjectState.Artifacts.Any(artifact =>
+                artifact.Id == id && artifact.SizeBytes > 0 &&
+                File.Exists(Path.Combine(project, artifact.RelativePath))));
+        return new RunArtifacts(
+            state.StageRuns,
+            state.TranscriptSegments.Any(segment => !string.IsNullOrWhiteSpace(segment.Text)),
+            playableTake);
     }
 
     private static IReadOnlyList<BenchmarkEvidenceStage> MapStages(
@@ -389,10 +455,14 @@ public sealed class ControlledDubbingBenchmarkRunner
             };
         }).ToArray();
 
-    private sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
+    private sealed record RunArtifacts(
+        IReadOnlyList<StageRunRecord> StageRuns, bool HasUsableTranscript, bool HasPlayableTake);
+
+    private sealed class StageTimingCollector(long runStart) : IProgress<PipelineProgressEvent>
     {
         private readonly Dictionary<string, long> _starts = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, double> _durations = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, double> _completions = new(StringComparer.OrdinalIgnoreCase);
 
         public void Report(PipelineProgressEvent value)
         {
@@ -401,11 +471,17 @@ public sealed class ControlledDubbingBenchmarkRunner
             else if ((value.EventKind is PipelineProgressEventKind.Completed or
                       PipelineProgressEventKind.Failed or PipelineProgressEventKind.Skipped) &&
                      _starts.TryGetValue(value.StageKey, out long start))
+            {
                 _durations[value.StageKey] = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                _completions[value.StageKey] = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
+            }
         }
 
         public double? GetMilliseconds(string stage) =>
             _durations.TryGetValue(stage, out double milliseconds) ? milliseconds : null;
+
+        public double? GetCompletionMilliseconds(string stage) =>
+            _completions.TryGetValue(stage, out double milliseconds) ? milliseconds : null;
     }
 
     private sealed class EnvironmentOverride(string name, string value) : IDisposable

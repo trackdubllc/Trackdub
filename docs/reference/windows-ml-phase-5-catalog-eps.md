@@ -29,9 +29,9 @@ Stub marker: `#TODO(phase-5-catalog-ep)` in code; reference this doc and [ADR-00
 Windows TFM:
 
 ```powershell
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --help
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider dml
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <model-id> --windows-ml-device-policy PreferNpu
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --help
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider dml
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --windows-ml-device-policy PreferNpu
 ```
 
 When QNN / catalog OpenVINO CLI aliases exist, add matrix rows here. For TRT RTX smoke commands, use the plugin doc instead of this catalog checklist.

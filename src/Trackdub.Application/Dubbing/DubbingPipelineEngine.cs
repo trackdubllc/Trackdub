@@ -9,6 +9,7 @@ using Trackdub.Application.Transcripts;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Dubbing;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Licensing;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Contracts.Transcripts;
@@ -113,7 +114,8 @@ public sealed class DubbingPipelineEngine(
             // --- Ensure project/media spine exists for fresh SDK runs ---
             if (requiresSourceMedia)
             {
-                initialProjectState = await EnsureMediaSpineCreatedAsync(session, options, cancellationToken).ConfigureAwait(false);
+                using (BenchmarkPhaseCapture.Start("import"))
+                    initialProjectState = await EnsureMediaSpineCreatedAsync(session, options, cancellationToken).ConfigureAwait(false);
             }
 
             (initialProjectState, projectId) = await ResolveTelemetryProjectStateAsync(
@@ -128,8 +130,11 @@ public sealed class DubbingPipelineEngine(
             }
 
             // --- Pre-flight checks ---
-            (DubbingRunResult? preFlightResult, IReadOnlySet<string> declinedOptionalStages) =
-                await RunPreFlightChecksAsync(
+            DubbingRunResult? preFlightResult;
+            IReadOnlySet<string> declinedOptionalStages;
+            using (BenchmarkPhaseCapture.Start("preflight"))
+            {
+                (preFlightResult, declinedOptionalStages) = await RunPreFlightChecksAsync(
                     session,
                     options,
                     stagesToRun,
@@ -140,6 +145,7 @@ public sealed class DubbingPipelineEngine(
                     progress,
                     cancellationToken,
                     initialProjectState).ConfigureAwait(false);
+            }
             if (preFlightResult is not null)
             {
                 return preFlightResult;

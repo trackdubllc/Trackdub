@@ -56,6 +56,16 @@ public static class BenchmarkComparison
             (sample.ActualProvider is null ||
              !sample.RequestedProvider.Equals(sample.ActualProvider, StringComparison.OrdinalIgnoreCase)))
             return "Requested provider did not execute.";
+        if (sample.Scenario is "Vad" or "Asr" or "Diarization" or "Separation" or
+            "Translation" or "Tts" or "LipSync" or "TextRefinementAsr" &&
+            sample.ActualProvider is null)
+            return "Actual provider unavailable.";
+        if (sample.Scenario == "full-pipeline" &&
+            sample.Stages.Any(stage =>
+                stage.Name is "Vad" or "Asr" or "Diarization" or "Separation" or
+                    "Translation" or "Tts" or "LipSync" or "TextRefinementAsr" &&
+                stage.ActualProvider is null))
+            return "A stage's actual provider is unavailable.";
         if (sample.Stages.Any(x => x.Status != BenchmarkEvidenceStatus.Completed))
             return "Stage skipped, failed, or partially completed.";
         return null;

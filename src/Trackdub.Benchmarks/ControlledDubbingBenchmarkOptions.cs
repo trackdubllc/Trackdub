@@ -4,6 +4,7 @@ namespace Trackdub.Benchmarks;
 public sealed record ControlledDubbingBenchmarkOptions
 {
     public required string FixturePath { get; init; }
+    public string? ExpectedFixtureSha256 { get; init; }
     public required string OutputDirectory { get; init; }
     public string TargetLanguage { get; init; } = "es";
     public string? SourceLanguage { get; init; }

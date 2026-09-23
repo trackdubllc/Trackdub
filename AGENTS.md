@@ -23,6 +23,7 @@ Cli → Sdk
 DubBench → Benchmarks, Domain, Inference, Inference.Onnx
 DubBench.DevHost → DubBench, Infrastructure
 Benchmarks → Application, Composition, Domain, Inference, Inference.Onnx, Infrastructure
+Benchmarks.DevHost → Benchmarks
 Tools → Application, Domain, Infrastructure, Media
 Contracts → Domain
 Licensing → (nothing)
@@ -53,7 +54,7 @@ dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows 
 # Filter builds & benchmarks
 dotnet build Trackdub.Inference.slnx -m:1
 dotnet build Trackdub.Sdk.slnx -m:1
-dotnet run --project src/Trackdub.Benchmarks -- --help
+dotnet run --project src/Trackdub.Benchmarks.DevHost -- --help
 ```
 
 ## Coding Style & Testing

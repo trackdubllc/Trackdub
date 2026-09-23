@@ -1,5 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.Pipeline;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.Planning;
 
@@ -56,6 +57,7 @@ internal static class InferenceRetryPolicy
         {
             try
             {
+                using var inference = BenchmarkPhaseCapture.Start("onnx-inference");
                 return session.Run(inputs);
             }
             catch (OnnxRuntimeException ex) when (IsTransient(ex, provider) && ++attempt < maxAttempts)
@@ -85,6 +87,7 @@ internal static class InferenceRetryPolicy
         {
             try
             {
+                using var inference = BenchmarkPhaseCapture.Start("onnx-inference");
                 return session.Run(inputs);
             }
             catch (OnnxRuntimeException ex) when (IsTransient(ex, provider) && ++attempt < maxAttempts)
@@ -122,6 +125,7 @@ internal static class InferenceRetryPolicy
         {
             try
             {
+                using var inference = BenchmarkPhaseCapture.Start("onnx-inference");
                 return session.RunWithBindingAndNames(runOptions, binding, outputNames);
             }
             catch (OnnxRuntimeException ex) when (IsTransient(ex, provider) && ++attempt < maxAttempts)

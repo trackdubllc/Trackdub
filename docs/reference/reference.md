@@ -994,7 +994,7 @@ Use the same procedure on every run so rows in this report stay comparable.
 | Export throughput | Wall clock around export command; note FFmpeg profile and segment count | duration, real-time factor |
 | SQLite plans | `dotnet test tests/Trackdub.Infrastructure.Tests --filter FullyQualifiedName~Explain` | pass/fail + index names |
 | UI layout | `Trackdub.UI.Tests` layout facts; PNG only when `CAPTURE_UI_SCREENSHOTS=1` | test name + optional PNG path |
-| Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
+| Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks.DevHost -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
 
 **Rules:** never collapse provider registered, model downloaded, stage ran, and stage succeeded. Label every number as *measured on reference machine* or *pending local run*. Do not copy example rows below into release notes as real data.
 
@@ -1088,7 +1088,7 @@ Record commit hash, model manifest IDs, and EP selection policy (`WindowsMlExecu
 |---|---|
 | Model id | *pending local run* (`onnx-community/silero-vad` suggested) |
 | Plugin version | `0.3.0/cu12` |
-| Command | `Trackdub.Benchmarks --provider trt-rtx --runs 1 --format console` |
+| Command | `Trackdub.Benchmarks.DevHost --provider trt-rtx --runs 1 --format console` |
 | Headless probe | `trackdub providers trt-rtx status` |
 | Wall time (ms) | *pending local run* |
 | Actual EP reported | *pending local run* (`NvTensorRTRTXExecutionProvider`) |
@@ -1308,7 +1308,7 @@ Benchmark smoke on a Windows NVIDIA RTX machine with the plugin bundle available
 
 ```powershell
 $env:TRACKDUB_TRT_RTX_EP_DIR = "$env:LOCALAPPDATA\Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64"
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider trt-rtx --runs 1 --format console
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider trt-rtx --runs 1 --format console
 ```
 
 For explicit session testing, inspect the selected provider in benchmark output. Do not infer success from plugin registration logs alone.
@@ -1343,7 +1343,7 @@ When NVIDIA ships a new `TensorRT-RTX-EP-ABI` GitHub release:
 1. Run `tools/dev/Update-TrtRtxEpManifest.ps1 -Version <x.y.z>` to refresh `runtime/trt-rtx-ep.manifest.json` (URLs, SHA-256, size).
 2. Update `TensorRtRtxProviderConstants.BundledVersion`, install hints, and default install path segments if the version changed.
 3. Run `tools/dev/Fetch-TrtRtxEp.ps1` locally and verify `trackdub providers trt-rtx status`.
-4. Run optional GPU smoke (`.github/workflows/trt-rtx-smoke.yml`) or `Trackdub.Benchmarks --provider trt-rtx`.
+4. Run optional GPU smoke (`.github/workflows/trt-rtx-smoke.yml`) or `Trackdub.Benchmarks.DevHost --provider trt-rtx`.
 5. Run `trackdub doctor` and advise users with stale engines to `trackdub cache clear engines` after upgrading the EP bundle.
 
 ## CI optional GPU tier
@@ -1356,7 +1356,7 @@ Default CI (`ci.yml`) stays unit/fake-backed. Optional smoke workflow: `.github/
 | `TRACKDUB_TRT_RTX_EP_DIR` | Plugin directory after fetch (workflow sets from default install root) |
 | `TRACKDUB_TRT_RTX_SMOKE=1` | Test attribute gate for optional integration tests (`RequiresTrtRtxFactAttribute`) |
 
-The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then one `Trackdub.Benchmarks --provider trt-rtx` invocation. It uses `continue-on-error: true` until the GPU runner is stable.
+The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then one `Trackdub.Benchmarks.DevHost --provider trt-rtx` invocation. It uses `continue-on-error: true` until the GPU runner is stable.
 
 ## References
 
@@ -1415,7 +1415,7 @@ After explicit matrix baseline on hardware:
 3. `PreferNpu` / `MaxEfficiency`  -  on Copilot+ PC if available; else N/A in matrix.
 4. Change policy → restart → confirm new fingerprint / sessions.
 
-**Benchmark harness:** `Trackdub.Benchmarks --windows-ml-device-policy <name>` configures `OnnxModelBenchmarkRunner`. For Windows ML catalog/device-policy routes (`dml`, `migraphx`, `auto`), non-`Explicit` policies use `SetEpSelectionPolicy` only (no explicit catalog-device append). `trt-rtx` uses the standalone EP ABI plugin and ignores Windows ML device policy. CPU and native CUDA/TensorRT benchmark routes also never apply device policy.
+**Benchmark harness:** `Trackdub.Benchmarks.DevHost --windows-ml-device-policy <name>` configures `OnnxModelBenchmarkRunner`. For Windows ML catalog/device-policy routes (`dml`, `migraphx`, `auto`), non-`Explicit` policies use `SetEpSelectionPolicy` only (no explicit catalog-device append). `trt-rtx` uses the standalone EP ABI plugin and ignores Windows ML device policy. CPU and native CUDA/TensorRT benchmark routes also never apply device policy.
 
 ## References
 
@@ -1455,7 +1455,7 @@ Production closeout for Windows ML device policies (Phase 3) and ONNX runtime al
 **Verify:**
 
 ```powershell
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <path> --provider trt-rtx --runs 1 --format console
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <path> --provider trt-rtx --runs 1 --format console
 ```
 
 ## Workstream C  -  Pool eviction + policy cache
@@ -1513,9 +1513,9 @@ Stub marker: `#TODO(phase-5-catalog-ep)` in code; reference this doc and [ADR-00
 Windows TFM:
 
 ```powershell
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --help
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider dml
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <model-id> --windows-ml-device-policy PreferNpu
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --help
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider dml
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --windows-ml-device-policy PreferNpu
 ```
 
 When QNN / catalog OpenVINO CLI aliases exist, add matrix rows here. For TRT RTX smoke commands, use the plugin doc instead of this catalog checklist.
@@ -1602,7 +1602,7 @@ Suggested commands:
 ```powershell
 dotnet build Trackdub.sln
 dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~RuntimePlanner"
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --help
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --help
 ```
 
 ## Manifest `expected_runtime` (Phase 2)
@@ -1617,7 +1617,7 @@ This field is **governance / Model Manager hints only**; the runtime planner doe
 
 ## Device policy mode smoke (Phase 3)
 
-Set **Settings → Windows ML device policy** to each non-default value, **restart Trackdub**, then run one stage per policy. Harness shortcut: `Trackdub.Benchmarks --model silero-vad --provider dml --windows-ml-device-policy <name>` (catalog GPU; policy mode uses `SetEpSelectionPolicy`).
+Set **Settings → Windows ML device policy** to each non-default value, **restart Trackdub**, then run one stage per policy. Harness shortcut: `Trackdub.Benchmarks.DevHost --model silero-vad --provider dml --windows-ml-device-policy <name>` (catalog GPU; policy mode uses `SetEpSelectionPolicy`).
 
 | Policy | Stage exercised | Pass/fail | Actual EP | Notes |
 |--------|-----------------|-----------|-----------|-------|
@@ -1635,7 +1635,7 @@ TRT RTX is **not** a Windows ML catalog EP and is **not** selected by `WindowsMl
 
 | Stage | Representative model | Command / surface | Pass/fail | Actual EP | Notes |
 |-------|---------------------|-------------------|-----------|-----------|-------|
-| VAD | `onnx-community/silero-vad` | `Trackdub.Benchmarks --provider trt-rtx` | pending | *pending local GPU run* | Requires NVIDIA GPU + plugin bundle |
+| VAD | `onnx-community/silero-vad` | `Trackdub.Benchmarks.DevHost --provider trt-rtx` | pending | *pending local GPU run* | Requires NVIDIA GPU + plugin bundle |
 | Headless status |  -  | `trackdub providers trt-rtx status` | pending | JSON `isOrtProviderListed` | Probe-only; no download |
 | Headless install |  -  | `trackdub providers trt-rtx install --accept-license` | pending |  -  | License-gated bundle download |
 | DubBench | same as benchmark | DubBench ONNX run after shared bootstrap | pending |  -  | Uses `BenchmarkOnnxExecutionBootstrap` |
@@ -1647,7 +1647,7 @@ Suggested smoke:
 ```powershell
 .\tools\dev\Fetch-TrtRtxEp.ps1
 $env:TRACKDUB_TRT_RTX_EP_DIR = "$env:LOCALAPPDATA\Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64"
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model onnx-community/silero-vad --provider trt-rtx --runs 1 --format console
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model onnx-community/silero-vad --provider trt-rtx --runs 1 --format console
 trackdub providers trt-rtx status
 ```
 

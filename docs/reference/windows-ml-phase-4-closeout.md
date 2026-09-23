@@ -31,7 +31,7 @@ Production closeout for Windows ML device policies (Phase 3) and ONNX runtime al
 **Verify:**
 
 ```powershell
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <path> --provider trt-rtx --runs 1 --format console
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <path> --provider trt-rtx --runs 1 --format console
 ```
 
 ## Workstream C — Pool eviction + policy cache
