@@ -322,6 +322,29 @@ public sealed class OnnxTranscriptEnginesTests
     }
 
     [Fact]
+    public void Qwen3AsrPromptBuilder_UsesChatTemplateRoleTokens()
+    {
+        IReadOnlyList<int> ids = Qwen3AsrPromptBuilder.BuildPromptIds(audioTokenCount: 2);
+
+        // Chat template: im_start "system" NL im_end NL im_start "user" NL audio_start ... (vocab.json ids).
+        Assert.Equal(
+            [
+                Qwen3AsrPromptTokens.ImStartTokenId, 8948, 198, Qwen3AsrPromptTokens.ImEndTokenId, 198,
+                Qwen3AsrPromptTokens.ImStartTokenId, 872, 198, Qwen3AsrPromptTokens.AudioStartTokenId,
+                Qwen3AsrPromptTokens.AudioPadTokenId, Qwen3AsrPromptTokens.AudioPadTokenId,
+                Qwen3AsrPromptTokens.AudioEndTokenId, Qwen3AsrPromptTokens.ImEndTokenId, 198,
+                Qwen3AsrPromptTokens.ImStartTokenId, 77091, 198,
+            ],
+            ids);
+    }
+
+    [Fact]
+    public void Qwen3AsrMelFeatureExtractor_MatchesWhisperFrameCount()
+    {
+        Assert.Equal(100, new Qwen3AsrMelFeatureExtractor().Extract(new float[16_000]).Dimensions[2]);
+    }
+
+    [Fact]
     public void Qwen3AsrFeatureLengths_MatchesReferenceFormula()
     {
         Assert.Equal(1, Qwen3AsrFeatureLengths.GetEncoderOutputLength(1));

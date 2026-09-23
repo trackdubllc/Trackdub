@@ -11,6 +11,11 @@ internal static class Qwen3AsrPromptTokens
     public const int AsrTextTokenId = 151704;
     public const int NewlineTokenId = 198;
 
+    // Chat role names from the Qwen3-ASR vocab.json ("system", "user", "assistant").
+    public const int SystemRoleTokenId = 8948;
+    public const int UserRoleTokenId = 872;
+    public const int AssistantRoleTokenId = 77091;
+
     public static readonly int[] EosTokenIds = [EndOfTextTokenId, ImEndTokenId];
 
     // Token id 151704 decodes to the literal "<asr_text>" (no pipes) in the Qwen3-ASR

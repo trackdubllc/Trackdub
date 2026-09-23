@@ -25,7 +25,8 @@ internal sealed class Qwen3AsrMelFeatureExtractor
         try
         {
             ReadOnlySpan<float> paddedForStft = ReflectPad(inputSamples, FftSize / 2, out rentedPaddedForStft);
-            int frameCount = Math.Min(MaxFrames, Math.Max(0, 1 + ((paddedForStft.Length - FftSize) / HopLength)));
+            // Centered STFT yields 1 + n/hop frames; WhisperFeatureExtractor drops the last one.
+            int frameCount = Math.Min(MaxFrames, Math.Max(0, (paddedForStft.Length - FftSize) / HopLength));
             if (frameCount == 0)
             {
                 return new DenseTensor<float>(Array.Empty<float>(), [1, MelBins, 0]);

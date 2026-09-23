@@ -72,7 +72,9 @@ internal static class StageRuntimeRequirementsCatalog
                 ["default", "fp16"],
                 ["default", "int8", "quantized", "uint8", "q4"],
                 // Stock Olive whisper-onnx graphs omit trt-rtx in supported_providers and use
-                // fused contrib ops TensorRT RTX cannot import. Keep qwen3-asr on TRT RTX.
+                // fused contrib ops TensorRT RTX cannot import. The bundled qwen3-asr export also
+                // contains SkipLayerNormalization/BiasGelu, so its TRT RTX smoke falls back and the
+                // planner lands on DirectML (Windows build) or CPU.
                 // whisper-genai loads through ORT GenAI, whose NvTensorRtRtx device can
                 // terminate the process (native stack overflow) during model init/generation.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)

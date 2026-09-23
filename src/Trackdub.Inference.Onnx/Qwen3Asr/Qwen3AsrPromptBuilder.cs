@@ -9,12 +9,12 @@ internal static class Qwen3AsrPromptBuilder
         var ids = new List<int>
         {
             Qwen3AsrPromptTokens.ImStartTokenId,
-            9125,
+            Qwen3AsrPromptTokens.SystemRoleTokenId,
             Qwen3AsrPromptTokens.NewlineTokenId,
             Qwen3AsrPromptTokens.ImEndTokenId,
             Qwen3AsrPromptTokens.NewlineTokenId,
             Qwen3AsrPromptTokens.ImStartTokenId,
-            882,
+            Qwen3AsrPromptTokens.UserRoleTokenId,
             Qwen3AsrPromptTokens.NewlineTokenId,
             Qwen3AsrPromptTokens.AudioStartTokenId,
         };
@@ -28,7 +28,7 @@ internal static class Qwen3AsrPromptBuilder
         ids.Add(Qwen3AsrPromptTokens.ImEndTokenId);
         ids.Add(Qwen3AsrPromptTokens.NewlineTokenId);
         ids.Add(Qwen3AsrPromptTokens.ImStartTokenId);
-        ids.Add(77091);
+        ids.Add(Qwen3AsrPromptTokens.AssistantRoleTokenId);
         ids.Add(Qwen3AsrPromptTokens.NewlineTokenId);
 
         if (forcedLanguageSuffix is { Count: > 0 })
