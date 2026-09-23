@@ -2,34 +2,30 @@
 
 Olive recipe for compiling the SortFormer diarization encoder for TensorRT RTX.
 
-## Why this exists
+## Status
 
-The bundled SortFormer ONNX export contains two op types that TensorRT RTX
-v0.3.0 cu12 cannot parse:
+The bundled export (`onnx/model.onnx`) is a plain PyTorch export at opset
+`ai.onnx=17` with standard `LayerNormalization`. It contains no
+`com.microsoft::SkipLayerNormalization` or `BiasGelu` nodes, so no graph surgery is
+needed. It loads and runs on `NvTensorRTRTXExecutionProvider` (EP ABI 0.3.0 cu12)
+as-is, verified on an RTX 5070.
 
-- `com.microsoft::SkipLayerNormalization`
-- `com.microsoft::BiasGelu`
+`encoder_trtrtx_fp16.json` applies:
 
-Both come from the FastSpeech-style Conformer blocks and appear in every
-encoder layer (17+ layers). Until the model is re-exported with these ops
-fused to their TRT-RTX-compatible equivalents (`LayerNormalization + Add`
-and `Gelu + Add`), TRT-RTX falls through to CPU and the smoke gate fires
-`preFlightFailed` because the requested provider (`tensorrt-rtx`) does not
-match the effective provider (`cpu`).
+1. `OnnxFloatToFloat16` with `keep_io_types: true`. The graph I/O stays float32
+   because `SortFormerDiarizationEngine` feeds float32 tensors.
+2. `OrtSessionParamsTuning` on TensorRT RTX, using the `sortformer_steady_state`
+   dummy data config (the shapes the engine feeds in steady state: `chunk`
+   1x1000x128, `spkcache` 1x188x512, `fifo` 1x124x512). The graph has dynamic
+   dims, so Olive cannot infer dummy inputs on its own.
 
-This recipe applies two pre-fusion passes **before** fp16 conversion so the
-TRT-RTX parser sees the standard ops it knows how to compile:
+The accelerator entry is `["NvTensorRTRTXExecutionProvider", "${TRT_RTX_EP_PATH}"]`.
+Olive registers the EP ABI plugin DLL from that path, which requires an onnxruntime
+build that has `register_execution_provider_library` / `get_ep_devices`.
+`Bootstrap-TrtRtxOliveVenv.ps1` pins one.
 
-1. `GraphSurgeries` (surgeon: `ReplaceNodePatternByNode`) — decomposes `SkipLayerNormalization` into `Add` + `LayerNormalization`.
-2. `GraphSurgeries` (surgeon: `ReplaceNodePatternByNode`) — decomposes `BiasGelu` into `Add` + `Gelu`.
-
-**Known issue:** `ReplaceNodePatternByNode` and `RemoveIdentityAndCastNodes` are not
-surgeons that exist in olive-ai's `Surgeon` registry (checked against the installed
-0.13.0 source: `olive/passes/onnx/graph_surgeries.py`). Both passes above will fail
-at run time (`Surgeon '...' does not exist`) until a real decomposition pass is
-written — either a custom Olive pass or an equivalent using `onnxscript.rewriter` /
-`onnx-graphsurgeon`. Do not treat this recipe as validated until that pass exists
-and has been run against the real model.
+There is no MXFP8 recipe. Olive 0.13's `NVModelOptQuantization` only supports INT4
+weight-only quantization.
 
 ## Usage
 
@@ -37,16 +33,14 @@ and has been run against the real model.
 .\tools\olive\Validate-SortFormerTrtRtx.ps1
 ```
 
-This runs the encoder recipe, copies the optimized model into
-`build/sortformer-4spk-onnx-trtrtx-validated-<precision>/` (`fp16` by default,
-`mxfp8` with `-Mxfp8`), and writes `build/sortformer-4spk-trtrtx-validation.json`.
-`SortFormerDiarizationEngineTests.cs` has no TRT-RTX smoke test yet — one should
-be added (mirroring `WhisperOnnxTrtRtxValidationTests.cs`'s
-`[Fact(Skip = "Pending TRT-RTX validation ...")]` pattern) once this recipe is
-hardware-validated.
+This runs the recipe, stages the output in
+`build/sortformer-4spk-onnx-trtrtx-validated-fp16/`, then runs
+`trackdub providers trt-rtx verify` against the staged model. It records
+`pass = true` only if the model actually loads and runs on TensorRT RTX, and writes
+`build/sortformer-4spk-trtrtx-validation.json`.
 
 ## Staging output
 
-`build/sortformer-4spk-onnx-trtrtx-validated-<precision>/onnx/model.onnx` is
-what `SortFormerDiarizationEngine` loads. The C# engine auto-derives the
-`benchmark_entry` from the staging directory.
+`build/sortformer-4spk-onnx-trtrtx-validated-fp16/onnx/model.onnx` is what
+`SortFormerDiarizationEngineTests.DiarizeAsync_with_trtrtx_staged_model_selects_tensorrt_rtx_provider`
+loads (Skip-gated until run locally).

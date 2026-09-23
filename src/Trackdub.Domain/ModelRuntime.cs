@@ -132,7 +132,11 @@ public sealed record ModelOptimizationRecipeBinding(
     string? CostModelRelativePath = null,
     string? AdapterRelativePath = null,
     string? AdapterMode = null,
-    string? OutputManifestRelativePath = null)
+    string? OutputManifestRelativePath = null,
+    // Disambiguates bindings when a model has multiple ONNX components (e.g. Nemotron's
+    // encoder + decoder_joint) that would otherwise both match the same provider/precision
+    // and collide under a first-match resolver. Null matches any component.
+    string? Component = null)
 {
     public IReadOnlyList<ModelOptimizationOperation> Operations { get; init; } = Operations ?? [];
 }

@@ -19,7 +19,8 @@ public sealed class OliveRecipeResolver
         string precision,
         string? recipesRoot,
         string? explicitRecipeConfigPath = null,
-        ModelOptimizationFallbackPolicy profileFallbackPolicy = ModelOptimizationFallbackPolicy.None)
+        ModelOptimizationFallbackPolicy profileFallbackPolicy = ModelOptimizationFallbackPolicy.None,
+        string? component = null)
     {
         if (!string.IsNullOrWhiteSpace(explicitRecipeConfigPath))
         {
@@ -50,8 +51,16 @@ public sealed class OliveRecipeResolver
                                 candidate.Provider.Equals(providerKey, StringComparison.OrdinalIgnoreCase))
             .Where(candidate => candidate.Precision is null ||
                                 candidate.Precision.Equals(normalizedPrecision, StringComparison.OrdinalIgnoreCase))
+            // A binding with a Component only matches a caller that asked for that same
+            // component; a binding with no Component matches any caller. Without this, a
+            // model with multiple components (e.g. Nemotron's encoder + decoder_joint) would
+            // have every component's binding tie on provider+precision and silently collide
+            // under FirstOrDefault.
+            .Where(candidate => candidate.Component is null ||
+                                (component is not null && candidate.Component.Equals(component, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(candidate => candidate.Provider is not null)
             .ThenByDescending(candidate => candidate.Precision is not null)
+            .ThenByDescending(candidate => candidate.Component is not null)
             .FirstOrDefault();
 
         ModelOptimizationFallbackPolicy effectivePolicy = binding?.FallbackPolicy ?? profileFallbackPolicy;

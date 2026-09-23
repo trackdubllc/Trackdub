@@ -2018,6 +2018,66 @@ public sealed class ModelManifestLoaderTests
             manifest.Optimization!.Olive!.Components);
     }
 
+    [Theory]
+    [InlineData("encoder.onnx", true)]
+    [InlineData("encoder_typo.onnx", false)]
+    public void LoadCatalog_RecipeBindingComponentMustBeADeclaredComponent(string component, bool valid)
+    {
+        string manifestPath = WriteTempManifest(
+            $$"""
+            {
+              "models": [
+                {
+                  "model_id": "example/two-component",
+                  "task": "asr",
+                  "engine_family": "whisper-onnx",
+                  "capabilities": [ "asr" ],
+                  "license": "MIT",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_safe_mode": true,
+                  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "root_path": "../../../../models/example-two-component",
+                  "download_files": [ "encoder.onnx", "decoder.onnx" ],
+                  "variants": [],
+                  "hash_verification": { "mode": "verify-if-sha-present", "algorithm": "SHA-256" },
+                  "optimization": {
+                    "olive": {
+                      "mode": "existing-onnx-components",
+                      "components": [ "encoder.onnx", "decoder.onnx" ],
+                      "supported_providers": [ "trt-rtx" ],
+                      "recipe_bindings": [
+                        {
+                          "provider": "trt-rtx",
+                          "precision": "fp16",
+                          "component": "{{component}}",
+                          "config_relative_path": "example/encoder_fp16.json",
+                          "operations": [ "provider_optimization" ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+            """);
+
+        if (valid)
+        {
+            ModelManifest manifest = Assert.Single(ModelManifestLoader.LoadCatalog(manifestPath).Models);
+            Assert.Equal(component, Assert.Single(manifest.Optimization!.Olive!.RecipeBindings).Component);
+        }
+        else
+        {
+            ModelManifestValidationException ex = Assert.Throws<ModelManifestValidationException>(
+                () => ModelManifestLoader.LoadCatalog(manifestPath));
+            Assert.Contains("encoder_typo.onnx", ex.Message, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void LoadCatalog_LoadsNewestOliveProvidersAndRecipeMetadata()
     {

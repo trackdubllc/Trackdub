@@ -218,6 +218,69 @@ public static class TrtRtxStarterPackSmokeRunner
         return new TrtRtxStarterPackSmokeReport(attempted, passed, failed, skipped, results);
     }
 
+    /// <summary>
+    /// Runs the real, production-parity TRT RTX smoke path (same <see cref="OnnxExecutionProviderSmokeTester"/>
+    /// code the runtime uses) against an explicit ONNX entry path instead of the model cache — for an
+    /// Olive-recipe-staged output directory an Olive validator script just produced, before that
+    /// output is trusted. Confirms the model actually loads and the effective provider is TensorRT
+    /// RTX, not a silent CPU/DirectML fallback (see <see cref="ExecutionProviderSmokeTestResult"/>).
+    /// </summary>
+    public static async Task<TrtRtxStarterPackSmokeTargetResult> VerifyEntryPathAsync(
+        string modelId,
+        string entryPath,
+        string? variant = null,
+        IExecutionProviderSmokeTester? smokeTester = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(entryPath);
+
+        if (!BundledModelManifestRegistry.TryLoadDefault(out BundledModelManifestRegistry? registry, out string? manifestError))
+        {
+            throw new InvalidOperationException(manifestError ?? "Bundled model manifest was not found.");
+        }
+
+        BundledModelManifestEntry? entry = registry!.Entries.FirstOrDefault(
+            model => model.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            throw new InvalidOperationException($"Manifest entry missing for '{modelId}'.");
+        }
+
+        string absoluteEntryPath = Path.GetFullPath(entryPath);
+        if (!File.Exists(absoluteEntryPath))
+        {
+            throw new FileNotFoundException($"Entry path not found: '{absoluteEntryPath}'.", absoluteEntryPath);
+        }
+
+        string modelRootPath = Path.GetDirectoryName(absoluteEntryPath)
+            ?? throw new InvalidOperationException($"Could not resolve model root for '{absoluteEntryPath}'.");
+
+        RuntimeStage stage = ResolveStage(entry);
+        string alias = entry.Aliases.Count > 0 ? entry.Aliases[0] : entry.ModelId;
+
+        var request = new ExecutionProviderSmokeTestRequest(
+            stage,
+            entry.ModelId,
+            alias,
+            entry.EngineFamily,
+            variant ?? "default",
+            ExecutionProviderKind.TensorRTRtx,
+            modelRootPath,
+            absoluteEntryPath);
+
+        IExecutionProviderSmokeTester tester = smokeTester ?? new OnnxExecutionProviderSmokeTester();
+        ExecutionProviderSmokeTestResult result = await tester
+            .SmokeTestAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new TrtRtxStarterPackSmokeTargetResult(
+            alias,
+            entry.ModelId,
+            result.Passed ? TrtRtxStarterPackSmokeTargetStatus.Passed : TrtRtxStarterPackSmokeTargetStatus.Failed,
+            result.Detail);
+    }
+
     private static RuntimeStage ResolveStage(BundledModelManifestEntry entry)
     {
         if (entry.EngineFamily.Equals("phi-genai", StringComparison.OrdinalIgnoreCase)

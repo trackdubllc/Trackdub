@@ -1,41 +1,50 @@
 # Nemotron 3.5 ASR Streaming (0.6B) — TRT-RTX recipe bundle
 
-Olive recipe for compiling the Nemotron streaming ASR encoder + decoder_joint
+Olive recipes for compiling the Nemotron streaming ASR encoder and decoder_joint
 for TensorRT RTX.
 
-## Why this exists
+## Status
 
-The bundled Nemotron ASR encoder contains the same two `com.microsoft::` op
-types that defeat TensorRT RTX v0.3.0 cu12's parser:
+Both bundled exports are plain PyTorch exports at opset `ai.onnx=17`: the encoder
+uses standard `LayerNormalization`, and decoder_joint is a 42-node LSTM/MatMul
+graph. Neither contains any `com.microsoft::` op, so no graph surgery is needed.
+Both load and run on `NvTensorRTRTXExecutionProvider` (EP ABI 0.3.0 cu12) as-is,
+verified on an RTX 5070.
 
-- `SkipLayerNormalization`
-- `BiasGelu`
+The encoder needs a fixed TensorRT shape profile. Without one, TRT-RTX fails to
+build the engine: `kOPT values ... violate shape constraints` at
+`/encoder/layers.0/self_attn/Reshape_7`. The runtime supplies the profile through
+`NemotronAsrEncoderTrtProfiles`:
 
-These appear in the 24-layer FastSpeech-style encoder body. With them
-present, TRT-RTX compiles zero nodes and ORT falls back to CPU, which makes
-the smoke gate fire `preFlightFailed` because the requested provider
-(`tensorrt-rtx`) does not match the effective provider (`cpu`).
+```
+processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,
+cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1
+```
 
-The decoder_joint is compiled separately because it has different dynamic
-shapes (B × 1 cache state, sequence-by-sequence greedy decoding).
+(min = opt = max.) This drives the recipe shapes:
 
-## Fusion strategy
+- `encoder_trtrtx_fp16.json`: `OnnxFloatToFloat16` with `keep_io_types: true`
+  only. Its `input_model.inference_settings` carries the profile, as
+  `nv_profile_*_shapes`, for Olive's own session. It has no
+  `OrtSessionParamsTuning` pass because Olive 0.13's tuning baseline session
+  overrides `provider_options` with `None`, so the profile cannot reach it and the
+  engine build fails. The runtime builds its own session options anyway.
+- `decoder_joint_trtrtx_fp16.json`: `OnnxFloatToFloat16` with
+  `keep_io_types: true`, plus `OrtSessionParamsTuning` using the
+  `nemotron_decoder_joint_step` dummy data config (single RNNT step:
+  `encoder_outputs` 1x1024x1, `input_states_*` 2x1x640).
 
-Same as the SortFormer recipe:
+`keep_io_types` keeps graph I/O float32, matching what `NemotronAsrGreedyDecoder`
+feeds.
 
-1. `GraphSurgeries` (surgeon: `ReplaceNodePatternByNode`) — decomposes `SkipLayerNormalization` into `Add` + `LayerNormalization`.
-2. `GraphSurgeries` (surgeon: `ReplaceNodePatternByNode`) — decomposes `BiasGelu` into `Add` + `Gelu`.
+The accelerator entry is `["NvTensorRTRTXExecutionProvider", "${TRT_RTX_EP_PATH}"]`.
+Olive registers the EP ABI plugin DLL from that path.
 
-**Known issue:** `ReplaceNodePatternByNode` and `RemoveIdentityAndCastNodes` are not
-surgeons that exist in olive-ai's `Surgeon` registry (checked against the installed
-0.13.0 source: `olive/passes/onnx/graph_surgeries.py`). Both passes above will fail
-at run time (`Surgeon '...' does not exist`) until a real decomposition pass is
-written — either a custom Olive pass or an equivalent using `onnxscript.rewriter` /
-`onnx-graphsurgeon`. Do not treat this recipe as validated until that pass exists
-and has been run against the real model.
+There are no MXFP8 recipes. Olive 0.13's `NVModelOptQuantization` only supports
+INT4 weight-only quantization.
 
-After fusion, fp16 conversion and `OrtSessionParamsTuning` produce an
-encoder + decoder_joint pair that TRT-RTX can parse and compile.
+Nemotron stays out of ASR auto-planning (`StageRuntimeRequirements`) because of a
+separate empty-transcript issue unrelated to TensorRT RTX.
 
 ## Usage
 
@@ -43,28 +52,9 @@ encoder + decoder_joint pair that TRT-RTX can parse and compile.
 .\tools\olive\Validate-NemotronAsrTrtRtx.ps1
 ```
 
-This runs both encoder and decoder_joint recipes, stages them under
-`build/nemotron-3.5-asr-onnx-trtrtx-validated-<precision>/` (`fp16` by default, `mxfp8` with `-Mxfp8`), and writes
-`build/nemotron-3.5-asr-trtrtx-validation.json`. After that, remove the
-`Skip = "Pending TRT-RTX validation"` attribute from
-`tests/Trackdub.Inference.Onnx.Tests/NemotronAsrEncoderTrtRtxValidationTests.cs`
-when that file is added (see Whisper equivalent for the convention).
-
-## TRT profile shapes
-
-The C# encoder (`NemotronAsrEncoderTrtProfiles.BuildOptions`) declares:
-
-```
-processed_signal:1x128x65
-processed_signal_length:1
-cache_last_channel:24x1x56x1024
-cache_last_time:24x1x1024x8
-cache_last_channel_len:1
-prompt_index:1
-```
-
-for `min / opt / max`. If TRT-RTX reports a kMAX self-inconsistency
-(`Profile kMAX values are not self-consistent`), the encoder graph has an
-additional dynamic dim not covered here — extend the profile string and
-re-run. The synthetic eval above feeds the same shapes so latency
-measurements are reproducible.
+This runs both recipes and stages them in
+`build/nemotron-3.5-asr-onnx-trtrtx-validated-fp16/`. It then runs
+`trackdub providers trt-rtx verify` against the staged encoder; the smoke path
+also loads the decoder_joint beside it and applies the profile above. It records
+`pass = true` only if both run on TensorRT RTX, and writes
+`build/nemotron-3.5-asr-trtrtx-validation.json`.

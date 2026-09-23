@@ -134,6 +134,46 @@ public sealed class OliveRecipeResolverTests : IDisposable
         Assert.Contains("outside the recipe pilot", resolution.FallbackReason, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Resolve_disambiguates_same_provider_and_precision_bindings_by_component()
+    {
+        string encoderPath = WriteRecipe("nemotron/NvTensorRtRtx/encoder_trtrtx_fp16.json", "{}");
+        string decoderJointPath = WriteRecipe("nemotron/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json", "{}");
+        var bindings = new[]
+        {
+            new ModelOptimizationRecipeBinding(
+                "nemotron/NvTensorRtRtx/encoder_trtrtx_fp16.json", "trt-rtx", "fp16", Component: "encoder.onnx"),
+            new ModelOptimizationRecipeBinding(
+                "nemotron/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json", "trt-rtx", "fp16", Component: "decoder_joint.onnx"),
+        };
+
+        OliveRecipeResolution encoderResolution = _resolver.Resolve(
+            "example/two-component-model",
+            "whisper-onnx",
+            bindings,
+            OliveExecutionProvider.TensorRtRtx,
+            "fp16",
+            _recipesRoot,
+            component: "encoder.onnx");
+        Assert.True(encoderResolution.UseRecipe);
+        Assert.Equal(encoderPath, encoderResolution.RecipeConfigPath);
+
+        OliveRecipeResolution decoderJointResolution = _resolver.Resolve(
+            "example/two-component-model",
+            "whisper-onnx",
+            bindings,
+            OliveExecutionProvider.TensorRtRtx,
+            "fp16",
+            _recipesRoot,
+            component: "decoder_joint.onnx");
+        Assert.True(decoderJointResolution.UseRecipe);
+        Assert.Equal(decoderJointPath, decoderJointResolution.RecipeConfigPath);
+
+        // Distinct components must not collide under FirstOrDefault: each call above must
+        // resolve to its own component's config, not silently return the encoder's for both.
+        Assert.NotEqual(encoderResolution.RecipeConfigPath, decoderJointResolution.RecipeConfigPath);
+    }
+
     private string WriteRecipe(string relativePath, string contents)
     {
         string fullPath = Path.Combine(_recipesRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));

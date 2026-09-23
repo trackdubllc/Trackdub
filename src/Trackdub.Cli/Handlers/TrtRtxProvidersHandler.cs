@@ -277,6 +277,81 @@ internal static class TrtRtxProvidersHandler
         return report.HasFailures ? Program.ExitPipelineFailure : Program.ExitSuccess;
     }
 
+    /// <summary>
+    /// Runs the real TRT RTX smoke path against an explicit ONNX entry path — e.g. an
+    /// Olive-recipe-staged output directory — instead of the model cache. Used by
+    /// Olive validator scripts to confirm a staged model actually loads and the effective
+    /// provider is TensorRT RTX (not a silent CPU/DirectML fallback) before trusting it.
+    /// </summary>
+    public static async Task<int> VerifyAsync(
+        TrackdubSessionFactory factory,
+        string modelId,
+        string entryPath,
+        string? variant,
+        TextWriter output,
+        CancellationToken cancellationToken)
+    {
+        ITensorRtRtxRuntimeReadinessService readinessService =
+            factory.GetRequiredService<ITensorRtRtxRuntimeReadinessService>();
+
+        TensorRtRtxRuntimeReadinessSnapshot snapshot = await readinessService
+            .ProbeAsync(allowProviderDownloads: false, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!snapshot.IsReady)
+        {
+            var blocked = new TrtRtxVerifyOutput
+            {
+                Ready = false,
+                Passed = false,
+                ModelId = modelId,
+                EntryPath = entryPath,
+                Blocker = snapshot.Blocker.ToString(),
+                Detail = snapshot.Detail,
+            };
+            await output.WriteLineAsync(JsonSerializer.Serialize(blocked, SmokeJsonOptions)).ConfigureAwait(false);
+            return Program.ExitPipelineFailure;
+        }
+
+        TrtRtxStarterPackSmokeTargetResult result;
+        try
+        {
+            result = await TrtRtxStarterPackSmokeRunner
+                .VerifyEntryPathAsync(modelId, entryPath, variant, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var failed = new TrtRtxVerifyOutput
+            {
+                Ready = true,
+                Passed = false,
+                ModelId = modelId,
+                EntryPath = entryPath,
+                Detail = ex.Message,
+            };
+            await output.WriteLineAsync(JsonSerializer.Serialize(failed, SmokeJsonOptions)).ConfigureAwait(false);
+            return Program.ExitPipelineFailure;
+        }
+
+        bool passed = result.Status == TrtRtxStarterPackSmokeTargetStatus.Passed;
+        var payload = new TrtRtxVerifyOutput
+        {
+            Ready = true,
+            Passed = passed,
+            ModelId = modelId,
+            EntryPath = entryPath,
+            Detail = result.Detail,
+        };
+        await output.WriteLineAsync(JsonSerializer.Serialize(payload, SmokeJsonOptions)).ConfigureAwait(false);
+
+        return passed ? Program.ExitSuccess : Program.ExitPipelineFailure;
+    }
+
     private static IReadOnlyList<TrtRtxSmokeCatalog.Target> FilterTargets(
         IReadOnlyList<TrtRtxSmokeCatalog.Target> targets,
         IReadOnlyList<string>? modelFilter)
@@ -394,6 +469,16 @@ internal static class TrtRtxProvidersHandler
         public string Label { get; init; } = string.Empty;
         public string ModelReference { get; init; } = string.Empty;
         public string Status { get; init; } = string.Empty;
+        public string? Detail { get; init; }
+    }
+
+    private sealed class TrtRtxVerifyOutput
+    {
+        public bool Ready { get; init; }
+        public bool Passed { get; init; }
+        public string? ModelId { get; init; }
+        public string? EntryPath { get; init; }
+        public string? Blocker { get; init; }
         public string? Detail { get; init; }
     }
 

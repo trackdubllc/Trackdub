@@ -279,7 +279,7 @@ public sealed class OnnxExecutionSessionFactoryTests
     }
 
     [Fact]
-    public void BuildTensorRtRtxOptions_includes_runtime_cache_and_cuda_graph_by_default()
+    public void BuildTensorRtRtxOptions_includes_runtime_cache_by_default_and_omits_cuda_graph()
     {
         string? previousEngineCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT");
         string? previousCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_CACHE_ROOT");
@@ -293,19 +293,35 @@ public sealed class OnnxExecutionSessionFactoryTests
                 .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
 
-            object? rawResult = method.Invoke(null, [null]);
+            object? rawResult = method.Invoke(null, [null, false]);
             var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
             Assert.Equal(
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Trackdub", "EngineCache"),
                 options["nv_runtime_cache_path"]);
-            Assert.Equal("1", options["enable_cuda_graph"]);
+            // Cuda-graph capture requires stable device buffer addresses across Run() calls; most
+            // call sites build fresh input tensors every call, so the flag must default to off.
+            // It has to be an explicit "0": the TensorRT RTX EP treats a missing key as true.
+            Assert.Equal("0", options["enable_cuda_graph"]);
         }
         finally
         {
             Environment.SetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT", previousEngineCacheRoot);
             Environment.SetEnvironmentVariable("TRACKDUB_CACHE_ROOT", previousCacheRoot);
         }
+    }
+
+    [Fact]
+    public void BuildTensorRtRtxOptions_enable_cuda_graph_true_sets_the_flag()
+    {
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
+
+        object? rawResult = method.Invoke(null, [null, true]);
+        var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
+
+        Assert.Equal("1", options["enable_cuda_graph"]);
     }
 
     [Fact]
@@ -327,11 +343,10 @@ public sealed class OnnxExecutionSessionFactoryTests
                 .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
 
-            object? rawResult = method.Invoke(null, [null]);
+            object? rawResult = method.Invoke(null, [null, false]);
             var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
             Assert.Equal(Path.Combine(Path.GetFullPath(cacheRoot), "EngineCache"), options["nv_runtime_cache_path"]);
-            Assert.Equal("1", options["enable_cuda_graph"]);
         }
         finally
         {
@@ -360,11 +375,10 @@ public sealed class OnnxExecutionSessionFactoryTests
                 .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)
                 ?? throw new InvalidOperationException("Could not locate TensorRT RTX provider-options helper.");
 
-            object? rawResult = method.Invoke(null, [null]);
+            object? rawResult = method.Invoke(null, [null, false]);
             var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
             Assert.Equal(Path.GetFullPath(engineCacheRoot), options["nv_runtime_cache_path"]);
-            Assert.Equal("1", options["enable_cuda_graph"]);
         }
         finally
         {
@@ -387,7 +401,8 @@ public sealed class OnnxExecutionSessionFactoryTests
                 {
                     ["enable_cuda_graph"] = "0",
                     ["nv_runtime_cache_path"] = @"D:\cache"
-                }
+                },
+                false
             ]);
         var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
@@ -410,7 +425,8 @@ public sealed class OnnxExecutionSessionFactoryTests
                     ["trt_profile_min_shapes"] = "mel:1x128x1",
                     ["trt_profile_max_shapes"] = "mel:1x128x3000",
                     ["trt_profile_opt_shapes"] = "mel:1x128x3000",
-                }
+                },
+                false
             ]);
         var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
@@ -436,7 +452,8 @@ public sealed class OnnxExecutionSessionFactoryTests
                 {
                     ["trt_profile_min_shapes"] = "mel:1x128x1",
                     ["nv_profile_min_shapes"] = "mel:1x128x8",
-                }
+                },
+                false
             ]);
         var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
@@ -462,7 +479,8 @@ public sealed class OnnxExecutionSessionFactoryTests
                     ["trt_profile_min_shapes"] = "input_features:1x80x1",
                     ["trt_profile_max_shapes"] = "input_features:1x80x3000",
                     ["trt_profile_opt_shapes"] = "input_features:1x80x3000",
-                }
+                },
+                false
             ]);
         var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
@@ -488,7 +506,8 @@ public sealed class OnnxExecutionSessionFactoryTests
                     ["trt_profile_min_shapes"] = "waveform:1x16000",
                     ["trt_profile_max_shapes"] = "waveform:1x57600000",
                     ["trt_profile_opt_shapes"] = "waveform:1x160000",
-                }
+                },
+                false
             ]);
         var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
@@ -520,7 +539,8 @@ public sealed class OnnxExecutionSessionFactoryTests
                         "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1",
                     ["trt_profile_opt_shapes"] =
                         "processed_signal:1x128x65,processed_signal_length:1,cache_last_channel:24x1x56x1024,cache_last_time:24x1x1024x8,cache_last_channel_len:1,prompt_index:1",
-                }
+                },
+                false
             ]);
         var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
@@ -548,7 +568,8 @@ public sealed class OnnxExecutionSessionFactoryTests
                 {
                     ["nv_max_workspace_size"] = "2147483648",
                     ["trt_profile_min_shapes"] = "waveform:1x16000",
-                }
+                },
+                false
             ]);
         var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
@@ -568,24 +589,45 @@ public sealed class OnnxExecutionSessionFactoryTests
             [
                 ExecutionProviderKind.TensorRTRtx,
                 WindowsMlExecutionDevicePolicy.Explicit,
-                new Dictionary<string, string> { ["enable_cuda_graph"] = "1" }
+                new Dictionary<string, string> { ["enable_cuda_graph"] = "1" },
+                false
             ]);
         object? second = method.Invoke(
             null,
             [
                 ExecutionProviderKind.TensorRTRtx,
                 WindowsMlExecutionDevicePolicy.Explicit,
-                new Dictionary<string, string> { ["enable_cuda_graph"] = "0" }
+                new Dictionary<string, string> { ["enable_cuda_graph"] = "0" },
+                false
             ]);
         object? cpuExplicit = method.Invoke(
             null,
-            [ExecutionProviderKind.Cpu, WindowsMlExecutionDevicePolicy.Explicit, null]);
+            [ExecutionProviderKind.Cpu, WindowsMlExecutionDevicePolicy.Explicit, null, false]);
         object? cpuMaxPerf = method.Invoke(
             null,
-            [ExecutionProviderKind.Cpu, WindowsMlExecutionDevicePolicy.MaxPerformance, null]);
+            [ExecutionProviderKind.Cpu, WindowsMlExecutionDevicePolicy.MaxPerformance, null, false]);
 
         Assert.NotEqual(Assert.IsType<string>(first), Assert.IsType<string>(second));
         Assert.Equal(Assert.IsType<string>(cpuExplicit), Assert.IsType<string>(cpuMaxPerf));
+    }
+
+    [Fact]
+    public void BuildSessionOptionsFingerprint_distinguishes_enable_cuda_graph_parameter_from_override_dictionary()
+    {
+        // Guards against the enableCudaGraph parameter and the additionalTrtOptions dictionary
+        // silently collapsing onto the same fingerprint when neither mentions enable_cuda_graph.
+        MethodInfo method = typeof(OnnxExecutionSessionFactory)
+            .GetMethod("BuildSessionOptionsFingerprint", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate session-options fingerprint helper.");
+
+        object? cudaGraphOff = method.Invoke(
+            null,
+            [ExecutionProviderKind.TensorRTRtx, WindowsMlExecutionDevicePolicy.Explicit, null, false]);
+        object? cudaGraphOn = method.Invoke(
+            null,
+            [ExecutionProviderKind.TensorRTRtx, WindowsMlExecutionDevicePolicy.Explicit, null, true]);
+
+        Assert.NotEqual(Assert.IsType<string>(cudaGraphOff), Assert.IsType<string>(cudaGraphOn));
     }
 
     [Fact]
@@ -615,10 +657,10 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object? explicitCpu = method.Invoke(
             null,
-            [ExecutionProviderKind.Cpu, WindowsMlExecutionDevicePolicy.Explicit, null]);
+            [ExecutionProviderKind.Cpu, WindowsMlExecutionDevicePolicy.Explicit, null, false]);
         object? maxPerfCpu = method.Invoke(
             null,
-            [ExecutionProviderKind.Cpu, WindowsMlExecutionDevicePolicy.MaxPerformance, null]);
+            [ExecutionProviderKind.Cpu, WindowsMlExecutionDevicePolicy.MaxPerformance, null, false]);
 
         Assert.Equal(Assert.IsType<string>(explicitCpu), Assert.IsType<string>(maxPerfCpu));
         Assert.Equal("default", Assert.IsType<string>(explicitCpu));
@@ -633,22 +675,22 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object? explicitDml = method.Invoke(
             null,
-            [ExecutionProviderKind.DirectMl, WindowsMlExecutionDevicePolicy.Explicit, null]);
+            [ExecutionProviderKind.DirectMl, WindowsMlExecutionDevicePolicy.Explicit, null, false]);
         object? maxPerfDml = method.Invoke(
             null,
-            [ExecutionProviderKind.DirectMl, WindowsMlExecutionDevicePolicy.MaxPerformance, null]);
+            [ExecutionProviderKind.DirectMl, WindowsMlExecutionDevicePolicy.MaxPerformance, null, false]);
         object? defaultRenderDml = method.Invoke(
             null,
-            [ExecutionProviderKind.DirectMl, WindowsMlExecutionDevicePolicy.DefaultRender, null]);
+            [ExecutionProviderKind.DirectMl, WindowsMlExecutionDevicePolicy.DefaultRender, null, false]);
         object? minPowerDml = method.Invoke(
             null,
-            [ExecutionProviderKind.DirectMl, WindowsMlExecutionDevicePolicy.MinPower, null]);
+            [ExecutionProviderKind.DirectMl, WindowsMlExecutionDevicePolicy.MinPower, null, false]);
         object? maxPerfTrt = method.Invoke(
             null,
-            [ExecutionProviderKind.TensorRTRtx, WindowsMlExecutionDevicePolicy.MaxPerformance, null]);
+            [ExecutionProviderKind.TensorRTRtx, WindowsMlExecutionDevicePolicy.MaxPerformance, null, false]);
         object? explicitTrt = method.Invoke(
             null,
-            [ExecutionProviderKind.TensorRTRtx, WindowsMlExecutionDevicePolicy.Explicit, null]);
+            [ExecutionProviderKind.TensorRTRtx, WindowsMlExecutionDevicePolicy.Explicit, null, false]);
 
         Assert.Equal("default", Assert.IsType<string>(explicitDml));
         Assert.Equal(Assert.IsType<string>(explicitDml), Assert.IsType<string>(maxPerfDml));
@@ -659,10 +701,10 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object? explicitMigraphx = method.Invoke(
             null,
-            [ExecutionProviderKind.Migraphx, WindowsMlExecutionDevicePolicy.Explicit, null]);
+            [ExecutionProviderKind.Migraphx, WindowsMlExecutionDevicePolicy.Explicit, null, false]);
         object? defaultRenderMigraphx = method.Invoke(
             null,
-            [ExecutionProviderKind.Migraphx, WindowsMlExecutionDevicePolicy.DefaultRender, null]);
+            [ExecutionProviderKind.Migraphx, WindowsMlExecutionDevicePolicy.DefaultRender, null, false]);
         if (OperatingSystem.IsWindows())
         {
             Assert.NotEqual(Assert.IsType<string>(explicitMigraphx), Assert.IsType<string>(defaultRenderMigraphx));
@@ -773,7 +815,7 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object result = method.Invoke(
             null,
-            [ExecutionProviderKind.DirectMl, devicePolicy, null])
+            [ExecutionProviderKind.DirectMl, devicePolicy, null, false])
             ?? throw new InvalidOperationException("Session options factory returned null.");
         Type resultType = result.GetType();
         using var options = Assert.IsAssignableFrom<SessionOptions>(
@@ -816,7 +858,7 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object result = method.Invoke(
             null,
-            [ExecutionProviderKind.Dnnl, WindowsMlExecutionDevicePolicy.Explicit, null])
+            [ExecutionProviderKind.Dnnl, WindowsMlExecutionDevicePolicy.Explicit, null, false])
             ?? throw new InvalidOperationException("Session options factory returned null.");
         Type resultType = result.GetType();
         using var options = Assert.IsAssignableFrom<SessionOptions>(

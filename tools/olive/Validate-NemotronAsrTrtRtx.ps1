@@ -4,32 +4,28 @@
     Validate TRT-RTX optimization of the Nemotron 3.5 ASR streaming model using Microsoft Olive.
 
 .DESCRIPTION
-    Runs the Olive TRT-RTX recipes for the Nemotron ASR encoder and decoder_joint,
-    each with SkipLayerNormalization + BiasGelu fusion pre-passes, then stages
-    the result for the C# NemotronAsrOnnxAudioTranscriptionEngine to load.
-
-    Pass -Mxfp8 to select the MXFP8-quantized recipes (Hopper/Ada + Blackwell).
-    Without it, the fp16 recipes are used (works on every TensorRT-RTX-capable GPU).
+    Runs the Olive TRT-RTX recipes for the Nemotron ASR encoder and decoder_joint
+    (fp16 conversion with float32 I/O kept + TRT-RTX session param tuning), then stages the result
+    for the C# NemotronAsrOnnxAudioTranscriptionEngine to load.
 
     Requires:
       - NVIDIA GPU with TRT-RTX (NvTensorRTRTXExecutionProvider) support
-      - Model files already downloaded:
-          models/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/encoder.onnx
-          models/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/decoder_joint.onnx
+      - Model files already downloaded to the model cache (TRACKDUB_MODEL_CACHE, or
+        %LOCALAPPDATA%\Trackdub\model-cache by default):
+          <model cache>/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/encoder.onnx
+          <model cache>/tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx/decoder_joint.onnx
       - olive-ai[nvmo] + nvidia-modelopt[onnx] installed (Bootstrap-TrtRtxOliveVenv.ps1 auto-runs)
 
-    Records results (pass stays false until a provider smoke check exists) to build/nemotron-3.5-asr-trtrtx-validation.json.
+    Records results (pass = staged model verified on TensorRT RTX via `trackdub providers trt-rtx verify`) to build/nemotron-3.5-asr-trtrtx-validation.json.
     Run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to apply manifest + test changes.
 
 .EXAMPLE
     .\tools\olive\Validate-NemotronAsrTrtRtx.ps1
     .\tools\olive\Validate-NemotronAsrTrtRtx.ps1 -SkipLatency
-    .\tools\olive\Validate-NemotronAsrTrtRtx.ps1 -Mxfp8 -SkipLatency
 #>
 
 param(
-    [switch] $SkipLatency,
-    [switch] $Mxfp8
+    [switch] $SkipLatency
 )
 
 Set-StrictMode -Version Latest
@@ -40,17 +36,28 @@ $RepoRoot       = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 $VenvPath       = Join-Path $env:LOCALAPPDATA 'Trackdub\tools\olive-env-tensorrtrtx'
 $OliveExe       = Join-Path $VenvPath 'Scripts\olive.exe'
 $BuildDir       = Join-Path $RepoRoot 'build'
-$Precision      = if ($Mxfp8) { 'mxfp8' } else { 'fp16' }
+$Precision      = 'fp16'
 $ResultFile     = Join-Path $BuildDir "nemotron-3.5-asr-trtrtx-validation.json"
 
+# A previous pass cannot authorize a later failed or incomplete run.
+Remove-Item -LiteralPath $ResultFile -Force -ErrorAction SilentlyContinue
+
 # ---------------------------------------------------------------------------
-# Model layout (matches bundled-models.manifest.json nemotron-asr entry)
+# Model layout (matches the download-cache layout, not bundled-models.manifest.json's
+# root_path): the model id "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx" splits on
+# "/" into the cache's owner/repo directory segments.
 # ---------------------------------------------------------------------------
-# Path matches where Trackdub.Cli lands the model when TRACKDUB_MODEL_CACHE=$RepoRoot\models:
-# the model id "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx" gets split on "/" into two
-# path segments. The bundled-models.manifest.json `root_path` resolves to a different layout
-# (../../../../models/nemotron-3.5-asr-onnx); for the validate step we follow the download layout.
-$modelRoot      = Join-Path $RepoRoot 'models\tonythethompson\nemotron-3.5-asr-streaming-0.6b-onnx'
+. (Join-Path $PSScriptRoot 'TrtRtxOliveCommon.ps1')
+$ModelCacheRoot = Resolve-TrackdubModelCacheRoot
+
+# TensorRT RTX EP ABI plugin DLL, resolved like TensorRtRtxPluginLocator: TRACKDUB_TRT_RTX_EP_DIR,
+# then the default install. Olive registers it via the recipe accelerator's (name, path) pair.
+$TrtRtxEpDir    = if ($env:TRACKDUB_TRT_RTX_EP_DIR) { $env:TRACKDUB_TRT_RTX_EP_DIR } else { Join-Path $env:LOCALAPPDATA 'Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64' }
+$TrtRtxEpPath   = Join-Path $TrtRtxEpDir 'onnxruntime_providers_nv_tensorrt_rtx.dll'
+# The plugin's companion DLLs (cudart64_12.dll, tensorrt_rtx_1_5.dll) live beside it but are
+# resolved through the normal DLL search path, so the bundle dir must be on PATH for olive.
+$env:PATH = "$TrtRtxEpDir;$env:PATH"
+$modelRoot      = Join-Path $ModelCacheRoot 'tonythethompson\nemotron-3.5-asr-streaming-0.6b-onnx'
 $encoderSrc     = Join-Path $modelRoot 'encoder.onnx'
 $decoderSrc     = Join-Path $modelRoot 'decoder_joint.onnx'
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes\nemotron-3.5-asr-streaming-0.6b-onnx\NvTensorRtRtx'
@@ -63,24 +70,10 @@ $stagingDirName       = "nemotron-3.5-asr-onnx-trtrtx-validated-$Precision"
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
-if (-not (Test-Path $OliveExe)) {
-    $bootstrapScript = Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1'
-    for ($attempt = 1; $attempt -le 2; $attempt++) {
-        Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (attempt $attempt/2)..."
-        # Run in a child pwsh process: Bootstrap-TrtRtxOliveVenv.ps1 calls exit on failure, which
-        # would terminate this whole process (not just the child script) if invoked in-process.
-        & pwsh -NoProfile -File $bootstrapScript
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $OliveExe)) { break }
-        Write-Host "Bootstrap attempt $attempt failed (exit $LASTEXITCODE)." -ForegroundColor Red
-    }
-    if (-not (Test-Path $OliveExe)) {
-        Write-Error "olive.exe still not found at $OliveExe after 2 bootstrap attempts."
-        exit 1
-    }
-}
+Ensure-TrtRtxOliveEnvironment -VenvPath $VenvPath -BootstrapScript (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1')
 
 if (-not (Test-Path $encoderSrc)) {
-    Write-Error "Nemotron encoder model not found: $encoderSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx"
+    Write-Error "Nemotron encoder model not found: $encoderSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx`nSearched model cache root: $ModelCacheRoot (override with `$env:TRACKDUB_MODEL_CACHE)"
     exit 1
 }
 
@@ -104,6 +97,7 @@ function Resolve-Recipe {
     param([string] $SrcPath, [string] $DestPath)
     $content = Get-Content -Raw $SrcPath
     $content = $content -replace '\$\{MODEL_ROOT\}', ($modelRoot -replace '\\', '/')
+    $content = $content -replace '\$\{TRT_RTX_EP_PATH\}', ($TrtRtxEpPath -replace '\\', '/')
     $content = $content -replace '\$\{ENCODER_OUTPUT_DIR\}', ("build/$encoderOutputDirName" -replace '\\', '/')
     Set-Content -Path $DestPath -Value $content -Encoding UTF8
 }
@@ -136,7 +130,7 @@ try {
     # Step 1: Optimize encoder
     # ---------------------------------------------------------------------------
     Write-Host ""
-    Write-Host "=== Nemotron encoder optimization ($Precision + fusion + TRT-RTX session params) ===" -ForegroundColor Cyan
+    Write-Host "=== Nemotron encoder optimization ($Precision + TRT-RTX session params) ===" -ForegroundColor Cyan
     & $OliveExe run --config $encoderRecipeDst
     if ($LASTEXITCODE -ne 0) { Write-Error "Encoder optimization failed (exit $LASTEXITCODE)."; exit 1 }
     $results.encoder = @{ status = 'ok'; output = "build/$encoderOutputDirName"; precision = $Precision }
@@ -145,7 +139,7 @@ try {
     # Step 2: Optimize decoder_joint
     # ---------------------------------------------------------------------------
     Write-Host ""
-    Write-Host "=== Nemotron decoder_joint optimization ($Precision + fusion + TRT-RTX session params) ===" -ForegroundColor Cyan
+    Write-Host "=== Nemotron decoder_joint optimization ($Precision + TRT-RTX session params) ===" -ForegroundColor Cyan
     & $OliveExe run --config $decoderRecipeDst
     if ($LASTEXITCODE -ne 0) { Write-Error "Decoder_joint optimization failed (exit $LASTEXITCODE)."; exit 1 }
     $results.decoder = @{ status = 'ok'; output = "build/$decoderOutputDirName"; precision = $Precision }
@@ -179,41 +173,70 @@ try {
 
     # Carry over companion files (tokenizer, config, README, LICENSE).
     foreach ($asset in @("README.md", "NOTICE.md", "LICENSE.OpenMDW-1.1", "config.json",
-                          "tokenizer.model", "encoder.onnx.data")) {
+                          "tokenizer.model")) {
         $assetSrc = Join-Path $modelRoot $asset
         if (Test-Path $assetSrc) {
             Copy-Item $assetSrc (Join-Path $StagingDir $asset) -Force
         }
     }
 
-    # Copy optimized encoder.
+    # Olive writes each component as model.onnx plus external data that keeps the source's
+    # data filename (the graph references it by that name), so copy the .onnx.data files
+    # under their own names and rename only the graph.
     $encoderOutputDir = Join-Path $BuildDir $encoderOutputDirName
-    $encoderOnnxSrc   = Get-ChildItem $encoderOutputDir -Filter "encoder.onnx" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $encoderOnnxSrc   = Get-ChildItem $encoderOutputDir -Filter "*.onnx" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($encoderOnnxSrc) {
         Copy-Item $encoderOnnxSrc.FullName (Join-Path $StagingDir "encoder.onnx") -Force
-        Get-ChildItem $encoderOnnxSrc.Directory -Filter "encoder.onnx.data" -ErrorAction SilentlyContinue |
-            ForEach-Object { Copy-Item $_.FullName (Join-Path $StagingDir "encoder.onnx.data") -Force }
+        Get-ChildItem $encoderOnnxSrc.Directory -Filter "*.onnx.data" -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName (Join-Path $StagingDir $_.Name) -Force }
     } else {
-        Write-Warning "No encoder.onnx found in $encoderOutputDir - staging incomplete."
+        Write-Warning "No *.onnx found in $encoderOutputDir - staging incomplete."
     }
 
-    # Copy optimized decoder_joint.
     $decoderOutputDir = Join-Path $BuildDir $decoderOutputDirName
-    $decoderOnnxSrc   = Get-ChildItem $decoderOutputDir -Filter "decoder_joint.onnx" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $decoderOnnxSrc   = Get-ChildItem $decoderOutputDir -Filter "*.onnx" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($decoderOnnxSrc) {
         Copy-Item $decoderOnnxSrc.FullName (Join-Path $StagingDir "decoder_joint.onnx") -Force
-        Get-ChildItem $decoderOnnxSrc.Directory -Filter "decoder_joint.onnx.data" -ErrorAction SilentlyContinue |
-            ForEach-Object { Copy-Item $_.FullName (Join-Path $StagingDir "decoder_joint.onnx.data") -Force }
+        Get-ChildItem $decoderOnnxSrc.Directory -Filter "*.onnx.data" -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName (Join-Path $StagingDir $_.Name) -Force }
     } else {
-        Write-Warning "No decoder_joint.onnx found in $decoderOutputDir - staging incomplete."
+        Write-Warning "No *.onnx found in $decoderOutputDir - staging incomplete."
     }
 
     $results.staging_dir = $StagingDir
     $results.staged = ($null -ne $encoderOnnxSrc) -and ($null -ne $decoderOnnxSrc)
-    # pass stays false: nothing here loads the staged model or checks the effective provider is
-    # trt-rtx (not cpu). Flip-TrtRtxAsrDiarization.ps1 gates on pass; set it only after a real
-    # provider smoke check exists, or run the smoke test manually and use Flip -Force.
-    $results.pass = $false
+
+    # ---------------------------------------------------------------------------
+    # Step 5: Verify the staged encoder + decoder_joint pair actually loads and runs on
+    # TensorRT RTX, not a silent CPU/DirectML fallback. Uses the real production smoke
+    # path (`trackdub providers trt-rtx verify`), which exercises both components with
+    # the pinned NemotronAsrEncoderTrtProfiles shape profile — not a file-existence check.
+    # ---------------------------------------------------------------------------
+    $results.provider_check = $null
+    if ($results.staged) {
+        Write-Host ""
+        Write-Host "=== Verifying staged encoder + decoder_joint on TensorRT RTX (trackdub providers trt-rtx verify) ===" -ForegroundColor Cyan
+        $stagedEncoderPath = Join-Path $StagingDir "encoder.onnx"
+        $verifyOutput = & dotnet run --project (Join-Path $RepoRoot "src\Trackdub.Cli") -c Release -f net10.0-windows10.0.19041.0 -- `
+            providers trt-rtx verify --model "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx" --entry $stagedEncoderPath 2>&1
+        $verifyExitCode = $LASTEXITCODE
+        $verifyJsonLine = $verifyOutput | Where-Object { $_ -match '^\s*\{.*"passed"\s*:' } | Select-Object -Last 1
+        if ($verifyJsonLine) {
+            $verifyResult = $verifyJsonLine | ConvertFrom-Json
+            $results.provider_check = @{
+                ready  = $verifyResult.ready
+                passed = $verifyResult.passed
+                detail = $verifyResult.detail
+            }
+            $results.pass = [bool]$verifyResult.passed
+        } else {
+            Write-Warning "Could not parse 'trackdub providers trt-rtx verify' output (exit $verifyExitCode); provider not confirmed."
+            $results.provider_check = @{ ready = $null; passed = $false; detail = "verify command produced no parseable JSON (exit $verifyExitCode)" }
+            $results.pass = $false
+        }
+    } else {
+        $results.pass = $false
+    }
 
 } finally {
     Set-Location $origDir
@@ -228,17 +251,20 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 $results | ConvertTo-Json -Depth 4 | Set-Content -Path $ResultFile -Encoding UTF8
 
 Write-Host ""
-if ($results.staged) {
-    Write-Host "STAGED - TRT-RTX ($Precision) optimization output staged for Nemotron 3.5 ASR. Provider NOT verified (pass=false in the result file)." -ForegroundColor Yellow
+if ($results.pass) {
+    Write-Host "PASS - TRT-RTX ($Precision) optimization output staged and verified on hardware for Nemotron 3.5 ASR." -ForegroundColor Green
     Write-Host "Results written to: $ResultFile"
     Write-Host ""
     Write-Host "Staging directory: $($results.staging_dir)"
     Write-Host ""
     Write-Host "Next steps:"
-    Write-Host "  1. Add a TRT-RTX smoke test in tests/Trackdub.Inference.Onnx.Tests/NemotronAsrEncoderTrtRtxValidationTests.cs"
-    Write-Host "     (mirror WhisperOnnxTrtRtxValidationTests.cs; load the staging dir via Discover())."
-    Write-Host "  2. dotnet test tests/Trackdub.Inference.Onnx.Tests --filter 'FullyQualifiedName~NemotronAsrEncoderTrtRtx'"
-    Write-Host "  3. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 -Force to enable trt-rtx in the manifest and tests (pass=false requires -Force)."
+    Write-Host "  1. dotnet test tests/Trackdub.Inference.Onnx.Tests --filter 'FullyQualifiedName~NemotronAsrEncoderTrtRtx'"
+    Write-Host "  2. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to enable trt-rtx in the manifest and tests."
+} elseif ($results.staged) {
+    Write-Host "STAGED BUT NOT VERIFIED - TRT-RTX ($Precision) output staged for Nemotron 3.5 ASR, but the real provider check failed." -ForegroundColor Yellow
+    Write-Host "Detail: $($results.provider_check.detail)"
+    Write-Host "Results written to: $ResultFile"
+    exit 1
 } else {
     Write-Host "FAIL - see errors above." -ForegroundColor Red
     exit 1
