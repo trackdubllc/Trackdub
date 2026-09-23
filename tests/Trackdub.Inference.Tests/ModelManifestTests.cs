@@ -1767,15 +1767,15 @@ public sealed class ModelManifestLoaderTests
                 Assert.Contains(OliveOptimizationProvider.TensorRt, manifest.Optimization.Olive.SupportedProviders);
             });
 
-        // Standard ONNX whisper entries must use existing-onnx-components mode and must not list TRT providers
-        // (TRT optimization of standard ONNX whisper models has not been validated).
+        // Standard ONNX whisper entries use existing-onnx-components mode; TRT-RTX is hardware validated,
+        // classic TensorRT is not.
         Assert.All(
             catalog.Models.Where(m => m.Task is ModelTask.Asr && m.EngineFamily == "whisper-onnx"),
             manifest =>
             {
                 Assert.Equal("existing-onnx-components", manifest.Optimization!.Olive!.Mode);
                 Assert.DoesNotContain(OliveOptimizationProvider.TensorRt, manifest.Optimization.Olive.SupportedProviders);
-                Assert.DoesNotContain(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);
+                Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);
             });
     }
 

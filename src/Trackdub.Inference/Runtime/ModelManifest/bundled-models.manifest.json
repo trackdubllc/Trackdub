@@ -1472,7 +1472,8 @@
           "supported_providers": [
             "cpu",
             "dml",
-            "cuda"
+            "cuda",
+            "trt-rtx"
           ],
           "supported_precisions": [
             "fp32",
@@ -1497,6 +1498,15 @@
                 "provider_optimization"
               ],
               "expected_output": "onnx_components"
+            },
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "onnx-community-whisper-tiny/NvTensorRtRtx/encoder_trtrtx_fp16.json"
             }
           ]
         }
@@ -1597,7 +1607,19 @@
           "supported_providers": [
             "cpu",
             "dml",
-            "cuda"
+            "cuda",
+            "trt-rtx"
+          ],
+          "recipe_bindings": [
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "onnx-community-whisper-base/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            }
           ]
         }
       },
@@ -1722,7 +1744,19 @@
           "supported_providers": [
             "cpu",
             "dml",
-            "cuda"
+            "cuda",
+            "trt-rtx"
+          ],
+          "recipe_bindings": [
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "onnx-community-whisper-small/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            }
           ]
         }
       },
@@ -1848,7 +1882,19 @@
           "supported_providers": [
             "cpu",
             "dml",
-            "cuda"
+            "cuda",
+            "trt-rtx"
+          ],
+          "recipe_bindings": [
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "Xenova-whisper-medium/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            }
           ]
         }
       },
@@ -1973,7 +2019,19 @@
           "supported_providers": [
             "cpu",
             "dml",
-            "cuda"
+            "cuda",
+            "trt-rtx"
+          ],
+          "recipe_bindings": [
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "Xenova-whisper-large-v3/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            }
           ]
         }
       },
