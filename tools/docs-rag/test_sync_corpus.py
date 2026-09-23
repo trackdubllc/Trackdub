@@ -351,6 +351,14 @@ class HtmlToTextTests(unittest.TestCase):
         html = "<body><main id='app'></main><p>server text</p></body>"
         self.assertEqual(sync_corpus.html_to_text(html), "server text")
 
+    def test_small_card_article_yields_to_main(self):
+        # Hugging Face model pages: <article> holds a dataset/paper card, <main> holds the model card.
+        card = "<article><p>Viewer • Updated Jun 26</p></article>"
+        body = "<p>" + "Streaming ASR model card with usage and limits. " * 10 + "</p>"
+        html = f"<body><main><div>{card}</div><div class='model-card'>{body}</div></main></body>"
+        text = sync_corpus.html_to_text(html)
+        self.assertIn("Streaming ASR model card", text)
+
     def test_void_elements_do_not_unbalance_skipping(self):
         html = "<body><main><nav><img src='a'><br>menu</nav><p>kept<br>line</p></main></body>"
         self.assertEqual(sync_corpus.html_to_text(html), "kept\nline")
