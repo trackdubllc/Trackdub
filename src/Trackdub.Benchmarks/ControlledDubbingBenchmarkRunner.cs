@@ -231,7 +231,11 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     : BenchmarkEvidenceStatus.Failed;
                 reason = result.PreFlightFailures is { Count: > 0 }
                     ? "Preflight failed."
-                    : "Pipeline did not complete successfully.";
+                    : string.Join("; ", stages
+                        .Where(measured => measured.Status != BenchmarkEvidenceStatus.Completed)
+                        .Select(measured => $"{measured.Name}:{measured.Reason ?? measured.Status.ToString()}"));
+                if (string.IsNullOrWhiteSpace(reason))
+                    reason = "Pipeline did not complete successfully.";
             }
             else if (options.Provider is not null &&
                      (actualProvider is null ||
@@ -414,13 +418,19 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 DefaultTargetLanguage = options.TargetLanguage,
             });
         var state = await session.Workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
+        // Project.OpenAsync applies a UI-only provider downgrade to historical
+        // stage rows when current hardware differs. Benchmark provenance must
+        // use the persisted execution record, not that display projection.
+        var rawStageStore = new SqliteProjectStageRunStore(new SqliteProjectDatabase(project));
+        IReadOnlyList<StageRunRecord> rawStageRuns = await rawStageStore
+            .ListByProjectAsync(state.ProjectState.Project.Id, cancellationToken).ConfigureAwait(false);
         bool playableTake = state.TtsTakes.Any(take =>
             take.Status == TtsTakeStatus.Completed && take.ArtifactId is Guid id &&
             state.ProjectState.Artifacts.Any(artifact =>
                 artifact.Id == id && artifact.SizeBytes > 0 &&
                 File.Exists(Path.Combine(project, artifact.RelativePath))));
         return new RunArtifacts(
-            state.StageRuns,
+            rawStageRuns,
             state.TranscriptSegments.Any(segment => !string.IsNullOrWhiteSpace(segment.Text)),
             playableTake);
     }
