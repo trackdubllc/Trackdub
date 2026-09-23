@@ -1,4 +1,5 @@
 using Trackdub.Contracts.Benchmarking;
+using Trackdub.Domain.StageRuns;
 
 namespace Trackdub.Benchmarks;
 
@@ -12,6 +13,19 @@ public sealed record BenchmarkComparisonResult(
 /// <summary>Aggregates only successful samples with matching controlled conditions.</summary>
 public static class BenchmarkComparison
 {
+    private static readonly HashSet<string> ModelStages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        StageNames.Separation, StageNames.Vad, StageNames.Diarization, StageNames.Asr,
+        StageNames.OverlapRescue, StageNames.TextRefinementAsr, StageNames.Translation,
+        StageNames.Tts, StageNames.LipSync, StageNames.LipSynthesis,
+    };
+
+    internal static bool ProviderMatches(string requested, string actual) =>
+        string.Equals(NormalizeProvider(requested), NormalizeProvider(actual), StringComparison.Ordinal);
+
+    private static string NormalizeProvider(string provider) =>
+        new(provider.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
     public static BenchmarkComparisonResult Compare(
         IReadOnlyList<BenchmarkEvidenceReport> samples, string metric = "pipeline")
     {
@@ -54,17 +68,14 @@ public static class BenchmarkComparison
             return "Requested measurement unavailable.";
         if (sample.RequestedProvider is not null &&
             (sample.ActualProvider is null ||
-             !sample.RequestedProvider.Equals(sample.ActualProvider, StringComparison.OrdinalIgnoreCase)))
+             !ProviderMatches(sample.RequestedProvider, sample.ActualProvider)))
             return "Requested provider did not execute.";
-        if (sample.Scenario is "Vad" or "Asr" or "Diarization" or "Separation" or
-            "Translation" or "Tts" or "LipSync" or "TextRefinementAsr" &&
+        if (ModelStages.Contains(sample.Scenario) &&
             sample.ActualProvider is null)
             return "Actual provider unavailable.";
         if (sample.Scenario == "full-pipeline" &&
             sample.Stages.Any(stage =>
-                stage.Name is "Vad" or "Asr" or "Diarization" or "Separation" or
-                    "Translation" or "Tts" or "LipSync" or "TextRefinementAsr" &&
-                stage.ActualProvider is null))
+                ModelStages.Contains(stage.Name) && stage.ActualProvider is null))
             return "A stage's actual provider is unavailable.";
         if (sample.Stages.Any(x => x.Status != BenchmarkEvidenceStatus.Completed))
             return "Stage skipped, failed, or partially completed.";

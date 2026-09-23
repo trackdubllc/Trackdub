@@ -8,6 +8,7 @@ using Trackdub.Contracts.Dubbing;
 using Trackdub.Contracts.Persistence;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
+using Trackdub.Domain.StageRuns;
 using Trackdub.Domain.Tts;
 using Trackdub.Infrastructure.Persistence.Repositories;
 using Trackdub.Infrastructure.Persistence.Sqlite;
@@ -239,7 +240,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             }
             else if (options.Provider is not null &&
                      (actualProvider is null ||
-                      !actualProvider.Equals(options.Provider, StringComparison.OrdinalIgnoreCase)))
+                     !BenchmarkComparison.ProviderMatches(options.Provider, actualProvider)))
             {
                 status = BenchmarkEvidenceStatus.PartiallyCompleted;
                 reason = "Actual provider was unavailable or differed from requested provider.";
@@ -344,6 +345,11 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             throw new ArgumentException("Mode must be fresh-process, warm-host, or artifact-resume.");
         if (options.Provider is not null && !Enum.TryParse<ExecutionProviderKind>(options.Provider, true, out _))
             throw new ArgumentException("Unknown provider.");
+        if (options.Provider is not null &&
+            (ResolveStage(options.Stage) is not string stage || RuntimeStageFor(stage) is null))
+            throw new ArgumentException("Provider pin requires a runtime-backed focused stage.");
+        if (options.Model is not null && ResolveStage(options.Stage) is null)
+            throw new ArgumentException("Model selection requires a focused stage.");
         if (options.ExpectedFixtureSha256 is not null &&
             (options.ExpectedFixtureSha256.Length != 64 ||
              !options.ExpectedFixtureSha256.All(Uri.IsHexDigit)))
@@ -369,8 +375,9 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     private HeadlessDubbingHost CreateHost(ControlledDubbingBenchmarkOptions options)
     {
         Dictionary<string, ExecutionProviderKind>? pins = null;
-        if (options.Provider is not null && options.Stage is not null &&
-            Enum.TryParse<RuntimeStage>(options.Stage, true, out RuntimeStage runtimeStage))
+        string? stage = ResolveStage(options.Stage);
+        if (options.Provider is not null && stage is not null &&
+            RuntimeStageFor(stage) is RuntimeStage runtimeStage)
         {
             pins = new Dictionary<string, ExecutionProviderKind>
             {
@@ -388,13 +395,29 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         });
     }
 
+    private static RuntimeStage? RuntimeStageFor(string stage) => stage switch
+    {
+        StageNames.Separation => RuntimeStage.Separation,
+        StageNames.Vad => RuntimeStage.Vad,
+        StageNames.Diarization => RuntimeStage.Diarization,
+        StageNames.Asr => RuntimeStage.Asr,
+        StageNames.OverlapRescue => RuntimeStage.OverlapRescue,
+        StageNames.TextRefinementAsr => RuntimeStage.TextRefinement,
+        StageNames.Translation => RuntimeStage.Translation,
+        StageNames.Tts => RuntimeStage.Tts,
+        StageNames.LipSync => RuntimeStage.LipSync,
+        StageNames.LipSynthesis => RuntimeStage.LipSynthesis,
+        _ => null,
+    };
+
     private static Task<DubbingRunResult> ExecuteAsync(
         HeadlessDubbingHost host, string fixture, string project, ControlledDubbingBenchmarkOptions options,
         IReadOnlyList<string>? stages, bool forceRerun, CancellationToken cancellationToken,
         IProgress<PipelineProgressEvent>? progress = null)
     {
-        IReadOnlyDictionary<string, string>? models = options.Model is null || options.Stage is null
-            ? null : new Dictionary<string, string> { [options.Stage] = options.Model };
+        string? stage = ResolveStage(options.Stage);
+        IReadOnlyDictionary<string, string>? models = options.Model is null || stage is null
+            ? null : new Dictionary<string, string> { [stage] = options.Model };
         return host.CreateEngine().ExecuteAsync(new DubbingSessionOptions
         {
             SourceMediaPath = fixture,

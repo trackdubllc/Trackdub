@@ -46,6 +46,36 @@ public sealed class BenchmarkComparisonTests
         Assert.Null(comparison.MedianMilliseconds);
     }
 
+    [Fact]
+    public void CompareRequiresProviderForLowercaseModelStage()
+    {
+        BenchmarkEvidenceReport missingProvider = Sample(10) with
+        {
+            Scenario = "asr",
+            RequestedProvider = null,
+            ActualProvider = null,
+        };
+
+        BenchmarkComparisonResult comparison = BenchmarkComparison.Compare([missingProvider]);
+
+        Assert.Empty(comparison.Accepted);
+        Assert.Contains(missingProvider.RunId, comparison.Rejected.Keys);
+    }
+
+    [Fact]
+    public void CompareAcceptsEquivalentProviderSpelling()
+    {
+        BenchmarkEvidenceReport alias = Sample(10) with
+        {
+            RequestedProvider = "TensorRTRtx",
+            ActualProvider = "tensor-rt-rtx",
+        };
+
+        BenchmarkComparisonResult comparison = BenchmarkComparison.Compare([alias]);
+
+        Assert.Single(comparison.Accepted);
+    }
+
     private static BenchmarkEvidenceReport Sample(double milliseconds) => new()
     {
         RunId = Guid.NewGuid(),

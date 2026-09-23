@@ -96,7 +96,7 @@ Hot paths audited in `tests/Trackdub.Infrastructure.Tests/SqliteExplainQueryPlan
 
 | Source | Location | Status |
 |---|---|---|
-| DubBench / `Trackdub.Benchmarks` harness | `src/Trackdub.Benchmarks` | *pending local run* — capture baseline JSON or log excerpt |
+| DubBench / `Trackdub.Benchmarks` harness | `src/Trackdub.Benchmarks` | Initial controlled local samples and raw report IDs in [benchmark evidence](../development/benchmark-evidence.md); comparison medians pending compatible repeats |
 | Inference session pool tests | `tests/` (session pooling) | present in repo; link results in follow-up |
 | User benchmark SQLite (`BenchmarkRuns` table) | per-user DB | wired on `main` via M19; link results in follow-up |
 | Hardware profiler history recorder | `src/Trackdub.Composition/HardwareProfiler` | present on `main`; capture history path in follow-up |
