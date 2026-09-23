@@ -80,7 +80,6 @@ internal static class TranscriptPipelineResumeHydrator
         TranscriptAudioRoutingPlan enhancedRoutingPlan = context.AudioRoutingPlan with
         {
             VadAudioArtifact = enhancedArtifact,
-            AsrAudioArtifact = enhancedArtifact,
             DiarizationAudioArtifact = enhancedArtifact
         };
 

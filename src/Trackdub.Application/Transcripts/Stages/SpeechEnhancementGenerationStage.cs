@@ -52,11 +52,11 @@ public sealed class SpeechEnhancementGenerationStage(
 
         PipelineProgressReporter.Phase(progress, StageName, "Updating routing", "Updating audio routing with enhanced audio.");
 
-        // Update the routing plan so VAD, ASR, and diarization all use the enhanced audio.
+        // VAD and diarization use the enhanced audio; ASR keeps its unprocessed source
+        // (see TranscriptAudioRoutingPlan.WithUnprocessedAsrSource).
         TranscriptAudioRoutingPlan enhancedRoutingPlan = context.AudioRoutingPlan with
         {
             VadAudioArtifact = result.EnhancedAudioArtifact,
-            AsrAudioArtifact = result.EnhancedAudioArtifact,
             DiarizationAudioArtifact = result.EnhancedAudioArtifact
         };
 
