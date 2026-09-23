@@ -9,12 +9,21 @@ internal sealed class WhisperFeatureExtractor
     private const int SampleRate = 16000;
     private const int FftSize = 400;
     private const int HopLength = 160;
-    private const int MelBins = 80;
     private const int MaxSamples = 480000;
     private const int MaxFrames = 3000;
     private const int FrequencyBins = 1 + (FftSize / 2);
     private readonly float[] hannWindow = BuildPeriodicHannWindow(FftSize);
-    private readonly float[,] melFilters = BuildMelFilterBank();
+    private readonly int melBins;
+    private readonly float[,] melFilters;
+
+    public WhisperFeatureExtractor(int melBins = 80)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(melBins);
+        this.melBins = melBins;
+        melFilters = BuildMelFilterBank(melBins);
+    }
+
+    public int MelBins => melBins;
 
     public DenseTensor<float> Extract(ReadOnlySpan<float> inputSamples)
     {
@@ -28,8 +37,8 @@ internal sealed class WhisperFeatureExtractor
             float[,] melSpectrum = ApplyMelFilters(powerSpectrum);
             NormalizeLogMel(melSpectrum);
 
-            var data = new float[MelBins * MaxFrames];
-            for (int melIndex = 0; melIndex < MelBins; melIndex++)
+            var data = new float[melBins * MaxFrames];
+            for (int melIndex = 0; melIndex < melBins; melIndex++)
             {
                 for (int frameIndex = 0; frameIndex < MaxFrames; frameIndex++)
                 {
@@ -37,7 +46,7 @@ internal sealed class WhisperFeatureExtractor
                 }
             }
 
-            return new DenseTensor<float>(data, [1, MelBins, MaxFrames]);
+            return new DenseTensor<float>(data, [1, melBins, MaxFrames]);
         }
         finally
         {
@@ -83,8 +92,8 @@ internal sealed class WhisperFeatureExtractor
 
     private float[,] ApplyMelFilters(float[,] powerSpectrum)
     {
-        var melSpectrum = new float[MelBins, MaxFrames];
-        for (int melIndex = 0; melIndex < MelBins; melIndex++)
+        var melSpectrum = new float[melBins, MaxFrames];
+        for (int melIndex = 0; melIndex < melBins; melIndex++)
         {
             for (int frameIndex = 0; frameIndex < MaxFrames; frameIndex++)
             {
@@ -101,10 +110,10 @@ internal sealed class WhisperFeatureExtractor
         return melSpectrum;
     }
 
-    private static void NormalizeLogMel(float[,] melSpectrum)
+    private void NormalizeLogMel(float[,] melSpectrum)
     {
         float maxValue = float.NegativeInfinity;
-        for (int melIndex = 0; melIndex < MelBins; melIndex++)
+        for (int melIndex = 0; melIndex < melBins; melIndex++)
         {
             for (int frameIndex = 0; frameIndex < MaxFrames; frameIndex++)
             {
@@ -119,7 +128,7 @@ internal sealed class WhisperFeatureExtractor
         }
 
         float minimumAllowed = maxValue - 8f;
-        for (int melIndex = 0; melIndex < MelBins; melIndex++)
+        for (int melIndex = 0; melIndex < melBins; melIndex++)
         {
             for (int frameIndex = 0; frameIndex < MaxFrames; frameIndex++)
             {
@@ -182,21 +191,21 @@ internal sealed class WhisperFeatureExtractor
         return window;
     }
 
-    private static float[,] BuildMelFilterBank()
+    private static float[,] BuildMelFilterBank(int melBins)
     {
-        var filters = new float[MelBins, FrequencyBins];
+        var filters = new float[melBins, FrequencyBins];
         double[] fftFrequencies = Enumerable.Range(0, FrequencyBins)
             .Select(index => index * (SampleRate / 2d) / (FrequencyBins - 1))
             .ToArray();
 
         double melMin = HertzToMel(0);
         double melMax = HertzToMel(SampleRate / 2d);
-        double[] melPoints = Enumerable.Range(0, MelBins + 2)
-            .Select(index => melMin + ((melMax - melMin) * index / (MelBins + 1d)))
+        double[] melPoints = Enumerable.Range(0, melBins + 2)
+            .Select(index => melMin + ((melMax - melMin) * index / (melBins + 1d)))
             .ToArray();
         double[] hzPoints = melPoints.Select(MelToHertz).ToArray();
 
-        for (int melIndex = 0; melIndex < MelBins; melIndex++)
+        for (int melIndex = 0; melIndex < melBins; melIndex++)
         {
             double lower = hzPoints[melIndex];
             double center = hzPoints[melIndex + 1];

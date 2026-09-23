@@ -92,7 +92,9 @@ public sealed class WhisperOnnxTrtRtxValidationTests
                 [new SpeechRegion(0, 0.0, 0.8)],
                 CancellationToken.None);
 
-            Assert.All(segments, static segment => Assert.False(string.IsNullOrWhiteSpace(segment.Text)));
+            // Silence legitimately decodes to empty text on larger models (CPU does the same);
+            // this smoke only proves the TRT-RTX sessions ran end to end.
+            Assert.Single(segments);
             Assert.NotNull(engine.LastExecutionSummary);
 
             // Confirm TRT-RTX (or its DirectML fallback on non-NVIDIA hardware) was selected.

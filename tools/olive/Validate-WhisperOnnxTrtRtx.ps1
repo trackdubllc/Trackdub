@@ -90,6 +90,32 @@ if (-not (Test-Path $decoderSrc)) {
 }
 
 # ---------------------------------------------------------------------------
+# Prune attention-probability outputs (Xenova exports carry output_attentions=True).
+# When anything was pruned, recipes read from the pruned copy instead of the cache.
+# ---------------------------------------------------------------------------
+$PythonExe   = Join-Path $VenvPath 'Scripts\python.exe'
+$pruneScript = Join-Path $PSScriptRoot 'prune_whisper_outputs.py'
+$prunedRoot  = Join-Path $BuildDir "whisper-$ModelSize-onnx-pruned-src"
+$pruneStatus = @{}
+foreach ($kind in @('encoder', 'decoder')) {
+    $src = if ($kind -eq 'encoder') { $encoderSrc } else { $decoderSrc }
+    & $PythonExe $pruneScript $src (Join-Path $prunedRoot "onnx\${kind}_model.onnx") $kind
+    if ($LASTEXITCODE -notin 0, 3) { Write-Error "Output pruning failed for $kind (exit $LASTEXITCODE)."; exit 1 }
+    $pruneStatus[$kind] = $LASTEXITCODE
+}
+if ($pruneStatus.Values -contains 0) {
+    foreach ($kind in @('encoder', 'decoder')) {
+        if ($pruneStatus[$kind] -eq 3) {
+            $src = if ($kind -eq 'encoder') { $encoderSrc } else { $decoderSrc }
+            Copy-Item $src (Join-Path $prunedRoot "onnx\${kind}_model.onnx") -Force
+        }
+    }
+    $recipeModelRoot = $prunedRoot
+} else {
+    $recipeModelRoot = $modelRoot
+}
+
+# ---------------------------------------------------------------------------
 # Patch recipes: substitute ${MODEL_ROOT} with the absolute model path
 # ---------------------------------------------------------------------------
 $TempDir = Join-Path $env:TEMP "trackdub-olive-trtrtx-$ModelSize-$([System.Diagnostics.Process]::GetCurrentProcess().Id)"
@@ -98,7 +124,7 @@ New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
 function Resolve-Recipe {
     param([string] $SrcPath, [string] $DestPath)
     $content = Get-Content -Raw $SrcPath
-    $content = $content -replace '\$\{MODEL_ROOT\}', ($modelRoot -replace '\\', '/')
+    $content = $content -replace '\$\{MODEL_ROOT\}', ($recipeModelRoot -replace '\\', '/')
     $content = $content -replace '\$\{TRT_RTX_EP_PATH\}', ($TrtRtxEpPath -replace '\\', '/')
     Set-Content -Path $DestPath -Value $content -Encoding UTF8
 }

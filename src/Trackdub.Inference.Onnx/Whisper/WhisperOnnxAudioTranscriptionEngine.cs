@@ -19,12 +19,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
 {
     public const string EngineFamilyName = "whisper-onnx";
 
-    private static readonly IReadOnlyDictionary<string, string> TrtEncoderOptions = new Dictionary<string, string>
-    {
-        ["trt_profile_min_shapes"] = "input_features:1x80x1",
-        ["trt_profile_max_shapes"] = "input_features:1x80x3000",
-        ["trt_profile_opt_shapes"] = "input_features:1x80x3000"
-    };
+    private const int DefaultMelBins = 80;
 
     private const double MaxChunkDurationSeconds = 28;
     private const double TranscriptionMergeGapSeconds = 1.5;
@@ -34,7 +29,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
     private readonly IRuntimePlanner runtimePlanner = runtimePlanner ?? throw new ArgumentNullException(nameof(runtimePlanner));
     private readonly BenchmarkModelPathResolver modelPathResolver = modelPathResolver ?? throw new ArgumentNullException(nameof(modelPathResolver));
     private readonly IPipelineDeviceExclusionProvider? deviceExclusionProvider = deviceExclusionProvider;
-    private readonly WhisperFeatureExtractor featureExtractor = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, WhisperFeatureExtractor> featureExtractors = new();
 
     public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
 
@@ -124,6 +119,9 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         using OnnxExecutionSessionFactory.WhisperSessionLease sessionLease = acquired.Lease.Lease;
         WhisperTokenizerDecoder tokenizer = await WhisperTokenizerDecoder
             .LoadAsync(acquired.Lease.ModelRootPath).ConfigureAwait(false);
+        WhisperFeatureExtractor featureExtractor = featureExtractors.GetOrAdd(
+            ReadMelBins(acquired.Lease.ModelRootPath),
+            static melBins => new WhisperFeatureExtractor(melBins));
 
         // Merged regions give the language detector more context per probe, but the
         // transcription loop must use the original effectiveRegions so that caller-provided
@@ -140,6 +138,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
             : await DetectTranscriptLanguageAsync(
                 sessionLease,
                 tokenizer,
+                featureExtractor,
                 targetAudio,
                 languageDetectionRegions,
                 cancellationToken).ConfigureAwait(false);
@@ -153,6 +152,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
             RegionTranscription transcription = await TranscribeRegionAsync(
                 sessionLease,
                 tokenizer,
+                featureExtractor,
                 targetAudio,
                 region,
                 detectedTranscriptLanguage,
@@ -189,7 +189,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
                 decoderModelPath,
                 plan.ExecutionProvider!.Value,
                 cancellationToken,
-                additionalTrtEncoderOptions: TrtEncoderOptions)
+                additionalTrtEncoderOptions: BuildTrtEncoderOptions(ReadMelBins(modelRootPath)))
             .ConfigureAwait(false);
         return new WhisperSessionBundle(lease, encoderModelPath, decoderModelPath, modelRootPath);
     }
@@ -203,6 +203,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
     private async Task<string?> DetectTranscriptLanguageAsync(
         OnnxExecutionSessionFactory.WhisperSessionLease sessionLease,
         WhisperTokenizerDecoder tokenizer,
+        WhisperFeatureExtractor featureExtractor,
         IAudioSamples targetAudio,
         IReadOnlyList<SpeechRegion> regions,
         CancellationToken cancellationToken)
@@ -215,6 +216,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
             RegionTranscription transcription = await TranscribeRegionAsync(
                 sessionLease,
                 tokenizer,
+                featureExtractor,
                 targetAudio,
                 region,
                 forcedLanguage: null,
@@ -355,6 +357,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
     private async Task<RegionTranscription> TranscribeRegionAsync(
         OnnxExecutionSessionFactory.WhisperSessionLease sessionLease,
         WhisperTokenizerDecoder tokenizer,
+        WhisperFeatureExtractor featureExtractor,
         IAudioSamples targetAudio,
         SpeechRegion region,
         string? forcedLanguage,
@@ -391,7 +394,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
             ]);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
                 sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values);
-            Tensor<float> hiddenStates = encoderResults.Single().AsTensor<float>();
+            Tensor<float> hiddenStates = encoderResults.Single(static result => result.Name == "last_hidden_state").AsTensor<float>();
 
             WhisperDecodeResult decodeResult = await GreedyDecodeAsync(
                 sessionLease.DecoderSession,
@@ -711,6 +714,29 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         }
 
         throw new FileNotFoundException("Whisper decoder model was not found next to the encoder model.", decoderModelPath);
+    }
+
+    private static Dictionary<string, string> BuildTrtEncoderOptions(int melBins) => new()
+    {
+        ["trt_profile_min_shapes"] = $"input_features:1x{melBins}x1",
+        ["trt_profile_max_shapes"] = $"input_features:1x{melBins}x3000",
+        ["trt_profile_opt_shapes"] = $"input_features:1x{melBins}x3000"
+    };
+
+    // large-v3 uses 128 mel bins; earlier sizes use 80.
+    private static int ReadMelBins(string modelRootPath)
+    {
+        string configPath = Path.Combine(modelRootPath, "preprocessor_config.json");
+        if (!File.Exists(configPath))
+        {
+            return DefaultMelBins;
+        }
+
+        using System.Text.Json.JsonDocument config = System.Text.Json.JsonDocument.Parse(File.ReadAllText(configPath));
+        return config.RootElement.TryGetProperty("feature_size", out System.Text.Json.JsonElement featureSize)
+            && featureSize.TryGetInt32(out int melBins) && melBins > 0
+                ? melBins
+                : DefaultMelBins;
     }
 
     private static string ResolveModelRootPath(string encoderModelPath)
