@@ -30,7 +30,7 @@ TensorRT RTX (EP ABI plugin) → DirectML → CPU
 
 More precisely, `Milestone5PlanningPolicy.SupportedProvidersThisMilestone` orders
 all providers (`TensorRTRtx → Migraphx → OpenVinoCatalog → Qnn → VitisAi →
-TensorRt → Cuda → OpenVino → DirectMl → Dnnl → Cpu`), and each stage intersects
+TensorRt → Cuda → OpenVino → CoreMl → DirectMl → Dnnl → Cpu`), and each stage intersects
 that with its own allow-list. The planner picks the first provider that is
 discovered **and** passes the per-model smoke test; smoke failure falls through
 to the next provider. Provider registration alone never counts as readiness.

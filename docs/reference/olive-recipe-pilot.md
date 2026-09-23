@@ -6,7 +6,7 @@ Trackdub can run [Olive](https://microsoft.github.io/Olive/) **recipe configs** 
 
 - **Automatic (Model Manager):** manifest `recipe_bindings` on pilot families `whisper-genai`, `whisper-onnx`, and `phi-genai`.
 - **Fallback:** `auto-opt`, or bundled GenAI folder optimization when no recipe matches.
-- **Developer override (ModelLab only):** `--olive-recipe-config <path>` runs `olive run --run-config <path>`.
+- **Developer override (ModelLab only):** `--olive-recipe-config <path>` runs the recipe config through `olive run`. The pinned vendor doc (Olive 0.13.0) uses `olive run --config <path>`; Trackdub's ModelLab currently passes `--run-config` (`ModelLabCommand.cs`) — verify against the installed Olive version before relying on the flag name.
 
 End users still choose **execution provider** and **precision** only; there is no recipe picker in Model Manager.
 

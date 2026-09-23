@@ -10,7 +10,7 @@ Internal audit companion for [ADR-0002](../decisions/ADR-0002-windows-ml-provide
 
 Phase 2+ sets default stage allow-lists to `StageRuntimeRequirementsCatalog.DefaultOnnxStageAllowedProviders` (same sequence as milestone probe order) for ONNX spine stages. **`kokoro` engine-family override remains CPU-only** (ConvTranspose mechanical block).
 
-Milestone probe order (2026-06): `TensorRTRtx` → `Migraphx` → `OpenVinoCatalog` → `Qnn` → `VitisAi` → `TensorRt` → `Cuda` → `OpenVino` → `DirectMl` → `Cpu`. Catalog EPs are in the intersection list; discovery + smoke-test gating still determine whether a route becomes `Verified`.
+Milestone probe order (2026-06): `TensorRTRtx` → `Migraphx` → `OpenVinoCatalog` → `Qnn` → `VitisAi` → `TensorRt` → `Cuda` → `OpenVino` → `CoreMl` → `DirectMl` → `Cpu`. Catalog EPs are in the intersection list; discovery + smoke-test gating still determine whether a route becomes `Verified`.
 
 ## Stage defaults (current)
 
