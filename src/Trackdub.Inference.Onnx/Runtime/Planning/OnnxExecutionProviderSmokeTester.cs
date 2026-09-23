@@ -4,6 +4,7 @@ using Trackdub.Inference.Runtime.Planning;
 using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Onnx.Qwen3Asr;
 using Trackdub.Inference.Onnx.NemotronAsr;
+using Trackdub.Inference.Onnx.ParakeetTdt;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -188,6 +189,12 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             return;
         }
 
+        if (engineFamily.Equals(ParakeetTdtOnnxAudioTranscriptionEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase))
+        {
+            await SmokeTestParakeetTdtAsync(request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (engineFamily.Equals("whisper-onnx", StringComparison.OrdinalIgnoreCase))
         {
             await SmokeTestWhisperAsync(request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
@@ -351,6 +358,36 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
             sessionLease.EncoderSession.Run(encoderInputs.Values);
         Tensor<float> encoded = encoderResults.Single(static result => result.Name == "encoded").AsTensor<float>();
+        using var decoderInputs = CreateNemotronDecoderInputs(sessionLease.DecoderJointSession.InputMetadata, encoded);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderJointSession.Run(decoderInputs.Values);
+    }
+
+    private static async Task SmokeTestParakeetTdtAsync(
+        string encoderModelPath,
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken)
+    {
+        string root = Path.GetDirectoryName(encoderModelPath)
+            ?? throw new InvalidOperationException("Parakeet-TDT smoke test could not resolve model root.");
+        using OnnxExecutionSessionFactory.NemotronAsrSessionLease sessionLease = await OnnxExecutionSessionFactory
+            .CreatePooledNemotronAsrAsync(
+                ParakeetTdtOnnxAudioTranscriptionEngine.EngineFamilyName,
+                encoderModelPath,
+                Path.Combine(root, "decoder_joint-model.onnx"),
+                provider,
+                cancellationToken,
+                additionalTrtEncoderOptions: ParakeetTdtOnnxAudioTranscriptionEngine.TrtEncoderOptions)
+            .ConfigureAwait(false);
+        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+
+        const int melFrames = 100;
+        using var encoderInputs = new InputSet([
+            NamedOnnxValue.CreateFromTensor("audio_signal", new DenseTensor<float>(new float[128 * melFrames], [1, 128, melFrames])),
+            NamedOnnxValue.CreateFromTensor("length", new DenseTensor<long>(new long[] { melFrames }, [1])),
+        ]);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
+            sessionLease.EncoderSession.Run(encoderInputs.Values);
+        Tensor<float> encoded = encoderResults.Single(static result => result.Name == "outputs").AsTensor<float>();
         using var decoderInputs = CreateNemotronDecoderInputs(sessionLease.DecoderJointSession.InputMetadata, encoded);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderJointSession.Run(decoderInputs.Values);
     }

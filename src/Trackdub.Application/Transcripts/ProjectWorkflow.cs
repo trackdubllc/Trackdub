@@ -611,7 +611,8 @@ public sealed class ProjectWorkflow(
             : null;
         if (existingProcessed is not null)
         {
-            return TranscriptAudioRoutingPlan.Raw(existingProcessed, sourceKind);
+            return TranscriptAudioRoutingPlan.Raw(existingProcessed, sourceKind)
+                .WithUnprocessedAsrSource(normalizedAudioArtifact, vocalStemArtifact);
         }
 
         SpeechAudioEnhancementStageResult? enhancementResult = null;
@@ -654,7 +655,8 @@ public sealed class ProjectWorkflow(
             ProjectArtifact fallbackSource = enhancementResult?.EnhancedAudioArtifact
                 ?? existingEnhanced
                 ?? selectedSource;
-            return TranscriptAudioRoutingPlan.Raw(fallbackSource, sourceKind);
+            return TranscriptAudioRoutingPlan.Raw(fallbackSource, sourceKind)
+                .WithUnprocessedAsrSource(normalizedAudioArtifact, vocalStemArtifact);
         }
 
         ProjectArtifact prepNormalizedAudio = normalizedAudioArtifact;
@@ -684,7 +686,7 @@ public sealed class ProjectWorkflow(
 
         try
         {
-            return await speechAudioPreparationStageHandler
+            TranscriptAudioRoutingPlan preparedPlan = await speechAudioPreparationStageHandler
                 .HandleAsync(
                     new SpeechAudioPreparationStageRequest(
                         projectId,
@@ -694,6 +696,7 @@ public sealed class ProjectWorkflow(
                         existingArtifacts),
                     cancellationToken)
                 .ConfigureAwait(false);
+            return preparedPlan.WithUnprocessedAsrSource(normalizedAudioArtifact, vocalStemArtifact);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
         {
@@ -702,7 +705,8 @@ public sealed class ProjectWorkflow(
             ProjectArtifact fallbackSource = enhancementResult?.EnhancedAudioArtifact
                 ?? existingEnhanced
                 ?? selectedSource;
-            return TranscriptAudioRoutingPlan.Raw(fallbackSource, sourceKind);
+            return TranscriptAudioRoutingPlan.Raw(fallbackSource, sourceKind)
+                .WithUnprocessedAsrSource(normalizedAudioArtifact, vocalStemArtifact);
         }
     }
 

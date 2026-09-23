@@ -68,6 +68,7 @@ using Trackdub.Inference.Onnx.WindowsMl;
 using Trackdub.Application.Hardware;
 using Trackdub.Composition.Hardware;
 using Trackdub.Inference.Onnx.Pool;
+using Trackdub.Inference.Onnx.ParakeetTdt;
 using Trackdub.Inference.Onnx.Qwen3Asr;
 using Trackdub.Inference.Onnx.NemotronAsr;
 using Trackdub.Inference.Onnx.QwenTextRefinement;
@@ -566,6 +567,7 @@ public static class CompositionRoot
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAudioTranscriptionEngineAdapter, WhisperOnnxAudioTranscriptionEngine>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAudioTranscriptionEngineAdapter, Qwen3AsrOnnxAudioTranscriptionEngine>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAudioTranscriptionEngineAdapter, NemotronAsrOnnxAudioTranscriptionEngine>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IAudioTranscriptionEngineAdapter, ParakeetTdtOnnxAudioTranscriptionEngine>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ISpeakerDiarizationEngineAdapter, SortFormerDiarizationEngine>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IStemSeparationEngineAdapter, SpleeterStemSeparationEngine>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IOverlapRescueEngineAdapter, SepFormerOverlapRescueEngine>());

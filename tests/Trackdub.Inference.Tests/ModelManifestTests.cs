@@ -1997,6 +1997,43 @@ public sealed class ModelManifestLoaderTests
     }
 
     [Fact]
+    public void LoadCatalog_ParakeetTdtEntryMatchesPinnedOnnxBundle()
+    {
+        string repoRoot = FindRepoRoot();
+        string manifestPath = Path.Combine(
+            repoRoot,
+            "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
+
+        ModelManifestCatalog catalog = ModelManifestLoader.LoadCatalog(manifestPath);
+        ModelManifest manifest = Assert.Single(catalog.Models, model =>
+            model.ModelId.Equals("tonythethompson/parakeet-tdt-0.6b-v3-onnx", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(ModelTask.Asr, manifest.Task);
+        Assert.Equal("parakeet-tdt", manifest.EngineFamily);
+        Assert.Equal(ModelLicenseKind.CcBy40, manifest.License);
+        Assert.True(manifest.CommercialAllowed);
+        Assert.True(manifest.CommercialUseVerified);
+        Assert.True(manifest.RequiresAttribution);
+        Assert.Equal("107353b64181b47e250dfa846cf3de6a0b084c73", manifest.Revision);
+        Assert.Equal(HashVerificationMode.Required, manifest.HashVerificationPolicy.Mode);
+        Assert.Equal("encoder-model.onnx", manifest.BenchmarkEntry);
+        Assert.Contains("parakeet-tdt-0.6b-v3", manifest.Aliases, StringComparer.OrdinalIgnoreCase);
+        foreach (string required in new[] { "nemo128.onnx", "encoder-model.onnx", "encoder-model.onnx.data", "decoder_joint-model.onnx", "vocab.txt" })
+        {
+            Assert.Contains(required, manifest.DownloadFiles);
+        }
+
+        Assert.All(manifest.DownloadFiles, file =>
+        {
+            Assert.True(manifest.DownloadFileHashes.ContainsKey(file), $"Missing hash for '{file}'.");
+            Assert.StartsWith(
+                "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/",
+                manifest.DownloadFileSources[file],
+                StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void LoadCatalog_NemotronAsrEntryMatchesPinnedOnnxBundle()
     {
         string repoRoot = FindRepoRoot();
