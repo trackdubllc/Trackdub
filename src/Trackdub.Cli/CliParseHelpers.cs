@@ -408,7 +408,7 @@ internal static class CliParseHelpers
 
     /// <summary>
     /// Parses a CLI/preset execution-provider token. Empty or auto yields <c>null</c> kind.
-    /// On Windows, <c>cuda</c> maps to <see cref="ExecutionProviderKind.TensorRTRtx"/> with a warning.
+    /// On Windows, <c>cuda</c> and <c>tensorrt</c> map to <see cref="ExecutionProviderKind.TensorRTRtx"/> with a warning.
     /// </summary>
     internal static bool TryParseExecutionProvider(
         string? value,
@@ -428,8 +428,9 @@ internal static class CliParseHelpers
             kind = ExecutionProviderTokens.ResolvePlatformPin(parsedKind, out string? platformRemapWarning);
             if (platformRemapWarning is not null)
             {
+                string tag = ExecutionProviderTokens.ToCanonicalTag(parsedKind);
                 warning =
-                    "Warning: --execution-provider cuda on Windows maps to TensorRT RTX (trt-rtx). "
+                    $"Warning: --execution-provider {tag} on Windows maps to TensorRT RTX (trt-rtx). "
                     + "Use --execution-provider trt-rtx explicitly, or run on Linux for native CUDA.";
             }
         }

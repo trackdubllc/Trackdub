@@ -89,7 +89,7 @@ public static class ExecutionProviderTokens
     }
 
     /// <summary>
-    /// Warning emitted when a user-facing <c>cuda</c> pin is remapped on Windows.
+    /// Warning emitted when a user-facing <c>cuda</c> or <c>tensorrt</c> pin is remapped on Windows.
     /// </summary>
     public const string WindowsCudaRemapWarning =
         "Warning: execution provider cuda on Windows maps to TensorRT RTX (trt-rtx). "
@@ -109,17 +109,17 @@ public static class ExecutionProviderTokens
 
     /// <summary>
     /// Resolves <paramref name="kind"/> via <see cref="ResolvePlatformPin"/> and reports when
-    /// a Windows <c>cuda</c> remap occurred.
+    /// a Windows <c>cuda</c> or <c>tensorrt</c> remap occurred.
     /// </summary>
     public static ExecutionProviderKind ResolvePlatformPin(
         ExecutionProviderKind kind,
         out string? platformRemapWarning)
     {
         ExecutionProviderKind resolved = ResolvePlatformPin(kind);
-        platformRemapWarning = kind is ExecutionProviderKind.Cuda &&
-            resolved is ExecutionProviderKind.TensorRTRtx
-                ? WindowsCudaRemapWarning
-                : null;
+        platformRemapWarning = resolved is ExecutionProviderKind.TensorRTRtx
+            && kind is ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRt
+            ? WindowsCudaRemapWarning
+            : null;
         return resolved;
     }
 

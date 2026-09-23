@@ -198,6 +198,24 @@ public sealed class TrackdubExecutionProviderOptionsTests
     }
 
     [Fact]
+    public void TryParseExecutionProvider_WindowsTensorRt_EmitsWarning()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.True(CliParseHelpers.TryParseExecutionProvider(
+            "tensorrt",
+            out ExecutionProviderKind? kind,
+            out string? warning));
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, kind);
+        Assert.NotNull(warning);
+        Assert.Contains("tensorrt", warning, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("trt-rtx", warning, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void TryBuildFactory_UnknownExecutionProvider_ReturnsArgumentError()
     {
         TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(
