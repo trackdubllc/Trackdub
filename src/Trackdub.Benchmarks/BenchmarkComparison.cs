@@ -51,7 +51,7 @@ public static class BenchmarkComparison
         double[] values = accepted.Select(x => x.TimingsMilliseconds[metric]!.Value).Order().ToArray();
         double? median = values.Length == 0 ? null :
             values.Length % 2 == 1 ? values[values.Length / 2] :
-            (values[values.Length / 2 - 1] + values[values.Length / 2]) / 2;
+            (values[(values.Length / 2) - 1] + values[values.Length / 2]) / 2;
         return new BenchmarkComparisonResult(
             accepted, rejected, median,
             values.Length == 0 ? null : values[0],
