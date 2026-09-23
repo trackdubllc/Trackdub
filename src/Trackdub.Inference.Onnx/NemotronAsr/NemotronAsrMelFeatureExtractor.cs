@@ -18,6 +18,9 @@ internal sealed class NemotronAsrMelFeatureExtractor
     private const float LogZeroGuard = 5.9604645e-8f;
     private const int FrequencyBins = 1 + (FftSize / 2);
 
+    // torch.stft centers a window shorter than n_fft inside the FFT frame.
+    private const int WindowOffset = (FftSize - WinLength) / 2;
+
     private readonly float[] hannWindow = BuildHannWindow(WinLength);
     private readonly float[,] melFilters = BuildMelFilterBank();
     private readonly bool applyPerFeatureNormalization;
@@ -38,7 +41,8 @@ internal sealed class NemotronAsrMelFeatureExtractor
 
         float[] emphasized = ApplyPreEmphasis(inputSamples);
         float[] padded = ZeroPad(emphasized, FftSize / 2);
-        int frameCount = Math.Max(0, 1 + ((padded.Length - FftSize) / HopLength));
+        // NeMo keeps floor(n / hop) frames; torch.stft's trailing frame is masked out.
+        int frameCount = inputSamples.Length / HopLength;
         if (frameCount == 0)
         {
             return new float[MelBins, 0];
@@ -107,8 +111,8 @@ internal sealed class NemotronAsrMelFeatureExtractor
             Array.Clear(spectrum);
             for (int sampleIndex = 0; sampleIndex < WinLength; sampleIndex++)
             {
-                spectrum[sampleIndex] = new Complex(
-                    paddedSamples[sampleOffset + sampleIndex] * hannWindow[sampleIndex],
+                spectrum[WindowOffset + sampleIndex] = new Complex(
+                    paddedSamples[sampleOffset + WindowOffset + sampleIndex] * hannWindow[sampleIndex],
                     0d);
             }
 
