@@ -43,8 +43,37 @@ Olive registers the EP ABI plugin DLL from that path.
 There are no MXFP8 recipes. Olive 0.13's `NVModelOptQuantization` only supports
 INT4 weight-only quantization.
 
-Nemotron stays out of ASR auto-planning (`StageRuntimeRequirements`) because of a
-separate empty-transcript issue unrelated to TensorRT RTX.
+Nemotron stays out of ASR auto-planning (`StageRuntimeRequirements`) — not a
+TensorRT RTX issue. The blank_id/normalize/RNNT-SOS decode bugs and the
+IoBinding output-pairing crash from the original integration are fixed, and the
+mel extraction now matches NeMo/parakeet-rs exactly (frame count, STFT window
+centering). Decoding is correct. Accuracy is still not competitive with
+qwen3-asr-0.6b on real clips:
+
+| Clip | Nemotron | qwen3-asr-0.6b |
+|---|---|---|
+| marge (EN) | 2/5 lines, dropped words | 5/5 |
+| tut (EN) | empty, fell back to qwen | 2/2 |
+| tension (EN) | 1 garbled line | 3 lines |
+| aura (DE) | empty, fell back to qwen | 3 lines |
+| russia (RU) | 5/11 lines, incl. a Japanese hallucination | 11/11, accurate |
+| reflexion (ES) | 80/154 lines, many errors | 154/154, accurate |
+
+Root cause: the cache-aware streaming encoder resets `cache_last_channel` /
+`cache_last_time` to zero at the start of every VAD region, so it has no prior
+audio context and loses roughly the first second of each region. Most speech
+regions in real content are short, so this hits hard. Padding a region with
+lead-in silence recovers some words but is fragile (too much padding zeros the
+output entirely) and isn't a fix. A real fix needs cross-region cache
+carry-over (feed the previous region's trailing cache instead of resetting) or
+merging adjacent short regions before ASR — neither is implemented.
+
+Nemotron is also 4–7x slower per clip than qwen3-asr-0.6b even after the #253
+prefetch/IoBinding speedups (110–210s vs 15–46s on these clips, most of it
+TensorRT RTX engine build/session warmup on each new process).
+
+Explicit `--model nemotron-3.5-asr` overrides still work; auto-planning keeps
+picking qwen3-asr-0.6b.
 
 ## Usage
 
