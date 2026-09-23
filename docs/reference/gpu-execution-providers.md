@@ -41,7 +41,7 @@ to the next provider. Provider registration alone never counts as readiness.
 |------|----------|
 | `--prefer-gpu` | Soft preference: vendor EP first (Windows NVIDIA → trt-rtx, AMD → migraphx, Intel → openvino-catalog; Linux NVIDIA → cuda), then DirectML, then CPU. |
 | `--require-gpu` | Same resolution but hard-requires the preferred EP where the stage allows it. |
-| `--execution-provider <kind>` | Soft pin to a specific provider; falls through on family exclusion or smoke failure. On Windows, `cuda`/`tensorrt` are accepted as compatibility aliases for `trt-rtx`. |
+| `--execution-provider <kind>` | Soft pin to a specific provider; falls through on family exclusion or smoke failure. Native `cuda`/`tensorrt` are Linux-only; on Windows they are rejected with remediation — use `trt-rtx` for NVIDIA acceleration. (The legacy SDK `ExecutionProviderPreference.Cuda` and starter-pack `cuda` tokens still map to `trt-rtx` on Windows.) |
 | `--require-execution-provider` | Hard pin: no fallthrough when the stage allows the provider. |
 
 ## Engine-family exclusions

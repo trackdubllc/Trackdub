@@ -179,10 +179,12 @@ internal static class PresetHandler
         out string? errorMessage)
     {
         if (preset.ExecutionProvider is { Length: > 0 }
-            && !CliParseHelpers.TryParseExecutionProvider(preset.ExecutionProvider, out _))
+            && !CliParseHelpers.TryParseExecutionProvider(preset.ExecutionProvider, out _, out string? providerWarning))
         {
             errorMessage =
-                $"Invalid execution provider: '{preset.ExecutionProvider}'. Expected one of: {CliParseHelpers.FormatSupportedExecutionProviders()}.";
+                !string.IsNullOrWhiteSpace(providerWarning)
+                    ? providerWarning
+                    : $"Invalid execution provider: '{preset.ExecutionProvider}'. Expected one of: {CliParseHelpers.FormatSupportedExecutionProviders()}.";
             return false;
         }
 

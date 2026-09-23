@@ -301,9 +301,13 @@ internal static class CliParseHelpers
 
         if (!TryParseExecutionProvider(executionProvider, out ExecutionProviderKind? providerKind, out string? parseWarning))
         {
+            // parseWarning carries targeted remediation (e.g. Windows cuda/tensorrt rejection);
+            // fall back to the generic unknown-provider message only when it is empty.
             CliErrorReporter.ReportValidationError(
                 ErrorCode.InvalidArgument,
-                $"Unknown execution provider: '{executionProvider}'. Expected one of: {FormatSupportedExecutionProviders()}.",
+                !string.IsNullOrWhiteSpace(parseWarning)
+                    ? parseWarning
+                    : $"Unknown execution provider: '{executionProvider}'. Expected one of: {FormatSupportedExecutionProviders()}.",
                 "--execution-provider");
             exitCode = Program.ExitArgumentError;
             return null;
@@ -408,7 +412,8 @@ internal static class CliParseHelpers
 
     /// <summary>
     /// Parses a CLI/preset execution-provider token. Empty or auto yields <c>null</c> kind.
-    /// On Windows, <c>cuda</c> and <c>tensorrt</c> map to <see cref="ExecutionProviderKind.TensorRTRtx"/> with a warning.
+    /// On Windows, <c>cuda</c> and <c>tensorrt</c> are rejected with remediation (native
+    /// CUDA/TensorRT are not wired on Windows); use <c>trt-rtx</c> instead.
     /// </summary>
     internal static bool TryParseExecutionProvider(
         string? value,
@@ -425,14 +430,19 @@ internal static class CliParseHelpers
 
         if (kind is ExecutionProviderKind parsedKind)
         {
-            kind = ExecutionProviderTokens.ResolvePlatformPin(parsedKind, out string? platformRemapWarning);
-            if (platformRemapWarning is not null)
+            if (OperatingSystem.IsWindows()
+                && parsedKind is ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRt)
             {
                 string tag = ExecutionProviderTokens.ToCanonicalTag(parsedKind);
                 warning =
-                    $"Warning: --execution-provider {tag} on Windows maps to TensorRT RTX (trt-rtx). "
-                    + "Use --execution-provider trt-rtx explicitly, or run on Linux for native CUDA.";
+                    $"Execution provider '{tag}' is not available on Windows: native CUDA/TensorRT "
+                    + "are wired for Linux only. Use --execution-provider trt-rtx for NVIDIA "
+                    + "acceleration on Windows, or run on Linux for native CUDA.";
+                kind = null;
+                return false;
             }
+
+            kind = ExecutionProviderTokens.ResolvePlatformPin(parsedKind, out _);
         }
 
         return true;

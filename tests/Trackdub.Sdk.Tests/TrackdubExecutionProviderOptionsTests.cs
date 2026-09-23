@@ -121,6 +121,19 @@ public sealed class TrackdubExecutionProviderOptionsTests
     [Fact]
     public async Task TryBuildFactory_TensorRtTag_MapsToPlatformSoftPrefer()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            // Native TensorRT is not wired on Windows; the tag is rejected with remediation.
+            TrackdubSessionFactory? rejected = CliParseHelpers.TryBuildFactory(
+                modelDirectory: null,
+                executionProvider: "tensorrt",
+                devicePolicy: null,
+                out int rejectedExitCode);
+            Assert.Null(rejected);
+            Assert.Equal(Program.ExitArgumentError, rejectedExitCode);
+            return;
+        }
+
         using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
             modelDirectory: null,
             executionProvider: "tensorrt",
@@ -131,12 +144,9 @@ public sealed class TrackdubExecutionProviderOptionsTests
         IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
         StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
 
-        ExecutionProviderKind expected = OperatingSystem.IsWindows()
-            ? ExecutionProviderKind.TensorRTRtx
-            : ExecutionProviderKind.TensorRt;
         Assert.False(settings.RequirePreferredExecutionProviders);
         Assert.NotEmpty(settings.HardwareOverrides!);
-        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expected, v));
+        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.TensorRt, v));
     }
 
     [Fact]
@@ -161,24 +171,21 @@ public sealed class TrackdubExecutionProviderOptionsTests
     }
 
     [Fact]
-    public async Task TryBuildFactory_WindowsCudaAlias_MapsToTensorRTRtx()
+    public void TryBuildFactory_WindowsCudaAlias_IsRejectedWithRemediation()
     {
         if (!OperatingSystem.IsWindows())
         {
             return;
         }
 
-        using TrackdubSessionFactory factory = CliParseHelpers.TryBuildFactory(
+        TrackdubSessionFactory? factory = CliParseHelpers.TryBuildFactory(
             modelDirectory: null,
             executionProvider: "cuda",
             devicePolicy: null,
-            out int exitCode)!;
+            out int exitCode);
 
-        Assert.Equal(Program.ExitSuccess, exitCode);
-        IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
-        StudioSettings settings = await settingsService.LoadAsync(CancellationToken.None);
-
-        Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.TensorRTRtx, v));
+        Assert.Null(factory);
+        Assert.Equal(Program.ExitArgumentError, exitCode);
     }
 
     [Fact]
@@ -189,11 +196,11 @@ public sealed class TrackdubExecutionProviderOptionsTests
             return;
         }
 
-        Assert.True(CliParseHelpers.TryParseExecutionProvider(
+        Assert.False(CliParseHelpers.TryParseExecutionProvider(
             "cuda",
             out ExecutionProviderKind? kind,
             out string? warning));
-        Assert.Equal(ExecutionProviderKind.TensorRTRtx, kind);
+        Assert.Null(kind);
         Assert.Contains("trt-rtx", warning, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -205,11 +212,11 @@ public sealed class TrackdubExecutionProviderOptionsTests
             return;
         }
 
-        Assert.True(CliParseHelpers.TryParseExecutionProvider(
+        Assert.False(CliParseHelpers.TryParseExecutionProvider(
             "tensorrt",
             out ExecutionProviderKind? kind,
             out string? warning));
-        Assert.Equal(ExecutionProviderKind.TensorRTRtx, kind);
+        Assert.Null(kind);
         Assert.NotNull(warning);
         Assert.Contains("tensorrt", warning, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("trt-rtx", warning, StringComparison.OrdinalIgnoreCase);
@@ -282,6 +289,18 @@ public sealed class TrackdubExecutionProviderOptionsTests
     [Fact]
     public async Task Cli_ExecutionProviderAndDevicePolicyOptions_ThreadThroughToStudioSettings()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            // Native CUDA is not wired on Windows; the cuda tag is rejected with remediation.
+            RootCommand rejectedCommand = Program.BuildRootCommand(isSetupInteractive: () => false);
+            ParseResult rejectedResult = rejectedCommand.Parse(
+                ["config", "show", "--execution-provider", "cuda", "--device-policy", "prefer-npu"]);
+            TrackdubSessionFactory? rejectedFactory = CliParseHelpers.TryBuildFactory(rejectedResult, out int rejectedExitCode);
+            Assert.Null(rejectedFactory);
+            Assert.Equal(Program.ExitArgumentError, rejectedExitCode);
+            return;
+        }
+
         RootCommand rootCommand = Program.BuildRootCommand(isSetupInteractive: () => false);
         ParseResult parseResult = rootCommand.Parse(
             ["config", "show", "--execution-provider", "cuda", "--device-policy", "prefer-npu"]);
@@ -297,10 +316,7 @@ public sealed class TrackdubExecutionProviderOptionsTests
 
             Assert.Equal(WindowsMlExecutionDevicePolicy.PreferNpu, settings.WindowsMlExecutionDevicePolicy);
             Assert.NotEmpty(settings.HardwareOverrides!);
-            ExecutionProviderKind expectedEp = OperatingSystem.IsWindows()
-                ? ExecutionProviderKind.TensorRTRtx
-                : ExecutionProviderKind.Cuda;
-            Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(expectedEp, v));
+            Assert.All(settings.HardwareOverrides!.Values, v => Assert.Equal(ExecutionProviderKind.Cuda, v));
         }
     }
 
