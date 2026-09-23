@@ -301,7 +301,8 @@
               "cost_model_relative_path": { "type": "string", "minLength": 1 },
               "adapter_relative_path": { "type": "string", "minLength": 1 },
               "adapter_mode": { "type": "string", "minLength": 1 },
-              "output_manifest_relative_path": { "type": "string", "minLength": 1 }
+              "output_manifest_relative_path": { "type": "string", "minLength": 1 },
+              "component": { "type": "string", "minLength": 1, "description": "Optional. Scopes the binding to one entry of components (for multi-component models); must match a components value." }
             },
             "additionalProperties": false
           }

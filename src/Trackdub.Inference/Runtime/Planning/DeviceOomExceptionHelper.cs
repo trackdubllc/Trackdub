@@ -106,9 +106,28 @@ public static class DeviceOomExceptionHelper
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        string message = exception.Message;
-        if (string.IsNullOrEmpty(message)
-            || !message.Contains("[ErrorCode:RuntimeException]", StringComparison.OrdinalIgnoreCase))
+        return ClassifyDeviceExceptionMessage(exception.Message);
+    }
+
+    /// <summary>
+    /// Message-only overload of <see cref="ClassifyDeviceException"/>, for callers that hold
+    /// the ONNX Runtime error text rather than the exception instance.
+    /// </summary>
+    public static DeviceDegradationKind? ClassifyDeviceExceptionMessage(string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return null;
+        }
+
+        // Checked before the RuntimeException gate because the CUDA-backed EPs (TensorRT RTX
+        // plugin, CUDA) can surface these under other ORT error codes such as EPFail.
+        if (IsStickyCudaError(message))
+        {
+            return DeviceDegradationKind.DeviceFailed;
+        }
+
+        if (!message.Contains("[ErrorCode:RuntimeException]", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
@@ -128,4 +147,32 @@ public static class DeviceOomExceptionHelper
             || message.Contains("E_OUTOFMEMORY", StringComparison.OrdinalIgnoreCase);
         return isOom ? DeviceDegradationKind.MemoryExhausted : null;
     }
+
+    // CUDA errors that leave the whole process's CUDA state unusable: every later CUDA call
+    // returns the same error until the process restarts, so neither a re-run nor a new CUDA
+    // session in this process can recover (CUDA Runtime/Driver API "Error Types"). Runtime names,
+    // descriptions, and Driver API names that ORT/EP messages report are listed, taken from the
+    // cudart shipped in the TensorRT RTX bundle.
+    private static readonly string[] StickyCudaErrorMarkers =
+    [
+        "cudaErrorIllegalAddress", "an illegal memory access was encountered",
+        "cudaErrorLaunchTimeout", "the launch timed out and was terminated",
+        "cudaErrorAssert", "device-side assert triggered",
+        "cudaErrorHardwareStackError", "hardware stack error",
+        "cudaErrorIllegalInstruction", "an illegal instruction was encountered",
+        "cudaErrorMisalignedAddress", "misaligned address",
+        "cudaErrorInvalidAddressSpace", "operation not supported on global/shared address space",
+        "cudaErrorInvalidPc", "invalid program counter",
+        "cudaErrorLaunchFailure", "unspecified launch failure",
+        "cudaErrorTensorMemoryLeak", "tensor memory not completely freed",
+        "cudaErrorContained", "Invalid access of peer GPU memory over nvlink or a hardware error",
+        "CUDA_ERROR_ILLEGAL_ADDRESS", "CUDA_ERROR_LAUNCH_TIMEOUT", "CUDA_ERROR_ASSERT",
+        "CUDA_ERROR_HARDWARE_STACK_ERROR", "CUDA_ERROR_ILLEGAL_INSTRUCTION",
+        "CUDA_ERROR_MISALIGNED_ADDRESS", "CUDA_ERROR_INVALID_ADDRESS_SPACE",
+        "CUDA_ERROR_INVALID_PC",
+        "CUDA_ERROR_CONTAINED", "CUDA_ERROR_LAUNCH_FAILED",
+    ];
+
+    private static bool IsStickyCudaError(string message) =>
+        StickyCudaErrorMarkers.Any(marker => message.Contains(marker, StringComparison.OrdinalIgnoreCase));
 }

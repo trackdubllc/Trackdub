@@ -44,4 +44,32 @@ public sealed class DeviceOomExceptionHelperClassifyTests
 
         Assert.Null(kind);
     }
+
+    // Strings are exactly what the bundled cudart64_12.dll returns from cudaGetErrorString /
+    // cudaGetErrorName; CUDA documents these as leaving the process's CUDA state unusable.
+    [Theory]
+    [InlineData("[ErrorCode:RuntimeException] CUDA failure 700: an illegal memory access was encountered")]
+    [InlineData("[ErrorCode:EPFail] [NvTensorRTRTX EP] cudaErrorIllegalAddress")]
+    [InlineData("[ErrorCode:Fail] the launch timed out and was terminated")]
+    [InlineData("[ErrorCode:EPFail] device-side assert triggered")]
+    [InlineData("[ErrorCode:RuntimeException] unspecified launch failure")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_CONTAINED")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_HARDWARE_STACK_ERROR")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_ILLEGAL_INSTRUCTION")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_MISALIGNED_ADDRESS")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_INVALID_ADDRESS_SPACE")]
+    [InlineData("[ErrorCode:EPFail] CUDA_ERROR_INVALID_PC")]
+    public void ClassifyDeviceExceptionMessage_StickyCudaError_ReturnsDeviceFailedRegardlessOfOrtErrorCode(string message)
+    {
+        Assert.Equal(
+            DeviceDegradationKind.DeviceFailed,
+            DeviceOomExceptionHelper.ClassifyDeviceExceptionMessage(message));
+    }
+
+    [Fact]
+    public void ClassifyDeviceExceptionMessage_EpFailWithoutStickyCudaMarker_ReturnsNull()
+    {
+        Assert.Null(DeviceOomExceptionHelper.ClassifyDeviceExceptionMessage(
+            "[ErrorCode:EPFail] [NvTensorRTRTX EP] Failed to create serialized engine for fused node"));
+    }
 }

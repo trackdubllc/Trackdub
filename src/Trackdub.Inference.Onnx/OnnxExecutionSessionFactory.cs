@@ -115,12 +115,13 @@ internal static class OnnxExecutionSessionFactory
         ExecutionProviders.ExecutionProviderBootstrapResult bootstrapResult,
         WindowsMlExecutionDevicePolicy devicePolicy,
         IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions,
-        IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions)
+        IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions,
+        bool enableEncoderCudaGraph = false)
     {
         ExecutionProviderKind sessionProvider =
             ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider);
         return new DualOptionsSelections(
-            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtEncoderOptions),
+            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph),
             CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtDecoderOptions));
     }
 
@@ -168,10 +169,11 @@ internal static class OnnxExecutionSessionFactory
         IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions,
         IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions,
         string? modelId,
-        string? variant)
+        string? variant,
+        bool enableEncoderCudaGraph = false)
     {
         string encoderFingerprint = BuildSessionOptionsFingerprint(
-            selections.Encoder.SelectedProvider, devicePolicy, additionalTrtEncoderOptions);
+            selections.Encoder.SelectedProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph);
         string decoderFingerprint = BuildSessionOptionsFingerprint(
             selections.Decoder.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
         return (
@@ -952,15 +954,22 @@ internal static class OnnxExecutionSessionFactory
 
         BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
+        // CUDA graph replay reads and writes the device addresses captured on the first run, so every
+        // binding must stay at a fixed address across runs. The encoder does not meet that yet:
+        // NemotronAsrGreedyDecoder rebinds fresh processed_signal / length / prompt OrtValues every
+        // chunk, and CachePingPongBuffer alternates the cache input/output buffers between two
+        // host allocations. Keep capture off for both sessions until the full binding set uses fixed
+        // device buffers and is validated across multiple chunks on TRT-RTX hardware.
+        const bool enableEncoderCudaGraph = false;
         DualOptionsSelections selections = CreateDualOptionsSelections(
             provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
-            additionalTrtEncoderOptions, additionalTrtDecoderOptions);
+            additionalTrtEncoderOptions, additionalTrtDecoderOptions, enableEncoderCudaGraph);
         using SessionOptions encoderOptions = selections.Encoder.Options;
         using SessionOptions decoderOptions = selections.Decoder.Options;
         (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = BuildDualPooledKeys(
             engineFamily, encoderModelPath, decoderJointModelPath, selections,
             bootstrap.DevicePolicy, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
-            modelId, variant);
+            modelId, variant, enableEncoderCudaGraph);
 
         DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
             provider, bootstrap, selections,
@@ -1159,7 +1168,8 @@ internal static class OnnxExecutionSessionFactory
     private static SessionOptionsSelection CreateSessionOptions(
         ExecutionProviderKind provider,
         WindowsMlExecutionDevicePolicy devicePolicy,
-        IReadOnlyDictionary<string, string>? additionalTrtOptions = null)
+        IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
+        bool enableCudaGraph = false)
     {
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, provider);
         SessionOptions options = CreateBaseSessionOptions(
@@ -1179,20 +1189,21 @@ internal static class OnnxExecutionSessionFactory
                 BuildDevicePolicyFallbackReason(devicePolicy, devicePolicyApplied));
         }
 
-        return AppendProviderSpecificSelection(options, provider, additionalTrtOptions)
+        return AppendProviderSpecificSelection(options, provider, additionalTrtOptions, enableCudaGraph)
             ?? throw new ArgumentOutOfRangeException(nameof(provider), provider, "Unsupported execution provider kind.");
     }
 
     private static SessionOptionsSelection? AppendProviderSpecificSelection(
         SessionOptions options,
         ExecutionProviderKind provider,
-        IReadOnlyDictionary<string, string>? additionalTrtOptions)
+        IReadOnlyDictionary<string, string>? additionalTrtOptions,
+        bool enableCudaGraph = false)
     {
         return provider switch
         {
             ExecutionProviderKind.DirectMl => CreateDirectMlSelection(options),
             ExecutionProviderKind.Dnnl => CreateDnnlSelection(options),
-            ExecutionProviderKind.TensorRTRtx => CreateTensorRtRtxSelection(options, additionalTrtOptions),
+            ExecutionProviderKind.TensorRTRtx => CreateTensorRtRtxSelection(options, additionalTrtOptions, enableCudaGraph),
             ExecutionProviderKind.Migraphx => CreateMigraphxSelection(options),
             ExecutionProviderKind.CoreMl => CreateCoreMlSelection(options),
             ExecutionProviderKind.OpenVinoCatalog => CreateOpenVinoCatalogSelection(options),
@@ -1235,9 +1246,11 @@ internal static class OnnxExecutionSessionFactory
 
     private static SessionOptionsSelection CreateTensorRtRtxSelection(
         SessionOptions options,
-        IReadOnlyDictionary<string, string>? additionalTrtOptions)
+        IReadOnlyDictionary<string, string>? additionalTrtOptions,
+        bool enableCudaGraph = false)
     {
-        ExecutionProviderKind selectedProvider = AppendTensorRtRtxOrFallbackProvider(options, additionalTrtOptions);
+        ExecutionProviderKind selectedProvider =
+            AppendTensorRtRtxOrFallbackProvider(options, additionalTrtOptions, enableCudaGraph);
         if (selectedProvider is ExecutionProviderKind.TensorRTRtx)
         {
             return new SessionOptionsSelection(options, selectedProvider);
@@ -1589,7 +1602,8 @@ internal static class OnnxExecutionSessionFactory
 
     internal static ExecutionProviderKind AppendTensorRtRtxOrFallbackProvider(
         SessionOptions options,
-        IReadOnlyDictionary<string, string>? additionalTrtOptions = null)
+        IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
+        bool enableCudaGraph = false)
     {
 #if WINDOWS
         WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
@@ -1598,7 +1612,7 @@ internal static class OnnxExecutionSessionFactory
         var trtDevice = devices.FirstOrDefault(d => IsTensorRtRtxDeviceCandidate(d.EpName, d.HardwareDevice.Type));
         if (trtDevice != null)
         {
-            IReadOnlyDictionary<string, string> trtOptions = BuildTensorRtRtxOptions(additionalTrtOptions);
+            IReadOnlyDictionary<string, string> trtOptions = BuildTensorRtRtxOptions(additionalTrtOptions, enableCudaGraph);
             options.AppendExecutionProvider(OrtEnv.Instance(), new[] { trtDevice }, trtOptions);
             return ExecutionProviderKind.TensorRTRtx;
         }
@@ -1684,15 +1698,31 @@ internal static class OnnxExecutionSessionFactory
             ["trt_profile_opt_shapes"] = "nv_profile_opt_shapes",
         };
 
+    /// <summary>
+    /// Builds TensorRT-RTX provider options.
+    /// </summary>
+    /// <param name="enableCudaGraph">
+    /// CUDA graph capture replays a fixed sequence of GPU kernel launches against fixed device
+    /// memory addresses (see ONNX Runtime's TensorRT-RTX EP docs: "Avoid enabling CUDA Graph ...
+    /// if input shapes or device bindings frequently change"). Defaults to <see langword="false"/>
+    /// because most call sites build fresh input tensors on every <c>Run()</c>, which violates that
+    /// precondition and can silently replay stale device buffers. Pass <see langword="true"/> only
+    /// for a session whose call site is verified to feed stable, IoBinding-backed device buffers
+    /// across iterations.
+    /// </param>
     private static IReadOnlyDictionary<string, string> BuildTensorRtRtxOptions(
-        IReadOnlyDictionary<string, string>? additionalTrtOptions)
+        IReadOnlyDictionary<string, string>? additionalTrtOptions,
+        bool enableCudaGraph = false)
     {
         var trtOptions = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             // Cache compiled TRT-RTX kernels locally to speed up subsequent session loads.
             ["nv_runtime_cache_path"] = ResolveTensorRtRtxRuntimeCachePath(),
-            ["enable_cuda_graph"] = "1"
         };
+
+        // Always write the flag explicitly: the TensorRT RTX EP defaults enable_cuda_graph to
+        // true, so omitting it leaves capture on rather than off.
+        trtOptions["enable_cuda_graph"] = enableCudaGraph ? "1" : "0";
 
         if (additionalTrtOptions is null)
         {
@@ -1754,11 +1784,13 @@ internal static class OnnxExecutionSessionFactory
     private static string BuildSessionOptionsFingerprint(
         ExecutionProviderKind selectedProviderKind,
         WindowsMlExecutionDevicePolicy devicePolicy,
-        IReadOnlyDictionary<string, string>? additionalTrtOptions)
+        IReadOnlyDictionary<string, string>? additionalTrtOptions,
+        bool enableCudaGraph = false)
     {
         if (selectedProviderKind is ExecutionProviderKind.TensorRTRtx)
         {
-            var combinedOptions = new Dictionary<string, string>(BuildTensorRtRtxOptions(additionalTrtOptions), StringComparer.Ordinal);
+            var combinedOptions = new Dictionary<string, string>(
+                BuildTensorRtRtxOptions(additionalTrtOptions, enableCudaGraph), StringComparer.Ordinal);
 
             return SessionPoolKey.HashOptions(combinedOptions);
         }

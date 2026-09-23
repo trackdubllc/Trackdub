@@ -9,7 +9,13 @@
       "type": "SyntheticDataContainer",
       "params": {
         "input_shapes": [
-          { "name": "waveform", "shape": [1, 160000] }
+          {
+            "name": "waveform",
+            "shape": [
+              1,
+              160000
+            ]
+          }
         ]
       }
     }
@@ -42,7 +48,10 @@
         {
           "device": "gpu",
           "execution_providers": [
-            "NvTensorRTRTXExecutionProvider"
+            [
+              "NvTensorRTRTXExecutionProvider",
+              "${TRT_RTX_EP_PATH}"
+            ]
           ]
         }
       ]

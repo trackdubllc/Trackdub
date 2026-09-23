@@ -54,6 +54,105 @@ public sealed class TrtRtxStarterPackSmokeRunnerTests
                 && string.Equals(target.Detail, "simulated failure", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task VerifyEntryPathAsync_PassesRequestedEntryPathAndProviderToSmokeTester()
+    {
+        string entryFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        File.WriteAllBytes(entryFile, [0x00]);
+        try
+        {
+            ExecutionProviderSmokeTestRequest? capturedRequest = null;
+            var smokeTester = new FakeExecutionProviderSmokeTester((request, _) =>
+            {
+                capturedRequest = request;
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+            TrtRtxStarterPackSmokeTargetResult result = await TrtRtxStarterPackSmokeRunner.VerifyEntryPathAsync(
+                "cgus/diar_streaming_sortformer_4spk-v2.1-onnx",
+                entryFile,
+                variant: null,
+                smokeTester,
+                CancellationToken.None);
+
+            Assert.Equal(TrtRtxStarterPackSmokeTargetStatus.Passed, result.Status);
+            Assert.Equal("cgus/diar_streaming_sortformer_4spk-v2.1-onnx", result.ModelReference);
+            Assert.NotNull(capturedRequest);
+            Assert.Equal(ExecutionProviderKind.TensorRTRtx, capturedRequest!.ExecutionProvider);
+            Assert.Equal(RuntimeStage.Diarization, capturedRequest.Stage);
+            Assert.Equal(Path.GetFullPath(entryFile), capturedRequest.EntryPath);
+            Assert.Equal(Path.GetDirectoryName(Path.GetFullPath(entryFile)), capturedRequest.ModelRootPath);
+        }
+        finally
+        {
+            File.Delete(entryFile);
+        }
+    }
+
+    [Fact]
+    public async Task VerifyEntryPathAsync_ReportsSmokeTesterFailureDetail()
+    {
+        string entryFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        File.WriteAllBytes(entryFile, [0x00]);
+        try
+        {
+            var smokeTester = new FakeExecutionProviderSmokeTester(
+                (_, _) => new ExecutionProviderSmokeTestResult(false, "effective provider is cpu, not trt-rtx"));
+
+            TrtRtxStarterPackSmokeTargetResult result = await TrtRtxStarterPackSmokeRunner.VerifyEntryPathAsync(
+                "tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx",
+                entryFile,
+                variant: null,
+                smokeTester,
+                CancellationToken.None);
+
+            Assert.Equal(TrtRtxStarterPackSmokeTargetStatus.Failed, result.Status);
+            Assert.Equal("effective provider is cpu, not trt-rtx", result.Detail);
+        }
+        finally
+        {
+            File.Delete(entryFile);
+        }
+    }
+
+    [Fact]
+    public async Task VerifyEntryPathAsync_ThrowsWhenEntryPathMissing()
+    {
+        string missingEntryFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        var smokeTester = new FakeExecutionProviderSmokeTester(
+            (_, _) => throw new InvalidOperationException("Smoke should not run when the entry file is missing."));
+
+        await Assert.ThrowsAsync<FileNotFoundException>(() => TrtRtxStarterPackSmokeRunner.VerifyEntryPathAsync(
+            "cgus/diar_streaming_sortformer_4spk-v2.1-onnx",
+            missingEntryFile,
+            variant: null,
+            smokeTester,
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task VerifyEntryPathAsync_ThrowsWhenModelIdNotInManifest()
+    {
+        string entryFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        File.WriteAllBytes(entryFile, [0x00]);
+        try
+        {
+            var smokeTester = new FakeExecutionProviderSmokeTester(
+                (_, _) => throw new InvalidOperationException("Smoke should not run for an unknown model id."));
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => TrtRtxStarterPackSmokeRunner.VerifyEntryPathAsync(
+                "example/does-not-exist",
+                entryFile,
+                variant: null,
+                smokeTester,
+                CancellationToken.None));
+        }
+        finally
+        {
+            File.Delete(entryFile);
+        }
+    }
+
     private sealed class FakeExecutionProviderSmokeTester(
         Func<ExecutionProviderSmokeTestRequest, CancellationToken, ExecutionProviderSmokeTestResult> handler)
         : IExecutionProviderSmokeTester

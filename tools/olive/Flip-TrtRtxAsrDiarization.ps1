@@ -57,13 +57,7 @@ if (-not $Force) {
         }
         $result = Get-Content -Raw $resultPath | ConvertFrom-Json
         if (-not $result.pass) {
-            Write-Error "Validation result has pass=false in $resultPath.`nThe validators set pass=false until a real trt-rtx provider smoke check exists. After verifying on hardware that the effective provider is trt-rtx (not cpu), re-run with -Force."
-            exit 1
-        }
-        # This script only writes fp16 recipe bindings. The validators share one result filename
-        # across -Mxfp8 and fp16 runs, so an mxfp8-only pass must not be accepted as fp16 evidence.
-        if ($result.precision -ne 'fp16') {
-            Write-Error "Last validation run in $resultPath was precision='$($result.precision)', not fp16.`nRe-run the validate script without -Mxfp8, or use -Force."
+            Write-Error "Validation result has pass=false in $resultPath.`nThe validator's 'trackdub providers trt-rtx verify' step did not confirm the staged model runs on TensorRT RTX; see provider_check.detail in that file. Re-run the validator, or use -Force."
             exit 1
         }
     }

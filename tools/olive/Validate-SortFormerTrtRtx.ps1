@@ -5,30 +5,26 @@
 
 .DESCRIPTION
     Runs the Olive TRT-RTX recipe for the SortFormer 4-speaker diarization encoder
-    (with SkipLayerNormalization + BiasGelu fusion pre-passes), then stages the
-    result for the C# SortFormerDiarizationEngine to load.
-
-    Pass -Mxfp8 to select the MXFP8-quantized recipe (Hopper/Ada + Blackwell).
-    Without it, the fp16 recipe is used (works on every TensorRT-RTX-capable GPU).
+    (fp16 conversion with float32 I/O kept + TRT-RTX session param tuning), then stages the result
+    for the C# SortFormerDiarizationEngine to load.
 
     Requires:
       - NVIDIA GPU with TRT-RTX (NvTensorRTRTXExecutionProvider) support
-      - Model files already downloaded:
-          models/sortformer/cgus-diar_streaming_sortformer_4spk-v2.1-onnx/onnx/model.onnx
+      - Model files already downloaded to the model cache (TRACKDUB_MODEL_CACHE, or
+        %LOCALAPPDATA%\Trackdub\model-cache by default):
+          <model cache>/cgus/diar_streaming_sortformer_4spk-v2.1-onnx/onnx/model.onnx
       - olive-ai[nvmo] + nvidia-modelopt[onnx] installed (Bootstrap-TrtRtxOliveVenv.ps1 auto-runs)
 
-    Records results (pass stays false until a provider smoke check exists) to build/sortformer-4spk-trtrtx-validation.json.
+    Records results (pass = staged model verified on TensorRT RTX via `trackdub providers trt-rtx verify`) to build/sortformer-4spk-trtrtx-validation.json.
     Run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to apply manifest + test changes.
 
 .EXAMPLE
     .\tools\olive\Validate-SortFormerTrtRtx.ps1
     .\tools\olive\Validate-SortFormerTrtRtx.ps1 -SkipLatency
-    .\tools\olive\Validate-SortFormerTrtRtx.ps1 -Mxfp8 -SkipLatency
 #>
 
 param(
-    [switch] $SkipLatency,
-    [switch] $Mxfp8
+    [switch] $SkipLatency
 )
 
 Set-StrictMode -Version Latest
@@ -39,13 +35,28 @@ $RepoRoot       = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 $VenvPath       = Join-Path $env:LOCALAPPDATA 'Trackdub\tools\olive-env-tensorrtrtx'
 $OliveExe       = Join-Path $VenvPath 'Scripts\olive.exe'
 $BuildDir       = Join-Path $RepoRoot 'build'
-$Precision      = if ($Mxfp8) { 'mxfp8' } else { 'fp16' }
+$Precision      = 'fp16'
 $ResultFile     = Join-Path $BuildDir "sortformer-4spk-trtrtx-validation.json"
 
+# A previous pass cannot authorize a later failed or incomplete run.
+Remove-Item -LiteralPath $ResultFile -Force -ErrorAction SilentlyContinue
+
 # ---------------------------------------------------------------------------
-# Model layout (matches bundled-models.manifest.json sortformer entry)
+# Model layout (matches the download-cache layout, not bundled-models.manifest.json's
+# root_path: model_id "cgus/diar_streaming_sortformer_4spk-v2.1-onnx" splits on "/" into
+# the cache's owner/repo directory segments)
 # ---------------------------------------------------------------------------
-$modelRoot      = Join-Path $RepoRoot 'models\sortformer\cgus-diar_streaming_sortformer_4spk-v2.1-onnx'
+. (Join-Path $PSScriptRoot 'TrtRtxOliveCommon.ps1')
+$ModelCacheRoot = Resolve-TrackdubModelCacheRoot
+
+# TensorRT RTX EP ABI plugin DLL, resolved like TensorRtRtxPluginLocator: TRACKDUB_TRT_RTX_EP_DIR,
+# then the default install. Olive registers it via the recipe accelerator's (name, path) pair.
+$TrtRtxEpDir    = if ($env:TRACKDUB_TRT_RTX_EP_DIR) { $env:TRACKDUB_TRT_RTX_EP_DIR } else { Join-Path $env:LOCALAPPDATA 'Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64' }
+$TrtRtxEpPath   = Join-Path $TrtRtxEpDir 'onnxruntime_providers_nv_tensorrt_rtx.dll'
+# The plugin's companion DLLs (cudart64_12.dll, tensorrt_rtx_1_5.dll) live beside it but are
+# resolved through the normal DLL search path, so the bundle dir must be on PATH for olive.
+$env:PATH = "$TrtRtxEpDir;$env:PATH"
+$modelRoot      = Join-Path $ModelCacheRoot 'cgus\diar_streaming_sortformer_4spk-v2.1-onnx'
 $modelSrc       = Join-Path $modelRoot 'onnx\model.onnx'
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes\cgus-diar_streaming_sortformer_4spk-v2.1-onnx\NvTensorRtRtx'
 $recipeSrc      = Join-Path $recipeDir "encoder_trtrtx_$Precision.json"
@@ -55,24 +66,10 @@ $stagingDirName      = "sortformer-4spk-onnx-trtrtx-validated-$Precision"
 # ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
-if (-not (Test-Path $OliveExe)) {
-    $bootstrapScript = Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1'
-    for ($attempt = 1; $attempt -le 2; $attempt++) {
-        Write-Warning "olive.exe not found at $OliveExe. Bootstrapping TRT-RTX olive venv (attempt $attempt/2)..."
-        # Run in a child pwsh process: Bootstrap-TrtRtxOliveVenv.ps1 calls exit on failure, which
-        # would terminate this whole process (not just the child script) if invoked in-process.
-        & pwsh -NoProfile -File $bootstrapScript
-        if ($LASTEXITCODE -eq 0 -and (Test-Path $OliveExe)) { break }
-        Write-Host "Bootstrap attempt $attempt failed (exit $LASTEXITCODE)." -ForegroundColor Red
-    }
-    if (-not (Test-Path $OliveExe)) {
-        Write-Error "olive.exe still not found at $OliveExe after 2 bootstrap attempts."
-        exit 1
-    }
-}
+Ensure-TrtRtxOliveEnvironment -VenvPath $VenvPath -BootstrapScript (Join-Path $PSScriptRoot 'Bootstrap-TrtRtxOliveVenv.ps1')
 
 if (-not (Test-Path $modelSrc)) {
-    Write-Error "SortFormer encoder model not found: $modelSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model cgus/diar_streaming_sortformer_4spk-v2.1-onnx"
+    Write-Error "SortFormer encoder model not found: $modelSrc`nDownload with: dotnet run --project src/Trackdub.Tools -- ingest --model cgus/diar_streaming_sortformer_4spk-v2.1-onnx`nSearched model cache root: $ModelCacheRoot (override with `$env:TRACKDUB_MODEL_CACHE)"
     exit 1
 }
 
@@ -91,6 +88,7 @@ function Resolve-Recipe {
     param([string] $SrcPath, [string] $DestPath)
     $content = Get-Content -Raw $SrcPath
     $content = $content -replace '\$\{MODEL_ROOT\}', ($modelRoot -replace '\\', '/')
+    $content = $content -replace '\$\{TRT_RTX_EP_PATH\}', ($TrtRtxEpPath -replace '\\', '/')
     $content = $content -replace '\$\{ENCODER_OUTPUT_DIR\}', ("build/$encoderOutputDirName" -replace '\\', '/')
     Set-Content -Path $DestPath -Value $content -Encoding UTF8
 }
@@ -117,10 +115,10 @@ $results = [ordered]@{
 
 try {
     # ---------------------------------------------------------------------------
-    # Step 1: Optimize encoder (fp16 or mxfp8 + SkipLayerNorm/BiasGelu fusion + TRT-RTX session params)
+    # Step 1: Optimize encoder (fp16 + TRT-RTX session params)
     # ---------------------------------------------------------------------------
     Write-Host ""
-    Write-Host "=== SortFormer encoder optimization ($Precision + fusion + TRT-RTX session params) ===" -ForegroundColor Cyan
+    Write-Host "=== SortFormer encoder optimization ($Precision + TRT-RTX session params) ===" -ForegroundColor Cyan
     & $OliveExe run --config $encoderRecipeDst
     if ($LASTEXITCODE -ne 0) { Write-Error "Encoder optimization failed (exit $LASTEXITCODE)."; exit 1 }
     $results.encoder = @{ status = 'ok'; output = "build/$encoderOutputDirName"; precision = $Precision }
@@ -165,10 +163,37 @@ try {
 
     $results.staging_dir = $StagingDir
     $results.staged = ($null -ne $encoderOnnxSrc)
-    # pass stays false: nothing here loads the staged model or checks the effective provider is
-    # trt-rtx (not cpu). Flip-TrtRtxAsrDiarization.ps1 gates on pass; set it only after a real
-    # provider smoke check exists, or run the smoke test manually and use Flip -Force.
-    $results.pass = $false
+
+    # ---------------------------------------------------------------------------
+    # Step 4: Verify the staged model actually loads on TensorRT RTX, not a silent
+    # CPU/DirectML fallback. Uses the real production smoke path (`trackdub providers
+    # trt-rtx verify`), not a file-existence check.
+    # ---------------------------------------------------------------------------
+    $results.provider_check = $null
+    if ($results.staged) {
+        Write-Host ""
+        Write-Host "=== Verifying staged model on TensorRT RTX (trackdub providers trt-rtx verify) ===" -ForegroundColor Cyan
+        $stagedModelPath = Join-Path $StagingOnnxDir "model.onnx"
+        $verifyOutput = & dotnet run --project (Join-Path $RepoRoot "src\Trackdub.Cli") -c Release -f net10.0-windows10.0.19041.0 -- `
+            providers trt-rtx verify --model "cgus/diar_streaming_sortformer_4spk-v2.1-onnx" --entry $stagedModelPath 2>&1
+        $verifyExitCode = $LASTEXITCODE
+        $verifyJsonLine = $verifyOutput | Where-Object { $_ -match '^\s*\{.*"passed"\s*:' } | Select-Object -Last 1
+        if ($verifyJsonLine) {
+            $verifyResult = $verifyJsonLine | ConvertFrom-Json
+            $results.provider_check = @{
+                ready  = $verifyResult.ready
+                passed = $verifyResult.passed
+                detail = $verifyResult.detail
+            }
+            $results.pass = [bool]$verifyResult.passed
+        } else {
+            Write-Warning "Could not parse 'trackdub providers trt-rtx verify' output (exit $verifyExitCode); provider not confirmed."
+            $results.provider_check = @{ ready = $null; passed = $false; detail = "verify command produced no parseable JSON (exit $verifyExitCode)" }
+            $results.pass = $false
+        }
+    } else {
+        $results.pass = $false
+    }
 
 } finally {
     Set-Location $origDir
@@ -183,17 +208,20 @@ New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 $results | ConvertTo-Json -Depth 4 | Set-Content -Path $ResultFile -Encoding UTF8
 
 Write-Host ""
-if ($results.staged) {
-    Write-Host "STAGED - TRT-RTX ($Precision) optimization output staged for SortFormer 4-spk. Provider NOT verified (pass=false in the result file)." -ForegroundColor Yellow
+if ($results.pass) {
+    Write-Host "PASS - TRT-RTX ($Precision) optimization output staged and verified on hardware for SortFormer 4-spk." -ForegroundColor Green
     Write-Host "Results written to: $ResultFile"
     Write-Host ""
     Write-Host "Staging directory: $($results.staging_dir)"
     Write-Host ""
     Write-Host "Next steps:"
-    Write-Host "  1. Add a TRT-RTX smoke test in tests/Trackdub.Inference.Tests/SortFormerDiarizationEngineTests.cs"
-    Write-Host "     (mirror WhisperOnnxTrtRtxValidationTests.cs; load the staging dir via Discover())."
-    Write-Host "  2. dotnet test tests/Trackdub.Inference.Tests --filter 'FullyQualifiedName~SortFormer'"
-    Write-Host "  3. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 -Force to enable trt-rtx in the manifest and tests (pass=false requires -Force)."
+    Write-Host "  1. dotnet test tests/Trackdub.Inference.Tests --filter 'FullyQualifiedName~SortFormer'"
+    Write-Host "  2. If that passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to enable trt-rtx in the manifest and tests."
+} elseif ($results.staged) {
+    Write-Host "STAGED BUT NOT VERIFIED - TRT-RTX ($Precision) output staged for SortFormer 4-spk, but the real provider check failed." -ForegroundColor Yellow
+    Write-Host "Detail: $($results.provider_check.detail)"
+    Write-Host "Results written to: $ResultFile"
+    exit 1
 } else {
     Write-Host "FAIL - see errors above." -ForegroundColor Red
     exit 1

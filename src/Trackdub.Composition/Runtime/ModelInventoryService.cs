@@ -372,7 +372,8 @@ public sealed class ModelInventoryService(
             binding.CostModelRelativePath,
             binding.AdapterRelativePath,
             binding.AdapterMode,
-            binding.OutputManifestRelativePath);
+            binding.OutputManifestRelativePath,
+            binding.Component);
 
     private static ModelOptimizationOperation MapOptimizationOperation(OliveOptimizationOperation op) =>
         op switch
