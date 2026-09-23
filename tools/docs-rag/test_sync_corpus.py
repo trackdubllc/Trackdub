@@ -316,5 +316,45 @@ class ExcludeGlobTests(unittest.TestCase):
         self.assertNotIn("full_match", source)
 
 
+class HtmlToTextTests(unittest.TestCase):
+    def test_article_is_preferred_over_main_and_page_chrome(self):
+        html = """<html><body><header>Site header</header>
+            <nav>Home Docs API</nav>
+            <main><div class="bd-sidebar">Sidebar TOC</div>
+              <article><h1>Title<a class="headerlink" href="#t">#</a></h1><p>Body text.</p>
+                <footer class="prev-next-footer">previous next</footer></article>
+              <aside>On this page</aside></main>
+            <footer>Privacy Policy</footer></body></html>"""
+        self.assertEqual(sync_corpus.html_to_text(html), "Title\nBody text.")
+
+    def test_main_is_used_when_there_is_no_article(self):
+        html = "<body><nav>menu</nav><main><h1>EP options</h1><p>enable_cuda_graph</p></main><footer>x</footer></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "EP options\nenable_cuda_graph")
+
+    def test_role_main_on_a_div_closes_at_its_own_end_tag(self):
+        html = "<body><div role='main'><div><p>inner</p></div><p>outer</p></div><div>after root</div></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "inner\nouter")
+
+    def test_only_first_article_is_kept(self):
+        html = "<body><article><p>page</p></article><article><p>related card</p></article></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "page")
+
+    def test_nested_chrome_with_the_root_tag_does_not_leak_the_root(self):
+        html = "<body><article><p>a</p><article class='sidebar'>x</article><p>b</p></article><p>after</p></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "a\nb")
+
+    def test_page_without_content_root_keeps_body_minus_chrome(self):
+        html = "<body><nav>menu</nav><p>plain page</p><script>var x;</script><footer>legal</footer></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "plain page")
+
+    def test_empty_content_root_falls_back_to_whole_page(self):
+        html = "<body><main id='app'></main><p>server text</p></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "server text")
+
+    def test_void_elements_do_not_unbalance_skipping(self):
+        html = "<body><main><nav><img src='a'><br>menu</nav><p>kept<br>line</p></main></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "kept\nline")
+
+
 if __name__ == "__main__":
     unittest.main()

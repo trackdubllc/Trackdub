@@ -22,24 +22,107 @@ MANIFEST_PATH = TOOL_ROOT / "corpus.v1.json"
 USER_AGENT = "TrackdubDocsRag/0.1 (corpus sync)"
 
 
-class _TextExtractor(HTMLParser):
+# Page chrome that repeats on every page of a doc site. Left in, it dominates chunk
+# embeddings: a Sphinx sidebar table of contents is longer than many pages' actual content.
+_CHROME_TAGS = {"script", "style", "noscript", "template", "svg", "nav", "header", "footer", "aside", "form", "button"}
+_CHROME_ROLES = {"navigation", "banner", "contentinfo", "search", "complementary"}
+_CHROME_CLASS_WORDS = ("sidebar", "toctree", "breadcrumb", "navbar", "headerlink", "prev-next", "skip-link", "bd-toc")
+_VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+_BLOCK_TAGS = {"p", "div", "section", "h1", "h2", "h3", "h4", "h5", "h6", "li", "br", "tr", "pre", "table", "dt", "dd", "blockquote"}
+
+
+def _is_chrome(tag: str, attrs: list[tuple[str, str | None]]) -> bool:
+    if tag in _CHROME_TAGS:
+        return True
+    values = dict(attrs)
+    if (values.get("role") or "").lower() in _CHROME_ROLES:
+        return True
+    classes = (values.get("class") or "").lower()
+    return any(word in classes for word in _CHROME_CLASS_WORDS)
+
+
+def _is_content_root(tag: str, attrs: list[tuple[str, str | None]], root: str) -> bool:
+    if root == "article":
+        return tag == "article"
+    return tag == "main" or (dict(attrs).get("role") or "").lower() == "main"
+
+
+class _RootProbe(HTMLParser):
+    """Finds which main-content container the page uses, if any."""
+
     def __init__(self) -> None:
         super().__init__()
-        self._skip = 0
-        self._parts: list[str] = []
+        self.has_article = False
+        self.has_main = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in {"script", "style", "noscript"}:
-            self._skip += 1
+        if tag == "article":
+            self.has_article = True
+        elif tag == "main" or (dict(attrs).get("role") or "").lower() == "main":
+            self.has_main = True
+
+
+class _TextExtractor(HTMLParser):
+    """Extracts readable text, keeping only the page's main content region when it has one.
+
+    Root preference: the first <article> (GitHub README body, Sphinx page body), else <main> /
+    role="main" (Just-the-Docs), else the whole page. Chrome inside the root (nav, header,
+    footer, sidebars, Sphinx "#" header links) is always dropped.
+    """
+
+    def __init__(self, root: str | None = None) -> None:
+        super().__init__()
+        self._root = root
+        self._root_tag: str | None = None  # actual tag of the matched root (role="main" can sit on a div)
+        self._root_depth = 0  # open elements named _root_tag, counting the root itself
+        self._root_done = False
+        self._skip_stack: list[str] = []
+        self._parts: list[str] = []
+
+    def _capturing(self) -> bool:
+        if self._skip_stack:
+            return False
+        return self._root is None or self._root_depth > 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _VOID_TAGS:
+            if tag == "br" and self._capturing():
+                self._parts.append("\n")
+            return
+        if self._skip_stack:
+            self._skip_stack.append(tag)
+            return
+        if self._root_depth:
+            if _is_chrome(tag, attrs):
+                self._skip_stack.append(tag)
+            elif tag == self._root_tag:
+                self._root_depth += 1
+        elif self._root is not None and not self._root_done and _is_content_root(tag, attrs, self._root):
+            self._root_tag = tag
+            self._root_depth = 1
+        elif self._root is None and _is_chrome(tag, attrs):
+            self._skip_stack.append(tag)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in {"script", "style", "noscript"} and self._skip:
-            self._skip -= 1
-        if tag in {"p", "div", "h1", "h2", "h3", "li", "br", "tr"}:
+        if tag in _VOID_TAGS:
+            return
+        if self._skip_stack:
+            # Pop to the matching open tag so unclosed children cannot leave us skipping forever.
+            if tag in self._skip_stack:
+                while self._skip_stack and self._skip_stack.pop() != tag:
+                    pass
+            return
+        if self._root_depth and tag == self._root_tag:
+            self._root_depth -= 1
+            if self._root_depth == 0:
+                # Only the first root: a later <article> is usually a related-content card.
+                self._root_done = True
+                return
+        if self._capturing() and tag in _BLOCK_TAGS:
             self._parts.append("\n")
 
     def handle_data(self, data: str) -> None:
-        if self._skip:
+        if not self._capturing():
             return
         text = data.strip()
         if text:
@@ -49,6 +132,21 @@ class _TextExtractor(HTMLParser):
         raw = "".join(self._parts)
         lines = [" ".join(line.split()) for line in raw.splitlines()]
         return "\n".join(line for line in lines if line).strip()
+
+
+def html_to_text(html: str) -> str:
+    probe = _RootProbe()
+    probe.feed(html)
+    root = "article" if probe.has_article else "main" if probe.has_main else None
+    extractor = _TextExtractor(root)
+    extractor.feed(html)
+    text = extractor.text()
+    if root is not None and not text:
+        # Content region was empty (client-rendered page); fall back to the whole document.
+        extractor = _TextExtractor(None)
+        extractor.feed(html)
+        text = extractor.text()
+    return text
 
 
 def load_manifest() -> dict:
@@ -133,9 +231,7 @@ def fetch_url(url: str) -> str:
         content_type = response.headers.get("Content-Type", "")
     text = body.decode("utf-8", errors="replace")
     if "html" in content_type or text.lstrip().lower().startswith("<!doctype html") or text.lstrip().lower().startswith("<html"):
-        parser = _TextExtractor()
-        parser.feed(text)
-        text = parser.text()
+        text = html_to_text(text)
     return text.strip()
 
 
