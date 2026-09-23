@@ -1,4 +1,6 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Trackdub.Contracts;
 using Trackdub.Contracts.ModelOptimization;
 using Trackdub.Domain;
@@ -810,17 +812,79 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
         string oliveExe = _oliveEnvironment.GetOliveExecutablePath(request.ExecutionProvider);
         string cacheRoot = GetOliveCacheRoot(request.ModelId);
         string oliveOutputDir = CreateUniqueOliveWorkDirectory(cacheRoot, "recipe");
+        string recipeInputDir = CreateUniqueOliveWorkDirectory(cacheRoot, "recipe-input");
         Directory.CreateDirectory(oliveOutputDir);
+        Directory.CreateDirectory(recipeInputDir);
 
         try
         {
+            string recipeText = await File.ReadAllTextAsync(recipeConfigPath, cancellationToken).ConfigureAwait(false);
+            IReadOnlySet<string> placeholders = OliveRecipePreparation.FindPlaceholders(recipeText);
+            var placeholderValues = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [OliveRecipePreparation.ModelRootPlaceholder] = Path.GetFullPath(request.ModelRootPath)
+            };
+            Dictionary<string, string>? oliveEnvironment = null;
+            if (placeholders.Contains(OliveRecipePreparation.TrtRtxEpPathPlaceholder))
+            {
+                string providerLibraryPath = OliveRecipePreparation.FindTrtRtxProviderLibrary(
+                        _storagePaths.UserDataRoot,
+                        Environment.GetEnvironmentVariable)
+                    ?? throw new InvalidOperationException(
+                        $"Olive recipe '{Path.GetFileName(recipeConfigPath)}' needs the TensorRT RTX EP plugin, which is not installed. " +
+                        $"Install it from Model Manager or set {OliveRecipePreparation.TrtRtxEpDirectoryEnvironmentVariable}.");
+                placeholderValues[OliveRecipePreparation.TrtRtxEpPathPlaceholder] = providerLibraryPath;
+
+                // The plugin's companion DLLs (cudart, tensorrt_rtx) resolve through the normal search path.
+                string pluginDirectory = Path.GetDirectoryName(providerLibraryPath)!;
+                oliveEnvironment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["PATH"] = pluginDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH")
+                };
+            }
+
+            JsonNode recipe = JsonNode.Parse(OliveRecipePreparation.ResolvePlaceholders(recipeText, placeholderValues))
+                ?? throw new InvalidOperationException($"Olive recipe '{recipeConfigPath}' is empty.");
+
+            string? inputModelPath = OliveRecipePreparation.GetInputModelPath(recipe);
+            if (!string.Equals(request.OliveMode, "ort-genai-builder", StringComparison.OrdinalIgnoreCase) &&
+                inputModelPath is not null &&
+                inputModelPath.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(inputModelPath))
+            {
+                string prunedModelPath = Path.Combine(recipeInputDir, Path.GetFileName(inputModelPath));
+                string pruneScript = OliveRecipePreparation.ExtractPruneScript(recipeInputDir);
+                await foreach (string line in _runner.RunAsync(
+                    _oliveEnvironment.GetManagedPythonPath(request.ExecutionProvider),
+                    [pruneScript, inputModelPath, prunedModelPath],
+                    recipeInputDir,
+                    cancellationToken).ConfigureAwait(false))
+                {
+                    yield return line;
+                }
+
+                // The script writes its output only when it removed attention outputs. A failed prune
+                // leaves no output and Olive runs on the original export: correct, just heavier.
+                if (File.Exists(prunedModelPath))
+                {
+                    OliveRecipePreparation.SetInputModelPath(recipe, prunedModelPath);
+                }
+            }
+
+            string resolvedRecipePath = Path.Combine(recipeInputDir, Path.GetFileName(recipeConfigPath));
+            await File.WriteAllTextAsync(
+                resolvedRecipePath,
+                recipe.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
+                cancellationToken).ConfigureAwait(false);
+
             yield return $"Running Olive recipe: {Path.GetFileName(recipeConfigPath)}";
 
             await foreach (string line in RunOliveProcessAsync(
                 oliveExe,
-                ["run", "--config", recipeConfigPath],
+                ["run", "--config", resolvedRecipePath],
                 oliveOutputDir,
-                cancellationToken).ConfigureAwait(false))
+                cancellationToken,
+                oliveEnvironment).ConfigureAwait(false))
             {
                 yield return line;
             }
@@ -857,7 +921,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
         }
         finally
         {
-            CleanupOliveWorkDirectories([oliveOutputDir], tempOutputPath);
+            CleanupOliveWorkDirectories([oliveOutputDir, recipeInputDir], tempOutputPath);
         }
     }
 
@@ -1001,13 +1065,15 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
         string oliveExe,
         IReadOnlyList<string> arguments,
         string workingDirectory,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         await foreach (string line in _runner.RunAsync(
             oliveExe,
             arguments,
             workingDirectory,
-            cancellationToken).ConfigureAwait(false))
+            cancellationToken,
+            environment).ConfigureAwait(false))
         {
             if (OliveOptimizationProgress.TryFormatProgressLine(line, out string progressLine))
             {

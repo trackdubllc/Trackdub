@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <None Include="..\..\runtime\trt-rtx-ep.manifest.json" Link="trt-rtx-ep.manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="..\..\tools\olive\prune_attention_outputs.py" Link="ModelOptimization\prune_attention_outputs.py" LogicalName="Trackdub.Infrastructure.ModelOptimization.prune_attention_outputs.py" />
   </ItemGroup>
 
   <ItemGroup>

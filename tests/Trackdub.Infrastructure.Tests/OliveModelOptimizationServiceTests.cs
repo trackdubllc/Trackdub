@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json.Nodes;
 using Trackdub.Contracts;
 using Trackdub.Application.ModelOptimization;
 using Trackdub.Domain;
@@ -357,8 +358,92 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
         ProcessCall call = Assert.Single(runner.Calls);
         Assert.Equal("run", call.Arguments[0]);
         Assert.Equal("--config", call.Arguments[1]);
-        Assert.Equal(recipeConfig, call.Arguments[2]);
+        Assert.Equal("recipe.json", Path.GetFileName(call.Arguments[2]));
+        Assert.NotEqual(recipeConfig, call.Arguments[2]);
         Assert.Contains(lines, line => line.Contains("[progress] Step 1/3", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OptimizeAsync_recipe_resolves_model_root_and_prunes_input_model(bool pruneWritesOutput)
+    {
+        string modelRoot = Path.Combine(tempRoot, "recipe model");
+        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-dml-fp16");
+        string recipeConfig = Path.Combine(tempRoot, "encoder_fp16.json");
+        WriteFile(recipeConfig, """{ "input_model": { "type": "ONNXModel", "model_path": "${MODEL_ROOT}/onnx/encoder_model.onnx" } }""");
+        string sourceModel = Path.Combine(modelRoot, "onnx", "encoder_model.onnx");
+        WriteFile(sourceModel, "source");
+        var runner = new FakeProcessRunner(createModelOutput: true, pruneWritesOutput: pruneWritesOutput);
+        var service = CreateService(runner, new FakeVariantRegistrar());
+        string? resolvedRecipe = null;
+
+        await foreach (string _ in service.OptimizeAsync(
+            new ModelOptimizationRequest(
+                "Xenova/whisper-medium",
+                modelRoot,
+                outputRoot,
+                OliveExecutionProvider.Dml,
+                "fp16",
+                ["onnx/encoder_model.onnx"],
+                OliveRecipeConfigPath: recipeConfig),
+            TestContext.Current.CancellationToken))
+        {
+            // The work directory is deleted when the run finishes, so capture the recipe mid-stream.
+            string? recipePath = runner.Calls.LastOrDefault(call => call.Executable == "olive")?.Arguments[2];
+            if (resolvedRecipe is null && recipePath is not null && File.Exists(recipePath))
+            {
+                resolvedRecipe = File.ReadAllText(recipePath);
+            }
+        }
+
+        Assert.Equal(2, runner.Calls.Count);
+        ProcessCall prune = runner.Calls[0];
+        Assert.Equal("python", prune.Executable);
+        Assert.Equal("prune_attention_outputs.py", Path.GetFileName(prune.Arguments[0]));
+        Assert.Equal(sourceModel.Replace('\\', '/'), prune.Arguments[1]);
+        Assert.Null(runner.Calls[1].Environment);
+
+        Assert.NotNull(resolvedRecipe);
+        string modelPath = JsonNode.Parse(resolvedRecipe!)!["input_model"]!["model_path"]!.GetValue<string>();
+        string expected = pruneWritesOutput ? prune.Arguments[2] : sourceModel;
+        Assert.Equal(expected.Replace('\\', '/'), modelPath);
+    }
+
+    [Fact]
+    public void ResolvePlaceholders_escapes_paths_and_rejects_unknown_placeholders()
+    {
+        string resolved = OliveRecipePreparation.ResolvePlaceholders(
+            """{ "p": "${MODEL_ROOT}/onnx/a.onnx" }""",
+            new Dictionary<string, string> { ["MODEL_ROOT"] = @"C:\Users\a ""b""" });
+        Assert.Equal("C:/Users/a \"b\"/onnx/a.onnx", JsonNode.Parse(resolved)!["p"]!.GetValue<string>());
+
+        Assert.Throws<InvalidOperationException>(() => OliveRecipePreparation.ResolvePlaceholders(
+            """{ "p": "${TRT_RTX_EP_PATH}" }""",
+            new Dictionary<string, string>()));
+    }
+
+    [Fact]
+    public void FindTrtRtxProviderLibrary_prefers_env_dir_then_newest_installed_bundle()
+    {
+        string fileName = OperatingSystem.IsWindows()
+            ? "onnxruntime_providers_nv_tensorrt_rtx.dll"
+            : "libonnxruntime_providers_nv_tensorrt_rtx.so";
+        string rid = OperatingSystem.IsWindows() ? "win-x64" : "linux-x64";
+        string userDataRoot = Path.Combine(tempRoot, "user-data");
+        string older = Path.Combine(userDataRoot, "Providers", "trt-rtx", "0.2.0", "cu12", rid, fileName);
+        string newer = Path.Combine(userDataRoot, "Providers", "trt-rtx", "0.10.0", "cu12", rid, fileName);
+        WriteFile(older, "");
+        WriteFile(newer, "");
+        string envDir = Path.Combine(tempRoot, "env-ep");
+        WriteFile(Path.Combine(envDir, fileName), "");
+
+        Assert.Equal(newer, OliveRecipePreparation.FindTrtRtxProviderLibrary(userDataRoot, _ => null));
+        Assert.Equal(
+            Path.Combine(envDir, fileName),
+            OliveRecipePreparation.FindTrtRtxProviderLibrary(userDataRoot, _ => envDir));
+        Assert.Null(OliveRecipePreparation.FindTrtRtxProviderLibrary(userDataRoot, _ => Path.Combine(tempRoot, "missing")));
+        Assert.Null(OliveRecipePreparation.FindTrtRtxProviderLibrary(Path.Combine(tempRoot, "empty"), _ => null));
     }
 
     public void Dispose()
@@ -409,7 +494,10 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
         return call.Arguments[index + 1];
     }
 
-    private sealed class FakeProcessRunner(bool createModelOutput, bool createGenAiConfigOutput = false) : IStreamingProcessRunner
+    private sealed class FakeProcessRunner(
+        bool createModelOutput,
+        bool createGenAiConfigOutput = false,
+        bool pruneWritesOutput = false) : IStreamingProcessRunner
     {
         public List<ProcessCall> Calls { get; } = [];
 
@@ -417,9 +505,20 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
             string executable,
             IReadOnlyList<string> arguments,
             string workingDirectory,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken,
+            IReadOnlyDictionary<string, string>? environment = null)
         {
-            Calls.Add(new ProcessCall(executable, arguments.ToArray(), workingDirectory));
+            Calls.Add(new ProcessCall(executable, arguments.ToArray(), workingDirectory, environment));
+            if (executable == "python")
+            {
+                if (pruneWritesOutput)
+                {
+                    WriteFile(arguments[2], "pruned");
+                }
+
+                yield break;
+            }
+
             if (createModelOutput)
             {
                 WriteFile(Path.Combine(workingDirectory, "model.onnx"), "optimized");
@@ -439,7 +538,8 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
     private sealed record ProcessCall(
         string Executable,
         IReadOnlyList<string> Arguments,
-        string WorkingDirectory);
+        string WorkingDirectory,
+        IReadOnlyDictionary<string, string>? Environment = null);
 
     private sealed class FakeOliveEnvironmentService : IOliveEnvironmentService
     {

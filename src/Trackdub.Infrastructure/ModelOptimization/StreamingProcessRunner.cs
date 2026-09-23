@@ -10,7 +10,8 @@ internal interface IStreamingProcessRunner
         string executable,
         IReadOnlyList<string> arguments,
         string workingDirectory,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? environment = null);
 }
 
 internal sealed class StreamingProcessRunner : IStreamingProcessRunner
@@ -19,7 +20,8 @@ internal sealed class StreamingProcessRunner : IStreamingProcessRunner
         string executable,
         IReadOnlyList<string> arguments,
         string workingDirectory,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         var startInfo = new ProcessStartInfo(executable)
         {
@@ -33,6 +35,14 @@ internal sealed class StreamingProcessRunner : IStreamingProcessRunner
         foreach (string arg in arguments)
         {
             startInfo.ArgumentList.Add(arg);
+        }
+
+        if (environment is not null)
+        {
+            foreach ((string name, string value) in environment)
+            {
+                startInfo.Environment[name] = value;
+            }
         }
 
         var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });

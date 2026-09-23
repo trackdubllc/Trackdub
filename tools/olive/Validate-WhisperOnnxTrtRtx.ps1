@@ -94,18 +94,20 @@ if (-not (Test-Path $decoderSrc)) {
 # When anything was pruned, recipes read from the pruned copy instead of the cache.
 # ---------------------------------------------------------------------------
 $PythonExe   = Join-Path $VenvPath 'Scripts\python.exe'
-$pruneScript = Join-Path $PSScriptRoot 'prune_whisper_outputs.py'
+$pruneScript = Join-Path $PSScriptRoot 'prune_attention_outputs.py'
 $prunedRoot  = Join-Path $BuildDir "whisper-$ModelSize-onnx-pruned-src"
-$pruneStatus = @{}
+$pruned      = @{}
 foreach ($kind in @('encoder', 'decoder')) {
     $src = if ($kind -eq 'encoder') { $encoderSrc } else { $decoderSrc }
-    & $PythonExe $pruneScript $src (Join-Path $prunedRoot "onnx\${kind}_model.onnx") $kind
-    if ($LASTEXITCODE -notin 0, 3) { Write-Error "Output pruning failed for $kind (exit $LASTEXITCODE)."; exit 1 }
-    $pruneStatus[$kind] = $LASTEXITCODE
+    $dst = Join-Path $prunedRoot "onnx\${kind}_model.onnx"
+    Remove-Item -LiteralPath $dst, "$dst.data" -Force -ErrorAction SilentlyContinue
+    & $PythonExe $pruneScript $src $dst
+    if ($LASTEXITCODE -ne 0) { Write-Error "Output pruning failed for $kind (exit $LASTEXITCODE)."; exit 1 }
+    $pruned[$kind] = Test-Path $dst
 }
-if ($pruneStatus.Values -contains 0) {
+if ($pruned.Values -contains $true) {
     foreach ($kind in @('encoder', 'decoder')) {
-        if ($pruneStatus[$kind] -eq 3) {
+        if (-not $pruned[$kind]) {
             $src = if ($kind -eq 'encoder') { $encoderSrc } else { $decoderSrc }
             Copy-Item $src (Join-Path $prunedRoot "onnx\${kind}_model.onnx") -Force
         }
