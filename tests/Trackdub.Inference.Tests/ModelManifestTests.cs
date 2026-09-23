@@ -1780,6 +1780,33 @@ public sealed class ModelManifestLoaderTests
     }
 
     [Fact]
+    public void LoadCatalog_BindingsSharingProviderAndPrecisionNameDistinctComponents()
+    {
+        string manifestPath = Path.Combine(
+            FindRepoRoot(),
+            "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
+
+        ModelManifestCatalog catalog = ModelManifestLoader.LoadCatalog(manifestPath);
+
+        // OliveRecipeResolver can only tell same provider+precision bindings apart by component;
+        // without one, the first binding (usually the encoder recipe) wins for every component.
+        Assert.All(
+            catalog.Models.Where(manifest => manifest.Optimization?.Olive is not null),
+            manifest =>
+            {
+                foreach (IGrouping<(string? Provider, string? Precision), OliveRecipeBinding> group in manifest.Optimization!.Olive!.RecipeBindings
+                             .GroupBy(binding => (binding.Provider, binding.Precision))
+                             .Where(group => group.Count() > 1))
+                {
+                    Assert.All(group, binding => Assert.False(
+                        string.IsNullOrWhiteSpace(binding.Component),
+                        $"{manifest.ModelId}: {binding.ConfigRelativePath} shares {group.Key} with another binding but names no component."));
+                    Assert.Equal(group.Count(), group.Select(binding => binding.Component).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+                }
+            });
+    }
+
+    [Fact]
     public void LoadCatalog_BundledManifestSeparationModelsUseSupportedEngineFamilies()
     {
         string repoRoot = FindRepoRoot();

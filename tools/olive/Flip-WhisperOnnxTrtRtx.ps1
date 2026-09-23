@@ -105,13 +105,22 @@ for model in catalog.get("models", []):
     recipe_dir = MODEL_RECIPE_DIRS.get(model["model_id"])
     if recipe_dir:
         bindings = olive.setdefault("recipe_bindings", [])
-        existing = {b.get("config_relative_path") for b in bindings if b.get("provider") == "trt-rtx"}
-        for recipe in ("encoder_trtrtx_fp16.json", "decoder_trtrtx_fp16.json"):
+        existing = {b.get("config_relative_path"): b for b in bindings if b.get("provider") == "trt-rtx"}
+        for recipe, component in (
+            ("encoder_trtrtx_fp16.json", "onnx/encoder_model.onnx"),
+            ("decoder_trtrtx_fp16.json", "onnx/decoder_model.onnx"),
+        ):
             config_path = f"{recipe_dir}/NvTensorRtRtx/{recipe}"
-            if config_path not in existing:
+            current = existing.get(config_path)
+            if current is None:
                 binding = dict(RECIPE_BINDING_TEMPLATE)
+                binding["component"] = component
                 binding["config_relative_path"] = config_path
                 bindings.append(binding)
+                changed += 1
+            elif current.get("component") != component:
+                # Without a component, OliveRecipeResolver cannot tell encoder and decoder bindings apart.
+                current["component"] = component
                 changed += 1
 
 # Match the manifest's existing serialization (2-space indent, LF) so the diff stays minimal.

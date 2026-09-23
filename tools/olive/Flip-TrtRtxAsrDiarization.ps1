@@ -92,6 +92,7 @@ def sortformer_recipe_bindings():
         {
             "provider": "trt-rtx",
             "precision": "fp16",
+            "component": "onnx/model.onnx",
             "config_relative_path": "cgus-diar_streaming_sortformer_4spk-v2.1-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
             "operations": ["provider_optimization"],
             "expected_output": "onnx_components"
@@ -103,6 +104,7 @@ def nemotron_recipe_bindings():
         {
             "provider": "trt-rtx",
             "precision": "fp16",
+            "component": "encoder.onnx",
             "config_relative_path": "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/encoder_trtrtx_fp16.json",
             "operations": ["provider_optimization"],
             "expected_output": "onnx_components"
@@ -110,6 +112,7 @@ def nemotron_recipe_bindings():
         {
             "provider": "trt-rtx",
             "precision": "fp16",
+            "component": "decoder_joint.onnx",
             "config_relative_path": "nemotron-3.5-asr-streaming-0.6b-onnx/NvTensorRtRtx/decoder_joint_trtrtx_fp16.json",
             "operations": ["provider_optimization"],
             "expected_output": "onnx_components"
@@ -124,11 +127,16 @@ def ensure_provider(providers, provider):
 
 def ensure_recipe_binding(olive, provider, new_bindings):
     bindings = olive.setdefault("recipe_bindings", [])
-    existing_paths = {b.get("config_relative_path") for b in bindings}
+    existing = {b.get("config_relative_path"): b for b in bindings}
     added = False
     for binding in new_bindings:
-        if binding["config_relative_path"] not in existing_paths:
+        current = existing.get(binding["config_relative_path"])
+        if current is None:
             bindings.append(binding)
+            added = True
+        elif current.get("component") != binding["component"]:
+            # Without a component, OliveRecipeResolver cannot tell a model's bindings apart.
+            current["component"] = binding["component"]
             added = True
     return added
 
