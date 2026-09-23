@@ -10,12 +10,28 @@
                 {
                     "device": "gpu",
                     "execution_providers": [
-                        "NvTensorRTRTXExecutionProvider"
+                        [
+                            "NvTensorRTRTXExecutionProvider",
+                            "${TRT_RTX_EP_PATH}"
+                        ]
                     ]
                 }
             ]
         }
     },
+    "data_configs": [
+        {
+            "name": "whisper_encoder_steady_state",
+            "type": "DummyDataContainer",
+            "load_dataset_config": {
+                "params": {
+                    "input_names": ["input_features"],
+                    "input_shapes": [[1, 128, 3000]],
+                    "input_types": ["float32"]
+                }
+            }
+        }
+    ],
     "passes": {
         "fp16": {
             "type": "OnnxFloatToFloat16",
@@ -24,7 +40,8 @@
         "session_params": {
             "type": "OrtSessionParamsTuning",
             "io_bind": true,
-            "execution_provider": "NvTensorRTRTXExecutionProvider"
+            "providers_list": "NvTensorRTRTXExecutionProvider",
+            "data_config": "whisper_encoder_steady_state"
         }
     },
     "evaluators": {
@@ -37,7 +54,8 @@
                         {"name": "avg", "priority": 1, "higher_is_better": false},
                         {"name": "max"},
                         {"name": "min"}
-                    ]
+                    ],
+                    "data_config": "whisper_encoder_steady_state"
                 }
             ]
         }

@@ -61,6 +61,14 @@ $modelTable = @{
 $entry          = $modelTable[$ModelSize]
 . (Join-Path $PSScriptRoot 'TrtRtxOliveCommon.ps1')
 $ModelCacheRoot = Resolve-TrackdubModelCacheRoot
+
+# TensorRT RTX EP ABI plugin DLL, resolved like TensorRtRtxPluginLocator: TRACKDUB_TRT_RTX_EP_DIR,
+# then the default install. Olive registers it via the recipe accelerator's (name, path) pair.
+$TrtRtxEpDir    = if ($env:TRACKDUB_TRT_RTX_EP_DIR) { $env:TRACKDUB_TRT_RTX_EP_DIR } else { Join-Path $env:LOCALAPPDATA 'Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64' }
+$TrtRtxEpPath   = Join-Path $TrtRtxEpDir 'onnxruntime_providers_nv_tensorrt_rtx.dll'
+# The plugin's companion DLLs (cudart64_12.dll, tensorrt_rtx_1_5.dll) live beside it but are
+# resolved through the normal DLL search path, so the bundle dir must be on PATH for olive.
+$env:PATH = "$TrtRtxEpDir;$env:PATH"
 $modelRoot      = Join-Path $ModelCacheRoot (Join-Path $entry.Owner $entry.Repo)
 $recipeDir      = Join-Path $RepoRoot 'resources\olive-recipes' $entry.RecipeDir 'NvTensorRtRtx'
 $encoderSrc = Join-Path $modelRoot 'onnx\encoder_model.onnx'
@@ -91,6 +99,7 @@ function Resolve-Recipe {
     param([string] $SrcPath, [string] $DestPath)
     $content = Get-Content -Raw $SrcPath
     $content = $content -replace '\$\{MODEL_ROOT\}', ($modelRoot -replace '\\', '/')
+    $content = $content -replace '\$\{TRT_RTX_EP_PATH\}', ($TrtRtxEpPath -replace '\\', '/')
     Set-Content -Path $DestPath -Value $content -Encoding UTF8
 }
 
@@ -100,7 +109,7 @@ $latencyRecipeDst = Join-Path $TempDir 'eval_latency.json'
 
 Resolve-Recipe (Join-Path $recipeDir 'encoder_trtrtx_fp16.json') $encoderRecipeDst
 Resolve-Recipe (Join-Path $recipeDir 'decoder_trtrtx_fp16.json') $decoderRecipeDst
-Copy-Item (Join-Path $recipeDir 'eval_latency.json') $latencyRecipeDst
+Resolve-Recipe (Join-Path $recipeDir 'eval_latency.json') $latencyRecipeDst
 
 $origDir = Get-Location
 Set-Location $RepoRoot

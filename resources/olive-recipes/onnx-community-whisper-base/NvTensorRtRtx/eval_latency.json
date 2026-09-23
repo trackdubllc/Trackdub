@@ -54,7 +54,10 @@
         {
           "device": "gpu",
           "execution_providers": [
-            "NvTensorRTRTXExecutionProvider"
+            [
+                "NvTensorRTRTXExecutionProvider",
+                "${TRT_RTX_EP_PATH}"
+            ]
           ]
         }
       ]
