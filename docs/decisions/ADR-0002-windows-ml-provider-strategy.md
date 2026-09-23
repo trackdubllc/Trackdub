@@ -61,7 +61,7 @@ Negative:
 
 ## Device policies (Phase 3)
 
-Optional advanced studio setting `WindowsMlExecutionDevicePolicy` (default `Explicit`). Non-default values call `SessionOptions.SetEpSelectionPolicy` for Windows ML catalog/device-policy routes (`DirectMl`, `Migraphx`) and skip explicit catalog-device append. TensorRT RTX plugin and native CUDA/TensorRT on Windows ignore device policy. Details: [windows-ml-phase-3-device-policies.md](../internal/windows-ml-phase-3-device-policies.md).
+Optional advanced studio setting `WindowsMlExecutionDevicePolicy` (default `Explicit`). Non-default values call `SessionOptions.SetEpSelectionPolicy` for Windows ML catalog/device-policy routes (`DirectMl`, `Migraphx`) and skip explicit catalog-device append. TensorRT RTX plugin and native CUDA/TensorRT on Windows ignore device policy. Details: [windows-ml-phase-3-device-policies.md](../reference/windows-ml-phase-3-device-policies.md).
 
 ## Future work
 
@@ -87,7 +87,7 @@ Deferred items; not required for accepting this strategy ADR:
 
 1. Catalog provider id confirmed against ExecutionProviderCatalog / Microsoft docs for the target Windows ML SDK.
 2. WindowsMlProviderRegistrationPolicy + OnnxExecutionSessionFactory append path implemented and covered by tests.
-3. Per-stage smoke on representative hardware (matrix rows in [windows-ml-stage-provider-matrix.md](../internal/windows-ml-stage-provider-matrix.md)).
+3. Per-stage smoke on representative hardware (matrix rows in [windows-ml-stage-provider-matrix.md](../reference/windows-ml-stage-provider-matrix.md)).
 4. Bundled manifest expected_runtime tokens updated where product commits to a catalog route.
 5. Model Manager / settings copy states registration vs download vs smoke vs stage success separately.
 6. Planner smoke failure → fall through to next provider (no stuck “ready” state).
@@ -97,7 +97,7 @@ Deferred items; not required for accepting this strategy ADR:
 - No change to Milestone5PlanningPolicy.SupportedProvidersThisMilestone probe order until matrix smoke passes for the new EP on target hardware.
 - Stubs must report **unavailable** in discovery and **not enabled** in registration/session paths — never “GPU ready” or “catalog registered therefore ready.”
 
-Operational detail: [windows-ml-phase-5-catalog-eps.md](../internal/windows-ml-phase-5-catalog-eps.md).
+Operational detail: [windows-ml-phase-5-catalog-eps.md](../reference/windows-ml-phase-5-catalog-eps.md).
 
 ## References
 
@@ -108,11 +108,11 @@ Operational detail: [windows-ml-phase-5-catalog-eps.md](../internal/windows-ml-p
 - [Installing and registering Windows ML EPs](https://learn.microsoft.com/windows/ai/new-windows-ml/initialize-execution-providers)
 - [ONNX Runtime TensorRT RTX EP](https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html)
 - [ONNX Runtime plugin EP library usage](https://onnxruntime.ai/docs/execution-providers/plugin-ep-libraries/usage.html)
-- Internal seams: [`docs/internal/migraphx-phase0-seams.md`](../internal/migraphx-phase0-seams.md)
+- Seams: [`docs/reference/migraphx-phase0-seams.md`](../reference/migraphx-phase0-seams.md)
 
 ## Phase 4 closeout (2026-05-23)
 
-ORT native load order prefers the managed ONNX Runtime package before app-base DLLs; session pool eviction and policy-cache invalidation run when hardware settings change. Operational checklist: [windows-ml-phase-4-closeout.md](../internal/windows-ml-phase-4-closeout.md).
+ORT native load order prefers the managed ONNX Runtime package before app-base DLLs; session pool eviction and policy-cache invalidation run when hardware settings change. Operational checklist: [windows-ml-phase-4-closeout.md](../reference/windows-ml-phase-4-closeout.md).
 
 ## Phase 6: portable-build TRT RTX and GenAI exclusions (2026-09)
 

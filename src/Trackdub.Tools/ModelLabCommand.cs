@@ -435,7 +435,7 @@ public static class ModelLabCommand
                     options.OliveExecutablePath,
                     [
                         "run",
-                        "--run-config",
+                        "--config",
                         recipeConfigPath
                     ],
                     options.CacheDirectoryPath),
@@ -522,7 +522,7 @@ public static class ModelLabCommand
         writer.WriteLine("  --benchmark-runs <count>");
         writer.WriteLine("  --no-benchmark        skip benchmark validation (enables cross-platform Olive optimization)");
         writer.WriteLine("  --candidate <alias>:<builder-provider>:<precision>:<olive-provider>:<olive-device>:<benchmark-provider>");
-        writer.WriteLine("  --olive-recipe-config <path>  developer override: run `olive run --run-config` instead of optimize");
+        writer.WriteLine("  --olive-recipe-config <path>  developer override: run `olive run --config` instead of optimize");
     }
 
     private static string ComputeSha256(string path)
