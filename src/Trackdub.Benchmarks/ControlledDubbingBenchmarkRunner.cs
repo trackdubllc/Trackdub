@@ -332,7 +332,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 MemoryBytes = memory,
                 Stages = stages,
             };
-            await _history.SaveAsync(report, CancellationToken.None).ConfigureAwait(false);
+            await _history.SaveAsync(report, cancellationToken).ConfigureAwait(false);
             return report;
         }
     }
