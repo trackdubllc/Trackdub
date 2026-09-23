@@ -134,18 +134,30 @@ class _TextExtractor(HTMLParser):
         return "\n".join(line for line in lines if line).strip()
 
 
+def _extract(html: str, root: str | None) -> str:
+    extractor = _TextExtractor(root)
+    extractor.feed(html)
+    return extractor.text()
+
+
+# A first <article> this much smaller than <main> is a card inside the page (Hugging Face puts
+# dataset/paper cards in <article> and the model card in <main>), not the page body.
+_ARTICLE_MIN_SHARE_OF_MAIN = 0.25
+
+
 def html_to_text(html: str) -> str:
     probe = _RootProbe()
     probe.feed(html)
-    root = "article" if probe.has_article else "main" if probe.has_main else None
-    extractor = _TextExtractor(root)
-    extractor.feed(html)
-    text = extractor.text()
-    if root is not None and not text:
-        # Content region was empty (client-rendered page); fall back to the whole document.
-        extractor = _TextExtractor(None)
-        extractor.feed(html)
-        text = extractor.text()
+    text = ""
+    if probe.has_article:
+        text = _extract(html, "article")
+    if probe.has_main:
+        main_text = _extract(html, "main")
+        if len(text) < len(main_text) * _ARTICLE_MIN_SHARE_OF_MAIN:
+            text = main_text
+    if not text:
+        # No content region, or it was empty (client-rendered page); use the whole document.
+        text = _extract(html, None)
     return text
 
 
