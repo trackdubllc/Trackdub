@@ -35,7 +35,8 @@
     "passes": {
         "fp16": {
             "type": "OnnxFloatToFloat16",
-            "save_as_external_data": true
+            "save_as_external_data": true,
+            "keep_io_types": true
         },
         "session_params": {
             "type": "OrtSessionParamsTuning",

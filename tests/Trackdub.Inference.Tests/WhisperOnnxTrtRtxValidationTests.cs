@@ -25,31 +25,31 @@ namespace Trackdub.Inference.Tests;
 /// </summary>
 public sealed class WhisperOnnxTrtRtxValidationTests
 {
-    [Fact(Skip = "Pending TRT-RTX validation — run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize tiny, then remove this Skip")]
+    [Fact]
     public async Task WhisperOnnxTrtRtx_TinyModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("tiny", "onnx-community/whisper-tiny");
     }
 
-    [Fact(Skip = "Pending TRT-RTX validation — run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize base, then remove this Skip")]
+    [Fact]
     public async Task WhisperOnnxTrtRtx_BaseModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("base", "onnx-community/whisper-base");
     }
 
-    [Fact(Skip = "Pending TRT-RTX validation — run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize small, then remove this Skip")]
+    [Fact]
     public async Task WhisperOnnxTrtRtx_SmallModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("small", "onnx-community/whisper-small");
     }
 
-    [Fact(Skip = "Pending TRT-RTX validation — run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize medium, then remove this Skip")]
+    [Fact]
     public async Task WhisperOnnxTrtRtx_MediumModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("medium", "Xenova/whisper-medium");
     }
 
-    [Fact(Skip = "Pending TRT-RTX validation — run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize large-v3, then remove this Skip")]
+    [Fact]
     public async Task WhisperOnnxTrtRtx_LargeV3Model_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("large-v3", "Xenova/whisper-large-v3");
