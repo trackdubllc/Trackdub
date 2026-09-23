@@ -1507,6 +1507,15 @@
               ],
               "expected_output": "onnx_components",
               "config_relative_path": "onnx-community-whisper-tiny/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            },
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "onnx-community-whisper-tiny/NvTensorRtRtx/decoder_trtrtx_fp16.json"
             }
           ]
         }
@@ -1619,6 +1628,15 @@
               ],
               "expected_output": "onnx_components",
               "config_relative_path": "onnx-community-whisper-base/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            },
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "onnx-community-whisper-base/NvTensorRtRtx/decoder_trtrtx_fp16.json"
             }
           ]
         }
@@ -1756,6 +1774,15 @@
               ],
               "expected_output": "onnx_components",
               "config_relative_path": "onnx-community-whisper-small/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            },
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "onnx-community-whisper-small/NvTensorRtRtx/decoder_trtrtx_fp16.json"
             }
           ]
         }
@@ -1894,6 +1921,15 @@
               ],
               "expected_output": "onnx_components",
               "config_relative_path": "Xenova-whisper-medium/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            },
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "Xenova-whisper-medium/NvTensorRtRtx/decoder_trtrtx_fp16.json"
             }
           ]
         }
@@ -2031,6 +2067,15 @@
               ],
               "expected_output": "onnx_components",
               "config_relative_path": "Xenova-whisper-large-v3/NvTensorRtRtx/encoder_trtrtx_fp16.json"
+            },
+            {
+              "provider": "trt-rtx",
+              "precision": "fp16",
+              "operations": [
+                "provider_optimization"
+              ],
+              "expected_output": "onnx_components",
+              "config_relative_path": "Xenova-whisper-large-v3/NvTensorRtRtx/decoder_trtrtx_fp16.json"
             }
           ]
         }

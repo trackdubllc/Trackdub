@@ -105,22 +105,21 @@ for model in catalog.get("models", []):
     recipe_dir = MODEL_RECIPE_DIRS.get(model["model_id"])
     if recipe_dir:
         bindings = olive.setdefault("recipe_bindings", [])
-        already = any(
-            b.get("provider") == "trt-rtx"
-            for b in bindings
-        )
-        if not already:
-            binding = dict(RECIPE_BINDING_TEMPLATE)
-            binding["config_relative_path"] = (
-                f"{recipe_dir}/NvTensorRtRtx/encoder_trtrtx_fp16.json"
-            )
-            bindings.append(binding)
+        existing = {b.get("config_relative_path") for b in bindings if b.get("provider") == "trt-rtx"}
+        for recipe in ("encoder_trtrtx_fp16.json", "decoder_trtrtx_fp16.json"):
+            config_path = f"{recipe_dir}/NvTensorRtRtx/{recipe}"
+            if config_path not in existing:
+                binding = dict(RECIPE_BINDING_TEMPLATE)
+                binding["config_relative_path"] = config_path
+                bindings.append(binding)
+                changed += 1
 
+# Match the manifest's existing serialization (2-space indent, LF) so the diff stays minimal.
 with open(manifest_path, "w", encoding="utf-8", newline="\n") as f:
-    json.dump(catalog, f, indent=6, ensure_ascii=False)
+    json.dump(catalog, f, indent=2, ensure_ascii=False)
     f.write("\n")
 
-print(f"Done. {changed} models updated.")
+print(f"Done. {changed} manifest changes applied.")
 '@
 
 $tmpPy = Join-Path $env:TEMP "flip_trtrtx_$([System.Diagnostics.Process]::GetCurrentProcess().Id).py"
