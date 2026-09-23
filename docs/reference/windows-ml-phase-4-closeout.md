@@ -31,7 +31,7 @@ Production closeout for Windows ML device policies (Phase 3) and ONNX runtime al
 **Verify:**
 
 ```powershell
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <path> --provider trt-rtx --runs 1 --format console
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <path> --provider trt-rtx --runs 1 --format console
 ```
 
 ## Workstream C — Pool eviction + policy cache
@@ -52,7 +52,7 @@ Update [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md
 
 ## Workstream E — ADR
 
-[ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md) Phase 4 section.
+[ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md) Phase 4 section.
 
 ## Related
 

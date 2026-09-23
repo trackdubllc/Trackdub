@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Dnnl;
 using Trackdub.Inference.Onnx.ExecutionProviders;
@@ -291,6 +292,7 @@ internal static class OnnxExecutionSessionFactory
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        using var phase = BenchmarkPhaseCapture.Start("onnx-session-create");
         return sessionFactory is null
             ? new InferenceSession(modelPath, options)
             : sessionFactory(modelPath, options);

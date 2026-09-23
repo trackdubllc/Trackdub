@@ -1,5 +1,8 @@
+using Microsoft.Extensions.DependencyInjection;
 using Trackdub.Benchmarks;
 using Trackdub.Domain;
+using Trackdub.Contracts.Benchmarking;
+using Trackdub.Contracts.Persistence;
 #if WINDOWS
 using Trackdub.Inference;
 using Trackdub.Inference.Onnx;
@@ -18,14 +21,18 @@ public sealed class BenchmarkRunnerService : IBenchmarkRunnerService
 #endif
     private readonly AudioPrepBenchmarkRunner _audioRunner;
     private readonly DubbingBenchmarkRunner _dubbingRunner;
+    private readonly ControlledDubbingBenchmarkRunner _controlledRunner;
 
-    public BenchmarkRunnerService()
+    public BenchmarkRunnerService(
+        IBenchmarkEvidenceRepository? history = null,
+        Action<IServiceCollection>? serviceConfigurator = null)
     {
 #if WINDOWS
         _onnxRunner = BenchmarkOnnxExecutionBootstrap.CreateOnnxRunner();
 #endif
         _audioRunner = new AudioPrepBenchmarkRunner();
         _dubbingRunner = new DubbingBenchmarkRunner();
+        _controlledRunner = new ControlledDubbingBenchmarkRunner(history, serviceConfigurator);
     }
 
     /// <inheritdoc />
@@ -90,5 +97,12 @@ public sealed class BenchmarkRunnerService : IBenchmarkRunnerService
     {
         ArgumentNullException.ThrowIfNull(options);
         return await _dubbingRunner.RunAsync(options, ct).ConfigureAwait(false);
+    }
+
+    public Task<BenchmarkEvidenceReport> RunControlledDubbingBenchmarkAsync(
+        ControlledDubbingBenchmarkOptions options, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return _controlledRunner.RunAsync(options, ct);
     }
 }

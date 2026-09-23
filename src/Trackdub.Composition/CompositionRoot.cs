@@ -341,7 +341,8 @@ public static class CompositionRoot
                 sp.GetRequiredService<IApplicationLogger>()));
         services.TryAddScoped<IProjectRepository, SqliteProjectRepository>();
         services.TryAddScoped<IMediaAssetRepository, SqliteMediaAssetRepository>();
-        services.TryAddScoped<IProjectStageRunStore, SqliteProjectStageRunStore>();
+        services.TryAddScoped<SqliteProjectStageRunStore>();
+        services.TryAddScoped<IProjectStageRunStore, ObservedProjectStageRunStore>();
         services.TryAddScoped<ITranscriptRepository, SqliteTranscriptRepository>();
         services.TryAddScoped<ITranslationRepository, SqliteTranslationRepository>();
         services.TryAddScoped<IGlossaryRepository, SqliteGlossaryRepository>();
@@ -792,6 +793,7 @@ public static class CompositionRoot
         services.TryAddSingleton(sp =>
             new SqliteUserBenchmarkDatabase(sp.GetRequiredService<IAppStoragePaths>().UserDataRoot));
         services.TryAddSingleton<Trackdub.Contracts.Persistence.IUserBenchmarkRepository, UserBenchmarkRepository>();
+        services.TryAddSingleton<Trackdub.Contracts.Persistence.IBenchmarkEvidenceRepository, BenchmarkEvidenceRepository>();
         services.TryAddSingleton<HardwareProfilerHistoryRecorder>();
         services.TryAddSingleton<JsonHardwareProfilerStore>();
         services.TryAddSingleton<IHardwareProfilerService, HardwareProfilerService>();

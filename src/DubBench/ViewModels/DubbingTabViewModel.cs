@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DubBench.Services;
 using Trackdub.Benchmarks;
+using Trackdub.Contracts.Benchmarking;
 
 namespace DubBench.ViewModels;
 
@@ -12,6 +13,8 @@ public sealed partial class DubbingTabViewModel : ObservableObject, ITabViewMode
 
     public string Title => "Dubbing";
     public string IconGlyph => "\U0001F3AC";
+    public IReadOnlyList<string> RunModes { get; } =
+        ["warm-host", "artifact-resume"];
 
     [ObservableProperty]
     private bool _isSelected;
@@ -23,6 +26,21 @@ public sealed partial class DubbingTabViewModel : ObservableObject, ITabViewMode
     // Target language
     [ObservableProperty]
     private string _targetLanguage = "es";
+
+    [ObservableProperty]
+    private string _stage = string.Empty;
+
+    [ObservableProperty]
+    private string _requestedModel = string.Empty;
+
+    [ObservableProperty]
+    private string _requestedProvider = string.Empty;
+
+    [ObservableProperty]
+    private string _runMode = "warm-host";
+
+    [ObservableProperty]
+    private string _outputDirectory = string.Empty;
 
     // Running state
     [ObservableProperty]
@@ -41,7 +59,7 @@ public sealed partial class DubbingTabViewModel : ObservableObject, ITabViewMode
 
     // Result
     [ObservableProperty]
-    private DubbingBenchmarkReport? _lastResult;
+    private BenchmarkEvidenceReport? _lastResult;
 
     [ObservableProperty]
     private string _statusMessage = "Ready";
@@ -129,24 +147,31 @@ public sealed partial class DubbingTabViewModel : ObservableObject, ITabViewMode
         try
         {
             IsRunning = true;
-            StatusMessage = "Running dubbing benchmark estimate...";
+            StatusMessage = "Running dubbing benchmark...";
 
-            var options = new DubbingBenchmarkOptions(
-                InputPath: InputPath,
-                TargetLanguage: TargetLanguage);
+            var options = new ControlledDubbingBenchmarkOptions
+            {
+                FixturePath = InputPath,
+                OutputDirectory = string.IsNullOrWhiteSpace(OutputDirectory)
+                    ? Path.Combine(Path.GetTempPath(), "Trackdub", "benchmark-runs")
+                    : OutputDirectory,
+                TargetLanguage = TargetLanguage,
+                Stage = EmptyToNull(Stage),
+                Model = EmptyToNull(RequestedModel),
+                Provider = EmptyToNull(RequestedProvider),
+                Mode = RunMode
+            };
 
-            LastResult = await _runner.RunDubbingBenchmarkAsync(options);
+            LastResult = await _runner.RunControlledDubbingBenchmarkAsync(options);
             if (LastResult is null)
             {
                 StatusMessage = "Dubbing benchmark did not return a result.";
                 return;
             }
 
-            StatusMessage = LastResult.Success
-                ? $"Estimated: {LastResult.TotalDuration.TotalSeconds:F1}s total, " +
-                  $"{LastResult.SegmentCount} segments, " +
-                  $"HW: {LastResult.HardwareInfo}"
-                : $"Error: {LastResult.Error}";
+            StatusMessage = LastResult.Status == BenchmarkEvidenceStatus.Completed
+                ? $"Measured run completed: {LastResult.RunId}. Open Local Runs to compare compatible results."
+                : $"{LastResult.Status}: {LastResult.Reason ?? "See stage outcomes."}";
         }
         catch (Exception ex)
         {
@@ -157,4 +182,7 @@ public sealed partial class DubbingTabViewModel : ObservableObject, ITabViewMode
             IsRunning = false;
         }
     }
+
+    private static string? EmptyToNull(string value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

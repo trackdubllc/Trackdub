@@ -49,9 +49,9 @@ After explicit matrix baseline on hardware:
 3. `PreferNpu` / `MaxEfficiency` — on Copilot+ PC if available; else N/A in matrix.
 4. Change policy → restart → confirm new fingerprint / sessions.
 
-**Benchmark harness:** `Trackdub.Benchmarks --windows-ml-device-policy <name>` configures `OnnxModelBenchmarkRunner`. For Windows ML catalog/device-policy routes (`dml`, `migraphx`, `auto`), non-`Explicit` policies use `SetEpSelectionPolicy` only (no explicit catalog-device append). `trt-rtx` uses the standalone EP ABI plugin and ignores Windows ML device policy. CPU and native CUDA/TensorRT benchmark routes also never apply device policy.
+**Benchmark harness:** `Trackdub.Benchmarks.DevHost --windows-ml-device-policy <name>` configures `OnnxModelBenchmarkRunner`. For Windows ML catalog/device-policy routes (`dml`, `migraphx`, `auto`), non-`Explicit` policies use `SetEpSelectionPolicy` only (no explicit catalog-device append). `trt-rtx` uses the standalone EP ABI plugin and ignores Windows ML device policy. CPU and native CUDA/TensorRT benchmark routes also never apply device policy.
 
 ## References
 
 - [Select execution providers (device policies)](https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers)
-- [ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md)
+- [ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md)

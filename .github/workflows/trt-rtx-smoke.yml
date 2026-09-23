@@ -59,7 +59,7 @@ jobs:
 
       - name: Build Benchmarks
         shell: pwsh
-        run: dotnet build src/Trackdub.Benchmarks/Trackdub.Benchmarks.csproj -f net10.0-windows10.0.19041.0 -m:1 --no-restore
+        run: dotnet build src/Trackdub.Benchmarks.DevHost/Trackdub.Benchmarks.DevHost.csproj -f net10.0-windows10.0.19041.0 -m:1 --no-restore
 
       - name: Download starter-pack models
         shell: pwsh
@@ -92,7 +92,7 @@ jobs:
       - name: Run TRT RTX provider smoke
         shell: pwsh
         run: |
-          dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 --no-build -- `
+          dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 --no-build -- `
             --scope trt-rtx-smoke `
             --provider trt-rtx `
             --runs 1 `

@@ -231,14 +231,35 @@ public sealed class InferenceRoutingEngineTests
         Assert.Equal(1, planner.PlanCallCount);
         Assert.Same(planner.LastPlan, selected.LastPlan);
 
-        // Summary is derived structurally from the plan (not from the adapter's mutable
-        // LastExecutionSummary), so it survives parallel synthesis without races.
+        // Summary combines the selected plan with the provider returned by this call.
         StageRuntimeExecutionSummary? summary = router.LastExecutionSummary;
         Assert.NotNull(summary);
         Assert.Equal("kokoro-model", summary!.ModelId);
         Assert.Equal("kokoro-alias", summary.ModelAlias);
         Assert.Equal("default", summary.ModelVariant);
         Assert.Equal(ExecutionProviderKind.Cpu.ToString(), summary.SelectedProvider);
+    }
+
+    [Fact]
+    public async Task RoutedTtsEngine_ReportsActualProviderAfterRuntimeFallback()
+    {
+        var planner = new StubRuntimePlanner("kokoro");
+        var adapter = new FakeTtsEngineAdapter("kokoro") { ResultProvider = "CPUExecutionProvider" };
+        var router = new RoutedTtsEngine(planner, [adapter]);
+        var request = new TtsSynthesisRequest(
+            "hello",
+            "en",
+            new VoiceCatalogEntry("voice", "en", "neutral", "Voice"),
+            Options: new InferenceRequestOptions(PreferredExecutionProvider: "trt-rtx"));
+
+        (TtsSynthesisResult result, StageRuntimeExecutionSummary? summary) =
+            await router.SynthesizeWithSummaryAsync(request, CancellationToken.None);
+
+        Assert.Equal("CPUExecutionProvider", result.Provider);
+        Assert.NotNull(summary);
+        Assert.Equal("trt-rtx", summary.RequestedProvider);
+        Assert.Equal("CPUExecutionProvider", summary.SelectedProvider);
+        Assert.Equal(summary, router.LastExecutionSummary);
     }
 
     [Fact]
@@ -531,6 +552,8 @@ public sealed class InferenceRoutingEngineTests
     {
         public string EngineFamily => engineFamily;
 
+        public string ResultProvider { get; init; } = ExecutionProviderKind.Cpu.ToString();
+
         public int CallCount { get; private set; }
 
         public TtsSynthesisRequest? LastRequest { get; private set; }
@@ -546,7 +569,7 @@ public sealed class InferenceRoutingEngineTests
             LastRequest = request;
             CallCount++;
             LastExecutionSummary = CreateSummary(engineFamily);
-            return Task.FromResult(new TtsSynthesisResult([], 0, 24000, $"{engineFamily}-model", request.Voice.VoiceId, engineFamily));
+            return Task.FromResult(new TtsSynthesisResult([], 0, 24000, $"{engineFamily}-model", request.Voice.VoiceId, ResultProvider));
         }
 
         public Task<TtsSynthesisResult> SynthesizeAsync(
@@ -558,7 +581,7 @@ public sealed class InferenceRoutingEngineTests
             LastPlan = plan;
             CallCount++;
             LastExecutionSummary = CreateSummary(engineFamily);
-            return Task.FromResult(new TtsSynthesisResult([], 0, 24000, $"{engineFamily}-model", request.Voice.VoiceId, engineFamily));
+            return Task.FromResult(new TtsSynthesisResult([], 0, 24000, $"{engineFamily}-model", request.Voice.VoiceId, ResultProvider));
         }
     }
 

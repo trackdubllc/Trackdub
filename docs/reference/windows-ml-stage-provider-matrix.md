@@ -56,7 +56,7 @@ Suggested commands:
 ```powershell
 dotnet build Trackdub.slnx -m:1
 dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~RuntimePlanner"
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --help
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --help
 ```
 
 ## Manifest `expected_runtime` (Phase 2)
@@ -71,7 +71,7 @@ This field is **governance / Model Manager hints only**; the runtime planner doe
 
 ## Device policy mode smoke (Phase 3)
 
-Set **Settings → Windows ML device policy** to each non-default value, **restart Trackdub**, then run one stage per policy. Harness shortcut: `Trackdub.Benchmarks --model silero-vad --provider dml --windows-ml-device-policy <name>` (catalog GPU; policy mode uses `SetEpSelectionPolicy`).
+Set **Settings → Windows ML device policy** to each non-default value, **restart Trackdub**, then run one stage per policy. Harness shortcut: `Trackdub.Benchmarks.DevHost --model silero-vad --provider dml --windows-ml-device-policy <name>` (catalog GPU; policy mode uses `SetEpSelectionPolicy`).
 
 | Policy | Stage exercised | Pass/fail | Actual EP | Notes |
 |--------|-----------------|-----------|-----------|-------|
@@ -89,7 +89,7 @@ TRT RTX is **not** a Windows ML catalog EP and is **not** selected by `WindowsMl
 
 | Stage | Representative model | Command / surface | Pass/fail | Actual EP | Notes |
 |-------|---------------------|-------------------|-----------|-----------|-------|
-| VAD | `onnx-community/silero-vad` | `Trackdub.Benchmarks --provider trt-rtx` | pending | *pending local GPU run* | Requires NVIDIA GPU + plugin bundle |
+| VAD | `onnx-community/silero-vad` | `Trackdub.Benchmarks.DevHost --provider trt-rtx` | pending | *pending local GPU run* | Requires NVIDIA GPU + plugin bundle |
 | Headless status | — | `trackdub providers trt-rtx status` | pass | `tensorrt-rtx-plugin-ep-abi` | ready=true on net10.0 + net10.0-windows (RTX 5070 host) |
 | Headless install | — | `trackdub providers trt-rtx install --accept-license` | pending | — | License-gated bundle download |
 | DubBench | same as benchmark | DubBench ONNX run after shared bootstrap | pending | — | Uses `BenchmarkOnnxExecutionBootstrap` |
@@ -114,7 +114,7 @@ Suggested smoke:
 ```powershell
 .\tools\dev\Fetch-TrtRtxEp.ps1
 $env:TRACKDUB_TRT_RTX_EP_DIR = "$env:LOCALAPPDATA\Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64"
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model onnx-community/silero-vad --provider trt-rtx --runs 1 --format console
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model onnx-community/silero-vad --provider trt-rtx --runs 1 --format console
 trackdub providers trt-rtx status
 ```
 

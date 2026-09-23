@@ -22,16 +22,16 @@ Do not duplicate “GPU ready” semantics between standalone OpenVINO install s
 | Session append | `OnnxExecutionSessionFactory.cs` — `NotSupportedException` until smoke path exists |
 | Milestone probe order | `StageRuntimeRequirements.cs` — **unchanged in 5c** |
 
-Stub marker: `#TODO(phase-5-catalog-ep)` in code; reference this doc and [ADR-0002 Phase 5](../adr/ADR-0002-windows-ml-provider-strategy.md).
+Stub marker: `#TODO(phase-5-catalog-ep)` in code; reference this doc and [ADR-0002 Phase 5](../decisions/ADR-0002-windows-ml-provider-strategy.md).
 
 ## Suggested smoke commands (when hardware exists)
 
 Windows TFM:
 
 ```powershell
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --help
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider dml
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <model-id> --windows-ml-device-policy PreferNpu
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --help
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider dml
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --windows-ml-device-policy PreferNpu
 ```
 
 When QNN / catalog OpenVINO CLI aliases exist, add matrix rows here. For TRT RTX smoke commands, use the plugin doc instead of this catalog checklist.
@@ -55,7 +55,7 @@ Update [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md
 
 ## References
 
-- [ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md)
+- [ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md)
 - [windows-ml-phase-3-device-policies.md](windows-ml-phase-3-device-policies.md)
 - [windows-ml-phase-4-closeout.md](windows-ml-phase-4-closeout.md)
 - [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md)

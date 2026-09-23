@@ -1,4 +1,4 @@
-﻿# Trackdub performance profiling report
+# Trackdub performance profiling report
 
 > **Status:** DRAFT — scaffold (M20 PR4). Numbers marked *pending local run* are placeholders until measured on a reference machine.
 > **Last updated:** 2026-06-13
@@ -15,7 +15,7 @@ Use the same procedure on every run so rows in this report stay comparable.
 | Export throughput | Wall clock around export command; note FFmpeg profile and segment count | duration, real-time factor |
 | SQLite plans | `dotnet test tests/Trackdub.Infrastructure.Tests --filter FullyQualifiedName~Explain` | pass/fail + index names |
 | UI layout | `Trackdub.UI.Tests` layout facts; PNG only when `CAPTURE_UI_SCREENSHOTS=1` | test name + optional PNG path |
-| Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
+| Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
 
 **Rules:** never collapse provider registered, model downloaded, stage ran, and stage succeeded. Label every number as *measured on reference machine* or *pending local run*. Do not copy example rows below into release notes as real data.
 
@@ -96,7 +96,7 @@ Hot paths audited in `tests/Trackdub.Infrastructure.Tests/SqliteExplainQueryPlan
 
 | Source | Location | Status |
 |---|---|---|
-| DubBench / `Trackdub.Benchmarks` harness | `src/Trackdub.Benchmarks` | *pending local run* — capture baseline JSON or log excerpt |
+| DubBench / `Trackdub.Benchmarks` harness | `src/Trackdub.Benchmarks` | Initial controlled local samples and raw report IDs in [benchmark evidence](../development/benchmark-evidence.md); comparison medians pending compatible repeats |
 | Inference session pool tests | `tests/` (session pooling) | present in repo; link results in follow-up |
 | User benchmark SQLite (`BenchmarkRuns` table) | per-user DB | wired on `main` via M19; link results in follow-up |
 | Hardware profiler history recorder | `src/Trackdub.Composition/HardwareProfiler` | present on `main`; capture history path in follow-up |
@@ -109,7 +109,7 @@ Record commit hash, model manifest IDs, and EP selection policy (`WindowsMlExecu
 |---|---|
 | Model id | *pending local run* (`onnx-community/silero-vad` suggested) |
 | Plugin version | `0.3.0/cu12` |
-| Command | `Trackdub.Benchmarks --provider trt-rtx --runs 1 --format console` |
+| Command | `Trackdub.Benchmarks.DevHost --provider trt-rtx --runs 1 --format console` |
 | Headless probe | `trackdub providers trt-rtx status` |
 | Wall time (ms) | *pending local run* |
 | Actual EP reported | *pending local run* (`NvTensorRTRTXExecutionProvider`) |

@@ -1,5 +1,6 @@
 using Trackdub.Benchmarks;
 using Trackdub.Domain;
+using Trackdub.Contracts.Benchmarking;
 
 namespace DubBench.Services;
 
@@ -19,7 +20,11 @@ public interface IBenchmarkRunnerService
     Task<AudioPrepBenchmarkReport> RunAudioPrepBenchmarkAsync(AudioPrepBenchmarkOptions options, CancellationToken ct = default);
 
     /// <summary>
-    /// Runs dubbing pipeline estimate using <see cref="DubbingBenchmarkRunner"/>.
+    /// Runs the dubbing pipeline using <see cref="DubbingBenchmarkRunner"/>.
     /// </summary>
     Task<DubbingBenchmarkReport> RunDubbingBenchmarkAsync(DubbingBenchmarkOptions options, CancellationToken ct = default);
+
+    /// <summary>Runs an isolated fixture and persists controlled benchmark evidence.</summary>
+    Task<BenchmarkEvidenceReport> RunControlledDubbingBenchmarkAsync(
+        ControlledDubbingBenchmarkOptions options, CancellationToken ct = default);
 }

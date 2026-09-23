@@ -204,7 +204,7 @@ Benchmark smoke on a Windows NVIDIA RTX machine with the plugin bundle available
 
 ```powershell
 $env:TRACKDUB_TRT_RTX_EP_DIR = "$env:LOCALAPPDATA\Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64"
-dotnet run --project src/Trackdub.Benchmarks -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider trt-rtx --runs 1 --format console
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider trt-rtx --runs 1 --format console
 ```
 
 For explicit session testing, inspect the selected provider in benchmark output. Do not infer success from plugin registration logs alone.
@@ -239,7 +239,7 @@ When NVIDIA ships a new `TensorRT-RTX-EP-ABI` GitHub release:
 1. Run `tools/dev/Update-TrtRtxEpManifest.ps1 -Version <x.y.z>` to refresh `runtime/trt-rtx-ep.manifest.json` (URLs, SHA-256, size).
 2. Update `TensorRtRtxProviderConstants.BundledVersion`, install hints, and default install path segments if the version changed.
 3. Run `tools/dev/Fetch-TrtRtxEp.ps1` locally and verify `trackdub providers trt-rtx status`.
-4. Run optional GPU smoke (`.github/workflows/trt-rtx-smoke.yml`) or `Trackdub.Benchmarks --provider trt-rtx`.
+4. Run optional GPU smoke (`.github/workflows/trt-rtx-smoke.yml`) or `Trackdub.Benchmarks.DevHost --provider trt-rtx`.
 5. Run `trackdub doctor` and advise users with stale engines to `trackdub cache clear engines` after upgrading the EP bundle.
 
 ## CI optional GPU tier
@@ -252,10 +252,10 @@ Default CI (`ci.yml`) stays unit/fake-backed. Optional smoke workflow: `.github/
 | `TRACKDUB_TRT_RTX_EP_DIR` | Plugin directory after fetch (workflow sets from default install root) |
 | `TRACKDUB_TRT_RTX_SMOKE=1` | Test attribute gate for optional integration tests (`RequiresTrtRtxFactAttribute`) |
 
-The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then one `Trackdub.Benchmarks --provider trt-rtx` invocation. It uses `continue-on-error: true` until the GPU runner is stable.
+The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then one `Trackdub.Benchmarks.DevHost --provider trt-rtx` invocation. A nonzero smoke exit fails the job.
 
 ## References
 
 - [ONNX Runtime TensorRT RTX EP](https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html)
 - [ONNX Runtime plugin EP usage](https://onnxruntime.ai/docs/execution-providers/plugin-ep-libraries/usage.html)
-- [ADR-0002 Windows ML provider strategy](../adr/ADR-0002-windows-ml-provider-strategy.md)
+- [ADR-0002 Windows ML provider strategy](../decisions/ADR-0002-windows-ml-provider-strategy.md)

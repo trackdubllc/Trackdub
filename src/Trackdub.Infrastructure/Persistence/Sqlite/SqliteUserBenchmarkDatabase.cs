@@ -51,6 +51,16 @@ public sealed class SqliteUserBenchmarkDatabase
 
             CREATE INDEX IF NOT EXISTS IX_BenchmarkRuns_EvidenceId
                 ON BenchmarkRuns (EvidenceId, Scenario);
+
+            CREATE TABLE IF NOT EXISTS BenchmarkEvidenceReports (
+                RunId TEXT NOT NULL PRIMARY KEY,
+                Kind TEXT NOT NULL,
+                CompletedAtUtc TEXT NOT NULL,
+                ReportFileName TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS IX_BenchmarkEvidenceReports_Recent
+                ON BenchmarkEvidenceReports (Kind, CompletedAtUtc DESC);
             """;
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.ML.OnnxRuntime;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
 
 namespace Trackdub.Inference.Onnx.Pool;
@@ -188,7 +189,8 @@ internal sealed class InferenceSessionPool : IDisposable
             {
                 try
                 {
-                    await existing.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    using (BenchmarkPhaseCapture.Start("pool-wait"))
+                        await existing.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
                     if (disposed)
                     {
                         ReleaseLeaseEntry(existing);
@@ -212,7 +214,8 @@ internal sealed class InferenceSessionPool : IDisposable
             // EvictModelAsync(), and GetLeaseAsync() for all other keys behind one load.
             bool ephemeral;
             PoolEntry? lruEvicted1 = null;
-            await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            using (BenchmarkPhaseCapture.Start("pool-creation-lock-wait"))
+                await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 // Re-check disposal after waiting on the creation lock so we do not create a
@@ -245,7 +248,9 @@ internal sealed class InferenceSessionPool : IDisposable
 
             // Phase 2: create the session OUTSIDE the creation lock so that Dispose(),
             // EvictModelAsync(), and GetLeaseAsync() for other keys are not blocked.
-            InferenceSession session = await factory(cancellationToken).ConfigureAwait(false);
+            InferenceSession session;
+            using (BenchmarkPhaseCapture.Start("session-create"))
+                session = await factory(cancellationToken).ConfigureAwait(false);
             var freshEntry = new PoolEntry(session, ephemeral);
 
             if (freshEntry.Ephemeral)

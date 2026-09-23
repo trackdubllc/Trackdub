@@ -8,6 +8,7 @@ using Trackdub.Domain;
 using Trackdub.Inference.Runtime.ModelManifest;
 using Trackdub.TestDoubles;
 #if WINDOWS
+using Trackdub.Inference;
 using Trackdub.Inference.Onnx;
 using Microsoft.ML.OnnxRuntime;
 #endif
