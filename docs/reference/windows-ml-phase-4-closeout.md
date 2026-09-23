@@ -52,7 +52,7 @@ Update [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md
 
 ## Workstream E — ADR
 
-[ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md) Phase 4 section.
+[ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md) Phase 4 section.
 
 ## Related
 

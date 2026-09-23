@@ -498,7 +498,7 @@ Source: `src/DubBench/App.axaml`, `src/Trackdub.Contracts/IStudioSettingsService
 
 # Implementation Plan  -  G3: Cloud Egress Visibility & Consent
 
-**Source:** [design-g3-cloud-egress-visibility.md](design-g3-cloud-egress-visibility.md)
+**Source:** [design-g3-cloud-egress-visibility.md](../specs/design-g3-cloud-egress-visibility.md)
 
 **Prerequisite:** G5 Phase 1–2 (Contracts + Application Evaluate + Panel) must land first. G3 builds on ReadinessState, IPipelineReadinessService, and the readiness panel.
 
@@ -611,7 +611,7 @@ Assert guards in cloud engines.
 
 # Implementation Plan  -  G4: Run Progress & ETA
 
-**Source:** [design-g4-run-progress-eta.md](design-g4-run-progress-eta.md)
+**Source:** [design-g4-run-progress-eta.md](../specs/design-g4-run-progress-eta.md)
 
 ---
 
@@ -731,7 +731,7 @@ Update CliProgressReporter for Progress kind.
 
 # Implementation Plan  -  G5: Consolidated Pipeline Readiness Gate
 
-**Source:** [design-g5-readiness-gate.md](design-g5-readiness-gate.md)
+**Source:** [design-g5-readiness-gate.md](../specs/design-g5-readiness-gate.md)
 
 ---
 
@@ -790,7 +790,7 @@ Verify SpeakerDiarizationStage calls CreateRuntimeSelections(snapshot), not Crea
 
 # Implementation Plan  -  G7: Export Provenance & Attribution
 
-**Source:** [design-g6-g7-attribution-provenance.md](design-g6-g7-attribution-provenance.md)
+**Source:** [design-g6-g7-attribution-provenance.md](../specs/design-g6-g7-attribution-provenance.md)
 
 ---
 
@@ -923,7 +923,7 @@ Show in export success view.
 | Devices | `WindowsDeviceEnumerator.cs`, `LinuxDeviceEnumerator.cs` |
 | Studio hardware overrides | `HardwareOverrideCatalog.cs`, `IStudioSettingsService.HardwareOverrides` |
 | DI | `CompositionRoot.AddInference` |
-| Strategy doc | [ADR-0002-windows-ml-provider-strategy.md](../adr/ADR-0002-windows-ml-provider-strategy.md) |
+| Strategy doc | [ADR-0002-windows-ml-provider-strategy.md](../decisions/ADR-0002-windows-ml-provider-strategy.md) |
 
 # Olive recipe pilot
 
@@ -1362,7 +1362,7 @@ The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then
 
 - [ONNX Runtime TensorRT RTX EP](https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html)
 - [ONNX Runtime plugin EP usage](https://onnxruntime.ai/docs/execution-providers/plugin-ep-libraries/usage.html)
-- [ADR-0002 Windows ML provider strategy](../adr/ADR-0002-windows-ml-provider-strategy.md)
+- [ADR-0002 Windows ML provider strategy](../decisions/ADR-0002-windows-ml-provider-strategy.md)
 
 # Windows ML Phase 3: device policies
 
@@ -1420,7 +1420,7 @@ After explicit matrix baseline on hardware:
 ## References
 
 - [Select execution providers (device policies)](https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers)
-- [ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md)
+- [ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md)
 
 # Windows ML Phase 4 closeout
 
@@ -1476,7 +1476,7 @@ Update [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md
 
 ## Workstream E  -  ADR
 
-[ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md) Phase 4 section.
+[ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md) Phase 4 section.
 
 ## Related
 
@@ -1506,7 +1506,7 @@ Do not duplicate “GPU ready” semantics between standalone OpenVINO install s
 | Session append | `OnnxExecutionSessionFactory.cs`  -  `NotSupportedException` until smoke path exists |
 | Milestone probe order | `StageRuntimeRequirements.cs`  -  **unchanged in 5c** |
 
-Stub marker: `#TODO(phase-5-catalog-ep)` in code; reference this doc and [ADR-0002 Phase 5](../adr/ADR-0002-windows-ml-provider-strategy.md).
+Stub marker: `#TODO(phase-5-catalog-ep)` in code; reference this doc and [ADR-0002 Phase 5](../decisions/ADR-0002-windows-ml-provider-strategy.md).
 
 ## Suggested smoke commands (when hardware exists)
 
@@ -1539,14 +1539,14 @@ Update [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md
 
 ## References
 
-- [ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md)
+- [ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md)
 - [windows-ml-phase-3-device-policies.md](windows-ml-phase-3-device-policies.md)
 - [windows-ml-phase-4-closeout.md](windows-ml-phase-4-closeout.md)
 - [windows-ml-stage-provider-matrix.md](windows-ml-stage-provider-matrix.md)
 
 # Windows ML stage provider matrix (Phase 2)
 
-Internal audit companion for [ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md) stage catalog alignment.
+Internal audit companion for [ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md) stage catalog alignment.
 
 ## Planner intersection
 

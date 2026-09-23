@@ -54,4 +54,4 @@ After explicit matrix baseline on hardware:
 ## References
 
 - [Select execution providers (device policies)](https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers)
-- [ADR-0002](../adr/ADR-0002-windows-ml-provider-strategy.md)
+- [ADR-0002](../decisions/ADR-0002-windows-ml-provider-strategy.md)
