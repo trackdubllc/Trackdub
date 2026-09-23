@@ -150,9 +150,12 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
         {
             StartedAtUtc = stage.StartedAtUtc?.ToUniversalTime(),
             CompletedAtUtc = stage.CompletedAtUtc?.ToUniversalTime(),
-            Name = Scrub(stage.Name)!, Reason = Scrub(stage.Reason),
-            RequestedModel = Scrub(stage.RequestedModel), ActualModel = Scrub(stage.ActualModel),
-            RequestedProvider = Scrub(stage.RequestedProvider), ActualProvider = Scrub(stage.ActualProvider)
+            Name = Scrub(stage.Name)!,
+            Reason = Scrub(stage.Reason),
+            RequestedModel = Scrub(stage.RequestedModel),
+            ActualModel = Scrub(stage.ActualModel),
+            RequestedProvider = Scrub(stage.RequestedProvider),
+            ActualProvider = Scrub(stage.ActualProvider)
         }).ToArray()
     };
 

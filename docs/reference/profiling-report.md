@@ -15,7 +15,7 @@ Use the same procedure on every run so rows in this report stay comparable.
 | Export throughput | Wall clock around export command; note FFmpeg profile and segment count | duration, real-time factor |
 | SQLite plans | `dotnet test tests/Trackdub.Infrastructure.Tests --filter FullyQualifiedName~Explain` | pass/fail + index names |
 | UI layout | `Trackdub.UI.Tests` layout facts; PNG only when `CAPTURE_UI_SCREENSHOTS=1` | test name + optional PNG path |
-| Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks.DevHost -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
+| Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
 
 **Rules:** never collapse provider registered, model downloaded, stage ran, and stage succeeded. Label every number as *measured on reference machine* or *pending local run*. Do not copy example rows below into release notes as real data.
 

@@ -54,7 +54,7 @@ dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows 
 # Filter builds & benchmarks
 dotnet build Trackdub.Inference.slnx -m:1
 dotnet build Trackdub.Sdk.slnx -m:1
-dotnet run --project src/Trackdub.Benchmarks.DevHost -- --help
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- --help
 ```
 
 ## Coding Style & Testing

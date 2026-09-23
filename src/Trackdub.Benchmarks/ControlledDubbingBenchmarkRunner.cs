@@ -151,14 +151,9 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     DubbingRunResult preparation = await ExecuteAsync(
                         host, fixtureCopy, projectPath, options, prerequisites, true, cancellationToken).ConfigureAwait(false);
                     timings["prerequisites"] = Stopwatch.GetElapsedTime(prerequisiteStart).TotalMilliseconds;
-                    if (preparation.OverallStatus != DubbingRunStatus.Succeeded ||
-                        preparation.StageOutcomes.Any(x => x.Status != StageStatus.Succeeded))
-                    {
-                        reason = "Prerequisite preparation did not complete successfully.";
-                        status = BenchmarkEvidenceStatus.Skipped;
-                        stages = MapStages(preparation, [], null, null);
-                        throw new PreparationIncompleteException();
-                    }
+                    RequirePreparationSucceeded(
+                        preparation, "Prerequisite preparation did not complete successfully.",
+                        out reason, out status, out stages);
                 }
             }
 
@@ -169,14 +164,9 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 DubbingRunResult warmup = await ExecuteAsync(
                     host, fixtureCopy, projectPath, options, filter, true, cancellationToken).ConfigureAwait(false);
                 timings["warmup"] = Stopwatch.GetElapsedTime(warmupStart).TotalMilliseconds;
-                if (warmup.OverallStatus != DubbingRunStatus.Succeeded ||
-                    warmup.StageOutcomes.Any(x => x.Status != StageStatus.Succeeded))
-                {
-                    reason = "Warm-host preparation did not complete successfully.";
-                    status = BenchmarkEvidenceStatus.Skipped;
-                    stages = MapStages(warmup, [], null, null);
-                    throw new PreparationIncompleteException();
-                }
+                RequirePreparationSucceeded(
+                    warmup, "Warm-host preparation did not complete successfully.",
+                    out reason, out status, out stages);
             }
             if (options.Mode == "artifact-resume")
             {
@@ -262,7 +252,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         catch (Exception ex)
         {
             status = BenchmarkEvidenceStatus.Failed;
-            reason = ex.GetType().Name;
+            reason = $"{ex.GetType().Name}: {ex.Message}";
         }
         finally
         {
@@ -332,7 +322,11 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 MemoryBytes = memory,
                 Stages = stages,
             };
-            await _history.SaveAsync(report, cancellationToken).ConfigureAwait(false);
+            using var saveTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            CancellationToken saveToken = status == BenchmarkEvidenceStatus.Canceled
+                ? saveTimeout.Token
+                : cancellationToken;
+            await _history.SaveAsync(report, saveToken).ConfigureAwait(false);
             return report;
         }
     }
@@ -409,6 +403,29 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         StageNames.LipSynthesis => RuntimeStage.LipSynthesis,
         _ => null,
     };
+
+    private static void RequirePreparationSucceeded(
+        DubbingRunResult preparation,
+        string failureMessage,
+        out string? reason,
+        out BenchmarkEvidenceStatus status,
+        out IReadOnlyList<BenchmarkEvidenceStage> stages)
+    {
+        if (preparation.OverallStatus != DubbingRunStatus.Succeeded ||
+            preparation.StageOutcomes.Any(x => x.Status != StageStatus.Succeeded &&
+                !(x.Status == StageStatus.Skipped &&
+                    StageSkipReasonCodes.IsBenignSkip(x.ReasonCode))))
+        {
+            reason = failureMessage;
+            status = BenchmarkEvidenceStatus.Skipped;
+            stages = MapStages(preparation, [], null, null);
+            throw new PreparationIncompleteException();
+        }
+
+        reason = null;
+        status = BenchmarkEvidenceStatus.Skipped;
+        stages = [];
+    }
 
     private static Task<DubbingRunResult> ExecuteAsync(
         HeadlessDubbingHost host, string fixture, string project, ControlledDubbingBenchmarkOptions options,

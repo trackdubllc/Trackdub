@@ -252,7 +252,7 @@ Default CI (`ci.yml`) stays unit/fake-backed. Optional smoke workflow: `.github/
 | `TRACKDUB_TRT_RTX_EP_DIR` | Plugin directory after fetch (workflow sets from default install root) |
 | `TRACKDUB_TRT_RTX_SMOKE=1` | Test attribute gate for optional integration tests (`RequiresTrtRtxFactAttribute`) |
 
-The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then one `Trackdub.Benchmarks.DevHost --provider trt-rtx` invocation. It uses `continue-on-error: true` until the GPU runner is stable.
+The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then one `Trackdub.Benchmarks.DevHost --provider trt-rtx` invocation. A nonzero smoke exit fails the job.
 
 ## References
 

@@ -994,7 +994,7 @@ Use the same procedure on every run so rows in this report stay comparable.
 | Export throughput | Wall clock around export command; note FFmpeg profile and segment count | duration, real-time factor |
 | SQLite plans | `dotnet test tests/Trackdub.Infrastructure.Tests --filter FullyQualifiedName~Explain` | pass/fail + index names |
 | UI layout | `Trackdub.UI.Tests` layout facts; PNG only when `CAPTURE_UI_SCREENSHOTS=1` | test name + optional PNG path |
-| Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks.DevHost -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
+| Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
 
 **Rules:** never collapse provider registered, model downloaded, stage ran, and stage succeeded. Label every number as *measured on reference machine* or *pending local run*. Do not copy example rows below into release notes as real data.
 
@@ -1356,7 +1356,7 @@ Default CI (`ci.yml`) stays unit/fake-backed. Optional smoke workflow: `.github/
 | `TRACKDUB_TRT_RTX_EP_DIR` | Plugin directory after fetch (workflow sets from default install root) |
 | `TRACKDUB_TRT_RTX_SMOKE=1` | Test attribute gate for optional integration tests (`RequiresTrtRtxFactAttribute`) |
 
-The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then one `Trackdub.Benchmarks.DevHost --provider trt-rtx` invocation. It uses `continue-on-error: true` until the GPU runner is stable.
+The smoke job runs `Fetch-TrtRtxEp.ps1`, exports `TRACKDUB_TRT_RTX_EP_DIR`, then one `Trackdub.Benchmarks.DevHost --provider trt-rtx` invocation. A nonzero smoke exit fails the job.
 
 ## References
 

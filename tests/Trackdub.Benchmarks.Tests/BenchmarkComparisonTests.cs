@@ -76,6 +76,34 @@ public sealed class BenchmarkComparisonTests
         Assert.Single(comparison.Accepted);
     }
 
+    [Fact]
+    public void CompareAcceptsDirectMlRequestAgainstDmlLabel()
+    {
+        BenchmarkEvidenceReport directMl = Sample(10) with
+        {
+            RequestedProvider = "DirectMl",
+            ActualProvider = "dml",
+        };
+
+        BenchmarkComparisonResult comparison = BenchmarkComparison.Compare([directMl]);
+
+        Assert.Single(comparison.Accepted);
+    }
+
+    [Fact]
+    public void CompareAcceptsExecutionProviderSuffixedRequest()
+    {
+        BenchmarkEvidenceReport directMl = Sample(10) with
+        {
+            RequestedProvider = "CPUExecutionProvider",
+            ActualProvider = "cpu",
+        };
+
+        BenchmarkComparisonResult comparison = BenchmarkComparison.Compare([directMl]);
+
+        Assert.Single(comparison.Accepted);
+    }
+
     private static BenchmarkEvidenceReport Sample(double milliseconds) => new()
     {
         RunId = Guid.NewGuid(),

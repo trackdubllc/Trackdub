@@ -23,8 +23,18 @@ public static class BenchmarkComparison
     internal static bool ProviderMatches(string requested, string actual) =>
         string.Equals(NormalizeProvider(requested), NormalizeProvider(actual), StringComparison.Ordinal);
 
-    private static string NormalizeProvider(string provider) =>
-        new(provider.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+    private static string NormalizeProvider(string provider)
+    {
+        string key = new(provider.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        if (key.EndsWith("executionprovider", StringComparison.Ordinal))
+            key = key[..^"executionprovider".Length];
+        return key switch
+        {
+            "dml" => "directml",
+            "nvtensorrtrtx" or "trtrtx" => "tensorrtrtx",
+            _ => key,
+        };
+    }
 
     public static BenchmarkComparisonResult Compare(
         IReadOnlyList<BenchmarkEvidenceReport> samples, string metric = "pipeline")
