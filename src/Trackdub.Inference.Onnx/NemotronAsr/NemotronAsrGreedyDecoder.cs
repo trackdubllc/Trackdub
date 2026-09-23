@@ -24,8 +24,11 @@ internal sealed class NemotronAsrGreedyDecoder(
 
     public string? DetectedLanguage { get; private set; }
 
-    private static readonly string[] EncoderUnboundOutputNames =
-        ["encoded", "encoded_len", "cache_last_channel_len_next"];
+    // RunWithBindingAndNames pairs these names positionally with OrtIoBinding.GetOutputValues(),
+    // which returns only bound outputs, in bind order. Must match the BindOutput* order in
+    // BindEncoderInputs exactly.
+    private static readonly string[] EncoderBoundOutputNames =
+        ["encoded", "encoded_len", "cache_last_channel_len_next", "cache_last_channel_next", "cache_last_time_next"];
 
     public IReadOnlyList<int> Decode(float[,] mel, long promptIndex)
     {
@@ -85,14 +88,14 @@ internal sealed class NemotronAsrGreedyDecoder(
                     promptIndex);
                 try
                 {
-                    // cache_last_channel_next / cache_last_time_next are bound directly to the ping-pong
-                    // buffer's output slot (see BindEncoderInputs) and read from there after Swap() below —
-                    // they are deliberately NOT in EncoderUnboundOutputNames, so no CloneTensor round-trip.
+                    // cache_last_channel_next / cache_last_time_next are written straight into the ping-pong
+                    // buffer's output slot (see BindEncoderInputs) and read from there after Swap() below, so
+                    // they need no CloneTensor round-trip.
                     using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
                         sessionLease.EncoderSession.RunWithBindingAndNamesRetry(
                             encoderRunOptions,
                             encoderBinding,
-                            EncoderUnboundOutputNames,
+                            EncoderBoundOutputNames,
                             provider: providerHint);
 
                     Tensor<float> encoded = GetTensor<float>(encoderResults, "encoded");
@@ -214,6 +217,9 @@ internal sealed class NemotronAsrGreedyDecoder(
         binding.BindInput("cache_last_channel", cacheLastChannel.CurrentInput);
         binding.BindInput("cache_last_time", cacheLastTime.CurrentInput);
         binding.BindInput("cache_last_channel_len", cacheLastChannelLenValue);
+        binding.BindOutputToDevice("encoded", OrtMemoryInfo.DefaultInstance);
+        binding.BindOutputToDevice("encoded_len", OrtMemoryInfo.DefaultInstance);
+        binding.BindOutputToDevice("cache_last_channel_len_next", OrtMemoryInfo.DefaultInstance);
         binding.BindOutput("cache_last_channel_next", cacheLastChannel.CurrentOutput);
         binding.BindOutput("cache_last_time_next", cacheLastTime.CurrentOutput);
 
