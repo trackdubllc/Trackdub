@@ -1,66 +1,87 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DubBench.Models;
-using DubBench.Services;
+using Trackdub.Contracts.Benchmarking;
+using Trackdub.Contracts.Persistence;
 
 namespace DubBench.ViewModels;
 
+public sealed record LocalBenchmarkEntry(
+    Guid RunId,
+    string Scenario,
+    string RunMode,
+    string Status,
+    string Provider,
+    string Duration,
+    DateTimeOffset CompletedAtUtc);
+
 public sealed partial class LeaderboardTabViewModel : ObservableObject, ITabViewModel
 {
-    private readonly ILocalScoreCacheService _cache;
+    private readonly IBenchmarkEvidenceRepository _history;
 
-    public string Title => "Leaderboard";
-    public string IconGlyph => "\U0001F3C6";
+    public string Title => "Local Runs";
+    public string IconGlyph => "\U0001F4CA";
 
     [ObservableProperty]
     private bool _isSelected;
 
     [ObservableProperty]
-    private bool _isLocalMock = true;
+    private bool _isLoading;
 
     [ObservableProperty]
-    private string _disclaimerText = "\u26A0 LOCAL MOCK \u2014 no backend. Scores cached locally only.";
+    private string _statusMessage = "No measured benchmark runs yet.";
 
     [ObservableProperty]
-    private int _scoreCount;
+    private int _runCount;
 
-    [ObservableProperty]
-    private string _lastUpdatedText = "Never";
+    public ObservableCollection<LocalBenchmarkEntry> Entries { get; } = new();
 
-    public ObservableCollection<LeaderboardEntry> Entries { get; } = new();
-
-    public LeaderboardTabViewModel(ILocalScoreCacheService cache)
+    public LeaderboardTabViewModel(IBenchmarkEvidenceRepository history)
     {
-        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
-        LoadFromCache();
+        _history = history ?? throw new ArgumentNullException(nameof(history));
+        _ = RefreshAsync();
     }
 
     [RelayCommand]
-    private void Refresh()
+    private async Task RefreshAsync()
     {
-        _cache.Refresh();
-        LoadFromCache();
-    }
+        if (IsLoading)
+            return;
 
-    public void SaveToCache(LeaderboardEntry entry)
-    {
-        ArgumentNullException.ThrowIfNull(entry);
-        _cache.AddEntry(entry);
-        LoadFromCache();
-    }
-
-    private void LoadFromCache()
-    {
-        Entries.Clear();
-        foreach (LeaderboardEntry entry in _cache.GetEntries())
+        try
         {
-            Entries.Add(entry);
-        }
+            IsLoading = true;
+            IReadOnlyList<BenchmarkEvidenceReport> reports = await _history.ListRecentAsync(
+                BenchmarkEvidenceKind.Benchmark, 100);
+            Entries.Clear();
+            foreach (BenchmarkEvidenceReport report in reports)
+            {
+                string provider = report.ActualProvider ?? "Unknown provider";
+                string duration = report.TimingsMilliseconds.TryGetValue("total", out double? total) && total.HasValue
+                    ? $"{total.Value:F0} ms"
+                    : "Time unavailable";
+                Entries.Add(new LocalBenchmarkEntry(
+                    report.RunId,
+                    report.Scenario,
+                    report.RunMode,
+                    report.Status.ToString(),
+                    provider,
+                    duration,
+                    report.CompletedAtUtc));
+            }
 
-        ScoreCount = Entries.Count;
-        LastUpdatedText = Entries.Count > 0
-            ? Entries.Max(e => e.Timestamp).ToString("g")
-            : "No entries yet";
+            RunCount = Entries.Count;
+            StatusMessage = RunCount == 0
+                ? "No measured benchmark runs yet. Run a configured benchmark, then refresh."
+                : $"{RunCount} local benchmark run{(RunCount == 1 ? string.Empty : "s")}.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not load local runs: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 }

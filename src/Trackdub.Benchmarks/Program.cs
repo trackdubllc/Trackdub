@@ -50,6 +50,13 @@ public static class Program
         CancellationToken cancellationToken)
     {
         if (args.Length > 0 &&
+            args[0].Equals("controlled", StringComparison.OrdinalIgnoreCase))
+        {
+            return await RunControlledAsync(args.Skip(1).ToArray(), output, error, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (args.Length > 0 &&
             args[0].Equals("audio-prep", StringComparison.OrdinalIgnoreCase))
         {
             return await RunAudioPrepAsync(args.Skip(1).ToArray(), output, error, cancellationToken).ConfigureAwait(false);
@@ -131,6 +138,82 @@ public static class Program
         catch (Exception ex)
         {
             error.WriteLine(ex.ToString());
+            return 1;
+        }
+    }
+
+    private static async Task<int> RunControlledAsync(
+        string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken)
+    {
+        if (args.Length == 0 || args[0] is "--help" or "-h")
+        {
+            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>]");
+            return args.Length == 0 ? 1 : 0;
+        }
+        string? outputDirectory = null, stage = null, model = null, provider = null;
+        string? sourceLanguage = null, modelDirectory = null, ffmpeg = null, ffprobe = null;
+        string language = "es", mode = "fresh-process";
+        bool reuseCache = false;
+        for (int index = 1; index < args.Length; index++)
+        {
+            if (args[index] == "--reuse-engine-cache")
+            {
+                reuseCache = true;
+                continue;
+            }
+            if (index + 1 >= args.Length)
+            {
+                error.WriteLine($"Missing value for {args[index]}.");
+                return 1;
+            }
+            string value = args[++index];
+            switch (args[index - 1])
+            {
+                case "--output": outputDirectory = value; break;
+                case "--stage": stage = value; break;
+                case "--model": model = value; break;
+                case "--provider": provider = value; break;
+                case "--mode": mode = value; break;
+                case "--language": language = value; break;
+                case "--source-language": sourceLanguage = value; break;
+                case "--model-directory": modelDirectory = value; break;
+                case "--ffmpeg": ffmpeg = value; break;
+                case "--ffprobe": ffprobe = value; break;
+                default:
+                    error.WriteLine($"Unknown option {args[index - 1]}.");
+                    return 1;
+            }
+        }
+        if (outputDirectory is null)
+        {
+            error.WriteLine("--output is required.");
+            return 1;
+        }
+        try
+        {
+            var report = await new ControlledDubbingBenchmarkRunner().RunAsync(
+                new ControlledDubbingBenchmarkOptions
+                {
+                    FixturePath = args[0],
+                    OutputDirectory = outputDirectory,
+                    Stage = stage,
+                    Model = model,
+                    Provider = provider,
+                    Mode = mode,
+                    ReuseEngineCache = reuseCache,
+                    TargetLanguage = language,
+                    SourceLanguage = sourceLanguage,
+                    ModelDirectory = modelDirectory,
+                    FfmpegPath = ffmpeg,
+                    FfprobePath = ffprobe,
+                }, cancellationToken).ConfigureAwait(false);
+            output.WriteLine($"Evidence {report.RunId:N}: {report.Status} ({report.RunMode}, {report.Scenario})");
+            if (report.Reason is not null) output.WriteLine(report.Reason);
+            return report.Status == Trackdub.Contracts.Benchmarking.BenchmarkEvidenceStatus.Completed ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            error.WriteLine(ex.Message);
             return 1;
         }
     }

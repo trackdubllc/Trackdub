@@ -21,6 +21,7 @@ Composition → Application, Inference, Inference.Onnx, Infrastructure, Licensin
 Sdk → Application, Composition, Licensing
 Cli → Sdk
 DubBench → Benchmarks, Domain, Inference, Inference.Onnx
+DubBench.DevHost → DubBench, Infrastructure
 Benchmarks → Application, Composition, Domain, Inference, Inference.Onnx, Infrastructure
 Tools → Application, Domain, Infrastructure, Media
 Contracts → Domain

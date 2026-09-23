@@ -14,7 +14,7 @@
       <TextBlock Text="Dubbing Benchmark"
                  FontSize="18" FontWeight="SemiBold"
                  Foreground="{DynamicResource ThemeForegroundBrush}" />
-      <TextBlock Text="Estimate full dubbing pipeline performance for video input."
+      <TextBlock Text="Run the dubbing pipeline with a selected video and measure stage durations."
                  TextWrapping="Wrap" Opacity="0.7"
                  Foreground="{DynamicResource ThemeForegroundBrush}" />
 
@@ -43,7 +43,7 @@
       <StackPanel Spacing="4">
         <TextBlock Text="Input Video Path" FontWeight="SemiBold" />
         <TextBox Text="{Binding InputPath}"
-                 PlaceholderText="Path to video file for dubbing estimate..." />
+                 PlaceholderText="Path to video file for dubbing benchmark..." />
       </StackPanel>
 
       <!-- Target language -->
@@ -53,10 +53,32 @@
                  Width="120" HorizontalAlignment="Left" />
       </StackPanel>
 
+      <StackPanel Spacing="4">
+        <TextBlock Text="Stage (blank for full pipeline)" FontWeight="SemiBold" />
+        <TextBox Text="{Binding Stage}" PlaceholderText="asr, translation, tts, or export" />
+      </StackPanel>
+      <StackPanel Spacing="4">
+        <TextBlock Text="Requested Model (optional)" FontWeight="SemiBold" />
+        <TextBox Text="{Binding RequestedModel}" />
+      </StackPanel>
+      <StackPanel Spacing="4">
+        <TextBlock Text="Requested Provider (optional)" FontWeight="SemiBold" />
+        <TextBox Text="{Binding RequestedProvider}" />
+      </StackPanel>
+      <StackPanel Spacing="4">
+        <TextBlock Text="Run Mode" FontWeight="SemiBold" />
+        <ComboBox ItemsSource="{Binding RunModes}" SelectedItem="{Binding RunMode}"
+                  Width="220" HorizontalAlignment="Left" />
+      </StackPanel>
+      <StackPanel Spacing="4">
+        <TextBlock Text="Output Directory (optional)" FontWeight="SemiBold" />
+        <TextBox Text="{Binding OutputDirectory}" />
+      </StackPanel>
+
       <!-- Run button -->
       <Button Command="{Binding RunBenchmarkCommand}"
               IsEnabled="{Binding IsRunning, Converter={x:Static c:BoolConverters.Not}}"
-              Content="Run Estimate"
+              Content="Run Benchmark"
               Width="200" Height="36"
               HorizontalAlignment="Left" />
 
@@ -71,11 +93,12 @@
               Padding="12" Margin="0,8,0,0"
               IsVisible="{Binding LastResult, Converter={x:Static c:BoolConverters.IsNotNull}}">
         <StackPanel Spacing="4">
-          <TextBlock Text="Estimate Results"
+          <TextBlock Text="Benchmark Results"
                      FontSize="14" FontWeight="SemiBold" />
-          <TextBlock Text="{Binding LastResult.SegmentCount, StringFormat='Segments: {0}'}" />
-          <TextBlock Text="{Binding LastResult.TotalDuration, StringFormat='Total: {0:hh\\:mm\\:ss}'}" />
-          <TextBlock Text="{Binding LastResult.HardwareInfo, StringFormat='Hardware: {0}'}" />
+          <TextBlock Text="{Binding LastResult.RunId, StringFormat='Run: {0}'}" />
+          <TextBlock Text="{Binding LastResult.Status, StringFormat='Status: {0}'}" />
+          <TextBlock Text="{Binding LastResult.ActualProvider, StringFormat='Actual provider: {0}'}" />
+          <TextBlock Text="{Binding LastResult.Reason, StringFormat='Reason: {0}'}" />
         </StackPanel>
       </Border>
     </StackPanel>

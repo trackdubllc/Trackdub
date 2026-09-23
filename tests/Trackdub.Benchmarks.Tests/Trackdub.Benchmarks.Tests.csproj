@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\DubBench\Trackdub.DubBench.csproj" />
     <ProjectReference Include="..\..\src\Trackdub.Contracts\Trackdub.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Trackdub.Benchmarks\Trackdub.Benchmarks.csproj" />
     <ProjectReference Include="..\..\src\Trackdub.Domain\Trackdub.Domain.csproj" />

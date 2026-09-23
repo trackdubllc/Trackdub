@@ -56,12 +56,10 @@ public sealed class RoutedTtsEngine(IRuntimePlanner runtimePlanner,
 
         TtsSynthesisResult result = await adapter.SynthesizeAsync(request, plan, cancellationToken).ConfigureAwait(false);
 
-        // Derive the execution summary structurally from the plan we just routed to. The plan
-        // already carries the authoritative runtime attributes (provider, model id/alias,
-        // variant), so we don't need to read the adapter's mutable LastExecutionSummary —
-        // which is shared across parallel synthesis tasks and would race. This makes the
-        // returned summary deterministic for any homogeneous batch (same plan).
-        StageRuntimeExecutionSummary summary = BuildSummaryFromPlan(plan, options);
+        // The plan describes the requested route, while the result records the provider
+        // actually used by this synthesis call (including runtime fallback). Do not read
+        // the adapter's mutable LastExecutionSummary: parallel calls could overwrite it.
+        StageRuntimeExecutionSummary summary = BuildSummary(plan, options, result);
 
         lock (summarySync)
         {
@@ -71,14 +69,17 @@ public sealed class RoutedTtsEngine(IRuntimePlanner runtimePlanner,
         return (result, summary);
     }
 
-    private static StageRuntimeExecutionSummary BuildSummaryFromPlan(
+    private static StageRuntimeExecutionSummary BuildSummary(
         StageRuntimePlan plan,
-        InferenceRequestOptions options)
+        InferenceRequestOptions options,
+        TtsSynthesisResult result)
     {
         string requestedProvider = !string.IsNullOrWhiteSpace(options.PreferredExecutionProvider)
             ? options.PreferredExecutionProvider!
             : plan.ExecutionProvider?.ToString() ?? "default";
-        string selectedProvider = plan.ExecutionProvider?.ToString() ?? "default";
+        string selectedProvider = string.IsNullOrWhiteSpace(result.Provider)
+            ? "unknown"
+            : result.Provider;
         return new StageRuntimeExecutionSummary(
             RequestedProvider: requestedProvider,
             SelectedProvider: selectedProvider,

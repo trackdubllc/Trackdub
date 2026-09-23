@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/DubBench/Trackdub.DubBench.csproj" />
+    <Project Path="src/DubBench.DevHost/Trackdub.DubBench.DevHost.csproj" />
     <Project Path="src/Trackdub.Analyzers/Trackdub.Analyzers.csproj" />
     <Project Path="src/Trackdub.Application/Trackdub.Application.csproj" />
     <Project Path="src/Trackdub.Benchmarks/Trackdub.Benchmarks.csproj" />

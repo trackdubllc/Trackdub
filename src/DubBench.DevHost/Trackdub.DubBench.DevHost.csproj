@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">WinExe</OutputType>
+    <OutputType Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'windows'">Exe</OutputType>
+    <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFramework Condition="'$(TargetFrameworks)' != ''" />
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DubBench\Trackdub.DubBench.csproj" />
+    <ProjectReference Include="..\Trackdub.Infrastructure\Trackdub.Infrastructure.csproj" />
+    <PackageReference Include="Avalonia.Desktop" />
+  </ItemGroup>
+</Project>

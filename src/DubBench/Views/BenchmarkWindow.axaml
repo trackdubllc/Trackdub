@@ -47,24 +47,15 @@
                 CommandParameter="2"
                 AutomationProperties.Name="Dubbing"
                 ToolTip.Tip="Dubbing" />
-        <Button x:Name="PresetsTabBtn"
-                Content="{DynamicResource PresetsIcon}"
-                FontSize="18" Width="36" Height="36" Padding="0"
-                Background="Transparent"
-                Foreground="{DynamicResource TabInactiveBrush}"
-                Command="{Binding SelectTabCommand}"
-                CommandParameter="3"
-                AutomationProperties.Name="Presets"
-                ToolTip.Tip="Presets" />
         <Button x:Name="LeaderTabBtn"
                 Content="{DynamicResource LeaderboardIcon}"
                 FontSize="18" Width="36" Height="36" Padding="0"
                 Background="Transparent"
                 Foreground="{DynamicResource TabInactiveBrush}"
                 Command="{Binding SelectTabCommand}"
-                CommandParameter="4"
-                AutomationProperties.Name="Leaderboard"
-                ToolTip.Tip="Leaderboard" />
+                CommandParameter="3"
+                AutomationProperties.Name="Local Runs"
+                ToolTip.Tip="Local Runs" />
       </StackPanel>
     </Border>
 
