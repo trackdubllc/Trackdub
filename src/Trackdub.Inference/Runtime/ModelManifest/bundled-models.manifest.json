@@ -1288,6 +1288,120 @@
       "variants": []
     },
     {
+      "model_id": "tonythethompson/parakeet-tdt-0.6b-v3-onnx",
+      "display_name": "Parakeet TDT 0.6B v3 (European)",
+      "task": "asr",
+      "engine_family": "parakeet-tdt",
+      "capabilities": [
+        "asr",
+        "language-detection",
+        "punctuation-restoration",
+        "word-timestamps"
+      ],
+      "language_coverage": {
+        "source_languages": [
+          "bg",
+          "cs",
+          "da",
+          "de",
+          "el",
+          "en",
+          "es",
+          "et",
+          "fi",
+          "fr",
+          "hr",
+          "hu",
+          "it",
+          "lt",
+          "lv",
+          "mt",
+          "nl",
+          "pl",
+          "pt",
+          "ro",
+          "ru",
+          "sk",
+          "sl",
+          "sv",
+          "uk"
+        ]
+      },
+      "tier": "balanced",
+      "license": "CC-BY-4.0",
+      "commercial_allowed": true,
+      "redistribution_allowed": true,
+      "requires_attribution": true,
+      "requires_user_consent": false,
+      "voice_cloning": false,
+      "commercial_use_verified": true,
+      "source_url": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx",
+      "revision": "107353b64181b47e250dfa846cf3de6a0b084c73",
+      "sha256": "98a74b21b4cc0017c1e7030319a4a96f4a9506e50f0708f3a516d02a77c96bb1",
+      "download_file_hashes": {
+        "README.md": "7d181b0cec3cc3fe383d45244b8f1b9a87ff9c0ee741a5957f6d7271c419342a",
+        "NOTICE.md": "7ba3f5c64b2467b6dc34f9db2e0319246a68e693f1d49042be36e5224adea26d",
+        "LICENSE.CC-BY-4.0": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+        "config.json": "666903c76b9798caf2c210afd4f6cd60b08a8dbf9800ec8d7a3bc0d2148ac466",
+        "vocab.txt": "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d",
+        "nemo128.onnx": "a9fde1486ebfcc08f328d75ad4610c67835fea58c73ba57e3209a6f6cf019e9f",
+        "encoder-model.onnx": "98a74b21b4cc0017c1e7030319a4a96f4a9506e50f0708f3a516d02a77c96bb1",
+        "encoder-model.onnx.data": "9a22d372c51455c34f13405da2520baefb7125bd16981397561423ed32d24f36",
+        "decoder_joint-model.onnx": "e978ddf6688527182c10fde2eb4b83068421648985ef23f7a86be732be8706c1"
+      },
+      "hash_verification": {
+        "mode": "required"
+      },
+      "aliases": [
+        "parakeet-tdt-0.6b-v3",
+        "parakeet-tdt",
+        "parakeet-v3"
+      ],
+      "root_path": "../../../../models/parakeet-tdt-0.6b-v3-onnx",
+      "benchmark_entry": "encoder-model.onnx",
+      "download_files": [
+        "README.md",
+        "NOTICE.md",
+        "LICENSE.CC-BY-4.0",
+        "config.json",
+        "vocab.txt",
+        "nemo128.onnx",
+        "encoder-model.onnx",
+        "encoder-model.onnx.data",
+        "decoder_joint-model.onnx"
+      ],
+      "download_file_sources": {
+        "README.md": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/README.md",
+        "NOTICE.md": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/NOTICE.md",
+        "LICENSE.CC-BY-4.0": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/LICENSE.CC-BY-4.0",
+        "config.json": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/config.json",
+        "vocab.txt": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/vocab.txt",
+        "nemo128.onnx": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/nemo128.onnx",
+        "encoder-model.onnx": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/encoder-model.onnx",
+        "encoder-model.onnx.data": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/encoder-model.onnx.data",
+        "decoder_joint-model.onnx": "https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx/resolve/107353b64181b47e250dfa846cf3de6a0b084c73/decoder_joint-model.onnx"
+      },
+      "optimization": {
+        "olive": {
+          "mode": "existing-onnx-components",
+          "components": [
+            "encoder-model.onnx",
+            "decoder_joint-model.onnx"
+          ],
+          "supported_providers": [
+            "cpu",
+            "dml",
+            "cuda",
+            "tensorrt",
+            "trt-rtx"
+          ]
+        }
+      },
+      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-directml",
+      "provider_id": "tonythethompson/parakeet-tdt-0.6b-v3-onnx",
+      "variants": []
+    },
+    {
       "model_id": "tonythethompson/Qwen2.5-1.5B-Instruct",
       "task": "text-refinement",
       "engine_family": "qwen-instruct",

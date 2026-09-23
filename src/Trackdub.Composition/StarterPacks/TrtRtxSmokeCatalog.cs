@@ -44,6 +44,7 @@ public static class TrtRtxSmokeCatalog
         new("Xenova/whisper-medium", null, "asr-whisper-medium-onnx"),
         new("Xenova/whisper-large-v3", null, "asr-whisper-large-v3-onnx"),
         new("tonythethompson/nemotron-3.5-asr-streaming-0.6b-onnx", null, "asr-nemotron-0.6b"),
+        new("tonythethompson/parakeet-tdt-0.6b-v3-onnx", null, "asr-parakeet-tdt-0.6b-v3"),
         new("tonythethompson/Qwen2.5-1.5B-Instruct", null, "text-refinement-qwen"),
         new("onnx-community/opus-mt-en-es", "merged-decoder", "translation-opus-en-es"),
         new("onnx-community/opus-mt-es-en", "merged-decoder", "translation-opus-es-en"),

@@ -208,6 +208,19 @@ Entries mirror `src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.mani
 - attribution required? yes
 - notes: Multilingual ASR (`engine_family`: `nemotron-asr`). The bundle includes `encoder.onnx`, `encoder.onnx.data`, `decoder_joint.onnx`, `tokenizer.model`, `config.json`, `LICENSE.OpenMDW-1.1`, and `NOTICE.md`. NVIDIA lists the training-data stack as NVIDIA Riva multilingual ASR training data, NVIDIA Granary, Multilingual LibriSpeech, Mozilla Common Voice, FLEURS, VoxPopuli, and Europarl-ASR. Relevant upstream dataset license notices include Granary under CC-BY-3.0 with some listed source components under CC-BY-4.0, Multilingual LibriSpeech under CC-BY-4.0, Common Voice under CC0, FLEURS under CC-BY-4.0, VoxPopuli under CC0 with European Parliament raw-data notice, and Europarl-ASR under CC-BY-4.0. The ONNX runtime wrapper/export reference used during implementation is from `parakeet-rs`, licensed MIT OR Apache-2.0.
 
+### tonythethompson/parakeet-tdt-0.6b-v3-onnx (Parakeet TDT 0.6B v3)
+
+- name: NVIDIA Parakeet TDT 0.6B v3 ONNX bundle (`tonythethompson/parakeet-tdt-0.6b-v3-onnx`)
+- version / revision: `107353b64181b47e250dfa846cf3de6a0b084c73` (Trackdub download pin)
+- source URL: https://huggingface.co/tonythethompson/parakeet-tdt-0.6b-v3-onnx
+- upstream model URL: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+- ONNX artifact source used for this packaging pass: https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx (revision `8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce`, redistributed unmodified)
+- license: CC-BY-4.0
+- commercial use allowed? yes (per manifest `commercial_allowed` and `commercial_use_verified`)
+- redistribution allowed? yes (per manifest)
+- attribution required? yes
+- notes: European-language ASR (`engine_family`: `parakeet-tdt`, 25 languages). The bundle includes `nemo128.onnx`, `encoder-model.onnx`, `encoder-model.onnx.data`, `decoder_joint-model.onnx`, `vocab.txt`, `config.json`, `LICENSE.CC-BY-4.0`, and `NOTICE.md`. NVIDIA trained the model primarily on the NVIDIA Granary multilingual corpus. The export was produced with NVIDIA NeMo for `onnx-asr` (https://github.com/istupakov/onnx-asr), licensed MIT; the TDT greedy decoding reference used during implementation is from `parakeet-rs`, licensed MIT OR Apache-2.0.
+
 ### csukuangfj/sherpa-onnx-spleeter-2stems (Spleeter separation)
 
 - name: Sherpa-ONNX Spleeter 2-stem separation (`csukuangfj/sherpa-onnx-spleeter-2stems`)
