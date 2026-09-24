@@ -107,7 +107,7 @@ public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
             inputIds,
             attentionMask);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
-            sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values);
+            sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, cancellationToken: cancellationToken);
         Tensor<float> encoderHiddenStates = encoderResults
             .Single(static result => result.Name == "last_hidden_state")
             .AsTensor<float>();
@@ -144,7 +144,7 @@ public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
                 encoderHiddenStates,
                 attentionMask,
                 generatedTokens);
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults = decoderSession.RunWithRetry(decoderInputs.Values);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults = decoderSession.RunWithRetry(decoderInputs.Values, cancellationToken: cancellationToken);
             Tensor<float> logits = decoderResults
                 .Single(static result => result.Name == "logits")
                 .AsTensor<float>();

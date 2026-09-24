@@ -30,7 +30,7 @@ internal sealed class NemotronAsrGreedyDecoder(
     private static readonly string[] EncoderBoundOutputNames =
         ["encoded", "encoded_len", "cache_last_channel_len_next", "cache_last_channel_next", "cache_last_time_next"];
 
-    public IReadOnlyList<int> Decode(float[,] mel, long promptIndex)
+    public IReadOnlyList<int> Decode(float[,] mel, long promptIndex, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(mel);
         ResetState(out CachePingPongBuffer cacheLastChannel, out CachePingPongBuffer cacheLastTime,
@@ -53,6 +53,7 @@ internal sealed class NemotronAsrGreedyDecoder(
 
             for (int frameOffset = 0; frameOffset < totalFrames; frameOffset += NemotronAsrMelFeatureExtractor.ChunkFrames)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 int mainFrameCount = Math.Min(NemotronAsrMelFeatureExtractor.ChunkFrames, totalFrames - frameOffset);
                 float[] chunkData = prefetchedChunk is null
                     ? featureExtractor.BuildChunk(mel, frameOffset, mainFrameCount, includePreEncodeCache: chunkIndex > 0)
@@ -96,6 +97,7 @@ internal sealed class NemotronAsrGreedyDecoder(
                             encoderRunOptions,
                             encoderBinding,
                             EncoderBoundOutputNames,
+                            cancellationToken: cancellationToken,
                             provider: providerHint);
 
                     Tensor<float> encoded = GetTensor<float>(encoderResults, "encoded");
@@ -103,7 +105,8 @@ internal sealed class NemotronAsrGreedyDecoder(
                     cacheLastChannelLength = CloneTensor<long>(
                         GetTensor<long>(encoderResults, "cache_last_channel_len_next"));
 
-                    DecodeEncoderFrames(encoded, encodedLength, allTokens, ref state1, ref state2, ref lastToken);
+                    DecodeEncoderFrames(
+                        encoded, encodedLength, allTokens, ref state1, ref state2, ref lastToken, cancellationToken);
                     cacheLastChannel.Swap();
                     cacheLastTime.Swap();
                 }
@@ -155,7 +158,8 @@ internal sealed class NemotronAsrGreedyDecoder(
         List<int> tokens,
         ref DenseTensor<float> state1,
         ref DenseTensor<float> state2,
-        ref int lastToken)
+        ref int lastToken,
+        CancellationToken cancellationToken)
     {
         NemotronAsrEncodedTensorLayout.EncodedLayout layout = NemotronAsrEncodedTensorLayout.Resolve(
             encoded.Dimensions,
@@ -168,7 +172,8 @@ internal sealed class NemotronAsrGreedyDecoder(
             {
                 using NemotronAsrInputSet decoderInputs = BuildDecoderInputs(frame, lastToken, state1, state2);
                 using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults =
-                    sessionLease.DecoderJointSession.RunWithRetry(decoderInputs.Values, provider: providerHint);
+                    sessionLease.DecoderJointSession.RunWithRetry(
+                        decoderInputs.Values, cancellationToken: cancellationToken, provider: providerHint);
 
                 Tensor<float> logits = GetTensor<float>(decoderResults, "outputs");
                 int nextToken = ArgMax(logits);

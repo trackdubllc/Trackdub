@@ -137,7 +137,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
         {
             using var inputSet = CreateInputSet(sessionLease.Session, samples);
             cancellationToken.ThrowIfCancellationRequested();
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sessionLease.Session.RunWithRetry(inputSet.Values);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sessionLease.Session.RunWithRetry(inputSet.Values, cancellationToken: cancellationToken);
             Tensor<float> probabilityTensor = ResolveProbabilityTensor(outputs);
             turns = DecodeTurns(probabilityTensor, request.DurationSeconds, plan.ModelAlias);
         }
@@ -188,7 +188,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
                 startFrame,
                 currentFeatureFrameCount,
                 state);
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputSet.Values);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputSet.Values, cancellationToken: cancellationToken);
 
             Tensor<float> rawPredictions = ResolveRequiredFloatTensor(outputs, "spkcache_fifo_chunk_preds");
             Tensor<float> rawEmbeddings = ResolveRequiredFloatTensor(outputs, "chunk_pre_encode_embs");

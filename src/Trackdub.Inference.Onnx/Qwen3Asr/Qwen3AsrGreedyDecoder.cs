@@ -11,7 +11,8 @@ internal static class Qwen3AsrGreedyDecoder
         Qwen3AsrEmbedTokens embedTokens,
         Tensor<float> audioFeatures,
         IReadOnlyList<int> promptIds,
-        int maxTokens)
+        int maxTokens,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sessionLease);
         ArgumentNullException.ThrowIfNull(embedTokens);
@@ -30,7 +31,7 @@ internal static class Qwen3AsrGreedyDecoder
                    ? BuildDecoderInitInputIds(audioFeatures, promptIds, positionIds)
                    : BuildDecoderInitInputEmbeds(embedTokens, audioFeatures, promptIds, positionIds))
         using (IDisposableReadOnlyCollection<DisposableNamedOnnxValue> initResults =
-               sessionLease.DecoderInitSession.RunWithRetry(initInputs.Values))
+               sessionLease.DecoderInitSession.RunWithRetry(initInputs.Values, cancellationToken: cancellationToken))
         {
             logits = ExtractLogits(initResults);
             kvState = CloneKvState(initResults);
@@ -49,10 +50,11 @@ internal static class Qwen3AsrGreedyDecoder
         {
             for (int step = 1; step < maxTokens; step++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 float[] tokenEmbedding = embedTokens.Lookup(nextToken);
                 using Qwen3AsrInputSet stepInputs = BuildDecoderStepInputs(tokenEmbedding, position, kvState);
                 using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> stepResults =
-                    sessionLease.DecoderStepSession.RunWithRetry(stepInputs.Values);
+                    sessionLease.DecoderStepSession.RunWithRetry(stepInputs.Values, cancellationToken: cancellationToken);
 
                 DisposeKvState(kvState);
                 kvState = CloneKvState(stepResults);
