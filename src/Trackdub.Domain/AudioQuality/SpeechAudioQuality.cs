@@ -73,9 +73,7 @@ public sealed record AudioQualityAnalysisThresholds(
     double NearSilenceActiveRmsDbfs)
 {
     public static AudioQualityAnalysisThresholds ForSource(SpeechAudioSourceKind sourceKind) =>
-        sourceKind is SpeechAudioSourceKind.VocalStem
-            ? AudioQualityPolicy.VocalStemThresholds
-            : AudioQualityPolicy.FullMixThresholds;
+        AudioQualityPolicy.FullMixThresholds;
 }
 
 public sealed record AudioQualityAnalysisResult(
@@ -119,7 +117,6 @@ public sealed record SpeechAudioStageDecision(
 
 public sealed record SpeechAudioPreparationPlan(
     SpeechAudioSourceKind SelectedSourceKind,
-    AudioQualityAnalysisResult SelectedSourceAnalysis,
     AudioQualityAnalysisResult FullMixAnalysis,
     SpeechAudioStageDecision VadDecision,
     SpeechAudioStageDecision AsrDecision,
@@ -133,9 +130,6 @@ public static class AudioQualityPolicy
     public const double ProcessedActiveRmsRejectDbfs = -14.0d;
     public const double ProcessedSpeechBandWorsenRejectDb = 2.0d;
     public const double DenoiseMinimumSnrImprovementDb = 2.0d;
-    public const double UnusableActiveRmsDbfs = -48.0d;
-    public const double UnusableClippingPercent = 1.0d;
-    public const double UnusableSpeechBandRatioDb = -18.0d;
 
     public static AudioQualityAnalysisThresholds FullMixThresholds { get; } = new(
         LowVolumeActiveRmsDbfs: -32.0d,
@@ -145,16 +139,6 @@ public static class AudioQualityPolicy
         RumbleRatioDb: -18.0d,
         HissRatioDb: -20.0d,
         PoorSpeechBandRatioDb: -8.0d,
-        NearSilenceActiveRmsDbfs: -48.0d);
-
-    public static AudioQualityAnalysisThresholds VocalStemThresholds { get; } = new(
-        LowVolumeActiveRmsDbfs: -36.0d,
-        LowVolumePeakDbfs: -12.0d,
-        ClippingPercent: 0.03d,
-        LowSnrDb: 15.0d,
-        RumbleRatioDb: -15.0d,
-        HissRatioDb: -16.0d,
-        PoorSpeechBandRatioDb: -6.0d,
         NearSilenceActiveRmsDbfs: -48.0d);
 }
 

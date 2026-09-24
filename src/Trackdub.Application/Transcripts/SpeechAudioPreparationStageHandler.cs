@@ -61,7 +61,7 @@ public sealed class SpeechAudioPreparationStageHandler(
                         stageRun,
                         selectedSourceArtifact,
                         preparationPlan.VadDecision,
-                        preparationPlan.SelectedSourceAnalysis,
+                        preparationPlan.FullMixAnalysis,
                         analysisArtifactId,
                         processedArtifacts,
                         ct).ConfigureAwait(false);
@@ -70,7 +70,7 @@ public sealed class SpeechAudioPreparationStageHandler(
                         stageRun,
                         selectedSourceArtifact,
                         preparationPlan.AsrDecision,
-                        preparationPlan.SelectedSourceAnalysis,
+                        preparationPlan.FullMixAnalysis,
                         analysisArtifactId,
                         processedArtifacts,
                         ct).ConfigureAwait(false);
@@ -79,7 +79,7 @@ public sealed class SpeechAudioPreparationStageHandler(
                         stageRun,
                         selectedSourceArtifact,
                         preparationPlan.DiarizationDecision,
-                        preparationPlan.SelectedSourceAnalysis,
+                        preparationPlan.FullMixAnalysis,
                         analysisArtifactId,
                         processedArtifacts,
                         ct).ConfigureAwait(false);

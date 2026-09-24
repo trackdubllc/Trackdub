@@ -481,10 +481,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
     {
         public SpeechAudioPreparationPlan Plan(SpeechAudioPreparationPlanningRequest request)
         {
-            // Build a source analysis from the full-mix analysis that was passed in
-            // (from the queued analyzer result that HandleAsync fetched before calling Plan).
-            AudioQualityAnalysisResult sourceAnalysis = request.FullMixAnalysis;
-
             SpeechAudioStageDecision MakeDecision(SpeechPipelineStageKind stage) =>
                 new(
                     stage,
@@ -499,8 +495,7 @@ public sealed class SpeechAudioPreparationGuardrailTests
 
             return new SpeechAudioPreparationPlan(
                 SelectedSourceKind: SpeechAudioSourceKind.FullMix,
-                SelectedSourceAnalysis: sourceAnalysis,
-                FullMixAnalysis: sourceAnalysis,
+                FullMixAnalysis: request.FullMixAnalysis,
                 VadDecision: MakeDecision(SpeechPipelineStageKind.Vad),
                 AsrDecision: MakeDecision(SpeechPipelineStageKind.Asr),
                 DiarizationDecision: MakeDecision(SpeechPipelineStageKind.Diarization));

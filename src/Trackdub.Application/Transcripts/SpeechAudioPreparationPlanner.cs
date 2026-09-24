@@ -28,7 +28,6 @@ public sealed class SpeechAudioPreparationPlanner : ISpeechAudioPreparationPlann
         return new SpeechAudioPreparationPlan(
             selectedSourceKind,
             selectedAnalysis,
-            request.FullMixAnalysis,
             vad,
             asr,
             diarization);

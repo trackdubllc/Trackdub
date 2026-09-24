@@ -28,6 +28,43 @@ public sealed class SpeechAudioPreparationTests
     }
 
     [Fact]
+    public void Planner_selects_stage_specific_full_mix_profiles_for_rumble()
+    {
+        var planner = new SpeechAudioPreparationPlanner();
+        AudioQualityAnalysisResult fullMix = CreateAnalysis(SpeechAudioSourceKind.FullMix, [AudioQualityDefectKind.Rumble]);
+
+        SpeechAudioPreparationPlan plan = planner.Plan(new SpeechAudioPreparationPlanningRequest(fullMix));
+
+        Assert.Equal(SpeechAudioSourceKind.FullMix, plan.SelectedSourceKind);
+        Assert.Equal(SpeechAudioProcessingProfileCatalog.FullMixVadLightProfileId, plan.VadDecision.ProfileId);
+        Assert.Contains("highpass=f=80", plan.VadDecision.FilterChain, StringComparison.Ordinal);
+        Assert.True(plan.VadDecision.RequiresProcessing);
+        Assert.Equal(SpeechAudioProcessingProfileCatalog.FullMixAsrLightProfileId, plan.AsrDecision.ProfileId);
+        Assert.True(plan.AsrDecision.RequiresProcessing);
+        Assert.Equal(SpeechAudioProcessingProfileCatalog.FullMixDiarizationSafeProfileId, plan.DiarizationDecision.ProfileId);
+        Assert.True(plan.DiarizationDecision.RequiresProcessing);
+    }
+
+    [Fact]
+    public void Planner_keeps_every_stage_unprocessed_when_low_snr_is_not_reliable()
+    {
+        var planner = new SpeechAudioPreparationPlanner();
+        AudioQualityAnalysisResult fullMix = CreateAnalysis(SpeechAudioSourceKind.FullMix, [AudioQualityDefectKind.LowSnr]) with
+        {
+            Metrics = CreateMetrics(SpeechAudioSourceKind.FullMix) with { SnrConfidence = AudioSnrConfidence.Estimated }
+        };
+
+        SpeechAudioPreparationPlan plan = planner.Plan(new SpeechAudioPreparationPlanningRequest(fullMix));
+
+        Assert.Equal(SpeechAudioProcessingProfileCatalog.NoneProfileId, plan.VadDecision.ProfileId);
+        Assert.Equal(SpeechAudioProcessingProfileCatalog.NoneProfileId, plan.AsrDecision.ProfileId);
+        Assert.Equal(SpeechAudioProcessingProfileCatalog.NoneProfileId, plan.DiarizationDecision.ProfileId);
+        Assert.False(plan.VadDecision.RequiresProcessing);
+        Assert.False(plan.AsrDecision.RequiresProcessing);
+        Assert.False(plan.DiarizationDecision.RequiresProcessing);
+    }
+
+    [Fact]
     public async Task StageHandler_discards_processed_output_when_guardrail_fails()
     {
         MediaAsset mediaAsset = CreateMediaAsset();
