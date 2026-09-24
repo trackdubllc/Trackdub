@@ -48,6 +48,14 @@ public sealed class TrtRtxBundlePinTests
     [Fact]
     public void Installer_required_files_match_locator_required_files()
     {
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+        {
+            // The TensorRT-RTX EP ABI plugin ships only for Windows and Linux;
+            // TrtRtxEpRequiredFiles.RequiredFileNames throws PlatformNotSupportedException
+            // elsewhere (macOS CI), so there is no installer/locator set to compare.
+            return;
+        }
+
         Assert.Equal(TensorRtRtxProviderConstants.RequiredPluginFileNames, TrtRtxEpRequiredFiles.RequiredFileNames);
     }
 
