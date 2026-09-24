@@ -101,6 +101,17 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
         ArgumentNullException.ThrowIfNull(hardwareProfile);
         cancellationToken.ThrowIfCancellationRequested();
 
+#if WINDOWS
+        // DirectML is only visible through the WinML catalog route on this ORT build (no native
+        // OrtSessionOptionsAppendExecutionProvider_DML export). The catalog EP must be registered
+        // before the first OrtEnv touch or GetEpDevices() never lists a DML device and every later
+        // session silently appends nothing and falls back to CPU — which then fails smoke.
+        WindowsMl.WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
+        await WindowsMl.WindowsMlProviderRegistrationPolicy.Shared
+            .RegisterForReadinessAsync(ExecutionProviderKind.DirectMl, cancellationToken)
+            .ConfigureAwait(false);
+#endif
+
         bool allowNativeCudaTensorRtOnWindows = await _nativeCudaTensorRtWindowsPolicy
             .IsNativeProvidersAllowedOnWindowsAsync(cancellationToken)
             .ConfigureAwait(false);

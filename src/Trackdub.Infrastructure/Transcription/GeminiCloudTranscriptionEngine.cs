@@ -16,14 +16,14 @@ public sealed class GeminiCloudTranscriptionEngine(
     public const string ProviderName = "gemini";
     public const string EngineFamilyName = "gemini-asr-cloud";
 
-    // Use gemini-1.5-pro for audio understanding — gemini-1.5-flash has limited audio support.
-    // Note: audio file size is limited to ~20 MB for inline_data; larger files require the Files API.
-    private const string Model = "gemini-1.5-pro";
+    public const string DefaultModel = "gemini-2.5-flash";
+    public const string QualityModel = "gemini-2.5-pro";
     private const string EndpointBase = "https://generativelanguage.googleapis.com/v1beta/models";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString
     };
 
     private readonly HttpClient httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
@@ -47,6 +47,13 @@ public sealed class GeminiCloudTranscriptionEngine(
         byte[] audioBytes = await File.ReadAllBytesAsync(
             request.NormalizedAudioPath, cancellationToken).ConfigureAwait(false);
 
+        if (audioBytes.Length > 20 * 1024 * 1024)
+        {
+            throw new InvalidOperationException(
+                $"Audio file size ({audioBytes.Length / (1024 * 1024)} MB) exceeds Gemini inline audio payload limit (20 MB). " +
+                "Please use compressed audio (MP3/OGG) or split into shorter segments.");
+        }
+
         string base64Audio = Convert.ToBase64String(audioBytes);
         string extension = Path.GetExtension(request.NormalizedAudioPath).TrimStart('.').ToLowerInvariant();
         string mimeType = extension switch
@@ -54,6 +61,7 @@ public sealed class GeminiCloudTranscriptionEngine(
             "mp3" => "audio/mpeg",
             "ogg" => "audio/ogg",
             "flac" => "audio/flac",
+            "m4a" => "audio/mp4",
             _ => "audio/wav"
         };
 
@@ -75,7 +83,9 @@ public sealed class GeminiCloudTranscriptionEngine(
             Contents: [new GeminiContent(parts)],
             GenerationConfig: new GeminiGenerationConfig("application/json"));
 
-        string endpoint = $"{EndpointBase}/{Model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
+        string model = ResolveModel(request);
+
+        string endpoint = $"{EndpointBase}/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Content = new StringContent(
@@ -104,7 +114,8 @@ public sealed class GeminiCloudTranscriptionEngine(
             throw new InvalidOperationException("Gemini returned an empty transcription response.");
         }
 
-        GeminiTranscriptSegment[]? segments = TryParseSegments(content);
+        string cleanedContent = StripMarkdownFences(content);
+        GeminiTranscriptSegment[]? segments = TryParseSegments(cleanedContent);
         if (segments is null || segments.Length == 0)
         {
             throw new InvalidOperationException($"Gemini transcription produced no parseable segments. Raw: {content[..Math.Min(200, content.Length)]}");
@@ -113,12 +124,31 @@ public sealed class GeminiCloudTranscriptionEngine(
         LastExecutionSummary = new StageRuntimeExecutionSummary(
             RequestedProvider: "cloud",
             SelectedProvider: "cloud",
+            ModelId: model,
             ModelAlias: AsrModelOverrideSettings.GeminiAsrCloudAlias,
             BootstrapDetail: "Google Gemini Cloud API");
 
         return segments
             .Select((s, i) => new RecognizedTranscriptSegment(i, s.Start, s.End, s.Text.Trim()))
             .ToArray();
+    }
+
+    private static string ResolveModel(AudioTranscriptionRequest request)
+    {
+        string? envModel = Environment.GetEnvironmentVariable("TRACKDUB_GEMINI_ASR_MODEL");
+        if (!string.IsNullOrWhiteSpace(envModel))
+        {
+            return envModel.Trim();
+        }
+
+        if (string.Equals(request.Options?.NormalizedPreferredModelVariantAlias, "pro", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(request.Options?.NormalizedPreferredModelAlias, QualityModel, StringComparison.OrdinalIgnoreCase) ||
+            request.Options?.NormalizedPreferredModelAlias?.Contains("pro", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return QualityModel;
+        }
+
+        return DefaultModel;
     }
 
     private async Task<string> ResolveApiKeyAsync(CancellationToken cancellationToken)
@@ -131,6 +161,26 @@ public sealed class GeminiCloudTranscriptionEngine(
         }
 
         return apiKey.Trim();
+    }
+
+    private static string StripMarkdownFences(string text)
+    {
+        string trimmed = text.Trim();
+        if (trimmed.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[7..];
+        }
+        else if (trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[3..];
+        }
+
+        if (trimmed.EndsWith("```", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[..^3];
+        }
+
+        return trimmed.Trim();
     }
 
     private static GeminiTranscriptSegment[]? TryParseSegments(string content)

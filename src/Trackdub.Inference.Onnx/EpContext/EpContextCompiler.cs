@@ -73,7 +73,9 @@ public sealed class EpContextCompiler
 #if WINDOWS
             WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
 #endif
-            using SessionOptions sessionOptions = CreateCompileSessionOptions(out ExecutionProviderKind selectedProvider);
+            using SessionOptions sessionOptions = CreateCompileSessionOptions(
+                EpContextTrtProfiles.Resolve(sourceModelPath),
+                out ExecutionProviderKind selectedProvider);
             string selectedLabel = selectedProvider.ToString();
             // EP context engines are provider-specific. Compiling on anything but TensorRT RTX
             // only reserializes (and graph-optimizes) the source — it cannot skip engine rebuild.
@@ -106,7 +108,7 @@ public sealed class EpContextCompiler
             compileOptions.CompileModel();
             stopwatch.Stop();
 
-            // CompileModel() can succeed yet emit a plain reserialized graph (no com.microsoft.ep.context
+            // CompileModel() can succeed yet emit a plain reserialized graph (no com.microsoft EPContext
             // nodes) when the EP performs no AOT capture. Loading such an artifact rebuilds engines just
             // like the source and adds parse overhead, so refuse to keep it — measured: +146KB of extra
             // Conv/Squeeze nodes and a ~6s cold-load regression versus the source graph.
@@ -133,16 +135,9 @@ public sealed class EpContextCompiler
         }
     }
 
-    /// <summary>
-    /// Known divergence from the production session path: production also passes each model's
-    /// <c>nv_profile_min/max/opt_shapes</c> (see <c>OnnxExecutionSessionFactory</c> call sites),
-    /// which this generic, per-family-agnostic compile path does not have. The compiled engine
-    /// can therefore capture a different (TRT-RTX-auto-inferred) shape window than production's
-    /// profiled one. <see cref="TryContainsEpContextNodes"/> only catches the zero-capture case,
-    /// not a shape mismatch — accepted for now since threading per-model profiles through the
-    /// generic warmup scan would need a family-to-profile lookup this path doesn't have.
-    /// </summary>
-    private static SessionOptions CreateCompileSessionOptions(out ExecutionProviderKind selectedProvider)
+    private static SessionOptions CreateCompileSessionOptions(
+        IReadOnlyDictionary<string, string>? modelTrtOptions,
+        out ExecutionProviderKind selectedProvider)
     {
         var options = new SessionOptions
         {
@@ -150,7 +145,9 @@ public sealed class EpContextCompiler
             // parser cannot import — same reasoning as CreateBaseSessionOptions(tensorRtRtx: true).
             GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_BASIC,
         };
-        selectedProvider = OnnxExecutionSessionFactory.AppendTensorRtRtxOrFallbackProvider(options);
+        // Match production TRT RTX options (including the model's optimization profile) so the
+        // compiled engines match the inference path.
+        selectedProvider = OnnxExecutionSessionFactory.AppendTensorRtRtxOrFallbackProvider(options, modelTrtOptions);
         return options;
     }
 

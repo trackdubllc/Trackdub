@@ -113,7 +113,7 @@ Suggested smoke:
 
 ```powershell
 .\tools\dev\Fetch-TrtRtxEp.ps1
-$env:TRACKDUB_TRT_RTX_EP_DIR = "$env:LOCALAPPDATA\Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64"
+$env:TRACKDUB_TRT_RTX_EP_DIR = "$env:LOCALAPPDATA\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64"
 dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model onnx-community/silero-vad --provider trt-rtx --runs 1 --format console
 trackdub providers trt-rtx status
 ```

@@ -130,6 +130,7 @@ product carries tiered features, activation, and support.
 | `Trackdub.Cli` | Headless CLI entry point |
 | `Trackdub.Licensing` | Neutral license validation mechanisms |
 | `Trackdub.Benchmarks` | Performance benchmarks |
+| `Trackdub.Benchmarks.Micro` | BenchmarkDotNet microbenchmarks for CPU, tensor, tokenizer, and opt-in ONNX paths |
 | `Trackdub.Tools` | Development utilities |
 | `Trackdub.Analyzers` | Roslyn analyzers |
 | `Trackdub.DubBench` | Benchmark harness and Avalonia sidecar launcher |
@@ -196,6 +197,7 @@ Sdk -> Application, Composition, Licensing
 Cli -> Sdk
 DubBench -> Benchmarks, Domain, Inference, Inference.Onnx
 Benchmarks -> Application, Composition, Domain, Inference, Inference.Onnx, Infrastructure
+Benchmarks.Micro -> Inference.Onnx
 Tools -> Application, Domain, Infrastructure, Media
 Contracts -> Domain
 Licensing -> (nothing)

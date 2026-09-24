@@ -5,7 +5,7 @@ using Trackdub.Inference.Runtime.TensorRtRtx;
 
 namespace Trackdub.Inference.Onnx.TensorRtRtx;
 
-/// <summary>Result of probing/loading the CUDA 12 runtime required by the TRT RTX EP ABI plugin (cu12).</summary>
+/// <summary>Result of probing/loading the CUDA runtime required by the TRT RTX EP ABI plugin.</summary>
 internal sealed record TensorRtRtxCudaRuntimeEnsureResult(
     bool Succeeded,
     string? LoadedPath,
@@ -16,24 +16,39 @@ internal sealed record TensorRtRtxCudaRuntimeEnsureResult(
 }
 
 /// <summary>
-/// Ensures CUDA 12 runtime libraries are visible before ORT loads the TensorRT RTX EP plugin.
-/// The shipping TRT RTX EP ABI bundle is cu12; a machine with only CUDA 13.x is not ready.
+/// Ensures the CUDA runtime needed by the pinned cu13 TRT RTX EP ABI bundle is visible before ORT loads
+/// the plugin. On Windows the TensorRT-RTX 1.6 cu13 binaries link the CUDA runtime statically (no
+/// cudart import), so nothing is required. On Linux the bundle ships libcudart.so.13 beside the plugin.
 /// </summary>
 internal static class TensorRtRtxCudaRuntimeBootstrap
 {
-    internal const string WindowsCudaRuntimeFileName = "cudart64_12.dll";
-    internal const string LinuxCudaRuntimeFileName = "libcudart.so.12";
+    internal const string LinuxCudaRuntimeFileName = "libcudart.so.13";
+    internal const int RequiredCudaMajorVersion = 13;
     private const string CudaRuntimeEnvironmentVariable = TensorRtRtxProviderConstants.CudaRuntimeBinDirectoryEnvironmentVariable;
 
-    public static TensorRtRtxCudaRuntimeEnsureResult TryEnsureLoadedResult() =>
-        TryEnsureLoadedResult(DiscoverSearchDirectories());
+    /// <summary>Shared CUDA runtime library the plugin needs at load, or <see langword="null"/> when statically linked.</summary>
+    internal static string? RequiredCudaRuntimeFileName =>
+        OperatingSystem.IsWindows() ? null : LinuxCudaRuntimeFileName;
 
-    internal static TensorRtRtxCudaRuntimeEnsureResult TryEnsureLoadedResult(IEnumerable<string> searchDirectories)
+    public static TensorRtRtxCudaRuntimeEnsureResult TryEnsureLoadedResult(string? pluginDirectory = null)
     {
-        string runtimeFileName = OperatingSystem.IsWindows()
-            ? WindowsCudaRuntimeFileName
-            : LinuxCudaRuntimeFileName;
+        string? runtimeFileName = RequiredCudaRuntimeFileName;
+        if (runtimeFileName is null)
+        {
+            return new TensorRtRtxCudaRuntimeEnsureResult(
+                true,
+                null,
+                $"CUDA runtime is statically linked into the TensorRT-RTX {TensorRtRtxProviderConstants.BundledTrtRtxRuntimeVersion} "
+                + $"{TensorRtRtxProviderConstants.BundledCudaVariant} bundle; no CUDA runtime library is required.");
+        }
 
+        return TryEnsureLoadedResult(DiscoverSearchDirectories(pluginDirectory), runtimeFileName);
+    }
+
+    internal static TensorRtRtxCudaRuntimeEnsureResult TryEnsureLoadedResult(
+        IEnumerable<string> searchDirectories,
+        string runtimeFileName)
+    {
         foreach (string directory in searchDirectories)
         {
             if (string.IsNullOrWhiteSpace(directory))
@@ -53,30 +68,31 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
                 return new TensorRtRtxCudaRuntimeEnsureResult(
                     true,
                     candidatePath,
-                    $"CUDA 12 runtime loaded from '{candidatePath}'.");
+                    $"CUDA {RequiredCudaMajorVersion} runtime loaded from '{candidatePath}'.");
             }
 
             return TensorRtRtxCudaRuntimeEnsureResult.Failed(
-                $"CUDA 12 runtime file exists at '{candidatePath}' but failed to load "
-                + $"(Win32 error may be 126). Inspect dependencies or reinstall CUDA 12 runtime.");
+                $"CUDA {RequiredCudaMajorVersion} runtime file exists at '{candidatePath}' but failed to load. "
+                + "Inspect its dependencies or reinstall the TensorRT RTX EP bundle.");
         }
 
         string installedCudaHint = DescribeInstalledCudaMajorVersions();
         return TensorRtRtxCudaRuntimeEnsureResult.Failed(
-            "CUDA 12 runtime (" + runtimeFileName + ") was not found in configured search paths. "
-            + "The TensorRT RTX EP ABI bundle is cu12 and will not use a CUDA 13 runtime. "
+            $"CUDA {RequiredCudaMajorVersion} runtime ({runtimeFileName}) was not found beside the TensorRT RTX plugin "
+            + $"or in configured search paths. The {TensorRtRtxProviderConstants.BundledCudaVariant} bundle ships it; "
+            + "reinstall the bundle from Model Manager. "
             + installedCudaHint
-            + " Install CUDA Toolkit 12.x, run `pip install nvidia-cuda-runtime-cu12`, "
-            + $"or set {CudaRuntimeEnvironmentVariable} to the directory containing {runtimeFileName}.");
+            + $" To use a system CUDA {RequiredCudaMajorVersion} runtime instead, set {CudaRuntimeEnvironmentVariable} "
+            + $"to the directory containing {runtimeFileName}.");
     }
 
     public static string? TryEnsureLoaded() => TryEnsureLoadedResult().LoadedPath;
 
-    internal static IEnumerable<string> DiscoverSearchDirectories()
+    internal static IEnumerable<string> DiscoverSearchDirectories(string? pluginDirectory = null)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (string? directory in EnumerateConfiguredDirectories())
+        foreach (string? directory in EnumerateConfiguredDirectories(pluginDirectory))
         {
             if (TryAddDirectory(seen, directory, out string? normalized))
             {
@@ -86,8 +102,8 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
     }
 
     /// <summary>
-    /// Reports installed CUDA toolkit major versions so a CUDA 13-only machine gets an honest
-    /// "found 13, need 12" message instead of an opaque Error 126 later in EP registration.
+    /// Reports installed CUDA toolkit major versions so a machine with only a mismatched CUDA major
+    /// gets an honest message instead of an opaque loader error later in EP registration.
     /// </summary>
     internal static string DescribeInstalledCudaMajorVersions()
     {
@@ -123,18 +139,13 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
         var builder = new StringBuilder("Detected CUDA Toolkit major version(s): ");
         builder.Append(string.Join(", ", majors));
         builder.Append('.');
-        if (majors.Contains(12))
+        if (!majors.Contains(RequiredCudaMajorVersion))
         {
-            builder.Append(" CUDA 12 is installed; ensure its bin directory is on PATH or TRACKDUB_CUDA12_BIN_DIR.");
-        }
-        else if (majors.Count == 1 && majors.Contains(13))
-        {
-            builder.Append(" Only CUDA 13 is installed; TRT RTX cu12 requires the CUDA 12 runtime DLL.");
+            builder.Append($" None is CUDA {RequiredCudaMajorVersion}; the {TensorRtRtxProviderConstants.BundledCudaVariant} plugin cannot use them.");
         }
 
         return builder.ToString();
     }
-
     private static bool TryParseCudaMajor(string directoryName, out int major)
     {
         major = 0;
@@ -160,92 +171,27 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
         return int.TryParse(majorToken, out major) && major > 0;
     }
 
-    private static IEnumerable<string?> EnumerateConfiguredDirectories()
+    private static IEnumerable<string?> EnumerateConfiguredDirectories(string? pluginDirectory)
     {
+        // The bundle ships its CUDA runtime beside the plugin; prefer it over any system install.
+        yield return pluginDirectory;
         yield return Environment.GetEnvironmentVariable(CudaRuntimeEnvironmentVariable);
 
         string? cudaPath = Environment.GetEnvironmentVariable("CUDA_PATH");
         if (!string.IsNullOrWhiteSpace(cudaPath))
         {
             yield return cudaPath;
-            yield return Path.Join(cudaPath, "bin");
-            yield return Path.Join(cudaPath, "bin", "x64");
             yield return Path.Join(cudaPath, "lib64");
             yield return Path.Join(cudaPath, "lib");
         }
 
-        if (OperatingSystem.IsWindows())
-        {
-            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string cudaRoot = Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA");
-            if (Directory.Exists(cudaRoot))
-            {
-                // Prefer CUDA 12 installs so a machine with both 12 and 13 loads cu12 first.
-                foreach (string versionDirectory in EnumerateChildDirectoriesSafe(cudaRoot)
-                             .OrderBy(static path => PreferCuda12First(path)))
-                {
-                    yield return Path.Join(versionDirectory, "bin");
-                    yield return Path.Join(versionDirectory, "bin", "x64");
-                }
-            }
-
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            foreach (string pythonRoot in new[]
-                     {
-                         Path.Join(appData, "Python"),
-                         Path.Join(localAppData, "Programs", "Python"),
-                     })
-            {
-                if (!Directory.Exists(pythonRoot))
-                {
-                    continue;
-                }
-
-                foreach (string pythonVersionDir in EnumerateChildDirectoriesSafe(pythonRoot))
-                {
-                    // System/venv layout: Python\Python3X\Lib\site-packages
-                    yield return Path.Join(pythonVersionDir, "Lib", "site-packages", "nvidia", "cuda_runtime", "bin");
-                    // pip --user layout: %APPDATA%\Python\Python3X\site-packages (no Lib prefix)
-                    yield return Path.Join(pythonVersionDir, "site-packages", "nvidia", "cuda_runtime", "bin");
-                }
-            }
-
-            // Co-located runtime: installer or operator may drop cudart64_12 next to the plugin.
-            string userDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string trtRtxProvidersRoot = Path.Join(userDataRoot, "Trackdub", "Providers", "trt-rtx");
-            if (Directory.Exists(trtRtxProvidersRoot))
-            {
-                foreach (string versionDir in EnumerateChildDirectoriesSafe(trtRtxProvidersRoot))
-                {
-                    foreach (string cudaVariantDir in EnumerateChildDirectoriesSafe(versionDir))
-                    {
-                        foreach (string ridDir in EnumerateChildDirectoriesSafe(cudaVariantDir))
-                        {
-                            yield return ridDir;
-                        }
-                    }
-                }
-            }
-        }
-        else if (OperatingSystem.IsLinux())
+        if (OperatingSystem.IsLinux())
         {
             yield return "/usr/local/cuda/lib64";
-            yield return "/usr/local/cuda-12/lib64";
+            yield return $"/usr/local/cuda-{RequiredCudaMajorVersion}/lib64";
             yield return "/usr/lib/x86_64-linux-gnu";
         }
     }
-
-    private static int PreferCuda12First(string path)
-    {
-        if (TryParseCudaMajor(Path.GetFileName(path), out int major))
-        {
-            return major == 12 ? 0 : major;
-        }
-
-        return 100;
-    }
-
     /// <summary>
     /// Enumerates immediate child directories under a fixed local root.
     /// Swallows access / IO failures so CUDA discovery cannot crash bootstrap
@@ -338,7 +284,7 @@ internal static class TensorRtRtxCudaRuntimeBootstrap
         Environment.SetEnvironmentVariable("PATH", directory + Path.PathSeparator + currentPath);
     }
 
-    // The CUDA 12 runtime is preloaded once per process so it stays resident for ORT's
+    // The CUDA runtime is preloaded once per process so it stays resident for ORT's
     // subsequent TRT RTX plugin load; the module is intentionally never freed. Handles are
     // retained (keyed by resolved path) so repeated bootstrap attempts reuse the already
     // loaded module instead of leaking a fresh loader reference on every retry.

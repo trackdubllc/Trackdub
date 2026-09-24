@@ -380,12 +380,15 @@ internal static class TrtRtxProvidersHandler
         string? environmentDirectory,
         string defaultInstallDirectory)
     {
-        if (!string.IsNullOrWhiteSpace(studioDirectory))
+        // Mirrors TensorRtRtxPluginLocator: a previous managed bundle left in settings/env is skipped.
+        if (!string.IsNullOrWhiteSpace(studioDirectory) &&
+            !TensorRtRtxProviderConstants.IsSupersededManagedInstallDirectory(studioDirectory, defaultInstallDirectory))
         {
             return studioDirectory;
         }
 
-        if (!string.IsNullOrWhiteSpace(environmentDirectory))
+        if (!string.IsNullOrWhiteSpace(environmentDirectory) &&
+            !TensorRtRtxProviderConstants.IsSupersededManagedInstallDirectory(environmentDirectory, defaultInstallDirectory))
         {
             return environmentDirectory;
         }

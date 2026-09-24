@@ -112,7 +112,8 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
                 resolution.Detail);
         }
 
-        TensorRtRtxCudaRuntimeEnsureResult cudaRuntime = TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoadedResult();
+        TensorRtRtxCudaRuntimeEnsureResult cudaRuntime =
+            TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoadedResult(resolution.DirectoryPath);
         if (!cudaRuntime.Succeeded)
         {
             return new TensorRtRtxBootstrapResult(
@@ -123,20 +124,19 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
         }
 
         // ORT loads the plugin library with an altered search path, so process PATH
-        // prepends are ignored for the plugin's dependent DLLs. Co-locate cudart64_12
-        // next to the plugin so registration can resolve it (avoids Win32 Error 126).
-        EnsureCudartBesidePlugin(
-            resolution.DirectoryPath!,
-            cudaRuntime.LoadedPath,
-            runtimeFileName: OperatingSystem.IsWindows()
-                ? TensorRtRtxCudaRuntimeBootstrap.WindowsCudaRuntimeFileName
-                : TensorRtRtxCudaRuntimeBootstrap.LinuxCudaRuntimeFileName);
+        // prepends are ignored for the plugin's dependent libraries. Co-locate a CUDA runtime
+        // resolved from outside the bundle next to the plugin so registration can resolve it.
+        if (TensorRtRtxCudaRuntimeBootstrap.RequiredCudaRuntimeFileName is { } cudaRuntimeFileName)
+        {
+            EnsureCudartBesidePlugin(resolution.DirectoryPath!, cudaRuntime.LoadedPath, cudaRuntimeFileName);
+        }
 
         try
         {
             await RegistrationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                Console.Error.WriteLine($"[TRTDBG] registered='{registeredProviderLibraryPath}' resolved='{resolution.ProviderLibraryPath}' source={resolution.Source} explicit='{explicitPluginDirectory}' default='{defaultInstallDirectory}' stack={Environment.StackTrace.Split('\n').Skip(2).Take(6).Select(static l => l.Trim()).Aggregate(static (a, b) => a + " | " + b)}");
                 if (!string.Equals(registeredProviderLibraryPath, resolution.ProviderLibraryPath, StringComparison.OrdinalIgnoreCase))
                 {
                     OrtEnv.Instance().RegisterExecutionProviderLibrary(
@@ -172,23 +172,32 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
         }
         catch (Exception ex) when (ex is OnnxRuntimeException or DllNotFoundException or BadImageFormatException or InvalidOperationException)
         {
-            // Win32 ERROR_MOD_NOT_FOUND (126) on cu12 plugins almost always means cudart64_12 is still
-            // invisible to the OS loader. Do not collapse that into a generic registration failure.
+            // A missing dependent module (Win32 126 / dlopen failure) must not collapse into a generic
+            // registration failure. Only blame the CUDA runtime where the bundle actually links it
+            // dynamically; the Windows cu13 plugin imports just the bundle DLLs, the driver's nvml.dll
+            // and the VC++ runtime.
             bool looksLikeMissingModule =
                 ex is DllNotFoundException
                 || (ex is OnnxRuntimeException &&
                     (ex.Message.Contains("126", StringComparison.Ordinal) ||
                      ex.Message.Contains("cudart", StringComparison.OrdinalIgnoreCase) ||
                      ex.Message.Contains("The specified module could not be found", StringComparison.OrdinalIgnoreCase)));
+            bool blameCudaRuntime = looksLikeMissingModule &&
+                (TensorRtRtxCudaRuntimeBootstrap.RequiredCudaRuntimeFileName is not null ||
+                 ex.Message.Contains("cudart", StringComparison.OrdinalIgnoreCase));
 
-            TensorRtRtxReadinessBlocker blocker = looksLikeMissingModule
+            TensorRtRtxReadinessBlocker blocker = blameCudaRuntime
                 ? TensorRtRtxReadinessBlocker.CudaRuntimeMissing
                 : TensorRtRtxReadinessBlocker.EpRegisterFailed;
 
-            string detailPrefix = looksLikeMissingModule
-                ? "TensorRT RTX EP ABI plugin registration failed: a required native module was not found "
-                  + "(likely CUDA 12 runtime / cudart64_12). "
-                : "TensorRT RTX EP ABI plugin registration failed: ";
+            string detailPrefix = (looksLikeMissingModule, blameCudaRuntime) switch
+            {
+                (true, true) => "TensorRT RTX EP ABI plugin registration failed: a required native module was not found "
+                                + "(likely the bundled CUDA runtime). ",
+                (true, false) => "TensorRT RTX EP ABI plugin registration failed: a required native module was not found "
+                                 + "(check the bundle's tensorrt_rtx_* DLLs, the NVIDIA driver's nvml.dll, and the VC++ runtime). ",
+                _ => "TensorRT RTX EP ABI plugin registration failed: ",
+            };
 
             return new TensorRtRtxBootstrapResult(
                 false,
@@ -215,7 +224,7 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
     }
 
     /// <summary>
-    /// Copies the discovered CUDA 12 runtime next to the plugin when missing.
+    /// Copies a CUDA runtime discovered outside the bundle next to the plugin when missing.
     /// Best-effort: failure is non-fatal because bootstrap already loaded the runtime.
     /// </summary>
     private static void EnsureCudartBesidePlugin(

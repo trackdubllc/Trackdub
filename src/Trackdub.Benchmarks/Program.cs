@@ -1,6 +1,7 @@
 using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
 using Trackdub.Inference;
 using Trackdub.Inference.Onnx;
@@ -53,6 +54,13 @@ public static class Program
             args[0].Equals("controlled", StringComparison.OrdinalIgnoreCase))
         {
             return await RunControlledAsync(args.Skip(1).ToArray(), output, error, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (args.Length > 0 &&
+            args[0].Equals("controlled-matrix", StringComparison.OrdinalIgnoreCase))
+        {
+            return await RunControlledMatrixAsync(args.Skip(1).ToArray(), output, error, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -213,6 +221,47 @@ public static class Program
             output.WriteLine($"Evidence {report.RunId:N}: {report.Status} ({report.RunMode}, {report.Scenario})");
             if (report.Reason is not null) output.WriteLine(report.Reason);
             return report.Status == Trackdub.Contracts.Benchmarking.BenchmarkEvidenceStatus.Completed ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static async Task<int> RunControlledMatrixAsync(
+        string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken)
+    {
+        if (args.Length == 0 || args[0] is "--help" or "-h")
+        {
+            output.WriteLine("controlled-matrix <fixture> --output <directory> [--stages <comma-separated>] [--model <stage=alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>]");
+            output.WriteLine("With no --stages, runs the full extended pipeline stage catalog in canonical order.");
+            return args.Length == 0 ? 1 : 0;
+        }
+
+        if (!ControlledStageBenchmarkMatrixOptionsParser.TryParse(args, error, out var options) || options is null)
+        {
+            return 1;
+        }
+
+        try
+        {
+            using var runner = new ControlledStageBenchmarkMatrixRunner();
+            ControlledStageBenchmarkMatrixReport report = await runner.RunAsync(options, cancellationToken)
+                .ConfigureAwait(false);
+            await BenchmarkReportWriter.WriteAsync(report, cancellationToken).ConfigureAwait(false);
+            output.WriteLine($"Stage matrix {report.Status} ({report.Results.Count} stage(s))");
+            output.WriteLine($"Report written to: {report.ReportPath}");
+            foreach (ControlledStageBenchmarkMatrixResult result in report.Results)
+            {
+                BenchmarkEvidenceStage? stage = result.Evidence.Stages
+                    .FirstOrDefault(candidate => candidate.Name.Equals(result.Stage, StringComparison.OrdinalIgnoreCase));
+                output.WriteLine(
+                    $"  {result.Stage}: {result.Evidence.Status}"
+                    + (stage?.DurationMilliseconds is double duration ? $" ({duration:F1} ms)" : string.Empty));
+            }
+
+            return report.Success ? 0 : 1;
         }
         catch (Exception ex)
         {

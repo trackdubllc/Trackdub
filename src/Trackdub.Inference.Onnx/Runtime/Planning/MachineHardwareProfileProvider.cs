@@ -22,6 +22,7 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
 
         string architecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
         string? gpuDescription = null;
+        string? gpuDriverVersion = null;
         string? cpuName = null;
         bool hasGpu = false;
         long dedicatedVramMb = 0;
@@ -57,6 +58,7 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
                         if (!string.IsNullOrEmpty(desc))
                         {
                             gpuDescription = desc;
+                            gpuDriverVersion = subkey?.GetValue("DriverVersion") as string;
 
                             object? vramObj = subkey?.GetValue("HardwareInformation.MemorySize")
                                           ?? subkey?.GetValue("HardwareInformation.qwMemorySize");
