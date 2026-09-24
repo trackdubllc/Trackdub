@@ -16,14 +16,16 @@ namespace Trackdub.Inference.Onnx.Pool;
 /// without destroying it.  This allows warm sessions to survive across DI scope boundaries.</para>
 ///
 /// <para><strong>Bounded capacity:</strong>
-/// The pool holds at most <c>maxSessions</c> live sessions across all keys (default: 8).
-/// This is a <em>count-based</em> cap, not an RSS/working-set-aware limit.
-/// When the count limit is reached, the pool evicts the least-recently-released idle session
-/// (i.e. a session not currently leased out).
-/// If every pooled session is currently leased, the new session is created outside the pool
-/// (ephemeral) and disposed when its lease is released.
-/// RSS-aware eviction (e.g. triggering on GC pressure or OS committed bytes) is out of scope
-/// for this PR and is left as future work.</para>
+/// The pool holds at most <c>maxSessions</c> live sessions across all keys (default: 12).
+/// This is a <em>count-based</em> cap. Optional memory admission (off by default) adds a
+/// VRAM budget: before construct, reserve <see cref="SessionPoolKey.EstimatedVramMb"/>,
+/// evict idle sessions to fit, and wait — never allocate an unbudgeted ephemeral session.
+/// When admission is off and the count limit is reached with every entry leased, the new
+/// session is created outside the pool (ephemeral) and disposed when its lease is released.</para>
+///
+/// <para><strong>Single-flight creation:</strong>
+/// Concurrent misses for the same key share one factory invocation. Cancelling one waiter
+/// does not cancel another caller’s valid acquisition.</para>
 ///
 /// <para><strong>Model invalidation:</strong>
 /// Session keys are keyed by model file <em>path hash</em>, not file content.  If a model file
@@ -33,9 +35,9 @@ namespace Trackdub.Inference.Onnx.Pool;
 ///
 /// <para><strong>Memory pressure guidance:</strong>
 /// Each ONNX session can consume hundreds of MB of GPU/CPU memory depending on model size.
-/// The default limit of 8 is conservative; reduce it via the constructor when many large
-/// models are active simultaneously.  Call <see cref="EvictModelAsync"/> to free memory for
-/// a model that is no longer needed, or <see cref="Dispose"/> to release the entire pool.</para>
+/// Prefer enabling memory admission with a realistic budget over relying on the count cap.
+/// Call <see cref="EvictModelAsync"/> to free memory for a model that is no longer needed,
+/// or <see cref="Dispose"/> to release the entire pool.</para>
 ///
 /// <para><strong>Thread safety:</strong>
 /// All public APIs are thread-safe.  Sessions are single-threaded: only one caller may hold
@@ -51,18 +53,61 @@ internal sealed class InferenceSessionPool : IDisposable
     /// </remarks>
     public static readonly InferenceSessionPool Shared = new();
 
-    private const int DefaultMaxSessions = 8;
+    // Sized for a full dub working set (VAD + separation + diarization + ASR encoder/decoder
+    // + translation encoder/decoder + multi-graph TTS) so LRU does not thrash mid-pipeline.
+    private const int DefaultMaxSessions = 12;
+
+    /// <summary>Default VRAM admission budget when <c>enableMemoryAdmission</c> is on.</summary>
+    public const long DefaultMemoryBudgetMb = 4096;
+
+    /// <summary>
+    /// Idle sessions released within this window are treated as part of the active pipeline
+    /// working set and are only evicted when no older idle entry exists.
+    /// </summary>
+    private const long RecentReleaseWindowMs = 120_000;
 
     private sealed class PoolEntry(InferenceSession session, bool ephemeral) : IDisposable
     {
         private long lastReleasedTicks = Environment.TickCount64;
         private volatile bool evicted;
         private int disposeState; // 0 = live, 1 = disposed; guarded by Interlocked for idempotency
+        private int pinCount;
 
         public InferenceSession Session { get; } = session;
 
         /// <summary>Per-entry gate that serialises access (one user at a time).</summary>
         public SemaphoreSlim Gate { get; } = new(0, 1); // Starts unavailable because the creator immediately owns the first lease.
+
+        /// <summary>
+        /// Residency pins (audit §3A). Pinned entries are not idle-evicted. Independent of
+        /// <see cref="Gate"/> — a session can be resident and still free for execution.
+        /// </summary>
+        public int PinCount => Volatile.Read(ref pinCount);
+
+        public bool TryPin()
+        {
+            if (evicted || disposeState != 0)
+            {
+                return false;
+            }
+
+            Interlocked.Increment(ref pinCount);
+            if (evicted || disposeState != 0)
+            {
+                Unpin();
+                return false;
+            }
+
+            return true;
+        }
+
+        public void Unpin()
+        {
+            if (Interlocked.Decrement(ref pinCount) < 0)
+            {
+                Interlocked.Exchange(ref pinCount, 0);
+            }
+        }
 
         /// <summary>
         /// When <see langword="true"/> the entry was created beyond the pool limit and will not
@@ -119,22 +164,46 @@ internal sealed class InferenceSessionPool : IDisposable
 
     private readonly int maxSessions;
     private readonly ConcurrentDictionary<SessionPoolKey, PoolEntry> entries = new();
-    private readonly ConcurrentDictionary<SessionPoolKey, TaskCompletionSource> pendingCreations = new();
+    private readonly ConcurrentDictionary<SessionPoolKey, SemaphoreSlim> createGates = new();
+    /// <summary>
+    /// Most recent construction failure per key. A waiter that wakes to find no entry and no
+    /// in-flight creation consumes this so a failed creator's exception propagates without
+    /// re-invoking the factory (single-flight: one factory call per creation wave).
+    /// </summary>
+    private readonly ConcurrentDictionary<SessionPoolKey, Exception> creationFailures = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
+    private readonly SemaphoreSlim bundleAcquireLock = new(1, 1);
+    private readonly bool enableMemoryAdmission;
+    private readonly long memoryBudgetMb;
+    /// <summary>Pending create reservations per device (audit §3A: budget is per physical device).</summary>
+    private readonly ConcurrentDictionary<int, long> pendingCreateMbByDevice = new();
+    private int admissionWaiters;
     private volatile bool disposed;
     private int pooledCount;
     private int disposeOnce; // 0 = not yet, 1 = disposed; Interlocked guard for single-winner teardown
 
-    public InferenceSessionPool(int maxSessions = DefaultMaxSessions)
+    public InferenceSessionPool(
+        int maxSessions = DefaultMaxSessions,
+        bool enableMemoryAdmission = false,
+        long memoryBudgetMb = DefaultMemoryBudgetMb)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxSessions, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(memoryBudgetMb, 1);
         this.maxSessions = maxSessions;
+        this.enableMemoryAdmission = enableMemoryAdmission;
+        this.memoryBudgetMb = memoryBudgetMb;
     }
 
     /// <summary>
+    /// Device ordinal used for admission accounting. Null means the default device (0).
+    /// DirectML and TensorRT on the same GPU share this budget — provider is not part of the key.
+    /// </summary>
+    private static int DeviceOf(SessionPoolKey key) => key.DeviceId ?? 0;
+
+    /// <summary>
     /// Returns an appropriate default max-session count for the current hardware.
-    /// On Windows with a discrete NVIDIA GPU and >= 8 GB VRAM, returns 16.
-    /// Otherwise returns the conservative default of 8.
+    /// On Windows with a discrete NVIDIA GPU and >= 8 GB VRAM, returns 24 (covers a full
+    /// multi-graph pipeline without mid-run LRU thrash). Otherwise returns 12.
     /// </summary>
     public static int RecommendedMaxSessions(IReadOnlyList<DeviceEntry>? devices)
     {
@@ -146,19 +215,18 @@ internal sealed class InferenceSessionPool : IDisposable
             string.Equals(d.VendorName, "NVIDIA", StringComparison.OrdinalIgnoreCase));
 
         if (nvidiaGpu is not null && nvidiaGpu.DedicatedVramMb >= 8192)
-            return 16;
+            return 24;
 
         return DefaultMaxSessions;
     }
 
     /// <summary>
-    /// Ensures a pooled session exists for <paramref name="key"/> without returning a lease.
+    /// Pre-warms a session for <paramref name="key"/> without returning a lease.
+    /// Useful at startup to amortise first-call latency.
     /// If a session for this key already exists the call is a no-op.
+    /// The session is resident but <em>unpinned</em> and may be idle-evicted later.
+    /// Use <see cref="GetResidencyAsync"/> when it must stay warm.
     /// </summary>
-    /// <remarks>
-    /// This only constructs the session; it runs no inference, so first-run costs such as
-    /// kernel selection or engine building on the first input shape are still paid later.
-    /// </remarks>
     public async Task WarmAsync(
         SessionPoolKey key,
         Func<CancellationToken, Task<InferenceSession>> factory,
@@ -171,10 +239,65 @@ internal sealed class InferenceSessionPool : IDisposable
     }
 
     /// <summary>
+    /// Creates or reuses <paramref name="key"/> and returns a <see cref="SessionResidency"/> pin.
+    /// The pin keeps the session out of idle eviction but does <em>not</em> hold the execution
+    /// gate — other callers can still <see cref="GetLeaseAsync"/> and Run() (audit §3A:
+    /// residency ≠ exclusivity). Dispose the residency to allow eviction again.
+    /// </summary>
+    public async Task<SessionResidency> GetResidencyAsync(
+        SessionPoolKey key,
+        Func<CancellationToken, Task<InferenceSession>> factory,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(factory);
+
+        while (true)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+
+            // Ensure the session exists (single-flight create). Release the lease immediately.
+            using (await GetLeaseAsync(key, factory, cancellationToken).ConfigureAwait(false))
+            {
+            }
+
+            if (entries.TryGetValue(key, out PoolEntry? entry) && entry.TryPin())
+            {
+                PoolEntry pinned = entry;
+                return new SessionResidency(pinned.Unpin);
+            }
+
+            // Evicted between release and pin — retry create.
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
+
+    /// <summary>
+    /// Pins an already-pooled session if present. Used after a create/warm when the caller
+    /// re-acquires with the same <see cref="SessionPoolKey"/> for each execution.
+    /// </summary>
+    public bool TryPinExisting(SessionPoolKey key, out SessionResidency? residency)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        if (entries.TryGetValue(key, out PoolEntry? entry) && entry.TryPin())
+        {
+            PoolEntry pinned = entry;
+            residency = new SessionResidency(pinned.Unpin);
+            return true;
+        }
+
+        residency = null;
+        return false;
+    }
+
+    /// <summary>
     /// Returns an exclusive <see cref="SessionLease"/> for <paramref name="key"/>.
-    /// If no session exists for the key, one is created using <paramref name="factory"/>.
-    /// If the pool is full and no idle session can be evicted, the new session is created
-    /// outside the pool (ephemeral) and disposed when the lease is released.
+    /// If no session exists for the key, one is created using <paramref name="factory"/>
+    /// (single-flight: concurrent misses share one factory call).
+    /// When memory admission is enabled the create waits for budget after evicting idle
+    /// sessions and never allocates an unbudgeted ephemeral session. When admission is off
+    /// and the pool is full with no idle eviction target, the session is created outside
+    /// the pool (ephemeral) and disposed when the lease is released.
     /// </summary>
     public async Task<SessionLease> GetLeaseAsync(
         SessionPoolKey key,
@@ -212,94 +335,113 @@ internal sealed class InferenceSessionPool : IDisposable
                 }
             }
 
-            // Slow path — Phase 1: under the creation lock, determine ephemeral / evict,
-            // then release the lock before calling factory.  Holding creationLock across
-            // a potentially slow ORT-initialisation call would serialise Dispose(),
-            // EvictModelAsync(), and GetLeaseAsync() for all other keys behind one load.
-            bool ephemeral = false;
-            PoolEntry? lruEvicted1 = null;
-            Task? inFlightCreation = null;
-            TaskCompletionSource? creation = null;
-            using (BenchmarkPhaseCapture.Start("pool-creation-lock-wait"))
-                await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            // Single-flight create: one factory invocation per key. Cancelling this waiter
+            // does not cancel the shared create for other callers. A creator that fails
+            // records the failure so queued waiters propagate it without rebuilding.
+            SemaphoreSlim createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+            bool propagatedRecentFailure = false;
+            using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
+                await createGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                // Re-check disposal after waiting on the creation lock so we do not create a
-                // new entry after the pool has been disposed concurrently.
                 ObjectDisposedException.ThrowIf(disposed, this);
-
-                // Double-check after acquiring the lock (another thread may have created the entry).
-                // `continue` releases creationLock via the finally block and restarts the loop so
-                // we acquire the gate via the fast path WITHOUT holding creationLock.
                 if (entries.ContainsKey(key))
                 {
                     continue;
                 }
 
-                // Single-flight: a concurrent miss for this key waits for the in-flight
-                // construction instead of building (and then discarding) a duplicate session.
-                if (pendingCreations.TryGetValue(key, out TaskCompletionSource? pending))
+                if (creationFailures.TryRemove(key, out Exception recentFailure))
                 {
-                    inFlightCreation = pending.Task;
+                    propagatedRecentFailure = true;
+                    throw recentFailure;
                 }
-                else
-                {
-                    // Enforce the pool limit by evicting the LRU idle entry only when at capacity.
-                    // Cold misses while pooledCount < maxSessions must not evict a warm idle session.
-                    // TryEvictLruIdle removes and marks the entry under the lock but returns it
-                    // for disposal outside the lock so expensive ORT teardown does not hold creationLock.
-                    lruEvicted1 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
-                    ephemeral = pooledCount >= maxSessions && lruEvicted1 is null;
-                    if (!ephemeral)
-                    {
-                        creation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                        pendingCreations[key] = creation;
-                    }
-                }
-            }
-            finally
-            {
-                creationLock.Release();
-            }
 
-            if (inFlightCreation is not null)
-            {
+                long needMb = ResolveReservationMb(key);
+                int device = DeviceOf(key);
+                bool ephemeral = false;
+                PoolEntry? lruEvicted1 = null;
+                bool reserved = false;
+                using (BenchmarkPhaseCapture.Start("pool-creation-lock-wait"))
+                    await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
-                        await inFlightCreation.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    ObjectDisposedException.ThrowIf(disposed, this);
+                    if (entries.ContainsKey(key))
+                    {
+                        continue;
+                    }
+
+                    if (enableMemoryAdmission)
+                    {
+                        // Evict idle sessions on this device until the reservation fits.
+                        // Other devices have their own budgets (shared across EPs on one GPU).
+                        while (CurrentReservedMb(device) + needMb > memoryBudgetMb)
+                        {
+                            PoolEntry? evictedForBudget = TryEvictLruIdle(onlyDevice: device);
+                            if (evictedForBudget is null)
+                            {
+                                break;
+                            }
+
+                            evictedForBudget.Dispose();
+                        }
+
+                        if (CurrentReservedMb(device) + needMb <= memoryBudgetMb)
+                        {
+                            AddPendingReservation(device, needMb);
+                            reserved = true;
+                        }
+                        // else: do not hold a reservation while waiting — that deadlocks
+                        // when every waiter reserves and nobody can release.
+                    }
+                    else
+                    {
+                        lruEvicted1 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
+                        ephemeral = pooledCount >= maxSessions && lruEvicted1 is null;
+                    }
                 }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                finally
                 {
-                    // The creating caller was cancelled, not this one: retry, becoming the creator
-                    // if nobody else has. Construction failures still propagate to every waiter.
+                    creationLock.Release();
                 }
 
-                continue;
-            }
+                if (enableMemoryAdmission && !reserved)
+                {
+                    await WaitForAdmissionBudgetAsync(needMb, device, cancellationToken).ConfigureAwait(false);
+                    // Budget reserved by WaitForAdmissionBudgetAsync on success.
+                    reserved = true;
+                }
 
-            Exception? creationFailure = null;
-            try
-            {
-                // Dispose the evicted session outside the lock so expensive ORT teardown
-                // does not block unrelated callers waiting on creationLock.
                 lruEvicted1?.Dispose();
 
-                // Phase 2: create the session OUTSIDE the creation lock so that Dispose(),
-                // EvictModelAsync(), and GetLeaseAsync() for other keys are not blocked.
                 InferenceSession session;
-                using (BenchmarkPhaseCapture.Start("session-create"))
-                    session = await factory(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    using (BenchmarkPhaseCapture.Start("session-create"))
+                        session = await factory(cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    if (reserved)
+                    {
+                        ReleaseReservation(device, needMb);
+                    }
+
+                    throw;
+                }
+
                 var freshEntry = new PoolEntry(session, ephemeral);
 
                 if (freshEntry.Ephemeral)
                 {
-                    // Ephemeral entries are never stored; return the lease directly.
+                    if (reserved)
+                    {
+                        ReleaseReservation(device, needMb);
+                    }
+
                     return BuildLease(freshEntry);
                 }
 
-                // Phase 3: re-acquire the creation lock to publish the new entry atomically.
-                // A concurrent thread may have created an entry for this key while our factory ran.
                 bool published = false;
                 PoolEntry? competitor = null;
                 PoolEntry? lruEvicted2 = null;
@@ -316,13 +458,16 @@ internal sealed class InferenceSessionPool : IDisposable
                         }
                         else
                         {
-                            // Only evict to make room when the pool is already at capacity (same as phase 1).
-                            lruEvicted2 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
-                            if (pooledCount >= maxSessions && lruEvicted2 is null)
+                            if (!enableMemoryAdmission)
                             {
-                                freshEntry.MarkEphemeral();
+                                lruEvicted2 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
+                                if (pooledCount >= maxSessions && lruEvicted2 is null)
+                                {
+                                    freshEntry.MarkEphemeral();
+                                }
                             }
-                            else
+
+                            if (!freshEntry.Ephemeral)
                             {
                                 published = entries.TryAdd(key, freshEntry);
                                 if (!published)
@@ -343,36 +488,52 @@ internal sealed class InferenceSessionPool : IDisposable
                 }
                 catch
                 {
-                    // Cancellation, pool disposal, or an unexpected error: entry was not stored,
-                    // so dispose freshEntry here to prevent a session leak.
                     if (!published)
                     {
                         freshEntry.Dispose();
+                    }
+
+                    if (reserved)
+                    {
+                        ReleaseReservation(device, needMb);
                     }
 
                     lruEvicted2?.Dispose();
                     throw;
                 }
 
-                // Dispose the evicted session outside the lock so expensive ORT teardown
-                // does not block unrelated callers waiting on creationLock.
                 lruEvicted2?.Dispose();
 
                 if (published)
                 {
-                    // The gate starts locked (count=0), representing the active lease for
-                    // the creator. Release() is called when the lease is disposed.
+                    // Estimate now lives on the pooled entry (CurrentReservedMb sums entries);
+                    // drop the pending reservation so it is not double-counted.
+                    if (reserved)
+                    {
+                        ReleaseReservation(device, needMb);
+                    }
+
                     return BuildLease(freshEntry);
                 }
 
                 if (freshEntry.Ephemeral)
                 {
+                    if (reserved)
+                    {
+                        ReleaseReservation(device, needMb);
+                    }
+
                     return BuildLease(freshEntry);
                 }
 
                 // Lost the race: another thread concurrently published an entry for this key.
                 // Discard our duplicate session and lease the winner's entry instead.
                 freshEntry.Dispose();
+                if (reserved)
+                {
+                    ReleaseReservation(device, needMb);
+                }
+
                 if (competitor is not null)
                 {
                     try
@@ -388,46 +549,242 @@ internal sealed class InferenceSessionPool : IDisposable
                     }
                     catch (ObjectDisposedException)
                     {
-                        // Competitor was evicted between Phase 3 and here; restart the whole loop.
                         continue;
                     }
                 }
-                // Competitor entry was evicted between TryGetValue and Gate.WaitAsync; restart.
+
                 continue;
             }
             catch (Exception ex)
             {
-                creationFailure = ex;
+                if (!propagatedRecentFailure && ex is not OperationCanceledException)
+                {
+                    creationFailures[key] = ex;
+                }
+
                 throw;
             }
             finally
             {
-                if (creation is not null)
-                {
-                    CompleteCreation(key, creation, creationFailure);
-                }
+                createGate.Release();
             }
         }
     }
 
-    private void CompleteCreation(SessionPoolKey key, TaskCompletionSource creation, Exception? failure)
+    private long ResolveReservationMb(SessionPoolKey key) =>
+        key.EstimatedVramMb > 0 ? key.EstimatedVramMb : SessionPoolKey.DefaultEstimatedVramMb;
+
+    /// <summary>
+    /// Acquires every graph in <paramref name="requests"/> as one all-or-nothing bundle
+    /// (audit §3A: never hold an encoder while waiting indefinitely for a decoder).
+    /// Sessions are created first (single-flight), then exclusive gates are taken in
+    /// <see cref="SessionPoolKey.StableComparer"/> order without blocking on a later
+    /// key while holding an earlier one — if any gate is busy the attempt rolls back
+    /// and retries. Duplicate keys are rejected.
+    /// </summary>
+    public async Task<SessionLeaseBundle> GetLeaseBundleAsync(
+        IReadOnlyList<SessionLeaseRequest> requests,
+        CancellationToken cancellationToken)
     {
-        // Remove before signalling so released waiters observe either the published entry or
-        // no creation in flight, never a completed one.
-        pendingCreations.TryRemove(new KeyValuePair<SessionPoolKey, TaskCompletionSource>(key, creation));
-        if (failure is null)
+        ArgumentNullException.ThrowIfNull(requests);
+        if (requests.Count == 0)
         {
-            creation.TrySetResult();
+            throw new ArgumentException("Bundle requires at least one session.", nameof(requests));
         }
-        else if (failure is OperationCanceledException)
+
+        var ordered = requests
+            .OrderBy(r => r.Key, SessionPoolKey.StableComparer)
+            .ToArray();
+        for (int i = 1; i < ordered.Length; i++)
         {
-            creation.TrySetCanceled();
+            if (Equals(ordered[i - 1].Key, ordered[i].Key))
+            {
+                throw new ArgumentException(
+                    "Bundle contains duplicate session keys; multi-graph bundles require distinct graphs.",
+                    nameof(requests));
+            }
         }
-        else
+
+        // Phase 1: make sure every session exists (warm). Individual GetLeaseAsync is
+        // single-flight and safe here — we release immediately so no gate is held.
+        foreach (SessionLeaseRequest request in ordered)
         {
-            creation.TrySetException(failure);
-            // Waiters are optional; do not let a failure nobody awaited surface as unobserved.
-            _ = creation.Task.Exception;
+            cancellationToken.ThrowIfCancellationRequested();
+            using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // Phase 2: all-or-nothing exclusive acquire in stable order. TryWait(0) per key
+        // so we never block on key N while holding keys 1..N-1. One bundle at a time
+        // (bundleAcquireLock) so opposing caller orders cannot livelock each other.
+        await bundleAcquireLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            while (true)
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var held = new List<(SessionPoolKey Key, PoolEntry Entry)>(ordered.Length);
+                bool allAcquired = true;
+                foreach (SessionLeaseRequest request in ordered)
+                {
+                    if (!entries.TryGetValue(request.Key, out PoolEntry? entry) || !TryAcquireGate(entry))
+                    {
+                        allAcquired = false;
+                        break;
+                    }
+
+                    if (entry.IsEvicted)
+                    {
+                        entry.ReleaseGateWithoutTouchingLru();
+                        allAcquired = false;
+                        break;
+                    }
+
+                    held.Add((request.Key, entry));
+                }
+
+                if (allAcquired && held.Count == ordered.Length)
+                {
+                    var leases = new SessionLease[ordered.Length];
+                    for (int i = 0; i < ordered.Length; i++)
+                    {
+                        SessionPoolKey key = ordered[i].Key;
+                        int requestIndex = -1;
+                        for (int r = 0; r < requests.Count; r++)
+                        {
+                            if (Equals(requests[r].Key, key))
+                            {
+                                requestIndex = r;
+                                break;
+                            }
+                        }
+
+                        PoolEntry entry = held.First(h => Equals(h.Key, key)).Entry;
+                        leases[requestIndex] = BuildLease(entry);
+                    }
+
+                    return new SessionLeaseBundle(leases);
+                }
+
+                foreach ((SessionPoolKey _, PoolEntry entry) in held)
+                {
+                    entry.ReleaseGateWithoutTouchingLru();
+                }
+
+                lock (createGates)
+                {
+                    Monitor.Wait(createGates, 10);
+                }
+            }
+        }
+        finally
+        {
+            bundleAcquireLock.Release();
+        }
+    }
+
+    private long CurrentReservedMb(int device)
+    {
+        long pooled = 0;
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
+        {
+            if (DeviceOf(pair.Key) == device)
+            {
+                pooled += ResolveReservationMb(pair.Key);
+            }
+        }
+
+        pendingCreateMbByDevice.TryGetValue(device, out long pending);
+        return pooled + pending;
+    }
+
+    private void AddPendingReservation(int device, long mb) =>
+        pendingCreateMbByDevice.AddOrUpdate(device, mb, (_, existing) => existing + mb);
+
+    private void ReleaseReservation(int device, long mb)
+    {
+        pendingCreateMbByDevice.AddOrUpdate(device, 0, (_, existing) => Math.Max(0, existing - mb));
+        lock (createGates)
+        {
+            Monitor.PulseAll(createGates);
+        }
+    }
+
+    /// <summary>
+    /// Waits until <paramref name="needMb"/> fits in <paramref name="device"/>'s budget
+    /// (evicting idle sessions on that device as needed), then takes the reservation.
+    /// Never holds a reservation while waiting. Budget is shared across EPs on one device.
+    /// </summary>
+    private async Task WaitForAdmissionBudgetAsync(long needMb, int device, CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref admissionWaiters);
+        try
+        {
+            while (true)
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                bool acquired = false;
+                List<PoolEntry>? toDispose = null;
+                await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    ObjectDisposedException.ThrowIf(disposed, this);
+                    while (CurrentReservedMb(device) + needMb > memoryBudgetMb)
+                    {
+                        PoolEntry? evicted = TryEvictLruIdle(onlyDevice: device);
+                        if (evicted is null)
+                        {
+                            break;
+                        }
+
+                        toDispose ??= new List<PoolEntry>();
+                        toDispose.Add(evicted);
+                    }
+
+                    if (CurrentReservedMb(device) + needMb <= memoryBudgetMb)
+                    {
+                        AddPendingReservation(device, needMb);
+                        acquired = true;
+                    }
+                }
+                finally
+                {
+                    creationLock.Release();
+                }
+
+                if (toDispose is not null)
+                {
+                    foreach (PoolEntry entry in toDispose)
+                    {
+                        entry.Dispose();
+                    }
+                }
+
+                if (acquired)
+                {
+                    return;
+                }
+
+                lock (createGates)
+                {
+                    if (CurrentReservedMb(device) + needMb <= memoryBudgetMb)
+                    {
+                        // Fits now; loop to take the reservation under creationLock.
+                    }
+                    else
+                    {
+                        Monitor.Wait(createGates, 50);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            Interlocked.Decrement(ref admissionWaiters);
         }
     }
 
@@ -692,6 +1049,7 @@ internal sealed class InferenceSessionPool : IDisposable
         if (entry.Ephemeral)
         {
             // Ephemeral entries are never stored in the pool; dispose immediately.
+            // Admission mode never creates ephemeral sessions.
             entry.Dispose();
             return;
         }
@@ -735,14 +1093,30 @@ internal sealed class InferenceSessionPool : IDisposable
     /// <see cref="creationLock"/> to avoid blocking unrelated pool operations during potentially expensive
     /// <see cref="InferenceSession"/> teardown.
     /// </returns>
-    private PoolEntry? TryEvictLruIdle()
+    /// <summary>
+    /// Evicts the least-recently-released idle entry, optionally restricted to one device
+    /// (so a budget shortfall on GPU 0 is not “fixed” by dropping GPU 1 sessions).
+    /// Must be called while <see cref="creationLock"/> is held.
+    /// </summary>
+    private PoolEntry? TryEvictLruIdle(int? onlyDevice = null)
     {
+        // Prefer evicting entries that have been idle for a while. Sessions released within
+        // the recent window are treated as the active pipeline working set (e.g. the next
+        // stage's graphs) and are only chosen when nothing older is idle.
+        long now = Environment.TickCount64;
+        long recentCutoff = now - RecentReleaseWindowMs;
+
         SessionPoolKey? candidateKey = null;
         PoolEntry? candidateEntry = null;
         long candidateLastReleasedTicks = long.MaxValue;
 
         foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
         {
+            if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
+            {
+                continue;
+            }
+
             PoolEntry entry = pair.Value;
             if (!entry.IsIdle)
             {
@@ -750,11 +1124,46 @@ internal sealed class InferenceSessionPool : IDisposable
             }
 
             long lastReleasedTicks = entry.LastReleasedTicks;
+            if (lastReleasedTicks >= recentCutoff)
+            {
+                continue;
+            }
+
+            if (entry.PinCount > 0)
+            {
+                continue;
+            }
+
             if (candidateEntry is null || lastReleasedTicks < candidateLastReleasedTicks)
             {
                 candidateKey = pair.Key;
                 candidateEntry = entry;
                 candidateLastReleasedTicks = lastReleasedTicks;
+            }
+        }
+
+        if (candidateEntry is null)
+        {
+            foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
+            {
+                if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
+                {
+                    continue;
+                }
+
+                PoolEntry entry = pair.Value;
+                if (!entry.IsIdle || entry.PinCount > 0)
+                {
+                    continue;
+                }
+
+                long lastReleasedTicks = entry.LastReleasedTicks;
+                if (candidateEntry is null || lastReleasedTicks < candidateLastReleasedTicks)
+                {
+                    candidateKey = pair.Key;
+                    candidateEntry = entry;
+                    candidateLastReleasedTicks = lastReleasedTicks;
+                }
             }
         }
 
