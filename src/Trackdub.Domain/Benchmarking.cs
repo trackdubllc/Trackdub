@@ -14,7 +14,12 @@ public sealed record BenchmarkMeasurements(
     double? WarmLatencyMinimumMilliseconds,
     double? WarmLatencyMaximumMilliseconds,
     double? AudioDurationSeconds,
-    double? RealTimeFactorAverage);
+    double? RealTimeFactorAverage,
+    double? OptionsCreateMilliseconds = null,
+    string? EngineCacheOutcome = null,
+    long? EngineCacheBytesAdded = null,
+    int? EngineCacheFilesAdded = null,
+    string? ColdLoadDominantPhase = null);
 
 public sealed record BenchmarkReport(
     string Scenario,
