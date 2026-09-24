@@ -37,7 +37,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     private const int StreamingFeedFeatureFrames =
         (StreamingChunkModelFrames + StreamingRightContextModelFrames) * StreamingFeatureSubsampling;
 
-    private static readonly IReadOnlyDictionary<string, string> TrtOptions = new Dictionary<string, string>
+    internal static readonly IReadOnlyDictionary<string, string> TrtOptions = new Dictionary<string, string>
     {
         ["trt_profile_min_shapes"] = "waveform:1x16000",
         ["trt_profile_max_shapes"] = "waveform:1x57600000",
@@ -137,7 +137,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
         {
             using var inputSet = CreateInputSet(sessionLease.Session, samples);
             cancellationToken.ThrowIfCancellationRequested();
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sessionLease.Session.RunWithRetry(inputSet.Values);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sessionLease.Session.RunWithRetry(inputSet.Values, cancellationToken: cancellationToken);
             Tensor<float> probabilityTensor = ResolveProbabilityTensor(outputs);
             turns = DecodeTurns(probabilityTensor, request.DurationSeconds, plan.ModelAlias);
         }
@@ -188,7 +188,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
                 startFrame,
                 currentFeatureFrameCount,
                 state);
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputSet.Values);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputSet.Values, cancellationToken: cancellationToken);
 
             Tensor<float> rawPredictions = ResolveRequiredFloatTensor(outputs, "spkcache_fifo_chunk_preds");
             Tensor<float> rawEmbeddings = ResolveRequiredFloatTensor(outputs, "chunk_pre_encode_embs");

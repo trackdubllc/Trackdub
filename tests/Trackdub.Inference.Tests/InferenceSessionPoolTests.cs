@@ -187,6 +187,118 @@ public sealed class InferenceSessionPoolTests
         await Assert.ThrowsAsync<ObjectDisposedException>(() => waitingLease);
     }
 
+    // ── Single-flight creation ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task ConcurrentColdMisses_ConstructOneSession()
+    {
+        using var pool = new InferenceSessionPool(4);
+        var releaseFactory = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int factoryCalls = 0;
+        Func<CancellationToken, Task<InferenceSession>> factory = async _ =>
+        {
+            Interlocked.Increment(ref factoryCalls);
+            await releaseFactory.Task;
+            return CreateMinimalSession();
+        };
+
+        Task<SessionLease> creator = pool.GetLeaseAsync(TestKey, factory, CancellationToken.None);
+        Task<SessionLease> waiter1 = pool.GetLeaseAsync(TestKey, factory, CancellationToken.None);
+        Task<SessionLease> waiter2 = pool.GetLeaseAsync(TestKey, factory, CancellationToken.None);
+        releaseFactory.SetResult();
+
+        // Leases on one key are exclusive, so take them in whatever order they are granted.
+        var remaining = new List<Task<SessionLease>> { creator, waiter1, waiter2 };
+        InferenceSession? session = null;
+        while (remaining.Count > 0)
+        {
+            Task<SessionLease> granted = await Task.WhenAny(remaining);
+            remaining.Remove(granted);
+            using SessionLease lease = await granted;
+            session ??= lease.Session;
+            Assert.Same(session, lease.Session);
+        }
+
+        Assert.Equal(1, factoryCalls);
+    }
+
+    [Fact]
+    public async Task CancellingTheCreator_LetsWaiterCreateInstead()
+    {
+        using var pool = new InferenceSessionPool(4);
+        var creatorStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int factoryCalls = 0;
+        using var creatorCts = new CancellationTokenSource();
+
+        Task<SessionLease> creator = pool.GetLeaseAsync(
+            TestKey,
+            async ct =>
+            {
+                Interlocked.Increment(ref factoryCalls);
+                creatorStarted.SetResult();
+                await Task.Delay(Timeout.Infinite, ct);
+                return CreateMinimalSession();
+            },
+            creatorCts.Token);
+        await creatorStarted.Task;
+
+        Task<SessionLease> waiter = pool.GetLeaseAsync(
+            TestKey,
+            _ => { Interlocked.Increment(ref factoryCalls); return Task.FromResult(CreateMinimalSession()); },
+            CancellationToken.None);
+        creatorCts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => creator);
+        using SessionLease lease = await waiter;
+        Assert.NotNull(lease.Session);
+        Assert.Equal(2, factoryCalls);
+    }
+
+    [Fact]
+    public async Task CancellingAWaiter_DoesNotCancelTheCreator()
+    {
+        using var pool = new InferenceSessionPool(4);
+        var releaseFactory = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var waiterCts = new CancellationTokenSource();
+
+        Task<SessionLease> creator = pool.GetLeaseAsync(
+            TestKey,
+            async _ => { await releaseFactory.Task; return CreateMinimalSession(); },
+            CancellationToken.None);
+        Task<SessionLease> waiter = pool.GetLeaseAsync(
+            TestKey,
+            _ => Task.FromException<InferenceSession>(new InvalidOperationException("waiter must not build")),
+            waiterCts.Token);
+
+        waiterCts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiter);
+        releaseFactory.SetResult();
+        using SessionLease lease = await creator;
+        Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task CreatorFailure_PropagatesToWaiters()
+    {
+        using var pool = new InferenceSessionPool(4);
+        var releaseFactory = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int factoryCalls = 0;
+        Func<CancellationToken, Task<InferenceSession>> factory = async _ =>
+        {
+            Interlocked.Increment(ref factoryCalls);
+            await releaseFactory.Task;
+            throw new InvalidOperationException("model load failed");
+        };
+
+        Task<SessionLease> creator = pool.GetLeaseAsync(TestKey, factory, CancellationToken.None);
+        Task<SessionLease> waiter = pool.GetLeaseAsync(TestKey, factory, CancellationToken.None);
+        releaseFactory.SetResult();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => creator);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => waiter);
+        Assert.Equal(1, factoryCalls);
+    }
+
     // ── LRU eviction & ephemeral fallback ────────────────────────────────────
 
     [Fact]

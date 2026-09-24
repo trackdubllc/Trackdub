@@ -6,6 +6,7 @@ using Trackdub.Inference.Onnx.ExecutionProviders;
 using Trackdub.Inference.Onnx.Qwen3Asr;
 using Trackdub.Inference.Onnx.NemotronAsr;
 using Trackdub.Inference.Onnx.ParakeetTdt;
+using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.SortFormer;
 using Trackdub.Inference.Onnx.Whisper;
 using Microsoft.ML.OnnxRuntime;
@@ -153,25 +154,36 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
-        // Pooled with the same engine family SileroVadSpeechRegionDetector uses, so the
-        // smoke run leaves a warm session for the VAD stage instead of a throwaway one.
-        using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync("silero-vad", modelPath, provider, cancellationToken, allowTrtInitFallback: false)
-            .ConfigureAwait(false);
+        // Keyed exactly like SileroVadSpeechRegionDetector, so the session this smoke verifies
+        // is the one the VAD stage leases next instead of being built a second time.
         try
         {
-            EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new InvalidOperationException(
-                $"{ex.Message} Session bootstrap: {sessionLease.BootstrapDetail}",
-                ex);
-        }
+            using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
+                .CreatePooledSingleAsync(SileroVadPoolFamily, modelPath, provider, cancellationToken, allowTrtInitFallback: false)
+                .ConfigureAwait(false);
+            try
+            {
+                EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidOperationException(
+                    $"{ex.Message} Session bootstrap: {sessionLease.BootstrapDetail}",
+                    ex);
+            }
 
-        using var input = CreateVadInputs();
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(input.Values);
+            using var input = CreateVadInputs();
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(input.Values);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Do not leave a session that failed verification for the stage to reuse.
+            await InferenceSessionPool.Shared.EvictModelAsync(SileroVadPoolFamily).ConfigureAwait(false);
+            throw;
+        }
     }
+
+    private const string SileroVadPoolFamily = "silero-vad";
 
     private static async Task SmokeTestWhisperAsync(
         string encoderModelPath,
@@ -838,12 +850,36 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     private static InputSet CreateDiarizationInputs(InferenceSession session)
     {
         IReadOnlyDictionary<string, NodeMetadata> inputs = session.InputMetadata;
+        if (SortFormerDiarizationEngine.IsStreamingExportInputSet(inputs.Keys))
+        {
+            return CreateSortFormerStreamingInputs();
+        }
+
         if (TryCreateWaveformDiarizationInputs(inputs, out InputSet? waveformInputs))
         {
             return waveformInputs!;
         }
 
         return CreateMetadataDrivenInputs(inputs);
+    }
+
+    // The streaming export's TRT engine is built for the engine's optimization profile (chunk is a
+    // fixed 1x3040x128 window), so probe inputs must sit inside it; "1 for every dynamic dim" does not.
+    private static InputSet CreateSortFormerStreamingInputs()
+    {
+        var values = new List<NamedOnnxValue>();
+        foreach (string entry in SortFormerDiarizationEngine.TrtOptions["trt_profile_opt_shapes"].Split(','))
+        {
+            string[] parts = entry.Split(':');
+            int[] dimensions = parts[1].Split('x').Select(int.Parse).ToArray();
+            int elementCount = dimensions.Aggregate(1, static (product, dimension) => checked(product * dimension));
+            values.Add(NamedOnnxValue.CreateFromTensor(parts[0], new DenseTensor<float>(new float[elementCount], dimensions)));
+            values.Add(NamedOnnxValue.CreateFromTensor(
+                parts[0] + "_lengths",
+                new DenseTensor<long>(new long[] { dimensions[1] }, [1])));
+        }
+
+        return new InputSet(values);
     }
 
     private static bool TryCreateWaveformDiarizationInputs(

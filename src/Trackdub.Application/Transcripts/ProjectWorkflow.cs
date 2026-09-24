@@ -542,7 +542,6 @@ public sealed class ProjectWorkflow(
                         projectId,
                         mediaAsset,
                         prepNormalizedAudio,
-                        VocalStemArtifact: null,
                         existingArtifacts),
                     cancellationToken)
                 .ConfigureAwait(false);

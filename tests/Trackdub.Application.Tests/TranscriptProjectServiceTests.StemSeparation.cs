@@ -73,7 +73,7 @@ public partial class TranscriptProjectServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_when_vocal_stem_is_rejected_keeps_full_mix_route_on_reload()
+    public async Task CreateAsync_with_vocal_stem_does_not_analyze_it_for_transcript_preparation()
     {
         string tempDirectory = CreateTempDirectory();
         string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
@@ -85,12 +85,6 @@ public partial class TranscriptProjectServiceTests
             CreateAudioQualityMetrics(SpeechAudioSourceKind.FullMix),
             AudioQualityAnalysisThresholds.ForSource(SpeechAudioSourceKind.FullMix),
             [],
-            []));
-        analyzer.QueueResult(new AudioQualityAnalysisResult(
-            "vocals.wav",
-            CreateAudioQualityMetrics(SpeechAudioSourceKind.VocalStem) with { ActiveRmsDbfs = -60.0d },
-            AudioQualityAnalysisThresholds.ForSource(SpeechAudioSourceKind.VocalStem),
-            [AudioQualityDefectKind.NearSilence],
             []));
         var transcriptionEngine = new RecordingAudioTranscriptionEngine();
         FakeServiceScope scope = CreateScope(
@@ -108,6 +102,7 @@ public partial class TranscriptProjectServiceTests
         Assert.Contains(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
         Assert.Equal(ProjectArtifactPaths.NormalizedAudioRelativePath, result.AsrAudioRelativePath);
         Assert.Equal(scope.ArtifactStore.GetPath(ProjectArtifactPaths.NormalizedAudioRelativePath), transcriptionEngine.LastAudioPath);
+        Assert.Equal(SpeechAudioSourceKind.FullMix, Assert.Single(analyzer.Requests).SourceKind);
     }
 
     [Fact]

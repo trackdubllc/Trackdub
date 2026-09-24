@@ -1,3 +1,4 @@
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Audio;
@@ -135,13 +136,13 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         string? detectedTranscriptLanguage = requestedSourceLanguage is not null &&
                                              tokenizer.TryGetLanguageTokenId(requestedSourceLanguage) is not null
             ? requestedSourceLanguage
-            : await DetectTranscriptLanguageAsync(
+            : DetectTranscriptLanguage(
                 sessionLease,
                 tokenizer,
                 featureExtractor,
                 targetAudio,
                 languageDetectionRegions,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
         var segments = new List<RecognizedTranscriptSegment>(transcriptionRegions.Count);
         bool repetitionGuarded = false;
 
@@ -200,7 +201,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         string DecoderModelPath,
         string ModelRootPath);
 
-    private async Task<string?> DetectTranscriptLanguageAsync(
+    private static string? DetectTranscriptLanguage(
         OnnxExecutionSessionFactory.WhisperSessionLease sessionLease,
         WhisperTokenizerDecoder tokenizer,
         WhisperFeatureExtractor featureExtractor,
@@ -213,21 +214,72 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            RegionTranscription transcription = await TranscribeRegionAsync(
+            string? regionLanguage = DetectRegionLanguage(
                 sessionLease,
                 tokenizer,
                 featureExtractor,
                 targetAudio,
                 region,
-                forcedLanguage: null,
-                cancellationToken).ConfigureAwait(false);
-            if (!string.IsNullOrWhiteSpace(transcription.DetectedLanguage))
+                cancellationToken);
+            if (!string.IsNullOrWhiteSpace(regionLanguage))
             {
-                detectedLanguages.Add(transcription.DetectedLanguage);
+                detectedLanguages.Add(regionLanguage);
             }
         }
 
         return ResolveDetectedLanguage(detectedLanguages);
+    }
+
+    /// <summary>
+    /// Votes the region's language from the same per-chunk language-token probe that
+    /// <see cref="GreedyDecodeAsync"/> runs, without the full greedy decode whose text
+    /// detection would discard.
+    /// </summary>
+    private static string? DetectRegionLanguage(
+        OnnxExecutionSessionFactory.WhisperSessionLease sessionLease,
+        WhisperTokenizerDecoder tokenizer,
+        WhisperFeatureExtractor featureExtractor,
+        IAudioSamples targetAudio,
+        SpeechRegion region,
+        CancellationToken cancellationToken)
+    {
+        long startSample = Math.Max(0, (long)Math.Floor(region.StartSeconds * 16000d));
+        long endSample = Math.Min(targetAudio.SampleFrameCount, (long)Math.Ceiling(region.EndSeconds * 16000d));
+        if (endSample <= startSample || tokenizer.LanguageTokenIds.Count == 0)
+        {
+            return null;
+        }
+
+        float[] regionSamples = new float[checked((int)(endSample - startSample))];
+        targetAudio.ReadMonoSamples(startSample, regionSamples);
+        List<string> chunkLanguages = [];
+        int maxChunkSamples = (int)(MaxChunkDurationSeconds * 16000d);
+        using var phase = BenchmarkPhaseCapture.Start("asr-language-detection");
+
+        for (int offset = 0; offset < regionSamples.Length; offset += maxChunkSamples)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int chunkLength = Math.Min(maxChunkSamples, regionSamples.Length - offset);
+            DenseTensor<float> features = featureExtractor.Extract(
+                new ReadOnlySpan<float>(regionSamples, offset, chunkLength));
+
+            using var encoderInputs = new InputSet(
+            [
+                NamedOnnxValue.CreateFromTensor("input_features", features)
+            ]);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
+                sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, cancellationToken: cancellationToken);
+            Tensor<float> hiddenStates = encoderResults.Single(static result => result.Name == "last_hidden_state").AsTensor<float>();
+
+            string? chunkLanguage = tokenizer.TryGetLanguageCode(
+                DetectLanguageToken(sessionLease.DecoderSession, tokenizer, hiddenStates, cancellationToken));
+            if (!string.IsNullOrWhiteSpace(chunkLanguage))
+            {
+                chunkLanguages.Add(chunkLanguage);
+            }
+        }
+
+        return ResolveDetectedLanguage(chunkLanguages);
     }
 
     private static string? NormalizeLanguageCode(string? languageCode)
@@ -393,7 +445,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
                 NamedOnnxValue.CreateFromTensor("input_features", features)
             ]);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
-                sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values);
+                sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, cancellationToken: cancellationToken);
             Tensor<float> hiddenStates = encoderResults.Single(static result => result.Name == "last_hidden_state").AsTensor<float>();
 
             WhisperDecodeResult decodeResult = await GreedyDecodeAsync(
@@ -455,7 +507,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         CancellationToken cancellationToken)
     {
         int? detectedLanguageToken = tokenizer.TryGetLanguageTokenId(forcedLanguage) ??
-                                     DetectLanguageToken(decoderSession, tokenizer, encoderHiddenStates);
+                                     DetectLanguageToken(decoderSession, tokenizer, encoderHiddenStates, cancellationToken);
         IReadOnlyList<int> promptTokens = tokenizer.BuildTranscriptionPrompt(detectedLanguageToken);
         string? detectedLanguage = tokenizer.TryGetLanguageCode(detectedLanguageToken);
         var generated = promptTokens.Select(static token => (long)token).ToList();
@@ -472,7 +524,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
             cancellationToken.ThrowIfCancellationRequested();
 
             using var decoderInputs = CreateDecoderInputs(generated, encoderHiddenStates);
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults = decoderSession.RunWithRetry(decoderInputs.Values);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults = decoderSession.RunWithRetry(decoderInputs.Values, cancellationToken: cancellationToken);
             Tensor<float> logits = decoderResults.Single(static result => result.Name == "logits").AsTensor<float>();
 
             int sequenceLength = logits.Dimensions[1];
@@ -576,7 +628,8 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
     private static int? DetectLanguageToken(
         InferenceSession decoderSession,
         WhisperTokenizerDecoder tokenizer,
-        Tensor<float> encoderHiddenStates)
+        Tensor<float> encoderHiddenStates,
+        CancellationToken cancellationToken)
     {
         if (tokenizer.LanguageTokenIds.Count == 0)
         {
@@ -584,7 +637,8 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         }
 
         using var decoderInputs = CreateDecoderInputs([tokenizer.DecoderStartToken], encoderHiddenStates);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults = decoderSession.RunWithRetry(decoderInputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults =
+            decoderSession.RunWithRetry(decoderInputs.Values, cancellationToken: cancellationToken);
         Tensor<float> logits = decoderResults.Single(static result => result.Name == "logits").AsTensor<float>();
 
         int sequenceLength = logits.Dimensions[1];
@@ -716,7 +770,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         throw new FileNotFoundException("Whisper decoder model was not found next to the encoder model.", decoderModelPath);
     }
 
-    private static Dictionary<string, string> BuildTrtEncoderOptions(int melBins) => new()
+    internal static Dictionary<string, string> BuildTrtEncoderOptions(int melBins) => new()
     {
         ["trt_profile_min_shapes"] = $"input_features:1x{melBins}x1",
         ["trt_profile_max_shapes"] = $"input_features:1x{melBins}x3000",
@@ -724,7 +778,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
     };
 
     // large-v3 uses 128 mel bins; earlier sizes use 80.
-    private static int ReadMelBins(string modelRootPath)
+    internal static int ReadMelBins(string modelRootPath)
     {
         string configPath = Path.Combine(modelRootPath, "preprocessor_config.json");
         if (!File.Exists(configPath))

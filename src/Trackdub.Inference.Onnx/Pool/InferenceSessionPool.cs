@@ -165,6 +165,12 @@ internal sealed class InferenceSessionPool : IDisposable
     private readonly int maxSessions;
     private readonly ConcurrentDictionary<SessionPoolKey, PoolEntry> entries = new();
     private readonly ConcurrentDictionary<SessionPoolKey, SemaphoreSlim> createGates = new();
+    /// <summary>
+    /// Most recent construction failure per key. A waiter that wakes to find no entry and no
+    /// in-flight creation consumes this so a failed creator's exception propagates without
+    /// re-invoking the factory (single-flight: one factory call per creation wave).
+    /// </summary>
+    private readonly ConcurrentDictionary<SessionPoolKey, Exception> creationFailures = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
     private readonly SemaphoreSlim bundleAcquireLock = new(1, 1);
     private readonly bool enableMemoryAdmission;
@@ -330,15 +336,24 @@ internal sealed class InferenceSessionPool : IDisposable
             }
 
             // Single-flight create: one factory invocation per key. Cancelling this waiter
-            // does not cancel the shared create for other callers.
+            // does not cancel the shared create for other callers. A creator that fails
+            // records the failure so queued waiters propagate it without rebuilding.
             SemaphoreSlim createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
-            await createGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            bool propagatedRecentFailure = false;
+            using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
+                await createGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 ObjectDisposedException.ThrowIf(disposed, this);
                 if (entries.ContainsKey(key))
                 {
                     continue;
+                }
+
+                if (creationFailures.TryRemove(key, out Exception? recentFailure) && recentFailure is not null)
+                {
+                    propagatedRecentFailure = true;
+                    throw recentFailure;
                 }
 
                 long needMb = ResolveReservationMb(key);
@@ -358,7 +373,6 @@ internal sealed class InferenceSessionPool : IDisposable
                             ReleaseReservation(device, needMb);
                         }
                         continue;
-                    }
                     }
 
                     if (enableMemoryAdmission)
@@ -544,6 +558,15 @@ internal sealed class InferenceSessionPool : IDisposable
                 }
 
                 continue;
+            }
+            catch (Exception ex)
+            {
+                if (!propagatedRecentFailure && ex is not OperationCanceledException)
+                {
+                    creationFailures[key] = ex;
+                }
+
+                throw;
             }
             finally
             {

@@ -153,6 +153,11 @@ public sealed class SepFormerOverlapRescueEngine : IOverlapRescueEngineAdapter, 
                 PermutationWarning: separated.PermutationWarning,
                 Metadata: metadata);
         }
+        catch (OperationCanceledException)
+        {
+            DeleteOutputPaths(request);
+            throw;
+        }
         catch (Exception ex)
         {
             DeleteOutputPaths(request);
