@@ -32,17 +32,33 @@ public sealed class DubbingExportFormatTests
         Assert.Equal(Path.Combine(projectRoot, "exports", "dubbed.mkv"), outputPath);
     }
 
-    [Fact]
-    public void ShouldSkipModelPreFlight_skips_translation_when_deepl_cloud_is_selected()
+    [Theory]
+    [InlineData(StageNames.Translation, TranslationModelOverrideSettings.DeepLModelAlias, true)]
+    [InlineData(StageNames.Translation, TranslationModelOverrideSettings.GeminiTranslationCloudAlias, true)]
+    [InlineData(StageNames.Translation, TranslationModelOverrideSettings.OpenAiGptCloudAlias, true)]
+    [InlineData(StageNames.Translation, "madlad400", false)]
+    [InlineData(StageNames.Asr, AsrModelOverrideSettings.GeminiAsrCloudAlias, true)]
+    [InlineData(StageNames.Asr, AsrModelOverrideSettings.OpenAiWhisperCloudAlias, true)]
+    [InlineData(StageNames.Asr, "qwen3-asr-0.6b", false)]
+    [InlineData(StageNames.Tts, TtsModelOverrideSettings.ElevenLabsCloudAlias, true)]
+    [InlineData(StageNames.Tts, TtsModelOverrideSettings.OpenAiTtsCloudAlias, true)]
+    [InlineData(StageNames.Tts, TtsModelOverrideSettings.GoogleTtsCloudAlias, true)]
+    [InlineData(StageNames.Tts, "kokoro-onnx", false)]
+    [InlineData(StageNames.TextRefinementAsr, "gemini-refinement-cloud", true)]
+    [InlineData(StageNames.TextRefinementAsr, "qwen-refinement", false)]
+    public void ShouldSkipModelPreFlight_handles_cloud_and_local_models(
+        string stageName,
+        string modelAlias,
+        bool expectedSkip)
     {
         bool skip = InvokeShouldSkipModelPreFlight(
-            StageNames.Translation,
+            stageName,
             new Dictionary<string, string>
             {
-                [StageNames.Translation] = TranslationModelOverrideSettings.DeepLModelAlias
+                [stageName] = modelAlias
             });
 
-        Assert.True(skip);
+        Assert.Equal(expectedSkip, skip);
     }
 
     private static bool InvokeShouldSkipModelPreFlight(
