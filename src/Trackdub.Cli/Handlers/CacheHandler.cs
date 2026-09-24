@@ -36,13 +36,17 @@ internal static class CacheHandler
     public static async Task<int> WarmEnginesAsync(
         TrackdubSessionFactory factory,
         TextWriter output,
+        TextWriter progressOutput,
         IReadOnlyList<string>? modelPaths,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         IEpContextWarmupService warmup = factory.GetRequiredService<IEpContextWarmupService>();
-        var progress = new Progress<string>(message => output.WriteLine(message));
+
+        // Synchronous reporter on the progress stream: keeps stdout machine-readable and
+        // guarantees every progress line is written before the JSON report line.
+        var progress = new ImmediateProgress(progressOutput);
         EpContextWarmReport report = await warmup.WarmAsync(modelPaths, progress, cancellationToken)
             .ConfigureAwait(false);
 
@@ -75,6 +79,14 @@ internal static class CacheHandler
     private static string BuildWarmMessage(EpContextWarmReport report) =>
         $"EP-context warm: compiled={report.CompiledCount}, reused={report.ReusedCount}, " +
         $"skipped={report.SkippedCount}, failed={report.FailedCount}.";
+
+    private sealed class ImmediateProgress(TextWriter progressOutput) : IProgress<string>
+    {
+        public void Report(string message)
+        {
+            progressOutput.WriteLine(message);
+        }
+    }
 
     private static string BuildClearEnginesMessage(EngineCacheClearResult result)
     {

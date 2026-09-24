@@ -57,10 +57,19 @@ internal static class CacheCommand
 
             string[]? models = parseResult.GetValue(modelOption);
             IReadOnlyList<string>? modelPaths = models is { Length: > 0 } ? models : null;
+            string[] missingModels = modelPaths?.Where(static path => !File.Exists(path)).ToArray() ?? [];
+            if (missingModels.Length > 0)
+            {
+                CliErrorReporter.ReportValidationError(
+                    ErrorCode.InvalidArgument,
+                    $"Model path(s) not found: {string.Join(", ", missingModels)}",
+                    "--model");
+                return Program.ExitArgumentError;
+            }
 
             using (factory)
             {
-                return await CacheHandler.WarmEnginesAsync(factory, Console.Out, modelPaths, cancellationToken)
+                return await CacheHandler.WarmEnginesAsync(factory, Console.Out, Console.Error, modelPaths, cancellationToken)
                     .ConfigureAwait(false);
             }
         });
