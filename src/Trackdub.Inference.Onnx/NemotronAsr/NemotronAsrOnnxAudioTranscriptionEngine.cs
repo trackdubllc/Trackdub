@@ -106,6 +106,8 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
                 modelPaths.DecoderJointPath,
                 plan.ExecutionProvider!.Value,
                 cancellationToken,
+                // modelId/variant participate in SessionPoolKey; smoke passes the same values
+                // so a proven smoke session is reused here instead of a second cold create.
                 modelId: plan.ModelId,
                 variant: plan.Variant,
                 additionalTrtEncoderOptions: NemotronAsrEncoderTrtProfiles.BuildOptions(modelPaths.EncoderPath))

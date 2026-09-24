@@ -2,9 +2,12 @@ using Microsoft.ML.OnnxRuntimeGenAI;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.Planning;
 using Trackdub.Inference.Onnx.Runtime;
+using Trackdub.Inference.Onnx.ExecutionProviders;
 using Trackdub.Inference.Onnx.Qwen3Asr;
 using Trackdub.Inference.Onnx.NemotronAsr;
 using Trackdub.Inference.Onnx.ParakeetTdt;
+using Trackdub.Inference.Onnx.SortFormer;
+using Trackdub.Inference.Onnx.Whisper;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -21,6 +24,32 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
         try
         {
+            // Fatal-CTP guards first: these families hard-crash the host under TRT, and the
+            // refusal must happen before any bootstrap/native touch (a crash cannot be caught).
+            if (request.Stage is RuntimeStage.TextRefinement
+                || UsesOrtGenAiModelLoad(request.EngineFamily)
+                || UsesOrtGenAiTranslationSmoke(request.EngineFamily))
+            {
+                ThrowIfGenAiTensorRtProvider(request.ExecutionProvider);
+            }
+
+            ThrowIfFatalTensorRtFamily(request.EngineFamily, request.ExecutionProvider);
+
+            // Register/validate the requested EP before any probe session. When the bootstrapper
+            // cannot keep the requested provider selected (e.g. TRT RTX plugin missing and
+            // falling back to DirectML), the pair is unproven — fail fast with that detail
+            // instead of creating a session that silently lands on a different provider.
+            ExecutionProviderBootstrapResult bootstrap = await OnnxExecutionSessionFactory
+                .BootstrapForSmokeAsync(request.ExecutionProvider, cancellationToken)
+                .ConfigureAwait(false);
+            if (!bootstrap.IsRequestFulfilled)
+            {
+                return new ExecutionProviderSmokeTestResult(
+                    false,
+                    $"Smoke bootstrap could not select {request.ExecutionProvider} "
+                    + $"(selected {bootstrap.SelectedProvider}). {bootstrap.Detail}");
+            }
+
             switch (request.Stage)
             {
                 case RuntimeStage.Vad:
@@ -30,7 +59,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                     await SmokeTestAsrAsync(request, cancellationToken).ConfigureAwait(false);
                     break;
                 case RuntimeStage.Separation:
-                    await SmokeTestSeparationAsync(request.ModelId, request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
+                    await SmokeTestSeparationAsync(request, cancellationToken).ConfigureAwait(false);
                     break;
                 case RuntimeStage.Translation:
                     await SmokeTestTranslationAsync(request, cancellationToken).ConfigureAwait(false);
@@ -59,7 +88,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 case RuntimeStage.OverlapRescue:
                 case RuntimeStage.LipSync:
                 case RuntimeStage.LipSynthesis:
-                    await SmokeTestGenericSessionAsync(request.EntryPath, request.ExecutionProvider, cancellationToken)
+                    await SmokeTestGenericSessionAsync(request, cancellationToken)
                         .ConfigureAwait(false);
                     break;
                 default:
@@ -124,10 +153,21 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
+        // Pooled with the same engine family SileroVadSpeechRegionDetector uses, so the
+        // smoke run leaves a warm session for the VAD stage instead of a throwaway one.
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreateSingleAsync(modelPath, provider, cancellationToken)
+            .CreatePooledSingleAsync("silero-vad", modelPath, provider, cancellationToken, allowTrtInitFallback: false)
             .ConfigureAwait(false);
-        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        try
+        {
+            EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(
+                $"{ex.Message} Session bootstrap: {sessionLease.BootstrapDetail}",
+                ex);
+        }
 
         using var input = CreateVadInputs();
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(input.Values);
@@ -139,8 +179,19 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         CancellationToken cancellationToken)
     {
         string decoderModelPath = ResolveWhisperDecoderPath(encoderModelPath);
+        string? onnxDirectory = Path.GetDirectoryName(encoderModelPath);
+        string modelRootPath = Path.GetDirectoryName(onnxDirectory ?? string.Empty)
+            ?? throw new InvalidOperationException("Whisper smoke test could not resolve model root.");
+        // Pooled with the same family/TRT profiles WhisperOnnxAudioTranscriptionEngine uses.
         using OnnxExecutionSessionFactory.WhisperSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreateWhisperAsync(encoderModelPath, decoderModelPath, provider, cancellationToken)
+            .CreatePooledWhisperAsync(
+                WhisperOnnxAudioTranscriptionEngine.EngineFamilyName,
+                encoderModelPath,
+                decoderModelPath,
+                provider,
+                cancellationToken,
+                additionalTrtEncoderOptions: WhisperOnnxAudioTranscriptionEngine.BuildTrtEncoderOptions(
+                    WhisperOnnxAudioTranscriptionEngine.ReadMelBins(modelRootPath)))
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
@@ -179,19 +230,21 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         string engineFamily = request.EngineFamily?.Trim() ?? string.Empty;
         if (engineFamily.Equals("qwen3-asr", StringComparison.OrdinalIgnoreCase))
         {
+            // Pool key: production Qwen3 omits modelId/variant; keep smoke identical so the
+            // session proven here is the one the ASR stage reuses.
             await SmokeTestQwen3AsrAsync(request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         if (engineFamily.Equals("nemotron-asr", StringComparison.OrdinalIgnoreCase))
         {
-            await SmokeTestNemotronAsrAsync(request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
+            await SmokeTestNemotronAsrAsync(request, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         if (engineFamily.Equals(ParakeetTdtOnnxAudioTranscriptionEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase))
         {
-            await SmokeTestParakeetTdtAsync(request.EntryPath, request.ExecutionProvider, cancellationToken).ConfigureAwait(false);
+            await SmokeTestParakeetTdtAsync(request, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -212,7 +265,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             return;
         }
 
-        await SmokeTestGenericSessionAsync(request.EntryPath, request.ExecutionProvider, cancellationToken)
+        await SmokeTestGenericSessionAsync(request, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -294,17 +347,64 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     }
 
     private static async Task SmokeTestGenericSessionAsync(
-        string modelPath,
-        ExecutionProviderKind provider,
+        ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
+        string poolFamily = ResolveGenericPoolFamily(request);
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreateSingleAsync(modelPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(
+                poolFamily,
+                request.EntryPath,
+                request.ExecutionProvider,
+                cancellationToken,
+                allowTrtInitFallback: false)
             .ConfigureAwait(false);
-        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
         using var inputs = CreateMetadataDrivenInputs(sessionLease.Session.InputMetadata);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(inputs.Values);
+    }
+
+    /// <summary>
+    /// Resolves the pool family for generic single-graph smoke targets so the key matches
+    /// the production engine's CreatePooledSingleAsync family (DeepFilterNet, SepFormer, LatentSync).
+    /// </summary>
+    private static string ResolveGenericPoolFamily(ExecutionProviderSmokeTestRequest request)
+    {
+        string name = $"{request.EngineFamily} {request.ModelId} {Path.GetFileNameWithoutExtension(request.EntryPath)}";
+        if (name.Contains("deepfilternet", StringComparison.OrdinalIgnoreCase) ||
+            request.Stage is RuntimeStage.SpeechEnhancement)
+        {
+            if (name.Contains("erb", StringComparison.OrdinalIgnoreCase))
+            {
+                return "deepfilternet3-erb-dec";
+            }
+
+            if (name.Contains("df_dec", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("df-dec", StringComparison.OrdinalIgnoreCase))
+            {
+                return "deepfilternet3-df-dec";
+            }
+
+            if (name.Contains("enc", StringComparison.OrdinalIgnoreCase))
+            {
+                return "deepfilternet3-enc";
+            }
+        }
+
+        if (request.Stage is RuntimeStage.OverlapRescue)
+        {
+            return name.Contains("osd", StringComparison.OrdinalIgnoreCase)
+                ? "sepformer-osd"
+                : "sepformer";
+        }
+
+        if (request.Stage is RuntimeStage.LipSync or RuntimeStage.LipSynthesis)
+        {
+            return string.IsNullOrWhiteSpace(request.EngineFamily) ? "latentsync" : request.EngineFamily;
+        }
+
+        return string.IsNullOrWhiteSpace(request.EngineFamily) ? request.Stage.ToString().ToLowerInvariant() : request.EngineFamily;
     }
 
     private static async Task SmokeTestQwen3AsrAsync(
@@ -338,21 +438,25 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     }
 
     private static async Task SmokeTestNemotronAsrAsync(
-        string encoderModelPath,
-        ExecutionProviderKind provider,
+        ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
+        string encoderModelPath = request.EntryPath;
         string decoderJointPath = ResolveNemotronDecoderJointPath(encoderModelPath);
+        // modelId/variant must match NemotronAsrOnnxAudioTranscriptionEngine or the stage
+        // misses this pooled session and pays cold load again.
         using OnnxExecutionSessionFactory.NemotronAsrSessionLease sessionLease = await OnnxExecutionSessionFactory
             .CreatePooledNemotronAsrAsync(
                 "nemotron-asr",
                 encoderModelPath,
                 decoderJointPath,
-                provider,
+                request.ExecutionProvider,
                 cancellationToken,
+                modelId: request.ModelId,
+                variant: request.Variant,
                 additionalTrtEncoderOptions: NemotronAsrEncoderTrtProfiles.BuildOptions(encoderModelPath))
             .ConfigureAwait(false);
-        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
         using var encoderInputs = CreateNemotronEncoderInputs(sessionLease.EncoderSession.InputMetadata);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
@@ -363,22 +467,35 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     }
 
     private static async Task SmokeTestParakeetTdtAsync(
-        string encoderModelPath,
-        ExecutionProviderKind provider,
+        ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
+        string encoderModelPath = request.EntryPath;
         string root = Path.GetDirectoryName(encoderModelPath)
             ?? throw new InvalidOperationException("Parakeet-TDT smoke test could not resolve model root.");
+        // Preprocessor is a separate pooled CPU graph in production; warm the same key so the
+        // stage does not rebuild nemo128.onnx after a successful smoke.
+        using OnnxExecutionSessionFactory.SingleSessionLease preprocessor = await OnnxExecutionSessionFactory
+            .CreatePooledSingleAsync(
+                "parakeet-tdt-preprocessor",
+                Path.Combine(root, "nemo128.onnx"),
+                ExecutionProviderKind.Cpu,
+                cancellationToken)
+            .ConfigureAwait(false);
+        EnsureSelectedProviderMatchesRequested(ExecutionProviderKind.Cpu, preprocessor.SelectedProvider);
+
         using OnnxExecutionSessionFactory.NemotronAsrSessionLease sessionLease = await OnnxExecutionSessionFactory
             .CreatePooledNemotronAsrAsync(
                 ParakeetTdtOnnxAudioTranscriptionEngine.EngineFamilyName,
                 encoderModelPath,
                 Path.Combine(root, "decoder_joint-model.onnx"),
-                provider,
+                request.ExecutionProvider,
                 cancellationToken,
+                modelId: request.ModelId,
+                variant: request.Variant,
                 additionalTrtEncoderOptions: ParakeetTdtOnnxAudioTranscriptionEngine.TrtEncoderOptions)
             .ConfigureAwait(false);
-        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
         const int melFrames = 100;
         using var encoderInputs = new InputSet([
@@ -393,19 +510,51 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     }
 
     private static async Task SmokeTestSeparationAsync(
-        string modelId,
-        string modelPath,
-        ExecutionProviderKind provider,
+        ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
-        string runnableModelPath = modelPath;
+        string runnableModelPath = request.EntryPath;
+        string poolFamily = ResolveSeparationPoolFamily(request.EngineFamily, request.ModelId, runnableModelPath);
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreateSingleAsync(runnableModelPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(poolFamily, runnableModelPath, request.ExecutionProvider, cancellationToken, allowTrtInitFallback: false)
             .ConfigureAwait(false);
-        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
         using var inputs = CreateSeparationInputs(sessionLease.Session);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(inputs.Values);
+    }
+
+    /// <summary>
+    /// Maps a separation smoke target onto the pool family strings used by the production
+    /// separators (Spleeter/SepFormer) so smoke and stage runs share one warm session.
+    /// </summary>
+    private static string ResolveSeparationPoolFamily(string? engineFamily, string modelId, string modelPath)
+    {
+        string name = $"{modelId} {Path.GetFileNameWithoutExtension(modelPath)} {engineFamily}";
+        if (name.Contains("vocals", StringComparison.OrdinalIgnoreCase))
+        {
+            return "spleeter-vocals";
+        }
+
+        if (name.Contains("accompaniment", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("spleeter-acc", StringComparison.OrdinalIgnoreCase) ||
+            (name.Contains("acc", StringComparison.OrdinalIgnoreCase) && name.Contains("spleeter", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "spleeter-acc";
+        }
+
+        if (name.Contains("osd", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("overlap", StringComparison.OrdinalIgnoreCase))
+        {
+            return "sepformer-osd";
+        }
+
+        if (name.Contains("sepformer", StringComparison.OrdinalIgnoreCase))
+        {
+            return "sepformer";
+        }
+
+        return string.IsNullOrWhiteSpace(engineFamily) ? "separation" : engineFamily;
     }
 
     private static async Task SmokeTestDiarizationAsync(
@@ -413,8 +562,16 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
+        // Same family + TRT profiles as SortFormerDiarizationEngine so the smoke run warms
+        // the session the diarization stage will lease.
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreateSingleAsync(modelPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(
+                SortFormerDiarizationEngine.EngineFamilyName,
+                modelPath,
+                provider,
+                cancellationToken,
+                additionalTrtOptions: SortFormerDiarizationEngine.TrtOptions,
+                allowTrtInitFallback: false)
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
@@ -432,13 +589,85 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         CancellationToken cancellationToken)
     {
         string modelPath = ResolveTtsProbeModelPath(modelId, modelAlias, modelRootPath, entryPath, variant);
+        string poolFamily = ResolveTtsPoolFamily(modelId, modelAlias);
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreateSingleAsync(modelPath, provider, cancellationToken)
+            .CreatePooledSingleAsync(poolFamily, modelPath, provider, cancellationToken, allowTrtInitFallback: false)
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
         using var inputs = CreateTtsInputs(sessionLease.Session.InputMetadata);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(inputs.Values);
+
+        if (IsChatterboxTtsModel(modelId, modelAlias))
+        {
+            await WarmChatterboxSidecarsAsync(modelRootPath, entryPath, variant, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static string ResolveTtsPoolFamily(string modelId, string modelAlias)
+    {
+        if (IsChatterboxTtsModel(modelId, modelAlias))
+        {
+            return "chatterbox";
+        }
+
+        if (modelId.Contains("cosyvoice", StringComparison.OrdinalIgnoreCase) ||
+            modelAlias.Contains("cosyvoice", StringComparison.OrdinalIgnoreCase))
+        {
+            return "cosyvoice";
+        }
+
+        return "kokoro";
+    }
+
+    /// <summary>
+    /// Pre-warms the three Chatterbox CPU sidecar graphs so the TTS stage does not pay
+    /// their cold load after the smoke test already warmed the conditional decoder.
+    /// Provider selection mirrors ChatterboxVoiceCloneTtsEngine (sidecars on CPU).
+    /// </summary>
+    private static async Task WarmChatterboxSidecarsAsync(
+        string modelRootPath,
+        string entryPath,
+        string variant,
+        CancellationToken cancellationToken)
+    {
+        string rootPath = !string.IsNullOrWhiteSpace(modelRootPath)
+            ? modelRootPath
+            : Path.GetDirectoryName(entryPath)
+                ?? throw new InvalidOperationException("Cannot resolve Chatterbox TTS warmup root path.");
+        string onnxDirectory = string.Equals(Path.GetFileName(rootPath), "onnx", StringComparison.OrdinalIgnoreCase)
+            ? rootPath
+            : Path.Combine(rootPath, "onnx");
+
+        foreach (string graphName in new[] { "speech_encoder", "embed_tokens", "language_model" })
+        {
+            string graphPath = ResolveChatterboxGraphPath(onnxDirectory, graphName, variant);
+            if (!File.Exists(graphPath))
+            {
+                continue;
+            }
+
+            await OnnxExecutionSessionFactory.WarmPooledSingleAsync(
+                "chatterbox",
+                graphPath,
+                ExecutionProviderKind.Cpu,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static string ResolveChatterboxGraphPath(string onnxDirectory, string graphName, string? variant)
+    {
+        if (!string.IsNullOrWhiteSpace(variant) &&
+            !variant.Equals("default", StringComparison.OrdinalIgnoreCase))
+        {
+            string variantPath = Path.Combine(onnxDirectory, $"{graphName}_{variant}.onnx");
+            if (File.Exists(variantPath))
+            {
+                return variantPath;
+            }
+        }
+
+        return Path.Combine(onnxDirectory, $"{graphName}.onnx");
     }
 
     private static InputSet CreateVadInputs()
