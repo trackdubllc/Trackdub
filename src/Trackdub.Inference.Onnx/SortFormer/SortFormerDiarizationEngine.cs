@@ -37,7 +37,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     private const int StreamingFeedFeatureFrames =
         (StreamingChunkModelFrames + StreamingRightContextModelFrames) * StreamingFeatureSubsampling;
 
-    private static readonly IReadOnlyDictionary<string, string> TrtOptions = new Dictionary<string, string>
+    internal static readonly IReadOnlyDictionary<string, string> TrtOptions = new Dictionary<string, string>
     {
         ["trt_profile_min_shapes"] = "waveform:1x16000",
         ["trt_profile_max_shapes"] = "waveform:1x57600000",

@@ -350,7 +350,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     continue;
                 }
 
-                if (creationFailures.TryRemove(key, out Exception recentFailure))
+                if (creationFailures.TryRemove(key, out Exception? recentFailure) && recentFailure is not null)
                 {
                     propagatedRecentFailure = true;
                     throw recentFailure;
