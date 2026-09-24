@@ -20,7 +20,10 @@ internal sealed class ParakeetTdtGreedyDecoder(
 
     internal readonly record struct EmittedToken(int TokenId, int Frame, int Duration);
 
-    public IReadOnlyList<EmittedToken> Decode(Tensor<float> encoded, int encodedLength)
+    public IReadOnlyList<EmittedToken> Decode(
+        Tensor<float> encoded,
+        int encodedLength,
+        CancellationToken cancellationToken = default)
     {
         int frameCount = Math.Min(encodedLength, encoded.Dimensions[2]);
         int[] stateShape = ResolveStateShape();
@@ -33,9 +36,11 @@ internal sealed class ParakeetTdtGreedyDecoder(
 
         while (frame < frameCount)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             DenseTensor<float> encoderFrame = SliceFrame(encoded, frame);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = decoderJointSession.RunWithRetry(
                 BuildInputs(encoderFrame, lastToken, state1, state2),
+                cancellationToken: cancellationToken,
                 provider: provider);
 
             float[] logits = results.Single(static value => value.Name == "outputs").AsTensor<float>().ToArray();

@@ -82,6 +82,7 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
         InferenceRequestOptions options = request.Options ?? InferenceRequestOptions.Default;
 
         StageRuntimePlan plan = await runtimePlanner.PlanAsync(
@@ -108,6 +109,7 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(plan);
+        cancellationToken.ThrowIfCancellationRequested();
         EnsurePlanReady(plan);
 
         BenchmarkModelCandidate candidate = PlannedRuntimeModelResolver.ResolveCandidate(plan, modelPathResolver);
@@ -148,7 +150,8 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
             int phonemeTokenCount = Math.Max(0, inputIds.Length - 2);
             float[] styleVector = KokoroVoicepackLoader.LoadStyleVector(binPath, phonemeTokenCount);
 
-            float[] audioSamples = RunInference(session.Lease.Session, inputIds, styleVector, request.Speed);
+            float[] audioSamples = RunInference(
+                session.Lease.Session, inputIds, styleVector, request.Speed, cancellationToken);
             byte[] wavBytes = KokoroPcmConverter.EncodePcm16Wav(audioSamples, SampleRate);
 
             LastExecutionSummary = new StageRuntimeExecutionSummary(
@@ -265,7 +268,8 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         InferenceSession session,
         long[] inputIds,
         float[] styleVector,
-        float speed)
+        float speed,
+        CancellationToken cancellationToken)
     {
         var inputs = new List<NamedOnnxValue>(3);
         foreach ((string name, _) in session.InputMetadata)
@@ -285,7 +289,9 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
             });
         }
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.RunWithRetry(inputs);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.RunWithRetry(
+            inputs,
+            cancellationToken: cancellationToken);
 
         // Model has one output (waveform/audio); take the first regardless of name.
         DisposableNamedOnnxValue audioOutput = results.Count == 1

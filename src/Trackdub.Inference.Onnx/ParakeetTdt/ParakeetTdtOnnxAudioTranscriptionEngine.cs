@@ -64,6 +64,7 @@ public sealed class ParakeetTdtOnnxAudioTranscriptionEngine(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
         InferenceRequestOptions options = request.Options ?? InferenceRequestOptions.Default;
         StageRuntimePlan plan = await runtimePlanner.PlanAsync(
             await StageRuntimePlanningRequestFactory.ApplyPreferredModelTierAsync(
@@ -91,6 +92,7 @@ public sealed class ParakeetTdtOnnxAudioTranscriptionEngine(
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(plan);
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(request.Regions);
         if (!plan.IsRunnable() || plan.ExecutionProvider is null)
         {
@@ -151,7 +153,8 @@ public sealed class ParakeetTdtOnnxAudioTranscriptionEngine(
                     windowStart == region.StartSeconds ? claimStart : windowStart,
                     windowEnd >= region.EndSeconds ? claimEnd : windowEnd,
                     durationSeconds,
-                    words.Count));
+                    words.Count,
+                    cancellationToken));
             }
 
             regionWords.Add(words);
@@ -194,7 +197,8 @@ public sealed class ParakeetTdtOnnxAudioTranscriptionEngine(
         double claimStart,
         double claimEnd,
         double audioDuration,
-        int firstWordIndex)
+        int firstWordIndex,
+        CancellationToken cancellationToken)
     {
         double windowStart = Math.Max(0.0, keepStart - ContextPaddingSeconds);
         double windowEnd = Math.Min(audioDuration, keepEnd + ContextPaddingSeconds);
@@ -212,7 +216,7 @@ public sealed class ParakeetTdtOnnxAudioTranscriptionEngine(
         [
             NamedOnnxValue.CreateFromTensor("waveforms", new DenseTensor<float>(samples, [1, samples.Length])),
             NamedOnnxValue.CreateFromTensor("waveforms_lens", new DenseTensor<long>(new long[] { samples.Length }, [1])),
-        ]);
+        ], cancellationToken: cancellationToken);
         Tensor<float> mel = features.Single(static v => v.Name == "features").AsTensor<float>();
         long melLength = features.Single(static v => v.Name == "features_lens").AsTensor<long>().First();
 
@@ -220,11 +224,12 @@ public sealed class ParakeetTdtOnnxAudioTranscriptionEngine(
         [
             NamedOnnxValue.CreateFromTensor("audio_signal", mel),
             NamedOnnxValue.CreateFromTensor("length", new DenseTensor<long>(new[] { melLength }, [1])),
-        ]);
+        ], cancellationToken: cancellationToken);
         Tensor<float> encoderOutput = encoded.Single(static v => v.Name == "outputs").AsTensor<float>();
         int encodedLength = (int)encoded.Single(static v => v.Name == "encoded_lengths").AsTensor<long>().First();
 
-        IReadOnlyList<ParakeetTdtGreedyDecoder.EmittedToken> tokens = decoder.Decode(encoderOutput, encodedLength);
+        IReadOnlyList<ParakeetTdtGreedyDecoder.EmittedToken> tokens = decoder.Decode(
+            encoderOutput, encodedLength, cancellationToken);
         return GroupWords(tokens, vocab, windowStart, claimStart, claimEnd, firstWordIndex);
     }
 

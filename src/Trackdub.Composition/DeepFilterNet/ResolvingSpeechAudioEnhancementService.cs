@@ -18,6 +18,7 @@ internal sealed class ResolvingSpeechAudioEnhancementService(
         SpeechAudioEnhancementRequest request,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         DeepFilterNetModelPaths? paths = await DeepFilterNetModelPaths
             .TryResolveAsync(registry, modelCacheInventory, cancellationToken)
             .ConfigureAwait(false);

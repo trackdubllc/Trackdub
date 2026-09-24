@@ -63,6 +63,7 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
 
         StageRuntimePlan plan = await runtimePlanner.PlanAsync(
             new StageRuntimePlanningRequest(
@@ -159,7 +160,8 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
                     frameIndex,
                     frames.FrameRate,
                     AudioConditioningWindowSeconds);
-                (float[] whisperEmbeds, int whisperSeqLen, int whisperHiddenDim) = RunWhisperEncoder(lease.WhisperEncoderSession, framePcm);
+                (float[] whisperEmbeds, int whisperSeqLen, int whisperHiddenDim) = RunWhisperEncoder(
+                    lease.WhisperEncoderSession, framePcm, cancellationToken);
 
                 byte[] rgbaBytes = await File.ReadAllBytesAsync(framePath, cancellationToken)
                     .ConfigureAwait(false);
@@ -168,7 +170,8 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
 
                 // Encode reference frame to latent space.
                 float[] normalizedFrame = LatentSyncTensorPreprocessor.RgbaToNormalizedTensor(rgbaBytes, w, h);
-                float[] refLatent = RunVaeEncoder(lease.VaeEncoderSession, normalizedFrame);
+                float[] refLatent = RunVaeEncoder(
+                    lease.VaeEncoderSession, normalizedFrame, cancellationToken);
 
                 // Initialize noisy latent.
                 float[] noisyLatent = CreateGaussianNoise(refLatent.Length);
@@ -177,12 +180,21 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
                 // DDIM denoising loop.
                 foreach (int t in scheduler.Timesteps)
                 {
-                    float[] noise = RunUNet(lease.UNetSession, noisyLatent, t, whisperEmbeds, whisperSeqLen, whisperHiddenDim);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    float[] noise = RunUNet(
+                        lease.UNetSession,
+                        noisyLatent,
+                        t,
+                        whisperEmbeds,
+                        whisperSeqLen,
+                        whisperHiddenDim,
+                        cancellationToken);
                     noisyLatent = scheduler.Step(noise, t, noisyLatent);
                 }
 
                 // Decode latent to pixel space and write back.
-                float[] decoded = RunVaeDecoder(lease.VaeDecoderSession, noisyLatent);
+                float[] decoded = RunVaeDecoder(
+                    lease.VaeDecoderSession, noisyLatent, cancellationToken);
 
                 Span<byte> outRgba = rgbaBytes;
                 LatentSyncTensorPreprocessor.PasteFloatTensorIntoRgba(
@@ -234,7 +246,10 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         }
     }
 
-    private static (float[] Embeddings, int SeqLen, int HiddenDim) RunWhisperEncoder(InferenceSession session, float[] pcm16000Hz)
+    private static (float[] Embeddings, int SeqLen, int HiddenDim) RunWhisperEncoder(
+        InferenceSession session,
+        float[] pcm16000Hz,
+        CancellationToken cancellationToken)
     {
         float[] mel = LatentSyncTensorPreprocessor.ComputeWhisperMelSpectrogram(pcm16000Hz);
         (int melBins, int melFrames) = LatentSyncTensorPreprocessor.MelShape;
@@ -242,7 +257,9 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         var melTensor = new DenseTensor<float>(mel, [1, melBins, melFrames]);
         var inputs = new[] { NamedOnnxValue.CreateFromTensor("input_features", melTensor) };
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputs);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(
+            inputs,
+            cancellationToken: cancellationToken);
         var hidden = outputs.Single(o => o.Name == "last_hidden_state").AsTensor<float>();
         return (hidden.ToArray(), hidden.Dimensions[1], hidden.Dimensions[2]);
     }
@@ -274,20 +291,28 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         return window;
     }
 
-    private static float[] RunVaeEncoder(InferenceSession session, float[] normalizedFrame)
+    private static float[] RunVaeEncoder(
+        InferenceSession session,
+        float[] normalizedFrame,
+        CancellationToken cancellationToken)
     {
         int h = LatentSyncTensorPreprocessor.TargetHeight;
         int w = LatentSyncTensorPreprocessor.TargetWidth;
         var frameTensor = new DenseTensor<float>(normalizedFrame, [1, 3, h, w]);
         var inputs = new[] { NamedOnnxValue.CreateFromTensor("sample", frameTensor) };
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputs);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(
+            inputs,
+            cancellationToken: cancellationToken);
         return outputs.Single(o => o.Name == "latent_sample")
             .AsTensor<float>()
             .ToArray();
     }
 
-    private static float[] RunVaeDecoder(InferenceSession session, float[] latent)
+    private static float[] RunVaeDecoder(
+        InferenceSession session,
+        float[] latent,
+        CancellationToken cancellationToken)
     {
         int lh = LatentSyncTensorPreprocessor.LatentHeight;
         int lw = LatentSyncTensorPreprocessor.LatentWidth;
@@ -295,7 +320,9 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         var latentTensor = new DenseTensor<float>(latent, [1, lc, lh, lw]);
         var inputs = new[] { NamedOnnxValue.CreateFromTensor("latent_sample", latentTensor) };
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputs);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(
+            inputs,
+            cancellationToken: cancellationToken);
         return outputs.Single(o => o.Name == "sample")
             .AsTensor<float>()
             .ToArray();
@@ -307,7 +334,8 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         int timestep,
         float[] encoderHiddenStates,
         int seqLen,
-        int hiddenDim)
+        int hiddenDim,
+        CancellationToken cancellationToken)
     {
         int lh = LatentSyncTensorPreprocessor.LatentHeight;
         int lw = LatentSyncTensorPreprocessor.LatentWidth;
@@ -324,7 +352,9 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
             NamedOnnxValue.CreateFromTensor("encoder_hidden_states", hiddenTensor),
         };
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputs);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(
+            inputs,
+            cancellationToken: cancellationToken);
         return outputs.Single(o => o.Name == "out_sample")
             .AsTensor<float>()
             .ToArray();
