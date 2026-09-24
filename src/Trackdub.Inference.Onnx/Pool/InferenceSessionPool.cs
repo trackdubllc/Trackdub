@@ -368,7 +368,12 @@ internal sealed class InferenceSessionPool : IDisposable
                     ObjectDisposedException.ThrowIf(disposed, this);
                     if (entries.ContainsKey(key))
                     {
+                        if (reserved)
+                        {
+                            ReleaseReservation(device, needMb);
+                        }
                         continue;
+                    }
                     }
 
                     if (enableMemoryAdmission)
