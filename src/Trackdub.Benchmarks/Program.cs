@@ -263,6 +263,13 @@ public static class Program
 
             return report.Success ? 0 : 1;
         }
+        catch (OperationCanceledException)
+        {
+            // Cancellation (Ctrl+C) must keep its non-zero exit semantics instead of a
+            // regular failure exit; stage failures are captured in the report, so anything
+            // else reaching here is unexpected and reported with its message.
+            throw;
+        }
         catch (Exception ex)
         {
             error.WriteLine(ex.Message);

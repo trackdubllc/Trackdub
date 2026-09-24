@@ -26,7 +26,7 @@ Milestone probe order (2026-06): `TensorRTRtx` → `Migraphx` → `OpenVinoCatal
 |LipSync|Milestone default|`onnx-ctc-phoneme-aligner` (family allow-list)|
 |LipSynthesis|Milestone default|`latentsync-diffusion` → no TensorRT|
 |TextRefinement|Milestone default|`qwen-instruct`, `phi-genai` → no TensorRT (ORT GenAI `NvTensorRtRtx` terminates the process)|
-|TTS|Milestone default|**`kokoro` → CPU only** (ConvTranspose / DirectML incompatible); `chatterbox`, `cosyvoice`, `qwen3-tts` → no TensorRT|
+|TTS|Milestone default|**`kokoro` → CPU only** (ConvTranspose / DirectML incompatible); `chatterbox`, `qwen3-tts` → no TensorRT; `cosyvoice` → TensorRT allowed (per-graph scanner + session-init fallback)|
 
 ## Windows manual smoke checklist
 
@@ -105,7 +105,8 @@ TRT RTX is **not** a Windows ML catalog EP and is **not** selected by `WindowsMl
 | phi-genai (`microsoft/Phi-4-mini-instruct-onnx` gpu-int4) | fail (refused) | Same GenAI fatal-crash guard |
 | opus-mt (9 pairs), madlad | fail (refused) | InferenceSession ctor stack overflow under TRT; guard refuses before native call |
 | chatterbox (onnx-community) | model-dependent | stage exclusion stands for real runs; smoke probe subgraphs may still pass |
-| cosyvoice, qwen3-tts | pass on smoke probe | stage exclusions remain; probe coverage is partial |
+| cosyvoice | pass on smoke probe | family exclusion lifted; smoke creates every graph session (TRT-pinned) and runs the primary probe |
+| qwen3-tts | pass on smoke probe | stage exclusion remains; probe coverage is partial |
 
 Prerequisites: [tensorrt-rtx-ep-abi-plugin.md](tensorrt-rtx-ep-abi-plugin.md) (Model Manager, `Fetch-TrtRtxEp.ps1`, or license-accepted auto-download). Optional CI: `.github/workflows/trt-rtx-smoke.yml` when repository variable `TRACKDUB_TRT_RTX_SMOKE=true`.
 
