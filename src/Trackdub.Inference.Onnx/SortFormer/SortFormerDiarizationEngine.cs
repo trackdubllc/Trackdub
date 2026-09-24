@@ -173,19 +173,6 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     private static bool UsesStreamingFeatureInputs(InferenceSession session) =>
         IsStreamingExportInputSet(session.InputMetadata.Keys);
 
-    /// <summary>
-    /// True when the graph exposes the streaming SortFormer feature inputs
-    /// (chunk / spkcache / fifo). Shared with the smoke tester so probe inputs
-    /// match the engine's streaming path.
-    /// </summary>
-    internal static bool IsStreamingExportInputSet(IEnumerable<string> inputNames)
-    {
-        var names = inputNames as IReadOnlyCollection<string> ?? inputNames.ToArray();
-        return names.Contains("chunk", StringComparer.Ordinal)
-            && names.Contains("spkcache", StringComparer.Ordinal)
-            && names.Contains("fifo", StringComparer.Ordinal);
-    }
-
     private static DenseTensor<float> RunStreamingFeatureModel(
         InferenceSession session,
         float[] samples,
