@@ -107,6 +107,40 @@ public sealed class EngineCacheMaintenanceServiceTests
     }
 
     [Fact]
+    public void Clear_also_clears_smoke_verdict_store()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"trackdub-engine-cache-verdicts-{Guid.NewGuid():N}");
+        var paths = new TrackdubStoragePaths(root);
+        Directory.CreateDirectory(paths.EngineCacheDirectory);
+        File.WriteAllText(Path.Combine(paths.EngineCacheDirectory, "engine.cache"), "x");
+
+        string verdictPath = Path.Combine(root, "smoke-verdicts.json");
+        var verdictStore = new FileSmokeVerdictStore(verdictPath);
+        var key = new SmokeVerdictKey(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            Trackdub.Domain.ExecutionProviderKind.TensorRTRtx,
+            Trackdub.Domain.NvidiaGpuArchitectureBucket.Ada,
+            "560.35.03",
+            "0.3.0");
+        verdictStore.RecordVerified(key);
+        Assert.True(File.Exists(verdictPath));
+
+        var service = new EngineCacheMaintenanceService(paths, verdictStore);
+        service.Clear();
+
+        Assert.False(verdictStore.IsVerified(key));
+        Assert.False(File.Exists(verdictPath));
+
+        try
+        {
+            Directory.Delete(root, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    [Fact]
     public void Describe_reports_size_and_count()
     {
         string root = Path.Combine(Path.GetTempPath(), $"trackdub-engine-cache-describe-{Guid.NewGuid():N}");
