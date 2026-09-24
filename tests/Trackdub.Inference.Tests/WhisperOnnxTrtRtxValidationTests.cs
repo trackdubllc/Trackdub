@@ -47,18 +47,18 @@ public sealed class RequiresTrtRtxStagingFactAttribute : FactAttribute
 /// <summary>
 /// Hardware validation tests for TRT-RTX optimization of whisper-onnx models.
 ///
-/// Prerequisites before removing [Fact(Skip = ...)] from any test here:
+/// Prerequisites before running any test here:
 ///   1. Download the whisper-onnx model:
 ///      dotnet run --project src/Trackdub.Tools -- ingest --model onnx-community/whisper-{size}
 ///   2. Run Olive TRT-RTX optimization and staging:
 ///      .\tools\olive\Validate-WhisperOnnxTrtRtx.ps1 -ModelSize {size}
-///   3. Verify build/whisper-{size}-onnx-trtrtx-validated/ was created.
-///   4. Remove the Skip attribute, run:
+///   3. Verify build/whisper-{size}-onnx-trtrtx-validated/ was created, then run:
 ///      dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~WhisperOnnxTrtRtx"
-///   5. If tests pass, apply manifest+test flip:
+///   4. If tests pass, apply manifest+test flip:
 ///      .\tools\olive\Flip-WhisperOnnxTrtRtx.ps1
 ///
-/// These tests never run in CI (either guarded by Skip or by staging dir absence).
+/// These tests never run in CI: each fact skips at discovery time when its gitignored
+/// staging directory under build/ is absent.
 /// </summary>
 public sealed class WhisperOnnxTrtRtxValidationTests
 {

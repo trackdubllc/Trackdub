@@ -253,10 +253,10 @@ if ($results.pass) {
     Write-Host "Staging directory: $($results.staging_dir)"
     Write-Host ""
     Write-Host "Next steps:"
-    Write-Host "  1. Remove the Skip attribute from WhisperOnnxTrtRtx_${ModelSize}Model_SessionLoadsAndTranscribesSilence in"
-    Write-Host "     tests/Trackdub.Inference.Tests/WhisperOnnxTrtRtxValidationTests.cs"
-    Write-Host "  2. dotnet test tests/Trackdub.Inference.Tests --filter 'FullyQualifiedName~WhisperOnnxTrtRtx'"
-    Write-Host "  3. If that passes: run .\tools\olive\Flip-WhisperOnnxTrtRtx.ps1 to enable trt-rtx in the manifest and tests."
+    Write-Host "  1. dotnet test tests/Trackdub.Inference.Tests --filter 'FullyQualifiedName~WhisperOnnxTrtRtx'"
+    Write-Host "     (WhisperOnnxTrtRtx_${ModelSize}Model_SessionLoadsAndTranscribesSilence now runs on this machine;"
+    Write-Host "     it skips automatically wherever build/whisper-${ModelSize}-onnx-trtrtx-validated is absent, e.g. CI.)"
+    Write-Host "  2. If that passes: run .\tools\olive\Flip-WhisperOnnxTrtRtx.ps1 to enable trt-rtx in the manifest and tests."
 } else {
     Write-Host "FAIL — see errors above." -ForegroundColor Red
     exit 1

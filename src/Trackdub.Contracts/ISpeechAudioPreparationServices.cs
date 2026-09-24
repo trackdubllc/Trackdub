@@ -1,6 +1,4 @@
-using Trackdub.Domain.Artifacts;
 using Trackdub.Domain.AudioQuality;
-using Trackdub.Domain.Media;
 
 namespace Trackdub.Contracts;
 
@@ -42,8 +40,4 @@ public sealed record SpeechAudioProcessingResult(
     SpeechAudioFilterSelection FilterSelection);
 
 public sealed record SpeechAudioPreparationPlanningRequest(
-    MediaAsset MediaAsset,
-    ProjectArtifact NormalizedAudioArtifact,
-    ProjectArtifact? VocalStemArtifact,
-    AudioQualityAnalysisResult FullMixAnalysis,
-    AudioQualityAnalysisResult? VocalStemAnalysis);
+    AudioQualityAnalysisResult FullMixAnalysis);
