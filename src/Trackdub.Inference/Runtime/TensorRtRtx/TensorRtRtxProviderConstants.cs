@@ -26,6 +26,12 @@ public static class TensorRtRtxProviderConstants
 
     public const string BundledCudaVariant = "cu12";
 
+    /// <summary>
+    /// Version identity for anything that must invalidate with the engine cache (smoke verdicts,
+    /// EP-context stamps): changes when the bundled EP ABI plugin changes.
+    /// </summary>
+    public static string BundledFingerprintVersion => BundledVersion;
+
     public const string NativeOrtExecutionProviderName = "TensorrtExecutionProvider";
 
     public static string ProviderIdPluginEpAbi => TensorRtRtxProviderIds.PluginEpAbi;
