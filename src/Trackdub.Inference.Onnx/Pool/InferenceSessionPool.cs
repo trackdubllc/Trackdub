@@ -374,7 +374,6 @@ internal sealed class InferenceSessionPool : IDisposable
                         }
                         continue;
                     }
-                    }
 
                     if (enableMemoryAdmission)
                     {
