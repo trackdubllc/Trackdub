@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Microsoft.Windows.AI.MachineLearning;
+using Trackdub.Inference.Onnx.TensorRtRtx;
 
 namespace Trackdub.Inference.Onnx.WindowsMl;
 
@@ -22,8 +23,8 @@ public sealed class WindowsMlExecutionProviderBootstrapper
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
 
             var catalog = ExecutionProviderCatalog.GetDefault();
-            await catalog.RegisterCertifiedAsync().AsTask(timeoutCts.Token);
-            return new WindowsMlBootstrapResult(WindowsMlBootstrapMode.RegisterInstalledCertified, true, null);
+            (bool succeeded, string? detail) = await RegisterCatalogProvidersAsync(catalog, allowDownloads: false, timeoutCts.Token);
+            return new WindowsMlBootstrapResult(WindowsMlBootstrapMode.RegisterInstalledCertified, succeeded, detail);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -55,8 +56,8 @@ public sealed class WindowsMlExecutionProviderBootstrapper
             timeoutCts.CancelAfter(TimeSpan.FromMinutes(5));
 
             var catalog = ExecutionProviderCatalog.GetDefault();
-            await catalog.EnsureAndRegisterCertifiedAsync().AsTask(timeoutCts.Token);
-            return new WindowsMlBootstrapResult(WindowsMlBootstrapMode.EnsureAndRegisterCertified, true, null);
+            (bool succeeded, string? detail) = await RegisterCatalogProvidersAsync(catalog, allowDownloads: true, timeoutCts.Token);
+            return new WindowsMlBootstrapResult(WindowsMlBootstrapMode.EnsureAndRegisterCertified, succeeded, detail);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -70,6 +71,54 @@ public sealed class WindowsMlExecutionProviderBootstrapper
         {
             return new WindowsMlBootstrapResult(WindowsMlBootstrapMode.EnsureAndRegisterCertified, false, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Per-provider equivalent of RegisterCertifiedAsync / EnsureAndRegisterCertifiedAsync that skips
+    /// providers Trackdub ships itself (see <see cref="WindowsMlCatalogProviderFilter"/>). Without
+    /// downloads, only providers already on the machine are readied and registered, matching
+    /// RegisterCertifiedAsync. Like the bulk APIs, one provider failing does not fail the others: the
+    /// call fails only when providers failed and none registered; partial failures stay in the detail.
+    /// </summary>
+    private static async Task<(bool Succeeded, string? Detail)> RegisterCatalogProvidersAsync(
+        ExecutionProviderCatalog catalog,
+        bool allowDownloads,
+        CancellationToken cancellationToken)
+    {
+        var failures = new List<string>();
+        int registered = 0;
+        foreach (ExecutionProvider provider in catalog.FindAllProviders())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (WindowsMlCatalogProviderFilter.IsExcludedFromBulkRegistration(provider.Name) ||
+                (!allowDownloads && provider.ReadyState is ExecutionProviderReadyState.NotPresent))
+            {
+                continue;
+            }
+
+            if (provider.ReadyState is not ExecutionProviderReadyState.Ready)
+            {
+                ExecutionProviderReadyResult ready = await provider.EnsureReadyAsync().AsTask(cancellationToken);
+                if (ready.Status is not ExecutionProviderReadyResultState.Success)
+                {
+                    failures.Add($"EnsureReadyAsync failed for {provider.Name}: {ready.Status}.");
+                    continue;
+                }
+            }
+
+            if (provider.TryRegister())
+            {
+                registered++;
+            }
+            else
+            {
+                failures.Add($"TryRegister failed for {provider.Name}.");
+            }
+        }
+
+        return failures.Count == 0
+            ? (true, null)
+            : (registered > 0, string.Join(" ", failures));
     }
 
     private static bool TryEnsureWinMlProjectionDeployed(out string? failureReason)

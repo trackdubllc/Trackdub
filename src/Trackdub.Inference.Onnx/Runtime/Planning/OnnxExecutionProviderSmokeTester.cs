@@ -623,12 +623,36 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     private static InputSet CreateDiarizationInputs(InferenceSession session)
     {
         IReadOnlyDictionary<string, NodeMetadata> inputs = session.InputMetadata;
+        if (SortFormerDiarizationEngine.IsStreamingExportInputSet(inputs.Keys))
+        {
+            return CreateSortFormerStreamingInputs();
+        }
+
         if (TryCreateWaveformDiarizationInputs(inputs, out InputSet? waveformInputs))
         {
             return waveformInputs!;
         }
 
         return CreateMetadataDrivenInputs(inputs);
+    }
+
+    // The streaming export's TRT engine is built for the engine's optimization profile (chunk is a
+    // fixed 1x3040x128 window), so probe inputs must sit inside it; "1 for every dynamic dim" does not.
+    private static InputSet CreateSortFormerStreamingInputs()
+    {
+        var values = new List<NamedOnnxValue>();
+        foreach (string entry in SortFormerDiarizationEngine.TrtOptions["trt_profile_opt_shapes"].Split(','))
+        {
+            string[] parts = entry.Split(':');
+            int[] dimensions = parts[1].Split('x').Select(int.Parse).ToArray();
+            int elementCount = dimensions.Aggregate(1, static (product, dimension) => checked(product * dimension));
+            values.Add(NamedOnnxValue.CreateFromTensor(parts[0], new DenseTensor<float>(new float[elementCount], dimensions)));
+            values.Add(NamedOnnxValue.CreateFromTensor(
+                parts[0] + "_lengths",
+                new DenseTensor<long>(new long[] { dimensions[1] }, [1])));
+        }
+
+        return new InputSet(values);
     }
 
     private static bool TryCreateWaveformDiarizationInputs(
