@@ -118,7 +118,8 @@ public sealed class FileSmokeVerdictStoreTests
         try
         {
             SmokeVerdictKey runtime15 = CreateKey(ModelSha, ExecutionProviderKind.TensorRTRtx, "560.35.03")
-                with { TrtRtxEpVersion = "0.4.2+trt-rtx-1.5.0" };
+                with
+            { TrtRtxEpVersion = "0.4.2+trt-rtx-1.5.0" };
             SmokeVerdictKey runtime16 = runtime15 with { TrtRtxEpVersion = "0.4.2+trt-rtx-1.6.1" };
 
             var store = new FileSmokeVerdictStore(path);

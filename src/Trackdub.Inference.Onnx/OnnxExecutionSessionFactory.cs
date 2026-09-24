@@ -343,7 +343,7 @@ internal static class OnnxExecutionSessionFactory
         // TensorRT-RTX (all-or-nothing ONNX catalog). Do not attempt TRT and do not emit
         // the ModelImporter error storm — fall through to DirectML/CPU immediately.
         if (initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
-            && TrtRtxUnsupportedOpScanner.FindUnsupportedOps(modelPath) is { Count: >0 } unsupportedOps)
+            && TrtRtxUnsupportedOpScanner.FindUnsupportedOps(modelPath) is { Count: > 0 } unsupportedOps)
         {
             string opList = string.Join(", ", unsupportedOps);
             string skipReason =
