@@ -170,7 +170,13 @@ internal sealed class InferenceSessionPool : IDisposable
     /// in-flight creation consumes this so a failed creator's exception propagates without
     /// re-invoking the factory (single-flight: one factory call per creation wave).
     /// </summary>
-    private readonly ConcurrentDictionary<SessionPoolKey, (Exception Error, long Ticks)> creationFailures = new();
+    /// <summary>
+/// Monotonic creation-wave id. Incremented only when a factory fails and the failure is
+/// recorded; waiters capture the observed wave before queueing so only failures from a
+/// later wave (i.e. a creator they actually waited behind) are propagated.
+/// </summary>
+    private long creationWave;
+    private readonly ConcurrentDictionary<SessionPoolKey, (Exception Error, long Wave)> creationFailures = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
     private readonly SemaphoreSlim bundleAcquireLock = new(1, 1);
     private readonly bool enableMemoryAdmission;
@@ -340,7 +346,7 @@ internal sealed class InferenceSessionPool : IDisposable
             // records the failure so queued waiters propagate it without rebuilding.
             SemaphoreSlim createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
             bool propagatedRecentFailure = false;
-            long waitStartTicks = Environment.TickCount64;
+            long observedCreationWave = Volatile.Read(ref creationWave);
             using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
                 await createGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -353,15 +359,16 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 if (creationFailures.TryGetValue(key, out var recentFailure))
                 {
-                    if (recentFailure.Ticks >= waitStartTicks)
+                    if (recentFailure.Wave > observedCreationWave)
                     {
-                        // Failure happened while this caller was queued: same creation wave.
+                        // Failure from a later wave than we observed when we queued: we
+                        // waited behind that creator — propagate without rebuilding.
                         propagatedRecentFailure = true;
                         System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(recentFailure.Error).Throw();
                     }
 
                     // Stale failure from an earlier wave: retry the factory.
-                    creationFailures.TryRemove(new KeyValuePair<SessionPoolKey, (Exception Error, long Ticks)>(key, recentFailure));
+                    creationFailures.TryRemove(new KeyValuePair<SessionPoolKey, (Exception Error, long Wave)>(key, recentFailure));
                 }
 
                 long needMb = ResolveReservationMb(key);
@@ -578,7 +585,7 @@ internal sealed class InferenceSessionPool : IDisposable
             {
                 if (!propagatedRecentFailure && ex is not OperationCanceledException)
                 {
-                    creationFailures[key] = (ex, Environment.TickCount64);
+                    creationFailures[key] = (ex, Interlocked.Increment(ref creationWave));
                 }
 
                 throw;
