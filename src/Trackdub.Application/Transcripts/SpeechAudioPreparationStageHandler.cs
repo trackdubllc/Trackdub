@@ -49,45 +49,12 @@ public sealed class SpeechAudioPreparationStageHandler(
                         request.NormalizedAudioArtifact,
                         SpeechAudioSourceKind.FullMix,
                         ct).ConfigureAwait(false);
-                    AudioQualityAnalysisResult? vocalAnalysis = request.VocalStemArtifact is null
-                        ? null
-                        : await AnalyzeAsync(
-                            request.VocalStemArtifact,
-                            SpeechAudioSourceKind.VocalStem,
-                            ct).ConfigureAwait(false);
-
                     SpeechAudioPreparationPlan preparationPlan = preparationPlanner.Plan(
-                        new SpeechAudioPreparationPlanningRequest(
-                            request.MediaAsset,
-                            request.NormalizedAudioArtifact,
-                            request.VocalStemArtifact,
-                            fullMixAnalysis,
-                            vocalAnalysis));
+                        new SpeechAudioPreparationPlanningRequest(fullMixAnalysis));
 
-                    ProjectArtifact selectedSourceArtifact = preparationPlan.SelectedSourceKind is SpeechAudioSourceKind.VocalStem && request.VocalStemArtifact is not null
-                        ? request.VocalStemArtifact
-                        : request.NormalizedAudioArtifact;
+                    ProjectArtifact selectedSourceArtifact = request.NormalizedAudioArtifact;
                     Guid analysisArtifactId = Guid.NewGuid();
                     var processedArtifacts = new Dictionary<Guid, ProjectArtifact>();
-
-                    if (preparationPlan.SelectedSourceRejected && !string.IsNullOrWhiteSpace(preparationPlan.SourceRejectionReason))
-                    {
-                        logger?.LogWarning(
-                            "Vocal stem rejected for transcript audio preparation: {SourceRejectionReason}",
-                            preparationPlan.SourceRejectionReason);
-                    }
-
-                    if (logger is not null && preparationPlan.VocalStemAnalysis is not null)
-                    {
-                        // Diagnostics: surface the actual quality metrics vs thresholds that drive
-                        // vocal-stem selection, so rejection decisions can be evaluated with real numbers.
-                        logger.LogInformation(
-                            $"Audio prep diagnostics for project {request.MediaAsset.ProjectId}: " +
-                            $"selectedSource={preparationPlan.SelectedSourceKind} rejected={preparationPlan.SelectedSourceRejected} " +
-                            $"mediaDuration={request.MediaAsset.DurationSeconds:F2}s. " +
-                            $"VocalStem {{ {FormatQualityDiagnostics(preparationPlan.VocalStemAnalysis)} }}. " +
-                            $"FullMix {{ {FormatQualityDiagnostics(preparationPlan.FullMixAnalysis)} }}.");
-                    }
 
                     SpeechAudioStageDecision vadDecision = await ProcessStageIfNeededAsync(
                         request,
@@ -373,7 +340,7 @@ public sealed class SpeechAudioPreparationStageHandler(
             ChannelCount: null,
             DateTimeOffset.UtcNow,
             StageRunId: stageRun.Id,
-            Provenance: $"audio-quality-analysis:policy={AudioQualityPolicy.AnalyzerPolicyVersion};catalog={SpeechAudioProcessingProfileCatalog.CatalogVersion};selectedSource={plan.SelectedSourceKind};selectedSourceRejected={plan.SelectedSourceRejected.ToString().ToLowerInvariant()}");
+            Provenance: $"audio-quality-analysis:policy={AudioQualityPolicy.AnalyzerPolicyVersion};catalog={SpeechAudioProcessingProfileCatalog.CatalogVersion};selectedSource={plan.SelectedSourceKind}");
 
     private static ProjectArtifact CreateProcessedArtifact(
         SpeechAudioPreparationStageRequest request,
@@ -402,28 +369,12 @@ public sealed class SpeechAudioPreparationStageHandler(
     private static string FormatNullable(double? value) =>
         value is null ? "n/a" : $"{value.Value:F1}dB";
 
-    private static string FormatQualityDiagnostics(AudioQualityAnalysisResult analysis)
-    {
-        AudioQualityMetrics m = analysis.Metrics;
-        AudioQualityAnalysisThresholds t = analysis.Thresholds;
-        string defects = analysis.TriggeredDefects.Count == 0
-            ? "none"
-            : string.Join("+", analysis.TriggeredDefects);
-        return
-            $"rumble={m.RumbleRatioDb:F1}dB(>{t.RumbleRatioDb:F1} flags), " +
-            $"hiss={m.HissRatioDb:F1}dB(>{t.HissRatioDb:F1} flags), " +
-            $"snr={FormatNullable(m.SnrDb)}({m.SnrConfidence}, <{t.LowSnrDb:F1} flags), " +
-            $"speechBand={m.SpeechBandRatioDb:F1}dB(<{t.PoorSpeechBandRatioDb:F1} flags, unusable<{AudioQualityPolicy.UnusableSpeechBandRatioDb:F1}), " +
-            $"activeRms={m.ActiveRmsDbfs:F1}dBFS(unusable<{AudioQualityPolicy.UnusableActiveRmsDbfs:F1}), " +
-            $"clip={m.ClippedSamplePercent:F3}%, dur={m.DurationSeconds:F2}s, conf={m.AnalysisConfidence}, defects=[{defects}]";
-    }
 }
 
 public sealed record SpeechAudioPreparationStageRequest(
     Guid ProjectId,
     MediaAsset MediaAsset,
     ProjectArtifact NormalizedAudioArtifact,
-    ProjectArtifact? VocalStemArtifact,
     IReadOnlyList<ProjectArtifact> ExistingArtifacts);
 
 public sealed record SpeechAudioPreparationAudit(
@@ -432,10 +383,7 @@ public sealed record SpeechAudioPreparationAudit(
     string AnalyzerPolicyVersion,
     string ProfileCatalogVersion,
     SpeechAudioSourceAudit FullMix,
-    SpeechAudioSourceAudit? VocalStem,
     SpeechAudioSourceKind SelectedSourceKind,
-    bool SelectedSourceRejected,
-    string? SourceRejectionReason,
     IReadOnlyList<SpeechAudioDecisionAudit> Decisions)
 {
     public static SpeechAudioPreparationAudit Create(
@@ -448,12 +396,7 @@ public sealed record SpeechAudioPreparationAudit(
             AudioQualityPolicy.AnalyzerPolicyVersion,
             SpeechAudioProcessingProfileCatalog.CatalogVersion,
             SpeechAudioSourceAudit.FromArtifact(request.NormalizedAudioArtifact, plan.FullMixAnalysis),
-            request.VocalStemArtifact is null || plan.VocalStemAnalysis is null
-                ? null
-                : SpeechAudioSourceAudit.FromArtifact(request.VocalStemArtifact, plan.VocalStemAnalysis),
             plan.SelectedSourceKind,
-            plan.SelectedSourceRejected,
-            plan.SourceRejectionReason,
             decisions.Select(SpeechAudioDecisionAudit.FromDecision).ToArray());
 }
 

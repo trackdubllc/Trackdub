@@ -70,8 +70,7 @@ public sealed record AudioQualityAnalysisThresholds(
     double RumbleRatioDb,
     double HissRatioDb,
     double PoorSpeechBandRatioDb,
-    double NearSilenceActiveRmsDbfs,
-    double VocalStemDurationMismatchSeconds = AudioQualityPolicy.DefaultVocalStemDurationMismatchSeconds)
+    double NearSilenceActiveRmsDbfs)
 {
     public static AudioQualityAnalysisThresholds ForSource(SpeechAudioSourceKind sourceKind) =>
         sourceKind is SpeechAudioSourceKind.VocalStem
@@ -120,11 +119,8 @@ public sealed record SpeechAudioStageDecision(
 
 public sealed record SpeechAudioPreparationPlan(
     SpeechAudioSourceKind SelectedSourceKind,
-    bool SelectedSourceRejected,
-    string? SourceRejectionReason,
     AudioQualityAnalysisResult SelectedSourceAnalysis,
     AudioQualityAnalysisResult FullMixAnalysis,
-    AudioQualityAnalysisResult? VocalStemAnalysis,
     SpeechAudioStageDecision VadDecision,
     SpeechAudioStageDecision AsrDecision,
     SpeechAudioStageDecision DiarizationDecision);
@@ -132,7 +128,6 @@ public sealed record SpeechAudioPreparationPlan(
 public static class AudioQualityPolicy
 {
     public const string AnalyzerPolicyVersion = "2026.04.1";
-    public const double DefaultVocalStemDurationMismatchSeconds = 0.750d;
     public const double ProcessedDurationDriftRejectSeconds = 0.050d;
     public const double ProcessedClippingIncreaseRejectPercent = 0.050d;
     public const double ProcessedActiveRmsRejectDbfs = -14.0d;
@@ -170,9 +165,6 @@ public static class SpeechAudioProcessingProfileCatalog
     public const string FullMixVadLightProfileId = "fullmix-vad-light";
     public const string FullMixAsrLightProfileId = "fullmix-asr-light";
     public const string FullMixDiarizationSafeProfileId = "fullmix-diarization-safe";
-    public const string VocalRumbleCutProfileId = "vocal-rumble-cut";
-    public const string VocalGainSafeProfileId = "vocal-gain-safe";
-    public const string VocalDenoiseLightProfileId = "vocal-denoise-light";
     public const string CurrentAggressiveProfileId = "current-aggressive";
 
     private static readonly IReadOnlyDictionary<string, SpeechAudioProcessingProfile> Profiles =
@@ -182,9 +174,6 @@ public static class SpeechAudioProcessingProfileCatalog
             new SpeechAudioProcessingProfile(FullMixVadLightProfileId, 1, "Full mix VAD light cleanup", true, false, string.Empty),
             new SpeechAudioProcessingProfile(FullMixAsrLightProfileId, 1, "Full mix ASR light cleanup", true, false, string.Empty),
             new SpeechAudioProcessingProfile(FullMixDiarizationSafeProfileId, 1, "Full mix diarization safe cleanup", true, false, string.Empty),
-            new SpeechAudioProcessingProfile(VocalRumbleCutProfileId, 1, "Vocal stem rumble cut", true, false, "highpass=f=70"),
-            new SpeechAudioProcessingProfile(VocalGainSafeProfileId, 1, "Vocal stem safe gain", true, false, "volume=1.5"),
-            new SpeechAudioProcessingProfile(VocalDenoiseLightProfileId, 1, "Vocal stem light denoise", true, false, "afftdn=nr=4:nf=-60"),
             new SpeechAudioProcessingProfile(CurrentAggressiveProfileId, 1, "Current aggressive benchmark baseline", false, true, "highpass=f=80,lowpass=f=8000,afftdn=nr=8:nf=-55,speechnorm=e=6.25:l=1")
         }.ToDictionary(profile => profile.ProfileId, StringComparer.OrdinalIgnoreCase);
 

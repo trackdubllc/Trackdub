@@ -154,7 +154,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
                 mediaAsset.ProjectId,
                 mediaAsset,
                 normalized,
-                VocalStemArtifact: null,
                 [normalized]),
             TestContext.Current.CancellationToken);
 
@@ -199,7 +198,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
                 mediaAsset.ProjectId,
                 mediaAsset,
                 normalized,
-                VocalStemArtifact: null,
                 [normalized]),
             TestContext.Current.CancellationToken);
 
@@ -249,7 +247,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
                 mediaAsset.ProjectId,
                 mediaAsset,
                 normalized,
-                VocalStemArtifact: null,
                 [normalized]),
             TestContext.Current.CancellationToken);
 
@@ -295,7 +292,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
                 mediaAsset.ProjectId,
                 mediaAsset,
                 normalized,
-                VocalStemArtifact: null,
                 [normalized]),
             TestContext.Current.CancellationToken);
 
@@ -336,7 +332,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
                 mediaAsset.ProjectId,
                 mediaAsset,
                 normalized,
-                VocalStemArtifact: null,
                 [normalized]),
             TestContext.Current.CancellationToken);
 
@@ -380,7 +375,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
                 mediaAsset.ProjectId,
                 mediaAsset,
                 normalized,
-                VocalStemArtifact: null,
                 [normalized]),
             TestContext.Current.CancellationToken);
 
@@ -423,7 +417,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
                 mediaAsset.ProjectId,
                 mediaAsset,
                 normalized,
-                VocalStemArtifact: null,
                 [normalized]),
             TestContext.Current.CancellationToken);
 
@@ -465,7 +458,6 @@ public sealed class SpeechAudioPreparationGuardrailTests
                 mediaAsset.ProjectId,
                 mediaAsset,
                 normalized,
-                VocalStemArtifact: null,
                 [normalized]),
             TestContext.Current.CancellationToken);
 
@@ -507,11 +499,8 @@ public sealed class SpeechAudioPreparationGuardrailTests
 
             return new SpeechAudioPreparationPlan(
                 SelectedSourceKind: SpeechAudioSourceKind.FullMix,
-                SelectedSourceRejected: false,
-                SourceRejectionReason: null,
                 SelectedSourceAnalysis: sourceAnalysis,
                 FullMixAnalysis: sourceAnalysis,
-                VocalStemAnalysis: null,
                 VadDecision: MakeDecision(SpeechPipelineStageKind.Vad),
                 AsrDecision: MakeDecision(SpeechPipelineStageKind.Asr),
                 DiarizationDecision: MakeDecision(SpeechPipelineStageKind.Diarization));

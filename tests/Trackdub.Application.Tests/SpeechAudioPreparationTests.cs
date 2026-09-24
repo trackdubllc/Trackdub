@@ -13,81 +13,14 @@ namespace Trackdub.Application.Tests;
 public sealed class SpeechAudioPreparationTests
 {
     [Fact]
-    public void Planner_keeps_clean_vocal_stem_raw()
-    {
-        var planner = new SpeechAudioPreparationPlanner();
-        MediaAsset mediaAsset = CreateMediaAsset();
-        AudioQualityAnalysisResult fullMix = CreateAnalysis(SpeechAudioSourceKind.FullMix, [AudioQualityDefectKind.Hiss]);
-        AudioQualityAnalysisResult vocals = CreateAnalysis(SpeechAudioSourceKind.VocalStem, []);
-
-        SpeechAudioPreparationPlan plan = planner.Plan(new SpeechAudioPreparationPlanningRequest(
-            mediaAsset,
-            CreateArtifact(mediaAsset, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath),
-            CreateArtifact(mediaAsset, ArtifactKind.Vocals, ProjectArtifactPaths.GetStemVocalsRelativePath(Guid.NewGuid())),
-            fullMix,
-            vocals));
-
-        Assert.Equal(SpeechAudioSourceKind.VocalStem, plan.SelectedSourceKind);
-        Assert.False(plan.AsrDecision.RequiresProcessing);
-        Assert.Equal(SpeechAudioProcessingProfileCatalog.NoneProfileId, plan.AsrDecision.ProfileId);
-    }
-
-    [Fact]
-    public void Planner_rejects_vocal_stem_with_poor_speech_band_and_uses_full_mix()
-    {
-        var planner = new SpeechAudioPreparationPlanner();
-        MediaAsset mediaAsset = CreateMediaAsset();
-        AudioQualityAnalysisResult fullMix = CreateAnalysis(SpeechAudioSourceKind.FullMix, []);
-        AudioQualityAnalysisResult vocals = CreateAnalysis(SpeechAudioSourceKind.VocalStem, [AudioQualityDefectKind.PoorSpeechBand]);
-
-        SpeechAudioPreparationPlan plan = planner.Plan(new SpeechAudioPreparationPlanningRequest(
-            mediaAsset,
-            CreateArtifact(mediaAsset, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath),
-            CreateArtifact(mediaAsset, ArtifactKind.Vocals, ProjectArtifactPaths.GetStemVocalsRelativePath(Guid.NewGuid())),
-            fullMix,
-            vocals));
-
-        Assert.Equal(SpeechAudioSourceKind.FullMix, plan.SelectedSourceKind);
-        Assert.True(plan.SelectedSourceRejected);
-        Assert.Contains("PoorSpeechBand", plan.SourceRejectionReason, StringComparison.Ordinal);
-        Assert.Equal(SpeechAudioSourceKind.FullMix, plan.AsrDecision.SourceKind);
-    }
-
-    [Fact]
-    public void Planner_remediates_rumble_on_vocal_stem_instead_of_rejecting()
-    {
-        var planner = new SpeechAudioPreparationPlanner();
-        MediaAsset mediaAsset = CreateMediaAsset();
-        AudioQualityAnalysisResult fullMix = CreateAnalysis(SpeechAudioSourceKind.FullMix, []);
-        AudioQualityAnalysisResult vocals = CreateAnalysis(SpeechAudioSourceKind.VocalStem, [AudioQualityDefectKind.Rumble]);
-
-        SpeechAudioPreparationPlan plan = planner.Plan(new SpeechAudioPreparationPlanningRequest(
-            mediaAsset,
-            CreateArtifact(mediaAsset, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath),
-            CreateArtifact(mediaAsset, ArtifactKind.Vocals, ProjectArtifactPaths.GetStemVocalsRelativePath(Guid.NewGuid())),
-            fullMix,
-            vocals));
-
-        Assert.Equal(SpeechAudioSourceKind.VocalStem, plan.SelectedSourceKind);
-        Assert.False(plan.SelectedSourceRejected);
-        Assert.Equal(SpeechAudioProcessingProfileCatalog.VocalRumbleCutProfileId, plan.AsrDecision.ProfileId);
-        Assert.True(plan.AsrDecision.RequiresProcessing);
-    }
-
-    [Fact]
     public void Planner_selects_stage_specific_full_mix_asr_profile_for_hiss()
     {
         var planner = new SpeechAudioPreparationPlanner();
-        MediaAsset mediaAsset = CreateMediaAsset();
         AudioQualityAnalysisResult fullMix = CreateAnalysis(SpeechAudioSourceKind.FullMix, [AudioQualityDefectKind.Hiss]);
 
-        SpeechAudioPreparationPlan plan = planner.Plan(new SpeechAudioPreparationPlanningRequest(
-            mediaAsset,
-            CreateArtifact(mediaAsset, ArtifactKind.NormalizedAudio, ProjectArtifactPaths.NormalizedAudioRelativePath),
-            VocalStemArtifact: null,
-            fullMix,
-            VocalStemAnalysis: null));
+        SpeechAudioPreparationPlan plan = planner.Plan(new SpeechAudioPreparationPlanningRequest(fullMix));
 
+        Assert.Equal(SpeechAudioSourceKind.FullMix, plan.SelectedSourceKind);
         Assert.Equal(SpeechAudioProcessingProfileCatalog.FullMixAsrLightProfileId, plan.AsrDecision.ProfileId);
         Assert.Contains("lowpass=f=8000", plan.AsrDecision.FilterChain, StringComparison.Ordinal);
         Assert.False(plan.VadDecision.RequiresProcessing);
@@ -118,7 +51,7 @@ public sealed class SpeechAudioPreparationTests
             new FakeProjectStageRunStore());
 
         var result = await handler.HandleAsync(
-            new SpeechAudioPreparationStageRequest(mediaAsset.ProjectId, mediaAsset, normalized, VocalStemArtifact: null, [normalized]),
+            new SpeechAudioPreparationStageRequest(mediaAsset.ProjectId, mediaAsset, normalized, [normalized]),
             TestContext.Current.CancellationToken);
 
         Assert.Equal(normalized.RelativePath, result.AsrAudioArtifact.RelativePath);
@@ -148,7 +81,7 @@ public sealed class SpeechAudioPreparationTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.HandleAsync(
-                new SpeechAudioPreparationStageRequest(mediaAsset.ProjectId, mediaAsset, normalized, VocalStemArtifact: null, [normalized]),
+                new SpeechAudioPreparationStageRequest(mediaAsset.ProjectId, mediaAsset, normalized, [normalized]),
                 TestContext.Current.CancellationToken));
 
         Assert.DoesNotContain(mediaRepository.Artifacts, artifact => artifact.Kind == ArtifactKind.SpeechProcessedAudio);
@@ -177,7 +110,7 @@ public sealed class SpeechAudioPreparationTests
             new FakeProjectStageRunStore());
 
         await handler.HandleAsync(
-            new SpeechAudioPreparationStageRequest(mediaAsset.ProjectId, mediaAsset, normalized, VocalStemArtifact: null, [normalized]),
+            new SpeechAudioPreparationStageRequest(mediaAsset.ProjectId, mediaAsset, normalized, [normalized]),
             TestContext.Current.CancellationToken);
 
         ProjectArtifact analysisArtifact = Assert.Single(mediaRepository.Artifacts, artifact => artifact.Kind == ArtifactKind.AudioQualityAnalysis);
