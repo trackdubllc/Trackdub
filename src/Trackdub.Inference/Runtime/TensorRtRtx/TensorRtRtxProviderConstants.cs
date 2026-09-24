@@ -44,20 +44,6 @@ public static class TensorRtRtxProviderConstants
     /// EP-context stamps): changes when either the EP ABI plugin or the TRT-RTX runtime changes.
     /// </summary>
     public static string BundledFingerprintVersion =>
-        $"{BundledVersion}+trt-rtx-{BundledTrtRtxRuntimeVersion}";
-
-    /// <summary>
-    /// TensorRT-RTX runtime vendored by the pinned EP ABI bundle. Tracked separately from the EP ABI
-    /// version because the runtime lineage can move without the plugin version moving.
-    /// </summary>
-    public const string BundledTrtRtxRuntimeVersion = "1.5";
-
-    /// <summary>
-    /// Version identity for anything that must invalidate with the engine cache (smoke verdicts,
-    /// EP-context stamps): changes when either the EP ABI plugin or the vendored TRT-RTX runtime
-    /// changes.
-    /// </summary>
-    public static string BundledFingerprintVersion =>
         $"{BundledVersion}+{BundledCudaVariant}+trt-rtx-{BundledTrtRtxRuntimeVersion}";
 
     public const string NativeOrtExecutionProviderName = "TensorrtExecutionProvider";
