@@ -27,7 +27,6 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
         bool hasGpu = false;
         long dedicatedVramMb = 0;
         long totalRamMb = 0;
-        string? gpuDriverVersion = null;
 
         try
         {
