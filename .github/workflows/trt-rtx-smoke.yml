@@ -51,7 +51,11 @@ jobs:
       - name: Export plugin directory
         shell: pwsh
         run: |
-          $pluginDir = Join-Path $env:LOCALAPPDATA "Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64"
+          # Derive from the pinned manifest so EP ABI bumps don't need a workflow edit.
+          $manifest = Get-Content -Raw runtime/trt-rtx-ep.manifest.json | ConvertFrom-Json
+          $package = $manifest.packages.'win-x64'
+          $version = if ($package.PSObject.Properties.Name -contains 'version' -and $package.version) { $package.version } else { $manifest.version }
+          $pluginDir = Join-Path $env:LOCALAPPDATA "Trackdub\Providers\trt-rtx\$version\$($manifest.cudaVariant)\win-x64"
           if (-not (Test-Path $pluginDir)) {
             throw "Expected plugin directory not found: $pluginDir"
           }

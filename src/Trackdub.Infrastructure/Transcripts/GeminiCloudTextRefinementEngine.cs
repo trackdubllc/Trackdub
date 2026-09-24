@@ -173,7 +173,31 @@ public sealed class GeminiCloudTextRefinementEngine(
             if (doc.RootElement.ValueKind == JsonValueKind.Array)
             {
                 return doc.RootElement.EnumerateArray()
-                    .Select(e => e.GetString() ?? string.Empty)
+                    .Select(e =>
+                    {
+                        if (e.ValueKind == JsonValueKind.String)
+                        {
+                            return e.GetString() ?? string.Empty;
+                        }
+
+                        if (e.ValueKind == JsonValueKind.Object)
+                        {
+                            if (e.TryGetProperty("refinedText", out JsonElement refinedTextProp) && refinedTextProp.ValueKind == JsonValueKind.String)
+                            {
+                                return refinedTextProp.GetString() ?? string.Empty;
+                            }
+                            if (e.TryGetProperty("text", out JsonElement textProp) && textProp.ValueKind == JsonValueKind.String)
+                            {
+                                return textProp.GetString() ?? string.Empty;
+                            }
+                            if (e.TryGetProperty("refined", out JsonElement refinedProp) && refinedProp.ValueKind == JsonValueKind.String)
+                            {
+                                return refinedProp.GetString() ?? string.Empty;
+                            }
+                        }
+
+                        return e.ToString();
+                    })
                     .ToArray();
             }
         }
