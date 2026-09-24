@@ -1,3 +1,4 @@
+using Trackdub.Contracts;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.Migraphx;
 using Trackdub.Inference.Runtime.ModelManifest;
@@ -32,7 +33,8 @@ public sealed class RuntimePlanner : IRuntimePlanner
         IModelCacheInventory modelCacheInventory,
         IReadOnlyDictionary<RuntimeStage, StageRuntimeRequirements>? stageRequirements = null,
         IPipelineDeviceExclusionProvider? deviceExclusionProvider = null,
-        IDeviceEnumerator? deviceEnumerator = null)
+        IDeviceEnumerator? deviceEnumerator = null,
+        ISmokeVerdictStore? smokeVerdictStore = null)
     {
         ArgumentNullException.ThrowIfNull(manifestRegistry);
         this.hardwareProfileProvider = hardwareProfileProvider ?? throw new ArgumentNullException(nameof(hardwareProfileProvider));
@@ -41,7 +43,7 @@ public sealed class RuntimePlanner : IRuntimePlanner
         ArgumentNullException.ThrowIfNull(modelCacheInventory);
         rankingStrategy = new RuntimePlannerRankingStrategy(manifestRegistry);
         cacheIndexBuilder = new RuntimePlannerCacheIndexBuilder(modelCacheInventory);
-        planFactory = new RuntimePlanFactory(executionProviderSmokeTester);
+        planFactory = new RuntimePlanFactory(executionProviderSmokeTester, smokeVerdictStore);
         this.stageRequirements = stageRequirements ?? StageRuntimeRequirementsCatalog.All;
         this.deviceExclusionProvider = deviceExclusionProvider;
         this.deviceEnumerator = deviceEnumerator;

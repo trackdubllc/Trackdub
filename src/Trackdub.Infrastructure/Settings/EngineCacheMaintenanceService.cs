@@ -3,8 +3,15 @@ using Trackdub.Contracts;
 
 namespace Trackdub.Infrastructure.Settings;
 
-public sealed class EngineCacheMaintenanceService(IAppStoragePaths storagePaths) : IEngineCacheMaintenanceService
+public sealed class EngineCacheMaintenanceService(
+    IAppStoragePaths storagePaths,
+    ISmokeVerdictStore? smokeVerdictStore = null) : IEngineCacheMaintenanceService
 {
+    // EP-context AOT artifacts live next to their source model but share the engine cache's
+    // invalidation triggers (model bytes, GPU arch, driver, TRT RTX EP version). Clearing the
+    // engine cache must drop them too, or load paths keep preferring a stale precompile.
+    private const string EpContextArtifactSuffix = ".epc.onnx";
+    private const string EpContextStampSuffix = ".epc.stamp.json";
     public EngineCacheDescription Describe()
     {
         string directory = storagePaths.EngineCacheDirectory;
@@ -40,6 +47,11 @@ public sealed class EngineCacheMaintenanceService(IAppStoragePaths storagePaths)
 
     public EngineCacheClearResult Clear()
     {
+        // Compiled engines and smoke verdicts share invalidation triggers (model sha256, EP,
+        // GPU arch, driver, TRT RTX EP version); clearing one must clear the other.
+        smokeVerdictStore?.Clear();
+        ClearEpContextArtifacts();
+
         string directory = storagePaths.EngineCacheDirectory;
         if (!Directory.Exists(directory))
         {
@@ -85,6 +97,37 @@ public sealed class EngineCacheMaintenanceService(IAppStoragePaths storagePaths)
         RemoveEmptySubdirectories(directory);
 
         return new EngineCacheClearResult(directory, filesRemoved, filesSkipped, bytesFreed, DirectoryExisted: true);
+    }
+
+    private void ClearEpContextArtifacts()
+    {
+        if (!Directory.Exists(storagePaths.ModelCacheDirectory))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (string filePath in Directory.EnumerateFiles(storagePaths.ModelCacheDirectory, "*", SearchOption.AllDirectories))
+            {
+                if (!filePath.EndsWith(EpContextArtifactSuffix, StringComparison.OrdinalIgnoreCase) &&
+                    !filePath.EndsWith(EpContextStampSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    File.Delete(filePath);
+                }
+                catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
+                {
+                }
+            }
+        }
+        catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
+        {
+        }
     }
 
     private static void RemoveEmptySubdirectories(string root)
