@@ -420,8 +420,14 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             throw new ArgumentException("Provider pin requires a runtime-backed focused stage.");
         if (options.Model is not null)
         {
-            if (ResolveStage(options.Stage) is not string modelStage)
-                throw new ArgumentException("Model selection requires a focused stage.");
+            // RuntimeStageFor mirrors the stages whose model preferences the pipeline
+            // consumes (BuildModelPreferences); a focused stage outside that set (for
+            // example audio-preparation, which runs a SpeechEnhancement model no
+            // preference key can pin) would silently run its default model while the
+            // report recorded options.Model as requested.
+            if (ResolveStage(options.Stage) is not string modelStage ||
+                RuntimeStageFor(modelStage) is null)
+                throw new ArgumentException("Model selection requires a runtime-backed focused stage.");
             ValidateModelAlias(options.Model, modelStage);
         }
         if (options.ExpectedFixtureSha256 is not null &&

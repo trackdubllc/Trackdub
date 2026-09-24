@@ -171,9 +171,12 @@ internal static class InferenceRetryPolicy
         }
 
         // Capture the caller's initial Terminate value and restore it after the run, so a
-        // caller-owned RunOptions stays reusable exactly as the caller left it. The restore
-        // also runs before the retry filter evaluates, letting it exclude a pre-terminated
-        // run from retrying against the caller's termination request.
+        // caller-owned RunOptions stays reusable exactly as the caller left it. The retry
+        // filters run BEFORE this finally (CLR two-pass unwinding: filters evaluate in pass 1,
+        // finally blocks in pass 2) and observe the pre-restore flag: a caller-pre-set
+        // Terminate blocks the retry directly, and a cancellation-set flag co-occurs with
+        // IsCancellationRequested, which the filters' first clause already excludes. The
+        // restore serves caller reuse and the next attempt.
         bool initialTerminate = runOptions.Terminate;
         try
         {

@@ -17,14 +17,31 @@ public sealed class RequiresTrtRtxStagingFactAttribute : FactAttribute
 {
     public RequiresTrtRtxStagingFactAttribute(string modelSize)
     {
+        // TryFindRepoRoot rather than the throwing FindRepoRoot: an exception escaping the
+        // constructor during xunit v2 discovery can cost the whole assembly's test run, while
+        // a null root here is just another Skip reason.
+        string? repoRoot = TestRepoRootResolver.TryFindRepoRoot();
+        if (repoRoot is null)
+        {
+            Skip = "Unable to locate Trackdub.slnx from the test runner base directory; skipping TRT-RTX staging smoke.";
+            return;
+        }
+
+        // TrimStart keeps rooted segments from silently dropping the repo root
+        // (Path.Combine argument-drop guard); segments here are literals or enum-derived.
         string stagingDirectory = Path.Combine(
-            WhisperOnnxTrtRtxValidationTests.FindRepoRoot(), "build", $"whisper-{modelSize}-onnx-trtrtx-validated");
+            repoRoot,
+            NormalizeRelativeSegment("build"),
+            NormalizeRelativeSegment($"whisper-{modelSize}-onnx-trtrtx-validated"));
         if (!Directory.Exists(stagingDirectory))
         {
             Skip = $"TRT-RTX staging directory not found: {stagingDirectory} " +
                    $"(run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize {modelSize}).";
         }
     }
+
+    private static string NormalizeRelativeSegment(string segment) =>
+        segment.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 }
 
 /// <summary>

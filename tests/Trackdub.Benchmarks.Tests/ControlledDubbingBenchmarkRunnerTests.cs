@@ -62,6 +62,34 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
         }
     }
 
+    [Fact]
+    public async Task Model_task_mismatch_message_pins_the_required_task_for_non_obvious_stages()
+    {
+        string fixture = Path.GetTempFileName();
+        try
+        {
+            using var runner = new ControlledDubbingBenchmarkRunner(new NoHistory());
+
+            // "kokoro" is a TTS model; lip-sync requires the forced-alignment task. Asserting
+            // the message pins ManifestTaskFor's non-obvious LipSync arm (stage string
+            // "lip-sync" → task "forced-alignment"), which no rejection test covers today.
+            ArgumentException error = await Assert.ThrowsAsync<ArgumentException>(() => runner.RunAsync(
+                new ControlledDubbingBenchmarkOptions
+                {
+                    FixturePath = fixture,
+                    OutputDirectory = Path.GetTempPath(),
+                    Stage = "lip-sync",
+                    Model = "kokoro",
+                }));
+
+            Assert.Contains("forced-alignment", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(fixture);
+        }
+    }
+
     private sealed class NoHistory : IBenchmarkEvidenceRepository
     {
         public Task SaveAsync(BenchmarkEvidenceReport report, CancellationToken cancellationToken = default) =>

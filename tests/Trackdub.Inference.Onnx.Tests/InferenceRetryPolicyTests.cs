@@ -162,6 +162,23 @@ public sealed class InferenceRetryPolicyTests
     }
 
     [Fact]
+    public void Run_failing_after_cancellation_surfaces_as_operation_canceled()
+    {
+        // Cancel runs the registered Terminate callback synchronously, so the run starts
+        // pre-terminated and ORT fails it with [ErrorCode:Fail]; the policy must surface
+        // that as OperationCanceledException, never as a retryable OnnxRuntimeException.
+        using var session = new InferenceSession(IdentityOnnxModel);
+        using var runOptions = new RunOptions();
+        using var cts = new CancellationTokenSource();
+
+        Assert.Throws<OperationCanceledException>(() => InferenceRetryPolicy.RunOnce(
+            () => { cts.Cancel(); return session.Run([IdentityInput(1f)], session.OutputNames, runOptions); },
+            runOptions, cts.Token));
+
+        Assert.False(runOptions.Terminate);
+    }
+
+    [Fact]
     public void Run_without_cancellation_returns_outputs_undisposed()
     {
         using var runOptions = new RunOptions();
