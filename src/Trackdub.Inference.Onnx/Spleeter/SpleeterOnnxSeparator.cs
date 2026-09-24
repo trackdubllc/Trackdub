@@ -73,7 +73,8 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
             // input "x", not "input". Read it from session metadata so any single-input variant works.
             string inputName = ResolveSingleInputName(sessionLease.Session);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sessionLease.Session.RunWithRetry(
-                [NamedOnnxValue.CreateFromTensor(inputName, inputTensor)]);
+                [NamedOnnxValue.CreateFromTensor(inputName, inputTensor)],
+                cancellationToken: cancellationToken);
 
             var outputTensor = outputs.First().AsTensor<float>();
             vocalsMaskMag = outputTensor.ToArray();
@@ -93,7 +94,8 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
         {
             string inputName = ResolveSingleInputName(sessionLease.Session);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sessionLease.Session.RunWithRetry(
-                [NamedOnnxValue.CreateFromTensor(inputName, inputTensor)]);
+                [NamedOnnxValue.CreateFromTensor(inputName, inputTensor)],
+                cancellationToken: cancellationToken);
 
             var outputTensor = outputs.First().AsTensor<float>();
             accMaskMag = outputTensor.ToArray();

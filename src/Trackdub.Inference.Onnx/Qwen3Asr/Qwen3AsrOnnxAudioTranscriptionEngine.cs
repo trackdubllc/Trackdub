@@ -193,7 +193,7 @@ public sealed class Qwen3AsrOnnxAudioTranscriptionEngine(
                 NamedOnnxValue.CreateFromTensor("mel", mel),
             ]);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
-                sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values);
+                sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, cancellationToken: cancellationToken);
             Tensor<float> audioFeatures = encoderResults.Single().AsTensor<float>();
 
             int maxTokens = Math.Min(512, Math.Max(48, (int)Math.Ceiling(chunkDurationSeconds * 12d) + 24));

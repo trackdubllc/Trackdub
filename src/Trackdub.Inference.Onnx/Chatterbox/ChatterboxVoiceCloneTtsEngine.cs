@@ -187,7 +187,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
                     referenceAudio,
                     [1, referenceAudio.Length]));
                 using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> speechResults =
-                    speechEncoderSession.RunWithRetry(speechEncoderInputs.Values);
+                    speechEncoderSession.RunWithRetry(speechEncoderInputs.Values, cancellationToken: cancellationToken);
                 DisposableNamedOnnxValue[] outputs = speechResults.ToArray();
                 TensorData<float> condEmbeds = ReadFloatTensor(outputs[0]);
                 Tensor<long> promptTensor = outputs[1].AsTensor<long>();
@@ -235,7 +235,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             }
 
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> languageResults =
-                languageModelSession.RunWithRetry(languageInputs.Values);
+                languageModelSession.RunWithRetry(languageInputs.Values, cancellationToken: cancellationToken);
             DisposableNamedOnnxValue[] languageOutputs = languageResults.ToArray();
             TensorData<float> logits = ReadFloatTensor(languageOutputs[0]);
             long nextToken = SelectNextToken(logits, generatedTokens);

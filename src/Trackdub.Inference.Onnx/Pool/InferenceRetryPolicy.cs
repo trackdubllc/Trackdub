@@ -41,6 +41,12 @@ internal static class InferenceRetryPolicy
     /// <summary>
     /// Executes an ONNX Runtime inference call with retry on transient <see cref="OnnxRuntimeException"/>.
     /// </summary>
+    /// <remarks>
+    /// Cancellation sets <see cref="RunOptions.Terminate"/>, which ORT honors between graph nodes
+    /// (a fused EP subgraph such as a TensorRT-RTX engine finishes its current execution first).
+    /// <c>Run</c> still returns before the caller can release the session lease or input buffers,
+    /// and a terminated run surfaces as <see cref="OperationCanceledException"/>, never a retry.
+    /// </remarks>
     /// <param name="provider">
     /// The execution provider the session was created with, if known. Narrows retry of an
     /// unclassified "[ErrorCode:RuntimeException]" — see remarks on <see cref="InferenceRetryPolicy"/>.
@@ -52,20 +58,18 @@ internal static class InferenceRetryPolicy
         CancellationToken cancellationToken = default,
         ExecutionProviderKind? provider = null)
     {
-        int attempt = 0;
-        while (true)
+        if (!cancellationToken.CanBeCanceled)
         {
-            try
-            {
-                using var inference = BenchmarkPhaseCapture.Start("onnx-inference");
-                return session.Run(inputs);
-            }
-            catch (OnnxRuntimeException ex) when (IsTransient(ex, provider) && ++attempt < maxAttempts)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                Thread.Sleep(DefaultDelays[Math.Min(attempt - 1, DefaultDelays.Length - 1)]);
-            }
+            return Execute(() => session.Run(inputs), maxAttempts, cancellationToken, provider);
         }
+
+        using var runOptions = new RunOptions();
+        return Execute(
+            () => session.Run(inputs, session.OutputNames, runOptions),
+            maxAttempts,
+            cancellationToken,
+            provider,
+            runOptions);
     }
 
     /// <summary>
@@ -82,19 +86,18 @@ internal static class InferenceRetryPolicy
         CancellationToken cancellationToken = default,
         ExecutionProviderKind? provider = null)
     {
+        using var runOptions = new RunOptions();
         int attempt = 0;
         while (true)
         {
             try
             {
-                using var inference = BenchmarkPhaseCapture.Start("onnx-inference");
-                return session.Run(inputs);
+                return RunOnce(() => session.Run(inputs, session.OutputNames, runOptions), runOptions, cancellationToken);
             }
-            catch (OnnxRuntimeException ex) when (IsTransient(ex, provider) && ++attempt < maxAttempts)
+            catch (OnnxRuntimeException ex) when (!cancellationToken.IsCancellationRequested &&
+                                                  IsTransient(ex, provider) && ++attempt < maxAttempts)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                await Task.Delay(DefaultDelays[Math.Min(attempt - 1, DefaultDelays.Length - 1)], cancellationToken)
-                    .ConfigureAwait(false);
+                await Task.Delay(BackoffFor(attempt), cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -118,23 +121,67 @@ internal static class InferenceRetryPolicy
         string[] outputNames,
         int maxAttempts = DefaultMaxAttempts,
         CancellationToken cancellationToken = default,
-        ExecutionProviderKind? provider = null)
+        ExecutionProviderKind? provider = null) =>
+        Execute(
+            () => session.RunWithBindingAndNames(runOptions, binding, outputNames),
+            maxAttempts,
+            cancellationToken,
+            provider,
+            runOptions);
+
+    private static T Execute<T>(
+        Func<T> run,
+        int maxAttempts,
+        CancellationToken cancellationToken,
+        ExecutionProviderKind? provider,
+        RunOptions? runOptions = null)
     {
         int attempt = 0;
         while (true)
         {
             try
             {
-                using var inference = BenchmarkPhaseCapture.Start("onnx-inference");
-                return session.RunWithBindingAndNames(runOptions, binding, outputNames);
+                return RunOnce(run, runOptions, cancellationToken);
             }
-            catch (OnnxRuntimeException ex) when (IsTransient(ex, provider) && ++attempt < maxAttempts)
+            catch (OnnxRuntimeException ex) when (!cancellationToken.IsCancellationRequested &&
+                                                  IsTransient(ex, provider) && ++attempt < maxAttempts)
             {
+                cancellationToken.WaitHandle.WaitOne(BackoffFor(attempt));
                 cancellationToken.ThrowIfCancellationRequested();
-                Thread.Sleep(DefaultDelays[Math.Min(attempt - 1, DefaultDelays.Length - 1)]);
             }
         }
     }
+
+    private static T RunOnce<T>(Func<T> run, RunOptions? runOptions, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        using var inference = BenchmarkPhaseCapture.Start("onnx-inference");
+        if (runOptions is null || !cancellationToken.CanBeCanceled)
+        {
+            return run();
+        }
+
+        // Disposing the registration waits for an in-flight callback, so Terminate cannot be
+        // set after the reset below. The reset keeps caller-owned RunOptions reusable.
+        CancellationTokenRegistration registration =
+            cancellationToken.UnsafeRegister(static state => ((RunOptions)state!).Terminate = true, runOptions);
+        try
+        {
+            return run();
+        }
+        catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
+        finally
+        {
+            registration.Dispose();
+            runOptions.Terminate = false;
+        }
+    }
+
+    private static TimeSpan BackoffFor(int attempt) =>
+        DefaultDelays[Math.Min(attempt - 1, DefaultDelays.Length - 1)];
 
     private static bool IsTransient(OnnxRuntimeException ex, ExecutionProviderKind? provider) =>
         IsTransientMessage(ex.Message, provider);

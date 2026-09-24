@@ -110,7 +110,7 @@ public sealed class SileroVadSpeechRegionDetector(IRuntimePlanner runtimePlanner
                 targetAudio.ReadMonoSamples(startFrame, chunkSpan);
 
                 using var input = CreateInputSet(chunkSpan, state);
-                using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> output = sessionLease.Session.RunWithRetry(input.Values);
+                using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> output = sessionLease.Session.RunWithRetry(input.Values, cancellationToken: cancellationToken);
                 IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputCollection = output;
 
                 Tensor<float> probabilityTensor = outputCollection.Single(static value => value.Name == "output").AsTensor<float>();

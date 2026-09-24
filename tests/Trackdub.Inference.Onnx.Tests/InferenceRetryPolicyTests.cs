@@ -1,3 +1,5 @@
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Pool;
 
@@ -89,4 +91,70 @@ public sealed class InferenceRetryPolicyTests
         Assert.False(InferenceRetryPolicy.IsTransientMessage(
             "[ErrorCode:InvalidArgument] input shape mismatch", provider));
     }
+
+    [Fact]
+    public void Cancellable_run_returns_every_output()
+    {
+        using var session = new InferenceSession(IdentityOnnxModel);
+        using var cts = new CancellationTokenSource();
+
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
+            session.RunWithRetry([IdentityInput(3f)], cancellationToken: cts.Token);
+
+        Assert.Equal("y", Assert.Single(outputs).Name);
+        Assert.Equal(3f, outputs.First().AsTensor<float>()[0]);
+    }
+
+    [Fact]
+    public void Cancelled_token_stops_before_native_run()
+    {
+        using var session = new InferenceSession(IdentityOnnxModel);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        Assert.Throws<OperationCanceledException>(
+            () => session.RunWithRetry([IdentityInput(1f)], cancellationToken: cts.Token));
+    }
+
+    [Fact]
+    public async Task Async_run_honors_cancellation()
+    {
+        using var session = new InferenceSession(IdentityOnnxModel);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => session.RunWithRetryAsync([IdentityInput(1f)], cancellationToken: cts.Token));
+    }
+
+    [Fact]
+    public void Binding_run_leaves_caller_run_options_reusable()
+    {
+        using var session = new InferenceSession(IdentityOnnxModel);
+        using var runOptions = new RunOptions();
+        using OrtIoBinding binding = session.CreateIoBinding();
+        using OrtValue input = OrtValue.CreateTensorValueFromMemory(new[] { 2f }, new long[] { 1 });
+        binding.BindInput("x", input);
+        binding.BindOutputToDevice("y", OrtMemoryInfo.DefaultInstance);
+        using var cts = new CancellationTokenSource();
+
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
+            session.RunWithBindingAndNamesRetry(runOptions, binding, ["y"], cancellationToken: cts.Token);
+
+        Assert.Equal(2f, outputs.First().AsTensor<float>()[0]);
+        Assert.False(runOptions.Terminate);
+    }
+
+    private static NamedOnnxValue IdentityInput(float value) =>
+        NamedOnnxValue.CreateFromTensor("x", new DenseTensor<float>(new[] { value }, [1]));
+
+    // x (float32 [1]) -> Identity -> y (float32 [1]); ir_version 7, opset 9.
+    private static readonly byte[] IdentityOnnxModel =
+    [
+        0x08, 0x07, 0x3A, 0x3A, 0x0A, 0x10, 0x0A, 0x01, 0x78, 0x12, 0x01, 0x79, 0x22, 0x08,
+        0x49, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x74, 0x79, 0x12, 0x04, 0x74, 0x65, 0x73, 0x74,
+        0x5A, 0x0F, 0x0A, 0x01, 0x78, 0x12, 0x0A, 0x0A, 0x08, 0x08, 0x01, 0x12, 0x04, 0x0A,
+        0x02, 0x08, 0x01, 0x62, 0x0F, 0x0A, 0x01, 0x79, 0x12, 0x0A, 0x0A, 0x08, 0x08, 0x01,
+        0x12, 0x04, 0x0A, 0x02, 0x08, 0x01, 0x42, 0x04, 0x0A, 0x00, 0x10, 0x09,
+    ];
 }

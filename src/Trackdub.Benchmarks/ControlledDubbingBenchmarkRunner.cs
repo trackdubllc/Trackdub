@@ -10,6 +10,7 @@ using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Domain.Tts;
+using Trackdub.Inference.Runtime.ModelManifest;
 using Trackdub.Infrastructure.Persistence.Repositories;
 using Trackdub.Infrastructure.Persistence.Sqlite;
 using Trackdub.Infrastructure.Settings;
@@ -148,12 +149,26 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 if (prerequisites.Count > 0)
                 {
                     long prerequisiteStart = Stopwatch.GetTimestamp();
+                    // Separation regenerates the transcript by default, which would leave ASR and
+                    // later stages timing an in-place re-run instead of their own work.
                     DubbingRunResult preparation = await ExecuteAsync(
-                        host, fixtureCopy, projectPath, options, prerequisites, true, cancellationToken).ConfigureAwait(false);
+                        host, fixtureCopy, projectPath, options, prerequisites, true, cancellationToken,
+                        regenerateTranscriptOnSeparation: false).ConfigureAwait(false);
                     timings["prerequisites"] = Stopwatch.GetElapsedTime(prerequisiteStart).TotalMilliseconds;
                     RequirePreparationSucceeded(
                         preparation, "Prerequisite preparation did not complete successfully.",
                         out reason, out status, out stages);
+
+                    // A stage already run by its prerequisites is timed as an in-place re-run
+                    // (for ASR: re-transcribing existing segments), not as the stage itself.
+                    RunArtifacts prepared = await ReadRunArtifactsAsync(host, projectPath, options, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (prepared.StageRuns.Any(run => run.StageName.Equals(stage, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        reason = $"Prerequisites already ran '{stage}'; the timed run would measure a re-run.";
+                        status = BenchmarkEvidenceStatus.Skipped;
+                        throw new PreparationIncompleteException();
+                    }
                 }
             }
 
@@ -331,6 +346,28 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         }
     }
 
+    // An unknown alias is not an error to the pipeline, which silently plans its default model,
+    // so a typo (or an engine family such as "whisper-onnx") would measure the wrong model.
+    private static void ValidateModelAlias(string model)
+    {
+        if (!BundledModelManifestRegistry.TryLoadDefault(out BundledModelManifestRegistry? registry, out _) ||
+            registry is null ||
+            registry.TryResolve(model, out _))
+            return;
+
+        string family = model.Split('-', '_', '@')[0];
+        string[] similar = registry.Entries
+            .SelectMany(static entry => entry.Aliases)
+            .Where(alias => family.Length > 2 && alias.StartsWith(family, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToArray();
+        throw new ArgumentException(similar.Length == 0
+            ? $"Unknown model alias '{model}'."
+            : $"Unknown model alias '{model}'. Similar aliases: {string.Join(", ", similar)}.");
+    }
+
     private static void ValidateOptions(ControlledDubbingBenchmarkOptions options)
     {
         if (!File.Exists(options.FixturePath)) throw new FileNotFoundException("Fixture missing.", options.FixturePath);
@@ -344,6 +381,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             throw new ArgumentException("Provider pin requires a runtime-backed focused stage.");
         if (options.Model is not null && ResolveStage(options.Stage) is null)
             throw new ArgumentException("Model selection requires a focused stage.");
+        if (options.Model is not null)
+            ValidateModelAlias(options.Model);
         if (options.ExpectedFixtureSha256 is not null &&
             (options.ExpectedFixtureSha256.Length != 64 ||
              !options.ExpectedFixtureSha256.All(Uri.IsHexDigit)))
@@ -430,7 +469,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     private static Task<DubbingRunResult> ExecuteAsync(
         HeadlessDubbingHost host, string fixture, string project, ControlledDubbingBenchmarkOptions options,
         IReadOnlyList<string>? stages, bool forceRerun, CancellationToken cancellationToken,
-        IProgress<PipelineProgressEvent>? progress = null)
+        IProgress<PipelineProgressEvent>? progress = null,
+        bool regenerateTranscriptOnSeparation = true)
     {
         string? stage = ResolveStage(options.Stage);
         IReadOnlyDictionary<string, string>? models = options.Model is null || stage is null
@@ -444,6 +484,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             StageFilter = stages,
             ModelPreferences = models,
             ForceRerun = forceRerun,
+            RegenerateTranscriptOnSeparation = regenerateTranscriptOnSeparation,
         }, progress, cancellationToken);
     }
 

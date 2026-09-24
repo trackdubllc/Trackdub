@@ -119,6 +119,7 @@ internal sealed class InferenceSessionPool : IDisposable
 
     private readonly int maxSessions;
     private readonly ConcurrentDictionary<SessionPoolKey, PoolEntry> entries = new();
+    private readonly ConcurrentDictionary<SessionPoolKey, TaskCompletionSource> pendingCreations = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
     private volatile bool disposed;
     private int pooledCount;
@@ -151,10 +152,13 @@ internal sealed class InferenceSessionPool : IDisposable
     }
 
     /// <summary>
-    /// Pre-warms a session for <paramref name="key"/> without returning a lease.
-    /// Useful at startup to amortise first-call latency.
+    /// Ensures a pooled session exists for <paramref name="key"/> without returning a lease.
     /// If a session for this key already exists the call is a no-op.
     /// </summary>
+    /// <remarks>
+    /// This only constructs the session; it runs no inference, so first-run costs such as
+    /// kernel selection or engine building on the first input shape are still paid later.
+    /// </remarks>
     public async Task WarmAsync(
         SessionPoolKey key,
         Func<CancellationToken, Task<InferenceSession>> factory,
@@ -212,8 +216,10 @@ internal sealed class InferenceSessionPool : IDisposable
             // then release the lock before calling factory.  Holding creationLock across
             // a potentially slow ORT-initialisation call would serialise Dispose(),
             // EvictModelAsync(), and GetLeaseAsync() for all other keys behind one load.
-            bool ephemeral;
+            bool ephemeral = false;
             PoolEntry? lruEvicted1 = null;
+            Task? inFlightCreation = null;
+            TaskCompletionSource? creation = null;
             using (BenchmarkPhaseCapture.Start("pool-creation-lock-wait"))
                 await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -230,131 +236,199 @@ internal sealed class InferenceSessionPool : IDisposable
                     continue;
                 }
 
-                // Enforce the pool limit by evicting the LRU idle entry only when at capacity.
-                // Cold misses while pooledCount < maxSessions must not evict a warm idle session.
-                // TryEvictLruIdle removes and marks the entry under the lock but returns it
-                // for disposal outside the lock so expensive ORT teardown does not hold creationLock.
-                lruEvicted1 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
-                ephemeral = pooledCount >= maxSessions && lruEvicted1 is null;
+                // Single-flight: a concurrent miss for this key waits for the in-flight
+                // construction instead of building (and then discarding) a duplicate session.
+                if (pendingCreations.TryGetValue(key, out TaskCompletionSource? pending))
+                {
+                    inFlightCreation = pending.Task;
+                }
+                else
+                {
+                    // Enforce the pool limit by evicting the LRU idle entry only when at capacity.
+                    // Cold misses while pooledCount < maxSessions must not evict a warm idle session.
+                    // TryEvictLruIdle removes and marks the entry under the lock but returns it
+                    // for disposal outside the lock so expensive ORT teardown does not hold creationLock.
+                    lruEvicted1 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
+                    ephemeral = pooledCount >= maxSessions && lruEvicted1 is null;
+                    if (!ephemeral)
+                    {
+                        creation = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                        pendingCreations[key] = creation;
+                    }
+                }
             }
             finally
             {
                 creationLock.Release();
             }
 
-            // Dispose the evicted session outside the lock so expensive ORT teardown
-            // does not block unrelated callers waiting on creationLock.
-            lruEvicted1?.Dispose();
-
-            // Phase 2: create the session OUTSIDE the creation lock so that Dispose(),
-            // EvictModelAsync(), and GetLeaseAsync() for other keys are not blocked.
-            InferenceSession session;
-            using (BenchmarkPhaseCapture.Start("session-create"))
-                session = await factory(cancellationToken).ConfigureAwait(false);
-            var freshEntry = new PoolEntry(session, ephemeral);
-
-            if (freshEntry.Ephemeral)
+            if (inFlightCreation is not null)
             {
-                // Ephemeral entries are never stored; return the lease directly.
-                return BuildLease(freshEntry);
-            }
-
-            // Phase 3: re-acquire the creation lock to publish the new entry atomically.
-            // A concurrent thread may have created an entry for this key while our factory ran.
-            bool published = false;
-            PoolEntry? competitor = null;
-            PoolEntry? lruEvicted2 = null;
-            try
-            {
-                await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    ObjectDisposedException.ThrowIf(disposed, this);
+                    using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
+                        await inFlightCreation.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // The creating caller was cancelled, not this one: retry, becoming the creator
+                    // if nobody else has. Construction failures still propagate to every waiter.
+                }
 
-                    if (entries.TryGetValue(key, out competitor))
+                continue;
+            }
+
+            Exception? creationFailure = null;
+            try
+            {
+
+                // Dispose the evicted session outside the lock so expensive ORT teardown
+                // does not block unrelated callers waiting on creationLock.
+                lruEvicted1?.Dispose();
+
+                // Phase 2: create the session OUTSIDE the creation lock so that Dispose(),
+                // EvictModelAsync(), and GetLeaseAsync() for other keys are not blocked.
+                InferenceSession session;
+                using (BenchmarkPhaseCapture.Start("session-create"))
+                    session = await factory(cancellationToken).ConfigureAwait(false);
+                var freshEntry = new PoolEntry(session, ephemeral);
+
+                if (freshEntry.Ephemeral)
+                {
+                    // Ephemeral entries are never stored; return the lease directly.
+                    return BuildLease(freshEntry);
+                }
+
+                // Phase 3: re-acquire the creation lock to publish the new entry atomically.
+                // A concurrent thread may have created an entry for this key while our factory ran.
+                bool published = false;
+                PoolEntry? competitor = null;
+                PoolEntry? lruEvicted2 = null;
+                try
+                {
+                    await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    try
                     {
-                        published = false;
-                    }
-                    else
-                    {
-                        // Only evict to make room when the pool is already at capacity (same as phase 1).
-                        lruEvicted2 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
-                        if (pooledCount >= maxSessions && lruEvicted2 is null)
+                        ObjectDisposedException.ThrowIf(disposed, this);
+
+                        if (entries.TryGetValue(key, out competitor))
                         {
-                            freshEntry.MarkEphemeral();
+                            published = false;
                         }
                         else
                         {
-                            published = entries.TryAdd(key, freshEntry);
-                            if (!published)
+                            // Only evict to make room when the pool is already at capacity (same as phase 1).
+                            lruEvicted2 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
+                            if (pooledCount >= maxSessions && lruEvicted2 is null)
                             {
-                                entries.TryGetValue(key, out competitor);
+                                freshEntry.MarkEphemeral();
                             }
                             else
                             {
-                                pooledCount++;
+                                published = entries.TryAdd(key, freshEntry);
+                                if (!published)
+                                {
+                                    entries.TryGetValue(key, out competitor);
+                                }
+                                else
+                                {
+                                    pooledCount++;
+                                }
                             }
                         }
                     }
-                }
-                finally
-                {
-                    creationLock.Release();
-                }
-            }
-            catch
-            {
-                // Cancellation, pool disposal, or an unexpected error: entry was not stored,
-                // so dispose freshEntry here to prevent a session leak.
-                if (!published)
-                {
-                    freshEntry.Dispose();
-                }
-
-                lruEvicted2?.Dispose();
-                throw;
-            }
-
-            // Dispose the evicted session outside the lock so expensive ORT teardown
-            // does not block unrelated callers waiting on creationLock.
-            lruEvicted2?.Dispose();
-
-            if (published)
-            {
-                // The gate starts locked (count=0), representing the active lease for
-                // the creator. Release() is called when the lease is disposed.
-                return BuildLease(freshEntry);
-            }
-
-            if (freshEntry.Ephemeral)
-            {
-                return BuildLease(freshEntry);
-            }
-
-            // Lost the race: another thread concurrently published an entry for this key.
-            // Discard our duplicate session and lease the winner's entry instead.
-            freshEntry.Dispose();
-            if (competitor is not null)
-            {
-                try
-                {
-                    await competitor.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-                    if (disposed)
+                    finally
                     {
-                        ReleaseLeaseEntry(competitor);
-                        ObjectDisposedException.ThrowIf(disposed, this);
+                        creationLock.Release();
+                    }
+                }
+                catch
+                {
+                    // Cancellation, pool disposal, or an unexpected error: entry was not stored,
+                    // so dispose freshEntry here to prevent a session leak.
+                    if (!published)
+                    {
+                        freshEntry.Dispose();
                     }
 
-                    return BuildLease(competitor);
+                    lruEvicted2?.Dispose();
+                    throw;
                 }
-                catch (ObjectDisposedException)
+
+                // Dispose the evicted session outside the lock so expensive ORT teardown
+                // does not block unrelated callers waiting on creationLock.
+                lruEvicted2?.Dispose();
+
+                if (published)
                 {
-                    // Competitor was evicted between Phase 3 and here; restart the whole loop.
-                    continue;
+                    // The gate starts locked (count=0), representing the active lease for
+                    // the creator. Release() is called when the lease is disposed.
+                    return BuildLease(freshEntry);
+                }
+
+                if (freshEntry.Ephemeral)
+                {
+                    return BuildLease(freshEntry);
+                }
+
+                // Lost the race: another thread concurrently published an entry for this key.
+                // Discard our duplicate session and lease the winner's entry instead.
+                freshEntry.Dispose();
+                if (competitor is not null)
+                {
+                    try
+                    {
+                        await competitor.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                        if (disposed)
+                        {
+                            ReleaseLeaseEntry(competitor);
+                            ObjectDisposedException.ThrowIf(disposed, this);
+                        }
+
+                        return BuildLease(competitor);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Competitor was evicted between Phase 3 and here; restart the whole loop.
+                        continue;
+                    }
+                }
+                // Competitor entry was evicted between TryGetValue and Gate.WaitAsync; restart.
+                continue;
+            }
+            catch (Exception ex)
+            {
+                creationFailure = ex;
+                throw;
+            }
+            finally
+            {
+                if (creation is not null)
+                {
+                    CompleteCreation(key, creation, creationFailure);
                 }
             }
-            // Competitor entry was evicted between TryGetValue and Gate.WaitAsync; restart.
-            continue;
+        }
+    }
+
+    private void CompleteCreation(SessionPoolKey key, TaskCompletionSource creation, Exception? failure)
+    {
+        // Remove before signalling so released waiters observe either the published entry or
+        // no creation in flight, never a completed one.
+        pendingCreations.TryRemove(new KeyValuePair<SessionPoolKey, TaskCompletionSource>(key, creation));
+        if (failure is null)
+        {
+            creation.TrySetResult();
+        }
+        else if (failure is OperationCanceledException)
+        {
+            creation.TrySetCanceled();
+        }
+        else
+        {
+            creation.TrySetException(failure);
+            // Waiters are optional; do not let a failure nobody awaited surface as unobserved.
+            _ = creation.Task.Exception;
         }
     }
 
