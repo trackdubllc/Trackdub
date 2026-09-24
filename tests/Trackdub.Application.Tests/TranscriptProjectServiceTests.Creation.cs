@@ -132,7 +132,7 @@ public partial class TranscriptProjectServiceTests
     }
 
     [Fact]
-    public async Task RunInitialTranscriptionAsync_with_stem_separation_enabled_splits_before_transcription()
+    public async Task RunInitialTranscriptionAsync_does_not_separate_stems()
     {
         string tempDirectory = CreateTempDirectory();
         string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
@@ -148,12 +148,11 @@ public partial class TranscriptProjectServiceTests
             null,
             TestContext.Current.CancellationToken,
             progress: null,
-            sourceLanguage: null,
-            enableStemSeparation: true);
+            sourceLanguage: null);
 
-        Assert.Equal(1, scope.StemSeparationEngine.CallCount);
+        Assert.Equal(0, scope.StemSeparationEngine.CallCount);
         Assert.NotNull(result.CurrentTranscriptRevision);
-        Assert.Contains(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
+        Assert.DoesNotContain(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
     }
 
     [Fact]

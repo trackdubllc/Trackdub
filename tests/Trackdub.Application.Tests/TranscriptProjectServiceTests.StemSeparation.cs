@@ -38,13 +38,12 @@ public partial class TranscriptProjectServiceTests
             diarizationEngine: diarizationEngine,
             transcriptionEngine: transcriptionEngine);
 
-        TranscriptProjectState result = await scope.Service.CreateAsync(
+        TranscriptProjectState result = await CreateWithStemsAsync(
+            scope,
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
                 sourcePath,
-                EnableSpeakerDiarization: true,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
+                EnableSpeakerDiarization: true));
 
         ProjectArtifact vocals = Assert.Single(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
         ProjectArtifact ambiance = Assert.Single(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Ambiance);
@@ -99,13 +98,12 @@ public partial class TranscriptProjectServiceTests
             transcriptionEngine: transcriptionEngine,
             audioQualityAnalyzer: analyzer);
 
-        TranscriptProjectState result = await scope.Service.CreateAsync(
+        TranscriptProjectState result = await CreateWithStemsAsync(
+            scope,
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
                 sourcePath,
-                EnableSpeakerDiarization: false,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
+                EnableSpeakerDiarization: false));
 
         Assert.Contains(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
         Assert.Equal(ProjectArtifactPaths.NormalizedAudioRelativePath, result.AsrAudioRelativePath);
@@ -146,13 +144,12 @@ public partial class TranscriptProjectServiceTests
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
-        TranscriptProjectState created = await scope.Service.CreateAsync(
+        TranscriptProjectState created = await CreateWithStemsAsync(
+            scope,
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
                 sourcePath,
-                EnableSpeakerDiarization: false,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
+                EnableSpeakerDiarization: false));
         ProjectArtifact initialVocals = Assert.Single(created.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
         ProjectArtifact initialAmbiance = Assert.Single(created.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Ambiance);
         ProjectArtifact initialMusic = Assert.Single(created.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Music);
@@ -211,13 +208,12 @@ public partial class TranscriptProjectServiceTests
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
-        TranscriptProjectState created = await scope.Service.CreateAsync(
+        TranscriptProjectState created = await CreateWithStemsAsync(
+            scope,
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
                 sourcePath,
-                EnableSpeakerDiarization: false,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
+                EnableSpeakerDiarization: false));
 
         TranscriptProjectState rerun = await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
 
@@ -239,13 +235,12 @@ public partial class TranscriptProjectServiceTests
             new DiarizedSpeakerTurn("spk_1", 6d, 11.8d, Confidence: 0.8d, HasOverlap: false)
         ]);
         FakeServiceScope scope = CreateScope(tempDirectory, diarizationEngine: diarizationEngine);
-        TranscriptProjectState created = await scope.Service.CreateAsync(
+        TranscriptProjectState created = await CreateWithStemsAsync(
+            scope,
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
                 sourcePath,
-                EnableSpeakerDiarization: true,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
+                EnableSpeakerDiarization: true));
         Guid[] createdSpeakerIdsBySegment = created.TranscriptSegments
             .OrderBy(segment => segment.SegmentIndex)
             .Select(segment => segment.SpeakerId ?? Guid.Empty)
@@ -267,7 +262,7 @@ public partial class TranscriptProjectServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_when_stem_separation_fails_records_failure_and_keeps_full_mix_route()
+    public async Task RunStemSeparationAsync_when_separation_fails_records_failure_and_keeps_full_mix_route()
     {
         string tempDirectory = CreateTempDirectory();
         string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
@@ -280,13 +275,15 @@ public partial class TranscriptProjectServiceTests
             transcriptionEngine: transcriptionEngine,
             stemSeparationEngine: stemEngine);
 
-        TranscriptProjectState result = await scope.Service.CreateAsync(
+        await scope.Service.CreateAsync(
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
                 sourcePath,
-                EnableSpeakerDiarization: true,
-                EnableStemSeparation: true),
+                EnableSpeakerDiarization: true),
             TestContext.Current.CancellationToken);
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken));
+        TranscriptProjectState result = await scope.Service.OpenAsync(TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain(result.ProjectState.Artifacts, artifact => artifact.Kind is ArtifactKind.Vocals or ArtifactKind.Ambiance);
         ProjectArtifact analysis = Assert.Single(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.AudioQualityAnalysis);
@@ -316,13 +313,12 @@ public partial class TranscriptProjectServiceTests
         };
         FakeServiceScope scope = CreateScope(tempDirectory, stemSeparationEngine: stemEngine);
 
-        TranscriptProjectState result = await scope.Service.CreateAsync(
+        TranscriptProjectState result = await CreateWithStemsAsync(
+            scope,
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
                 sourcePath,
-                EnableSpeakerDiarization: false,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
+                EnableSpeakerDiarization: false));
 
         ProjectArtifact vocals = Assert.Single(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
         ProjectArtifact ambiance = Assert.Single(result.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Ambiance);

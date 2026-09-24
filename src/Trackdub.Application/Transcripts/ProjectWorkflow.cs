@@ -34,8 +34,7 @@ public sealed class ProjectWorkflow(
 
     public async Task<TranscriptProjectState> CreateAsync(
         CreateTranscriptProjectRequest request,
-        CancellationToken cancellationToken,
-        IProgress<StemSeparationProgress>? stemSeparationProgress = null)
+        CancellationToken cancellationToken)
     {
         string? sourceLanguage = TranscriptWorkflowUtilities.NormalizeTranscriptLanguageCode(request.SourceLanguage);
         CreateProjectFromMediaResult createResult = await projectMediaIngestService.CreateAsync(
@@ -43,23 +42,6 @@ public sealed class ProjectWorkflow(
             cancellationToken).ConfigureAwait(false);
 
         var currentArtifacts = new List<ProjectArtifact> { createResult.AudioArtifact };
-        if (request.EnableStemSeparation)
-        {
-            StemSeparationStageResult? stemResult = await TryRunStemSeparationForImportAsync(
-                createResult.Project.Id,
-                createResult.MediaAsset,
-                createResult.StemSeparationSourceAudioArtifact,
-                request.ModelPreferences?.SeparationModelAlias,
-                request.ModelPreferences?.GetPreferredExecutionProvider(RuntimeStage.Separation),
-                request.ModelPreferences?.RequiresPreferredExecutionProvider(RuntimeStage.Separation) == true,
-                request.ModelPreferences?.GetPreferredModelVariantAlias(RuntimeStage.Separation),
-                stemSeparationProgress,
-                cancellationToken).ConfigureAwait(false);
-            if (stemResult is not null)
-            {
-                currentArtifacts.AddRange(stemResult.Artifacts);
-            }
-        }
 
         TranscriptAudioRoutingPlan audioRoutingPlan = await TryPrepareSpeechAudioAsync(
             createResult.Project.Id,
@@ -115,8 +97,7 @@ public sealed class ProjectWorkflow(
         InferenceModelPreferences? modelPreferences,
         CancellationToken cancellationToken,
         IProgress<PipelineProgressEvent>? progress = null,
-        string? sourceLanguage = null,
-        bool enableStemSeparation = false)
+        string? sourceLanguage = null)
     {
         string? normalizedSourceLanguage = TranscriptWorkflowUtilities.NormalizeTranscriptLanguageCode(sourceLanguage);
         InferenceModelPreferences preferences = modelPreferences ?? InferenceModelPreferences.Empty;
@@ -128,36 +109,6 @@ public sealed class ProjectWorkflow(
             mediaAsset,
             artifacts,
             cancellationToken).ConfigureAwait(false);
-
-        ProjectArtifact? vocalStem = TranscriptWorkflowUtilities.GetLatestAcceptedVocalStem(artifacts);
-        if (enableStemSeparation && vocalStem is null)
-        {
-            PipelineProgressReporter.Phase(progress, StageNames.Separation, "Splitting audio", "Separating dialogue before cleanup.");
-            ProjectArtifact stemSourceAudio = await projectMediaIngestService.EnsureStemSeparationAudioAsync(
-                mediaAsset,
-                artifacts,
-                cancellationToken).ConfigureAwait(false);
-            if (!artifacts.Any(artifact => artifact.Id == stemSourceAudio.Id))
-            {
-                artifacts = artifacts.Concat([stemSourceAudio]).ToArray();
-            }
-
-            StemSeparationStageResult? stemResult = await TryRunStemSeparationForImportAsync(
-                currentState.ProjectState.Project.Id,
-                mediaAsset,
-                stemSourceAudio,
-                preferences.SeparationModelAlias,
-                preferences.GetPreferredExecutionProvider(RuntimeStage.Separation),
-                preferences.RequiresPreferredExecutionProvider(RuntimeStage.Separation),
-                preferences.GetPreferredModelVariantAlias(RuntimeStage.Separation),
-                null,
-                cancellationToken).ConfigureAwait(false);
-            if (stemResult is not null)
-            {
-                vocalStem = stemResult.VocalsArtifact;
-                artifacts = artifacts.Concat(stemResult.Artifacts).ToArray();
-            }
-        }
 
         PipelineProgressReporter.Phase(progress, StageNames.Asr, "Routing speech audio", "Preparing the best speech audio for transcription.");
         TranscriptAudioRoutingPlan audioRoutingPlan = await TryPrepareSpeechAudioAsync(
@@ -400,54 +351,6 @@ public sealed class ProjectWorkflow(
             .ConfigureAwait(false);
 
         return await ReloadAsync(currentState.SelectedTranslationTargetLanguage, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<StemSeparationStageResult?> TryRunStemSeparationForImportAsync(
-        Guid projectId,
-        MediaAsset mediaAsset,
-        ProjectArtifact sourceAudioArtifact,
-        string? preferredModelAlias,
-        ExecutionProviderKind? preferredExecutionProvider,
-        bool requirePreferredExecutionProvider,
-        string? preferredModelVariantAlias,
-        IProgress<StemSeparationProgress>? progress,
-        CancellationToken cancellationToken)
-    {
-        if (stemSeparationStageHandler is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            return await stemSeparationStageHandler.HandleAsync(
-                new StemSeparationStageRequest(
-                    projectId,
-                    mediaAsset,
-                    sourceAudioArtifact,
-                    [sourceAudioArtifact],
-                    preferredModelAlias,
-                    preferredExecutionProvider,
-                    requirePreferredExecutionProvider,
-                    preferredModelVariantAlias),
-                progress,
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
-        {
-            if (requirePreferredExecutionProvider)
-            {
-                throw;
-            }
-
-            await WriteDialogueIsolationUnavailableAsync(
-                projectId,
-                mediaAsset.Id,
-                ex.Message,
-                cancellationToken: CancellationToken.None).ConfigureAwait(false);
-
-            return null;
-        }
     }
 
     private async Task WriteDialogueIsolationUnavailableAsync(

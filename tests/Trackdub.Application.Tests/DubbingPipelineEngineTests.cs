@@ -83,9 +83,9 @@ public sealed class DubbingPipelineEngineTests
     }
 
     [Fact]
-    public void PrerequisiteStages_contains_Separation()
+    public void PrerequisiteStages_does_not_contain_Separation()
     {
-        Assert.Contains(StageNames.Separation, DubbingPipelineStages.PrerequisiteStages);
+        Assert.DoesNotContain(StageNames.Separation, DubbingPipelineStages.PrerequisiteStages);
     }
 
     [Fact]
@@ -93,7 +93,6 @@ public sealed class DubbingPipelineEngineTests
     {
         var expected = new[]
         {
-            StageNames.Separation,
             StageNames.Vad,
             StageNames.Asr,
             StageNames.Translation,

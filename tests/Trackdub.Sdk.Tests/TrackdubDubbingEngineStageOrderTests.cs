@@ -11,11 +11,11 @@ public sealed class TrackdubDubbingEngineStageOrderTests
         string[] order = InvokeResolve(null);
         Assert.Equal(
             [
-                StageNames.Separation,
                 StageNames.Vad,
                 StageNames.Diarization,
                 StageNames.Asr,
                 StageNames.Translation,
+                StageNames.Separation,
                 StageNames.Tts,
                 StageNames.Export,
             ],

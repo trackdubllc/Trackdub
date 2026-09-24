@@ -14,11 +14,11 @@ internal static class PipelineHandler
 {
     internal static readonly (string StageName, string DisplayName)[] UiStages =
     [
-        (StageNames.Separation, "Separation"),
         (StageNames.Vad, "VAD"),
         (StageNames.Asr, "Transcribe"),
         (StageNames.Diarization, "Identify"),
         (StageNames.Translation, "Translate"),
+        (StageNames.Separation, "Separation"),
         (StageNames.Tts, "Dub"),
         (StageNames.Export, "Export"),
     ];

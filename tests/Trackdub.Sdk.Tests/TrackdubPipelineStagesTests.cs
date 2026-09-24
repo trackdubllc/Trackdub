@@ -43,7 +43,6 @@ public sealed class TrackdubPipelineStagesTests
     {
         string[] classifiedStages =
         [
-            StageNames.Separation,
             StageNames.AudioPreparation,
             StageNames.Vad,
             StageNames.Diarization,
@@ -51,6 +50,7 @@ public sealed class TrackdubPipelineStagesTests
             StageNames.OverlapRescue,
             StageNames.TextRefinementAsr,
             StageNames.Translation,
+            StageNames.Separation,
             StageNames.Tts,
             StageNames.LipSync,
             StageNames.Export,
