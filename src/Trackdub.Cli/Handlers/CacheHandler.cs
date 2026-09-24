@@ -33,6 +33,49 @@ internal static class CacheHandler
         return Program.ExitSuccess;
     }
 
+    public static async Task<int> WarmEnginesAsync(
+        TrackdubSessionFactory factory,
+        TextWriter output,
+        IReadOnlyList<string>? modelPaths,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IEpContextWarmupService warmup = factory.GetRequiredService<IEpContextWarmupService>();
+        var progress = new Progress<string>(message => output.WriteLine(message));
+        EpContextWarmReport report = await warmup.WarmAsync(modelPaths, progress, cancellationToken)
+            .ConfigureAwait(false);
+
+        var payload = new
+        {
+            command = "cache warm",
+            engineCacheDirectory = report.EngineCacheDirectory,
+            environmentFingerprint = report.EnvironmentFingerprint,
+            compiled = report.CompiledCount,
+            reused = report.ReusedCount,
+            skipped = report.SkippedCount,
+            failed = report.FailedCount,
+            items = report.Items.Select(item => new
+            {
+                sourceModelPath = item.SourceModelPath,
+                status = item.Status,
+                epContextPath = item.EpContextPath,
+                compileMilliseconds = item.CompileMilliseconds,
+                warmLoadMilliseconds = item.WarmLoadMilliseconds,
+                detail = item.Detail,
+            }),
+            message = BuildWarmMessage(report),
+        };
+
+        string json = JsonSerializer.Serialize(payload, CliJsonOptions.Default);
+        await output.WriteLineAsync(json).ConfigureAwait(false);
+        return report.FailedCount > 0 ? Program.ExitPipelineFailure : Program.ExitSuccess;
+    }
+
+    private static string BuildWarmMessage(EpContextWarmReport report) =>
+        $"EP-context warm: compiled={report.CompiledCount}, reused={report.ReusedCount}, " +
+        $"skipped={report.SkippedCount}, failed={report.FailedCount}.";
+
     private static string BuildClearEnginesMessage(EngineCacheClearResult result)
     {
         if (!result.DirectoryExisted)
