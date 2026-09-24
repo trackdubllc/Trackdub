@@ -112,7 +112,12 @@ internal sealed class RuntimePlanFactory
                             : null);
                 }
 
-                SmokeVerdictKey? verdictKey = TryBuildVerdictKey(modelSha256, provider, hardwareProfile);
+                // A local optimized variant is a different graph file from its source model;
+                // a source-sha verdict cannot prove it. Always smoke variants and record
+                // verdicts only for the graph file smoke actually loaded.
+                SmokeVerdictKey? verdictKey = variant.IsLocalOptimizedVariant
+                    ? null
+                    : TryBuildVerdictKey(modelSha256, provider, hardwareProfile);
                 if (verdictKey is not null && smokeVerdictStore.IsVerified(verdictKey))
                 {
                     // Proven on a previous launch under the same model/EP/environment identity.

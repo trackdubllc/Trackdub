@@ -170,7 +170,7 @@ internal sealed class InferenceSessionPool : IDisposable
     /// in-flight creation consumes this so a failed creator's exception propagates without
     /// re-invoking the factory (single-flight: one factory call per creation wave).
     /// </summary>
-    private readonly ConcurrentDictionary<SessionPoolKey, Exception> creationFailures = new();
+    private readonly ConcurrentDictionary<SessionPoolKey, (Exception Error, long Ticks)> creationFailures = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
     private readonly SemaphoreSlim bundleAcquireLock = new(1, 1);
     private readonly bool enableMemoryAdmission;
@@ -340,6 +340,7 @@ internal sealed class InferenceSessionPool : IDisposable
             // records the failure so queued waiters propagate it without rebuilding.
             SemaphoreSlim createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
             bool propagatedRecentFailure = false;
+            long waitStartTicks = Environment.TickCount64;
             using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
                 await createGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -350,10 +351,17 @@ internal sealed class InferenceSessionPool : IDisposable
                     continue;
                 }
 
-                if (creationFailures.TryRemove(key, out Exception? recentFailure) && recentFailure is not null)
+                if (creationFailures.TryGetValue(key, out var recentFailure))
                 {
-                    propagatedRecentFailure = true;
-                    throw recentFailure;
+                    if (recentFailure.Ticks >= waitStartTicks)
+                    {
+                        // Failure happened while this caller was queued: same creation wave.
+                        propagatedRecentFailure = true;
+                        System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(recentFailure.Error).Throw();
+                    }
+
+                    // Stale failure from an earlier wave: retry the factory.
+                    creationFailures.TryRemove(new KeyValuePair<SessionPoolKey, (Exception Error, long Ticks)>(key, recentFailure));
                 }
 
                 long needMb = ResolveReservationMb(key);
@@ -407,6 +415,13 @@ internal sealed class InferenceSessionPool : IDisposable
                 finally
                 {
                     creationLock.Release();
+                }
+
+                if (enableMemoryAdmission && needMb > memoryBudgetMb)
+                {
+                    throw new InvalidOperationException(
+                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
+                        $"device {device} admission budget of {memoryBudgetMb} MB.");
                 }
 
                 if (enableMemoryAdmission && !reserved)
@@ -563,7 +578,7 @@ internal sealed class InferenceSessionPool : IDisposable
             {
                 if (!propagatedRecentFailure && ex is not OperationCanceledException)
                 {
-                    creationFailures[key] = ex;
+                    creationFailures[key] = (ex, Environment.TickCount64);
                 }
 
                 throw;

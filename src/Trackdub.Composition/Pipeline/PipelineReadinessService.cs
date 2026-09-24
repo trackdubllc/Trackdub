@@ -39,14 +39,24 @@ public sealed class PipelineReadinessService(
 
     // Hard per-stage ceiling (audit: hard timeouts with cleanup). Linked to the caller
     // token so user cancel still wins; a timeout is reported as RuntimeMissing rather
-    // than aborting the whole sweep. Large multi-GB graphs (qwen3-asr-1.7b encoder) can
+    // than aborting the whole sweep. Cancellation is cooperative: native ONNX session
+    // construction already in flight may ignore the token and keep this throttle slot
+    // occupied until it returns. Large multi-GB graphs (qwen3-asr-1.7b encoder) can
     // exceed 180s on cold load + smoke, so the default is 10 minutes.
     private static readonly TimeSpan DefaultStageEvaluationTimeout = TimeSpan.FromSeconds(600);
 
     private readonly int _maxConcurrentStageEvaluations =
-        maxConcurrentStageEvaluations ?? DefaultMaxConcurrentStageEvaluations;
+        maxConcurrentStageEvaluations is null
+            ? DefaultMaxConcurrentStageEvaluations
+            : maxConcurrentStageEvaluations.Value > 0
+                ? maxConcurrentStageEvaluations.Value
+                : throw new ArgumentOutOfRangeException(nameof(maxConcurrentStageEvaluations));
     private readonly TimeSpan _stageEvaluationTimeout =
-        stageEvaluationTimeout ?? DefaultStageEvaluationTimeout;
+        stageEvaluationTimeout is null
+            ? DefaultStageEvaluationTimeout
+            : stageEvaluationTimeout.Value > TimeSpan.Zero || stageEvaluationTimeout.Value == Timeout.InfiniteTimeSpan
+                ? stageEvaluationTimeout.Value
+                : throw new ArgumentOutOfRangeException(nameof(stageEvaluationTimeout));
 
     // Cache key covers every input that reaches the runtime planner: stage, model alias,
     // language context, validation mode, per-stage execution-provider override, the
@@ -92,17 +102,19 @@ public sealed class PipelineReadinessService(
         {
             int slot = index;
             RuntimeStage stage = enabledStages[index];
-            stageTasks[slot] = EvaluateStageSlotAsync(
-                slot,
-                stage,
-                selections,
-                state,
-                preferredModelTier,
-                sourceLanguageCode,
-                targetLanguageCode,
-                validateRuntime,
-                stageReadinesses,
-                throttle,
+            stageTasks[slot] = Task.Run(
+                () => EvaluateStageSlotAsync(
+                    slot,
+                    stage,
+                    selections,
+                    state,
+                    preferredModelTier,
+                    sourceLanguageCode,
+                    targetLanguageCode,
+                    validateRuntime,
+                    stageReadinesses,
+                    throttle,
+                    cancellationToken),
                 cancellationToken);
         }
 

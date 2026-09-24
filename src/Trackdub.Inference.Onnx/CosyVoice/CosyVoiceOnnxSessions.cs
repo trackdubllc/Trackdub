@@ -94,18 +94,28 @@ internal sealed class CosyVoiceSessionPins : IDisposable
                 cancellationToken,
                 allowTrtInitFallback: allowTrtInitFallback).ConfigureAwait(false);
 
-        var pins = new[]
+        var pins = new OnnxExecutionSessionFactory.PooledSingleSessionPin[9];
+        try
         {
-            await Pin(modelFiles.CampPlusPath).ConfigureAwait(false),
-            await Pin(modelFiles.SpeechTokenizerPath).ConfigureAwait(false),
-            await Pin(modelFiles.TextEncoderPath).ConfigureAwait(false),
-            await Pin(modelFiles.TokenGeneratorPath).ConfigureAwait(false),
-            await Pin(modelFiles.FlowEncoderPath).ConfigureAwait(false),
-            await Pin(modelFiles.FlowDecoderEstimatorPath).ConfigureAwait(false),
-            await Pin(modelFiles.HiftF0PredictorPath).ConfigureAwait(false),
-            await Pin(modelFiles.HiftSourcePath).ConfigureAwait(false),
-            await Pin(modelFiles.HiftVocoderPath).ConfigureAwait(false),
-        };
+            pins[0] = await Pin(modelFiles.CampPlusPath).ConfigureAwait(false);
+            pins[1] = await Pin(modelFiles.SpeechTokenizerPath).ConfigureAwait(false);
+            pins[2] = await Pin(modelFiles.TextEncoderPath).ConfigureAwait(false);
+            pins[3] = await Pin(modelFiles.TokenGeneratorPath).ConfigureAwait(false);
+            pins[4] = await Pin(modelFiles.FlowEncoderPath).ConfigureAwait(false);
+            pins[5] = await Pin(modelFiles.FlowDecoderEstimatorPath).ConfigureAwait(false);
+            pins[6] = await Pin(modelFiles.HiftF0PredictorPath).ConfigureAwait(false);
+            pins[7] = await Pin(modelFiles.HiftSourcePath).ConfigureAwait(false);
+            pins[8] = await Pin(modelFiles.HiftVocoderPath).ConfigureAwait(false);
+        }
+        catch
+        {
+            foreach (OnnxExecutionSessionFactory.PooledSingleSessionPin pin in pins)
+            {
+                pin?.Dispose();
+            }
+
+            throw;
+        }
 
         return new CosyVoiceSessionPins(pins);
     }

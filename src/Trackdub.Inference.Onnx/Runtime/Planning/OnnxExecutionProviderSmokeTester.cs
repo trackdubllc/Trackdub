@@ -159,7 +159,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         try
         {
             using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync(SileroVadPoolFamily, modelPath, provider, cancellationToken, allowTrtInitFallback: false)
+                .CreatePooledSingleAsync(SileroVadPoolFamily, modelPath, provider, cancellationToken, allowTrtInitFallback: true)
                 .ConfigureAwait(false);
             try
             {
@@ -369,7 +369,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 request.EntryPath,
                 request.ExecutionProvider,
                 cancellationToken,
-                allowTrtInitFallback: false)
+                allowTrtInitFallback: true)
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
@@ -528,7 +528,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         string runnableModelPath = request.EntryPath;
         string poolFamily = ResolveSeparationPoolFamily(request.EngineFamily, request.ModelId, runnableModelPath);
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync(poolFamily, runnableModelPath, request.ExecutionProvider, cancellationToken, allowTrtInitFallback: false)
+            .CreatePooledSingleAsync(poolFamily, runnableModelPath, request.ExecutionProvider, cancellationToken, allowTrtInitFallback: true)
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
@@ -583,7 +583,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 provider,
                 cancellationToken,
                 additionalTrtOptions: SortFormerDiarizationEngine.TrtOptions,
-                allowTrtInitFallback: false)
+                allowTrtInitFallback: true)
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
@@ -603,7 +603,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         string modelPath = ResolveTtsProbeModelPath(modelId, modelAlias, modelRootPath, entryPath, variant);
         string poolFamily = ResolveTtsPoolFamily(modelId, modelAlias);
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync(poolFamily, modelPath, provider, cancellationToken, allowTrtInitFallback: false)
+            .CreatePooledSingleAsync(poolFamily, modelPath, provider, cancellationToken, allowTrtInitFallback: true)
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 

@@ -810,13 +810,24 @@ internal static class OnnxExecutionSessionFactory
             ?? throw new InvalidOperationException("Pooled single session did not resolve a pool key.");
 
         SessionResidency residency;
-        while (true)
+        // Bound retries: when the pool is full of leased/pinned entries, GetLeaseAsync
+        // returns an ephemeral lease that never reaches `entries`, so TryPinExisting
+        // can never succeed — infinite session create/dispose churn.
+        const int maxPinAttempts = 3;
+        for (int attempt = 1; ; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (pool.TryPinExisting(resolvedKey, out SessionResidency? pinned) && pinned is not null)
             {
                 residency = pinned;
                 break;
+            }
+
+            if (attempt >= maxPinAttempts)
+            {
+                throw new InvalidOperationException(
+                    $"Unable to pin pooled session '{resolvedKey.EngineFamily}' after {maxPinAttempts} attempts " +
+                    "(pool at capacity with leased or pinned entries; ephemeral creates are not retained).");
             }
 
             // Evicted before pin — recreate and retry.
@@ -917,11 +928,15 @@ internal static class OnnxExecutionSessionFactory
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
         SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(encoderProvider, bootstrapResult.SelectedProvider),
+            encoderProvider == bootstrapProvider
+                ? ResolveSessionOptionsProvider(encoderProvider, bootstrapResult.SelectedProvider)
+                : encoderProvider,
             devicePolicy,
             additionalTrtEncoderOptions);
         SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(decoderProvider, bootstrapResult.SelectedProvider),
+            decoderProvider == bootstrapProvider
+                ? ResolveSessionOptionsProvider(decoderProvider, bootstrapResult.SelectedProvider)
+                : decoderProvider,
             devicePolicy,
             additionalTrtDecoderOptions);
 
