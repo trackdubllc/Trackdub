@@ -130,7 +130,11 @@ public sealed class FileSmokeVerdictStore : ISmokeVerdictStore
         }
 
         foreach (string oldest in entries
-                     .OrderBy(entry => entry.Value, StringComparer.Ordinal)
+                     .OrderBy(entry =>
+                     {
+                         DateTimeOffset.TryParse(entry.Value, out DateTimeOffset timestamp);
+                         return timestamp;
+                     })
                      .Take(entries.Count - MaxEntries)
                      .Select(entry => entry.Key)
                      .ToArray())
