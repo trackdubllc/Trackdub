@@ -342,9 +342,12 @@ internal sealed class InferenceSessionPool : IDisposable
             }
 
             // Single-flight create: one factory invocation per key. Cancelling this waiter
-            // does not cancel the shared create for other callers. A creator that fails
-            // records the failure so queued waiters propagate it without rebuilding.
+            // does not cancel the shared create for other callers. A caller that queues behind
+            // an in-flight creator (gate already held) consumes that creator's recorded
+            // failure so construction failures propagate without rebuilding; callers that
+            // arrive afterwards retry the factory — failed sessions are not cached.
             SemaphoreSlim createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+            bool queuedBehindCreator = createGate.CurrentCount == 0;
             bool propagatedRecentFailure = false;
             long observedCreationWave = Volatile.Read(ref creationWave);
             using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
@@ -357,7 +360,8 @@ internal sealed class InferenceSessionPool : IDisposable
                     continue;
                 }
 
-                if (creationFailures.TryGetValue(key, out var recentFailure))
+                if (queuedBehindCreator
+                    && creationFailures.TryGetValue(key, out var recentFailure))
                 {
                     if (recentFailure.Wave > observedCreationWave)
                     {
