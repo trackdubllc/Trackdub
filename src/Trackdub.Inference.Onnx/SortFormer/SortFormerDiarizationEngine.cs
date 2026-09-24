@@ -21,6 +21,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     private const int TargetSampleRate = 16000;
     private const float SpeakerActiveThreshold = 0.5f;
     private const float OverlapThreshold = 0.5f;
+    internal const double FragmentSpeakerMaxSeconds = 3.0;
     // Maximum supported speakers for the 4-speaker SortFormer diarization model.
     public const int MaxSupportedSpeakers = 4;
     // NVIDIA's recommended offline ("very high latency") streaming config for v2.1:
@@ -655,7 +656,40 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
         }
 
         FlushActiveTurn(turns, ref activeTurn, durationSeconds);
-        return turns;
+        return MergeFragmentSpeakers(turns);
+    }
+
+    // A speaker slot with only a few seconds in the whole file is almost always a transient label at a
+    // speaker change: streaming SortFormer briefly opens a new slot before the incoming speaker settles.
+    // Relabel those turns to the next real speaker (the one taking over), else the previous one.
+    internal static List<DiarizedSpeakerTurn> MergeFragmentSpeakers(List<DiarizedSpeakerTurn> turns)
+    {
+        Dictionary<string, double> totals = turns
+            .GroupBy(static t => t.NormalizedSpeakerKey)
+            .ToDictionary(static g => g.Key, static g => g.Sum(static t => t.EndSeconds - t.StartSeconds));
+        if (totals.Count < 2 || totals.All(static kv => kv.Value < FragmentSpeakerMaxSeconds))
+        {
+            return turns;
+        }
+
+        bool IsFragment(DiarizedSpeakerTurn turn) => totals[turn.NormalizedSpeakerKey] < FragmentSpeakerMaxSeconds;
+
+        var merged = new List<DiarizedSpeakerTurn>(turns.Count);
+        for (int i = 0; i < turns.Count; i++)
+        {
+            DiarizedSpeakerTurn turn = turns[i];
+            if (!IsFragment(turn))
+            {
+                merged.Add(turn);
+                continue;
+            }
+
+            DiarizedSpeakerTurn? target = turns.Skip(i + 1).FirstOrDefault(t => !IsFragment(t))
+                ?? turns.Take(i).LastOrDefault(t => !IsFragment(t));
+            merged.Add(target is null ? turn : turn with { SpeakerKey = target.SpeakerKey });
+        }
+
+        return merged;
     }
 
     private static (int FrameCount, int SpeakerCount, Func<int, int, float> Accessor) CreateTensorAccessor(Tensor<float> tensor)
