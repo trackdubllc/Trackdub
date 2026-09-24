@@ -10,46 +10,46 @@ namespace Trackdub.Inference.Tests;
 /// <summary>
 /// Hardware validation tests for TRT-RTX optimization of whisper-onnx models.
 ///
-/// Prerequisites before removing [Fact(Skip = ...)] from any test here:
+/// Prerequisites before running any test here:
 ///   1. Download the whisper-onnx model:
 ///      dotnet run --project src/Trackdub.Tools -- ingest --model onnx-community/whisper-{size}
 ///   2. Run Olive TRT-RTX optimization and staging:
 ///      .\tools\olive\Validate-WhisperOnnxTrtRtx.ps1 -ModelSize {size}
-///   3. Verify build/whisper-{size}-onnx-trtrtx-validated/ was created.
-///   4. Remove the Skip attribute, run:
+///   3. Verify build/whisper-{size}-onnx-trtrtx-validated/ was created, then run:
 ///      dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~WhisperOnnxTrtRtx"
-///   5. If tests pass, apply manifest+test flip:
+///   4. If tests pass, apply manifest+test flip:
 ///      .\tools\olive\Flip-WhisperOnnxTrtRtx.ps1
 ///
-/// These tests never run in CI (either guarded by Skip or by staging dir absence).
+/// These tests never run in CI: each fact skips at discovery time when its gitignored
+/// staging directory under build/ is absent.
 /// </summary>
 public sealed class WhisperOnnxTrtRtxValidationTests
 {
-    [Fact]
+    [RequiresStagedModelFact("build/whisper-tiny-onnx-trtrtx-validated")]
     public async Task WhisperOnnxTrtRtx_TinyModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("tiny", "onnx-community/whisper-tiny");
     }
 
-    [Fact]
+    [RequiresStagedModelFact("build/whisper-base-onnx-trtrtx-validated")]
     public async Task WhisperOnnxTrtRtx_BaseModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("base", "onnx-community/whisper-base");
     }
 
-    [Fact]
+    [RequiresStagedModelFact("build/whisper-small-onnx-trtrtx-validated")]
     public async Task WhisperOnnxTrtRtx_SmallModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("small", "onnx-community/whisper-small");
     }
 
-    [Fact]
+    [RequiresStagedModelFact("build/whisper-medium-onnx-trtrtx-validated")]
     public async Task WhisperOnnxTrtRtx_MediumModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("medium", "Xenova/whisper-medium");
     }
 
-    [Fact]
+    [RequiresStagedModelFact("build/whisper-large-v3-onnx-trtrtx-validated")]
     public async Task WhisperOnnxTrtRtx_LargeV3Model_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("large-v3", "Xenova/whisper-large-v3");

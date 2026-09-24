@@ -57,6 +57,7 @@
   <ItemGroup>
     <Compile Include="..\Trackdub.TestDoubles\FakeDeviceEnumerator.cs" Link="TestDoubles\FakeDeviceEnumerator.cs" />
     <Compile Include="..\Trackdub.TestDoubles\RequiresBundledModelFactAttribute.cs" Link="TestDoubles\RequiresBundledModelFactAttribute.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\RequiresStagedModelFactAttribute.cs" Link="TestDoubles\RequiresStagedModelFactAttribute.cs" />
   </ItemGroup>
 
 </Project>
