@@ -87,7 +87,7 @@ internal static class DoctorHandler
             Message =
                 $"Engine cache contains {description.FileCount} file(s) (~{sizeLabel}) at {description.CacheDirectory}.",
             Remediation =
-                "Clear after GPU/driver changes or TensorRT RTX EP version bumps: trackdub cache clear engines",
+                "After GPU/driver changes or TRT RTX EP bumps: trackdub cache clear engines, then trackdub cache warm",
         };
     }
 
