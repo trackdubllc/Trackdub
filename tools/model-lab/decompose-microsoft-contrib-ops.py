@@ -32,7 +32,7 @@ from pathlib import Path
 
 import numpy as np
 import onnx
-from onnx import TensorProto, helper, numpy_helper, shape_inference
+from onnx import helper, numpy_helper
 
 
 CONTRIB_DOMAIN = "com.microsoft"
@@ -59,21 +59,6 @@ def main() -> int:
         return 2
 
     model = onnx.load(str(model_path), load_external_data=True)
-    try:
-        inferred = shape_inference.infer_shapes(model)
-    except Exception:
-        inferred = model
-
-    infos = {
-        value.name: value
-        for value in [*inferred.graph.value_info, *inferred.graph.input, *inferred.graph.output]
-    }
-
-    def tensor_elem_type(name: str) -> int:
-        value_info = infos.get(name)
-        if value_info is not None and value_info.type.HasField("tensor_type"):
-            return value_info.type.tensor_type.elem_type
-        return TensorProto.FLOAT
 
     graph = model.graph
     existing_names = {initializer.name for initializer in graph.initializer}
