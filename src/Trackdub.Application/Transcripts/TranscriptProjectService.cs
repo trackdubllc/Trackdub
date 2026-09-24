@@ -9,9 +9,8 @@ public sealed class TranscriptProjectService(TranscriptWorkspace workspace)
 
     public Task<TranscriptProjectState> CreateAsync(
         CreateTranscriptProjectRequest request,
-        CancellationToken cancellationToken,
-        IProgress<StemSeparationProgress>? stemSeparationProgress = null) =>
-        workspace.CreateProjectAsync(request, cancellationToken, stemSeparationProgress);
+        CancellationToken cancellationToken) =>
+        workspace.CreateProjectAsync(request, cancellationToken);
 
     public Task<TranscriptProjectState> OpenAsync(CancellationToken cancellationToken) =>
         workspace.Project.OpenAsync(cancellationToken);

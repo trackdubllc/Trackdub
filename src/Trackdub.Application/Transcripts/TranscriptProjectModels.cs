@@ -14,7 +14,6 @@ public sealed record CreateTranscriptProjectRequest(
     string ProjectName,
     string SourceMediaPath,
     bool EnableSpeakerDiarization = true,
-    bool EnableStemSeparation = false,
     InferenceModelPreferences? ModelPreferences = null,
     string? SourceLanguage = null);
 

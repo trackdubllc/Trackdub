@@ -13,13 +13,15 @@ public static class DubbingPipelineStages
     /// Canonical pipeline stage execution order for a full dubbing run.
     /// Lip stages are intentionally omitted — they are opt-in via StageFilter.
     /// </summary>
+    /// Separation runs after transcription: its stems feed voice-clone reference clips and the
+    /// mix bed, not the transcript stages, which route from the full mix.
     public static readonly IReadOnlyList<string> DefaultStageOrder =
     [
-        StageNames.Separation,
         StageNames.Vad,
         StageNames.Diarization,
         StageNames.Asr,
         StageNames.Translation,
+        StageNames.Separation,
         StageNames.Tts,
         StageNames.Export,
     ];
@@ -31,7 +33,6 @@ public static class DubbingPipelineStages
     /// </summary>
     public static readonly IReadOnlyList<string> ExtendedStageOrder =
     [
-        StageNames.Separation,
         StageNames.AudioPreparation,
         StageNames.Vad,
         StageNames.Diarization,
@@ -39,6 +40,7 @@ public static class DubbingPipelineStages
         StageNames.OverlapRescue,
         StageNames.TextRefinementAsr,
         StageNames.Translation,
+        StageNames.Separation,
         StageNames.Tts,
         StageNames.LipSync,
         StageNames.Export,
@@ -46,14 +48,11 @@ public static class DubbingPipelineStages
     ];
 
     /// <summary>
-    /// Stages that block all subsequent stages when they fail.
-    /// Separation is included because downstream analysis stages (Vad, Asr, Diarization)
-    /// depend on separated speech audio; running them on a mixed signal produces incoherent
-    /// results rather than a useful degradation.
+    /// Stages that block all subsequent stages when they fail. Separation is not one: without
+    /// stems, TTS reference clips come from the mix and export uses the original audio bed.
     /// </summary>
     public static readonly IReadOnlySet<string> PrerequisiteStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        StageNames.Separation,
         StageNames.Vad,
         StageNames.Asr,
         StageNames.Translation,

@@ -3,7 +3,8 @@ using Trackdub.Application.Pipeline;
 namespace Trackdub.Application.Transcripts;
 
 /// <summary>
-/// Ensures VAD/ASR (and optional separation) models are provisioned before transcription runs.
+/// Ensures VAD/ASR models are provisioned before transcription runs. Separation is not a
+/// transcript prerequisite; its model is provisioned by the separation stage itself.
 /// </summary>
 public sealed class TranscriptImportModelProvisioner(
     RuntimeModelSetupCoordinator coordinator,
@@ -16,7 +17,6 @@ public sealed class TranscriptImportModelProvisioner(
     public async Task EnsureImportModelsAsync(
         TranscriptWorkspace workspace,
         InferenceModelPreferences? modelPreferences,
-        bool enableStemSeparation,
         CancellationToken cancellationToken,
         RuntimeModelSetupCallbacks? callbacks = null,
         string? sourceLanguage = null)
@@ -34,9 +34,9 @@ public sealed class TranscriptImportModelProvisioner(
             .EnsureImportModelsAvailableAsync(
                 workspace,
                 selections,
-                enableStemSeparation,
+                enableStemSeparation: false,
                 effectiveCallbacks,
-                allowOptionalStageSkip: enableStemSeparation,
+                allowOptionalStageSkip: false,
                 cancellationToken,
                 sourceLanguageCode: sourceLanguage)
             .ConfigureAwait(false);

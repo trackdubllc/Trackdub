@@ -100,6 +100,15 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
         Assert.Equal(expected.Export.MatchOriginalLoudness, actual.Export.MatchOriginalLoudness);
     }
 
+    // Separation is no longer part of import; tests that need stems run the stage after creating.
+    private static async Task<TranscriptProjectState> CreateWithStemsAsync(
+        FakeServiceScope scope,
+        CreateTranscriptProjectRequest request)
+    {
+        await scope.Service.CreateAsync(request, TestContext.Current.CancellationToken);
+        return await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
+    }
+
     private FakeServiceScope CreateScope(
         string tempDirectory,
         ISpeakerDiarizationEngine? diarizationEngine = null,

@@ -124,19 +124,17 @@ public sealed class TranscriptWorkspace(
 
     public Task<TranscriptProjectState> CreateProjectAsync(
         CreateTranscriptProjectRequest request,
-        CancellationToken cancellationToken,
-        IProgress<StemSeparationProgress>? progress = null) =>
+        CancellationToken cancellationToken) =>
         RunPipelineAsync(
             nameof(CreateProjectAsync),
             async ct =>
             {
                 await EnsureImportModelsForTranscriptionAsync(
                         request.ModelPreferences,
-                        request.EnableStemSeparation,
                         ct,
                         request.SourceLanguage)
                     .ConfigureAwait(false);
-                return await Project.CreateAsync(request, ct, progress).ConfigureAwait(false);
+                return await Project.CreateAsync(request, ct).ConfigureAwait(false);
             },
             cancellationToken);
 
@@ -161,15 +159,13 @@ public sealed class TranscriptWorkspace(
         InferenceModelPreferences? modelPreferences,
         CancellationToken cancellationToken,
         IProgress<PipelineProgressEvent>? progress = null,
-        string? sourceLanguage = null,
-        bool enableStemSeparation = false) =>
+        string? sourceLanguage = null) =>
         RunPipelineAsync(
             nameof(RunInitialTranscriptionAsync),
             async ct =>
             {
                 await EnsureImportModelsForTranscriptionAsync(
                         modelPreferences,
-                        enableStemSeparation,
                         ct,
                         sourceLanguage)
                     .ConfigureAwait(false);
@@ -178,8 +174,7 @@ public sealed class TranscriptWorkspace(
                         modelPreferences,
                         ct,
                         progress,
-                        sourceLanguage,
-                        enableStemSeparation)
+                        sourceLanguage)
                     .ConfigureAwait(false);
             },
             cancellationToken);
@@ -213,7 +208,6 @@ public sealed class TranscriptWorkspace(
                 {
                     await EnsureImportModelsForTranscriptionAsync(
                             modelPreferences,
-                            enableStemSeparation: false,
                             ct,
                             sourceLanguage)
                         .ConfigureAwait(false);
@@ -231,7 +225,6 @@ public sealed class TranscriptWorkspace(
 
     private Task EnsureImportModelsForTranscriptionAsync(
         InferenceModelPreferences? modelPreferences,
-        bool enableStemSeparation,
         CancellationToken cancellationToken,
         string? sourceLanguage = null)
     {
@@ -243,7 +236,6 @@ public sealed class TranscriptWorkspace(
         return importModelProvisioner.EnsureImportModelsAsync(
             this,
             modelPreferences,
-            enableStemSeparation,
             cancellationToken,
             sourceLanguage: sourceLanguage);
     }

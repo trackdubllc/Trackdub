@@ -1211,7 +1211,7 @@ public sealed class DubbingPipelineEngine(
     }
 
     /// <summary>
-    /// Runs stem separation (speech enhancement surfaces as degradations, not failure).
+    /// Runs stem separation for voice-clone references and the mix bed.
     /// </summary>
     private static async Task<StageWorkflowResult> RunSeparationStageAsync(
         TranscriptWorkspace workspace,
@@ -1236,21 +1236,10 @@ public sealed class DubbingPipelineEngine(
             preferredModelAlias: runtimeSelections.SeparationModelAlias,
             modelPreferences: modelPreferences).ConfigureAwait(false);
 
-        IReadOnlyList<string>? enhancementDegradations =
-            ExtractSpeechEnhancementDegradations(separationState, stageWorkStartedUtc);
-        if (enhancementDegradations is { Count: > 0 })
-        {
-            // Surface the speech-enhancement failure before the separation Completed event so
-            // the caller sees it in the progress stream and the stage outcome DegradationRecords.
-            ReportProgress(progress, StageNames.SpeechEnhancement, PipelineProgressEventKind.Failed,
-                enhancementDegradations[0]);
-        }
-
         return BuildStageWorkflowResultFromStageRun(
             separationState,
             StageNames.Separation,
-            stageWorkStartedUtc,
-            enhancementDegradations);
+            stageWorkStartedUtc);
     }
 
     private static async Task<StageWorkflowResult> RunVadStageAsync(
@@ -1269,7 +1258,18 @@ public sealed class DubbingPipelineEngine(
             cancellationToken,
             progress,
             sourceLanguage: normalizedSourceLanguage).ConfigureAwait(false);
-        return BuildStageWorkflowResultFromStageRun(vadState, StageNames.Vad, stageWorkStartedUtc);
+
+        // Speech enhancement runs while routing audio for the first transcript stage; surface its
+        // failure before the VAD Completed event so it shows in the progress stream and outcome.
+        IReadOnlyList<string>? enhancementDegradations =
+            ExtractSpeechEnhancementDegradations(vadState, stageWorkStartedUtc);
+        if (enhancementDegradations is { Count: > 0 })
+        {
+            ReportProgress(progress, StageNames.SpeechEnhancement, PipelineProgressEventKind.Failed,
+                enhancementDegradations[0]);
+        }
+
+        return BuildStageWorkflowResultFromStageRun(vadState, StageNames.Vad, stageWorkStartedUtc, enhancementDegradations);
     }
 
     private static async Task<StageWorkflowResult> RunAsrStageAsync(

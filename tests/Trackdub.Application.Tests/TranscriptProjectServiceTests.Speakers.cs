@@ -201,13 +201,12 @@ public partial class TranscriptProjectServiceTests
         FakeServiceScope scope = CreateScope(
             tempDirectory,
             audioClipExtractor: clipExtractor);
-        TranscriptProjectState created = await scope.Service.CreateAsync(
+        TranscriptProjectState created = await CreateWithStemsAsync(
+            scope,
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
                 sourcePath,
-                EnableSpeakerDiarization: false,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
+                EnableSpeakerDiarization: false));
         ProjectArtifact vocals = Assert.Single(created.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
 
         await scope.Service.ExtractReferenceClipAsync(
