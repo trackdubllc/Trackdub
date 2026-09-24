@@ -25,7 +25,7 @@ namespace Trackdub.Application.Tests;
 public partial class TranscriptProjectServiceTests
 {
     [Fact]
-    public async Task CreateAsync_with_stem_separation_routes_vad_diarization_and_asr_to_vocals()
+    public async Task CreateAsync_with_stem_separation_keeps_transcript_stages_on_the_full_mix()
     {
         string tempDirectory = CreateTempDirectory();
         string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
@@ -59,12 +59,13 @@ public partial class TranscriptProjectServiceTests
         Assert.Equal("hash-ambiance.wav", ambiance.Sha256);
         Assert.Equal("hash-music.wav", music.Sha256);
         Assert.Equal("hash-sfx.wav", sfx.Sha256);
-        Assert.Equal(vocals.RelativePath, result.AsrAudioRelativePath);
+        string vocalsPath = scope.ArtifactStore.GetPath(vocals.RelativePath);
+        Assert.NotEqual(vocals.RelativePath, result.AsrAudioRelativePath);
         Assert.Equal(ambiance.RelativePath, result.MixSourceAudioRelativePath);
-        Assert.Equal(scope.ArtifactStore.GetPath(vocals.RelativePath), transcriptionEngine.LastAudioPath);
-        Assert.Equal(scope.ArtifactStore.GetPath(vocals.RelativePath), scope.SpeechRegionDetector.LastNormalizedAudioPath);
-        Assert.Equal(scope.ArtifactStore.GetPath(vocals.RelativePath), diarizationEngine.LastAudioPath);
-        Assert.Equal(2, scope.AudioQualityAnalyzer.Requests.Count);
+        Assert.NotEqual(vocalsPath, transcriptionEngine.LastAudioPath);
+        Assert.NotEqual(vocalsPath, scope.SpeechRegionDetector.LastNormalizedAudioPath);
+        Assert.NotEqual(vocalsPath, diarizationEngine.LastAudioPath);
+        Assert.Single(scope.AudioQualityAnalyzer.Requests);
         Assert.NotNull(analysis);
         Assert.Equal(1, scope.StemSeparationEngine.CallCount);
         Assert.Contains(result.StageRuns, stageRun => stageRun.StageName == "separation" && stageRun.Status == StageRunStatus.Completed);
@@ -156,7 +157,6 @@ public partial class TranscriptProjectServiceTests
         ProjectArtifact initialAmbiance = Assert.Single(created.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Ambiance);
         ProjectArtifact initialMusic = Assert.Single(created.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Music);
         ProjectArtifact initialSfx = Assert.Single(created.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.SoundEffects);
-        ProjectArtifact initialAnalysis = Assert.Single(created.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.AudioQualityAnalysis);
 
         TranscriptProjectState rerun = await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
 
@@ -164,72 +164,17 @@ public partial class TranscriptProjectServiceTests
         ProjectArtifact rerunAmbiance = Assert.Single(rerun.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Ambiance);
         ProjectArtifact rerunMusic = Assert.Single(rerun.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Music);
         ProjectArtifact rerunSfx = Assert.Single(rerun.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.SoundEffects);
-        ProjectArtifact rerunAnalysis = rerun.ProjectState.Artifacts
-            .Where(artifact => artifact.Kind == ArtifactKind.AudioQualityAnalysis)
-            .OrderByDescending(artifact => artifact.CreatedAtUtc)
-            .First();
         Assert.Equal(initialVocals.Id, rerunVocals.Id);
         Assert.Equal(initialAmbiance.Id, rerunAmbiance.Id);
         Assert.Equal(initialMusic.Id, rerunMusic.Id);
         Assert.Equal(initialSfx.Id, rerunSfx.Id);
-        Assert.NotEqual(initialAnalysis.RelativePath, rerunAnalysis.RelativePath);
         Assert.NotEqual(initialVocals.RelativePath, rerunVocals.RelativePath);
         Assert.NotEqual(initialAmbiance.RelativePath, rerunAmbiance.RelativePath);
         Assert.NotEqual(initialMusic.RelativePath, rerunMusic.RelativePath);
         Assert.NotEqual(initialSfx.RelativePath, rerunSfx.RelativePath);
-        Assert.Equal(rerunVocals.RelativePath, rerun.AsrAudioRelativePath);
-        Assert.Equal(created.CurrentTranscriptRevision!.RevisionNumber + 1, rerun.CurrentTranscriptRevision!.RevisionNumber);
+        Assert.NotEqual(rerunVocals.RelativePath, rerun.AsrAudioRelativePath);
+        Assert.Equal(created.CurrentTranscriptRevision!.Id, rerun.CurrentTranscriptRevision!.Id);
         Assert.Equal(2, scope.StemSeparationEngine.CallCount);
-    }
-
-    [Fact]
-    public async Task RunStemSeparationAsync_regenerates_after_previous_generated_rerun()
-    {
-        string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
-        await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
-
-        FakeServiceScope scope = CreateScope(tempDirectory);
-        TranscriptProjectState created = await scope.Service.CreateAsync(
-            new CreateTranscriptProjectRequest(
-                "Transcript Demo",
-                sourcePath,
-                EnableSpeakerDiarization: false,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
-
-        TranscriptProjectState firstRerun = await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
-        TranscriptProjectState secondRerun = await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
-
-        Assert.NotNull(created.CurrentTranscriptRevision!.StageRunId);
-        Assert.NotNull(firstRerun.CurrentTranscriptRevision!.StageRunId);
-        Assert.NotNull(secondRerun.CurrentTranscriptRevision!.StageRunId);
-        Assert.Equal(firstRerun.CurrentTranscriptRevision.RevisionNumber + 1, secondRerun.CurrentTranscriptRevision.RevisionNumber);
-        Assert.Equal(3, scope.StemSeparationEngine.CallCount);
-    }
-
-    [Fact]
-    public async Task RunStemSeparationAsync_autodetects_language_for_regenerated_asr()
-    {
-        string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
-        await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
-
-        var transcriptionEngine = new RecordingAudioTranscriptionEngine();
-        FakeServiceScope scope = CreateScope(tempDirectory, transcriptionEngine: transcriptionEngine);
-        TranscriptProjectState created = await scope.Service.CreateAsync(
-            new CreateTranscriptProjectRequest(
-                "Transcript Demo",
-                sourcePath,
-                EnableSpeakerDiarization: false,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
-        await scope.Service.SetTranscriptLanguageAsync(new SetTranscriptLanguageRequest("es"), TestContext.Current.CancellationToken);
-
-        TranscriptProjectState rerun = await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
-
-        Assert.Null(transcriptionEngine.LastSourceLanguage);
-        Assert.Equal(created.CurrentTranscriptRevision!.RevisionNumber + 1, rerun.CurrentTranscriptRevision!.RevisionNumber);
     }
 
     [Fact]
@@ -259,7 +204,7 @@ public partial class TranscriptProjectServiceTests
     }
 
     [Fact]
-    public async Task RunStemSeparationAsync_regenerateTranscriptFalse_skips_transcript_regeneration_when_assignments_missing()
+    public async Task RunStemSeparationAsync_never_regenerates_the_transcript()
     {
         string tempDirectory = CreateTempDirectory();
         string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
@@ -274,9 +219,7 @@ public partial class TranscriptProjectServiceTests
                 EnableStemSeparation: true),
             TestContext.Current.CancellationToken);
 
-        TranscriptProjectState rerun = await scope.Service.RunStemSeparationAsync(
-            TestContext.Current.CancellationToken,
-            regenerateTranscript: false);
+        TranscriptProjectState rerun = await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(created.CurrentTranscriptRevision!.Id, rerun.CurrentTranscriptRevision!.Id);
         Assert.Equal(created.CurrentTranscriptRevision.RevisionNumber, rerun.CurrentTranscriptRevision.RevisionNumber);
@@ -321,107 +264,6 @@ public partial class TranscriptProjectServiceTests
                 .Select(segment => segment.SpeakerId ?? Guid.Empty)
                 .ToArray());
         Assert.Equal(2, scope.StemSeparationEngine.CallCount);
-    }
-
-    [Fact]
-    public async Task RunStemSeparationAsync_retries_diarization_when_previous_run_had_no_turns()
-    {
-        string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
-        await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
-
-        var diarizationEngine = new SequencedDiarizationEngine(
-            [],
-            [
-                new DiarizedSpeakerTurn("spk_0", 0d, 5.8d, Confidence: 0.9d, HasOverlap: false),
-                new DiarizedSpeakerTurn("spk_1", 6d, 11.8d, Confidence: 0.8d, HasOverlap: false)
-            ]);
-        FakeServiceScope scope = CreateScope(tempDirectory, diarizationEngine: diarizationEngine);
-        TranscriptProjectState created = await scope.Service.CreateAsync(
-            new CreateTranscriptProjectRequest(
-                "Transcript Demo",
-                sourcePath,
-                EnableSpeakerDiarization: true,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
-
-        Assert.Empty(created.SpeakerTurns);
-        Assert.Equal(1, diarizationEngine.CallCount);
-
-        TranscriptProjectState rerun = await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
-
-        Assert.Equal(2, diarizationEngine.CallCount);
-        Assert.Equal(2, rerun.SpeakerTurns.Count);
-        Assert.Equal(created.CurrentTranscriptRevision!.RevisionNumber + 1, rerun.CurrentTranscriptRevision!.RevisionNumber);
-        Assert.Contains(rerun.Speakers, speaker => speaker.DisplayName == "Speaker 1");
-        Assert.Contains(rerun.Speakers, speaker => speaker.DisplayName == "Speaker 2");
-        Assert.Contains(rerun.Speakers, speaker => speaker.DisplayName == "Speaker 3");
-        Assert.Equal(
-            2,
-            rerun.TranscriptSegments
-                .Select(segment => segment.SpeakerId)
-                .Where(speakerId => speakerId is not null)
-                .Distinct()
-                .Count());
-    }
-
-    [Fact]
-    public async Task RunStemSeparationAsync_when_latest_audio_prep_fails_keeps_latest_raw_route()
-    {
-        string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
-        await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
-
-        var analyzer = new FakeAudioQualityAnalyzer();
-        analyzer.QueueResult(new AudioQualityAnalysisResult(
-            "full-mix-create.wav",
-            CreateAudioQualityMetrics(SpeechAudioSourceKind.FullMix),
-            AudioQualityAnalysisThresholds.ForSource(SpeechAudioSourceKind.FullMix),
-            [],
-            []));
-        analyzer.QueueResult(new AudioQualityAnalysisResult(
-            "vocals-create.wav",
-            CreateAudioQualityMetrics(SpeechAudioSourceKind.VocalStem) with { ActiveRmsDbfs = -60.0d },
-            AudioQualityAnalysisThresholds.ForSource(SpeechAudioSourceKind.VocalStem),
-            [AudioQualityDefectKind.NearSilence],
-            []));
-        analyzer.QueueResult(new AudioQualityAnalysisResult(
-            "full-mix-rerun.wav",
-            CreateAudioQualityMetrics(SpeechAudioSourceKind.FullMix),
-            AudioQualityAnalysisThresholds.ForSource(SpeechAudioSourceKind.FullMix),
-            [],
-            []));
-        analyzer.QueueResult(new AudioQualityAnalysisResult(
-            "vocals-rerun.wav",
-            CreateAudioQualityMetrics(SpeechAudioSourceKind.VocalStem),
-            AudioQualityAnalysisThresholds.ForSource(SpeechAudioSourceKind.VocalStem),
-            [AudioQualityDefectKind.LowVolume],
-            []));
-
-        var processingService = new FakeSpeechAudioProcessingService { ThrowOnCallNumber = 1 };
-        var transcriptionEngine = new RecordingAudioTranscriptionEngine();
-        FakeServiceScope scope = CreateScope(
-            tempDirectory,
-            transcriptionEngine: transcriptionEngine,
-            audioQualityAnalyzer: analyzer,
-            speechAudioProcessingService: processingService);
-
-        TranscriptProjectState created = await scope.Service.CreateAsync(
-            new CreateTranscriptProjectRequest(
-                "Transcript Demo",
-                sourcePath,
-                EnableSpeakerDiarization: false,
-                EnableStemSeparation: true),
-            TestContext.Current.CancellationToken);
-
-        Assert.Equal(ProjectArtifactPaths.NormalizedAudioRelativePath, created.AsrAudioRelativePath);
-
-        TranscriptProjectState rerun = await scope.Service.RunStemSeparationAsync(TestContext.Current.CancellationToken);
-
-        ProjectArtifact rerunVocals = Assert.Single(rerun.ProjectState.Artifacts, artifact => artifact.Kind == ArtifactKind.Vocals);
-        Assert.Equal(rerunVocals.RelativePath, rerun.AsrAudioRelativePath);
-        Assert.Equal(scope.ArtifactStore.GetPath(rerunVocals.RelativePath), transcriptionEngine.LastAudioPath);
-        Assert.Contains(rerun.StageRuns, stageRun => stageRun.StageName == StageNames.AudioPreparation && stageRun.Status == StageRunStatus.Failed);
     }
 
     [Fact]

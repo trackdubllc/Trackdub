@@ -104,13 +104,6 @@ public sealed record DubbingSessionOptions
     public bool EnableSpeakerDiarization { get; init; } = true;
 
     /// <summary>
-    /// When true, re-running separation regenerates the transcript from the new stems.
-    /// Defaults to true to preserve the historical headless behavior; interactive
-    /// callers pass false to keep the user's transcript intact.
-    /// </summary>
-    public bool RegenerateTranscriptOnSeparation { get; init; } = true;
-
-    /// <summary>
     /// When true, the OverlapRescue stage retranscribes rescued regions and merges
     /// candidates into the transcript. Defaults to false (artifacts only).
     /// </summary>

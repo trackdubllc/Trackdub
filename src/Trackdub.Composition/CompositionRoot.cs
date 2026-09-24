@@ -392,8 +392,7 @@ public static class CompositionRoot
         services.AddSingleton<ISpeechAudioEnhancementService>(sp =>
             new Trackdub.Composition.DeepFilterNet.ResolvingSpeechAudioEnhancementService(
                 sp.GetService<BundledModelManifestRegistry>(),
-                sp.GetService<IModelCacheInventory>(),
-                new FfmpegSpeechAudioEnhancementService(ffmpegPath: null)));
+                sp.GetService<IModelCacheInventory>()));
         services.TryAddSingleton<IWaveformSummaryGenerator, WaveformSummaryGenerator>();
         services.TryAddSingleton<IReferenceClipAnalyzer, Pcm16ReferenceClipAnalyzer>();
         services.TryAddSingleton<IReferenceClipTrimmer, Pcm16ReferenceClipTrimmer>();

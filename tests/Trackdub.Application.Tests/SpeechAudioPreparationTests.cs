@@ -239,37 +239,20 @@ public sealed class SpeechAudioPreparationTests
             now);
     }
 
-    [Theory]
-    [InlineData(SpeechAudioSourceKind.FullMix, "media/normalized_audio.wav")]
-    [InlineData(SpeechAudioSourceKind.VocalStem, "artifacts/stems/vocals.wav")]
-    public void WithUnprocessedAsrSource_routes_only_asr_to_the_plan_source(SpeechAudioSourceKind sourceKind, string expectedAsrPath)
+    [Fact]
+    public void WithUnprocessedAsrSource_routes_only_asr_to_the_normalized_mix()
     {
         MediaAsset mediaAsset = CreateMediaAsset();
         ProjectArtifact normalized = CreateArtifact(mediaAsset, ArtifactKind.NormalizedAudio, "media/normalized_audio.wav");
-        ProjectArtifact vocals = CreateArtifact(mediaAsset, ArtifactKind.Vocals, "artifacts/stems/vocals.wav");
         ProjectArtifact enhanced = CreateArtifact(mediaAsset, ArtifactKind.SpeechEnhancedAudio, "artifacts/audio/speech-enhancement/x/speech.wav");
 
-        TranscriptAudioRoutingPlan plan = TranscriptAudioRoutingPlan.Raw(enhanced, sourceKind)
-            .WithUnprocessedAsrSource(normalized, vocals);
+        TranscriptAudioRoutingPlan plan = TranscriptAudioRoutingPlan.Raw(enhanced, SpeechAudioSourceKind.FullMix)
+            .WithUnprocessedAsrSource(normalized);
 
-        Assert.Equal(expectedAsrPath, plan.AsrAudioArtifact.RelativePath);
+        Assert.Same(normalized, plan.AsrAudioArtifact);
         Assert.Equal(SpeechAudioProcessingProfileCatalog.NoneProfileId, plan.AsrDecision.ProfileId);
         Assert.Same(enhanced, plan.VadAudioArtifact);
         Assert.Same(enhanced, plan.DiarizationAudioArtifact);
-    }
-
-    [Fact]
-    public void WithUnprocessedAsrSource_never_routes_a_rejected_vocal_stem()
-    {
-        MediaAsset mediaAsset = CreateMediaAsset();
-        ProjectArtifact normalized = CreateArtifact(mediaAsset, ArtifactKind.NormalizedAudio, "media/normalized_audio.wav");
-        ProjectArtifact vocals = CreateArtifact(mediaAsset, ArtifactKind.Vocals, "artifacts/stems/vocals.wav");
-
-        // The preparation planner fell back to the full mix, so the stem must not come back.
-        TranscriptAudioRoutingPlan plan = TranscriptAudioRoutingPlan.Raw(normalized, SpeechAudioSourceKind.FullMix)
-            .WithUnprocessedAsrSource(normalized, vocals);
-
-        Assert.Same(normalized, plan.AsrAudioArtifact);
     }
 
     private static ProjectArtifact CreateArtifact(MediaAsset mediaAsset, ArtifactKind kind, string relativePath) =>

@@ -41,14 +41,12 @@ public sealed class TranscriptProjectService(TranscriptWorkspace workspace)
         CancellationToken cancellationToken,
         IProgress<StemSeparationProgress>? progress = null,
         string? preferredModelAlias = null,
-        InferenceModelPreferences? modelPreferences = null,
-        bool regenerateTranscript = true) =>
+        InferenceModelPreferences? modelPreferences = null) =>
         workspace.RunStemSeparationAsync(
             cancellationToken,
             progress,
             preferredModelAlias,
-            modelPreferences,
-            regenerateTranscript);
+            modelPreferences);
 
     public Task<TranscriptProjectState> SaveEditsAsync(
         SaveTranscriptEditsRequest request,

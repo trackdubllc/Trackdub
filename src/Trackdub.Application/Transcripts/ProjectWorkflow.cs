@@ -42,7 +42,6 @@ public sealed class ProjectWorkflow(
             new CreateProjectFromMediaRequest(request.ProjectName, request.SourceMediaPath),
             cancellationToken).ConfigureAwait(false);
 
-        ProjectArtifact? vocalStemArtifact = null;
         var currentArtifacts = new List<ProjectArtifact> { createResult.AudioArtifact };
         if (request.EnableStemSeparation)
         {
@@ -58,7 +57,6 @@ public sealed class ProjectWorkflow(
                 cancellationToken).ConfigureAwait(false);
             if (stemResult is not null)
             {
-                vocalStemArtifact = stemResult.VocalsArtifact;
                 currentArtifacts.AddRange(stemResult.Artifacts);
             }
         }
@@ -67,7 +65,6 @@ public sealed class ProjectWorkflow(
             createResult.Project.Id,
             createResult.MediaAsset,
             createResult.AudioArtifact,
-            vocalStemArtifact,
             currentArtifacts,
             cancellationToken).ConfigureAwait(false);
 
@@ -167,7 +164,6 @@ public sealed class ProjectWorkflow(
             currentState.ProjectState.Project.Id,
             mediaAsset,
             normalizedAudio,
-            vocalStem,
             artifacts,
             cancellationToken).ConfigureAwait(false);
 
@@ -203,13 +199,11 @@ public sealed class ProjectWorkflow(
             artifacts,
             cancellationToken).ConfigureAwait(false);
 
-        ProjectArtifact? vocalStem = TranscriptWorkflowUtilities.GetLatestAcceptedVocalStem(artifacts);
         PipelineProgressReporter.Phase(progress, stageName, "Routing speech audio", "Preparing the best speech audio for this stage.");
         TranscriptAudioRoutingPlan audioRoutingPlan = await TryPrepareSpeechAudioAsync(
             currentState.ProjectState.Project.Id,
             mediaAsset,
             normalizedAudio,
-            vocalStem,
             artifacts,
             cancellationToken).ConfigureAwait(false);
 
@@ -274,8 +268,7 @@ public sealed class ProjectWorkflow(
         CancellationToken cancellationToken,
         IProgress<StemSeparationProgress>? progress = null,
         string? preferredModelAlias = null,
-        InferenceModelPreferences? modelPreferences = null,
-        bool regenerateTranscript = true)
+        InferenceModelPreferences? modelPreferences = null)
     {
         TranscriptProjectState currentState = await OpenAsync(cancellationToken).ConfigureAwait(false);
         MediaAsset mediaAsset = TranscriptWorkflowUtilities.GetRequiredMediaAsset(currentState);
@@ -288,10 +281,9 @@ public sealed class ProjectWorkflow(
             throw new InvalidOperationException("Stem separation is not configured.");
         }
 
-        StemSeparationStageResult stemResult;
         try
         {
-            stemResult = await stemSeparationStageHandler.HandleAsync(
+            await stemSeparationStageHandler.HandleAsync(
                 new StemSeparationStageRequest(
                     currentState.ProjectState.Project.Id,
                     mediaAsset,
@@ -314,30 +306,8 @@ public sealed class ProjectWorkflow(
             throw;
         }
 
-        TranscriptAudioRoutingPlan audioRoutingPlan = await TryPrepareSpeechAudioAsync(
-            currentState.ProjectState.Project.Id,
-            mediaAsset,
-            sourceAudioArtifact,
-            stemResult.VocalsArtifact,
-            currentState.ProjectState.Artifacts
-                .Concat(stemResult.Artifacts)
-                .ToArray(),
-            cancellationToken).ConfigureAwait(false);
-
-        if (regenerateTranscript && ShouldRegenerateTranscriptAfterStemRerun(currentState))
-        {
-            await transcriptGenerationService.GenerateTranscriptAsync(
-                currentState.ProjectState.Project,
-                mediaAsset,
-                sourceAudioArtifact,
-                audioRoutingPlan,
-                ShouldRegenerateWithDiarization(currentState),
-                modelPreferences ?? InferenceModelPreferences.Empty,
-                cancellationToken,
-                sourceLanguage: null,
-                forceRerun: true).ConfigureAwait(false);
-        }
-
+        // Stems feed voice-clone references and the mix bed only; transcript stages always
+        // route from the full mix, so a separation rerun never invalidates the transcript.
         return await ReloadAsync(currentState.SelectedTranslationTargetLanguage, cancellationToken).ConfigureAwait(false);
     }
 
@@ -355,7 +325,6 @@ public sealed class ProjectWorkflow(
             artifacts,
             cancellationToken).ConfigureAwait(false);
 
-        ProjectArtifact? vocalStem = TranscriptWorkflowUtilities.GetLatestAcceptedVocalStem(artifacts);
         PipelineProgressReporter.Phase(progress, StageNames.SpeechEnhancement, "Processing speech audio", "Running speech audio preparation.");
 
         // Dedicated stage entry point: callers invoke this only when the engine's resume
@@ -366,7 +335,6 @@ public sealed class ProjectWorkflow(
             currentState.ProjectState.Project.Id,
             mediaAsset,
             normalizedAudio,
-            vocalStem,
             artifacts,
             cancellationToken,
             allowExistingReuse: false).ConfigureAwait(false);
@@ -591,15 +559,15 @@ public sealed class ProjectWorkflow(
         Guid projectId,
         MediaAsset mediaAsset,
         ProjectArtifact normalizedAudioArtifact,
-        ProjectArtifact? vocalStemArtifact,
         IReadOnlyList<ProjectArtifact> existingArtifacts,
         CancellationToken cancellationToken,
         bool allowExistingReuse = true)
     {
-        ProjectArtifact selectedSource = vocalStemArtifact ?? normalizedAudioArtifact;
-        SpeechAudioSourceKind sourceKind = vocalStemArtifact is null
-            ? SpeechAudioSourceKind.FullMix
-            : SpeechAudioSourceKind.VocalStem;
+        // Transcript stages always route from the full mix: ASR, VAD and diarization all scored
+        // as well or better on the mix (DeepFilterNet-cleaned for VAD/diarization) than on a
+        // separated vocal stem, so separation is not a transcript prerequisite.
+        ProjectArtifact selectedSource = normalizedAudioArtifact;
+        const SpeechAudioSourceKind sourceKind = SpeechAudioSourceKind.FullMix;
 
         // If speech processed audio already exists, skip both enhancement and preparation.
         // Reuse is suppressed when the caller requires fresh evidence of the stage's work.
@@ -612,7 +580,7 @@ public sealed class ProjectWorkflow(
         if (existingProcessed is not null)
         {
             return TranscriptAudioRoutingPlan.Raw(existingProcessed, sourceKind)
-                .WithUnprocessedAsrSource(normalizedAudioArtifact, vocalStemArtifact);
+                .WithUnprocessedAsrSource(normalizedAudioArtifact);
         }
 
         SpeechAudioEnhancementStageResult? enhancementResult = null;
@@ -656,33 +624,12 @@ public sealed class ProjectWorkflow(
                 ?? existingEnhanced
                 ?? selectedSource;
             return TranscriptAudioRoutingPlan.Raw(fallbackSource, sourceKind)
-                .WithUnprocessedAsrSource(normalizedAudioArtifact, vocalStemArtifact);
+                .WithUnprocessedAsrSource(normalizedAudioArtifact);
         }
 
-        ProjectArtifact prepNormalizedAudio = normalizedAudioArtifact;
-        ProjectArtifact? prepVocalStem = vocalStemArtifact;
-        if (enhancementResult?.EnhancedAudioArtifact is ProjectArtifact enhancedAudio)
-        {
-            if (vocalStemArtifact is not null)
-            {
-                prepVocalStem = enhancedAudio;
-            }
-            else
-            {
-                prepNormalizedAudio = enhancedAudio;
-            }
-        }
-        else if (existingEnhanced is not null)
-        {
-            if (vocalStemArtifact is not null)
-            {
-                prepVocalStem = existingEnhanced;
-            }
-            else
-            {
-                prepNormalizedAudio = existingEnhanced;
-            }
-        }
+        ProjectArtifact prepNormalizedAudio = enhancementResult?.EnhancedAudioArtifact
+            ?? existingEnhanced
+            ?? normalizedAudioArtifact;
 
         try
         {
@@ -692,11 +639,11 @@ public sealed class ProjectWorkflow(
                         projectId,
                         mediaAsset,
                         prepNormalizedAudio,
-                        prepVocalStem,
+                        VocalStemArtifact: null,
                         existingArtifacts),
                     cancellationToken)
                 .ConfigureAwait(false);
-            return preparedPlan.WithUnprocessedAsrSource(normalizedAudioArtifact, vocalStemArtifact);
+            return preparedPlan.WithUnprocessedAsrSource(normalizedAudioArtifact);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
         {
@@ -706,28 +653,7 @@ public sealed class ProjectWorkflow(
                 ?? existingEnhanced
                 ?? selectedSource;
             return TranscriptAudioRoutingPlan.Raw(fallbackSource, sourceKind)
-                .WithUnprocessedAsrSource(normalizedAudioArtifact, vocalStemArtifact);
+                .WithUnprocessedAsrSource(normalizedAudioArtifact);
         }
-    }
-
-    private static bool ShouldRegenerateWithDiarization(TranscriptProjectState currentState) =>
-        currentState.StageRuns.Any(static stageRun =>
-            string.Equals(stageRun.StageName, StageNames.Diarization, StringComparison.OrdinalIgnoreCase));
-
-    internal static bool ShouldRegenerateTranscriptAfterStemRerun(TranscriptProjectState currentState)
-    {
-        // Generated transcript revisions carry an ASR stage run id; editor-created
-        // revisions do not. Preserve user edits without treating generated reruns
-        // as manual changes.
-        if (currentState.CurrentTranscriptRevision is { StageRunId: null })
-        {
-            return false;
-        }
-
-        // Re-running diarization over an already diarized, assigned revision can
-        // invalidate speaker assignments. Keep that transcript intact while still
-        // allowing no-turn diarization retries and generated single-speaker reruns.
-        return currentState.SpeakerTurns.Count == 0 ||
-               !currentState.TranscriptSegments.Any(static segment => segment.SpeakerId is not null);
     }
 }

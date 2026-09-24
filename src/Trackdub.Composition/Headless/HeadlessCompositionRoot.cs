@@ -118,8 +118,7 @@ public static class HeadlessCompositionRoot
             services.Replace(ServiceDescriptor.Singleton<ISpeechAudioEnhancementService>(sp =>
                 new ResolvingSpeechAudioEnhancementService(
                     sp.GetService<BundledModelManifestRegistry>(),
-                    sp.GetService<IModelCacheInventory>(),
-                    new FfmpegSpeechAudioEnhancementService(ffmpegPath))));
+                    sp.GetService<IModelCacheInventory>())));
             services.Replace(ServiceDescriptor.Scoped<IAudioTimeStretchService>(
                 _ => new AudioTimeStretchService(ffmpegPath)));
         }

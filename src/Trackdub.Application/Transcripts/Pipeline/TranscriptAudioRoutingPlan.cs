@@ -25,23 +25,14 @@ public sealed record TranscriptAudioRoutingPlan(
             CreateRawDecision(SpeechPipelineStageKind.Diarization, sourceKind));
 
     /// <summary>
-    /// Routes ASR to the unprocessed source (normalized mix or vocal stem). The ffmpeg speech
-    /// enhancement chain (afftdn denoise + speechnorm expansion) reshapes the speech envelope and
-    /// measurably degraded both Qwen3-ASR and Parakeet-TDT transcripts, while VAD and diarization
-    /// keep the enhanced audio.
+    /// Routes ASR to the unprocessed full mix. Speech enhancement (DeepFilterNet or the ffmpeg
+    /// chain) and stem separation measurably degraded Parakeet-TDT and at best matched Qwen3-ASR,
+    /// while VAD and diarization keep the enhanced audio.
     /// </summary>
-    /// <remarks>
-    /// Follows the plan's own <see cref="SourceKind"/>, so a vocal stem the preparation planner
-    /// rejected never comes back through the ASR route.
-    /// </remarks>
-    public TranscriptAudioRoutingPlan WithUnprocessedAsrSource(
-        ProjectArtifact normalizedAudioArtifact,
-        ProjectArtifact? vocalStemArtifact) =>
+    public TranscriptAudioRoutingPlan WithUnprocessedAsrSource(ProjectArtifact normalizedAudioArtifact) =>
         this with
         {
-            AsrAudioArtifact = SourceKind == SpeechAudioSourceKind.VocalStem && vocalStemArtifact is not null
-                ? vocalStemArtifact
-                : normalizedAudioArtifact,
+            AsrAudioArtifact = normalizedAudioArtifact,
             AsrDecision = CreateRawDecision(SpeechPipelineStageKind.Asr, SourceKind),
         };
 

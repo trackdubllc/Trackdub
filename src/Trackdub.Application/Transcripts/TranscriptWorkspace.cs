@@ -285,16 +285,14 @@ public sealed class TranscriptWorkspace(
         CancellationToken cancellationToken,
         IProgress<StemSeparationProgress>? progress = null,
         string? preferredModelAlias = null,
-        InferenceModelPreferences? modelPreferences = null,
-        bool regenerateTranscript = true) =>
+        InferenceModelPreferences? modelPreferences = null) =>
         RunPipelineAsync(
             nameof(RunStemSeparationAsync),
             ct => Project.RunStemSeparationAsync(
                 ct,
                 progress,
                 preferredModelAlias,
-                modelPreferences,
-                regenerateTranscript),
+                modelPreferences),
             cancellationToken);
 
     public Task<TranscriptProjectState> RunOverlapRescueAsync(
