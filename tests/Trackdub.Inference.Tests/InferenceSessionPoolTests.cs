@@ -354,6 +354,307 @@ public sealed class InferenceSessionPoolTests
         ephemeralLease.Dispose();
     }
 
+    // ── Single-flight creation ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetLeaseAsync_ConcurrentMisses_SameKey_InvokesFactoryOnce()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 4);
+        int factoryCalls = 0;
+
+        Task<InferenceSession> Factory(CancellationToken _)
+        {
+            Interlocked.Increment(ref factoryCalls);
+            return Task.Delay(50).ContinueWith(
+                _ => CreateMinimalSession(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        // Same key is exclusive (one lease at a time), so collect leases sequentially:
+        // the point is that the second acquire must not rebuild the session.
+        Task<SessionLease> first = pool.GetLeaseAsync(TestKey, Factory, CancellationToken.None);
+        Task<SessionLease> second = pool.GetLeaseAsync(TestKey, Factory, CancellationToken.None);
+
+        SessionLease lease1 = await first;
+        Assert.Equal(1, factoryCalls);
+        lease1.Dispose();
+
+        SessionLease lease2 = await second;
+        lease2.Dispose();
+        Assert.Equal(1, factoryCalls);
+    }
+
+    [Fact]
+    public async Task GetLeaseAsync_CancelledWaiter_DoesNotCancelSharedCreate()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 4);
+        int factoryCalls = 0;
+        using var creatorCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var waiterCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        Task<SessionLease> creator = pool.GetLeaseAsync(
+            TestKey,
+            async _ =>
+            {
+                Interlocked.Increment(ref factoryCalls);
+                await Task.Delay(300);
+                return CreateMinimalSession();
+            },
+            creatorCts.Token);
+
+        await Task.Delay(20);
+        Task<SessionLease> waiter = pool.GetLeaseAsync(
+            TestKey,
+            _ =>
+            {
+                Interlocked.Increment(ref factoryCalls);
+                return Task.FromResult(CreateMinimalSession());
+            },
+            waiterCts.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiter);
+
+        SessionLease lease = await creator;
+        lease.Dispose();
+
+        Assert.Equal(1, factoryCalls);
+    }
+
+    // ── Memory admission (opt-in) ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task MemoryAdmission_DisabledByDefault_StillAllowsEphemeral()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 1);
+        var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h1", 0, "default") { EstimatedVramMb = 64 };
+        var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h2", 0, "default") { EstimatedVramMb = 64 };
+
+        using SessionLease lease1 = await pool.GetLeaseAsync(key1, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        using SessionLease lease2 = await pool.GetLeaseAsync(key2, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        Assert.NotNull(lease2.Session);
+    }
+
+    [Fact]
+    public async Task MemoryAdmission_WaitsInsteadOfEphemeral_WhenBudgetExhausted()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 4,
+            enableMemoryAdmission: true,
+            memoryBudgetMb: 100);
+        var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h1", 0, "default") { EstimatedVramMb = 80 };
+        var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h2", 0, "default") { EstimatedVramMb = 80 };
+
+        SessionLease lease1 = await pool.GetLeaseAsync(key1, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        // key2 needs 80MB while key1 holds 80MB against a 100MB budget — must wait, not go ephemeral.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => pool.GetLeaseAsync(key2, _ => Task.FromResult(CreateMinimalSession()), cts.Token));
+
+        lease1.Dispose();
+
+        using SessionLease lease2 = await pool.GetLeaseAsync(
+            key2,
+            _ => Task.FromResult(CreateMinimalSession()),
+            CancellationToken.None);
+        Assert.NotNull(lease2.Session);
+    }
+
+    [Fact]
+    public async Task MemoryAdmission_EvictsIdleToFit_InsteadOfWaiting()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            enableMemoryAdmission: true,
+            memoryBudgetMb: 120);
+        var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h1", 0, "default") { EstimatedVramMb = 80 };
+        var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h2", 0, "default") { EstimatedVramMb = 80 };
+
+        using (await pool.GetLeaseAsync(key1, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None))
+        {
+        }
+
+        // key1 is idle and must be evicted so key2 (80MB) fits in the 120MB budget.
+        using SessionLease lease2 = await pool.GetLeaseAsync(
+            key2,
+            _ => Task.FromResult(CreateMinimalSession()),
+            CancellationToken.None);
+        Assert.NotNull(lease2.Session);
+    }
+
+    [Fact]
+    public async Task MemoryAdmission_BudgetIsPerDevice_AndSharedAcrossEps()
+    {
+        // Same budget number applies per device. DML vs TRT is irrelevant — DeviceId is the bucket.
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            enableMemoryAdmission: true,
+            memoryBudgetMb: 100);
+        var gpu0Dml = new SessionPoolKey("eng", null, null, ExecutionProviderKind.DirectMl, "h0a", 0, "default") { EstimatedVramMb = 80 };
+        var gpu0Trt = new SessionPoolKey("eng", null, null, ExecutionProviderKind.TensorRTRtx, "h0b", 0, "default") { EstimatedVramMb = 80 };
+        var gpu1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.DirectMl, "h1", 1, "default") { EstimatedVramMb = 80 };
+
+        using SessionLease holdGpu0 = await pool.GetLeaseAsync(
+            gpu0Dml, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        // GPU 1 has its own 100MB budget — must fit even though GPU 0 holds 80MB.
+        using SessionLease takeGpu1 = await pool.GetLeaseAsync(
+            gpu1, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        Assert.NotNull(takeGpu1.Session);
+
+        // GPU 0 TRT shares the GPU 0 budget with DML — must wait.
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => pool.GetLeaseAsync(gpu0Trt, _ => Task.FromResult(CreateMinimalSession()), cts.Token));
+    }
+
+    // ── Residency ≠ execution exclusivity (audit §3A) ─────────────────────────
+
+    [Fact]
+    public async Task GetResidencyAsync_PinsWithoutHoldingExecutionGate()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 4);
+        SessionResidency residency = await pool.GetResidencyAsync(
+            TestKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        // Pin held, but a lease must still be acquirable — residency is not exclusivity.
+        using SessionLease lease = await pool.GetLeaseAsync(
+            TestKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        Assert.NotNull(lease.Session);
+        residency.Dispose();
+    }
+
+    [Fact]
+    public async Task GetResidencyAsync_PinnedSession_IsNotIdleEvicted()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 4,
+            enableMemoryAdmission: true,
+            memoryBudgetMb: 100);
+        var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "p1", 0, "default") { EstimatedVramMb = 80 };
+        var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "p2", 0, "default") { EstimatedVramMb = 80 };
+
+        SessionResidency pin = await pool.GetResidencyAsync(
+            key1, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        // key1 is idle (no lease) but pinned — must not be evicted to fit key2.
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => pool.GetLeaseAsync(key2, _ => Task.FromResult(CreateMinimalSession()), cts.Token));
+
+        // Unpin: key1 becomes eligible and is evicted so key2 fits.
+        pin.Dispose();
+        using SessionLease lease2 = await pool.GetLeaseAsync(
+            key2, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        Assert.NotNull(lease2.Session);
+    }
+
+    [Fact]
+    public void SessionPoolKey_EstimateVramMb_FromFileSize()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"vram-est-{Guid.NewGuid():N}.bin");
+        try
+        {
+            File.WriteAllBytes(path, new byte[3 * 1024 * 1024]); // 3 MB → 3*2+128 = 134
+            long estimate = SessionPoolKey.EstimateVramMb(path);
+            Assert.Equal(134, estimate);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    // ── Multi-graph lease bundles (audit §3A) ────────────────────────────────
+
+    private static SessionPoolKey KeyA() =>
+        new("dual", null, null, ExecutionProviderKind.Cpu, "hashA", 0, "encoder") { EstimatedVramMb = 32 };
+
+    private static SessionPoolKey KeyB() =>
+        new("dual", null, null, ExecutionProviderKind.Cpu, "hashB", 0, "decoder") { EstimatedVramMb = 32 };
+
+    [Fact]
+    public async Task GetLeaseBundleAsync_AcquiresAllGraphs()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 4);
+        using SessionLeaseBundle bundle = await pool.GetLeaseBundleAsync(
+            [
+                new SessionLeaseRequest(KeyA(), _ => Task.FromResult(CreateMinimalSession())),
+                new SessionLeaseRequest(KeyB(), _ => Task.FromResult(CreateMinimalSession())),
+            ],
+            CancellationToken.None);
+
+        Assert.Equal(2, bundle.Count);
+        Assert.NotNull(bundle[0]);
+        Assert.NotNull(bundle[1]);
+    }
+
+    [Fact]
+    public async Task GetLeaseBundleAsync_DuplicateKeys_Throws()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 4);
+        await Assert.ThrowsAsync<ArgumentException>(() => pool.GetLeaseBundleAsync(
+            [
+                new SessionLeaseRequest(KeyA(), _ => Task.FromResult(CreateMinimalSession())),
+                new SessionLeaseRequest(KeyA(), _ => Task.FromResult(CreateMinimalSession())),
+            ],
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetLeaseBundleAsync_OpposingCallerOrders_DoNotDeadlock()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 8);
+        SessionLeaseRequest a = new(KeyA(), _ => Task.FromResult(CreateMinimalSession()));
+        SessionLeaseRequest b = new(KeyB(), _ => Task.FromResult(CreateMinimalSession()));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Same graphs are exclusive, so bundles serialize — the point is that reversed
+        // caller order still completes (stable sort) instead of deadlocking half-held.
+        Task<SessionLeaseBundle> t1 = Task.Run(
+            () => pool.GetLeaseBundleAsync([a, b], cts.Token), cts.Token);
+        Task<SessionLeaseBundle> t2 = Task.Run(
+            () => pool.GetLeaseBundleAsync([b, a], cts.Token), cts.Token);
+
+        Task<SessionLeaseBundle> first = await Task.WhenAny(t1, t2).WaitAsync(cts.Token);
+        SessionLeaseBundle firstBundle = await first.WaitAsync(cts.Token);
+        firstBundle.Dispose();
+
+        Task<SessionLeaseBundle> second = ReferenceEquals(first, t1) ? t2 : t1;
+        SessionLeaseBundle secondBundle = await second.WaitAsync(cts.Token);
+        secondBundle.Dispose();
+    }
+
+    [Fact]
+    public async Task GetLeaseBundleAsync_DoesNotHoldFirstGraphWhileBlockedOnSecond()
+    {
+        using var pool = new InferenceSessionPool(maxSessions: 8);
+        SessionLeaseRequest a = new(KeyA(), _ => Task.FromResult(CreateMinimalSession()));
+        SessionLeaseRequest b = new(KeyB(), _ => Task.FromResult(CreateMinimalSession()));
+
+        // Warm both graphs so phase-2 is pure gate acquire.
+        using (await pool.GetLeaseBundleAsync([a, b], CancellationToken.None))
+        {
+        }
+
+        // Hold graph A exclusively.
+        SessionLease holdA = await pool.GetLeaseAsync(KeyA(), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => pool.GetLeaseBundleAsync([a, b], cts.Token));
+
+        // Graph B must still be acquirable: the failed bundle did not keep B while stuck on A.
+        using SessionLease takeB = await pool.GetLeaseAsync(
+            KeyB(),
+            _ => Task.FromResult(CreateMinimalSession()),
+            CancellationToken.None);
+        Assert.NotNull(takeB.Session);
+        holdA.Dispose();
+    }
+
     // ── TrimToVramBudgetAsync ─────────────────────────────────────────────────
 
     [Fact]
@@ -450,7 +751,7 @@ public sealed class InferenceSessionPoolTests
     public void RecommendedMaxSessions_NullDevices_ReturnsDefault()
     {
         int result = InferenceSessionPool.RecommendedMaxSessions(null);
-        Assert.Equal(8, result);
+        Assert.Equal(12, result);
     }
 
     [Fact]
@@ -462,7 +763,7 @@ public sealed class InferenceSessionPoolTests
         };
 
         int result = InferenceSessionPool.RecommendedMaxSessions(devices);
-        Assert.Equal(8, result);
+        Assert.Equal(12, result);
     }
 
     [Fact]
@@ -474,11 +775,11 @@ public sealed class InferenceSessionPoolTests
         };
 
         int result = InferenceSessionPool.RecommendedMaxSessions(devices);
-        Assert.Equal(8, result);
+        Assert.Equal(12, result);
     }
 
     [Fact]
-    public void RecommendedMaxSessions_NvidiaGpuAtLeast8Gb_Returns16()
+    public void RecommendedMaxSessions_NvidiaGpuAtLeast8Gb_Returns24()
     {
         var devices = new List<DeviceEntry>
         {
@@ -486,7 +787,7 @@ public sealed class InferenceSessionPoolTests
         };
 
         int result = InferenceSessionPool.RecommendedMaxSessions(devices);
-        Assert.Equal(16, result);
+        Assert.Equal(24, result);
     }
 
     [Fact]
@@ -498,7 +799,52 @@ public sealed class InferenceSessionPoolTests
         };
 
         int result = InferenceSessionPool.RecommendedMaxSessions(devices);
-        Assert.Equal(8, result);
+        Assert.Equal(12, result);
+    }
+
+    // ── Smoke ↔ stage pool-key identity ──────────────────────────────────────
+
+    [Fact]
+    public void SessionPoolKey_ModelIdAndVariant_participate_in_identity()
+    {
+        // Smoke and stage must build identical keys or smoke cannot warm the stage session.
+        var smokeStyle = SessionPoolKey.ForEncoder(
+            "nemotron-asr",
+            @"C:\models\encoder.onnx",
+            ExecutionProviderKind.TensorRTRtx,
+            modelId: "vendor/nemotron-asr",
+            variant: "default");
+        var stageStyle = SessionPoolKey.ForEncoder(
+            "nemotron-asr",
+            @"C:\models\encoder.onnx",
+            ExecutionProviderKind.TensorRTRtx,
+            modelId: "vendor/nemotron-asr",
+            variant: "default");
+        var omittedIdentity = SessionPoolKey.ForEncoder(
+            "nemotron-asr",
+            @"C:\models\encoder.onnx",
+            ExecutionProviderKind.TensorRTRtx);
+
+        Assert.Equal(smokeStyle, stageStyle);
+        Assert.NotEqual(smokeStyle, omittedIdentity);
+    }
+
+    [Fact]
+    public void SessionPoolKey_Qwen3OmittingIdentity_matches_across_smoke_and_stage()
+    {
+        // Qwen3 production and smoke both omit modelId/variant — that pair must stay aligned.
+        var smoke = SessionPoolKey.ForEncoder(
+            "qwen3-asr",
+            @"C:\models\encoder.onnx",
+            ExecutionProviderKind.Cpu);
+        var stage = SessionPoolKey.ForEncoder(
+            "qwen3-asr",
+            @"C:\models\encoder.onnx",
+            ExecutionProviderKind.Cpu,
+            modelId: null,
+            variant: null);
+
+        Assert.Equal(smoke, stage);
     }
 
     // ── Helper: build a minimal real InferenceSession from the ONNX operator ──
