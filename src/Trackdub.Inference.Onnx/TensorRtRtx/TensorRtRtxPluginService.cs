@@ -136,6 +136,7 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
             await RegistrationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                Console.Error.WriteLine($"[TRTDBG] registered='{registeredProviderLibraryPath}' resolved='{resolution.ProviderLibraryPath}' source={resolution.Source} explicit='{explicitPluginDirectory}' default='{defaultInstallDirectory}' stack={Environment.StackTrace.Split('\n').Skip(2).Take(6).Select(static l => l.Trim()).Aggregate(static (a, b) => a + " | " + b)}");
                 if (!string.Equals(registeredProviderLibraryPath, resolution.ProviderLibraryPath, StringComparison.OrdinalIgnoreCase))
                 {
                     OrtEnv.Instance().RegisterExecutionProviderLibrary(
