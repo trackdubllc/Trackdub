@@ -34,6 +34,34 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
         }
     }
 
+    [Fact]
+    public async Task Model_alias_for_a_different_task_is_rejected()
+    {
+        string fixture = Path.GetTempFileName();
+        try
+        {
+            using var runner = new ControlledDubbingBenchmarkRunner(new NoHistory());
+
+            // "kokoro" is a valid alias, but for TTS: the planner would keep its default ASR
+            // model while the report claims the requested one.
+            ArgumentException error = await Assert.ThrowsAsync<ArgumentException>(() => runner.RunAsync(
+                new ControlledDubbingBenchmarkOptions
+                {
+                    FixturePath = fixture,
+                    OutputDirectory = Path.GetTempPath(),
+                    Stage = "asr",
+                    Model = "kokoro",
+                }));
+
+            Assert.Contains("kokoro", error.Message, StringComparison.Ordinal);
+            Assert.Contains("asr", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(fixture);
+        }
+    }
+
     private sealed class NoHistory : IBenchmarkEvidenceRepository
     {
         public Task SaveAsync(BenchmarkEvidenceReport report, CancellationToken cancellationToken = default) =>

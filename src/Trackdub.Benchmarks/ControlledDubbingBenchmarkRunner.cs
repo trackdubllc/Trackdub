@@ -149,11 +149,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 if (prerequisites.Count > 0)
                 {
                     long prerequisiteStart = Stopwatch.GetTimestamp();
-                    // Separation regenerates the transcript by default, which would leave ASR and
-                    // later stages timing an in-place re-run instead of their own work.
                     DubbingRunResult preparation = await ExecuteAsync(
-                        host, fixtureCopy, projectPath, options, prerequisites, true, cancellationToken,
-                        regenerateTranscriptOnSeparation: false).ConfigureAwait(false);
+                        host, fixtureCopy, projectPath, options, prerequisites, true, cancellationToken).ConfigureAwait(false);
                     timings["prerequisites"] = Stopwatch.GetElapsedTime(prerequisiteStart).TotalMilliseconds;
                     RequirePreparationSucceeded(
                         preparation, "Prerequisite preparation did not complete successfully.",
@@ -161,6 +158,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
                     // A stage already run by its prerequisites is timed as an in-place re-run
                     // (for ASR: re-transcribing existing segments), not as the stage itself.
+                    // No prerequisite regenerates a later stage today, but guard against one
+                    // sneaking the timed stage in (e.g. an opt-in stage running during import).
                     RunArtifacts prepared = await ReadRunArtifactsAsync(host, projectPath, options, cancellationToken)
                         .ConfigureAwait(false);
                     if (prepared.StageRuns.Any(run => run.StageName.Equals(stage, StringComparison.OrdinalIgnoreCase)))
@@ -348,13 +347,35 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
     // An unknown alias is not an error to the pipeline, which silently plans its default model,
     // so a typo (or an engine family such as "whisper-onnx") would measure the wrong model.
-    private static void ValidateModelAlias(string model)
+    // A resolved alias must also match the selected stage's task: the planner treats a
+    // preferred alias as a preference, not a requirement, so a mismatched-task alias would
+    // let the pipeline plan its default model while the report claims the requested one.
+    private static void ValidateModelAlias(string model, string stage)
     {
         if (!BundledModelManifestRegistry.TryLoadDefault(out BundledModelManifestRegistry? registry, out _) ||
-            registry is null ||
-            registry.TryResolve(model, out _))
+            registry is null)
+        {
+            // Manifest unavailable: the pipeline preflight surfaces model problems later.
             return;
+        }
 
+        if (!registry.TryResolve(model, out BundledModelManifestResolution? resolution) ||
+            resolution is null)
+        {
+            throw UnknownAliasException(model, registry);
+        }
+
+        string? requiredTask = ManifestTaskFor(RuntimeStageFor(stage));
+        if (requiredTask is not null &&
+            !string.Equals(resolution.Entry.Task, requiredTask, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Model alias '{model}' resolves to a {resolution.Entry.Task} model, which cannot serve the '{stage}' stage (requires {requiredTask}).");
+        }
+    }
+
+    private static ArgumentException UnknownAliasException(string model, BundledModelManifestRegistry registry)
+    {
         string family = model.Split('-', '_', '@')[0];
         string[] similar = registry.Entries
             .SelectMany(static entry => entry.Aliases)
@@ -363,10 +384,28 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             .Order(StringComparer.OrdinalIgnoreCase)
             .Take(12)
             .ToArray();
-        throw new ArgumentException(similar.Length == 0
+        return new ArgumentException(similar.Length == 0
             ? $"Unknown model alias '{model}'."
             : $"Unknown model alias '{model}'. Similar aliases: {string.Join(", ", similar)}.");
     }
+
+    // Mirrors the stage → manifest task mapping in StageRuntimeRequirementsCatalog
+    // (Trackdub.Inference.Runtime.Planning), which is internal to that assembly.
+    private static string? ManifestTaskFor(RuntimeStage? stage) => stage switch
+    {
+        RuntimeStage.Vad => "vad",
+        RuntimeStage.Asr => "asr",
+        RuntimeStage.Translation => "translation",
+        RuntimeStage.Tts => "tts",
+        RuntimeStage.Diarization => "diarization",
+        RuntimeStage.Separation => "separation",
+        RuntimeStage.SpeechEnhancement => "speech-enhancement",
+        RuntimeStage.LipSync => "forced-alignment",
+        RuntimeStage.TextRefinement => "text-refinement",
+        RuntimeStage.OverlapRescue => "overlap-rescue",
+        RuntimeStage.LipSynthesis => "lip-synthesis",
+        _ => null,
+    };
 
     private static void ValidateOptions(ControlledDubbingBenchmarkOptions options)
     {
@@ -379,10 +418,12 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         if (options.Provider is not null &&
             (ResolveStage(options.Stage) is not string stage || RuntimeStageFor(stage) is null))
             throw new ArgumentException("Provider pin requires a runtime-backed focused stage.");
-        if (options.Model is not null && ResolveStage(options.Stage) is null)
-            throw new ArgumentException("Model selection requires a focused stage.");
         if (options.Model is not null)
-            ValidateModelAlias(options.Model);
+        {
+            if (ResolveStage(options.Stage) is not string modelStage)
+                throw new ArgumentException("Model selection requires a focused stage.");
+            ValidateModelAlias(options.Model, modelStage);
+        }
         if (options.ExpectedFixtureSha256 is not null &&
             (options.ExpectedFixtureSha256.Length != 64 ||
              !options.ExpectedFixtureSha256.All(Uri.IsHexDigit)))
@@ -469,8 +510,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     private static Task<DubbingRunResult> ExecuteAsync(
         HeadlessDubbingHost host, string fixture, string project, ControlledDubbingBenchmarkOptions options,
         IReadOnlyList<string>? stages, bool forceRerun, CancellationToken cancellationToken,
-        IProgress<PipelineProgressEvent>? progress = null,
-        bool regenerateTranscriptOnSeparation = true)
+        IProgress<PipelineProgressEvent>? progress = null)
     {
         string? stage = ResolveStage(options.Stage);
         IReadOnlyDictionary<string, string>? models = options.Model is null || stage is null
@@ -484,7 +524,6 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             StageFilter = stages,
             ModelPreferences = models,
             ForceRerun = forceRerun,
-            RegenerateTranscriptOnSeparation = regenerateTranscriptOnSeparation,
         }, progress, cancellationToken);
     }
 

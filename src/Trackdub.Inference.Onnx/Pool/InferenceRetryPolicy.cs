@@ -46,6 +46,10 @@ internal static class InferenceRetryPolicy
     /// (a fused EP subgraph such as a TensorRT-RTX engine finishes its current execution first).
     /// <c>Run</c> still returns before the caller can release the session lease or input buffers,
     /// and a terminated run surfaces as <see cref="OperationCanceledException"/>, never a retry.
+    /// Because ORT may complete a run before observing <c>Terminate</c>, outputs returned after
+    /// cancellation are disposed and surfaced as <see cref="OperationCanceledException"/> too.
+    /// A caller pre-set <c>Terminate</c> is preserved, and a run against a pre-terminated
+    /// <see cref="RunOptions"/> is never retried.
     /// </remarks>
     /// <param name="provider">
     /// The execution provider the session was created with, if known. Narrows retry of an
@@ -95,6 +99,7 @@ internal static class InferenceRetryPolicy
                 return RunOnce(() => session.Run(inputs, session.OutputNames, runOptions), runOptions, cancellationToken);
             }
             catch (OnnxRuntimeException ex) when (!cancellationToken.IsCancellationRequested &&
+                                                  !runOptions.Terminate &&
                                                   IsTransient(ex, provider) && ++attempt < maxAttempts)
             {
                 await Task.Delay(BackoffFor(attempt), cancellationToken).ConfigureAwait(false);
@@ -129,8 +134,8 @@ internal static class InferenceRetryPolicy
             provider,
             runOptions);
 
-    private static T Execute<T>(
-        Func<T> run,
+    internal static IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Execute(
+        Func<IDisposableReadOnlyCollection<DisposableNamedOnnxValue>> run,
         int maxAttempts,
         CancellationToken cancellationToken,
         ExecutionProviderKind? provider,
@@ -144,6 +149,7 @@ internal static class InferenceRetryPolicy
                 return RunOnce(run, runOptions, cancellationToken);
             }
             catch (OnnxRuntimeException ex) when (!cancellationToken.IsCancellationRequested &&
+                                                  !(runOptions?.Terminate ?? false) &&
                                                   IsTransient(ex, provider) && ++attempt < maxAttempts)
             {
                 cancellationToken.WaitHandle.WaitOne(BackoffFor(attempt));
@@ -152,7 +158,10 @@ internal static class InferenceRetryPolicy
         }
     }
 
-    private static T RunOnce<T>(Func<T> run, RunOptions? runOptions, CancellationToken cancellationToken)
+    internal static IDisposableReadOnlyCollection<DisposableNamedOnnxValue> RunOnce(
+        Func<IDisposableReadOnlyCollection<DisposableNamedOnnxValue>> run,
+        RunOptions? runOptions,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var inference = BenchmarkPhaseCapture.Start("onnx-inference");
@@ -161,22 +170,38 @@ internal static class InferenceRetryPolicy
             return run();
         }
 
-        // Disposing the registration waits for an in-flight callback, so Terminate cannot be
-        // set after the reset below. The reset keeps caller-owned RunOptions reusable.
-        CancellationTokenRegistration registration =
-            cancellationToken.UnsafeRegister(static state => ((RunOptions)state!).Terminate = true, runOptions);
+        // Capture the caller's initial Terminate value and restore it after the run, so a
+        // caller-owned RunOptions stays reusable exactly as the caller left it. The restore
+        // also runs before the retry filter evaluates, letting it exclude a pre-terminated
+        // run from retrying against the caller's termination request.
+        bool initialTerminate = runOptions.Terminate;
         try
         {
-            return run();
-        }
-        catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw new OperationCanceledException(cancellationToken);
+            // Disposing the registration waits for an in-flight callback, so a late callback
+            // cannot set Terminate after the restore in the outer finally below.
+            using CancellationTokenRegistration registration = cancellationToken.UnsafeRegister(
+                static state => ((RunOptions)state!).Terminate = true, runOptions);
+            try
+            {
+                IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = run();
+                // ORT honors Terminate between graph nodes and may complete a run that was
+                // cancelled mid-flight; never surface results produced after cancellation.
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    outputs.Dispose();
+                    throw new OperationCanceledException(cancellationToken);
+                }
+
+                return outputs;
+            }
+            catch (OnnxRuntimeException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
         }
         finally
         {
-            registration.Dispose();
-            runOptions.Terminate = false;
+            runOptions.Terminate = initialTerminate;
         }
     }
 

@@ -281,7 +281,6 @@ internal sealed class InferenceSessionPool : IDisposable
             Exception? creationFailure = null;
             try
             {
-
                 // Dispose the evicted session outside the lock so expensive ORT teardown
                 // does not block unrelated callers waiting on creationLock.
                 lruEvicted1?.Dispose();

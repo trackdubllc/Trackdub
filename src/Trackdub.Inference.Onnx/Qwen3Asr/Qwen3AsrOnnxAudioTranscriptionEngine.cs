@@ -202,7 +202,8 @@ public sealed class Qwen3AsrOnnxAudioTranscriptionEngine(
                 embedTokens,
                 audioFeatures,
                 promptIds,
-                maxTokens);
+                maxTokens,
+                cancellationToken);
 
             string decoded = tokenizer.Decode(generatedTokens);
             (string languageName, string text) = Qwen3AsrOutputParser.Parse(decoded, forcedLanguageName);

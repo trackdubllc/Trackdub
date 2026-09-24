@@ -145,6 +145,73 @@ public sealed class InferenceRetryPolicyTests
         Assert.False(runOptions.Terminate);
     }
 
+    [Fact]
+    public void Run_completed_after_cancellation_throws_and_disposes_outputs()
+    {
+        // ORT may complete a run before observing Terminate; the result of a run that was
+        // cancelled mid-flight must never reach the caller as a success.
+        using var runOptions = new RunOptions();
+        using var cts = new CancellationTokenSource();
+        var outputs = new FakeOutputs();
+
+        Assert.Throws<OperationCanceledException>(() => InferenceRetryPolicy.RunOnce(
+            () => { cts.Cancel(); return outputs; }, runOptions, cts.Token));
+
+        Assert.Equal(1, outputs.DisposeCount);
+        Assert.False(runOptions.Terminate);
+    }
+
+    [Fact]
+    public void Run_without_cancellation_returns_outputs_undisposed()
+    {
+        using var runOptions = new RunOptions();
+        using var cts = new CancellationTokenSource();
+        var outputs = new FakeOutputs();
+
+        IDisposableReadOnlyCollection<DisposableNamedOnnxValue> returned = InferenceRetryPolicy.RunOnce(
+            () => outputs, runOptions, cts.Token);
+
+        Assert.Same(outputs, returned);
+        Assert.Equal(0, outputs.DisposeCount);
+    }
+
+    [Fact]
+    public void Pre_terminated_binding_run_fails_without_releasing_a_success()
+    {
+        // A run against a caller-terminated RunOptions fails with [ErrorCode:Fail], which is
+        // transient; a retry with the flag reset would succeed and hand back outputs the
+        // caller explicitly asked to terminate. The caller's Terminate value must survive.
+        using var session = new InferenceSession(IdentityOnnxModel);
+        using var runOptions = new RunOptions { Terminate = true };
+        using OrtIoBinding binding = session.CreateIoBinding();
+        using OrtValue input = OrtValue.CreateTensorValueFromMemory(new[] { 2f }, new long[] { 1 });
+        binding.BindInput("x", input);
+        binding.BindOutputToDevice("y", OrtMemoryInfo.DefaultInstance);
+        using var cts = new CancellationTokenSource();
+
+        Assert.Throws<OnnxRuntimeException>(() => session.RunWithBindingAndNamesRetry(
+            runOptions, binding, ["y"], cancellationToken: cts.Token));
+
+        Assert.True(runOptions.Terminate);
+    }
+
+    private sealed class FakeOutputs : IDisposableReadOnlyCollection<DisposableNamedOnnxValue>
+    {
+        public int DisposeCount { get; private set; }
+
+        public void Dispose() => DisposeCount++;
+
+        public int Count => 0;
+
+        public DisposableNamedOnnxValue this[int index] =>
+            throw new ArgumentOutOfRangeException(nameof(index), "FakeOutputs is empty.");
+
+        public IEnumerator<DisposableNamedOnnxValue> GetEnumerator() =>
+            Enumerable.Empty<DisposableNamedOnnxValue>().GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private static NamedOnnxValue IdentityInput(float value) =>
         NamedOnnxValue.CreateFromTensor("x", new DenseTensor<float>(new[] { value }, [1]));
 
