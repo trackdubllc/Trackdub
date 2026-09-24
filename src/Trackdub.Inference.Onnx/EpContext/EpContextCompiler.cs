@@ -73,7 +73,9 @@ public sealed class EpContextCompiler
 #if WINDOWS
             WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
 #endif
-            using SessionOptions sessionOptions = CreateCompileSessionOptions(out ExecutionProviderKind selectedProvider);
+            using SessionOptions sessionOptions = CreateCompileSessionOptions(
+                EpContextTrtProfiles.Resolve(sourceModelPath),
+                out ExecutionProviderKind selectedProvider);
             string selectedLabel = selectedProvider.ToString();
             // EP context engines are provider-specific. Compiling on anything but TensorRT RTX
             // only reserializes (and graph-optimizes) the source — it cannot skip engine rebuild.
@@ -106,7 +108,7 @@ public sealed class EpContextCompiler
             compileOptions.CompileModel();
             stopwatch.Stop();
 
-            // CompileModel() can succeed yet emit a plain reserialized graph (no com.microsoft.ep.context
+            // CompileModel() can succeed yet emit a plain reserialized graph (no com.microsoft EPContext
             // nodes) when the EP performs no AOT capture. Loading such an artifact rebuilds engines just
             // like the source and adds parse overhead, so refuse to keep it — measured: +146KB of extra
             // Conv/Squeeze nodes and a ~6s cold-load regression versus the source graph.
@@ -117,7 +119,7 @@ public sealed class EpContextCompiler
                     false,
                     null,
                     stopwatch.Elapsed.TotalMilliseconds,
-                    "CompileModel() produced no EP-context nodes (com.microsoft.ep.context / engine_data "
+                    "CompileModel() produced no EP-context nodes (EPContext / ep_cache_context "
                     + $"markers absent) under provider '{selectedLabel}'. The output would not skip engine "
                     + "rebuild on load, so it was discarded.",
                     selectedLabel);
@@ -133,29 +135,34 @@ public sealed class EpContextCompiler
         }
     }
 
-    private static SessionOptions CreateCompileSessionOptions(out ExecutionProviderKind selectedProvider)
+    private static SessionOptions CreateCompileSessionOptions(
+        IReadOnlyDictionary<string, string>? modelTrtOptions,
+        out ExecutionProviderKind selectedProvider)
     {
         var options = new SessionOptions
         {
             GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
         };
-        // Match production TRT RTX options so the compiled engines match the inference path.
-        selectedProvider = OnnxExecutionSessionFactory.AppendTensorRtRtxOrFallbackProvider(options);
+        // Match production TRT RTX options (including the model's optimization profile) so the
+        // compiled engines match the inference path.
+        selectedProvider = OnnxExecutionSessionFactory.AppendTensorRtRtxOrFallbackProvider(options, modelTrtOptions);
         return options;
     }
 
     /// <summary>
-    /// Cheap marker scan: ONNX protobuf stores op-type and attribute names as plain ASCII, and a
-    /// real EP-context graph carries <c>com.microsoft.ep.context</c> nodes with an
-    /// <c>engine_data</c> attribute. Reads in chunks so multi-hundred-MB models never land in RAM.
+    /// Cheap marker scan: ONNX protobuf stores op-type and attribute names as plain ASCII. A real
+    /// EP-context graph carries <c>EPContext</c> nodes (domain <c>com.microsoft</c>) whose engine
+    /// payload or engine-file path lives in the <c>ep_cache_context</c> attribute; both must be
+    /// present. Reads in chunks so multi-hundred-MB models never land in RAM.
     /// </summary>
-    private static bool TryContainsEpContextNodes(string modelPath)
+    internal static bool TryContainsEpContextNodes(string modelPath)
     {
         byte[][] needles =
         [
-            "com.microsoft.ep.context"u8.ToArray(),
-            "engine_data"u8.ToArray(),
+            "EPContext"u8.ToArray(),
+            "ep_cache_context"u8.ToArray(),
         ];
+        var found = new bool[needles.Length];
         const int chunkSize = 8 * 1024 * 1024;
         const int overlap = 32;
 
@@ -168,12 +175,14 @@ public sealed class EpContextCompiler
             while ((read = stream.Read(buffer, carry, chunkSize)) > 0)
             {
                 int span = carry + read;
-                foreach (byte[] needle in needles)
+                for (int i = 0; i < needles.Length; i++)
                 {
-                    if (IndexOf(buffer.AsSpan(0, span), needle) >= 0)
-                    {
-                        return true;
-                    }
+                    found[i] |= buffer.AsSpan(0, span).IndexOf(needles[i]) >= 0;
+                }
+
+                if (Array.TrueForAll(found, static hit => hit))
+                {
+                    return true;
                 }
 
                 carry = Math.Min(overlap, span);
@@ -187,24 +196,6 @@ public sealed class EpContextCompiler
             // Cannot verify; treat as missing so we never keep an unproven artifact.
             return false;
         }
-    }
-
-    private static int IndexOf(ReadOnlySpan<byte> haystack, ReadOnlySpan<byte> needle)
-    {
-        if (needle.Length == 0 || haystack.Length < needle.Length)
-        {
-            return -1;
-        }
-
-        for (int i = 0; i <= haystack.Length - needle.Length; i++)
-        {
-            if (haystack.Slice(i, needle.Length).SequenceEqual(needle))
-            {
-                return i;
-            }
-        }
-
-        return -1;
     }
 
     private static void TryDeletePartial(string epContextPath)

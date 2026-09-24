@@ -61,11 +61,11 @@ public sealed class TensorRtRtxRuntimeReadinessService(ITensorRtRtxReadinessProb
 
         string? installHint = report.Route switch
         {
-            // Missing CUDA 12 runtime is not fixed by reinstalling the EP bundle.
+            // The cu13 bundle ships its CUDA runtime (static on Windows, libcudart.so.13 on Linux),
+            // so a missing runtime means a damaged bundle rather than a missing system toolkit.
             TensorRtRtxPlatformRoute.PluginEpAbi when report.Blocker is TensorRtRtxReadinessBlocker.CudaRuntimeMissing =>
-                "Install CUDA Toolkit 12.x runtime (cudart64_12.dll), run `pip install nvidia-cuda-runtime-cu12`, "
-                + $"or set {TensorRtRtxProviderConstants.CudaRuntimeBinDirectoryEnvironmentVariable} to that bin directory. "
-                + "A CUDA 13-only install is not sufficient for the cu12 TRT RTX EP bundle.",
+                "Reinstall the TensorRT RTX EP bundle from Model Manager (it ships the CUDA 13 runtime), "
+                + $"or set {TensorRtRtxProviderConstants.CudaRuntimeBinDirectoryEnvironmentVariable} to a directory containing a CUDA 13 runtime.",
             TensorRtRtxPlatformRoute.PluginEpAbi when canInstall =>
                 OperatingSystem.IsLinux()
                     ? TensorRtRtxProviderConstants.LinuxInstallHint
@@ -109,7 +109,7 @@ public sealed class TensorRtRtxRuntimeReadinessService(ITensorRtRtxReadinessProb
             TensorRtRtxReadinessBlocker.GpuVendorMismatch => "No NVIDIA GPU",
             TensorRtRtxReadinessBlocker.OrtProviderUnavailable => "ORT EP missing",
             TensorRtRtxReadinessBlocker.EpRegisterFailed => "Registration failed",
-            TensorRtRtxReadinessBlocker.CudaRuntimeMissing => "CUDA 12 runtime missing",
+            TensorRtRtxReadinessBlocker.CudaRuntimeMissing => "CUDA runtime missing",
             _ => "Blocked"
         };
 }

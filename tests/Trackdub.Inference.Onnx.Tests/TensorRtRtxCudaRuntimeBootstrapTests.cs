@@ -16,11 +16,11 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
     {
         string directory = Path.Combine(Path.GetTempPath(), $"trackdub-cuda-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
-        string? previous = Environment.GetEnvironmentVariable("TRACKDUB_CUDA12_BIN_DIR");
+        string? previous = Environment.GetEnvironmentVariable("TRACKDUB_CUDA_BIN_DIR");
 
         try
         {
-            Environment.SetEnvironmentVariable("TRACKDUB_CUDA12_BIN_DIR", directory);
+            Environment.SetEnvironmentVariable("TRACKDUB_CUDA_BIN_DIR", directory);
             Assert.Contains(
                 directory,
                 TensorRtRtxCudaRuntimeBootstrap.DiscoverSearchDirectories(),
@@ -28,7 +28,7 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("TRACKDUB_CUDA12_BIN_DIR", previous);
+            Environment.SetEnvironmentVariable("TRACKDUB_CUDA_BIN_DIR", previous);
             if (Directory.Exists(directory))
             {
                 Directory.Delete(directory, recursive: true);
@@ -37,7 +37,43 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
     }
 
     [Fact]
-    public void TryEnsureLoadedResult_without_cuda12_in_search_path_reports_missing_runtime()
+    public void DiscoverSearchDirectories_prefers_plugin_directory_first()
+    {
+        string pluginDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-trt-plugin-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(pluginDirectory);
+
+        try
+        {
+            Assert.Equal(
+                pluginDirectory,
+                TensorRtRtxCudaRuntimeBootstrap.DiscoverSearchDirectories(pluginDirectory).First(),
+                StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(pluginDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TryEnsureLoadedResult_on_windows_needs_no_cuda_runtime_library()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // The Windows cu13 TensorRT-RTX 1.6 binaries import no cudart DLL (static CUDA runtime).
+        Assert.Null(TensorRtRtxCudaRuntimeBootstrap.RequiredCudaRuntimeFileName);
+        TensorRtRtxCudaRuntimeEnsureResult result = TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoadedResult();
+
+        Assert.True(result.Succeeded);
+        Assert.Null(result.LoadedPath);
+        Assert.Contains("statically linked", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryEnsureLoadedResult_without_cuda13_in_search_path_reports_missing_runtime()
     {
         string emptyDir = Path.Combine(Path.GetTempPath(), $"trackdub-cuda-empty-{Guid.NewGuid():N}");
         Directory.CreateDirectory(emptyDir);
@@ -45,12 +81,15 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
         try
         {
             TensorRtRtxCudaRuntimeEnsureResult result =
-                TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoadedResult([emptyDir]);
+                TensorRtRtxCudaRuntimeBootstrap.TryEnsureLoadedResult(
+                    [emptyDir],
+                    TensorRtRtxCudaRuntimeBootstrap.LinuxCudaRuntimeFileName);
 
             Assert.False(result.Succeeded);
             Assert.Null(result.LoadedPath);
-            Assert.Contains("CUDA 12 runtime", result.Detail, StringComparison.Ordinal);
-            Assert.Contains("cu12", result.Detail, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("CUDA 13 runtime", result.Detail, StringComparison.Ordinal);
+            Assert.Contains("cu13", result.Detail, StringComparison.Ordinal);
+            Assert.Contains("TRACKDUB_CUDA_BIN_DIR", result.Detail, StringComparison.Ordinal);
         }
         finally
         {

@@ -155,6 +155,7 @@ credentials.xml
 # --- Reports and benchmark output ---
 reports/**/*.json
 benchmark-report*.json
+BenchmarkDotNet.Artifacts/
 
 # --- Design workspace (local HTML/PNG prototypes; not product docs) ---
 /docs/design/

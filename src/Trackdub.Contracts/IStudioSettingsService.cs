@@ -285,6 +285,9 @@ public static class TranslationModelOverrideSettings
     public static bool IsGeminiTranslationAlias(string? modelAlias) =>
         string.Equals(modelAlias, GeminiTranslationCloudAlias, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(modelAlias, GeminiTranslationKey, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsCloudAlias(string? modelAlias) =>
+        IsDeepLModelAlias(modelAlias) || IsOpenAiGptAlias(modelAlias) || IsGeminiTranslationAlias(modelAlias);
 }
 
 public enum TtsModelOverride

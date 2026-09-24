@@ -5,6 +5,7 @@
     <Project Path="src/Trackdub.Analyzers/Trackdub.Analyzers.csproj" />
     <Project Path="src/Trackdub.Application/Trackdub.Application.csproj" />
     <Project Path="src/Trackdub.Benchmarks/Trackdub.Benchmarks.csproj" />
+    <Project Path="src/Trackdub.Benchmarks.Micro/Trackdub.Benchmarks.Micro.csproj" />
     <Project Path="src/Trackdub.Benchmarks.DevHost/Trackdub.Benchmarks.DevHost.csproj" />
     <Project Path="src/Trackdub.Cli/Trackdub.Cli.csproj" />
     <Project Path="src/Trackdub.Composition/Trackdub.Composition.csproj" />

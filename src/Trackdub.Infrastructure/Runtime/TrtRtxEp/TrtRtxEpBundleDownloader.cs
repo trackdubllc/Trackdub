@@ -28,9 +28,10 @@ public sealed class TrtRtxEpBundleDownloader(
                 $"TensorRT RTX EP manifest does not contain a package entry for '{runtimeIdentifier}'.");
         }
 
+        string version = manifest.ResolveVersion(runtimeIdentifier);
         string installDirectory = TrtRtxEpBundlePathResolver.GetInstallDirectory(
             userDataRoot,
-            manifest.Version,
+            version,
             manifest.CudaVariant,
             runtimeIdentifier);
 
@@ -41,9 +42,9 @@ public sealed class TrtRtxEpBundleDownloader(
         }
 
         progress?.Report(
-            $"Downloading TensorRT RTX EP ABI v{manifest.Version} {manifest.CudaVariant} ({runtimeIdentifier})...");
+            $"Downloading TensorRT RTX EP ABI v{version} {manifest.CudaVariant} ({runtimeIdentifier})...");
         logger.LogInformation(
-            $"Downloading TensorRT RTX EP ABI bundle v{manifest.Version} {manifest.CudaVariant} for {runtimeIdentifier}.");
+            $"Downloading TensorRT RTX EP ABI bundle v{version} {manifest.CudaVariant} for {runtimeIdentifier}.");
 
         string parentDirectory = Path.GetDirectoryName(installDirectory)
             ?? throw new InvalidOperationException("Install directory path has no parent.");
@@ -156,7 +157,7 @@ public sealed class TrtRtxEpBundleDownloader(
         switch (archiveKind.ToLowerInvariant())
         {
             case "zip":
-                await Task.Run(() => ZipFile.ExtractToDirectory(archivePath, destinationDirectory, overwriteFiles: true), cancellationToken)
+                await Task.Run(() => ExtractZipPreservingSymlinks(archivePath, destinationDirectory), cancellationToken)
                     .ConfigureAwait(false);
                 return;
             case "tar.gz":
@@ -194,10 +195,107 @@ public sealed class TrtRtxEpBundleDownloader(
                 }
 
                 string destinationPath = Path.Combine(destinationRoot, Path.GetFileName(sourcePath));
+                string? linkTarget = OperatingSystem.IsWindows() ? null : new FileInfo(sourcePath).LinkTarget;
+                if (linkTarget is not null && IsFlatFileName(linkTarget))
+                {
+                    // Keep SONAME chains as links; copying would duplicate the 200+ MB runtime per alias.
+                    DeleteFileIfExists(destinationPath);
+                    File.CreateSymbolicLink(destinationPath, linkTarget);
+                    continue;
+                }
+
                 File.Copy(sourcePath, destinationPath, overwrite: true);
             }
         }
     }
+
+    // Unix-built zips (the linux cu13 EP ABI asset) store SONAME symlinks as tiny entries whose
+    // content is the link target. ZipFile.ExtractToDirectory writes those as text files, which
+    // dlopen rejects, so symlink entries are recreated as links (Unix) or resolved copies (Windows).
+    private const int UnixFileTypeMask = 0xF000;
+    private const int UnixSymlinkFileType = 0xA000;
+    private const int MaxSymlinkDepth = 8;
+
+    internal static void ExtractZipPreservingSymlinks(string archivePath, string destinationDirectory)
+    {
+        StringComparison pathComparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        string root = Path.GetFullPath(destinationDirectory);
+        string rootPrefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        var links = new Dictionary<string, string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+        using (ZipArchive archive = ZipFile.OpenRead(archivePath))
+        {
+            foreach (ZipArchiveEntry entry in archive.Entries)
+            {
+                string destinationPath = Path.GetFullPath(Path.Combine(root, entry.FullName));
+                if (!destinationPath.StartsWith(rootPrefix, pathComparison))
+                {
+                    throw new InvalidOperationException(
+                        $"TensorRT RTX EP archive entry '{entry.FullName}' resolves outside the extract directory.");
+                }
+
+                if (string.IsNullOrEmpty(entry.Name))
+                {
+                    Directory.CreateDirectory(destinationPath);
+                    continue;
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                if (((entry.ExternalAttributes >> 16) & UnixFileTypeMask) == UnixSymlinkFileType)
+                {
+                    using StreamReader reader = new(entry.Open());
+                    string target = reader.ReadToEnd().Trim();
+                    if (!IsFlatFileName(target))
+                    {
+                        throw new InvalidOperationException(
+                            $"TensorRT RTX EP archive symlink '{entry.FullName}' has unsupported target '{target}'.");
+                    }
+
+                    links[destinationPath] = target;
+                    continue;
+                }
+
+                entry.ExtractToFile(destinationPath, overwrite: true);
+            }
+        }
+
+        foreach ((string linkPath, string target) in links)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                File.CreateSymbolicLink(linkPath, target);
+                continue;
+            }
+
+            string resolved = Path.Combine(Path.GetDirectoryName(linkPath)!, target);
+            for (int depth = 0; links.TryGetValue(resolved, out string? next); depth++)
+            {
+                if (depth >= MaxSymlinkDepth)
+                {
+                    throw new InvalidOperationException(
+                        $"TensorRT RTX EP archive symlink chain at '{linkPath}' is too deep or cyclic.");
+                }
+
+                resolved = Path.Combine(Path.GetDirectoryName(resolved)!, next);
+            }
+
+            if (!File.Exists(resolved))
+            {
+                throw new InvalidOperationException(
+                    $"TensorRT RTX EP archive symlink '{linkPath}' points at missing file '{target}'.");
+            }
+
+            File.Copy(resolved, linkPath, overwrite: true);
+        }
+    }
+
+    private static bool IsFlatFileName(string value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value is not "." and not ".." &&
+        value.IndexOfAny(['/', '\\']) < 0;
 
     private static void ValidateRequiredFiles(string installDirectory, IReadOnlyList<string> requiredFileNames)
     {

@@ -37,12 +37,30 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     private const int StreamingFeedFeatureFrames =
         (StreamingChunkModelFrames + StreamingRightContextModelFrames) * StreamingFeatureSubsampling;
 
+    // Streaming export inputs: chunk is always fed padded to the full feed window; the speaker cache
+    // and FIFO grow from empty to their caps. A profile that names no real input leaves TRT-RTX with
+    // a fully dynamic range, where /pre_encode/Reshape (kMIN) and the attention broadcast (kMAX) have
+    // no consistent solution and the EP-context compile emits no engine.
+    private static readonly string StreamingChunkShape =
+        $"chunk:1x{StreamingFeedFeatureFrames}x{SortFormerFeatureExtractor.MelBins}";
+
+    // Shared with OnnxExecutionProviderSmokeTester and EP-context AOT so smoke, AOT and stage runs
+    // build the same engine profile and hit the same pool key.
     internal static readonly IReadOnlyDictionary<string, string> TrtOptions = new Dictionary<string, string>
     {
-        ["trt_profile_min_shapes"] = "waveform:1x16000",
-        ["trt_profile_max_shapes"] = "waveform:1x57600000",
-        ["trt_profile_opt_shapes"] = "waveform:1x160000"
+        ["trt_profile_min_shapes"] =
+            $"{StreamingChunkShape},spkcache:1x0x{StreamingEmbeddingDimension},fifo:1x0x{StreamingEmbeddingDimension}",
+        ["trt_profile_opt_shapes"] =
+            $"{StreamingChunkShape},spkcache:1x{StreamingSpeakerCacheFrames}x{StreamingEmbeddingDimension},fifo:1x{StreamingFifoFrames}x{StreamingEmbeddingDimension}",
+        ["trt_profile_max_shapes"] =
+            $"{StreamingChunkShape},spkcache:1x{StreamingSpeakerCacheFrames}x{StreamingEmbeddingDimension},fifo:1x{StreamingFifoFrames}x{StreamingEmbeddingDimension}",
     };
+
+    internal static bool IsStreamingExportInputSet(IEnumerable<string> inputNames)
+    {
+        var names = inputNames as IReadOnlySet<string> ?? inputNames.ToHashSet(StringComparer.Ordinal);
+        return names.Contains("chunk") && names.Contains("spkcache") && names.Contains("fifo");
+    }
 
     private static readonly SortFormerFeatureExtractor FeatureExtractor = new();
     private readonly IRuntimePlanner runtimePlanner = runtimePlanner ?? throw new ArgumentNullException(nameof(runtimePlanner));

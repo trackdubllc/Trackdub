@@ -227,7 +227,10 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             if (stage is not null && requestedStage?.Status != BenchmarkEvidenceStatus.Completed)
             {
                 status = requestedStage?.Status ?? BenchmarkEvidenceStatus.Skipped;
-                reason = requestedStage?.Reason ?? "Requested stage produced no successful outcome.";
+                reason = requestedStage?.Reason
+                    ?? (result.PreFlightFailures is { Count: > 0 }
+                        ? "Preflight failed: " + string.Join("; ", result.PreFlightFailures)
+                        : "Requested stage produced no successful outcome.");
             }
             else if (result.OverallStatus != DubbingRunStatus.Succeeded)
             {

@@ -15,7 +15,8 @@ public sealed class GeminiCloudTranslationEngine(
     public const string ProviderName = "gemini";
     public const string EngineFamilyName = "gemini-translation-cloud";
 
-    private const string Model = "gemini-1.5-flash";
+    public const string DefaultModel = "gemini-2.5-flash";
+    public const string QualityModel = "gemini-2.5-pro";
     private const string EndpointBase = "https://generativelanguage.googleapis.com/v1beta/models";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -41,10 +42,22 @@ public sealed class GeminiCloudTranslationEngine(
         }
 
         string apiKey = await ResolveApiKeyAsync(cancellationToken).ConfigureAwait(false);
+        string model = ResolveModel(request);
 
-        string systemInstruction =
-            $"You are a translation engine. Translate the JSON array from {request.SourceLanguage} to {request.TargetLanguage}. " +
-            "Return ONLY a valid JSON array of translated strings in the same order, with exactly the same number of elements. No explanation, no markdown.";
+        var promptBuilder = new StringBuilder();
+        promptBuilder.Append(
+            $"You are an expert dubbing translation engine. Translate the dialogue from {request.SourceLanguage} to {request.TargetLanguage} for voice dubbing. " +
+            "Maintain natural conversational flow, emotional resonance, and approximate syllabic pacing where possible. " +
+            "Return ONLY a valid JSON array of translated strings in the same order, with exactly the same number of elements. Do not include markdown formatting or commentary.");
+
+        if (request.GlossaryHints is { Count: > 0 })
+        {
+            promptBuilder.Append(" Adhere strictly to the following glossary terms: ");
+            promptBuilder.Append(string.Join(", ", request.GlossaryHints.Select(g => $"{g.SourceTerm} -> {g.TargetTerm}")));
+            promptBuilder.Append('.');
+        }
+
+        string systemInstruction = promptBuilder.ToString();
 
         string userContent = JsonSerializer.Serialize(
             request.Segments.Select(s => s.Text).ToArray(),
@@ -55,7 +68,7 @@ public sealed class GeminiCloudTranslationEngine(
             Contents: [new GeminiContent([new GeminiPart(userContent)])],
             GenerationConfig: new GeminiGenerationConfig("application/json"));
 
-        string endpoint = $"{EndpointBase}/{Model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
+        string endpoint = $"{EndpointBase}/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Content = new StringContent(
@@ -93,13 +106,14 @@ public sealed class GeminiCloudTranslationEngine(
 
         LastExecutionMetadata = new TranslationExecutionMetadata(
             ProviderName,
-            ModelId: Model,
+            ModelId: model,
             ModelAlias: TranslationModelOverrideSettings.GeminiTranslationCloudAlias,
             SelectedExecutionProvider: "cloud",
             TranslationRoutingKind.Direct);
         LastExecutionSummary = new StageRuntimeExecutionSummary(
             RequestedProvider: "cloud",
             SelectedProvider: "cloud",
+            ModelId: model,
             ModelAlias: TranslationModelOverrideSettings.GeminiTranslationCloudAlias,
             BootstrapDetail: "Google Gemini Cloud API");
 
@@ -117,6 +131,24 @@ public sealed class GeminiCloudTranslationEngine(
         return results;
     }
 
+    private static string ResolveModel(TranslationRequest request)
+    {
+        string? envModel = Environment.GetEnvironmentVariable("TRACKDUB_GEMINI_TRANSLATION_MODEL");
+        if (!string.IsNullOrWhiteSpace(envModel))
+        {
+            return envModel.Trim();
+        }
+
+        if (string.Equals(request.PreferredModelVariantAlias, "pro", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(request.PreferredModelAlias, QualityModel, StringComparison.OrdinalIgnoreCase) ||
+            request.PreferredModelAlias?.Contains("pro", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return QualityModel;
+        }
+
+        return DefaultModel;
+    }
+
     private async Task<string> ResolveApiKeyAsync(CancellationToken cancellationToken)
     {
         string? apiKey = await apiKeyProvider.GetApiKeyAsync(ProviderKey, cancellationToken).ConfigureAwait(false);
@@ -129,11 +161,32 @@ public sealed class GeminiCloudTranslationEngine(
         return apiKey.Trim();
     }
 
+    private static string StripMarkdownFences(string text)
+    {
+        string trimmed = text.Trim();
+        if (trimmed.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed[7..];
+        }
+        else if (trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[3..];
+        }
+
+        if (trimmed.EndsWith("```", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[..^3];
+        }
+
+        return trimmed.Trim();
+    }
+
     private static string[]? TryParseTranslationArray(string content)
     {
+        string stripped = StripMarkdownFences(content);
         try
         {
-            using JsonDocument doc = JsonDocument.Parse(content);
+            using JsonDocument doc = JsonDocument.Parse(stripped);
             if (doc.RootElement.ValueKind == JsonValueKind.Array)
             {
                 return doc.RootElement.EnumerateArray()

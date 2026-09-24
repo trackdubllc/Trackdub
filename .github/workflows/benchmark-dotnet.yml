@@ -1,0 +1,176 @@
+name: BenchmarkDotNet
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Benchmark mode
+        required: true
+        default: cpu
+        type: choice
+        options:
+          - cpu
+          - baseline
+          - onnx
+      baseline_commit:
+        description: Saved commit for mode=baseline
+        required: false
+        type: string
+      onnx_model_path:
+        description: Cached single-input ONNX model for mode=onnx
+        required: false
+        type: string
+      onnx_input_name:
+        description: Optional ONNX input name for mode=onnx
+        required: false
+        type: string
+      onnx_input_shape:
+        description: ONNX input shape, for example 1x128x500
+        required: false
+        type: string
+
+concurrency:
+  group: benchmark-dotnet-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-nightly:
+    name: CPU microbenchmarks
+    if: (github.event_name == 'schedule' && vars.TRACKDUB_BENCHMARKDOTNET == 'true') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'cpu')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore Dependencies
+        run: dotnet restore Trackdub.slnx -m:1
+
+      - name: Build Microbenchmarks
+        run: dotnet build src/Trackdub.Benchmarks.Micro/Trackdub.Benchmarks.Micro.csproj -c Release --no-restore -m:1
+
+      - name: Run CPU Microbenchmarks
+        run: >-
+          dotnet run --project src/Trackdub.Benchmarks.Micro/Trackdub.Benchmarks.Micro.csproj
+          -c Release --no-build --
+          --filter "Trackdub.Benchmarks.Micro.AudioResamplingBenchmarks.*" "Trackdub.Benchmarks.Micro.DeepFilterNetSignalBenchmarks.*" "Trackdub.Benchmarks.Micro.LatentSyncTensorBenchmarks.*"
+          --job Short
+          --exporters fulljson
+          --artifacts "$RUNNER_TEMP/benchmarkdotnet-cpu"
+
+      - name: Upload CPU Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarkdotnet-cpu
+          path: ${{ runner.temp }}/benchmarkdotnet-cpu
+          if-no-files-found: ignore
+
+  saved-baseline:
+    name: Saved-commit baseline comparison
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'baseline'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+      BDN_BASELINE_COMMIT: ${{ inputs.baseline_commit }}
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Validate Baseline Input
+        run: |
+          if [ -z "$BDN_BASELINE_COMMIT" ]; then
+            echo "baseline_commit is required for mode=baseline." >&2
+            exit 2
+          fi
+
+      - name: Compare Saved Commit
+        run: >-
+          python3 scripts/ci/run_benchmarkdotnet_baseline.py
+          --baseline-commit "$BDN_BASELINE_COMMIT"
+          --filter "Trackdub.Benchmarks.Micro.AudioResamplingBenchmarks.*" "Trackdub.Benchmarks.Micro.DeepFilterNetSignalBenchmarks.*" "Trackdub.Benchmarks.Micro.LatentSyncTensorBenchmarks.*"
+          --job Dry
+          --threshold-percent 10
+          --output-dir "$RUNNER_TEMP/benchmarkdotnet-baseline"
+
+      - name: Upload Baseline Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarkdotnet-baseline
+          path: ${{ runner.temp }}/benchmarkdotnet-baseline
+          if-no-files-found: ignore
+
+  onnx-opt-in:
+    name: Opt-in real-model ONNX benchmark
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'onnx'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+      TRACKDUB_BDN_ONNX_MODEL: ${{ inputs.onnx_model_path }}
+      TRACKDUB_BDN_ONNX_INPUT_NAME: ${{ inputs.onnx_input_name }}
+      TRACKDUB_BDN_ONNX_INPUT_SHAPE: ${{ inputs.onnx_input_shape }}
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore Dependencies
+        run: dotnet restore Trackdub.slnx -m:1
+
+      - name: Build Microbenchmarks
+        run: dotnet build src/Trackdub.Benchmarks.Micro/Trackdub.Benchmarks.Micro.csproj -c Release --no-restore -m:1
+
+      - name: Run Real-model ONNX Benchmark
+        run: >-
+          dotnet run --project src/Trackdub.Benchmarks.Micro/Trackdub.Benchmarks.Micro.csproj
+          -c Release --no-build --
+          --filter "Trackdub.Benchmarks.Micro.OnnxModelBenchmarks.*"
+          --job Short
+          --exporters fulljson
+          --artifacts "$RUNNER_TEMP/benchmarkdotnet-onnx"
+
+      - name: Upload ONNX Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarkdotnet-onnx
+          path: ${{ runner.temp }}/benchmarkdotnet-onnx
+          if-no-files-found: ignore
