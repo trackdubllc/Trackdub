@@ -220,7 +220,18 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
                 keepModelFrameCount,
                 StreamingEmbeddingDimension);
 
-            state.Update(chunkEmbeddings, keepModelFrameCount, validModelFrameCount);
+            float[] cacheAndFifoPredictions = ExtractTensorFrameSlice(
+                rawPredictions,
+                0,
+                predictionStartFrame,
+                speakerCount);
+            state.Update(
+                cacheAndFifoPredictions,
+                chunkPredictions,
+                speakerCount,
+                chunkEmbeddings,
+                keepModelFrameCount,
+                validModelFrameCount);
         }
 
         int frameCount = predictionData.Count / speakerCount;
@@ -496,24 +507,6 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
         return sliced;
     }
 
-    private static float[] AppendAndKeepLastFrames(
-        float[] existing,
-        int existingFrameCount,
-        float[] appended,
-        int appendedFrameCount,
-        int featureCount,
-        int maxFrameCount)
-    {
-        float[] combined = ConcatenateFrames(existing, existingFrameCount, appended, appendedFrameCount, featureCount);
-        int combinedFrameCount = existingFrameCount + appendedFrameCount;
-        if (combinedFrameCount <= maxFrameCount)
-        {
-            return combined;
-        }
-
-        return SliceFrames(combined, combinedFrameCount - maxFrameCount, maxFrameCount, featureCount);
-    }
-
     private static Tensor<float> ResolveProbabilityTensor(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs)
     {
         foreach (DisposableNamedOnnxValue output in outputs)
@@ -743,8 +736,15 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
         }
     }
 
+    // Mirrors NeMo SortformerModules.streaming_update (synchronous path): FIFO frames pop into the
+    // speaker cache, and an overfull cache is compressed by prediction scores rather than truncated.
     private sealed class SortFormerStreamingState
     {
+        private readonly float[] meanSilenceEmbedding = new float[StreamingEmbeddingDimension];
+        private int silenceFrameCount;
+        private float[] speakerCachePredictions = [];
+        private bool speakerCacheCompressed;
+
         public float[] SpeakerCacheEmbeddings { get; private set; } = [];
 
         public int SpeakerCacheFrameCount { get; private set; }
@@ -754,6 +754,9 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
         public int FifoFrameCount { get; private set; }
 
         public void Update(
+            float[] cacheAndFifoPredictions,
+            float[] chunkPredictions,
+            int speakerCount,
             float[] chunkEmbeddings,
             int chunkEmbeddingFrameCount,
             int validChunkFrameCount)
@@ -774,35 +777,69 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
                 return;
             }
 
+            // FIFO predictions come from this run, so they reflect the current cache context.
+            float[] combinedFifoPredictions = ConcatenateFrames(
+                SliceFrames(cacheAndFifoPredictions, SpeakerCacheFrameCount, previousFifoFrameCount, speakerCount),
+                previousFifoFrameCount,
+                chunkPredictions,
+                chunkEmbeddingFrameCount,
+                speakerCount);
+
             int popOutFrameCount = Math.Max(
                 StreamingChunkModelFrames,
                 validChunkFrameCount - StreamingFifoFrames + previousFifoFrameCount);
             popOutFrameCount = Math.Min(popOutFrameCount, combinedFifoFrameCount);
 
-            float[] popOutEmbeddings = SliceFrames(
-                combinedFifoEmbeddings,
-                0,
+            float[] popOutEmbeddings = SliceFrames(combinedFifoEmbeddings, 0, popOutFrameCount, StreamingEmbeddingDimension);
+            float[] popOutPredictions = SliceFrames(combinedFifoPredictions, 0, popOutFrameCount, speakerCount);
+            silenceFrameCount = SortFormerSpeakerCacheCompressor.UpdateSilenceProfile(
+                meanSilenceEmbedding,
+                silenceFrameCount,
+                popOutEmbeddings,
+                popOutPredictions,
                 popOutFrameCount,
+                speakerCount,
                 StreamingEmbeddingDimension);
 
-            SpeakerCacheEmbeddings = AppendAndKeepLastFrames(
+            int remainingFifoFrameCount = combinedFifoFrameCount - popOutFrameCount;
+            FifoEmbeddings = SliceFrames(combinedFifoEmbeddings, popOutFrameCount, remainingFifoFrameCount, StreamingEmbeddingDimension);
+            FifoFrameCount = remainingFifoFrameCount;
+
+            // Before the first compression, cache predictions are refreshed from this run.
+            float[] basePredictions = speakerCacheCompressed
+                ? speakerCachePredictions
+                : SliceFrames(cacheAndFifoPredictions, 0, SpeakerCacheFrameCount, speakerCount);
+            int cacheFrameCount = SpeakerCacheFrameCount + popOutFrameCount;
+            float[] cacheEmbeddings = ConcatenateFrames(
                 SpeakerCacheEmbeddings,
                 SpeakerCacheFrameCount,
                 popOutEmbeddings,
                 popOutFrameCount,
-                StreamingEmbeddingDimension,
-                StreamingSpeakerCacheFrames);
-            SpeakerCacheFrameCount = Math.Min(
-                StreamingSpeakerCacheFrames,
-                SpeakerCacheFrameCount + popOutFrameCount);
-
-            int remainingFifoFrameCount = combinedFifoFrameCount - popOutFrameCount;
-            FifoEmbeddings = SliceFrames(
-                combinedFifoEmbeddings,
-                popOutFrameCount,
-                remainingFifoFrameCount,
                 StreamingEmbeddingDimension);
-            FifoFrameCount = remainingFifoFrameCount;
+            float[] cachePredictions = ConcatenateFrames(
+                basePredictions,
+                SpeakerCacheFrameCount,
+                popOutPredictions,
+                popOutFrameCount,
+                speakerCount);
+
+            if (cacheFrameCount > StreamingSpeakerCacheFrames)
+            {
+                (cacheEmbeddings, cachePredictions) = SortFormerSpeakerCacheCompressor.Compress(
+                    cacheEmbeddings,
+                    cachePredictions,
+                    cacheFrameCount,
+                    speakerCount,
+                    StreamingEmbeddingDimension,
+                    StreamingSpeakerCacheFrames,
+                    meanSilenceEmbedding);
+                cacheFrameCount = StreamingSpeakerCacheFrames;
+                speakerCacheCompressed = true;
+            }
+
+            SpeakerCacheEmbeddings = cacheEmbeddings;
+            SpeakerCacheFrameCount = cacheFrameCount;
+            speakerCachePredictions = cachePredictions;
         }
     }
 
