@@ -8,6 +8,43 @@ using Trackdub.TestDoubles;
 namespace Trackdub.Inference.Tests;
 
 /// <summary>
+/// Skips unless the local TRT-RTX staging directory for the model size exists, so the
+/// hardware-validation smokes below only run on a machine that produced it via
+/// <c>tools/olive/Validate-WhisperOnnxTrtRtx.ps1</c> and never fail in CI.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class RequiresTrtRtxStagingFactAttribute : FactAttribute
+{
+    public RequiresTrtRtxStagingFactAttribute(string modelSize)
+    {
+        // TryFindRepoRoot rather than the throwing FindRepoRoot: an exception escaping the
+        // constructor during xunit v2 discovery can cost the whole assembly's test run, while
+        // a null root here is just another Skip reason.
+        string? repoRoot = TestRepoRootResolver.TryFindRepoRoot();
+        if (repoRoot is null)
+        {
+            Skip = "Unable to locate Trackdub.slnx from the test runner base directory; skipping TRT-RTX staging smoke.";
+            return;
+        }
+
+        // TrimStart keeps rooted segments from silently dropping the repo root
+        // (Path.Combine argument-drop guard); segments here are literals or enum-derived.
+        string stagingDirectory = Path.Combine(
+            repoRoot,
+            NormalizeRelativeSegment("build"),
+            NormalizeRelativeSegment($"whisper-{modelSize}-onnx-trtrtx-validated"));
+        if (!Directory.Exists(stagingDirectory))
+        {
+            Skip = $"TRT-RTX staging directory not found: {stagingDirectory} " +
+                   $"(run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize {modelSize}).";
+        }
+    }
+
+    private static string NormalizeRelativeSegment(string segment) =>
+        segment.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+}
+
+/// <summary>
 /// Hardware validation tests for TRT-RTX optimization of whisper-onnx models.
 ///
 /// Prerequisites before removing [Fact(Skip = ...)] from any test here:
@@ -25,31 +62,31 @@ namespace Trackdub.Inference.Tests;
 /// </summary>
 public sealed class WhisperOnnxTrtRtxValidationTests
 {
-    [Fact]
+    [RequiresTrtRtxStagingFact("tiny")]
     public async Task WhisperOnnxTrtRtx_TinyModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("tiny", "onnx-community/whisper-tiny");
     }
 
-    [Fact]
+    [RequiresTrtRtxStagingFact("base")]
     public async Task WhisperOnnxTrtRtx_BaseModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("base", "onnx-community/whisper-base");
     }
 
-    [Fact]
+    [RequiresTrtRtxStagingFact("small")]
     public async Task WhisperOnnxTrtRtx_SmallModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("small", "onnx-community/whisper-small");
     }
 
-    [Fact]
+    [RequiresTrtRtxStagingFact("medium")]
     public async Task WhisperOnnxTrtRtx_MediumModel_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("medium", "Xenova/whisper-medium");
     }
 
-    [Fact]
+    [RequiresTrtRtxStagingFact("large-v3")]
     public async Task WhisperOnnxTrtRtx_LargeV3Model_SessionLoadsAndTranscribesSilence()
     {
         await RunTrtRtxSilenceSmokeAsync("large-v3", "Xenova/whisper-large-v3");
@@ -62,11 +99,6 @@ public sealed class WhisperOnnxTrtRtxValidationTests
     private static async Task RunTrtRtxSilenceSmokeAsync(string modelSize, string modelId)
     {
         string stagingDir = Path.Combine(FindRepoRoot(), "build", $"whisper-{modelSize}-onnx-trtrtx-validated");
-
-        Assert.True(
-            Directory.Exists(stagingDir),
-            $"Staging directory not found: {stagingDir}\n" +
-            $"Run: .\\tools\\olive\\Validate-WhisperOnnxTrtRtx.ps1 -ModelSize {modelSize}");
 
         string wavePath = CreateSilenceWaveFile(durationSeconds: 1.0);
         try
@@ -109,7 +141,7 @@ public sealed class WhisperOnnxTrtRtxValidationTests
         }
     }
 
-    private static string FindRepoRoot()
+    internal static string FindRepoRoot()
     {
         DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)

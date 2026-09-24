@@ -5,6 +5,7 @@ using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Onnx.Qwen3Asr;
 using Trackdub.Inference.Onnx.NemotronAsr;
 using Trackdub.Inference.Onnx.ParakeetTdt;
+using Trackdub.Inference.Onnx.Pool;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -124,14 +125,27 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
-        using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreateSingleAsync(modelPath, provider, cancellationToken)
-            .ConfigureAwait(false);
-        EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        // Keyed exactly like SileroVadSpeechRegionDetector, so the session this smoke verifies
+        // is the one the VAD stage leases next instead of being built a second time.
+        try
+        {
+            using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
+                .CreatePooledSingleAsync(SileroVadPoolFamily, modelPath, provider, cancellationToken)
+                .ConfigureAwait(false);
+            EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
-        using var input = CreateVadInputs();
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(input.Values);
+            using var input = CreateVadInputs();
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(input.Values);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Do not leave a session that failed verification for the stage to reuse.
+            await InferenceSessionPool.Shared.EvictModelAsync(SileroVadPoolFamily).ConfigureAwait(false);
+            throw;
+        }
     }
+
+    private const string SileroVadPoolFamily = "silero-vad";
 
     private static async Task SmokeTestWhisperAsync(
         string encoderModelPath,

@@ -146,6 +146,11 @@ public sealed class SpleeterStemSeparationEngine : IStemSeparationEngineAdapter,
                 ChannelCount: 1,
                 Metadata: metadata);
         }
+        catch (OperationCanceledException)
+        {
+            DeleteOutputPaths(request);
+            throw;
+        }
         catch (Exception ex)
         {
             DeleteOutputPaths(request);

@@ -150,7 +150,8 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
 
             var inputTensor = new DenseTensor<float>(windowSamples, [1, OsdWindowSamples]);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = osdLease.Session.RunWithRetry(
-                [NamedOnnxValue.CreateFromTensor("waveform", inputTensor)]);
+                [NamedOnnxValue.CreateFromTensor("waveform", inputTensor)],
+                cancellationToken: cancellationToken);
 
             // segmentation: [1, frames, num_classes]
             Tensor<float> segTensor = outputs.First().AsTensor<float>();
@@ -295,7 +296,8 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
 
                 var inputTensor = new DenseTensor<float>(chunkInput, [1, SepChunkSamples]);
                 using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sepLease.Session.RunWithRetry(
-                    [NamedOnnxValue.CreateFromTensor("mix", inputTensor)]);
+                    [NamedOnnxValue.CreateFromTensor("mix", inputTensor)],
+                cancellationToken: cancellationToken);
 
                 float[] rawS0 = outputs.First(o => string.Equals(o.Name, "source_0", StringComparison.Ordinal))
                     .AsTensor<float>().ToArray();

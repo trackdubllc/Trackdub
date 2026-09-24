@@ -10,6 +10,7 @@ using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Domain.Tts;
+using Trackdub.Inference.Runtime.ModelManifest;
 using Trackdub.Infrastructure.Persistence.Repositories;
 using Trackdub.Infrastructure.Persistence.Sqlite;
 using Trackdub.Infrastructure.Settings;
@@ -154,6 +155,19 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     RequirePreparationSucceeded(
                         preparation, "Prerequisite preparation did not complete successfully.",
                         out reason, out status, out stages);
+
+                    // A stage already run by its prerequisites is timed as an in-place re-run
+                    // (for ASR: re-transcribing existing segments), not as the stage itself.
+                    // No prerequisite regenerates a later stage today, but guard against one
+                    // sneaking the timed stage in (e.g. an opt-in stage running during import).
+                    RunArtifacts prepared = await ReadRunArtifactsAsync(host, projectPath, options, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (prepared.StageRuns.Any(run => run.StageName.Equals(stage, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        reason = $"Prerequisites already ran '{stage}'; the timed run would measure a re-run.";
+                        status = BenchmarkEvidenceStatus.Skipped;
+                        throw new PreparationIncompleteException();
+                    }
                 }
             }
 
@@ -331,6 +345,68 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         }
     }
 
+    // An unknown alias is not an error to the pipeline, which silently plans its default model,
+    // so a typo (or an engine family such as "whisper-onnx") would measure the wrong model.
+    // A resolved alias must also match the selected stage's task: the planner treats a
+    // preferred alias as a preference, not a requirement, so a mismatched-task alias would
+    // let the pipeline plan its default model while the report claims the requested one.
+    private static void ValidateModelAlias(string model, string stage)
+    {
+        if (!BundledModelManifestRegistry.TryLoadDefault(out BundledModelManifestRegistry? registry, out _) ||
+            registry is null)
+        {
+            // Manifest unavailable: the pipeline preflight surfaces model problems later.
+            return;
+        }
+
+        if (!registry.TryResolve(model, out BundledModelManifestResolution? resolution) ||
+            resolution is null)
+        {
+            throw UnknownAliasException(model, registry);
+        }
+
+        string? requiredTask = ManifestTaskFor(RuntimeStageFor(stage));
+        if (requiredTask is not null &&
+            !string.Equals(resolution.Entry.Task, requiredTask, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Model alias '{model}' resolves to a {resolution.Entry.Task} model, which cannot serve the '{stage}' stage (requires {requiredTask}).");
+        }
+    }
+
+    private static ArgumentException UnknownAliasException(string model, BundledModelManifestRegistry registry)
+    {
+        string family = model.Split('-', '_', '@')[0];
+        string[] similar = registry.Entries
+            .SelectMany(static entry => entry.Aliases)
+            .Where(alias => family.Length > 2 && alias.StartsWith(family, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToArray();
+        return new ArgumentException(similar.Length == 0
+            ? $"Unknown model alias '{model}'."
+            : $"Unknown model alias '{model}'. Similar aliases: {string.Join(", ", similar)}.");
+    }
+
+    // Mirrors the stage → manifest task mapping in StageRuntimeRequirementsCatalog
+    // (Trackdub.Inference.Runtime.Planning), which is internal to that assembly.
+    private static string? ManifestTaskFor(RuntimeStage? stage) => stage switch
+    {
+        RuntimeStage.Vad => "vad",
+        RuntimeStage.Asr => "asr",
+        RuntimeStage.Translation => "translation",
+        RuntimeStage.Tts => "tts",
+        RuntimeStage.Diarization => "diarization",
+        RuntimeStage.Separation => "separation",
+        RuntimeStage.SpeechEnhancement => "speech-enhancement",
+        RuntimeStage.LipSync => "forced-alignment",
+        RuntimeStage.TextRefinement => "text-refinement",
+        RuntimeStage.OverlapRescue => "overlap-rescue",
+        RuntimeStage.LipSynthesis => "lip-synthesis",
+        _ => null,
+    };
+
     private static void ValidateOptions(ControlledDubbingBenchmarkOptions options)
     {
         if (!File.Exists(options.FixturePath)) throw new FileNotFoundException("Fixture missing.", options.FixturePath);
@@ -342,8 +418,18 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         if (options.Provider is not null &&
             (ResolveStage(options.Stage) is not string stage || RuntimeStageFor(stage) is null))
             throw new ArgumentException("Provider pin requires a runtime-backed focused stage.");
-        if (options.Model is not null && ResolveStage(options.Stage) is null)
-            throw new ArgumentException("Model selection requires a focused stage.");
+        if (options.Model is not null)
+        {
+            // RuntimeStageFor mirrors the stages whose model preferences the pipeline
+            // consumes (BuildModelPreferences); a focused stage outside that set (for
+            // example audio-preparation, which runs a SpeechEnhancement model no
+            // preference key can pin) would silently run its default model while the
+            // report recorded options.Model as requested.
+            if (ResolveStage(options.Stage) is not string modelStage ||
+                RuntimeStageFor(modelStage) is null)
+                throw new ArgumentException("Model selection requires a runtime-backed focused stage.");
+            ValidateModelAlias(options.Model, modelStage);
+        }
         if (options.ExpectedFixtureSha256 is not null &&
             (options.ExpectedFixtureSha256.Length != 64 ||
              !options.ExpectedFixtureSha256.All(Uri.IsHexDigit)))

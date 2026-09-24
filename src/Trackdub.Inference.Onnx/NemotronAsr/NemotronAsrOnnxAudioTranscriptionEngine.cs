@@ -138,7 +138,8 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
                 targetAudio,
                 region,
                 promptIndex,
-                forcedLanguage);
+                forcedLanguage,
+                cancellationToken);
 
             if (string.IsNullOrWhiteSpace(regionResult.Text))
             {
@@ -166,7 +167,8 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
         IAudioSamples targetAudio,
         SpeechRegion region,
         long promptIndex,
-        string? forcedLanguage)
+        string? forcedLanguage,
+        CancellationToken cancellationToken)
     {
         long startSample = Math.Max(0, (long)Math.Floor(region.StartSeconds * NemotronAsrMelFeatureExtractor.SampleRate));
         long endSample = Math.Min(
@@ -186,7 +188,7 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
         }
 
         var decoder = new NemotronAsrGreedyDecoder(sessionLease, vocab, exportConfig);
-        IReadOnlyList<int> tokens = decoder.Decode(mel, promptIndex);
+        IReadOnlyList<int> tokens = decoder.Decode(mel, promptIndex, cancellationToken);
         string text = decoder.DecodeText(tokens);
 
         return new RegionTranscription(

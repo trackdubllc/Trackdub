@@ -109,7 +109,8 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             float[] audioSamples = DecodeSpeechTokens(
                 generation,
                 sessions.ConditionalDecoder.Session,
-                modelFiles.IsTurbo);
+                modelFiles.IsTurbo,
+                cancellationToken);
             byte[] wavBytes = WaveAudioWriter.EncodeMonoPcm16(audioSamples, SampleRate);
 
             LastExecutionSummary = new StageRuntimeExecutionSummary(
@@ -175,7 +176,8 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
                 embedTokensSession,
                 currentInputIds,
                 embedPositionIds,
-                embedNeedsExaggeration);
+                embedNeedsExaggeration,
+                cancellationToken);
 
             TensorData<float> inputsEmbeds = textEmbeds;
             if (iteration == 0)
@@ -187,7 +189,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
                     referenceAudio,
                     [1, referenceAudio.Length]));
                 using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> speechResults =
-                    speechEncoderSession.RunWithRetry(speechEncoderInputs.Values);
+                    speechEncoderSession.RunWithRetry(speechEncoderInputs.Values, cancellationToken: cancellationToken);
                 DisposableNamedOnnxValue[] outputs = speechResults.ToArray();
                 TensorData<float> condEmbeds = ReadFloatTensor(outputs[0]);
                 Tensor<long> promptTensor = outputs[1].AsTensor<long>();
@@ -235,7 +237,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             }
 
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> languageResults =
-                languageModelSession.RunWithRetry(languageInputs.Values);
+                languageModelSession.RunWithRetry(languageInputs.Values, cancellationToken: cancellationToken);
             DisposableNamedOnnxValue[] languageOutputs = languageResults.ToArray();
             TensorData<float> logits = ReadFloatTensor(languageOutputs[0]);
             long nextToken = SelectNextToken(logits, generatedTokens);
@@ -314,7 +316,8 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         InferenceSession session,
         long[] inputIds,
         long[]? positionIds,
-        bool needsExaggeration)
+        bool needsExaggeration,
+        CancellationToken cancellationToken)
     {
         using var inputs = new NamedOnnxValueSet();
         inputs.Add(NamedOnnxValue.CreateFromTensor(
@@ -336,14 +339,16 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
                 [1]));
         }
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.RunWithRetry(inputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results =
+            session.RunWithRetry(inputs.Values, cancellationToken: cancellationToken);
         return ReadFloatTensor(results.Single());
     }
 
     private static float[] DecodeSpeechTokens(
         ChatterboxGenerationResult generation,
         InferenceSession decoderSession,
-        bool isTurbo)
+        bool isTurbo,
+        CancellationToken cancellationToken)
     {
         long[] speechTokens = generation.GeneratedTokens
             .Skip(1)
@@ -370,7 +375,8 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             generation.SpeakerFeatures,
             generation.SpeakerFeaturesDimensions));
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = decoderSession.RunWithRetry(inputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results =
+            decoderSession.RunWithRetry(inputs.Values, cancellationToken: cancellationToken);
         return ReadFloatTensor(results.Single()).Values;
     }
 
