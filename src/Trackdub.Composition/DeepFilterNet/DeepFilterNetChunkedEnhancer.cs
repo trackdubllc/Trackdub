@@ -13,9 +13,16 @@ internal static class DeepFilterNetChunkedEnhancer
     private static int OverlapSamples => OverlapFrames * DeepFilterNetSignalProcessor.HopSize;
     private static int LookbackSamples => DeepFilterNetSignalProcessor.FftSize;
 
+    // Features are shifted ConvLookahead frames earlier and the deep filter reads DfLookahead
+    // future frames, so each chunk reads that many hops past the samples it keeps.
+    private static int LookaheadSamples =>
+        Math.Max(DeepFilterNetSignalProcessor.ConvLookahead, DeepFilterNetSignalProcessor.DfLookahead)
+        * DeepFilterNetSignalProcessor.HopSize;
+
     public static async Task<float[]> EnhanceAsync(
         IAudioSamples audio,
         DeepFilterNetModelSessions sessions,
+        float attenuationLimit,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(audio);
@@ -48,7 +55,8 @@ internal static class DeepFilterNetChunkedEnhancer
             int chunkEnd = Math.Min(chunkStart + ChunkSamples, totalSamples);
             int chunkLen = chunkEnd - chunkStart;
             int readStart = Math.Max(0, chunkStart - LookbackSamples);
-            int readLen = chunkEnd - readStart;
+            int readEnd = Math.Min(chunkEnd + LookaheadSamples, totalSamples);
+            int readLen = readEnd - readStart;
 
             var pcm = new float[readLen];
             audio.ReadMonoSamples(readStart, pcm);
@@ -65,7 +73,7 @@ internal static class DeepFilterNetChunkedEnhancer
                 sessions, featErb, featSpec, numFrames);
 
             float[] chunkOut = DeepFilterNetSignalProcessor.Synthesize(
-                stftFrames, erbGains, dfCoefs, readLen);
+                stftFrames, erbGains, dfCoefs, readLen, attenuationLimit);
 
             int chunkOutOffset = chunkStart - readStart;
             OverlapAddSegment(

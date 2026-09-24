@@ -9,11 +9,21 @@ namespace Trackdub.Composition.DeepFilterNet;
 
 public sealed class DeepFilterNetEnhancementEngine : ISpeechAudioEnhancementService
 {
-    private readonly DeepFilterNetModelPaths modelPaths;
+    // Upstream enhance(atten_lim_db): cap noise suppression so some of the source stays in.
+    // Unlimited suppression smeared speech enough to cost ASR words on real clips; 6 dB kept
+    // transcripts on par with the unprocessed audio.
+    public const double DefaultAttenuationLimitDb = 6;
 
-    public DeepFilterNetEnhancementEngine(DeepFilterNetModelPaths modelPaths)
+    private readonly DeepFilterNetModelPaths modelPaths;
+    private readonly double attenuationLimitDb;
+
+    public DeepFilterNetEnhancementEngine(
+        DeepFilterNetModelPaths modelPaths,
+        double attenuationLimitDb = DefaultAttenuationLimitDb)
     {
         this.modelPaths = modelPaths ?? throw new ArgumentNullException(nameof(modelPaths));
+        ArgumentOutOfRangeException.ThrowIfNegative(attenuationLimitDb);
+        this.attenuationLimitDb = attenuationLimitDb;
     }
 
     public async Task<SpeechAudioEnhancementResult> EnhanceAsync(
@@ -55,7 +65,7 @@ public sealed class DeepFilterNetEnhancementEngine : ISpeechAudioEnhancementServ
             .ConfigureAwait(false);
 
         float[] cleanPcm = await DeepFilterNetChunkedEnhancer
-            .EnhanceAsync(resampled, sessions, cancellationToken)
+            .EnhanceAsync(resampled, sessions, ToLinearLimit(attenuationLimitDb), cancellationToken)
             .ConfigureAwait(false);
 
         await WaveAudioWriter.WriteMonoPcm16Async(
@@ -71,6 +81,13 @@ public sealed class DeepFilterNetEnhancementEngine : ISpeechAudioEnhancementServ
             durationSeconds,
             DeepFilterNetSignalProcessor.SampleRate,
             ChannelCount: 1,
-            SampleFrames: cleanPcm.Length);
+            SampleFrames: cleanPcm.Length,
+            Backend: SpeechAudioEnhancementBackend.DeepFilterNet,
+            BackendProfile: attenuationLimitDb > 0
+                ? FormattableString.Invariant($"atten-lim-{attenuationLimitDb:0.#}db")
+                : "unlimited");
     }
+
+    internal static float ToLinearLimit(double attenuationLimitDb) =>
+        attenuationLimitDb > 0 ? (float)Math.Pow(10, -attenuationLimitDb / 20) : 0f;
 }

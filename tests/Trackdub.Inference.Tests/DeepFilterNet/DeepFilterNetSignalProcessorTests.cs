@@ -105,14 +105,15 @@ public sealed class DeepFilterNetSignalProcessorTests
         int numFrames = stft.GetLength(0);
         float[,,,] erbGains = BuildUnityGains(numFrames);
 
-        // Identity deep filter: the LAST tap applies to the current frame (df_lookahead = 0),
-        // so tap index DfOrder - 1 set to 1 + 0i must reproduce the input.
+        // Identity deep filter: with df_lookahead = 2 the current frame sits at tap index
+        // DfOrder - 1 - DfLookahead, so that tap set to 1 + 0i must reproduce the input.
+        int currentTap = DeepFilterNetSignalProcessor.DfOrder - 1 - DeepFilterNetSignalProcessor.DfLookahead;
         var dfCoefs = new float[1, numFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2];
         for (int s = 0; s < numFrames; s++)
         {
             for (int k = 0; k < DeepFilterNetSignalProcessor.NbDf; k++)
             {
-                dfCoefs[0, s, DeepFilterNetSignalProcessor.DfOrder - 1, k, 0] = 1f;
+                dfCoefs[0, s, currentTap, k, 0] = 1f;
             }
         }
 
@@ -155,6 +156,72 @@ public sealed class DeepFilterNetSignalProcessorTests
 
         Assert.True(rmsRatio is > 0.9f and < 1.1f,
             $"RMS ratio {rmsRatio:F3} indicates broken FFT scaling or band gain application.");
+    }
+
+    [Fact]
+    public void ComputeFeatures_ShiftsFeaturesByConvLookahead()
+    {
+        // Silence then a tone: the first feature row that sees the tone must be ConvLookahead
+        // frames before the first STFT frame that contains it.
+        int hop = DeepFilterNetSignalProcessor.HopSize;
+        float[] pcm = new float[hop * 20];
+        float[] tone = BuildSine(hop * 10, frequencyHz: 1000f);
+        tone.CopyTo(pcm, hop * 10);
+
+        DeepFilterNetSignalProcessor.ComputeFeatures(
+            pcm,
+            DeepFilterNetFeatureNormState.CreateInitial(),
+            out _,
+            out float[,,,] featSpec,
+            out MathNet.Numerics.Complex32[,] stft);
+
+        int firstStftFrame = FirstFrame(t => stft[t, 20].Magnitude > 1e-3f, stft.GetLength(0));
+        int firstFeatRow = FirstFrame(t => MathF.Abs(featSpec[0, 0, t, 20]) + MathF.Abs(featSpec[0, 1, t, 20]) > 1f, featSpec.GetLength(2));
+
+        Assert.Equal(firstStftFrame - DeepFilterNetSignalProcessor.ConvLookahead, firstFeatRow);
+        for (int i = 1; i <= DeepFilterNetSignalProcessor.ConvLookahead; i++)
+        {
+            Assert.Equal(0f, featSpec[0, 0, featSpec.GetLength(2) - i, 20]);
+        }
+
+        static int FirstFrame(Func<int, bool> predicate, int count)
+        {
+            for (int t = 0; t < count; t++)
+            {
+                if (predicate(t))
+                {
+                    return t;
+                }
+            }
+
+            return -1;
+        }
+    }
+
+    [Fact]
+    public void Synthesize_FullAttenuationLimit_ReturnsSourceDespiteZeroMask()
+    {
+        int length = 4800;
+        float[] sine = BuildSine(length, frequencyHz: 1000f);
+        DeepFilterNetSignalProcessor.ComputeFeatures(
+            sine,
+            DeepFilterNetFeatureNormState.CreateInitial(),
+            out _,
+            out _,
+            out MathNet.Numerics.Complex32[,] stft);
+        int numFrames = stft.GetLength(0);
+
+        float[] reconstructed = DeepFilterNetSignalProcessor.Synthesize(
+            stft,
+            new float[1, 1, numFrames, DeepFilterNetSignalProcessor.ErbBands],
+            new float[1, numFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2],
+            length,
+            attenuationLimit: 1f);
+
+        for (int i = DeepFilterNetSignalProcessor.FftSize; i < length - DeepFilterNetSignalProcessor.FftSize; i++)
+        {
+            Assert.True(MathF.Abs(reconstructed[i] - sine[i]) < 1e-3f, $"Sample {i} diverged.");
+        }
     }
 
     [Fact]

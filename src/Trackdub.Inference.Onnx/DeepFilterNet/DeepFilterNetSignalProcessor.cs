@@ -14,14 +14,24 @@ internal static class DeepFilterNetSignalProcessor
     internal const int NbDf = 96;
     internal const int MinErbBinsPerBand = 2;
 
+    // DeepFilterNet3 trains with conv_lookahead = df_lookahead = 2. The ONNX export leaves
+    // DfNet.pad_feat and the deep-filter lookahead padding to the caller; skipping them
+    // applies every mask and filter two frames (20 ms) late.
+    internal const int ConvLookahead = 2;
+    internal const int DfLookahead = 2;
+
+    // libDF scales the analysis spectrum by wnorm = 1 / (fft_size^2 / (2 * hop)); the model's
+    // feat_spec unit norm is not scale invariant, so features must see the same scale.
+    private const float WindowNorm = 1f / (FftSize * FftSize / (2f * HopSize));
+
     // libDF norm alpha for sr=48000, hop=480, tau=1s: round(exp(-hop/(sr*tau)), 3) = 0.99.
     private const float Alpha = 0.99f;
     private const float Eps = 1e-10f;
     private const float ErbDbEps = 1e-10f;
     private const float ErbNormDivisor = 40f;
 
-    // Hann window and the libDF-style rectangular ERB band widths are computed once.
-    private static readonly float[] HannWindow = BuildHannWindow();
+    // libDF vorbis window and the libDF-style rectangular ERB band widths are computed once.
+    private static readonly float[] AnalysisWindow = BuildVorbisWindow();
     internal static readonly int[] ErbBandWidths = BuildErbBandWidths();
 
     // Compute model features and the synthesis spectrum from mono 48 kHz PCM.
@@ -30,9 +40,9 @@ internal static class DeepFilterNetSignalProcessor
     //   feat_spec [1,2,T,96] — unit-normalized complex spectrum of the first NbDf bins
     //   stft      [T,481]    — raw complex spectrum kept for synthesis
     // The norm state is mutated in place so chunked callers keep libDF's running statistics.
-    // Deviation from libDF noted for honesty: analysis/synthesis use a Hann window pair with
-    // window-square overlap-add normalization (libDF uses a sqrt-Hann pair); the FFT is
-    // unscaled on the forward side to keep feature magnitudes in the trained range.
+    // Features are shifted ConvLookahead frames earlier (DfNet.pad_feat): feature row s holds
+    // frame s + ConvLookahead and the last ConvLookahead rows are zero, so callers that chunk
+    // must read ConvLookahead extra hops past the region they keep.
     internal static void ComputeFeatures(
         ReadOnlySpan<float> pcm,
         DeepFilterNetFeatureNormState normState,
@@ -57,17 +67,20 @@ internal static class DeepFilterNetSignalProcessor
             for (int i = 0; i < FftSize; i++)
             {
                 float sample = (offset + i < pcm.Length) ? pcm[offset + i] : 0f;
-                frame[i] = new Complex32(sample * HannWindow[i], 0f);
+                frame[i] = new Complex32(sample * AnalysisWindow[i], 0f);
             }
 
-            // Matlab option: unscaled forward transform (matches libDF's realfft usage);
-            // InverseStft pairs it with the matching inverse option.
+            // Matlab option: unscaled forward transform, then libDF's wnorm;
+            // InverseStft undoes wnorm before the matching inverse option.
             Fourier.Forward(frame, FourierOptions.Matlab);
 
             for (int k = 0; k < FreqBins; k++)
             {
+                frame[k] *= WindowNorm;
                 spec[s, k] = frame[k];
             }
+
+            int featRow = s - ConvLookahead;
 
             // feat_spec: exponential unit-norm of the first NbDf complex bins
             // (libDF band_unit_norm: state ← α·state + (1-α)·|X|; out = X / sqrt(state)).
@@ -76,8 +89,11 @@ internal static class DeepFilterNetSignalProcessor
                 float magnitude = frame[k].Magnitude;
                 specUnitNorm[k] = (Alpha * specUnitNorm[k]) + ((1f - Alpha) * magnitude);
                 float denom = MathF.Sqrt(MathF.Max(specUnitNorm[k], Eps));
-                featSpecOut[0, 0, s, k] = frame[k].Real / denom;
-                featSpecOut[0, 1, s, k] = frame[k].Imaginary / denom;
+                if (featRow >= 0)
+                {
+                    featSpecOut[0, 0, featRow, k] = frame[k].Real / denom;
+                    featSpecOut[0, 1, featRow, k] = frame[k].Imaginary / denom;
+                }
             }
 
             // feat_erb: mean band power in dB, exponential-mean subtracted, divided by 40
@@ -96,7 +112,11 @@ internal static class DeepFilterNetSignalProcessor
                 power /= width;
                 float db = 10f * MathF.Log10(power + ErbDbEps);
                 erbMeanDb[b] = (Alpha * erbMeanDb[b]) + ((1f - Alpha) * db);
-                featErbOut[0, 0, s, b] = (db - erbMeanDb[b]) / ErbNormDivisor;
+                if (featRow >= 0)
+                {
+                    featErbOut[0, 0, featRow, b] = (db - erbMeanDb[b]) / ErbNormDivisor;
+                }
+
                 binStart += width;
             }
         }
@@ -158,15 +178,18 @@ internal static class DeepFilterNetSignalProcessor
     // Apply model outputs to the spectrum and reconstruct PCM via ISTFT, following the
     // upstream DfNet composition: the ERB mask multiplies the raw spectrum everywhere, but
     // the first NbDf bins of the output are REPLACED by the deep filter applied to the RAW
-    // (unmasked) spectrum. Tap index o applies to frame s - (DfOrder - 1) + o, i.e. the
-    // last tap weights the current frame (df_lookahead = 0).
+    // (unmasked) spectrum. Tap index o applies to frame s - (DfOrder - 1 - DfLookahead) + o,
+    // i.e. taps span two past frames through two future frames (upstream spec_pad).
+    // attenuationLimit (linear, 0..1) mixes that share of the unprocessed spectrum back in,
+    // as upstream enhance(atten_lim_db) does; 0 disables it.
     //   erbGains [1,1,T,32]            — sigmoid mask from erb_dec
     //   dfCoefs  [1,T,DfOrder,NbDf,2]  — complex FIR taps from df_dec (see UnpackDfCoefs)
     internal static float[] Synthesize(
         Complex32[,] stftFrames,
         float[,,,] erbGains,
         float[,,,,] dfCoefs,
-        int originalLength)
+        int originalLength,
+        float attenuationLimit = 0f)
     {
         int numFrames = stftFrames.GetLength(0);
         var outSpec = new Complex32[numFrames, FreqBins];
@@ -198,8 +221,8 @@ internal static class DeepFilterNetSignalProcessor
                 Complex32 filtered = Complex32.Zero;
                 for (int o = 0; o < DfOrder; o++)
                 {
-                    int srcFrame = s - (DfOrder - 1) + o;
-                    if (srcFrame < 0)
+                    int srcFrame = s - (DfOrder - 1 - DfLookahead) + o;
+                    if (srcFrame < 0 || srcFrame >= numFrames)
                     {
                         continue;
                     }
@@ -213,6 +236,18 @@ internal static class DeepFilterNetSignalProcessor
                 }
 
                 outSpec[s, k] = filtered;
+            }
+        }
+
+        if (attenuationLimit > 0f)
+        {
+            float keep = 1f - attenuationLimit;
+            for (int s = 0; s < numFrames; s++)
+            {
+                for (int k = 0; k < FreqBins; k++)
+                {
+                    outSpec[s, k] = (stftFrames[s, k] * attenuationLimit) + (outSpec[s, k] * keep);
+                }
             }
         }
 
@@ -240,12 +275,13 @@ internal static class DeepFilterNetSignalProcessor
 
             // Matlab option pairs with the unscaled forward transform in ComputeFeatures.
             Fourier.Inverse(frame, FourierOptions.Matlab);
+            float unscale = 1f / WindowNorm;
 
             int offset = s * HopSize;
             for (int i = 0; i < FftSize; i++)
             {
-                float w = HannWindow[i];
-                output[offset + i] += frame[i].Real * w;
+                float w = AnalysisWindow[i];
+                output[offset + i] += frame[i].Real * unscale * w;
                 windowSum[offset + i] += w * w;
             }
         }
@@ -262,12 +298,14 @@ internal static class DeepFilterNetSignalProcessor
         return output[..clampedLength];
     }
 
-    private static float[] BuildHannWindow()
+    // libDF vorbis window: sin(pi/2 * sin^2(pi * (n + 0.5) / N)).
+    private static float[] BuildVorbisWindow()
     {
         var window = new float[FftSize];
         for (int i = 0; i < FftSize; i++)
         {
-            window[i] = 0.5f * (1f - MathF.Cos(2f * MathF.PI * i / FftSize));
+            float inner = MathF.Sin(MathF.PI * (i + 0.5f) / FftSize);
+            window[i] = MathF.Sin(0.5f * MathF.PI * inner * inner);
         }
         return window;
     }
