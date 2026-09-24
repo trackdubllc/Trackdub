@@ -31,12 +31,12 @@ internal sealed class CosyVoiceSynthesisPipeline
 
         float[] campplusInput = CosyVoiceAudioFeatures.ExtractCampplusFbank(ref16k);
         int campplusFrames = campplusInput.Length / CosyVoiceConstants.MelBins;
-        float[] speakerEmbedding = RunCampplus(campplusInput, campplusFrames);
+        float[] speakerEmbedding = RunCampplus(campplusInput, campplusFrames, cancellationToken);
         float[] llmSpeaker = embeddings.ProjectLlmSpeaker(speakerEmbedding);
         float[] flowSpeaker = embeddings.ProjectFlowSpeaker(speakerEmbedding);
 
         (float[] speechTokenizerMel, int speechFrames) = CosyVoiceAudioFeatures.ExtractSpeechTokenizerMel(ref16k);
-        long[] promptSpeechTokens = RunSpeechTokenizer(speechTokenizerMel, speechFrames);
+        long[] promptSpeechTokens = RunSpeechTokenizer(speechTokenizerMel, speechFrames, cancellationToken);
 
         float[,] promptMel = CosyVoiceAudioFeatures.ExtractPromptMel(ref22050);
         int promptMelLength = promptMel.GetLength(0);
@@ -44,7 +44,7 @@ internal sealed class CosyVoiceSynthesisPipeline
         int[] promptTextTokens = tokenizer.Encode(referenceTranscript);
         int[] targetTextTokens = tokenizer.Encode(targetText);
         int[] combinedTextTokens = promptTextTokens.Concat(targetTextTokens).ToArray();
-        float[] textEncoderOut = RunTextEncoder(combinedTextTokens);
+        float[] textEncoderOut = RunTextEncoder(combinedTextTokens, cancellationToken);
         int textEncoderLength = combinedTextTokens.Length;
 
         var lmVectors = new List<float[]>
@@ -71,7 +71,7 @@ internal sealed class CosyVoiceSynthesisPipeline
         for (int step = 0; step < maxLen; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            float[] logits = RunTokenGenerator(lmVectors);
+            float[] logits = RunTokenGenerator(lmVectors, cancellationToken);
             var logProbs = SoftmaxLogits(logits);
             if (step < minLen)
             {
@@ -96,7 +96,7 @@ internal sealed class CosyVoiceSynthesisPipeline
 
         long[] allFlowTokens = promptSpeechTokens.Concat(generatedSpeechTokens).ToArray();
         float[] flowTokenEmbeddings = EmbedFlowTokens(allFlowTokens);
-        float[] flowEncoderOut = RunFlowEncoder(flowTokenEmbeddings, allFlowTokens.Length);
+        float[] flowEncoderOut = RunFlowEncoder(flowTokenEmbeddings, allFlowTokens.Length, cancellationToken);
         float[] promptEncoderOut = ExtractTokenTimeSlice(flowEncoderOut, allFlowTokens.Length, promptSpeechTokens.Length, 0);
         float[] generatedEncoderOut = ExtractTokenTimeSlice(
             flowEncoderOut,
@@ -138,21 +138,24 @@ internal sealed class CosyVoiceSynthesisPipeline
             }
         }
 
-        return RunHift(outputMel, outputMelLength);
+        return RunHift(outputMel, outputMelLength, cancellationToken);
     }
 
-    private float[] RunCampplus(float[] feats, int frames)
+    private float[] RunCampplus(float[] feats, int frames, CancellationToken cancellationToken)
     {
         using var inputs = new OnnxInputBatch();
         inputs.Add(NamedOnnxValue.CreateFromTensor(
             "input",
             new DenseTensor<float>(feats, [1, frames, CosyVoiceConstants.MelBins])));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
-            sessions.Campplus.Session.RunWithRetry(inputs.Values);
+            sessions.Campplus.Session.RunWithRetry(inputs.Values, cancellationToken: cancellationToken);
         return outputs[0].AsTensor<float>().ToArray();
     }
 
-    private long[] RunSpeechTokenizer(float[] feats, int frames)
+    private long[] RunSpeechTokenizer(
+        float[] feats,
+        int frames,
+        CancellationToken cancellationToken)
     {
         using var inputs = new OnnxInputBatch();
         inputs.Add(NamedOnnxValue.CreateFromTensor(
@@ -162,11 +165,11 @@ internal sealed class CosyVoiceSynthesisPipeline
             "feats_length",
             new DenseTensor<int>(new[] { frames }, [1])));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
-            sessions.SpeechTokenizer.Session.RunWithRetry(inputs.Values);
+            sessions.SpeechTokenizer.Session.RunWithRetry(inputs.Values, cancellationToken: cancellationToken);
         return outputs[0].AsTensor<long>().ToArray();
     }
 
-    private float[] RunTextEncoder(int[] textTokens)
+    private float[] RunTextEncoder(int[] textTokens, CancellationToken cancellationToken)
     {
         long[] tokenIds = textTokens.Select(static t => (long)t).ToArray();
         using var inputs = new OnnxInputBatch();
@@ -177,11 +180,13 @@ internal sealed class CosyVoiceSynthesisPipeline
             "text_lengths",
             new DenseTensor<long>(new[] { (long)tokenIds.Length }, [1])));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
-            sessions.TextEncoder.Session.RunWithRetry(inputs.Values);
+            sessions.TextEncoder.Session.RunWithRetry(inputs.Values, cancellationToken: cancellationToken);
         return outputs[0].AsTensor<float>().ToArray();
     }
 
-    private float[] RunTokenGenerator(IReadOnlyList<float[]> lmVectors)
+    private float[] RunTokenGenerator(
+        IReadOnlyList<float[]> lmVectors,
+        CancellationToken cancellationToken)
     {
         int seqLen = lmVectors.Count;
         var lmInput = new float[seqLen * CosyVoiceConstants.LlmHiddenSize];
@@ -198,7 +203,7 @@ internal sealed class CosyVoiceSynthesisPipeline
             "lm_input_len",
             new DenseTensor<long>(new[] { (long)seqLen }, [1])));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
-            sessions.TokenGenerator.Session.RunWithRetry(inputs.Values);
+            sessions.TokenGenerator.Session.RunWithRetry(inputs.Values, cancellationToken: cancellationToken);
         float[] logitsFlat = outputs[0].AsTensor<float>().ToArray();
         int vocab = CosyVoiceConstants.SpeechTokenSize + 1;
         int offset = (seqLen - 1) * vocab;
@@ -220,7 +225,10 @@ internal sealed class CosyVoiceSynthesisPipeline
         return embeddingsFlat;
     }
 
-    private float[] RunFlowEncoder(float[] tokenEmbeddings, int tokenLength)
+    private float[] RunFlowEncoder(
+        float[] tokenEmbeddings,
+        int tokenLength,
+        CancellationToken cancellationToken)
     {
         using var inputs = new OnnxInputBatch();
         inputs.Add(NamedOnnxValue.CreateFromTensor(
@@ -230,18 +238,20 @@ internal sealed class CosyVoiceSynthesisPipeline
             "token_len",
             new DenseTensor<long>(new[] { (long)tokenLength }, [1])));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
-            sessions.FlowEncoder.Session.RunWithRetry(inputs.Values);
+            sessions.FlowEncoder.Session.RunWithRetry(inputs.Values, cancellationToken: cancellationToken);
         return outputs[0].AsTensor<float>().ToArray();
     }
 
-    private float[] RunHift(float[] mel, int melLength)
+    private float[] RunHift(float[] mel, int melLength, CancellationToken cancellationToken)
     {
         using var f0Inputs = new OnnxInputBatch();
         f0Inputs.Add(NamedOnnxValue.CreateFromTensor(
             "mel",
             new DenseTensor<float>(mel, [1, CosyVoiceConstants.MelBins, melLength])));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> f0Outputs =
-            sessions.F0Predictor.Session.RunWithRetry(f0Inputs.Values);
+            sessions.F0Predictor.Session.RunWithRetry(
+                f0Inputs.Values,
+                cancellationToken: cancellationToken);
         float[] f0 = f0Outputs[0].AsTensor<float>().ToArray();
 
         int sourceLength = melLength * CosyVoiceConstants.F0UpsampleFactor;
@@ -260,7 +270,9 @@ internal sealed class CosyVoiceSynthesisPipeline
             "f0",
             new DenseTensor<float>(f0Upsampled, [1, sourceLength, 1])));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> sourceOutputs =
-            sessions.Source.Session.RunWithRetry(sourceInputs.Values);
+            sessions.Source.Session.RunWithRetry(
+                sourceInputs.Values,
+                cancellationToken: cancellationToken);
         float[] sineSource = sourceOutputs[0].AsTensor<float>().ToArray();
 
         using var vocoderInputs = new OnnxInputBatch();
@@ -271,7 +283,9 @@ internal sealed class CosyVoiceSynthesisPipeline
             "source_signal",
             new DenseTensor<float>(sineSource, [1, 1, sourceLength])));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> vocoderOutputs =
-            sessions.Vocoder.Session.RunWithRetry(vocoderInputs.Values);
+            sessions.Vocoder.Session.RunWithRetry(
+                vocoderInputs.Values,
+                cancellationToken: cancellationToken);
         return vocoderOutputs[0].AsTensor<float>().ToArray();
     }
 

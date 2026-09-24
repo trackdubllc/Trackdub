@@ -41,7 +41,8 @@ internal static class CosyVoiceFlowMatching
         for (int step = 1; step < tSpan.Length; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            float[] dPhi = RunEstimator(estimator, x, mask, mu, melLength, t, speakerEmbedding, cond);
+            float[] dPhi = RunEstimator(
+                estimator, x, mask, mu, melLength, t, speakerEmbedding, cond, cancellationToken);
             for (int i = 0; i < x.Length; i++)
             {
                 x[i] += dt * dPhi[i];
@@ -65,7 +66,8 @@ internal static class CosyVoiceFlowMatching
         int melLength,
         float t,
         float[] speakerEmbedding,
-        float[] cond)
+        float[] cond,
+        CancellationToken cancellationToken)
     {
         int channels = CosyVoiceConstants.MelBins;
         int slice = channels * melLength;
@@ -91,7 +93,9 @@ internal static class CosyVoiceFlowMatching
         inputs.Add(NamedOnnxValue.CreateFromTensor("spks", new DenseTensor<float>(spkBatch, [2, channels])));
         inputs.Add(NamedOnnxValue.CreateFromTensor("cond", new DenseTensor<float>(condBatch, [2, channels, melLength])));
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = estimator.RunWithRetry(inputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = estimator.RunWithRetry(
+            inputs.Values,
+            cancellationToken: cancellationToken);
         float[] estimatorOut = outputs[0].AsTensor<float>().ToArray();
 
         var guided = new float[slice];

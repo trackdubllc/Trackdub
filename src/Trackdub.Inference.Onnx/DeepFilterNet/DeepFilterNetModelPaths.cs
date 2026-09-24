@@ -34,6 +34,7 @@ public sealed record DeepFilterNetModelPaths(
         IModelCacheInventory? modelCacheInventory,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (registry is null ||
             !registry.TryResolve(EngineAlias, out BundledModelManifestResolution? resolution))
         {

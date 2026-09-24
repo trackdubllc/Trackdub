@@ -20,7 +20,8 @@ internal static class DeepFilterNetOnnxInference
         DeepFilterNetModelSessions sessions,
         float[,,,] featErb,
         float[,,,] featSpec,
-        int numFrames)
+        int numFrames,
+        CancellationToken cancellationToken)
     {
         int erbElements = numFrames * DeepFilterNetSignalProcessor.ErbBands;
         int specElements = 2 * numFrames * DeepFilterNetSignalProcessor.NbDf;
@@ -39,7 +40,9 @@ internal static class DeepFilterNetOnnxInference
 
         // The encoder outputs feed both decoders, so they must stay alive (undisposed)
         // until both decoder runs complete.
-        using var encOutputs = sessions.Enc.Session.RunWithRetry(encInputs);
+        using var encOutputs = sessions.Enc.Session.RunWithRetry(
+            encInputs,
+            cancellationToken: cancellationToken);
         Tensor<float> emb = GetOutputTensor(encOutputs, "emb");
         Tensor<float> c0 = GetOutputTensor(encOutputs, "c0");
 
@@ -52,7 +55,9 @@ internal static class DeepFilterNetOnnxInference
             NamedOnnxValue.CreateFromTensor("e1", GetOutputTensor(encOutputs, "e1")),
             NamedOnnxValue.CreateFromTensor("e0", GetOutputTensor(encOutputs, "e0"))
         };
-        using (var erbDecOutputs = sessions.ErbDec.Session.RunWithRetry(erbDecInputs))
+        using (var erbDecOutputs = sessions.ErbDec.Session.RunWithRetry(
+            erbDecInputs,
+            cancellationToken: cancellationToken))
         {
             int maskElements = numFrames * DeepFilterNetSignalProcessor.ErbBands;
             float[] flatMask = ExtractFlat(GetOutputTensor(erbDecOutputs, "m"), maskElements, "erb_dec output 'm'");
@@ -66,7 +71,9 @@ internal static class DeepFilterNetOnnxInference
             NamedOnnxValue.CreateFromTensor("emb", emb),
             NamedOnnxValue.CreateFromTensor("c0", c0)
         };
-        using (var dfDecOutputs = sessions.DfDec.Session.RunWithRetry(dfDecInputs))
+        using (var dfDecOutputs = sessions.DfDec.Session.RunWithRetry(
+            dfDecInputs,
+            cancellationToken: cancellationToken))
         {
             int coefElements = numFrames * DeepFilterNetSignalProcessor.NbDf * DeepFilterNetSignalProcessor.DfOrder * 2;
             float[] flatCoefs = ExtractFlat(GetOutputTensor(dfDecOutputs, "coefs"), coefElements, "df_dec output 'coefs'");

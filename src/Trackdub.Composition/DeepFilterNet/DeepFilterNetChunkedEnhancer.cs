@@ -27,6 +27,7 @@ internal static class DeepFilterNetChunkedEnhancer
     {
         ArgumentNullException.ThrowIfNull(audio);
         ArgumentNullException.ThrowIfNull(sessions);
+        cancellationToken.ThrowIfCancellationRequested();
 
         long totalSamplesLong = audio.SampleFrameCount;
         if (totalSamplesLong < 0)
@@ -70,7 +71,7 @@ internal static class DeepFilterNetChunkedEnhancer
 
             int numFrames = featErb.GetLength(2);
             (float[,,,] erbGains, float[,,,,] dfCoefs) = DeepFilterNetOnnxInference.Run(
-                sessions, featErb, featSpec, numFrames);
+                sessions, featErb, featSpec, numFrames, cancellationToken);
 
             float[] chunkOut = DeepFilterNetSignalProcessor.Synthesize(
                 stftFrames, erbGains, dfCoefs, readLen, attenuationLimit);

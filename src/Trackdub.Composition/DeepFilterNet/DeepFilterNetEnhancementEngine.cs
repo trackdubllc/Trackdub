@@ -33,6 +33,7 @@ public sealed class DeepFilterNetEnhancementEngine : ISpeechAudioEnhancementServ
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.SourceAudioPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.DestinationPath);
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (!modelPaths.AllFilesExist())
         {
