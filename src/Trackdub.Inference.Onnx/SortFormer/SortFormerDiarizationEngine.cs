@@ -23,10 +23,13 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     private const float OverlapThreshold = 0.5f;
     // Maximum supported speakers for the 4-speaker SortFormer diarization model.
     public const int MaxSupportedSpeakers = 4;
-    private const int StreamingChunkModelFrames = 124;
-    private const int StreamingRightContextModelFrames = 1;
+    // NVIDIA's recommended offline ("very high latency") streaming config for v2.1:
+    // chunk 340, right context 40, FIFO 40, cache update period 300, speaker cache 188.
+    private const int StreamingChunkModelFrames = 340;
+    private const int StreamingRightContextModelFrames = 40;
+    private const int StreamingSpeakerCacheUpdatePeriodFrames = 300;
     private const int StreamingFeatureSubsampling = 8;
-    private const int StreamingFifoFrames = 124;
+    private const int StreamingFifoFrames = 40;
     private const int StreamingSpeakerCacheFrames = 188;
     private const int StreamingEmbeddingDimension = 512;
     private const int StreamingChunkStrideFeatureFrames = StreamingChunkModelFrames * StreamingFeatureSubsampling;
@@ -231,7 +234,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
                 speakerCount,
                 chunkEmbeddings,
                 keepModelFrameCount,
-                validModelFrameCount);
+                keepModelFrameCount);
         }
 
         int frameCount = predictionData.Count / speakerCount;
@@ -759,7 +762,7 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
             int speakerCount,
             float[] chunkEmbeddings,
             int chunkEmbeddingFrameCount,
-            int validChunkFrameCount)
+            int chunkFrameCount)
         {
             int previousFifoFrameCount = FifoFrameCount;
             float[] combinedFifoEmbeddings = ConcatenateFrames(
@@ -786,8 +789,8 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
                 speakerCount);
 
             int popOutFrameCount = Math.Max(
-                StreamingChunkModelFrames,
-                validChunkFrameCount - StreamingFifoFrames + previousFifoFrameCount);
+                StreamingSpeakerCacheUpdatePeriodFrames,
+                chunkFrameCount - StreamingFifoFrames + previousFifoFrameCount);
             popOutFrameCount = Math.Min(popOutFrameCount, combinedFifoFrameCount);
 
             float[] popOutEmbeddings = SliceFrames(combinedFifoEmbeddings, 0, popOutFrameCount, StreamingEmbeddingDimension);

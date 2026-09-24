@@ -16,7 +16,8 @@ as-is, verified on an RTX 5070.
    because `SortFormerDiarizationEngine` feeds float32 tensors.
 2. `OrtSessionParamsTuning` on TensorRT RTX, using the `sortformer_steady_state`
    dummy data config (the shapes the engine feeds in steady state: `chunk`
-   1x1000x128, `spkcache` 1x188x512, `fifo` 1x124x512). The graph has dynamic
+   1x3040x128, `spkcache` 1x188x512, `fifo` 1x40x512: NVIDIA's
+   recommended offline config, chunk 340 + right context 40 model frames). The graph has dynamic
    dims, so Olive cannot infer dummy inputs on its own.
 
 The accelerator entry is `["NvTensorRTRTXExecutionProvider", "${TRT_RTX_EP_PATH}"]`.
