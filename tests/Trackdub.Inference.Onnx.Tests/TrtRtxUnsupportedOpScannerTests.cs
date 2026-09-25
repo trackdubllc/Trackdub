@@ -21,7 +21,7 @@ public sealed class TrtRtxUnsupportedOpScannerTests
     [Fact]
     public void FindUnsupportedOps_EmptyFile_ReturnsEmpty()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"trt-scan-empty-{Guid.NewGuid():N}.onnx");
+        string path = Path.Join(Path.GetTempPath(), $"trt-scan-empty-{Guid.NewGuid():N}.onnx");
         File.WriteAllBytes(path, []);
         try
         {
@@ -37,7 +37,7 @@ public sealed class TrtRtxUnsupportedOpScannerTests
     [Fact]
     public void FindUnsupportedOps_StandardOpsOnly_ReturnsEmpty()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"trt-scan-clean-{Guid.NewGuid():N}.onnx");
+        string path = Path.Join(Path.GetTempPath(), $"trt-scan-clean-{Guid.NewGuid():N}.onnx");
         File.WriteAllBytes(path, Encoding.ASCII.GetBytes("LayerNormalization Gelu Add MatMul Softmax"));
         try
         {
@@ -54,7 +54,7 @@ public sealed class TrtRtxUnsupportedOpScannerTests
     public void FindUnsupportedOps_TensorNameContainingOpType_IsNotAHit()
     {
         // Surgery leaves tensor ids like ".../MultiHeadAttention_output_0"; those are not ops.
-        string path = Path.Combine(Path.GetTempPath(), $"trt-scan-name-{Guid.NewGuid():N}.onnx");
+        string path = Path.Join(Path.GetTempPath(), $"trt-scan-name-{Guid.NewGuid():N}.onnx");
         File.WriteAllBytes(
             path,
             Encoding.ASCII.GetBytes("/encoder/encoders.0/self_attn/MultiHeadAttention_output_0 LayerNormalization"));
@@ -72,7 +72,7 @@ public sealed class TrtRtxUnsupportedOpScannerTests
     [Fact]
     public void FindUnsupportedOps_SkipLayerNormalizationAndBiasGelu_AreReported()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"trt-scan-contrib-{Guid.NewGuid():N}.onnx");
+        string path = Path.Join(Path.GetTempPath(), $"trt-scan-contrib-{Guid.NewGuid():N}.onnx");
         using var stream = new MemoryStream();
         stream.Write("prefix "u8);
         stream.Write(OpType("SkipLayerNormalization"));
@@ -99,6 +99,6 @@ public sealed class TrtRtxUnsupportedOpScannerTests
     {
         TrtRtxUnsupportedOpScanner.ResetCache();
         Assert.Empty(TrtRtxUnsupportedOpScanner.FindUnsupportedOps(
-            Path.Combine(Path.GetTempPath(), $"trt-scan-missing-{Guid.NewGuid():N}.onnx")));
+            Path.Join(Path.GetTempPath(), $"trt-scan-missing-{Guid.NewGuid():N}.onnx")));
     }
 }
