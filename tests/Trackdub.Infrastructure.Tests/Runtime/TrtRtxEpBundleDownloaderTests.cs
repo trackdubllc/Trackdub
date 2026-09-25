@@ -11,9 +11,9 @@ public sealed class TrtRtxEpBundleDownloaderTests
     [Fact]
     public void ExtractZipPreservingSymlinks_resolves_unix_soname_chains_instead_of_writing_link_text()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-trt-zip-{Guid.NewGuid():N}");
-        string archivePath = Path.Combine(root, "bundle.zip");
-        string extractDirectory = Path.Combine(root, "extract");
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-trt-zip-{Guid.NewGuid():N}");
+        string archivePath = Path.Join(root, "bundle.zip");
+        string extractDirectory = Path.Join(root, "extract");
         Directory.CreateDirectory(root);
 
         try
@@ -28,12 +28,12 @@ public sealed class TrtRtxEpBundleDownloaderTests
 
             TrtRtxEpBundleDownloader.ExtractZipPreservingSymlinks(archivePath, extractDirectory);
 
-            string bundle = Path.Combine(extractDirectory, "bundle");
-            Assert.Equal("real-runtime", File.ReadAllText(Path.Combine(bundle, "libtensorrt_rtx.so")));
-            Assert.Equal("real-runtime", File.ReadAllText(Path.Combine(bundle, "libtensorrt_rtx.so.1")));
+            string bundle = Path.Join(extractDirectory, "bundle");
+            Assert.Equal("real-runtime", File.ReadAllText(Path.Join(bundle, "libtensorrt_rtx.so")));
+            Assert.Equal("real-runtime", File.ReadAllText(Path.Join(bundle, "libtensorrt_rtx.so.1")));
             if (!OperatingSystem.IsWindows())
             {
-                Assert.Equal("libtensorrt_rtx.so.1", new FileInfo(Path.Combine(bundle, "libtensorrt_rtx.so")).LinkTarget);
+                Assert.Equal("libtensorrt_rtx.so.1", new FileInfo(Path.Join(bundle, "libtensorrt_rtx.so")).LinkTarget);
             }
         }
         finally
@@ -47,8 +47,8 @@ public sealed class TrtRtxEpBundleDownloaderTests
     [InlineData("/usr/lib/libcudart.so.13")]
     public void ExtractZipPreservingSymlinks_rejects_link_targets_outside_the_bundle(string target)
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-trt-zip-{Guid.NewGuid():N}");
-        string archivePath = Path.Combine(root, "bundle.zip");
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-trt-zip-{Guid.NewGuid():N}");
+        string archivePath = Path.Join(root, "bundle.zip");
         Directory.CreateDirectory(root);
 
         try
@@ -59,7 +59,7 @@ public sealed class TrtRtxEpBundleDownloaderTests
             }
 
             Assert.Throws<InvalidOperationException>(() =>
-                TrtRtxEpBundleDownloader.ExtractZipPreservingSymlinks(archivePath, Path.Combine(root, "extract")));
+                TrtRtxEpBundleDownloader.ExtractZipPreservingSymlinks(archivePath, Path.Join(root, "extract")));
         }
         finally
         {
@@ -70,8 +70,8 @@ public sealed class TrtRtxEpBundleDownloaderTests
     [Fact]
     public void ExtractZipPreservingSymlinks_rejects_entries_escaping_the_extract_directory()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-trt-zip-{Guid.NewGuid():N}");
-        string archivePath = Path.Combine(root, "bundle.zip");
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-trt-zip-{Guid.NewGuid():N}");
+        string archivePath = Path.Join(root, "bundle.zip");
         Directory.CreateDirectory(root);
 
         try
@@ -82,7 +82,7 @@ public sealed class TrtRtxEpBundleDownloaderTests
             }
 
             Assert.Throws<InvalidOperationException>(() =>
-                TrtRtxEpBundleDownloader.ExtractZipPreservingSymlinks(archivePath, Path.Combine(root, "extract")));
+                TrtRtxEpBundleDownloader.ExtractZipPreservingSymlinks(archivePath, Path.Join(root, "extract")));
         }
         finally
         {
