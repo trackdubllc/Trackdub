@@ -642,6 +642,7 @@ internal sealed class InferenceSessionPool : IDisposable
         await bundleAcquireLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            int consecutiveMisses = 0;
             while (true)
             {
                 ObjectDisposedException.ThrowIf(disposed, this);
@@ -695,10 +696,25 @@ internal sealed class InferenceSessionPool : IDisposable
                     entry.ReleaseGateWithoutTouchingLru();
                 }
 
-                lock (createGates)
+                // A key can be permanently missing from `entries` — phase 1's GetLeaseAsync
+                // returns an ephemeral (unpooled) lease when admission is off and the pool is
+                // full, or an entry can be idle-evicted between phase 1 and here. Blindly
+                // waiting never recovers that. Re-warm on a throttled cadence (~200ms) instead
+                // of every 10ms poll, since a miss can mean a real (expensive) session rebuild.
+                consecutiveMisses++;
+                if (consecutiveMisses % 20 == 0)
                 {
-                    Monitor.Wait(createGates, 10);
+                    foreach (SessionLeaseRequest request in ordered)
+                    {
+                        if (!entries.ContainsKey(request.Key))
+                        {
+                            using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                    }
                 }
+
+                await Task.Delay(10, cancellationToken).ConfigureAwait(false);
             }
         }
         finally
@@ -725,14 +741,8 @@ internal sealed class InferenceSessionPool : IDisposable
     private void AddPendingReservation(int device, long mb) =>
         pendingCreateMbByDevice.AddOrUpdate(device, mb, (_, existing) => existing + mb);
 
-    private void ReleaseReservation(int device, long mb)
-    {
+    private void ReleaseReservation(int device, long mb) =>
         pendingCreateMbByDevice.AddOrUpdate(device, 0, (_, existing) => Math.Max(0, existing - mb));
-        lock (createGates)
-        {
-            Monitor.PulseAll(createGates);
-        }
-    }
 
     /// <summary>
     /// Waits until <paramref name="needMb"/> fits in <paramref name="device"/>'s budget
@@ -791,16 +801,12 @@ internal sealed class InferenceSessionPool : IDisposable
                     return;
                 }
 
-                lock (createGates)
+                if (CurrentReservedMb(device) + needMb > memoryBudgetMb)
                 {
-                    if (CurrentReservedMb(device) + needMb <= memoryBudgetMb)
-                    {
-                        // Fits now; loop to take the reservation under creationLock.
-                    }
-                    else
-                    {
-                        Monitor.Wait(createGates, 50);
-                    }
+                    // Doesn't fit yet — poll instead of blocking a thread-pool thread on
+                    // Monitor.Wait. Bounded delay; loops back to retake creationLock and
+                    // recheck (an eviction or release elsewhere may have freed budget).
+                    await Task.Delay(50, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
