@@ -57,71 +57,13 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
         foreach (string sourcePath in sources)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (ShouldSkip(sourcePath))
-            {
-                skipped++;
-                items.Add(new EpContextWarmItem(sourcePath, "skipped", null, 0, 0, "Excluded family or already an EP-context artifact."));
-                continue;
-            }
-
-            var sourceInfo = new FileInfo(sourcePath);
-            string sourceFingerprint = EpContextLoadPathResolver.CurrentEnvironmentFingerprint;
-            EpContextArtifact.Stamp currentStamp = EpContextArtifact.CreateStamp(
-                sourcePath,
-                sourceInfo,
-                sourceSha256: null,
-                hardware.NvidiaGpuArchitecture.ToString(),
-                hardware.GpuDriverVersion);
-
-            string epContextPath = EpContextArtifact.GetEpContextPath(sourcePath);
-            bool haveValid = EpContextArtifact.TryResolveValidLoadPath(sourcePath, sourceFingerprint) is not null;
-            double compileMs = 0;
-            string? detail = null;
-
-            if (!haveValid)
-            {
-                progress?.Report($"compile {Path.GetFileName(sourcePath)}");
-                EpContextCompiler.CompileResult compile = await _compiler
-                    .CompileAsync(sourcePath, epContextPath, cancellationToken)
-                    .ConfigureAwait(false);
-                compileMs = compile.CompileMilliseconds;
-                if (!compile.Success)
-                {
-                    failed++;
-                    items.Add(new EpContextWarmItem(sourcePath, "failed", null, compileMs, 0, compile.FailureReason));
-                    continue;
-                }
-
-                EpContextArtifact.WriteStamp(sourcePath, currentStamp);
-                compiled++;
-            }
-            else
-            {
-                reused++;
-                detail = "Existing EP-context artifact is current.";
-            }
-
-            // Residual JIT: load once so nv_runtime_cache_path stores CUDA kernels for this GPU.
-            progress?.Report($"warm {Path.GetFileName(sourcePath)}");
-            double warmMs = TryWarmLoad(
-                epContextPath,
-                EpContextTrtProfiles.Resolve(sourcePath),
-                cancellationToken,
-                out string? warmFailure);
-            if (warmFailure is not null)
-            {
-                failed++;
-                items.Add(new EpContextWarmItem(sourcePath, "failed", epContextPath, compileMs, warmMs, warmFailure));
-                continue;
-            }
-
-            items.Add(new EpContextWarmItem(
-                sourcePath,
-                haveValid ? "reused" : "compiled",
-                epContextPath,
-                compileMs,
-                warmMs,
-                detail));
+            (EpContextWarmItem item, bool didCompile, bool didReuse) = await WarmSourceAsync(
+                sourcePath, hardware, progress, cancellationToken).ConfigureAwait(false);
+            items.Add(item);
+            if (didCompile) compiled++;
+            if (didReuse) reused++;
+            if (item.Status == "skipped") skipped++;
+            if (item.Status == "failed") failed++;
         }
 
         return new EpContextWarmReport(
@@ -132,6 +74,53 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
             skipped,
             failed,
             items);
+    }
+
+    private async Task<(EpContextWarmItem Item, bool Compiled, bool Reused)> WarmSourceAsync(
+        string sourcePath,
+        HardwareProfile hardware,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (ShouldSkip(sourcePath))
+        {
+            return (new EpContextWarmItem(sourcePath, "skipped", null, 0, 0,
+                "Excluded family or already an EP-context artifact."), false, false);
+        }
+
+        EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
+            sourcePath, new FileInfo(sourcePath), sourceSha256: null,
+            hardware.NvidiaGpuArchitecture.ToString(), hardware.GpuDriverVersion);
+        string epContextPath = EpContextArtifact.GetEpContextPath(sourcePath);
+        bool haveValid = EpContextArtifact.TryResolveValidLoadPath(
+            sourcePath, EpContextLoadPathResolver.CurrentEnvironmentFingerprint) is not null;
+        double compileMs = 0;
+        if (!haveValid)
+        {
+            progress?.Report($"compile {Path.GetFileName(sourcePath)}");
+            EpContextCompiler.CompileResult compile = await _compiler
+                .CompileAsync(sourcePath, epContextPath, cancellationToken).ConfigureAwait(false);
+            compileMs = compile.CompileMilliseconds;
+            if (!compile.Success)
+            {
+                return (new EpContextWarmItem(sourcePath, "failed", null, compileMs, 0, compile.FailureReason), false, false);
+            }
+
+            EpContextArtifact.WriteStamp(sourcePath, stamp);
+        }
+
+        // Residual JIT: load once so nv_runtime_cache_path stores CUDA kernels for this GPU.
+        progress?.Report($"warm {Path.GetFileName(sourcePath)}");
+        double warmMs = TryWarmLoad(
+            epContextPath,
+            EpContextTrtProfiles.Resolve(sourcePath),
+            cancellationToken,
+            out string? warmFailure);
+        return (new EpContextWarmItem(
+            sourcePath, warmFailure is null ? (haveValid ? "reused" : "compiled") : "failed",
+            epContextPath, compileMs, warmMs,
+            warmFailure ?? (haveValid ? "Existing EP-context artifact is current." : null)),
+            !haveValid, haveValid);
     }
 
     private static bool ShouldSkip(string sourcePath)

@@ -358,44 +358,8 @@ internal static class OnnxExecutionSessionFactory
                 throw new InvalidOperationException($"{skipReason} Hard-pin route has no fallback.");
             }
 
-            Exception? lastFailure = null;
-            foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
-                         .Select(fallbackProvider => CreateSessionOptions(
-                             fallbackProvider,
-                             devicePolicy,
-                             additionalTrtOptions: null)))
-            {
-                try
-                {
-                    InferenceSession session = CreateSession(
-                        modelPath,
-                        fallbackSelection.Options,
-                        sessionFactory,
-                        cancellationToken,
-                        fallbackSelection.SelectedProvider);
-                    initialSelection.Options.Dispose();
-                    string effectiveLabel = FormatProviderLabel(fallbackSelection.SelectedProvider);
-                    return (
-                        session,
-                        new SessionOptionsSelection(
-                            fallbackSelection.Options,
-                            fallbackSelection.SelectedProvider,
-                            MergeFallbackReasons($"{skipReason} Selected {effectiveLabel}.", fallbackSelection.FallbackReason)));
-                }
-                catch (Exception fallbackEx)
-                {
-                    fallbackSelection.Options.Dispose();
-                    if (!IsRecoverableTrtFallbackInitFailure(fallbackEx))
-                    {
-                        throw;
-                    }
-
-                    lastFailure = fallbackEx;
-                }
-            }
-
-            initialSelection.Options.Dispose();
-            throw lastFailure ?? new InvalidOperationException(skipReason);
+            return CreateUnsupportedGraphFallback(modelPath, initialSelection, devicePolicy,
+                sessionFactory, cancellationToken, skipReason);
         }
 
         try
@@ -413,50 +377,73 @@ internal static class OnnxExecutionSessionFactory
             && initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
             && LooksLikeTrtSessionInitFailure(ex))
         {
-            string trtError = SummarizeExceptionMessage(ex);
-            Exception? lastFailure = ex;
-
-            foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
-                         .Select(fallbackProvider => CreateSessionOptions(
-                             fallbackProvider,
-                             devicePolicy,
-                             additionalTrtOptions: null)))
-            {
-                try
-                {
-                    InferenceSession session = CreateSession(
-                        modelPath,
-                        fallbackSelection.Options,
-                        sessionFactory,
-                        cancellationToken,
-                        fallbackSelection.SelectedProvider);
-                    // Transfer ownership: dispose the failed TRT options; caller owns the fallback Options.
-                    initialSelection.Options.Dispose();
-                    string effectiveLabel = FormatProviderLabel(fallbackSelection.SelectedProvider);
-                    string trtFallbackReason =
-                        $"TensorRT RTX session init failed ({trtError}); fell back to {effectiveLabel}.";
-                    return (
-                        session,
-                        new SessionOptionsSelection(
-                            fallbackSelection.Options,
-                            fallbackSelection.SelectedProvider,
-                            MergeFallbackReasons(trtFallbackReason, fallbackSelection.FallbackReason)));
-                }
-                catch (Exception fallbackEx)
-                {
-                    fallbackSelection.Options.Dispose();
-                    if (!IsRecoverableTrtFallbackInitFailure(fallbackEx))
-                    {
-                        throw;
-                    }
-
-                    lastFailure = fallbackEx;
-                }
-            }
-
-            // Leave initialSelection.Options for the caller to dispose.
-            throw lastFailure ?? ex;
+            return CreateTrtInitFailureFallback(modelPath, initialSelection, devicePolicy,
+                sessionFactory, cancellationToken, ex);
         }
+    }
+
+    private static (InferenceSession Session, SessionOptionsSelection Selection) CreateUnsupportedGraphFallback(
+        string modelPath, SessionOptionsSelection initialSelection, WindowsMlExecutionDevicePolicy devicePolicy,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory, CancellationToken cancellationToken,
+        string skipReason)
+    {
+        Exception? lastFailure = null;
+        foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
+                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
+        {
+            try
+            {
+                InferenceSession session = CreateSession(modelPath, fallbackSelection.Options, sessionFactory,
+                    cancellationToken, fallbackSelection.SelectedProvider);
+                initialSelection.Options.Dispose();
+                string label = FormatProviderLabel(fallbackSelection.SelectedProvider);
+                return (session, new SessionOptionsSelection(fallbackSelection.Options,
+                    fallbackSelection.SelectedProvider,
+                    MergeFallbackReasons($"{skipReason} Selected {label}.", fallbackSelection.FallbackReason)));
+            }
+            catch (Exception fallbackEx)
+            {
+                fallbackSelection.Options.Dispose();
+                if (!IsRecoverableTrtFallbackInitFailure(fallbackEx)) throw;
+                lastFailure = fallbackEx;
+            }
+        }
+
+        initialSelection.Options.Dispose();
+        throw lastFailure ?? new InvalidOperationException(skipReason);
+    }
+
+    private static (InferenceSession Session, SessionOptionsSelection Selection) CreateTrtInitFailureFallback(
+        string modelPath, SessionOptionsSelection initialSelection, WindowsMlExecutionDevicePolicy devicePolicy,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory, CancellationToken cancellationToken,
+        Exception originalFailure)
+    {
+        string trtError = SummarizeExceptionMessage(originalFailure);
+        Exception lastFailure = originalFailure;
+        foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
+                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
+        {
+            try
+            {
+                InferenceSession session = CreateSession(modelPath, fallbackSelection.Options, sessionFactory,
+                    cancellationToken, fallbackSelection.SelectedProvider);
+                // Transfer ownership: the caller owns fallback options after success.
+                initialSelection.Options.Dispose();
+                string label = FormatProviderLabel(fallbackSelection.SelectedProvider);
+                string reason = $"TensorRT RTX session init failed ({trtError}); fell back to {label}.";
+                return (session, new SessionOptionsSelection(fallbackSelection.Options,
+                    fallbackSelection.SelectedProvider, MergeFallbackReasons(reason, fallbackSelection.FallbackReason)));
+            }
+            catch (Exception fallbackEx)
+            {
+                fallbackSelection.Options.Dispose();
+                if (!IsRecoverableTrtFallbackInitFailure(fallbackEx)) throw;
+                lastFailure = fallbackEx;
+            }
+        }
+
+        // Leave initialSelection.Options for the caller to dispose.
+        throw lastFailure;
     }
 
     /// <summary>
