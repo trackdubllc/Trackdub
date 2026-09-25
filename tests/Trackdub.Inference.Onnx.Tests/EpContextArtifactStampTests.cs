@@ -8,9 +8,9 @@ public sealed class EpContextArtifactStampTests
     [Fact]
     public void Stamp_records_runtime_lineage_so_a_trt_rtx_runtime_bump_invalidates_the_artifact()
     {
-        string directory = Path.Combine(Path.GetTempPath(), $"trackdub-epc-{Guid.NewGuid():N}");
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-epc-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
-        string sourcePath = Path.Combine(directory, "model.onnx");
+        string sourcePath = Path.Join(directory, "model.onnx");
 
         try
         {

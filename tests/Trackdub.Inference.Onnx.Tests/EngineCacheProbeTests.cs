@@ -81,11 +81,11 @@ public sealed class EngineCacheProbeTests
     public void Capture_reads_environment_overrides_without_throwing()
     {
         string? previous = Environment.GetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT");
-        string temp = Path.Combine(Path.GetTempPath(), $"engine-cache-probe-{Guid.NewGuid():N}");
+        string temp = Path.Join(Path.GetTempPath(), $"engine-cache-probe-{Guid.NewGuid():N}");
         try
         {
             Directory.CreateDirectory(temp);
-            File.WriteAllBytes(Path.Combine(temp, "engine.bin"), new byte[128]);
+            File.WriteAllBytes(Path.Join(temp, "engine.bin"), new byte[128]);
             Environment.SetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT", temp);
 
             EngineCacheProbe.Snapshot snapshot = EngineCacheProbe.Capture();
