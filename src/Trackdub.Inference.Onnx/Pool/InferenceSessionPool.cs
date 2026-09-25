@@ -171,10 +171,10 @@ internal sealed class InferenceSessionPool : IDisposable
     /// re-invoking the factory (single-flight: one factory call per creation wave).
     /// </summary>
     /// <summary>
-/// Monotonic creation-wave id. Incremented only when a factory fails and the failure is
-/// recorded; waiters capture the observed wave before queueing so only failures from a
-/// later wave (i.e. a creator they actually waited behind) are propagated.
-/// </summary>
+    /// Monotonic creation-wave id. Incremented only when a factory fails and the failure is
+    /// recorded; waiters capture the observed wave before queueing so only failures from a
+    /// later wave (i.e. a creator they actually waited behind) are propagated.
+    /// </summary>
     private long creationWave;
     private readonly ConcurrentDictionary<SessionPoolKey, (Exception Error, long Wave)> creationFailures = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
