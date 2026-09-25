@@ -145,6 +145,10 @@ internal sealed record SessionPoolKey
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
+            // Log file access failure to aid debugging VRAM estimation issues (model file inaccessible,
+            // malformed path). Falling back to the pessimistic DefaultEstimatedVramMb
+            // (256 MB) ensures admission accounting stays conservative but may trigger
+            // unnecessary evictions if the actual model is smaller.
             // File is inaccessible or the path is malformed; fall back to the pessimistic default.
             System.Diagnostics.Trace.TraceWarning(
                 $"SessionPoolKey: failed to estimate VRAM for '{modelPath}': {ex.Message}");

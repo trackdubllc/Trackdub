@@ -19,7 +19,9 @@ function Get-NewestReport([string]$label) {
             if ($r.Kind -eq "Benchmark" -and $r.Scenario) {
                 return $r
             }
-        } catch {}
+        } catch {
+            Write-Verbose "Skipping unparseable report $($f.FullName): $($_.Exception.Message)"
+        }
     }
     return $null
 }
@@ -38,7 +40,9 @@ function Invoke-Controlled([string]$stage, [string]$provider, [string]$model, [s
         try {
             $r = Get-Content $f.FullName -Raw | ConvertFrom-Json
             if ($r.Kind -eq "Benchmark") { return $r }
-        } catch {}
+        } catch {
+            Write-Verbose "Skipping unparseable report $($f.FullName): $($_.Exception.Message)"
+        }
     }
     return $null
 }

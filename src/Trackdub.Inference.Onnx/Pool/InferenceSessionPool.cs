@@ -180,6 +180,7 @@ internal sealed class InferenceSessionPool : IDisposable
     private readonly ConcurrentDictionary<SessionPoolKey, (Exception Error, long Wave)> creationFailures = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
     private readonly SemaphoreSlim bundleAcquireLock = new(1, 1);
+    private TaskCompletionSource<bool> bundleStateChanged = CreateBundleStateChangedSignal();
     private readonly bool enableMemoryAdmission;
     private readonly long memoryBudgetMb;
     /// <summary>Pending create reservations per device (audit §3A: budget is per physical device).</summary>
@@ -206,6 +207,21 @@ internal sealed class InferenceSessionPool : IDisposable
     /// DirectML and TensorRT on the same GPU share this budget — provider is not part of the key.
     /// </summary>
     private static int DeviceOf(SessionPoolKey key) => key.DeviceId ?? 0;
+
+    private static TaskCompletionSource<bool> CreateBundleStateChangedSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Wakes bundle acquisition after a gate or pool membership changes. The exchange makes the
+    /// signal one-shot: a waiter captures the current source before its attempt, while a later
+    /// transition installs a fresh source for the next waiter.
+    /// </summary>
+    private void SignalBundleStateChanged()
+    {
+        TaskCompletionSource<bool> previous =
+            Interlocked.Exchange(ref bundleStateChanged, CreateBundleStateChangedSignal());
+        previous.TrySetResult(true);
+    }
 
     /// <summary>
     /// Returns an appropriate default max-session count for the current hardware.
@@ -361,6 +377,17 @@ internal sealed class InferenceSessionPool : IDisposable
                     continue;
                 }
 
+                // If memory admission is enabled and model exceeds budget, fail fast before
+                // attempting to create an unbudgeted session (audit §3B).
+                long needMb = ResolveReservationMb(key);
+                int device = DeviceOf(key);
+                if (enableMemoryAdmission && needMb > memoryBudgetMb)
+                {
+                    throw new InvalidOperationException(
+                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
+                        $"device {device} admission budget of {memoryBudgetMb} MB.");
+                }
+
                 if (queuedBehindCreator
                     && creationFailures.TryGetValue(key, out var recentFailure))
                 {
@@ -374,16 +401,6 @@ internal sealed class InferenceSessionPool : IDisposable
 
                     // Stale failure from an earlier wave: retry the factory.
                     creationFailures.TryRemove(new KeyValuePair<SessionPoolKey, (Exception Error, long Wave)>(key, recentFailure));
-                }
-
-                long needMb = ResolveReservationMb(key);
-                int device = DeviceOf(key);
-
-                if (enableMemoryAdmission && needMb > memoryBudgetMb)
-                {
-                    throw new InvalidOperationException(
-                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
-                        $"device {device} admission budget of {memoryBudgetMb} MB.");
                 }
 
                 bool ephemeral = false;
@@ -506,6 +523,7 @@ internal sealed class InferenceSessionPool : IDisposable
                                 else
                                 {
                                     pooledCount++;
+                                    SignalBundleStateChanged();
                                 }
                             }
                         }
@@ -632,6 +650,10 @@ internal sealed class InferenceSessionPool : IDisposable
                 ObjectDisposedException.ThrowIf(disposed, this);
                 cancellationToken.ThrowIfCancellationRequested();
 
+                // Capture the signal before attempting the bundle. A lease release or pool
+                // publication that races this attempt either wakes this waiter or is observed
+                // by the next iteration, so no state change can be lost between check and wait.
+                Task bundleStateSignal = Volatile.Read(ref bundleStateChanged).Task;
                 SessionLeaseBundle? bundle = TryAcquireBundle(ordered, requests);
                 if (bundle is not null) return bundle;
 
@@ -667,7 +689,17 @@ internal sealed class InferenceSessionPool : IDisposable
                     }
                 }
 
-                await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+                // Wait for a state transition rather than polling every 10ms. The timeout is
+                // only a lost-wakeup safety net; normal progress is signaled by release,
+                // publication, and eviction paths below.
+                try
+                {
+                    await bundleStateSignal.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    // Lost-wakeup safety net; retry the bundle attempt.
+                }
             }
         }
         finally
@@ -892,6 +924,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 if (entries.TryRemove(new KeyValuePair<SessionPoolKey, PoolEntry>(key, entry)))
                 {
                     pooledCount--;
+                    SignalBundleStateChanged();
                     entry.MarkEvicted();
                     toDispose.Add(entry);
                     count++;
@@ -952,6 +985,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     if (entries.TryRemove(new KeyValuePair<SessionPoolKey, PoolEntry>(key, entry)))
                     {
                         pooledCount--;
+                        SignalBundleStateChanged();
                         entry.MarkEvicted();
                         toDispose.Add(entry); // dispose outside the lock below
                         count++;
@@ -1024,6 +1058,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 if (entries.TryRemove(new KeyValuePair<SessionPoolKey, PoolEntry>(key, entry)))
                 {
                     pooledCount--;
+                    SignalBundleStateChanged();
                     entry.MarkEvicted();
                     currentVram -= key.EstimatedVramMb;
                     toDispose.Add(entry);
@@ -1075,6 +1110,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     if (entries.TryRemove(key, out PoolEntry? entry))
                     {
                         pooledCount--;
+                        SignalBundleStateChanged();
                         entry.MarkEvicted(); // defence-in-depth alongside `disposed` flag
                         // Atomically try to acquire the gate. If we win, schedule the entry for
                         // disposal outside the lock. If the entry is still leased, the BuildLease
@@ -1132,6 +1168,7 @@ internal sealed class InferenceSessionPool : IDisposable
         // and dispose, or — if it has already backed off — we detect the eviction below and
         // perform disposal ourselves.
         entry.Release();
+        SignalBundleStateChanged();
 
         if (entry.IsEvicted || disposed)
         {
@@ -1200,6 +1237,7 @@ internal sealed class InferenceSessionPool : IDisposable
             if (removed)
             {
                 pooledCount--;
+                SignalBundleStateChanged();
                 evicted.MarkEvicted();
                 return evicted; // Caller must dispose outside creationLock.
             }

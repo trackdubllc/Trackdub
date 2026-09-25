@@ -8,7 +8,8 @@ namespace Trackdub.Inference.Onnx.EpContext;
 /// EP-context artifact paths and machine stamp. A stamp is valid only for the model bytes,
 /// GPU architecture, driver, and TRT RTX EP version it was compiled against — the same
 /// invalidation triggers as <c>SmokeVerdictKey</c> and the residual engine cache.
-/// Load-path checks use size + mtime (cheap) rather than hashing multi-hundred-MB graphs.
+/// Load-path checks use size + mtime (cheap) rather than hashing multi-hundred-MB graphs;
+/// optional external-data and artifact-sidecar identities are checked the same way.
 /// </summary>
 public static class EpContextArtifact
 {
@@ -26,10 +27,25 @@ public static class EpContextArtifact
         string? TrtRtxEpVersion,
         DateTimeOffset CreatedAtUtc,
         long? ExternalDataLengthBytes = null,
-        long? ExternalDataLastWriteUtcTicks = null)
+        long? ExternalDataLastWriteUtcTicks = null,
+        long? ArtifactExternalInitializersLengthBytes = null,
+        long? ArtifactExternalInitializersLastWriteUtcTicks = null)
     {
         public string EnvironmentFingerprint =>
             $"{GpuArchitecture}|{Normalize(DriverVersion)}|{Normalize(TrtRtxEpVersion)}";
+
+        /// <summary>
+        /// Validates the compiled artifact's optional external-initializers sidecar identity.
+        /// A missing sidecar or a replaced sidecar invalidates the artifact even when the
+        /// main ONNX file is unchanged.
+        /// </summary>
+        public bool MatchesArtifactExternalInitializers(FileInfo? sidecar, bool sidecarRequired = false) =>
+            (!sidecarRequired || (sidecar?.Exists ?? false)) &&
+            (sidecar?.Exists ?? false) == ArtifactExternalInitializersLengthBytes.HasValue &&
+            (!ArtifactExternalInitializersLengthBytes.HasValue ||
+                (sidecar is not null &&
+                 sidecar.Length == ArtifactExternalInitializersLengthBytes.Value &&
+                 sidecar.LastWriteTimeUtc.Ticks == ArtifactExternalInitializersLastWriteUtcTicks));
 
         /// <summary>
         /// Compares the source model file and, when present, its external-weights sibling
@@ -116,14 +132,6 @@ public static class EpContextArtifact
             return null;
         }
 
-        // A compiled artifact that needed external initializers is incomplete without its
-        // sidecar — a missing one would break session creation on load.
-        if (!ShouldEmbedEpContext(sourceModelPath) &&
-            !File.Exists(GetArtifactExternalInitializersPath(epContextPath)))
-        {
-            return null;
-        }
-
         return HasMatchingSourceStamp(sourceModelPath, epContextPath, stampPath, currentEnvironmentFingerprint);
     }
 
@@ -144,7 +152,14 @@ public static class EpContextArtifact
         {
             string externalDataPath = GetSourceExternalDataPath(sourceModelPath);
             FileInfo? externalData = File.Exists(externalDataPath) ? new FileInfo(externalDataPath) : null;
-            return stamp.MatchesSource(new FileInfo(sourceModelPath), externalData) ? epContextPath : null;
+            string sidecarPath = GetArtifactExternalInitializersPath(epContextPath);
+            FileInfo? sidecar = File.Exists(sidecarPath) ? new FileInfo(sidecarPath) : null;
+            return stamp.MatchesSource(new FileInfo(sourceModelPath), externalData) &&
+                stamp.MatchesArtifactExternalInitializers(
+                    sidecar,
+                    sidecarRequired: !ShouldEmbedEpContext(sourceModelPath))
+                ? epContextPath
+                : null;
         }
         catch (IOException)
         {
@@ -161,6 +176,8 @@ public static class EpContextArtifact
     {
         string externalDataPath = GetSourceExternalDataPath(sourceModelPath);
         var externalData = new FileInfo(externalDataPath);
+        string epContextPath = GetEpContextPath(sourceModelPath);
+        var artifactSidecar = new FileInfo(GetArtifactExternalInitializersPath(epContextPath));
         return new(
             SchemaVersion: 1,
             SourceFileName: Path.GetFileName(sourceModelPath),
@@ -172,7 +189,9 @@ public static class EpContextArtifact
             TrtRtxEpVersion: TensorRtRtxProviderConstants.BundledFingerprintVersion,
             ExternalDataLengthBytes: externalData.Exists ? externalData.Length : null,
             ExternalDataLastWriteUtcTicks: externalData.Exists ? externalData.LastWriteTimeUtc.Ticks : null,
-            CreatedAtUtc: DateTimeOffset.UtcNow);
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            ArtifactExternalInitializersLengthBytes: artifactSidecar.Exists ? artifactSidecar.Length : null,
+            ArtifactExternalInitializersLastWriteUtcTicks: artifactSidecar.Exists ? artifactSidecar.LastWriteTimeUtc.Ticks : null);
     }
 
     public static void WriteStamp(string sourceModelPath, Stamp stamp)

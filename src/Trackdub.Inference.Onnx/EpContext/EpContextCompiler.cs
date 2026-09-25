@@ -99,6 +99,14 @@ public sealed class EpContextCompiler
             }
 
             bool embed = EpContextArtifact.ShouldEmbedEpContext(sourceModelPath);
+            if (embed)
+            {
+                // A previous non-embedded compile may have left a sidecar next to this artifact.
+                // The new artifact embeds initializers, so that sidecar is stale and must not
+                // survive as an orphan or be mistaken for part of this artifact.
+                TryDeleteExternalInitializers(epContextPath);
+            }
+
             // Compile under the FINAL filename inside an isolated temp directory: the sidecar name
             // ORT embeds in the model (derived from the output path's filename) then matches the
             // name GetArtifactExternalInitializersPath computes for the final published path, so
@@ -302,6 +310,23 @@ public sealed class EpContextCompiler
         throw new InvalidDataException("Invalid ONNX varint.");
     }
 
+    private static void TryDeleteExternalInitializers(string epContextPath)
+    {
+        try
+        {
+            string sidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
+            if (File.Exists(sidecarPath))
+            {
+                File.Delete(sidecarPath);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best-effort stale-sidecar cleanup; the artifact validation will reject a stale
+            // sidecar if it cannot be removed here.
+        }
+    }
+
     private static void TryDeletePartial(string epContextPath)
     {
         try
@@ -321,6 +346,7 @@ public sealed class EpContextCompiler
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Log the deletion failure for debugging partial EP-context artifact cleanup.
             // Best-effort cleanup of a rejected compile's partial output; failure to delete is non-fatal.
             System.Diagnostics.Trace.TraceWarning(
                 $"EpContextCompiler: failed to delete partial output '{epContextPath}': {ex.Message}");
