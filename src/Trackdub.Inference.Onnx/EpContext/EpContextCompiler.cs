@@ -104,7 +104,7 @@ public sealed class EpContextCompiler
                 if (!embed)
                 {
                     string tempSidecarName = Path.GetFileNameWithoutExtension(tempPath) + ".ext_init";
-                    tempSidecarPath = Path.Combine(Path.GetDirectoryName(tempPath)!, tempSidecarName);
+                    tempSidecarPath = Path.Combine(Path.GetDirectoryName(tempPath)!, Path.GetFileName(tempSidecarName));
                     compileOptions.SetOutputModelExternalInitializersFile(
                         Path.GetFileNameWithoutExtension(tempPath) + ".ext_init",
                         64);
