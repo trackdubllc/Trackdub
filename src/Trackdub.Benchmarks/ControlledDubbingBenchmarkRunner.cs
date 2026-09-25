@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using Trackdub.Application.Dubbing;
+using Trackdub.Benchmarks.Metrics;
 using Trackdub.Composition.Headless;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Benchmarking;
@@ -143,14 +144,20 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 engineCache.Apply();
             timings["hostCreation"] = Stopwatch.GetElapsedTime(hostStart).TotalMilliseconds;
 
+            int runCount = Math.Max(1, options.RunCount);
+            string baselineProjectPath = Path.Combine(projectRoot, "baseline", "project.trackdub");
+            bool hasPrerequisites = false;
+
             if (stage is not null)
             {
                 IReadOnlyList<string> prerequisites = PrerequisitesFor(stage);
                 if (prerequisites.Count > 0)
                 {
+                    hasPrerequisites = true;
+                    Directory.CreateDirectory(Path.GetDirectoryName(baselineProjectPath)!);
                     long prerequisiteStart = Stopwatch.GetTimestamp();
                     DubbingRunResult preparation = await ExecuteAsync(
-                        host, fixtureCopy, projectPath, options, prerequisites, true, cancellationToken).ConfigureAwait(false);
+                        host, fixtureCopy, baselineProjectPath, options, prerequisites, true, cancellationToken).ConfigureAwait(false);
                     timings["prerequisites"] = Stopwatch.GetElapsedTime(prerequisiteStart).TotalMilliseconds;
                     RequirePreparationSucceeded(
                         preparation, "Prerequisite preparation did not complete successfully.",
@@ -160,7 +167,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     // (for ASR: re-transcribing existing segments), not as the stage itself.
                     // No prerequisite regenerates a later stage today, but guard against one
                     // sneaking the timed stage in (e.g. an opt-in stage running during import).
-                    RunArtifacts prepared = await ReadRunArtifactsAsync(host, projectPath, options, cancellationToken)
+                    RunArtifacts prepared = await ReadRunArtifactsAsync(host, baselineProjectPath, options, cancellationToken)
                         .ConfigureAwait(false);
                     if (prepared.StageRuns.Any(run => run.StageName.Equals(stage, StringComparison.OrdinalIgnoreCase)))
                     {
@@ -174,51 +181,182 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             IReadOnlyList<string>? filter = stage is null ? null : [stage];
             if (options.Mode == "warm-host")
             {
+                string warmupProjectPath = Path.Combine(projectRoot, "warmup", "project.trackdub");
+                if (hasPrerequisites)
+                {
+                    CopyDirectory(baselineProjectPath, warmupProjectPath);
+                }
+                else
+                {
+                    Directory.CreateDirectory(warmupProjectPath);
+                }
+
                 long warmupStart = Stopwatch.GetTimestamp();
                 DubbingRunResult warmup = await ExecuteAsync(
-                    host, fixtureCopy, projectPath, options, filter, true, cancellationToken).ConfigureAwait(false);
+                    host, fixtureCopy, warmupProjectPath, options, filter, true, cancellationToken).ConfigureAwait(false);
                 timings["warmup"] = Stopwatch.GetElapsedTime(warmupStart).TotalMilliseconds;
                 RequirePreparationSucceeded(
                     warmup, "Warm-host preparation did not complete successfully.",
                     out reason, out status, out stages);
             }
+
             if (options.Mode == "artifact-resume")
             {
+                string primingProjectPath = Path.Combine(projectRoot, "priming", "project.trackdub");
+                if (hasPrerequisites)
+                {
+                    CopyDirectory(baselineProjectPath, primingProjectPath);
+                }
+                else
+                {
+                    Directory.CreateDirectory(primingProjectPath);
+                }
+
                 DubbingRunResult priming = await ExecuteAsync(
-                    host, fixtureCopy, projectPath, options, filter, true, cancellationToken).ConfigureAwait(false);
+                    host, fixtureCopy, primingProjectPath, options, filter, true, cancellationToken).ConfigureAwait(false);
                 if (priming.OverallStatus != DubbingRunStatus.Succeeded)
                 {
                     reason = "Artifact-resume preparation did not complete successfully.";
                     status = BenchmarkEvidenceStatus.Skipped;
-                    stages = MapStages(priming, [], null, null);
+                    stages = MapStages(priming, [], null, null, null);
                     throw new PreparationIncompleteException();
                 }
             }
 
-            long runStart = Stopwatch.GetTimestamp();
-            var stageClock = new StageTimingCollector(runStart);
-            var phases = new BenchmarkPhaseCapture();
-            DubbingRunResult result;
-            using (BenchmarkPhaseCapture.Activate(phases))
+            var stageSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
+            var pipelineSamples = new List<double>(runCount);
+            var phaseSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
+            DubbingRunResult lastResult = null!;
+            StageTimingCollector lastClock = null!;
+            string lastProjectPath = null!;
+
+            for (int runIndex = 1; runIndex <= runCount; runIndex++)
             {
-                result = await ExecuteAsync(
-                    host, fixtureCopy, projectPath, options, filter, options.Mode != "artifact-resume", cancellationToken,
-                    stageClock).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                string iterProjectPath = Path.Combine(projectRoot, $"run_{runIndex}", "project.trackdub");
+
+                if (hasPrerequisites)
+                {
+                    CopyDirectory(baselineProjectPath, iterProjectPath);
+                }
+                else
+                {
+                    Directory.CreateDirectory(iterProjectPath);
+                }
+
+                long runStart = Stopwatch.GetTimestamp();
+                var stageClock = new StageTimingCollector(runStart);
+                var phases = new BenchmarkPhaseCapture();
+                DubbingRunResult iterResult;
+                using (BenchmarkPhaseCapture.Activate(phases))
+                {
+                    iterResult = await ExecuteAsync(
+                        host, fixtureCopy, iterProjectPath, options, filter,
+                        options.Mode != "artifact-resume",
+                        cancellationToken,
+                        stageClock).ConfigureAwait(false);
+                }
+
+                double pipeDuration = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
+                pipelineSamples.Add(pipeDuration);
+
+                foreach ((string name, double? duration) in phases.SnapshotMilliseconds())
+                {
+                    if (duration is double phaseMs)
+                    {
+                        if (!phaseSamples.TryGetValue(name, out var list))
+                        {
+                            list = [];
+                            phaseSamples[name] = list;
+                        }
+
+                        list.Add(phaseMs);
+                    }
+                }
+
+                foreach (var outcome in iterResult.StageOutcomes)
+                {
+                    double? ms = stageClock.GetMilliseconds(outcome.StageName);
+                    if (ms is double stageMs)
+                    {
+                        if (!stageSamples.TryGetValue(outcome.StageName, out var list))
+                        {
+                            list = [];
+                            stageSamples[outcome.StageName] = list;
+                        }
+
+                        list.Add(stageMs);
+                    }
+                }
+
+                lastResult = iterResult;
+                lastClock = stageClock;
+                lastProjectPath = iterProjectPath;
+
+                if (iterResult.OverallStatus != DubbingRunStatus.Succeeded)
+                {
+                    break;
+                }
             }
-            timings["pipeline"] = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
-            foreach ((string name, double? duration) in phases.SnapshotMilliseconds())
-                timings[name] = duration;
+
+            RunArtifacts artifacts = await ReadRunArtifactsAsync(host, lastProjectPath, options, cancellationToken)
+                .ConfigureAwait(false);
+            double mediaDuration = artifacts.MediaDurationSeconds;
+
+            foreach ((string stageName, List<double> samples) in stageSamples)
+            {
+                LatencyStatistics stageStats = PercentileCalculator.Calculate(
+                    samples,
+                    totalUnits: mediaDuration,
+                    totalDurationSeconds: samples.Sum() / 1000.0);
+
+                timings[$"stage:{stageName}:min"] = stageStats.MinMilliseconds;
+                timings[$"stage:{stageName}:max"] = stageStats.MaxMilliseconds;
+                timings[$"stage:{stageName}:mean"] = stageStats.MeanMilliseconds;
+                timings[$"stage:{stageName}:p50"] = stageStats.P50Milliseconds;
+                timings[$"stage:{stageName}:p90"] = stageStats.P90Milliseconds;
+                timings[$"stage:{stageName}:p99"] = stageStats.P99Milliseconds;
+                timings[$"stage:{stageName}:throughput"] = stageStats.ThroughputUnitsPerSecond;
+                timings[$"stage:{stageName}:sampleCount"] = (double)stageStats.SampleCount;
+                timings[$"stage:{stageName}"] = stageStats.P50Milliseconds;
+            }
+
+            if (pipelineSamples.Count > 0)
+            {
+                LatencyStatistics pipeStats = PercentileCalculator.Calculate(
+                    pipelineSamples,
+                    totalUnits: mediaDuration,
+                    totalDurationSeconds: pipelineSamples.Sum() / 1000.0);
+
+                timings["pipeline"] = pipeStats.P50Milliseconds;
+                timings["pipeline:min"] = pipeStats.MinMilliseconds;
+                timings["pipeline:max"] = pipeStats.MaxMilliseconds;
+                timings["pipeline:mean"] = pipeStats.MeanMilliseconds;
+                timings["pipeline:p50"] = pipeStats.P50Milliseconds;
+                timings["pipeline:p90"] = pipeStats.P90Milliseconds;
+                timings["pipeline:p99"] = pipeStats.P99Milliseconds;
+                timings["pipeline:throughput"] = pipeStats.ThroughputUnitsPerSecond;
+                timings["pipeline:sampleCount"] = (double)pipeStats.SampleCount;
+            }
+
+            foreach ((string name, List<double> pSamples) in phaseSamples)
+            {
+                timings[name] = PercentileCalculator.Calculate(pSamples).P50Milliseconds;
+            }
+
             timings["import"] = timings.GetValueOrDefault("phase:import");
             timings["preflight"] = timings.GetValueOrDefault("phase:preflight");
-            timings["export"] = stageClock.GetMilliseconds("Export");
-            runId = result.RunId;
-            RunArtifacts artifacts = await ReadRunArtifactsAsync(host, projectPath, options, cancellationToken)
-                .ConfigureAwait(false);
-            stages = MapStages(result, artifacts.StageRuns, options.Model, stageClock);
+            timings["export"] = timings.GetValueOrDefault("stage:Export:p50")
+                ?? lastClock?.GetMilliseconds("Export");
+
+            runId = lastResult.RunId;
+            stages = MapStages(lastResult, artifacts.StageRuns, options.Model, stageSamples, lastClock);
+
             if (artifacts.HasUsableTranscript)
-                timings["firstUsableTranscript"] = stageClock.GetCompletionMilliseconds("Asr");
+                timings["firstUsableTranscript"] = lastClock?.GetCompletionMilliseconds("Asr");
             if (artifacts.HasPlayableTake)
-                timings["firstPlayableAudio"] = stageClock.GetCompletionMilliseconds("Tts");
+                timings["firstPlayableAudio"] = lastClock?.GetCompletionMilliseconds("Tts");
+
             BenchmarkEvidenceStage? requestedStage = stage is null
                 ? null
                 : stages.LastOrDefault(x => x.Name.Equals(stage, StringComparison.OrdinalIgnoreCase));
@@ -228,16 +366,16 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             {
                 status = requestedStage?.Status ?? BenchmarkEvidenceStatus.Skipped;
                 reason = requestedStage?.Reason
-                    ?? (result.PreFlightFailures is { Count: > 0 }
-                        ? "Preflight failed: " + string.Join("; ", result.PreFlightFailures)
+                    ?? (lastResult.PreFlightFailures is { Count: > 0 }
+                        ? "Preflight failed: " + string.Join("; ", lastResult.PreFlightFailures)
                         : "Requested stage produced no successful outcome.");
             }
-            else if (result.OverallStatus != DubbingRunStatus.Succeeded)
+            else if (lastResult.OverallStatus != DubbingRunStatus.Succeeded)
             {
-                status = result.OverallStatus == DubbingRunStatus.PartialSuccess
+                status = lastResult.OverallStatus == DubbingRunStatus.PartialSuccess
                     ? BenchmarkEvidenceStatus.PartiallyCompleted
                     : BenchmarkEvidenceStatus.Failed;
-                reason = result.PreFlightFailures is { Count: > 0 }
+                reason = lastResult.PreFlightFailures is { Count: > 0 }
                     ? "Preflight failed."
                     : string.Join("; ", stages
                         .Where(measured => measured.Status != BenchmarkEvidenceStatus.Completed)
@@ -449,10 +587,33 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
     private static IReadOnlyList<string> PrerequisitesFor(string stage)
     {
+        if (stage.Equals(StageNames.LipSync, StringComparison.OrdinalIgnoreCase))
+        {
+            int ttsIndex = DubbingPipelineStages.DefaultStageOrder.ToList().FindIndex(x =>
+                x.Equals(StageNames.Tts, StringComparison.OrdinalIgnoreCase));
+            return DubbingPipelineStages.DefaultStageOrder.Take(ttsIndex + 1).ToArray();
+        }
+
         int index = DubbingPipelineStages.DefaultStageOrder.ToList().FindIndex(x =>
             x.Equals(stage, StringComparison.OrdinalIgnoreCase));
         if (index <= 0) return [];
         return DubbingPipelineStages.DefaultStageOrder.Take(index).ToArray();
+    }
+
+    private static void CopyDirectory(string sourceDir, string destinationDir)
+    {
+        Directory.CreateDirectory(destinationDir);
+        foreach (string file in Directory.GetFiles(sourceDir))
+        {
+            string destFile = Path.Combine(destinationDir, Path.GetFileName(file));
+            File.Copy(file, destFile, overwrite: true);
+        }
+
+        foreach (string subDir in Directory.GetDirectories(sourceDir))
+        {
+            string destSubDir = Path.Combine(destinationDir, Path.GetFileName(subDir));
+            CopyDirectory(subDir, destSubDir);
+        }
     }
 
     private HeadlessDubbingHost CreateHost(ControlledDubbingBenchmarkOptions options)
@@ -561,17 +722,34 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         return new RunArtifacts(
             rawStageRuns,
             state.TranscriptSegments.Any(segment => !string.IsNullOrWhiteSpace(segment.Text)),
-            playableTake);
+            playableTake,
+            state.ProjectState.MediaAsset?.DurationSeconds ?? 0);
     }
 
     private static IReadOnlyList<BenchmarkEvidenceStage> MapStages(
-        DubbingRunResult result, IReadOnlyList<StageRunRecord> records, string? requestedModel,
-        StageTimingCollector? stageClock) =>
+        DubbingRunResult result,
+        IReadOnlyList<StageRunRecord> records,
+        string? requestedModel,
+        IReadOnlyDictionary<string, List<double>>? stageSamples = null,
+        StageTimingCollector? stageClock = null) =>
         result.StageOutcomes.Select(outcome =>
         {
             StageRunRecord? record = records.LastOrDefault(x =>
                 x.StageName.Equals(outcome.StageName, StringComparison.OrdinalIgnoreCase) &&
                 x.StartedAtUtc >= result.StartTime.AddSeconds(-1));
+
+            double? duration = null;
+            if (stageSamples is not null &&
+                stageSamples.TryGetValue(outcome.StageName, out var samples) &&
+                samples.Count > 0)
+            {
+                duration = PercentileCalculator.Calculate(samples).P50Milliseconds;
+            }
+            else
+            {
+                duration = stageClock?.GetMilliseconds(outcome.StageName);
+            }
+
             return new BenchmarkEvidenceStage
             {
                 Name = outcome.StageName,
@@ -586,7 +764,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 StageRunId = record?.Id,
                 StartedAtUtc = outcome.StartTime,
                 CompletedAtUtc = outcome.EndTime,
-                DurationMilliseconds = stageClock?.GetMilliseconds(outcome.StageName),
+                DurationMilliseconds = duration,
                 RequestedModel = requestedModel,
                 ActualModel = record?.RuntimeInfo?.ModelAlias ?? record?.RuntimeInfo?.ModelId,
                 RequestedProvider = record?.RuntimeInfo?.RequestedProvider,
@@ -595,33 +773,10 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         }).ToArray();
 
     private sealed record RunArtifacts(
-        IReadOnlyList<StageRunRecord> StageRuns, bool HasUsableTranscript, bool HasPlayableTake);
-
-    private sealed class StageTimingCollector(long runStart) : IProgress<PipelineProgressEvent>
-    {
-        private readonly Dictionary<string, long> _starts = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, double> _durations = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, double> _completions = new(StringComparer.OrdinalIgnoreCase);
-
-        public void Report(PipelineProgressEvent value)
-        {
-            if (value.EventKind == PipelineProgressEventKind.Started)
-                _starts[value.StageKey] = Stopwatch.GetTimestamp();
-            else if ((value.EventKind is PipelineProgressEventKind.Completed or
-                      PipelineProgressEventKind.Failed or PipelineProgressEventKind.Skipped) &&
-                     _starts.TryGetValue(value.StageKey, out long start))
-            {
-                _durations[value.StageKey] = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-                _completions[value.StageKey] = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
-            }
-        }
-
-        public double? GetMilliseconds(string stage) =>
-            _durations.TryGetValue(stage, out double milliseconds) ? milliseconds : null;
-
-        public double? GetCompletionMilliseconds(string stage) =>
-            _completions.TryGetValue(stage, out double milliseconds) ? milliseconds : null;
-    }
+        IReadOnlyList<StageRunRecord> StageRuns,
+        bool HasUsableTranscript,
+        bool HasPlayableTake,
+        double MediaDurationSeconds = 0);
 
     private sealed class EnvironmentOverride(string name, string value) : IDisposable
     {

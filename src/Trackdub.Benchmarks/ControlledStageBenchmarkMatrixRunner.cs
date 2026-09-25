@@ -1,4 +1,5 @@
 using Trackdub.Application.Dubbing;
+using Trackdub.Benchmarks.Metrics;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain.StageRuns;
 
@@ -6,7 +7,8 @@ namespace Trackdub.Benchmarks;
 
 public sealed record ControlledStageBenchmarkMatrixResult(
     string Stage,
-    BenchmarkEvidenceReport Evidence);
+    BenchmarkEvidenceReport Evidence,
+    LatencyStatistics? Statistics = null);
 
 public sealed record ControlledStageBenchmarkMatrixReport
 {
@@ -54,9 +56,24 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     ModelDirectory = options.ModelDirectory,
                     FfmpegPath = options.FfmpegPath,
                     FfprobePath = options.FfprobePath,
+                    RunCount = options.RunCount,
                 }, cancellationToken).ConfigureAwait(false);
 
-            results.Add(new ControlledStageBenchmarkMatrixResult(stage, evidence));
+            LatencyStatistics? stats = null;
+            if (evidence.TimingsMilliseconds.TryGetValue($"stage:{stage}:p50", out double? p50) && p50.HasValue)
+            {
+                stats = new LatencyStatistics(
+                    MinMilliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:min") ?? p50.Value,
+                    MaxMilliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:max") ?? p50.Value,
+                    MeanMilliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:mean") ?? p50.Value,
+                    P50Milliseconds: p50.Value,
+                    P90Milliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:p90") ?? p50.Value,
+                    P99Milliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:p99") ?? p50.Value,
+                    ThroughputUnitsPerSecond: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:throughput") ?? 0d,
+                    SampleCount: (int)(evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:sampleCount") ?? 1d));
+            }
+
+            results.Add(new ControlledStageBenchmarkMatrixResult(stage, evidence, stats));
         }
 
         BenchmarkEvidenceStatus status = results.All(

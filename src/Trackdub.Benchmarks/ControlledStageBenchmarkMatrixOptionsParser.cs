@@ -30,6 +30,7 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
         string? provider = null;
         string? ffmpeg = null;
         string? ffprobe = null;
+        int runCount = 1;
         var modelOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         for (int index = 1; index < args.Length; index++)
@@ -60,6 +61,15 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
                 case "--provider": provider = value; break;
                 case "--ffmpeg": ffmpeg = value; break;
                 case "--ffprobe": ffprobe = value; break;
+                case "--runs":
+                    if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
+                    {
+                        error.WriteLine($"Invalid run count '{value}'. Expected a positive integer.");
+                        return false;
+                    }
+
+                    runCount = parsedRuns;
+                    break;
                 case "--model":
                     if (!TryParseModelOverride(value, error, modelOverrides))
                     {
@@ -100,6 +110,7 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
             FfmpegPath = ffmpeg,
             FfprobePath = ffprobe,
             ModelOverrides = modelOverrides,
+            RunCount = runCount,
         };
         return true;
     }

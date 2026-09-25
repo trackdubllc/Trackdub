@@ -155,7 +155,7 @@ public static class Program
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
-            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>]");
+            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>]");
             return args.Length == 0 ? 1 : 0;
         }
         string? outputDirectory = null, stage = null, model = null, provider = null;
@@ -163,6 +163,7 @@ public static class Program
         string? expectedSha256 = null;
         string language = "es", mode = "fresh-process";
         bool reuseCache = false;
+        int runCount = 1;
         for (int index = 1; index < args.Length; index++)
         {
             if (args[index] == "--reuse-engine-cache")
@@ -189,6 +190,14 @@ public static class Program
                 case "--ffmpeg": ffmpeg = value; break;
                 case "--ffprobe": ffprobe = value; break;
                 case "--sha256": expectedSha256 = value; break;
+                case "--runs":
+                    if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
+                    {
+                        error.WriteLine($"Invalid run count '{value}'. Expected a positive integer.");
+                        return 1;
+                    }
+                    runCount = parsedRuns;
+                    break;
                 default:
                     error.WriteLine($"Unknown option {args[index - 1]}.");
                     return 1;
@@ -217,6 +226,7 @@ public static class Program
                     ModelDirectory = modelDirectory,
                     FfmpegPath = ffmpeg,
                     FfprobePath = ffprobe,
+                    RunCount = runCount,
                 }, cancellationToken).ConfigureAwait(false);
             output.WriteLine($"Evidence {report.RunId:N}: {report.Status} ({report.RunMode}, {report.Scenario})");
             if (report.Reason is not null) output.WriteLine(report.Reason);
@@ -234,7 +244,7 @@ public static class Program
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
-            output.WriteLine("controlled-matrix <fixture> --output <directory> [--stages <comma-separated>] [--model <stage=alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>]");
+            output.WriteLine("controlled-matrix <fixture> --output <directory> [--stages <comma-separated>] [--model <stage=alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>]");
             output.WriteLine("With no --stages, runs the full extended pipeline stage catalog in canonical order.");
             return args.Length == 0 ? 1 : 0;
         }

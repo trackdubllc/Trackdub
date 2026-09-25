@@ -17,4 +17,5 @@ public sealed record ControlledStageBenchmarkMatrixOptions
     public string? FfprobePath { get; init; }
     public IReadOnlyDictionary<string, string> ModelOverrides { get; init; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    public int RunCount { get; init; } = 1;
 }

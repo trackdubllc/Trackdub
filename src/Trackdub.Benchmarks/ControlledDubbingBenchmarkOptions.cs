@@ -16,4 +16,5 @@ public sealed record ControlledDubbingBenchmarkOptions
     public string? ModelDirectory { get; init; }
     public string? FfmpegPath { get; init; }
     public string? FfprobePath { get; init; }
+    public int RunCount { get; init; } = 1;
 }
