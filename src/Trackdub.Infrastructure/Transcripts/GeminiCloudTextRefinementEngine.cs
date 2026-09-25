@@ -14,7 +14,9 @@ public sealed class GeminiCloudTextRefinementEngine(
     public const string ProviderKey = "gemini";
     public const string ProviderName = "gemini";
     public const string EngineFamilyName = "gemini-refinement-cloud";
-    public const string DefaultModel = "gemini-2.5-flash";
+    public const string DefaultModel = "gemini-3.5-flash-lite";
+    public const string StandardModel = "gemini-2.5-flash";
+    public const string AdvancedModel = "gemini-3.8-flash";
 
     private const string EndpointBase = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -42,6 +44,7 @@ public sealed class GeminiCloudTextRefinementEngine(
         }
 
         string apiKey = await ResolveApiKeyAsync(cancellationToken).ConfigureAwait(false);
+        string model = ResolveModel(request);
 
         string systemInstruction = request.Scope switch
         {
@@ -67,7 +70,7 @@ public sealed class GeminiCloudTextRefinementEngine(
             Contents: [new GeminiContent([new GeminiPart(userContent)])],
             GenerationConfig: new GeminiGenerationConfig("application/json"));
 
-        string endpoint = $"{EndpointBase}/{DefaultModel}:generateContent?key={Uri.EscapeDataString(apiKey)}";
+        string endpoint = $"{EndpointBase}/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Content = new StringContent(
@@ -106,7 +109,7 @@ public sealed class GeminiCloudTextRefinementEngine(
         LastExecutionSummary = new StageRuntimeExecutionSummary(
             RequestedProvider: "cloud",
             SelectedProvider: "cloud",
-            ModelId: DefaultModel,
+            ModelId: model,
             ModelAlias: EngineFamilyName,
             BootstrapDetail: "Google Gemini Cloud API");
 
@@ -131,6 +134,41 @@ public sealed class GeminiCloudTextRefinementEngine(
         }
 
         return results;
+    }
+
+    private static string ResolveModel(TextRefinementRequest request)
+    {
+        string? envModel = Environment.GetEnvironmentVariable("TRACKDUB_GEMINI_REFINEMENT_MODEL");
+        if (!string.IsNullOrWhiteSpace(envModel))
+        {
+            return envModel.Trim();
+        }
+
+        string? variant = request.PreferredModelVariantAlias ??
+                          request.PreferredModelAlias ??
+                          request.Options?.NormalizedPreferredModelVariantAlias ??
+                          request.Options?.NormalizedPreferredModelAlias;
+
+        if (variant is not null)
+        {
+            if (variant.Contains("3.8", StringComparison.OrdinalIgnoreCase))
+            {
+                return AdvancedModel;
+            }
+
+            if (variant.Contains("2.5", StringComparison.OrdinalIgnoreCase))
+            {
+                return StandardModel;
+            }
+
+            if (variant.Contains("lite", StringComparison.OrdinalIgnoreCase) ||
+                variant.Contains("3.5", StringComparison.OrdinalIgnoreCase))
+            {
+                return DefaultModel;
+            }
+        }
+
+        return DefaultModel;
     }
 
     private async Task<string> ResolveApiKeyAsync(CancellationToken cancellationToken)

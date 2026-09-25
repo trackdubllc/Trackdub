@@ -41,12 +41,48 @@ public sealed class GeminiCloudTextRefinementEngineTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(handler.RequestUri);
-        Assert.Contains("models/gemini-2.5-flash:generateContent", handler.RequestUri.ToString());
+        Assert.Contains("models/gemini-3.5-flash-lite:generateContent", handler.RequestUri.ToString());
         Assert.Single(result);
         Assert.Equal("Hello world.", result[0].RefinedText);
         Assert.Equal("gemini-refinement-cloud", engine.EngineFamily);
         Assert.Equal("cloud", engine.LastExecutionSummary?.SelectedProvider);
-        Assert.Equal("gemini-2.5-flash", engine.LastExecutionSummary?.ModelId);
+        Assert.Equal("gemini-3.5-flash-lite", engine.LastExecutionSummary?.ModelId);
+    }
+
+    [Fact]
+    public async Task RefineAsync_selects_advanced_model_when_variant_is_3_8()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent("""
+                {
+                  "candidates": [
+                    {
+                      "content": {
+                        "parts": [
+                          { "text": "[\"Hello universe.\"]" }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """)
+        });
+        using var httpClient = new HttpClient(handler);
+        var engine = new GeminiCloudTextRefinementEngine(
+            httpClient,
+            new StaticCloudApiKeyProvider("test-gemini-key"));
+
+        IReadOnlyList<RefinedTextSegment> result = await engine.RefineAsync(
+            new TextRefinementRequest(
+                [new TextRefinementInputSegment(0, 0.0, 1.5, "hello universe")],
+                SourceLanguage: "en",
+                PreferredModelVariantAlias: "gemini-3.8-flash"),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(handler.RequestUri);
+        Assert.Contains("models/gemini-3.8-flash:generateContent", handler.RequestUri.ToString());
+        Assert.Equal("gemini-3.8-flash", engine.LastExecutionSummary?.ModelId);
     }
 
     [Fact]

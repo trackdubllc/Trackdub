@@ -44,13 +44,50 @@ public sealed class GeminiCloudTranslationEngineTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(handler.RequestUri);
-        Assert.Contains("models/gemini-2.5-flash:generateContent", handler.RequestUri.ToString());
+        Assert.Contains("models/gemini-3.8-flash:generateContent", handler.RequestUri.ToString());
         Assert.Contains("key=test-gemini-key", handler.RequestUri.Query);
         Assert.Equal(2, result.Count);
         Assert.Equal("Hola", result[0].Text);
         Assert.Equal("Mundo", result[1].Text);
-        Assert.Equal("gemini-2.5-flash", engine.LastExecutionMetadata?.ModelId);
-        Assert.Equal("gemini-2.5-flash", engine.LastExecutionSummary?.ModelId);
+        Assert.Equal("gemini-3.8-flash", engine.LastExecutionMetadata?.ModelId);
+        Assert.Equal("gemini-3.8-flash", engine.LastExecutionSummary?.ModelId);
+    }
+
+    [Fact]
+    public async Task TranslateAsync_selects_lite_model_when_variant_is_lite()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent("""
+                {
+                  "candidates": [
+                    {
+                      "content": {
+                        "parts": [
+                          { "text": "[\"Hola\"]" }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """)
+        });
+        using var httpClient = new HttpClient(handler);
+        var engine = new GeminiCloudTranslationEngine(
+            httpClient,
+            new StaticCloudApiKeyProvider("test-gemini-key"));
+
+        IReadOnlyList<TranslatedTextSegment> result = await engine.TranslateAsync(
+            new TranslationRequest(
+                "en",
+                "es",
+                [new TranslationInputSegment(0, 0, 1.0, "Hello")],
+                PreferredModelVariantAlias: "3.5-flash-lite"),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(handler.RequestUri);
+        Assert.Contains("models/gemini-3.5-flash-lite:generateContent", handler.RequestUri.ToString());
+        Assert.Equal("gemini-3.5-flash-lite", engine.LastExecutionMetadata?.ModelId);
     }
 
     [Fact]

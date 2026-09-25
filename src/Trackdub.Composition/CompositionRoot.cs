@@ -608,6 +608,7 @@ public static class CompositionRoot
         services.AddHttpClient<ElevenLabsCloudTtsEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<OpenAiCloudTtsEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<GoogleCloudTtsEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient<GeminiCloudTtsEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<ElevenLabsCloudDubbingEngine>(c => c.Timeout = TimeSpan.FromMinutes(40));
 
         // Forced-alignment adapters. wav2vec2 (phoneme-capable, commercial lane) is registered
@@ -687,7 +688,8 @@ public static class CompositionRoot
                 sp.GetRequiredService<RoutedTtsEngine>(),
                 sp.GetRequiredService<ElevenLabsCloudTtsEngine>(),
                 sp.GetRequiredService<OpenAiCloudTtsEngine>(),
-                sp.GetRequiredService<GoogleCloudTtsEngine>()));
+                sp.GetRequiredService<GoogleCloudTtsEngine>(),
+                sp.GetRequiredService<GeminiCloudTtsEngine>()));
     }
 
     /// <summary>
