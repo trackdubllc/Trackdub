@@ -115,7 +115,7 @@ public static class EngineCacheProbe
         string? cacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_CACHE_ROOT");
         if (!string.IsNullOrWhiteSpace(cacheRoot))
         {
-            return Path.Combine(
+            return Path.Join(
                 Path.GetFullPath(Environment.ExpandEnvironmentVariables(cacheRoot)),
                 "EngineCache");
         }
@@ -126,6 +126,6 @@ public static class EngineCacheProbe
             localAppDataRoot = AppContext.BaseDirectory;
         }
 
-        return Path.Combine(localAppDataRoot, "Trackdub", "EngineCache");
+        return Path.Join(localAppDataRoot, "Trackdub", "EngineCache");
     }
 }

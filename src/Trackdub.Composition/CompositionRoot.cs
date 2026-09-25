@@ -553,7 +553,7 @@ public static class CompositionRoot
                     .NvidiaTensorRtRtxLicenseAccepted));
         services.TryAddSingleton<IExecutionProviderSmokeTester, OnnxExecutionProviderSmokeTester>();
         services.TryAddSingleton<ISmokeVerdictStore>(sp =>
-            new FileSmokeVerdictStore(Path.Combine(
+            new FileSmokeVerdictStore(Path.Join(
                 sp.GetRequiredService<TrackdubStoragePaths>().UserCacheRoot,
                 "smoke-verdicts.json")));
         services.TryAddSingleton<IRuntimePlanner, RuntimePlanner>();

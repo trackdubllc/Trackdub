@@ -46,7 +46,7 @@ public static class EpContextArtifact
         string name = Path.GetFileNameWithoutExtension(sourceModelPath);
         return directory is null
             ? name + EpContextSuffix + ".onnx"
-            : Path.Combine(directory, name + EpContextSuffix + ".onnx");
+            : Path.Join(directory, name + EpContextSuffix + ".onnx");
     }
 
     public static string GetStampPath(string sourceModelPath)
