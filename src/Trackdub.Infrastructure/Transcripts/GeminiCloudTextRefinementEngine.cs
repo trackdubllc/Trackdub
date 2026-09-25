@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -240,8 +241,9 @@ public sealed class GeminiCloudTextRefinementEngine(
                     .ToArray();
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            Debug.WriteLine($"Failed to parse JSON string array content: {ex}");
         }
 
         return null;

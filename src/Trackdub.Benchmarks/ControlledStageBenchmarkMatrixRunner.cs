@@ -43,7 +43,7 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                 {
                     FixturePath = options.FixturePath,
                     ExpectedFixtureSha256 = options.ExpectedFixtureSha256,
-                    OutputDirectory = Path.Combine(options.OutputDirectory, stage),
+                    OutputDirectory = Path.Combine(options.OutputDirectory, Path.GetFileName(stage)),
                     Stage = stage,
                     Model = model,
                     Provider = options.Provider,
