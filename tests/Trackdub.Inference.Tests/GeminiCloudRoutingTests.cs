@@ -1,5 +1,6 @@
 using Trackdub.Contracts;
 using Trackdub.Composition.Translation;
+using Trackdub.Composition.Tts;
 using Trackdub.Contracts.Pipeline;
 
 namespace Trackdub.Inference.Tests;
@@ -135,6 +136,36 @@ public sealed class GeminiCloudRoutingTests
         Assert.Equal("cloud", engine.LastExecutionSummary?.SelectedProvider);
     }
 
+    [Fact]
+    public async Task SynthesizeAsync_with_gemini_tts_alias_routes_to_gemini_tts_engine()
+    {
+        var localEngine = new StubTtsEngine("local");
+        var elevenLabsEngine = new StubTtsEngine("elevenlabs");
+        var openAiEngine = new StubTtsEngine("openai");
+        var googleEngine = new StubTtsEngine("google");
+        var geminiEngine = new StubTtsEngine("gemini");
+
+        var engine = new CloudAwareTtsEngine(
+            localEngine,
+            elevenLabsEngine,
+            openAiEngine,
+            googleEngine,
+            geminiEngine);
+
+        TtsSynthesisResult result = await engine.SynthesizeAsync(
+            new TtsSynthesisRequest(
+                "Hello world",
+                "en",
+                new VoiceCatalogEntry("Kore", "en", "neutral", "Kore"),
+                Options: new InferenceRequestOptions(PreferredModelAlias: "gemini-tts-cloud")),
+            CancellationToken.None);
+
+        Assert.Equal("gemini", result.Provider);
+        Assert.Equal(1, geminiEngine.CallCount);
+        Assert.Equal(0, localEngine.CallCount);
+        Assert.Equal(0, googleEngine.CallCount);
+    }
+
     private sealed class StaticCloudApiKeyProvider(string? apiKey) : ICloudApiKeyProvider
     {
         public Task<string?> GetApiKeyAsync(string providerKey, CancellationToken cancellationToken) =>
@@ -187,6 +218,25 @@ public sealed class GeminiCloudRoutingTests
                     segment.EndSeconds,
                     translatedText)
             ]);
+        }
+    }
+
+    private sealed class StubTtsEngine(string providerName) : ITtsEngine
+    {
+        public int CallCount { get; private set; }
+
+        public Task<TtsSynthesisResult> SynthesizeAsync(
+            TtsSynthesisRequest request,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.FromResult(new TtsSynthesisResult(
+                WavBytes: [1, 2, 3],
+                DurationSamples: 100,
+                SampleRate: 24000,
+                ModelId: "test-model",
+                VoiceId: request.Voice.VoiceId,
+                Provider: providerName));
         }
     }
 }

@@ -16,8 +16,9 @@ public sealed class GeminiCloudTranscriptionEngine(
     public const string ProviderName = "gemini";
     public const string EngineFamilyName = "gemini-asr-cloud";
 
-    public const string DefaultModel = "gemini-2.5-flash";
+    public const string DefaultModel = "gemini-3.8-flash";
     public const string QualityModel = "gemini-2.5-pro";
+    public const string StandardModel = "gemini-2.5-flash";
     private const string EndpointBase = "https://generativelanguage.googleapis.com/v1beta/models";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -141,11 +142,24 @@ public sealed class GeminiCloudTranscriptionEngine(
             return envModel.Trim();
         }
 
-        if (string.Equals(request.Options?.NormalizedPreferredModelVariantAlias, "pro", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(request.Options?.NormalizedPreferredModelAlias, QualityModel, StringComparison.OrdinalIgnoreCase) ||
-            request.Options?.NormalizedPreferredModelAlias?.Contains("pro", StringComparison.OrdinalIgnoreCase) == true)
+        string? variant = request.Options?.NormalizedPreferredModelVariantAlias ?? request.Options?.NormalizedPreferredModelAlias;
+        if (variant is not null)
         {
-            return QualityModel;
+            if (variant.Contains("pro", StringComparison.OrdinalIgnoreCase))
+            {
+                return QualityModel;
+            }
+
+            if (variant.Contains("2.5", StringComparison.OrdinalIgnoreCase) ||
+                variant.Contains("flash-2.5", StringComparison.OrdinalIgnoreCase))
+            {
+                return StandardModel;
+            }
+
+            if (variant.Contains("3.8", StringComparison.OrdinalIgnoreCase))
+            {
+                return DefaultModel;
+            }
         }
 
         return DefaultModel;

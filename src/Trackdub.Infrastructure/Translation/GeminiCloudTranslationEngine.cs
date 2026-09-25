@@ -15,8 +15,10 @@ public sealed class GeminiCloudTranslationEngine(
     public const string ProviderName = "gemini";
     public const string EngineFamilyName = "gemini-translation-cloud";
 
-    public const string DefaultModel = "gemini-2.5-flash";
+    public const string DefaultModel = "gemini-3.8-flash";
     public const string QualityModel = "gemini-2.5-pro";
+    public const string LiteModel = "gemini-3.5-flash-lite";
+    public const string StandardModel = "gemini-2.5-flash";
     private const string EndpointBase = "https://generativelanguage.googleapis.com/v1beta/models";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -139,11 +141,31 @@ public sealed class GeminiCloudTranslationEngine(
             return envModel.Trim();
         }
 
-        if (string.Equals(request.PreferredModelVariantAlias, "pro", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(request.PreferredModelAlias, QualityModel, StringComparison.OrdinalIgnoreCase) ||
-            request.PreferredModelAlias?.Contains("pro", StringComparison.OrdinalIgnoreCase) == true)
+        string? variant = request.PreferredModelVariantAlias ??
+                          request.PreferredModelAlias;
+
+        if (variant is not null)
         {
-            return QualityModel;
+            if (variant.Contains("pro", StringComparison.OrdinalIgnoreCase))
+            {
+                return QualityModel;
+            }
+
+            if (variant.Contains("lite", StringComparison.OrdinalIgnoreCase) ||
+                variant.Contains("3.5", StringComparison.OrdinalIgnoreCase))
+            {
+                return LiteModel;
+            }
+
+            if (variant.Contains("2.5", StringComparison.OrdinalIgnoreCase))
+            {
+                return StandardModel;
+            }
+
+            if (variant.Contains("3.8", StringComparison.OrdinalIgnoreCase))
+            {
+                return DefaultModel;
+            }
         }
 
         return DefaultModel;
