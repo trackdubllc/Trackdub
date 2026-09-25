@@ -608,33 +608,8 @@ internal sealed class InferenceSessionPool : IDisposable
         IReadOnlyList<SessionLeaseRequest> requests,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(requests);
-        if (requests.Count == 0)
-        {
-            throw new ArgumentException("Bundle requires at least one session.", nameof(requests));
-        }
-
-        var ordered = requests
-            .OrderBy(r => r.Key, SessionPoolKey.StableComparer)
-            .ToArray();
-        for (int i = 1; i < ordered.Length; i++)
-        {
-            if (Equals(ordered[i - 1].Key, ordered[i].Key))
-            {
-                throw new ArgumentException(
-                    "Bundle contains duplicate session keys; multi-graph bundles require distinct graphs.",
-                    nameof(requests));
-            }
-        }
-
-        // Phase 1: make sure every session exists (warm). Individual GetLeaseAsync is
-        // single-flight and safe here — we release immediately so no gate is held.
-        foreach (SessionLeaseRequest request in ordered)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
-                .ConfigureAwait(false);
-        }
+        SessionLeaseRequest[] ordered = await PrepareBundleRequestsAsync(requests, cancellationToken)
+            .ConfigureAwait(false);
 
         // Phase 2: all-or-nothing exclusive acquire in stable order. TryWait(0) per key
         // so we never block on key N while holding keys 1..N-1. One bundle at a time
@@ -650,53 +625,8 @@ internal sealed class InferenceSessionPool : IDisposable
                 ObjectDisposedException.ThrowIf(disposed, this);
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var held = new List<(SessionPoolKey Key, PoolEntry Entry)>(ordered.Length);
-                bool allAcquired = true;
-                foreach (SessionLeaseRequest request in ordered)
-                {
-                    if (!entries.TryGetValue(request.Key, out PoolEntry? entry) || !TryAcquireGate(entry))
-                    {
-                        allAcquired = false;
-                        break;
-                    }
-
-                    if (entry.IsEvicted)
-                    {
-                        entry.ReleaseGateWithoutTouchingLru();
-                        allAcquired = false;
-                        break;
-                    }
-
-                    held.Add((request.Key, entry));
-                }
-
-                if (allAcquired && held.Count == ordered.Length)
-                {
-                    var leases = new SessionLease[ordered.Length];
-                    for (int i = 0; i < ordered.Length; i++)
-                    {
-                        SessionPoolKey key = ordered[i].Key;
-                        int requestIndex = -1;
-                        for (int r = 0; r < requests.Count; r++)
-                        {
-                            if (Equals(requests[r].Key, key))
-                            {
-                                requestIndex = r;
-                                break;
-                            }
-                        }
-
-                        PoolEntry entry = held.First(h => Equals(h.Key, key)).Entry;
-                        leases[requestIndex] = BuildLease(entry);
-                    }
-
-                    return new SessionLeaseBundle(leases);
-                }
-
-                foreach ((SessionPoolKey _, PoolEntry entry) in held)
-                {
-                    entry.ReleaseGateWithoutTouchingLru();
-                }
+                SessionLeaseBundle? bundle = TryAcquireBundle(ordered, requests);
+                if (bundle is not null) return bundle;
 
                 // A key can be permanently missing from `entries` — phase 1's GetLeaseAsync
                 // returns an ephemeral (unpooled) lease when admission is off and the pool is
@@ -737,6 +667,99 @@ internal sealed class InferenceSessionPool : IDisposable
         {
             bundleAcquireLock.Release();
         }
+    }
+
+    private SessionLeaseBundle? TryAcquireBundle(
+        SessionLeaseRequest[] ordered, IReadOnlyList<SessionLeaseRequest> requests)
+    {
+        var held = new List<(SessionPoolKey Key, PoolEntry Entry)>(ordered.Length);
+        bool allAcquired = true;
+        foreach (SessionLeaseRequest request in ordered)
+        {
+            if (!entries.TryGetValue(request.Key, out PoolEntry? entry) || !TryAcquireGate(entry))
+            {
+                allAcquired = false;
+                break;
+            }
+
+            if (entry.IsEvicted)
+            {
+                entry.ReleaseGateWithoutTouchingLru();
+                allAcquired = false;
+                break;
+            }
+
+            held.Add((request.Key, entry));
+        }
+
+        if (allAcquired && held.Count == ordered.Length)
+        {
+            return BuildBundleInRequestOrder(ordered, requests, held);
+        }
+
+        foreach ((SessionPoolKey _, PoolEntry entry) in held)
+        {
+            entry.ReleaseGateWithoutTouchingLru();
+        }
+
+        return null;
+    }
+
+    private SessionLeaseBundle BuildBundleInRequestOrder(
+        SessionLeaseRequest[] ordered,
+        IReadOnlyList<SessionLeaseRequest> requests,
+        List<(SessionPoolKey Key, PoolEntry Entry)> held)
+    {
+        var leases = new SessionLease[ordered.Length];
+        for (int i = 0; i < ordered.Length; i++)
+        {
+            SessionPoolKey key = ordered[i].Key;
+            int requestIndex = -1;
+            for (int r = 0; r < requests.Count; r++)
+            {
+                if (Equals(requests[r].Key, key))
+                {
+                    requestIndex = r;
+                    break;
+                }
+            }
+
+            PoolEntry entry = held.First(h => Equals(h.Key, key)).Entry;
+            leases[requestIndex] = BuildLease(entry);
+        }
+
+        return new SessionLeaseBundle(leases);
+    }
+
+    private async Task<SessionLeaseRequest[]> PrepareBundleRequestsAsync(
+        IReadOnlyList<SessionLeaseRequest> requests, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        if (requests.Count == 0)
+        {
+            throw new ArgumentException("Bundle requires at least one session.", nameof(requests));
+        }
+
+        SessionLeaseRequest[] ordered = requests.OrderBy(r => r.Key, SessionPoolKey.StableComparer).ToArray();
+        for (int i = 1; i < ordered.Length; i++)
+        {
+            if (Equals(ordered[i - 1].Key, ordered[i].Key))
+            {
+                throw new ArgumentException(
+                    "Bundle contains duplicate session keys; multi-graph bundles require distinct graphs.",
+                    nameof(requests));
+            }
+        }
+
+        // Warm each session before holding any bundle gate.
+        foreach (SessionLeaseRequest request in ordered)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return ordered;
     }
 
     private long CurrentReservedMb(int device)
@@ -1150,65 +1173,10 @@ internal sealed class InferenceSessionPool : IDisposable
         long now = Environment.TickCount64;
         long recentCutoff = now - RecentReleaseWindowMs;
 
-        SessionPoolKey? candidateKey = null;
-        PoolEntry? candidateEntry = null;
-        long candidateLastReleasedTicks = long.MaxValue;
-
-        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
-        {
-            if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
-            {
-                continue;
-            }
-
-            PoolEntry entry = pair.Value;
-            if (!entry.IsIdle)
-            {
-                continue;
-            }
-
-            long lastReleasedTicks = entry.LastReleasedTicks;
-            if (lastReleasedTicks >= recentCutoff)
-            {
-                continue;
-            }
-
-            if (entry.PinCount > 0)
-            {
-                continue;
-            }
-
-            if (candidateEntry is null || lastReleasedTicks < candidateLastReleasedTicks)
-            {
-                candidateKey = pair.Key;
-                candidateEntry = entry;
-                candidateLastReleasedTicks = lastReleasedTicks;
-            }
-        }
-
+        (SessionPoolKey? candidateKey, PoolEntry? candidateEntry) = FindOldestIdle(onlyDevice, recentCutoff);
         if (candidateEntry is null)
         {
-            foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
-            {
-                if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
-                {
-                    continue;
-                }
-
-                PoolEntry entry = pair.Value;
-                if (!entry.IsIdle || entry.PinCount > 0)
-                {
-                    continue;
-                }
-
-                long lastReleasedTicks = entry.LastReleasedTicks;
-                if (candidateEntry is null || lastReleasedTicks < candidateLastReleasedTicks)
-                {
-                    candidateKey = pair.Key;
-                    candidateEntry = entry;
-                    candidateLastReleasedTicks = lastReleasedTicks;
-                }
-            }
+            (candidateKey, candidateEntry) = FindOldestIdle(onlyDevice, recentCutoff: null);
         }
 
         if (candidateEntry is null)
@@ -1241,6 +1209,41 @@ internal sealed class InferenceSessionPool : IDisposable
         }
 
         return null;
+    }
+
+    private (SessionPoolKey? Key, PoolEntry? Entry) FindOldestIdle(int? onlyDevice, long? recentCutoff)
+    {
+        SessionPoolKey? candidateKey = null;
+        PoolEntry? candidateEntry = null;
+        long candidateLastReleasedTicks = long.MaxValue;
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
+        {
+            if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
+            {
+                continue;
+            }
+
+            PoolEntry entry = pair.Value;
+            if (!entry.IsIdle || entry.PinCount > 0)
+            {
+                continue;
+            }
+
+            long lastReleasedTicks = entry.LastReleasedTicks;
+            if (recentCutoff is not null && lastReleasedTicks >= recentCutoff.Value)
+            {
+                continue;
+            }
+
+            if (candidateEntry is null || lastReleasedTicks < candidateLastReleasedTicks)
+            {
+                candidateKey = pair.Key;
+                candidateEntry = entry;
+                candidateLastReleasedTicks = lastReleasedTicks;
+            }
+        }
+
+        return (candidateKey, candidateEntry);
     }
 
     private static bool TryAcquireGate(PoolEntry entry)

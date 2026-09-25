@@ -124,6 +124,15 @@ public static class EpContextArtifact
             return null;
         }
 
+        return HasMatchingSourceStamp(sourceModelPath, epContextPath, stampPath, currentEnvironmentFingerprint);
+    }
+
+    private static string? HasMatchingSourceStamp(
+        string sourceModelPath,
+        string epContextPath,
+        string stampPath,
+        string currentEnvironmentFingerprint)
+    {
         Stamp? stamp = TryReadStamp(stampPath);
         if (stamp is null ||
             !stamp.EnvironmentFingerprint.Equals(currentEnvironmentFingerprint, StringComparison.Ordinal))

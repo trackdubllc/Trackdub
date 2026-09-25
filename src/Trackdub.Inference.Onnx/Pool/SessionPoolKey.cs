@@ -361,6 +361,24 @@ internal sealed record SessionPoolKey
                 return 1;
             }
 
+            int c = CompareGraphIdentity(x, y);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = string.CompareOrdinal(x.OptionsFingerprint, y.OptionsFingerprint);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = x.Provider.CompareTo(y.Provider);
+            return c != 0 ? c : (x.DeviceId ?? -1).CompareTo(y.DeviceId ?? -1);
+        }
+
+        private static int CompareGraphIdentity(SessionPoolKey x, SessionPoolKey y)
+        {
             int c = string.CompareOrdinal(x.EngineFamily, y.EngineFamily);
             if (c != 0)
             {
@@ -391,19 +409,7 @@ internal sealed record SessionPoolKey
                 return c;
             }
 
-            c = string.CompareOrdinal(x.OptionsFingerprint, y.OptionsFingerprint);
-            if (c != 0)
-            {
-                return c;
-            }
-
-            c = x.Provider.CompareTo(y.Provider);
-            if (c != 0)
-            {
-                return c;
-            }
-
-            return (x.DeviceId ?? -1).CompareTo(y.DeviceId ?? -1);
+            return c;
         }
     }
 
