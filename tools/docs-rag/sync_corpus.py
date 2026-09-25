@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urljoin
 
 
 TOOL_ROOT = Path(__file__).resolve().parent
@@ -67,17 +68,21 @@ class _TextExtractor(HTMLParser):
 
     Root preference: the first <article> (GitHub README body, Sphinx page body), else <main> /
     role="main" (Just-the-Docs), else the whole page. Chrome inside the root (nav, header,
-    footer, sidebars, Sphinx "#" header links) is always dropped.
+    footer, sidebars, Sphinx "#" header links) is always dropped. Non-chrome links inside the
+    content are preserved as Markdown ``[text](url)`` so a reader can follow them (fragment-only
+    anchors are left as plain text).
     """
 
-    def __init__(self, root: str | None = None) -> None:
+    def __init__(self, root: str | None = None, base_url: str | None = None) -> None:
         super().__init__()
         self._root = root
+        self._base_url = base_url
         self._root_tag: str | None = None  # actual tag of the matched root (role="main" can sit on a div)
         self._root_depth = 0  # open elements named _root_tag, counting the root itself
         self._root_done = False
         self._skip_stack: list[str] = []
         self._parts: list[str] = []
+        self._link_stack: list[tuple[str, list[str]]] = []  # (href, inner text parts) for open anchors
 
     def _capturing(self) -> bool:
         if self._skip_stack:
@@ -87,7 +92,10 @@ class _TextExtractor(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in _VOID_TAGS:
             if tag == "br" and self._capturing():
-                self._parts.append("\n")
+                if self._link_stack:
+                    self._link_stack[-1][1].append(" ")
+                else:
+                    self._parts.append("\n")
             return
         if self._skip_stack:
             self._skip_stack.append(tag)
@@ -102,6 +110,14 @@ class _TextExtractor(HTMLParser):
             self._root_depth = 1
         elif self._root is None and _is_chrome(tag, attrs):
             self._skip_stack.append(tag)
+        if tag == "a" and self._capturing():
+            href = (dict(attrs).get("href") or "").strip()
+            # Fragment-only anchors describe in-page navigation, not other documents; keep
+            # their label as plain text. Resolve relative targets against the source page.
+            if href and not href.startswith("#"):
+                if self._base_url:
+                    href = urljoin(self._base_url, href)
+                self._link_stack.append((href, []))
 
     def handle_endtag(self, tag: str) -> None:
         if tag in _VOID_TAGS:
@@ -111,6 +127,12 @@ class _TextExtractor(HTMLParser):
             if tag in self._skip_stack:
                 while self._skip_stack and self._skip_stack.pop() != tag:
                     pass
+            return
+        if tag == "a" and self._link_stack:
+            href, parts = self._link_stack.pop()
+            inner = " ".join("".join(parts).split())
+            if inner:
+                self._parts.append(f"[{inner}]({href}) ")
             return
         if self._root_depth and tag == self._root_tag:
             self._root_depth -= 1
@@ -126,7 +148,10 @@ class _TextExtractor(HTMLParser):
             return
         text = data.strip()
         if text:
-            self._parts.append(text + " ")
+            if self._link_stack:
+                self._link_stack[-1][1].append(text)
+            else:
+                self._parts.append(text + " ")
 
     def text(self) -> str:
         raw = "".join(self._parts)
@@ -134,8 +159,8 @@ class _TextExtractor(HTMLParser):
         return "\n".join(line for line in lines if line).strip()
 
 
-def _extract(html: str, root: str | None) -> str:
-    extractor = _TextExtractor(root)
+def _extract(html: str, root: str | None, base_url: str | None = None) -> str:
+    extractor = _TextExtractor(root, base_url)
     extractor.feed(html)
     return extractor.text()
 
@@ -145,19 +170,19 @@ def _extract(html: str, root: str | None) -> str:
 _ARTICLE_MIN_SHARE_OF_MAIN = 0.25
 
 
-def html_to_text(html: str) -> str:
+def html_to_text(html: str, base_url: str | None = None) -> str:
     probe = _RootProbe()
     probe.feed(html)
     text = ""
     if probe.has_article:
-        text = _extract(html, "article")
+        text = _extract(html, "article", base_url)
     if probe.has_main:
-        main_text = _extract(html, "main")
+        main_text = _extract(html, "main", base_url)
         if len(text) < len(main_text) * _ARTICLE_MIN_SHARE_OF_MAIN:
             text = main_text
     if not text:
         # No content region, or it was empty (client-rendered page); use the whole document.
-        text = _extract(html, None)
+        text = _extract(html, None, base_url)
     return text
 
 
@@ -243,7 +268,7 @@ def fetch_url(url: str) -> str:
         content_type = response.headers.get("Content-Type", "")
     text = body.decode("utf-8", errors="replace")
     if "html" in content_type or text.lstrip().lower().startswith("<!doctype html") or text.lstrip().lower().startswith("<html"):
-        text = html_to_text(text)
+        text = html_to_text(text, base_url=url)
     return text.strip()
 
 

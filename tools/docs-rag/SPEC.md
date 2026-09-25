@@ -78,7 +78,7 @@ the tokenizer or metadata schema requires full reindexing.
 | `vendor/nvidia/` | TRT-RTX docs (arch, AOT/JIT, support matrix, best practices, troubleshooting, APIs) + EP ABI releases + Sortformer/Nemotron model cards |
 | `vendor/microsoft/` | Windows ML (overview, EP selection, initialization), DirectML |
 | `vendor/onnxruntime/` | EP docs (TRT-RTX, plugin EP, CUDA, DirectML, OpenVINO, QNN, MIGraphX), ORT GenAI, performance tuning, quantization |
-| `vendor/olive/` | Microsoft Olive docs (the pinned 0.3.0-cu12 recipe engine) |
+| `vendor/olive/` | Microsoft Olive docs (the pinned Olive 0.13.0 recipe engine) |
 | `vendor/amd/` | MIGraphX (install, driver, C++ API, operators, quantization) |
 | `vendor/intel/` | OpenVINO (get started, workflow, generative) |
 | `vendor/qualcomm/` | QNN (overview, integration guide, backends) |

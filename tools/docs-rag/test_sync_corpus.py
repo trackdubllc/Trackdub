@@ -363,6 +363,19 @@ class HtmlToTextTests(unittest.TestCase):
         html = "<body><main><nav><img src='a'><br>menu</nav><p>kept<br>line</p></main></body>"
         self.assertEqual(sync_corpus.html_to_text(html), "kept\nline")
 
+    def test_content_links_are_preserved_as_markdown(self):
+        html = "<body><main><p>See the <a href='/docs/performance/best-practices.html'>Best Practices</a> guide.</p></main></body>"
+        text = sync_corpus.html_to_text(html, base_url="https://docs.nvidia.com/x/")
+        self.assertEqual(text, "See the [Best Practices](https://docs.nvidia.com/docs/performance/best-practices.html) guide.")
+
+    def test_fragment_only_links_keep_plain_text(self):
+        html = "<body><main><p>Jump to <a href='#install'>Install</a> section.</p></main></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "Jump to Install section.")
+
+    def test_links_inside_chrome_are_still_dropped(self):
+        html = "<body><nav><a href='/docs/x.html'>Home</a></nav><main><p>Body text.</p></main></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "Body text.")
+
 
 if __name__ == "__main__":
     unittest.main()
