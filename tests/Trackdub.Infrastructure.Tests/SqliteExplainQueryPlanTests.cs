@@ -1,4 +1,4 @@
-﻿using Microsoft.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 using Trackdub.Domain;
 using Trackdub.Domain.Projects;
 using Trackdub.Domain.Translation;
