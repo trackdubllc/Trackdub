@@ -12,6 +12,10 @@ from huggingface_hub import HfApi, hf_hub_download, create_repo
 
 api = HfApi()
 ME = "tonythethompson"
+SOURCE_REVISIONS = {
+    "cgus/diar_streaming_sortformer_4spk-v2.1-onnx": "6418561696a11506e38eb0babd64d7d1081554d5",
+    "ISoloist1/madlad400-3b-mt-onnx": "0dfc0b48e063b55508704ff75e21416c8679f663",
+}
 
 
 def mirror(
@@ -25,7 +29,13 @@ def mirror(
 
     for dest_path, (src_repo, src_filename) in files.items():
         print(f"  Downloading {src_repo}/{src_filename} ...")
-        local = hf_hub_download(repo_id=src_repo, filename=src_filename, repo_type=repo_type)
+        revision = SOURCE_REVISIONS[src_repo]
+        local = hf_hub_download(
+            repo_id=src_repo,
+            filename=src_filename,
+            repo_type=repo_type,
+            revision=revision,
+        )
         print(f"  Uploading -> {dest_path} ...")
         api.upload_file(
             path_or_fileobj=local,

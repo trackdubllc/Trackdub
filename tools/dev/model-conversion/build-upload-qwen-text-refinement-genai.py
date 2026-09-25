@@ -34,6 +34,7 @@ from huggingface_hub import HfApi, hf_hub_download  # type: ignore[import]
 from onnxruntime_genai.models.builder import create_model  # type: ignore[import]
 
 HF_SRC = "Qwen/Qwen2.5-1.5B-Instruct"
+HF_SRC_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 HF_DST = "tonythethompson/Qwen2.5-1.5B-Instruct"
 
 UPLOAD_FILES = [
@@ -140,6 +141,7 @@ def supplement_from_source(output_dir: Path, cache_dir: Path) -> None:
         downloaded = hf_hub_download(
             repo_id=HF_SRC,
             filename=name,
+            revision=HF_SRC_REVISION,
             cache_dir=str(cache_dir),
         )
         shutil.copy2(downloaded, output_dir / name)
