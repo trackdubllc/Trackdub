@@ -163,12 +163,13 @@ public static class Program
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
-            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>] [--mock] [--dry-run]");
+            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>] [--mock] [--dry-run] [--report-dir <directory>]");
             return args.Length == 0 ? 1 : 0;
         }
         string? outputDirectory = null, stage = null, model = null, provider = null;
         string? sourceLanguage = null, modelDirectory = null, ffmpeg = null, ffprobe = null;
         string? expectedSha256 = null;
+        string? reportDirectory = null;
         string language = "es", mode = "fresh-process";
         bool reuseCache = false;
         bool mock = false;
@@ -211,6 +212,7 @@ public static class Program
                 case "--ffmpeg": ffmpeg = value; break;
                 case "--ffprobe": ffprobe = value; break;
                 case "--sha256": expectedSha256 = value; break;
+                case "--report-dir": reportDirectory = value; break;
                 case "--runs":
                     if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
                     {
@@ -253,6 +255,14 @@ public static class Program
                 }, cancellationToken).ConfigureAwait(false);
             output.WriteLine($"Evidence {report.RunId:N}: {report.Status} ({report.RunMode}, {report.Scenario})");
             if (report.Reason is not null) output.WriteLine(report.Reason);
+
+            if (!string.IsNullOrWhiteSpace(reportDirectory))
+            {
+                await Reports.BenchmarkReportExporter.ExportAllAsync(
+                    report, reportDirectory, "benchmark-evidence", cancellationToken).ConfigureAwait(false);
+                output.WriteLine($"Reports exported to: {reportDirectory}");
+            }
+
             return report.Status == Trackdub.Contracts.Benchmarking.BenchmarkEvidenceStatus.Completed ? 0 : 1;
         }
         catch (OperationCanceledException)
@@ -271,7 +281,7 @@ public static class Program
     {
         if (args.Length == 0 || args.Any(a => a is "--help" or "-h" or "/?"))
         {
-            output.WriteLine("matrix <fixture> --output <directory> [--providers <comma-separated>] [--baseline <provider>] [--scenario <name>] [--runs <count>] [--mock] [--dry-run] [--format <console|json|both>]");
+            output.WriteLine("matrix <fixture> --output <directory> [--providers <comma-separated>] [--baseline <provider>] [--scenario <name>] [--runs <count>] [--mock] [--dry-run] [--format <console|json|both>] [--report-dir <directory>]");
             output.WriteLine("Evaluates comparative execution provider performance (speedup, latency deltas, throughput, memory) across configured providers.");
             return args.Length == 0 ? 1 : 0;
         }
@@ -285,6 +295,7 @@ public static class Program
         bool mock = false;
         bool dryRun = false;
         ReportFormat format = ReportFormat.Both;
+        string? reportDirectory = null;
 
         for (int index = 1; index < args.Length; index++)
         {
@@ -334,6 +345,9 @@ public static class Program
                         error.WriteLine($"Unknown format '{value}'. Expected console, json, or both.");
                         return 1;
                     }
+                    break;
+                case "--report-dir":
+                    reportDirectory = value;
                     break;
                 default:
                     error.WriteLine($"Unknown option {arg}.");
@@ -390,6 +404,23 @@ public static class Program
             {
                 string reportPath = Path.Join(outputDirectory, "execution-provider-matrix.json");
                 output.WriteLine($"Report written to: {reportPath}");
+            }
+
+            // Export Markdown alongside JSON into output dir by default, or report-dir if specified
+            string exportDir = reportDirectory ?? outputDirectory;
+            await Reports.BenchmarkReportExporter.ExportMarkdownAsync(
+                report,
+                Path.Join(exportDir, "execution-provider-matrix.md"),
+                cancellationToken).ConfigureAwait(false);
+            output.WriteLine($"Markdown report written to: {Path.Join(exportDir, "execution-provider-matrix.md")}");
+
+            if (!string.IsNullOrWhiteSpace(reportDirectory) && reportDirectory != outputDirectory)
+            {
+                // Also copy JSON to report dir for a single-directory archive
+                await Reports.BenchmarkReportExporter.ExportJsonAsync(
+                    report,
+                    Path.Join(reportDirectory, "execution-provider-matrix.json"),
+                    cancellationToken).ConfigureAwait(false);
             }
 
             return 0;
