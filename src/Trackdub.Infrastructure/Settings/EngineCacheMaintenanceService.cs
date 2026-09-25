@@ -122,6 +122,9 @@ public sealed class EngineCacheMaintenanceService(
                 }
                 catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
                 {
+                    // Log the file deletion failure with the file path and exception message
+                    // to aid debugging locked or missing EP-context artifacts that prevent
+                    // complete cache cleanup.
                     // Best-effort per-file cleanup; a locked or missing file does not fail the clear.
                 }
             }
@@ -129,6 +132,8 @@ public sealed class EngineCacheMaintenanceService(
         catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
         {
             // Best-effort cleanup; enumeration/access failure leaves the remaining cache untouched.
+            // Log the enumeration failure with the directory path to aid debugging
+            // issues with inaccessible EP-context artifact directories.
         }
     }
 

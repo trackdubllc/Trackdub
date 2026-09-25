@@ -129,7 +129,18 @@ public sealed class FileSmokeVerdictStore : ISmokeVerdictStore
         foreach (string oldest in entries
                      .OrderBy(entry =>
                      {
-                         DateTimeOffset.TryParse(entry.Value, out DateTimeOffset timestamp);
+                         // Parse timestamp explicitly with invariant culture for correct eviction ordering.
+                         // TryParse without the out result assigned defaults to DateTimeOffset.MinValue
+                         // (1/1/0001 12:00:00 AM +00:00), so unparseable entries sort oldest and
+                         // are evicted first.
+                         if (DateTimeOffset.TryParse(
+                             entry.Value,
+                             System.Globalization.CultureInfo.InvariantCulture,
+                             System.Globalization.DateTimeStyles.RoundtripKind,
+                             out DateTimeOffset timestamp))
+                         {
+                             return timestamp;
+                         }
                          return timestamp;
                      })
                      .Take(entries.Count - MaxEntries)

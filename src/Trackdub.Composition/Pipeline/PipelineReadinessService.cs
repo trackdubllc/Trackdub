@@ -52,6 +52,14 @@ public sealed class PipelineReadinessService(
             : maxConcurrentStageEvaluations.Value > 0
                 ? maxConcurrentStageEvaluations.Value
                 : throw new ArgumentOutOfRangeException(nameof(maxConcurrentStageEvaluations));
+            ? DefaultMaxConcurrentStageEvaluations
+        stageEvaluationTimeout is null
+            ? DefaultStageEvaluationTimeout
+            : stageEvaluationTimeout.Value > TimeSpan.Zero || stageEvaluationTimeout.Value == Timeout.InfiniteTimeSpan
+                ? stageEvaluationTimeout.Value
+                : throw new ArgumentOutOfRangeException(nameof(stageEvaluationTimeout));
+                ? maxConcurrentStageEvaluations.Value
+                : throw new ArgumentOutOfRangeException(nameof(maxConcurrentStageEvaluations));
     private readonly TimeSpan _stageEvaluationTimeout =
         stageEvaluationTimeout is null
             ? DefaultStageEvaluationTimeout
