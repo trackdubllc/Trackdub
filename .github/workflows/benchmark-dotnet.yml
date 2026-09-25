@@ -44,8 +44,6 @@ jobs:
     if: (github.event_name == 'schedule' && vars.TRACKDUB_BENCHMARKDOTNET == 'true') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'cpu')
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
@@ -88,7 +86,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
       BDN_BASELINE_COMMIT: ${{ inputs.baseline_commit }}
     steps:
       - name: Checkout Source
@@ -98,6 +95,8 @@ jobs:
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
         with:
           dotnet-version: '10.0.x'
           cache: true
@@ -135,7 +134,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      DOTNET_INSTALL_DIR: ${{ github.workspace }}/.dotnet
       TRACKDUB_BDN_ONNX_MODEL: ${{ inputs.onnx_model_path }}
       TRACKDUB_BDN_ONNX_INPUT_NAME: ${{ inputs.onnx_input_name }}
       TRACKDUB_BDN_ONNX_INPUT_SHAPE: ${{ inputs.onnx_input_shape }}
@@ -145,6 +143,8 @@ jobs:
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
         with:
           dotnet-version: '10.0.x'
           cache: true
