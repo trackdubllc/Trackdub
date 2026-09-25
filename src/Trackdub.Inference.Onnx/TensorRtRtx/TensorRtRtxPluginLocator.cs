@@ -37,21 +37,37 @@ internal static class TensorRtRtxPluginLocator
 
         if (!string.IsNullOrWhiteSpace(explicitPluginDirectory))
         {
-            return ValidateCandidate(
+            TensorRtRtxPluginResolution explicitResolution = ValidateCandidate(
                 explicitPluginDirectory,
                 TensorRtRtxPluginDirectorySource.ExplicitStudioSetting,
                 directoryExists,
                 fileExists);
+
+            // The bundle installer persists its install directory into this setting, so after a pin
+            // bump it still names the previous managed bundle (e.g. Providers/trt-rtx/0.3.0/cu12/...),
+            // which lacks the new runtime DLLs. Only a user-chosen directory is authoritative.
+            if (explicitResolution.Succeeded ||
+                !TensorRtRtxProviderConstants.IsSupersededManagedInstallDirectory(explicitResolution.DirectoryPath, defaultInstallDirectory))
+            {
+                return explicitResolution;
+            }
         }
 
         string? environmentDirectory = getEnvironmentVariable(TensorRtRtxProviderConstants.PluginDirectoryEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(environmentDirectory))
         {
-            return ValidateCandidate(
+            // Same staleness rule: tools/dev/Fetch-TrtRtxEp.ps1 prints the managed install directory
+            // for this variable, so a persisted value outlives the pin it was set for.
+            TensorRtRtxPluginResolution environmentResolution = ValidateCandidate(
                 environmentDirectory,
                 TensorRtRtxPluginDirectorySource.EnvironmentVariable,
                 directoryExists,
                 fileExists);
+            if (environmentResolution.Succeeded ||
+                !TensorRtRtxProviderConstants.IsSupersededManagedInstallDirectory(environmentResolution.DirectoryPath, defaultInstallDirectory))
+            {
+                return environmentResolution;
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(defaultInstallDirectory))

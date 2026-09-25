@@ -1,4 +1,4 @@
-﻿#if WINDOWS
+#if WINDOWS
 using Trackdub.Composition.HardwareProfiler;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Persistence;

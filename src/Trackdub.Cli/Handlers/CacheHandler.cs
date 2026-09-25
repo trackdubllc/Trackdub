@@ -33,6 +33,61 @@ internal static class CacheHandler
         return Program.ExitSuccess;
     }
 
+    public static async Task<int> WarmEnginesAsync(
+        TrackdubSessionFactory factory,
+        TextWriter output,
+        TextWriter progressOutput,
+        IReadOnlyList<string>? modelPaths,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IEpContextWarmupService warmup = factory.GetRequiredService<IEpContextWarmupService>();
+
+        // Synchronous reporter on the progress stream: keeps stdout machine-readable and
+        // guarantees every progress line is written before the JSON report line.
+        var progress = new ImmediateProgress(progressOutput);
+        EpContextWarmReport report = await warmup.WarmAsync(modelPaths, progress, cancellationToken)
+            .ConfigureAwait(false);
+
+        var payload = new
+        {
+            command = "cache warm",
+            engineCacheDirectory = report.EngineCacheDirectory,
+            environmentFingerprint = report.EnvironmentFingerprint,
+            compiled = report.CompiledCount,
+            reused = report.ReusedCount,
+            skipped = report.SkippedCount,
+            failed = report.FailedCount,
+            items = report.Items.Select(item => new
+            {
+                sourceModelPath = item.SourceModelPath,
+                status = item.Status,
+                epContextPath = item.EpContextPath,
+                compileMilliseconds = item.CompileMilliseconds,
+                warmLoadMilliseconds = item.WarmLoadMilliseconds,
+                detail = item.Detail,
+            }),
+            message = BuildWarmMessage(report),
+        };
+
+        string json = JsonSerializer.Serialize(payload, CliJsonOptions.Default);
+        await output.WriteLineAsync(json).ConfigureAwait(false);
+        return report.FailedCount > 0 ? Program.ExitPipelineFailure : Program.ExitSuccess;
+    }
+
+    private static string BuildWarmMessage(EpContextWarmReport report) =>
+        $"EP-context warm: compiled={report.CompiledCount}, reused={report.ReusedCount}, " +
+        $"skipped={report.SkippedCount}, failed={report.FailedCount}.";
+
+    private sealed class ImmediateProgress(TextWriter progressOutput) : IProgress<string>
+    {
+        public void Report(string message)
+        {
+            progressOutput.WriteLine(message);
+        }
+    }
+
     private static string BuildClearEnginesMessage(EngineCacheClearResult result)
     {
         if (!result.DirectoryExisted)

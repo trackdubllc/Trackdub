@@ -19,6 +19,9 @@ using Trackdub.Composition.HardwareProfiler;
 using Trackdub.Composition.Runtime.Planning;
 using Trackdub.Composition.Runtime;
 using Trackdub.Composition.StarterPacks;
+using Trackdub.Composition.Transcription;
+using Trackdub.Composition.Translation;
+using Trackdub.Composition.Tts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Inference.Onnx.Migraphx;
 using Trackdub.Contracts.Diagnostics;
@@ -563,7 +566,11 @@ public static class CompositionRoot
         services.TryAddSingleton(sp => new BenchmarkModelPathResolver(
             sp.GetService<BundledModelManifestRegistry>(),
             sp.GetRequiredService<TrackdubStoragePaths>().ModelCacheDirectory));
-        services.TryAddSingleton<ITranslationLanguageRouter, TranslationLanguageRouter>();
+        services.TryAddSingleton<TranslationLanguageRouter>();
+        services.TryAddSingleton<ITranslationLanguageRouter>(sp =>
+            new CloudAwareTranslationLanguageRouter(
+                sp.GetRequiredService<TranslationLanguageRouter>(),
+                sp.GetRequiredService<ICloudApiKeyProvider>()));
         services.TryAddSingleton<IGraphemeToPhoneme>(_ => new EspeakNgPhonemizer());
         services.TryAddScoped<IVoiceCatalog>(sp =>
             CreateKokoroVoiceCatalog(
@@ -588,6 +595,8 @@ public static class CompositionRoot
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ITtsEngineAdapter, Qwen3TtsEngine>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ITtsEngineAdapter, CosyVoiceTtsEngine>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ITextRefinementEngine, QwenTextRefinementEngine>());
+        services.AddHttpClient<GeminiCloudTextRefinementEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ITextRefinementEngine, GeminiCloudTextRefinementEngine>());
         services.TryAddScoped<ITextRefinementEngine>(sp =>
             new RoutedTextRefinementEngine(sp.GetServices<ITextRefinementEngine>()));
         services.TryAddScoped<ILocalAssistant, QwenLocalAssistantEngine>();
@@ -599,6 +608,7 @@ public static class CompositionRoot
         services.AddHttpClient<ElevenLabsCloudTtsEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<OpenAiCloudTtsEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<GoogleCloudTtsEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient<GeminiCloudTtsEngine>(c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient<ElevenLabsCloudDubbingEngine>(c => c.Timeout = TimeSpan.FromMinutes(40));
 
         // Forced-alignment adapters. wav2vec2 (phoneme-capable, commercial lane) is registered
@@ -656,12 +666,30 @@ public static class CompositionRoot
         services.TryAddScoped<ILipSynthesisSegmentRepository, SqliteLipSynthesisSegmentRepository>();
 
         services.TryAddScoped<ISpeechRegionDetector, RoutedSpeechRegionDetector>();
-        services.TryAddScoped<IAudioTranscriptionEngine, RoutedAudioTranscriptionEngine>();
+        services.TryAddScoped<RoutedAudioTranscriptionEngine>();
+        services.TryAddScoped<IAudioTranscriptionEngine>(sp =>
+            new CloudAwareAudioTranscriptionEngine(
+                sp.GetRequiredService<RoutedAudioTranscriptionEngine>(),
+                sp.GetRequiredService<OpenAiCloudTranscriptionEngine>(),
+                sp.GetRequiredService<GeminiCloudTranscriptionEngine>()));
         services.TryAddScoped<ISpeakerDiarizationEngine, RoutedSpeakerDiarizationEngine>();
         services.TryAddScoped<IStemSeparationEngine, RoutedStemSeparationEngine>();
         services.TryAddScoped<IOverlapRescueEngine, RoutedOverlapRescueEngine>();
-        services.TryAddScoped<ITranslationEngine, RoutedTranslationEngine>();
-        services.TryAddScoped<ITtsEngine, RoutedTtsEngine>();
+        services.TryAddScoped<RoutedTranslationEngine>();
+        services.TryAddScoped<ITranslationEngine>(sp =>
+            new CloudAwareTranslationEngine(
+                sp.GetRequiredService<RoutedTranslationEngine>(),
+                sp.GetRequiredService<DeepLCloudTranslationEngine>(),
+                sp.GetRequiredService<OpenAiCloudTranslationEngine>(),
+                sp.GetRequiredService<GeminiCloudTranslationEngine>()));
+        services.TryAddScoped<RoutedTtsEngine>();
+        services.TryAddScoped<ITtsEngine>(sp =>
+            new CloudAwareTtsEngine(
+                sp.GetRequiredService<RoutedTtsEngine>(),
+                sp.GetRequiredService<ElevenLabsCloudTtsEngine>(),
+                sp.GetRequiredService<OpenAiCloudTtsEngine>(),
+                sp.GetRequiredService<GoogleCloudTtsEngine>(),
+                sp.GetRequiredService<GeminiCloudTtsEngine>()));
     }
 
     /// <summary>

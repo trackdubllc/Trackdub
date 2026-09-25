@@ -47,27 +47,20 @@ public static class TrtRtxUnsupportedOpScanner
         "QAttention",
         "Attention");
 
-    private static byte[][] BuildOpTypeMarkers(params string[] opTypes)
-    {
-        var markers = new List<byte[]>(opTypes.Length);
-        foreach (string opType in opTypes)
-        {
-            byte[] name = System.Text.Encoding.ASCII.GetBytes(opType);
-            if (name.Length is < 1 or > 127)
+    private static byte[][] BuildOpTypeMarkers(params string[] opTypes) =>
+        opTypes
+            .Select(System.Text.Encoding.ASCII.GetBytes)
+            .Where(name => name.Length is >= 1 and <= 127)
+            .Select(name =>
             {
-                continue;
-            }
-
-            // NodeProto.op_type = field 4, length-delimited: tag 0x22, len, bytes.
-            byte[] marker = new byte[name.Length + 2];
-            marker[0] = 0x22;
-            marker[1] = (byte)name.Length;
-            name.CopyTo(marker, 2);
-            markers.Add(marker);
-        }
-
-        return markers.ToArray();
-    }
+                // NodeProto.op_type = field 4, length-delimited: tag 0x22, len, bytes.
+                byte[] marker = new byte[name.Length + 2];
+                marker[0] = 0x22;
+                marker[1] = (byte)name.Length;
+                name.CopyTo(marker, 2);
+                return marker;
+            })
+            .ToArray();
 
     private static readonly ConcurrentDictionary<string, (long Size, long MTime, string[] Ops)> Cache =
         new(StringComparer.OrdinalIgnoreCase);
@@ -99,12 +92,10 @@ public static class TrtRtxUnsupportedOpScanner
             // Drop stale entries for this path when the file changed.
             foreach (string stale in Cache.Keys
                          .Where(k => k.StartsWith(fullPath + "|", StringComparison.OrdinalIgnoreCase))
+                         .Where(k => !string.Equals(k, key, StringComparison.Ordinal))
                          .ToArray())
             {
-                if (!string.Equals(stale, key, StringComparison.Ordinal))
-                {
-                    Cache.TryRemove(stale, out _);
-                }
+                Cache.TryRemove(stale, out _);
             }
 
             string[] ops = Scan(fullPath);
@@ -137,13 +128,10 @@ public static class TrtRtxUnsupportedOpScanner
         while ((read = stream.Read(buffer, carry, buffer.Length - carry)) > 0)
         {
             int length = carry + read;
-            foreach (byte[] marker in UnsupportedOpMarkers)
+            foreach (byte[] marker in UnsupportedOpMarkers.Where(marker => ContainsMarker(buffer.AsSpan(0, length), marker)))
             {
-                if (ContainsMarker(buffer.AsSpan(0, length), marker))
-                {
-                    // marker = 0x22, len, ASCII op_type
-                    hits.Add(System.Text.Encoding.ASCII.GetString(marker, 2, marker.Length - 2));
-                }
+                // marker = 0x22, len, ASCII op_type
+                hits.Add(System.Text.Encoding.ASCII.GetString(marker, 2, marker.Length - 2));
             }
 
             // Keep a tail overlap equal to the longest marker so a split marker is rechecked.

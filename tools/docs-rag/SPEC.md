@@ -312,5 +312,5 @@ npx wrangler ai-search jobs list trackdub-docs
 
 - `Trackdub/tools/docs-rag/README.md` — short setup/usage
 - `Trackdub/tools/mcp-trackdub-gpu-docs/README.md` — the local v0 MCP
-- `Trackdub/docs/reference/tensorrt-rtx-ep-abi-plugin.md` — the pin this corpus is keyed to (EP ABI 0.3.0 / cu12)
+- `Trackdub/docs/reference/tensorrt-rtx-ep-abi-plugin.md` — the pin this corpus is keyed to (EP ABI 0.4.2 win / 0.4.0 linux, cu13, TRT-RTX 1.6.1)
 - `Trackdub-gated/docs/audits/2026-09-19-four-repo-audit/` — corpus includes this audit set

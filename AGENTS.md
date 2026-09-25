@@ -24,6 +24,7 @@ DubBench → Benchmarks, Domain, Inference, Inference.Onnx
 DubBench.DevHost → DubBench, Infrastructure
 Benchmarks → Application, Composition, Domain, Inference, Inference.Onnx, Infrastructure
 Benchmarks.DevHost → Benchmarks
+Benchmarks.Micro → Inference.Onnx
 Tools → Application, Domain, Infrastructure, Media
 Contracts → Domain
 Licensing → (nothing)
@@ -55,7 +56,18 @@ dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows 
 dotnet build Trackdub.Inference.slnx -m:1
 dotnet build Trackdub.Sdk.slnx -m:1
 dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- --help
+dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- controlled-matrix <fixture> --output <dir>
+dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 ```
+
+## BenchmarkDotNet policy
+- `src/Trackdub.Benchmarks.Micro` is the BenchmarkDotNet project for pure CPU, tensor, tokenizer, and opt-in real-model ONNX measurements.
+- Keep `src/Trackdub.Benchmarks` as the source of truth for controlled end-to-end pipeline evidence and `BenchmarkEvidenceReport`; do not replace or merge it with BDN artifacts.
+- Use `controlled-matrix` for comparable per-stage runs; it executes the controlled pipeline path and preserves each stage's evidence separately.
+- Run BDN in Release mode with deterministic inputs and `GlobalSetup`; keep model, tokenizer, file, and session initialization outside measured methods.
+- Do not run BDN on pull-request CI. CPU runs are manually/nightly triggered; real-model ONNX and saved-commit comparisons are opt-in through `.github/workflows/benchmark-dotnet.yml`.
+- Use `scripts/ci/run_benchmarkdotnet_baseline.py` for saved-commit comparisons; compare like-for-like benchmark names and keep threshold results separate from correctness tests.
+- BenchmarkDotNet usage and environment variables are documented in `docs/benchmarks/benchmarkdotnet.md` and `src/Trackdub.Benchmarks.Micro/README.md`.
 
 ## Coding Style & Testing
 - Style: File-scoped namespaces, `sealed` where extension not intended, `Async` on async methods, immutable `record` in Domain.

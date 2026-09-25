@@ -4,8 +4,15 @@
   Refreshes runtime/trt-rtx-ep.manifest.json for a new TensorRT RTX EP ABI release.
 
 .DESCRIPTION
-  Downloads win-x64 and linux-x64 archives from the NVIDIA GitHub release tag, computes
+  Downloads win-x64 and linux-x64 archives from the NVIDIA GitHub release tag(s), computes
   SHA-256 and size, and patches runtime/trt-rtx-ep.manifest.json.
+
+  NVIDIA does not publish every platform on every tag (v0.4.2 is Windows-only); pass
+  -LinuxVersion to pin the linux-x64 package to an older tag. It is recorded as a per-package
+  "version" and drives that platform's install directory. -TrtRtxRuntimeVersion is the
+  TensorRT-RTX runtime the bundle vendors (e.g. tensorrt_rtx_1_6.dll -> 1.6.x); it must match
+  TensorRtRtxProviderConstants.BundledTrtRtxRuntimeVersion because it feeds the smoke-verdict
+  and EP-context invalidation fingerprints.
 
   After running, update TensorRtRtxProviderConstants, user-facing install hints, run smoke
   tests, and commit the manifest. See docs/internal/tensorrt-rtx-ep-abi-plugin.md.
@@ -15,7 +22,12 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
 
-    [string]$CudaVariant = 'cu12',
+    [Parameter(Mandatory = $true)]
+    [string]$TrtRtxRuntimeVersion,
+
+    [string]$LinuxVersion,
+
+    [string]$CudaVariant = 'cu13',
 
     [string]$ManifestPath,
 
@@ -54,8 +66,8 @@ function Get-ReleaseArchiveSpec([string]$ReleaseVersion, [string]$Cuda, [string]
 
     if ($Rid -eq 'linux-x64') {
         return @{
-            ArchiveUrl = "$base/TensorRT-RTX-EP-ABI-v$ReleaseVersion-$Cuda-linux-x64.tar.gz"
-            ArchiveKind = 'tar.gz'
+            ArchiveUrl = "$base/TensorRT-RTX-EP-ABI-v$ReleaseVersion-$Cuda-linux-x86_64.zip"
+            ArchiveKind = 'zip'
         }
     }
 
@@ -86,11 +98,21 @@ if (-not $ManifestPath) {
     $ManifestPath = Join-Path $repoRoot 'runtime/trt-rtx-ep.manifest.json'
 }
 
-$packages = @{}
+if (-not $LinuxVersion) {
+    $LinuxVersion = $Version
+}
+
+$packages = [ordered]@{}
 foreach ($rid in @('win-x64', 'linux-x64')) {
-    $spec = Get-ReleaseArchiveSpec -ReleaseVersion $Version -Cuda $CudaVariant -Rid $rid
+    $ridVersion = if ($rid -eq 'linux-x64') { $LinuxVersion } else { $Version }
+    $spec = Get-ReleaseArchiveSpec -ReleaseVersion $ridVersion -Cuda $CudaVariant -Rid $rid
     $metrics = Measure-RemoteArchive -Url $spec.ArchiveUrl
-    $packages[$rid] = [ordered]@{
+    $packages[$rid] = [ordered]@{}
+    if ($ridVersion -ne $Version) {
+        $packages[$rid].version = $ridVersion
+    }
+
+    $packages[$rid] += [ordered]@{
         archiveUrl = $spec.ArchiveUrl
         archiveKind = $spec.ArchiveKind
         sha256 = $metrics.Sha256
@@ -103,6 +125,7 @@ $manifest = [ordered]@{
     schemaVersion = 1
     version = $Version
     cudaVariant = $CudaVariant
+    trtRtxRuntimeVersion = $TrtRtxRuntimeVersion
     licenseUrl = $LicenseUrl
     packages = $packages
 }
@@ -118,7 +141,7 @@ Set-Content -Path $ManifestPath -Value $json -Encoding utf8NoBOM -NoNewline
 Write-Host "Updated $ManifestPath"
 Write-Host ''
 Write-Host 'Checklist:'
-Write-Host "  1. Update TensorRtRtxProviderConstants (BundledVersion, install hints)."
+Write-Host "  1. Update TensorRtRtxProviderConstants (BundledVersionWindows/Linux, BundledCudaVariant, BundledTrtRtxRuntimeVersion, runtime DLL names)."
 Write-Host '  2. Run tools/dev/Fetch-TrtRtxEp.ps1 and trackdub providers trt-rtx status.'
 Write-Host '  3. Run TRT smoke / inference tests on Windows and Linux.'
 Write-Host '  4. Commit runtime/trt-rtx-ep.manifest.json and constant updates.'

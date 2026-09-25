@@ -15,7 +15,7 @@ public enum TensorRtRtxReadinessBlocker
     EpNotPresent,
     EpNotReady,
     EpDownloadFailed,
-    /// <summary>CUDA 12 runtime (cudart64_12 / libcudart.so.12) is missing or failed to load. Not the same as plugin-not-present.</summary>
+    /// <summary>CUDA runtime required by the plugin bundle (libcudart.so.13 on Linux) is missing or failed to load. Not the same as plugin-not-present.</summary>
     CudaRuntimeMissing,
     EpRegisterFailed,
     OrtProviderUnavailable,

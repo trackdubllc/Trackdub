@@ -356,6 +356,12 @@ public static class ModelLabCommand
         TextWriter error,
         CancellationToken cancellationToken)
     {
+        // SkipLayerNormalization / BiasGelu exist on every provider route and block
+        // TensorRT-RTX import; decompose them first so residual MHA is the only remaining
+        // contrib surface.
+        await DecomposeMicrosoftContribOpsAsync(
+            options, variantDirectory, processRunner, output, error, cancellationToken).ConfigureAwait(false);
+
         if (!candidate.BenchmarkProvider.Equals("dml", StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -398,6 +404,43 @@ public static class ModelLabCommand
 
         output.WriteLine("  graph: decomposed Whisper cross-attention for DirectML");
         return null;
+    }
+
+    private static async Task DecomposeMicrosoftContribOpsAsync(
+        ModelLabCommandOptions options,
+        string variantDirectory,
+        IModelLabProcessRunner processRunner,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        string scriptPath = Path.Join(
+            options.RepositoryRootPath,
+            "tools".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            "model-lab".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            "decompose-microsoft-contrib-ops.py".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (!File.Exists(scriptPath))
+        {
+            return;
+        }
+
+        foreach (string onnxPath in Directory
+                     .EnumerateFiles(variantDirectory, "*.onnx", SearchOption.TopDirectoryOnly)
+                     .Order(StringComparer.OrdinalIgnoreCase))
+        {
+            int exitCode = await processRunner.RunAsync(
+                new ModelLabProcessStartInfo(
+                    options.PythonPath,
+                    [scriptPath, onnxPath],
+                    options.RepositoryRootPath),
+                output,
+                error,
+                cancellationToken).ConfigureAwait(false);
+            if (exitCode == 0)
+            {
+                output.WriteLine($"  graph: decomposed com.microsoft contrib ops in {Path.GetFileName(onnxPath)}");
+            }
+        }
     }
 
     private static async Task<ModelLabCandidateResult?> OptimizeGeneratedOnnxComponentsAsync(
