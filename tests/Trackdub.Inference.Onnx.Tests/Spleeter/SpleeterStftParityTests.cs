@@ -196,7 +196,7 @@ public sealed class SpleeterStftParityTests
 
         rmsError = Math.Sqrt(rmsError / (end - start));
         double rmsSignal = Math.Sqrt(den / (end - start));
-        Assert.True(rmsError < 0.25 * rmsSignal + 1e-4,
+        Assert.True(rmsError < (0.25 * rmsSignal) + 1e-4,
             $"RMS error {rmsError} too large vs signal RMS {rmsSignal} (scale={scale}).");
     }
 
