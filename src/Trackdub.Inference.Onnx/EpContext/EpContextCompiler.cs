@@ -94,6 +94,14 @@ public sealed class EpContextCompiler
             }
 
             bool embed = EpContextArtifact.ShouldEmbedEpContext(sourceModelPath);
+            if (embed)
+            {
+                // A previous non-embedded compile may have left a sidecar next to this artifact.
+                // The new artifact embeds initializers, so that sidecar is stale and must not
+                // survive as an orphan or be mistaken for part of this artifact.
+                TryDeleteExternalInitializers(epContextPath);
+            }
+
             using (var compileOptions = new OrtModelCompilationOptions(sessionOptions))
             {
                 compileOptions.SetInputModelPath(sourceModelPath);
@@ -283,6 +291,23 @@ public sealed class EpContextCompiler
             if ((next & 0x80) == 0) return value;
         }
         throw new InvalidDataException("Invalid ONNX varint.");
+    }
+
+    private static void TryDeleteExternalInitializers(string epContextPath)
+    {
+        try
+        {
+            string sidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
+            if (File.Exists(sidecarPath))
+            {
+                File.Delete(sidecarPath);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best-effort stale-sidecar cleanup; the artifact validation will reject a stale
+            // sidecar if it cannot be removed here.
+        }
     }
 
     private static void TryDeletePartial(string epContextPath)
