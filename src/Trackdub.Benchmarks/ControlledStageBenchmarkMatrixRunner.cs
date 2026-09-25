@@ -37,6 +37,13 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
         foreach (string stage in selectedStages)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (Path.IsPathRooted(stage))
+            {
+                throw new ArgumentException(
+                    "Stage names must be relative path segments.",
+                    nameof(options));
+            }
+
             options.ModelOverrides.TryGetValue(stage, out string? model);
             BenchmarkEvidenceReport evidence = await runner.RunAsync(
                 new ControlledDubbingBenchmarkOptions
