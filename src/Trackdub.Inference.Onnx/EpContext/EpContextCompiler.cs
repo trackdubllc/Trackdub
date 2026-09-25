@@ -112,9 +112,19 @@ public sealed class EpContextCompiler
             // name GetArtifactExternalInitializersPath computes for the final published path, so
             // publishing (a same-name move) never breaks the external-initializers reference.
             string tempDirName = Path.GetFileName(".epc-tmp-" + Guid.NewGuid().ToString("N"));
+            if (string.IsNullOrEmpty(tempDirName) || Path.IsPathRooted(tempDirName))
+            {
+                throw new InvalidOperationException("Generated EP-context temp directory name must be a relative, non-empty path segment.");
+            }
+
             tempDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(epContextPath))!, tempDirName);
             Directory.CreateDirectory(tempDir);
             string outputFileName = Path.GetFileName(epContextPath);
+            if (string.IsNullOrEmpty(outputFileName) || Path.IsPathRooted(outputFileName))
+            {
+                throw new InvalidOperationException($"EP-context output path '{epContextPath}' does not resolve to a valid relative file name.");
+            }
+
             tempPath = Path.Combine(tempDir, outputFileName);
             using (var compileOptions = new OrtModelCompilationOptions(sessionOptions))
             {
