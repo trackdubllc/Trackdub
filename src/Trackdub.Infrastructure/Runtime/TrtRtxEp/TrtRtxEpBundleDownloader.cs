@@ -279,6 +279,12 @@ public sealed class TrtRtxEpBundleDownloader(
                         $"TensorRT RTX EP archive symlink chain at '{linkPath}' is too deep or cyclic.");
                 }
 
+                if (Path.IsPathRooted(next))
+                {
+                    throw new InvalidOperationException(
+                        $"TensorRT RTX EP archive symlink chain at '{linkPath}' has rooted target '{next}'.");
+                }
+
                 resolved = Path.Combine(Path.GetDirectoryName(resolved)!, next);
             }
 
