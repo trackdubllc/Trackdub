@@ -60,8 +60,8 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
             (EpContextWarmItem item, bool didCompile, bool didReuse) = await WarmSourceAsync(
                 sourcePath, hardware, progress, cancellationToken).ConfigureAwait(false);
             items.Add(item);
-            if (didCompile) compiled++;
-            if (didReuse) reused++;
+            if (didCompile && item.Status != "failed") compiled++;
+            if (didReuse && item.Status != "failed") reused++;
             if (item.Status == "skipped") skipped++;
             if (item.Status == "failed") failed++;
         }
@@ -114,7 +114,11 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
 
         // Residual JIT: load once so nv_runtime_cache_path stores CUDA kernels for this GPU.
         progress?.Report($"warm {Path.GetFileName(sourcePath)}");
-        double warmMs = TryWarmLoad(epContextPath, cancellationToken, out string? warmFailure);
+        double warmMs = TryWarmLoad(
+            epContextPath,
+            EpContextTrtProfiles.Resolve(sourcePath),
+            cancellationToken,
+            out string? warmFailure);
         return (new EpContextWarmItem(
             sourcePath, warmFailure is null ? (haveValid ? "reused" : "compiled") : "failed",
             epContextPath, compileMs, warmMs,
@@ -147,7 +151,11 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
             .ToArray();
     }
 
-    private double TryWarmLoad(string modelPath, CancellationToken cancellationToken, out string? failureReason)
+    private double TryWarmLoad(
+        string modelPath,
+        IReadOnlyDictionary<string, string>? modelTrtOptions,
+        CancellationToken cancellationToken,
+        out string? failureReason)
     {
         var stopwatch = Stopwatch.StartNew();
         try
@@ -157,7 +165,7 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
             WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
 #endif
             using SessionOptions options = new();
-            OnnxExecutionSessionFactory.AppendTensorRtRtxOrFallbackProvider(options);
+            OnnxExecutionSessionFactory.AppendTensorRtRtxOrFallbackProvider(options, modelTrtOptions);
             options.LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING;
             using var session = new InferenceSession(modelPath, options);
             stopwatch.Stop();

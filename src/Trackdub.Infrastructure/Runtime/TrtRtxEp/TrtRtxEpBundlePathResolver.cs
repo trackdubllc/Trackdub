@@ -17,7 +17,7 @@ public static class TrtRtxEpBundlePathResolver
             return "linux-x64";
         }
 
-        throw new PlatformNotSupportedException("TensorRT RTX EP ABI v0.3.0 is supported on Windows and Linux x64 only.");
+        throw new PlatformNotSupportedException("TensorRT RTX EP ABI is supported on Windows and Linux x64 only.");
     }
 
     public static string GetInstallDirectory(string userDataRoot, string version, string cudaVariant, string runtimeIdentifier)

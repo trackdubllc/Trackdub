@@ -7,13 +7,15 @@ public sealed class CloudAwareTtsEngine(
     ITtsEngine localEngine,
     ITtsEngine elevenLabsCloudEngine,
     ITtsEngine openAiCloudEngine,
-    ITtsEngine googleCloudEngine)
+    ITtsEngine googleCloudEngine,
+    ITtsEngine geminiCloudEngine)
     : ITtsEngine, IStageRuntimeExecutionReporter
 {
     private readonly ITtsEngine localEngine = localEngine ?? throw new ArgumentNullException(nameof(localEngine));
     private readonly ITtsEngine elevenLabsCloudEngine = elevenLabsCloudEngine ?? throw new ArgumentNullException(nameof(elevenLabsCloudEngine));
     private readonly ITtsEngine openAiCloudEngine = openAiCloudEngine ?? throw new ArgumentNullException(nameof(openAiCloudEngine));
     private readonly ITtsEngine googleCloudEngine = googleCloudEngine ?? throw new ArgumentNullException(nameof(googleCloudEngine));
+    private readonly ITtsEngine geminiCloudEngine = geminiCloudEngine ?? throw new ArgumentNullException(nameof(geminiCloudEngine));
 
     public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
 
@@ -29,6 +31,7 @@ public sealed class CloudAwareTtsEngine(
             var a when TtsModelOverrideSettings.IsElevenLabsAlias(a) => elevenLabsCloudEngine,
             var a when TtsModelOverrideSettings.IsOpenAiTtsAlias(a) => openAiCloudEngine,
             var a when TtsModelOverrideSettings.IsGoogleTtsAlias(a) => googleCloudEngine,
+            var a when TtsModelOverrideSettings.IsGeminiTtsAlias(a) => geminiCloudEngine,
             _ => localEngine
         };
 

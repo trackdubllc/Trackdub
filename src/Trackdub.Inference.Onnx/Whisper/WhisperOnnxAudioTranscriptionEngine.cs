@@ -770,6 +770,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         throw new FileNotFoundException("Whisper decoder model was not found next to the encoder model.", decoderModelPath);
     }
 
+    // Shared with OnnxExecutionProviderSmokeTester so smoke and stage runs hit the same pool key.
     internal static Dictionary<string, string> BuildTrtEncoderOptions(int melBins) => new()
     {
         ["trt_profile_min_shapes"] = $"input_features:1x{melBins}x1",

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
@@ -358,9 +359,12 @@ internal sealed class InferenceSessionPool : IDisposable
             }
 
             // Single-flight create: one factory invocation per key. Cancelling this waiter
-            // does not cancel the shared create for other callers. A creator that fails
-            // records the failure so queued waiters propagate it without rebuilding.
+            // does not cancel the shared create for other callers. A caller that queues behind
+            // an in-flight creator (gate already held) consumes that creator's recorded
+            // failure so construction failures propagate without rebuilding; callers that
+            // arrive afterwards retry the factory — failed sessions are not cached.
             SemaphoreSlim createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+            bool queuedBehindCreator = createGate.CurrentCount == 0;
             bool propagatedRecentFailure = false;
             long observedCreationWave = Volatile.Read(ref creationWave);
             using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
@@ -379,10 +383,13 @@ internal sealed class InferenceSessionPool : IDisposable
                 int device = DeviceOf(key);
                 if (enableMemoryAdmission && needMb > memoryBudgetMb)
                 {
-                    throw new InvalidOperationException($"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the device admission budget of {memoryBudgetMb} MB.");
+                    throw new InvalidOperationException(
+                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
+                        $"device {device} admission budget of {memoryBudgetMb} MB.");
                 }
 
-                if (creationFailures.TryGetValue(key, out var recentFailure))
+                if (queuedBehindCreator
+                    && creationFailures.TryGetValue(key, out var recentFailure))
                 {
                     if (recentFailure.Wave > observedCreationWave)
                     {
@@ -635,9 +642,9 @@ internal sealed class InferenceSessionPool : IDisposable
         await bundleAcquireLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            int consecutiveMisses = 0;
             int rewarmAttempts = 0;
             const int maxRewarmAttempts = 25; // ~5s of real re-warm tries at the 200ms cadence below.
+            var rewarmStopwatch = System.Diagnostics.Stopwatch.StartNew();
             while (true)
             {
                 ObjectDisposedException.ThrowIf(disposed, this);
@@ -653,11 +660,13 @@ internal sealed class InferenceSessionPool : IDisposable
                 // A key can be permanently missing from `entries` — phase 1's GetLeaseAsync
                 // returns an ephemeral (unpooled) lease when admission is off and the pool is
                 // full, or an entry can be idle-evicted between phase 1 and here. Blindly
-                // waiting never recovers that. Re-warm on a throttled cadence (~200ms) instead
-                // of every 10ms poll, since a miss can mean a real (expensive) session rebuild.
-                consecutiveMisses++;
-                if (consecutiveMisses % 20 == 0)
+                // waiting never recovers that. Re-warm on a throttled cadence (~200ms) gated by
+                // elapsed wall-clock time rather than iteration count: each iteration can wait
+                // up to 1s on bundleStateSignal, so a miss-count-based cadence would stretch the
+                // re-warm interval (and the maxRewarmAttempts give-up bound) far past ~5s.
+                if (rewarmStopwatch.Elapsed >= TimeSpan.FromMilliseconds(200))
                 {
+                    rewarmStopwatch.Restart();
                     bool anyMissing = false;
                     foreach (SessionLeaseRequest request in ordered.Where(request => !entries.ContainsKey(request.Key)))
                     {
@@ -684,10 +693,12 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 // Wait for a state transition rather than polling every 10ms. The timeout is
                 // only a lost-wakeup safety net; normal progress is signaled by release,
-                // publication, and eviction paths below.
+                // publication, and eviction paths below. Kept at the same ~200ms cadence as the
+                // re-warm gate above so the stuck-pool give-up bound stays near the documented
+                // ~5s (maxRewarmAttempts * 200ms) even when no signal ever fires.
                 try
                 {
-                    await bundleStateSignal.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+                    await bundleStateSignal.WaitAsync(TimeSpan.FromMilliseconds(200), cancellationToken).ConfigureAwait(false);
                 }
                 catch (TimeoutException)
                 {
@@ -797,12 +808,9 @@ internal sealed class InferenceSessionPool : IDisposable
     private long CurrentReservedMb(int device)
     {
         long pooled = 0;
-        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries.Where(pair => DeviceOf(pair.Key) == device))
         {
-            if (DeviceOf(pair.Key) == device)
-            {
-                pooled += ResolveReservationMb(pair.Key);
-            }
+            pooled += ResolveReservationMb(pair.Key);
         }
 
         pendingCreateMbByDevice.TryGetValue(device, out long pending);

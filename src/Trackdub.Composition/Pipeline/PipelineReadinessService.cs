@@ -8,6 +8,7 @@ using Trackdub.Domain;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Inference.Onnx.Runtime.Planning;
 using Trackdub.Inference.Runtime.Planning;
+using Trackdub.Infrastructure.Transcripts;
 
 namespace Trackdub.Composition.Pipeline;
 
@@ -49,14 +50,6 @@ public sealed class PipelineReadinessService(
         maxConcurrentStageEvaluations is null
             ? DefaultMaxConcurrentStageEvaluations
             : maxConcurrentStageEvaluations.Value > 0
-                ? maxConcurrentStageEvaluations.Value
-                : throw new ArgumentOutOfRangeException(nameof(maxConcurrentStageEvaluations));
-            ? DefaultMaxConcurrentStageEvaluations
-        stageEvaluationTimeout is null
-            ? DefaultStageEvaluationTimeout
-            : stageEvaluationTimeout.Value > TimeSpan.Zero || stageEvaluationTimeout.Value == Timeout.InfiniteTimeSpan
-                ? stageEvaluationTimeout.Value
-                : throw new ArgumentOutOfRangeException(nameof(stageEvaluationTimeout));
                 ? maxConcurrentStageEvaluations.Value
                 : throw new ArgumentOutOfRangeException(nameof(maxConcurrentStageEvaluations));
     private readonly TimeSpan _stageEvaluationTimeout =
@@ -439,8 +432,17 @@ public sealed class PipelineReadinessService(
             RuntimeStage.Asr => AsrModelOverrideSettings.IsCloudAlias(alias),
             RuntimeStage.Translation => IsCloudTranslationAlias(alias),
             RuntimeStage.Tts => TtsModelOverrideSettings.IsCloudAlias(alias),
+            RuntimeStage.TextRefinement => IsGeminiRefinementAlias(alias),
             _ => false,
         };
+
+    private static bool IsGeminiRefinementAlias(string? alias) =>
+        !string.IsNullOrWhiteSpace(alias) &&
+        (string.Equals(alias, GeminiCloudTextRefinementEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-refinement", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-3.8", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-3.5", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-2.5", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsCloudTranslationAlias(string? alias) =>
         TranslationModelOverrideSettings.IsDeepLModelAlias(alias)
@@ -457,6 +459,8 @@ public sealed class PipelineReadinessService(
         if (TtsModelOverrideSettings.IsElevenLabsAlias(alias)) return "elevenlabs";
         if (TtsModelOverrideSettings.IsOpenAiTtsAlias(alias)) return "openai";
         if (TtsModelOverrideSettings.IsGoogleTtsAlias(alias)) return "google";
+        if (TtsModelOverrideSettings.IsGeminiTtsAlias(alias)) return "gemini";
+        if (IsGeminiRefinementAlias(alias)) return "gemini";
         return "unknown";
     }
 

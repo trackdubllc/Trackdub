@@ -108,12 +108,9 @@ public sealed class FileSmokeVerdictStore : ISmokeVerdictStore
                 return;
             }
 
-            foreach (KeyValuePair<string, string> entry in payload.Verified)
+            foreach (KeyValuePair<string, string> entry in payload.Verified.Where(entry => !string.IsNullOrWhiteSpace(entry.Key)))
             {
-                if (!string.IsNullOrWhiteSpace(entry.Key))
-                {
-                    entries[entry.Key] = entry.Value ?? string.Empty;
-                }
+                entries[entry.Key] = entry.Value ?? string.Empty;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)

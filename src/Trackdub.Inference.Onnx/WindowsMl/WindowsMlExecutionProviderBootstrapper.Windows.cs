@@ -91,7 +91,7 @@ public sealed class WindowsMlExecutionProviderBootstrapper
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (WindowsMlCatalogProviderFilter.IsExcludedFromBulkRegistration(provider.Name) ||
-                (!allowDownloads && provider.ReadyState is ExecutionProviderReadyState.NotPresent or ExecutionProviderReadyState.NotReady))
+(!allowDownloads && provider.ReadyState is not ExecutionProviderReadyState.Ready))
             {
                 continue;
             }

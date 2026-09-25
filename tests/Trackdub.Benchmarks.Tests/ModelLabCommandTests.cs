@@ -206,7 +206,8 @@ public sealed class ModelLabCommandTests
             Assert.Equal(0, exitCode);
             ModelLabProcessStartInfo pythonCall = Assert.Single(
                 processRunner.Calls,
-                call => call.Executable.Equals("python.exe", StringComparison.OrdinalIgnoreCase));
+                call => call.Executable.Equals("python.exe", StringComparison.OrdinalIgnoreCase)
+                    && call.Arguments.Contains("onnxruntime_genai.models.builder", StringComparer.Ordinal));
             Assert.Collection(
                 pythonCall.Arguments.Take(2),
                 first => Assert.Equal("-m", first),
@@ -417,7 +418,8 @@ public sealed class ModelLabCommandTests
 
             if (startInfo.Executable.EndsWith("python.exe", StringComparison.OrdinalIgnoreCase))
             {
-                if (startInfo.Arguments.Any(argument => argument.EndsWith("decompose-whisper-cross-attention.py", StringComparison.OrdinalIgnoreCase)))
+                if (startInfo.Arguments.Any(argument => argument.EndsWith("decompose-whisper-cross-attention.py", StringComparison.OrdinalIgnoreCase))
+                    || startInfo.Arguments.Any(argument => argument.EndsWith("decompose-microsoft-contrib-ops.py", StringComparison.OrdinalIgnoreCase)))
                 {
                     return 0;
                 }

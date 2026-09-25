@@ -12,6 +12,24 @@ dotnet run --project src/Trackdub.Benchmarks.DevHost -c Release -f net10.0-windo
 
 Reports record UTC endpoints and monotonic durations, stage status and reason, persisted actual model/provider, fixture hash, runtime versions, process memory, and available phase spans. Null means unavailable. First transcript and audio timings require a usable transcript or playable take, respectively. GPU memory remains null without a reliable probe. Reports contain no transcript, media, or absolute source path. Project histories remain intact; only automatic observation history is bounded to 90 days or 5,000 records.
 
+## Stage-focused matrix
+
+Use the matrix command when the goal is a comparable timing row for each
+pipeline stage rather than a single full-pipeline result:
+
+```powershell
+dotnet run --project src/Trackdub.Benchmarks.DevHost -c Release -f net10.0-windows10.0.19041.0 -- controlled-matrix <fixture> --output <matrix-directory> --stages vad,diarization,asr,translation,tts,export
+```
+
+With no `--stages`, `controlled-matrix` runs the canonical extended stage
+catalog. Use `--model stage=alias` for stage-specific model pins, for example
+`--model asr=whisper-small,tts=kokoro`. The matrix runs each stage through the
+existing controlled benchmark path, including prerequisites, and writes one
+matrix report containing the individual `BenchmarkEvidenceReport` objects.
+It is intentionally separate from BenchmarkDotNet microbenchmarks; the matrix
+measures real stage execution and evidence semantics, while BDN measures
+small operations and allocations.
+
 ## Baseline fixture set, 2026-09-23
 
 The fixtures are machine-local and are not checked into the repository. Their local manifest is `%LOCALAPPDATA%\Trackdub\benchmark-fixtures\baseline-v1\manifest.json`. This table identifies contents without publishing media paths.

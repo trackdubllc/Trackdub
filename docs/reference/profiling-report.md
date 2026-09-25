@@ -108,13 +108,13 @@ Record commit hash, model manifest IDs, and EP selection policy (`WindowsMlExecu
 | Field | Value |
 |---|---|
 | Model id | *pending local run* (`onnx-community/silero-vad` suggested) |
-| Plugin version | `0.3.0/cu12` |
+| Plugin version | `0.4.2/cu13` (TRT-RTX 1.6.1) |
 | Command | `Trackdub.Benchmarks.DevHost --provider trt-rtx --runs 1 --format console` |
 | Headless probe | `trackdub providers trt-rtx status` |
 | Wall time (ms) | *pending local run* |
 | Actual EP reported | *pending local run* (`NvTensorRTRTXExecutionProvider`) |
 | Commit SHA | *pending local run* |
-| Plugin dir | `%LOCALAPPDATA%\Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64` or `TRACKDUB_TRT_RTX_EP_DIR` |
+| Plugin dir | `%LOCALAPPDATA%\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64` or `TRACKDUB_TRT_RTX_EP_DIR` |
 
 ## Avalonia UI / render budget (headless)
 

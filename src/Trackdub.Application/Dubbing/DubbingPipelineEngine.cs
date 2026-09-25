@@ -821,11 +821,37 @@ public sealed class DubbingPipelineEngine(
 
     internal static bool ShouldSkipModelPreFlight(
         string stageName,
-        IReadOnlyDictionary<string, string>? modelPreferences) =>
-        string.Equals(stageName, StageNames.Translation, StringComparison.OrdinalIgnoreCase) &&
-        modelPreferences is not null &&
-        modelPreferences.TryGetValue(StageNames.Translation, out string? modelAlias) &&
-        TranslationModelOverrideSettings.IsDeepLModelAlias(modelAlias);
+        IReadOnlyDictionary<string, string>? modelPreferences)
+    {
+        if (modelPreferences is null || !modelPreferences.TryGetValue(stageName, out string? modelAlias) || string.IsNullOrWhiteSpace(modelAlias))
+        {
+            return false;
+        }
+
+        if (string.Equals(stageName, StageNames.Asr, StringComparison.OrdinalIgnoreCase))
+        {
+            return AsrModelOverrideSettings.IsCloudAlias(modelAlias);
+        }
+
+        if (string.Equals(stageName, StageNames.Translation, StringComparison.OrdinalIgnoreCase))
+        {
+            return TranslationModelOverrideSettings.IsCloudAlias(modelAlias);
+        }
+
+        if (string.Equals(stageName, StageNames.Tts, StringComparison.OrdinalIgnoreCase))
+        {
+            return TtsModelOverrideSettings.IsCloudAlias(modelAlias);
+        }
+
+        if (string.Equals(stageName, StageNames.TextRefinementAsr, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(stageName, StageNames.TextRefinementTranslation, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(stageName, StageNames.TextRefinement, StringComparison.OrdinalIgnoreCase))
+        {
+            return modelAlias.StartsWith("gemini", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Ensures the project's media spine (project record + normalized audio) exists.

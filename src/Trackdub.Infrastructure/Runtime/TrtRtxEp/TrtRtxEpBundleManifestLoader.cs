@@ -43,7 +43,8 @@ public static class TrtRtxEpBundleManifestLoader
                 packageDto.ArchiveUrl,
                 packageDto.ArchiveKind ?? "zip",
                 packageDto.Sha256 ?? string.Empty,
-                packageDto.SizeBytes);
+                packageDto.SizeBytes,
+                string.IsNullOrWhiteSpace(packageDto.Version) ? null : packageDto.Version);
         }
 
         return new TrtRtxEpBundleManifest(
@@ -76,5 +77,7 @@ public static class TrtRtxEpBundleManifestLoader
         public string? Sha256 { get; set; }
 
         public long SizeBytes { get; set; }
+
+        public string? Version { get; set; }
     }
 }

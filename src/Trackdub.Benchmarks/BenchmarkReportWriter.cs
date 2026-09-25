@@ -99,6 +99,26 @@ public static class BenchmarkReportWriter
     }
 
     public static async Task WriteAsync(
+        ControlledStageBenchmarkMatrixReport report,
+        CancellationToken cancellationToken)
+    {
+        string? directory = Path.GetDirectoryName(report.ReportPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await using var stream = new FileStream(
+            report.ReportPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 4096,
+            options: FileOptions.Asynchronous);
+        await JsonSerializer.SerializeAsync(stream, report, SerializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public static async Task WriteAsync(
         DubbingBenchmarkReport report,
         ReportFormat format,
         CancellationToken cancellationToken)

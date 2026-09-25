@@ -35,11 +35,11 @@ Windows:
 
 ```text
 onnxruntime_providers_nv_tensorrt_rtx.dll
-tensorrt_rtx_1_5.dll
-tensorrt_onnxparser_rtx_1_5.dll
+tensorrt_rtx_1_6.dll
+tensorrt_onnxparser_rtx_1_6.dll
 ```
 
-Linux (v0.3.0 cu12 linux-x64 tarball):
+Linux (v0.4.0 cu13 linux-x86_64 zip; SONAME symlinks are preserved on extract):
 
 ```text
 libonnxruntime_providers_nv_tensorrt_rtx.so
@@ -58,7 +58,7 @@ Companion libraries such as `tensorrt_plugins.dll` / `libtensorrt_plugins.so` ar
 2. `TRACKDUB_TRT_RTX_EP_DIR`
 3. Default installed bundle under the Trackdub user data root (see below)
 
-If the bundle is missing, use **Install** in Model Manager (downloads v0.3.0 cu12, persists the studio path, then registers), or run the dev fetch script.
+If the bundle is missing, use **Install** in Model Manager (downloads v0.4.2 cu13 on Windows / v0.4.0 cu13 on Linux, persists the studio path, then registers), or run the dev fetch script.
 
 ## Fetch script (dev/CI)
 
@@ -74,9 +74,9 @@ Optional `-InstallRoot` or `TRACKDUB_DATA_ROOT` overrides the user data root. Th
 
 Trackdub ships the EP ABI plugin through a pinned manifest, not the Windows ML catalog:
 
-- **Manifest:** `runtime/trt-rtx-ep.manifest.json` (version `0.3.0`, CUDA `cu12`, per-RID archive URL + SHA-256 + size).
+- **Manifest:** `runtime/trt-rtx-ep.manifest.json` (version `0.4.2`, linux-x64 package pinned to `0.4.0`, CUDA `cu13`, `trtRtxRuntimeVersion` `1.6.1`, per-RID archive URL + SHA-256 + size).
 - **Composition copy:** `trt-rtx-ep.manifest.json` next to the app assembly (`Trackdub.Composition` `CopyToOutputDirectory`).
-- **Downloader:** `TrtRtxEpBundleDownloader` verifies checksum/size, extracts required plugin files into `%UserDataRoot%/Providers/trt-rtx/0.3.0/cu12/<rid>/`.
+- **Downloader:** `TrtRtxEpBundleDownloader` verifies checksum/size, extracts required plugin files into `%UserDataRoot%/Providers/trt-rtx/<version>/cu13/<rid>/ (0.4.2 on win-x64, 0.4.0 on linux-x64)`.
 - **In-app install:** Model Manager **Install** calls `ITrtRtxEpInstaller` after `NvidiaTensorRtRtx` license acceptance, persists `StudioSettings.TensorRtRtxPluginDirectory`, then registers via `ITensorRtRtxProviderBootstrap`.
 - **Inference bootstrap:** registers an already-installed bundle only; it **never** downloads the EP bundle (same policy as WinML catalog EPs during session bootstrap).
 
@@ -112,8 +112,8 @@ Provider binaries and runtime cache are separate.
 Provider bundle (installed by Model Manager or `Fetch-TrtRtxEp.ps1`):
 
 ```text
-%LOCALAPPDATA%\Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64\   # Windows
-~/.local/share/Trackdub/Providers/trt-rtx/0.3.0/cu12/linux-x64/   # Linux
+%LOCALAPPDATA%\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64\   # Windows
+~/.local/share/Trackdub/Providers/trt-rtx/0.4.0/cu13/linux-x64/   # Linux
 ```
 
 Manifest: `runtime/trt-rtx-ep.manifest.json` (pinned NVIDIA GitHub release URLs + checksums).
@@ -166,7 +166,7 @@ trackdub dub ... --execution-provider trt-rtx --require-execution-provider
 
 SDK equivalent: `WithExecutionProvider(ExecutionProviderKind.TensorRTRtx)` soft-prefers; pass `require: true` for a hard pin.
 
-Engine-family allow-lists deny TensorRT families for graphs that hard-fail session init under TRT RTX (examples: `whisper-onnx`, `opus-mt` / `madlad`, `chatterbox`, `cosyvoice`, `qwen3-tts`, `latentsync-diffusion`). Those stages still run under a global `trt-rtx` soft prefer by selecting DirectML/CPU. Do **not** treat this as hybrid VRAM spillover / `supports_partial_offload`; Trackdub does not claim partial offload for TRT RTX.
+Engine-family allow-lists deny TensorRT families for graphs that hard-fail session init under TRT RTX (examples: `whisper-onnx`, `opus-mt` / `madlad`, `chatterbox`, `qwen3-tts`, `latentsync-diffusion`). Those stages still run under a global `trt-rtx` soft prefer by selecting DirectML/CPU. CosyVoice is intentionally **not** denied: the per-graph `TrtRtxUnsupportedOpScanner` plus session-init fallback isolate its failures, and the TTS smoke proves all nine graph sessions before a hard pin trusts them. Do **not** treat this as hybrid VRAM spillover / `supports_partial_offload`; Trackdub does not claim partial offload for TRT RTX.
 
 **ORT GenAI loads are excluded from TensorRT entirely** (`whisper-genai`, `phi-genai`, `qwen-instruct` engine-family overrides). ORT GenAI's `NvTensorRtRtx` device can terminate the host process with a native stack overflow during model init/generation (observed on `qwen-instruct`, Qwen2.5-1.5B). A fatal crash cannot surface as a catchable smoke failure, so the planner never offers TensorRT to GenAI-loaded families and the smoke tester refuses the combination before touching native code.
 
@@ -203,7 +203,7 @@ dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~TensorRt
 Benchmark smoke on a Windows NVIDIA RTX machine with the plugin bundle available:
 
 ```powershell
-$env:TRACKDUB_TRT_RTX_EP_DIR = "$env:LOCALAPPDATA\Trackdub\Providers\trt-rtx\0.3.0\cu12\win-x64"
+$env:TRACKDUB_TRT_RTX_EP_DIR = "$env:LOCALAPPDATA\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64"
 dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0-windows10.0.19041.0 -- --model <model-id> --provider trt-rtx --runs 1 --format console
 ```
 
@@ -236,8 +236,9 @@ DubBench ONNX runs call the same bootstrap before each benchmark invocation.
 
 When NVIDIA ships a new `TensorRT-RTX-EP-ABI` GitHub release:
 
-1. Run `tools/dev/Update-TrtRtxEpManifest.ps1 -Version <x.y.z>` to refresh `runtime/trt-rtx-ep.manifest.json` (URLs, SHA-256, size).
-2. Update `TensorRtRtxProviderConstants.BundledVersion`, install hints, and default install path segments if the version changed.
+1. Check which platforms the tag actually ships (v0.4.2 is Windows-only). Run `tools/dev/Update-TrtRtxEpManifest.ps1 -Version <x.y.z> -TrtRtxRuntimeVersion <a.b.c> [-LinuxVersion <older tag>] [-CudaVariant cu13]` to refresh `runtime/trt-rtx-ep.manifest.json` (URLs, SHA-256, size, per-package `version` when a platform lags).
+2. Inspect the archive: update `TensorRtRtxProviderConstants.BundledVersionWindows` / `BundledVersionLinux`, `BundledCudaVariant`, `BundledTrtRtxRuntimeVersion`, and the `tensorrt_rtx_<major>_<minor>.dll` / parser file names (plus `TrtRtxEpRequiredFiles`). `TrtRtxBundlePinTests` fails if constants and manifest drift. Check the plugin's imports (`dumpbin /dependents`): the cu13 Windows bundle links the CUDA runtime statically, the Linux bundle ships `libcudart.so.13`; adjust `TensorRtRtxCudaRuntimeBootstrap` if that changes.
+   `BundledFingerprintVersion` (EP ABI version + TRT-RTX runtime version) keys smoke verdicts and EP-context stamps, so either bump invalidates them.
 3. Run `tools/dev/Fetch-TrtRtxEp.ps1` locally and verify `trackdub providers trt-rtx status`.
 4. Run optional GPU smoke (`.github/workflows/trt-rtx-smoke.yml`) or `Trackdub.Benchmarks.DevHost --provider trt-rtx`.
 5. Run `trackdub doctor` and advise users with stale engines to `trackdub cache clear engines` after upgrading the EP bundle.

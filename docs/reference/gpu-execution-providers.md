@@ -59,8 +59,15 @@ these as `AllowedProvidersByEngineFamily` overrides:
 | Translation | `phi-genai` | Same GenAI crash class as `whisper-genai` |
 | TextRefinement | `qwen-instruct`, `phi-genai` | Same GenAI crash class (observed on Qwen2.5-1.5B) |
 | TTS | `kokoro` | CPU-only (ConvTranspose block) |
-| TTS | `chatterbox`, `cosyvoice`, `qwen3-tts` | Contrib ops / graphs TRT RTX cannot import |
+| TTS | `chatterbox`, `qwen3-tts` | Contrib ops / graphs TRT RTX cannot import |
 | LipSynthesis | `latentsync-diffusion` | `MultiHeadAttention` TRT RTX cannot import |
+
+CosyVoice is deliberately **not** excluded: its multi-graph package compiles under
+TRT RTX, and two guards isolate per-graph failures — the per-graph
+`TrtRtxUnsupportedOpScanner` skips graphs with unsupported contrib ops before any
+session is built, and session-init fallback retries DirectML then CPU on TRT init
+errors (disabled on hard-pin routes, where the TTS smoke instead proves every
+CosyVoice graph up front).
 
 Because a fatal crash cannot be caught and reported as a smoke failure, the
 smoke tester also **refuses** the combinations outright before touching native
