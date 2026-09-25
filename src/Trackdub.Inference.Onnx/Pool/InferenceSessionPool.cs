@@ -440,9 +440,9 @@ internal sealed class InferenceSessionPool : IDisposable
                 {
                     if (reserved)
                     {
-                    // Always release reservation on factory failure to prevent a reservation leak
-                    // (audit §3A: VRAM accounting integrity).
-                    if (reserved)
+                        // Always release reservation on factory failure to prevent a reservation leak
+                        // (audit §3A: VRAM accounting integrity).
+                        ReleaseReservation(device, needMb);
                     }
 
                     throw;
