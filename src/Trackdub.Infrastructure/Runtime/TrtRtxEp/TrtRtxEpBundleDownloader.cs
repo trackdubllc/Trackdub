@@ -230,6 +230,12 @@ public sealed class TrtRtxEpBundleDownloader(
         {
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
+                if (Path.IsPathRooted(entry.FullName))
+                {
+                    throw new InvalidOperationException(
+                        $"TensorRT RTX EP archive entry '{entry.FullName}' must be a relative path.");
+                }
+
                 string destinationPath = Path.GetFullPath(Path.Combine(root, entry.FullName));
                 if (!destinationPath.StartsWith(rootPrefix, pathComparison))
                 {
