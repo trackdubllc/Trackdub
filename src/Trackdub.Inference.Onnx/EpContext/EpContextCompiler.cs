@@ -268,6 +268,8 @@ public sealed class EpContextCompiler
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Best-effort cleanup of a rejected compile's partial output; failure to delete is non-fatal.
+            System.Diagnostics.Trace.TraceWarning(
+                $"EpContextCompiler: failed to delete partial output '{epContextPath}': {ex.Message}");
         }
     }
 }
