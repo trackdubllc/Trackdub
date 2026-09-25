@@ -24,14 +24,25 @@ public static class EpContextArtifact
         string GpuArchitecture,
         string? DriverVersion,
         string? TrtRtxEpVersion,
-        DateTimeOffset CreatedAtUtc)
+        DateTimeOffset CreatedAtUtc,
+        long? ExternalDataLengthBytes = null,
+        long? ExternalDataLastWriteUtcTicks = null)
     {
         public string EnvironmentFingerprint =>
             $"{GpuArchitecture}|{Normalize(DriverVersion)}|{Normalize(TrtRtxEpVersion)}";
 
-        public bool MatchesSource(FileInfo source) =>
+        /// <summary>
+        /// Compares the source model file and, when present, its external-weights sibling
+        /// (audit: replacing external data must invalidate the artifact even though the
+        /// .onnx container's length and mtime do not change).
+        /// </summary>
+        public bool MatchesSource(FileInfo source, FileInfo? externalData = null) =>
             source.Length == SourceLengthBytes &&
-            source.LastWriteTimeUtc.Ticks == SourceLastWriteUtcTicks;
+            source.LastWriteTimeUtc.Ticks == SourceLastWriteUtcTicks &&
+            (externalData?.Exists ?? false) == ExternalDataLengthBytes.HasValue &&
+            (!ExternalDataLengthBytes.HasValue ||
+                (externalData!.Length == ExternalDataLengthBytes.Value &&
+                 externalData.LastWriteTimeUtc.Ticks == ExternalDataLastWriteUtcTicks));
 
         private static string Normalize(string? value) =>
             string.IsNullOrWhiteSpace(value) ? "unknown" : value.Trim();
@@ -53,6 +64,25 @@ public static class EpContextArtifact
     {
         string epContextPath = GetEpContextPath(sourceModelPath);
         return epContextPath[..^".onnx".Length] + ".stamp.json";
+    }
+
+    /// <summary>
+    /// Sibling external-weights file for <paramref name="sourceModelPath"/>, matching the
+    /// <c>&lt;model&gt;.onnx.data</c> convention this codebase writes (see
+    /// <c>OliveModelOptimizationService</c>). Not every model has one.
+    /// </summary>
+    public static string GetSourceExternalDataPath(string sourceModelPath) => sourceModelPath + ".data";
+
+    /// <summary>
+    /// External-initializers sidecar ORT writes next to a compiled EP-context artifact when
+    /// the artifact is too large to embed (see <see cref="EpContextCompiler"/>). Not every
+    /// artifact has one — only models compiled with embedding disabled.
+    /// </summary>
+    public static string GetArtifactExternalInitializersPath(string epContextPath)
+    {
+        string? directory = Path.GetDirectoryName(epContextPath);
+        string sidecarName = Path.GetFileNameWithoutExtension(epContextPath) + ".ext_init";
+        return string.IsNullOrEmpty(directory) ? sidecarName : Path.Join(directory, sidecarName);
     }
 
     public static bool ShouldEmbedEpContext(string sourceModelPath)
@@ -85,6 +115,14 @@ public static class EpContextArtifact
             return null;
         }
 
+        // A compiled artifact that needed external initializers is incomplete without its
+        // sidecar — a missing one would break session creation on load.
+        if (!ShouldEmbedEpContext(sourceModelPath) &&
+            !File.Exists(GetArtifactExternalInitializersPath(epContextPath)))
+        {
+            return null;
+        }
+
         Stamp? stamp = TryReadStamp(stampPath);
         if (stamp is null ||
             !stamp.EnvironmentFingerprint.Equals(currentEnvironmentFingerprint, StringComparison.Ordinal))
@@ -94,7 +132,9 @@ public static class EpContextArtifact
 
         try
         {
-            return stamp.MatchesSource(new FileInfo(sourceModelPath)) ? epContextPath : null;
+            string externalDataPath = GetSourceExternalDataPath(sourceModelPath);
+            FileInfo? externalData = File.Exists(externalDataPath) ? new FileInfo(externalDataPath) : null;
+            return stamp.MatchesSource(new FileInfo(sourceModelPath), externalData) ? epContextPath : null;
         }
         catch (IOException)
         {
@@ -107,8 +147,11 @@ public static class EpContextArtifact
         FileInfo source,
         string? sourceSha256,
         string gpuArchitecture,
-        string? driverVersion) =>
-        new(
+        string? driverVersion)
+    {
+        string externalDataPath = GetSourceExternalDataPath(sourceModelPath);
+        var externalData = new FileInfo(externalDataPath);
+        return new(
             SchemaVersion: 1,
             SourceFileName: Path.GetFileName(sourceModelPath),
             SourceLengthBytes: source.Length,
@@ -117,7 +160,10 @@ public static class EpContextArtifact
             GpuArchitecture: gpuArchitecture,
             DriverVersion: driverVersion,
             TrtRtxEpVersion: TensorRtRtxProviderConstants.BundledFingerprintVersion,
+            ExternalDataLengthBytes: externalData.Exists ? externalData.Length : null,
+            ExternalDataLastWriteUtcTicks: externalData.Exists ? externalData.LastWriteTimeUtc.Ticks : null,
             CreatedAtUtc: DateTimeOffset.UtcNow);
+    }
 
     public static void WriteStamp(string sourceModelPath, Stamp stamp)
     {

@@ -215,6 +215,14 @@ public sealed class EpContextCompiler
             {
                 File.Delete(epContextPath);
             }
+
+            // A rejected compile can still have written the external-initializers sidecar
+            // before the EP-context-node check ran; remove it too so no orphan is left behind.
+            string sidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
+            if (File.Exists(sidecarPath))
+            {
+                File.Delete(sidecarPath);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
