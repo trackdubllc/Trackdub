@@ -416,9 +416,9 @@ public static class ModelLabCommand
     {
         string scriptPath = Path.Combine(
             options.RepositoryRootPath,
-            "tools",
-            "model-lab",
-            "decompose-microsoft-contrib-ops.py");
+            "tools".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            "model-lab".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            "decompose-microsoft-contrib-ops.py".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         if (!File.Exists(scriptPath))
         {
             return;
