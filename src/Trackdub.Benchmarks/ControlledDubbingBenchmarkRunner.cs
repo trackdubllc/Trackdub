@@ -256,6 +256,14 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             {
                 status = BenchmarkEvidenceStatus.Completed;
             }
+            MeasuredPipelineResult measured = await MeasurePipelineAsync(
+                host, fixtureCopy, projectPath, options, stage, filter, timings, cancellationToken).ConfigureAwait(false);
+            runId = measured.RunId;
+            stages = measured.Stages;
+            actualModel = measured.ActualModel;
+            actualProvider = measured.ActualProvider;
+            status = measured.Status;
+            reason = measured.Reason;
         }
         catch (PreparationIncompleteException)
         {
@@ -347,6 +355,104 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             return report;
         }
     }
+
+    private async Task<MeasuredPipelineResult> MeasurePipelineAsync(
+        HeadlessDubbingHost host,
+        string fixtureCopy,
+        string projectPath,
+        ControlledDubbingBenchmarkOptions options,
+        string? stage,
+        IReadOnlyList<string>? filter,
+        Dictionary<string, double?> timings,
+        CancellationToken cancellationToken)
+    {
+        long runStart = Stopwatch.GetTimestamp();
+        var stageClock = new StageTimingCollector(runStart);
+        var phases = new BenchmarkPhaseCapture();
+        DubbingRunResult result;
+        using (BenchmarkPhaseCapture.Activate(phases))
+        {
+            result = await ExecuteAsync(
+                host, fixtureCopy, projectPath, options, filter, options.Mode != "artifact-resume", cancellationToken,
+                stageClock).ConfigureAwait(false);
+        }
+
+        timings["pipeline"] = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
+        foreach ((string name, double? duration) in phases.SnapshotMilliseconds())
+        {
+            timings[name] = duration;
+        }
+
+        timings["import"] = timings.GetValueOrDefault("phase:import");
+        timings["preflight"] = timings.GetValueOrDefault("phase:preflight");
+        timings["export"] = stageClock.GetMilliseconds("Export");
+        RunArtifacts artifacts = await ReadRunArtifactsAsync(host, projectPath, options, cancellationToken)
+            .ConfigureAwait(false);
+        IReadOnlyList<BenchmarkEvidenceStage> stages = MapStages(result, artifacts.StageRuns, options.Model, stageClock);
+        if (artifacts.HasUsableTranscript)
+        {
+            timings["firstUsableTranscript"] = stageClock.GetCompletionMilliseconds("Asr");
+        }
+
+        if (artifacts.HasPlayableTake)
+        {
+            timings["firstPlayableAudio"] = stageClock.GetCompletionMilliseconds("Tts");
+        }
+
+        BenchmarkEvidenceStage? requestedStage = stage is null
+            ? null
+            : stages.LastOrDefault(x => x.Name.Equals(stage, StringComparison.OrdinalIgnoreCase));
+        string? actualModel = requestedStage?.ActualModel;
+        string? actualProvider = requestedStage?.ActualProvider;
+        (BenchmarkEvidenceStatus status, string? reason) = DetermineOutcome(
+            stage, requestedStage, result, stages, options.Provider, actualProvider);
+        return new MeasuredPipelineResult(result.RunId, stages, actualModel, actualProvider, status, reason);
+    }
+
+    private static (BenchmarkEvidenceStatus Status, string? Reason) DetermineOutcome(
+        string? stage,
+        BenchmarkEvidenceStage? requestedStage,
+        DubbingRunResult result,
+        IReadOnlyList<BenchmarkEvidenceStage> stages,
+        string? requestedProvider,
+        string? actualProvider)
+    {
+        if (stage is not null && requestedStage?.Status != BenchmarkEvidenceStatus.Completed)
+        {
+            return (requestedStage?.Status ?? BenchmarkEvidenceStatus.Skipped,
+                requestedStage?.Reason ?? "Requested stage produced no successful outcome.");
+        }
+
+        if (result.OverallStatus != DubbingRunStatus.Succeeded)
+        {
+            BenchmarkEvidenceStatus status = result.OverallStatus == DubbingRunStatus.PartialSuccess
+                ? BenchmarkEvidenceStatus.PartiallyCompleted
+                : BenchmarkEvidenceStatus.Failed;
+            string reason = result.PreFlightFailures is { Count: > 0 }
+                ? "Preflight failed."
+                : string.Join("; ", stages
+                    .Where(measured => measured.Status != BenchmarkEvidenceStatus.Completed)
+                    .Select(measured => $"{measured.Name}:{measured.Reason ?? measured.Status.ToString()}"));
+            return (status, string.IsNullOrWhiteSpace(reason) ? "Pipeline did not complete successfully." : reason);
+        }
+
+        if (requestedProvider is not null &&
+            (actualProvider is null || !BenchmarkComparison.ProviderMatches(requestedProvider, actualProvider)))
+        {
+            return (BenchmarkEvidenceStatus.PartiallyCompleted,
+                "Actual provider was unavailable or differed from requested provider.");
+        }
+
+        return (BenchmarkEvidenceStatus.Completed, null);
+    }
+
+    private sealed record MeasuredPipelineResult(
+        Guid RunId,
+        IReadOnlyList<BenchmarkEvidenceStage> Stages,
+        string? ActualModel,
+        string? ActualProvider,
+        BenchmarkEvidenceStatus Status,
+        string? Reason);
 
     // An unknown alias is not an error to the pipeline, which silently plans its default model,
     // so a typo (or an engine family such as "whisper-onnx") would measure the wrong model.
