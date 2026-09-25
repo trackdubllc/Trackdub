@@ -203,7 +203,46 @@ public static class EpContextArtifact
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllText(stampPath, JsonSerializer.Serialize(stamp, new JsonSerializerOptions { WriteIndented = true }));
+        string json = JsonSerializer.Serialize(stamp, new JsonSerializerOptions { WriteIndented = true });
+        string tempPath = stampPath + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.WriteAllText(tempPath, json);
+            try
+            {
+                File.Move(tempPath, stampPath, overwrite: true);
+            }
+            catch (IOException)
+            {
+                if (File.Exists(stampPath))
+                {
+                    File.Delete(stampPath);
+                }
+
+                File.Move(tempPath, stampPath);
+            }
+        }
+        catch
+        {
+            TryDeleteFile(tempPath);
+            throw;
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"EpContextArtifact: failed to delete temp file '{path}': {ex.Message}");
+        }
     }
 
     public static Stamp? TryReadStamp(string stampPath)

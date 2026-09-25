@@ -145,14 +145,15 @@ internal static class StageRuntimeRequirementsCatalog
                 DefaultOnnxStageAllowedProviders,
                 ["int8", "q4f16", "fp16", "q4", "default", "int4"],
                 ["int8", "q4", "quantized", "default"],
-                // Chatterbox / CosyVoice / Qwen3-TTS ONNX graphs hit TensorRT RTX unsupported
-                // ops (e.g. Squeeze) and hard-fail session init under a global trt-rtx pin.
-                // Prefer DirectML/CPU for those families; keep TRT only for smoke-proven routes.
+                // Per-graph TrtRtxUnsupportedOpScanner + session-init fallback isolate failures.
+                // CosyVoice multi-graph packages compile under TRT RTX in micro-benchmarks
+                // (token_generator 788MB, text_encoder, speech_tokenizer); the family-level
+                // deny was over-broad. kokoro stays CPU (ConvTranspose / DirectML incompatible).
+                // chatterbox/qwen3-tts keep the deny until their multi-graph init is smoke-clean.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["kokoro"] = [ExecutionProviderKind.Cpu],
                     ["chatterbox"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                    ["cosyvoice"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["qwen3-tts"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 },
                 AllowedEngineFamilies: ["kokoro", "chatterbox", "cosyvoice", "qwen3-tts"]),

@@ -22,11 +22,11 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
 
         string architecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
         string? gpuDescription = null;
+        string? gpuDriverVersion = null;
         string? cpuName = null;
         bool hasGpu = false;
         long dedicatedVramMb = 0;
         long totalRamMb = 0;
-        string? gpuDriverVersion = null;
 
         try
         {

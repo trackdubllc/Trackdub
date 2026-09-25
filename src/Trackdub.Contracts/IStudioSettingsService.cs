@@ -208,8 +208,12 @@ public static class AsrModelOverrideSettings
         string.Equals(modelAlias, OpenAiWhisperKey, StringComparison.OrdinalIgnoreCase);
 
     public static bool IsGeminiAsrAlias(string? modelAlias) =>
-        string.Equals(modelAlias, GeminiAsrCloudAlias, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(modelAlias, GeminiAsrKey, StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrWhiteSpace(modelAlias) &&
+        (string.Equals(modelAlias, GeminiAsrCloudAlias, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(modelAlias, GeminiAsrKey, StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-asr", StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-3.8", StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-2.5", StringComparison.OrdinalIgnoreCase));
 
     public static bool IsCloudAlias(string? modelAlias) =>
         IsOpenAiWhisperAlias(modelAlias) || IsGeminiAsrAlias(modelAlias);
@@ -254,7 +258,7 @@ public static class TranslationModelOverrideSettings
                 MadladKey => TranslationModelOverride.Madlad,
                 DeepLKey or DeepLModelAlias => TranslationModelOverride.DeepL,
                 OpenAiGptKey or OpenAiGptCloudAlias => TranslationModelOverride.OpenAiGpt,
-                GeminiTranslationKey or GeminiTranslationCloudAlias => TranslationModelOverride.GeminiTranslation,
+                GeminiTranslationKey or GeminiTranslationCloudAlias or "gemini-3.8-flash" or "gemini-3.5-flash-lite" or "gemini-2.5-flash" or "gemini-2.5-pro" => TranslationModelOverride.GeminiTranslation,
                 _ => TranslationModelOverride.Auto
             };
 
@@ -283,8 +287,16 @@ public static class TranslationModelOverrideSettings
         string.Equals(modelAlias, OpenAiGptKey, StringComparison.OrdinalIgnoreCase);
 
     public static bool IsGeminiTranslationAlias(string? modelAlias) =>
-        string.Equals(modelAlias, GeminiTranslationCloudAlias, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(modelAlias, GeminiTranslationKey, StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrWhiteSpace(modelAlias) &&
+        (string.Equals(modelAlias, GeminiTranslationCloudAlias, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(modelAlias, GeminiTranslationKey, StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-translation", StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-3.8", StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-3.5", StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-2.5", StringComparison.OrdinalIgnoreCase));
+
+    public static bool IsCloudAlias(string? modelAlias) =>
+        IsDeepLModelAlias(modelAlias) || IsOpenAiGptAlias(modelAlias) || IsGeminiTranslationAlias(modelAlias);
 }
 
 public enum TtsModelOverride
@@ -296,7 +308,8 @@ public enum TtsModelOverride
     OpenAiTts = 4,
     GoogleTts = 5,
     CosyVoice = 6,
-    Qwen3Tts = 7
+    Qwen3Tts = 7,
+    GeminiTts = 8
 }
 
 public static class TtsModelOverrideSettings
@@ -312,9 +325,11 @@ public static class TtsModelOverrideSettings
     public const string ElevenLabsKey = "elevenlabs";
     public const string OpenAiTtsKey = "openai-tts";
     public const string GoogleTtsKey = "google-tts";
+    public const string GeminiTtsKey = "gemini-tts";
     public const string ElevenLabsCloudAlias = "elevenlabs-tts-cloud";
     public const string OpenAiTtsCloudAlias = "openai-tts-cloud";
     public const string GoogleTtsCloudAlias = "google-tts-cloud";
+    public const string GeminiTtsCloudAlias = "gemini-tts-cloud";
 
     public static string ToKey(TtsModelOverride modelOverride) =>
         modelOverride switch
@@ -326,6 +341,7 @@ public static class TtsModelOverrideSettings
             TtsModelOverride.ElevenLabs => ElevenLabsKey,
             TtsModelOverride.OpenAiTts => OpenAiTtsKey,
             TtsModelOverride.GoogleTts => GoogleTtsKey,
+            TtsModelOverride.GeminiTts => GeminiTtsKey,
             _ => AutoKey
         };
 
@@ -341,6 +357,7 @@ public static class TtsModelOverrideSettings
                 ElevenLabsKey or ElevenLabsCloudAlias => TtsModelOverride.ElevenLabs,
                 OpenAiTtsKey or OpenAiTtsCloudAlias => TtsModelOverride.OpenAiTts,
                 GoogleTtsKey or GoogleTtsCloudAlias => TtsModelOverride.GoogleTts,
+                GeminiTtsKey or GeminiTtsCloudAlias or "gemini-3.8-flash-tts" or "gemini-3.8-flash-lite-tts" => TtsModelOverride.GeminiTts,
                 _ => TtsModelOverride.Auto
             };
 
@@ -353,6 +370,7 @@ public static class TtsModelOverrideSettings
             TtsModelOverride.ElevenLabs => ElevenLabsCloudAlias,
             TtsModelOverride.OpenAiTts => OpenAiTtsCloudAlias,
             TtsModelOverride.GoogleTts => GoogleTtsCloudAlias,
+            TtsModelOverride.GeminiTts => GeminiTtsCloudAlias,
             _ => null
         };
 
@@ -362,7 +380,8 @@ public static class TtsModelOverrideSettings
             or TtsModelOverride.CosyVoice
             or TtsModelOverride.ElevenLabs
             or TtsModelOverride.OpenAiTts
-            or TtsModelOverride.GoogleTts;
+            or TtsModelOverride.GoogleTts
+            or TtsModelOverride.GeminiTts;
 
     public static bool IsElevenLabsAlias(string? modelAlias) =>
         string.Equals(modelAlias, ElevenLabsCloudAlias, StringComparison.OrdinalIgnoreCase) ||
@@ -376,6 +395,14 @@ public static class TtsModelOverrideSettings
         string.Equals(modelAlias, GoogleTtsCloudAlias, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(modelAlias, GoogleTtsKey, StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsGeminiTtsAlias(string? modelAlias) =>
+        !string.IsNullOrWhiteSpace(modelAlias) &&
+        (string.Equals(modelAlias, GeminiTtsCloudAlias, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(modelAlias, GeminiTtsKey, StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-tts", StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-3.8-flash-tts", StringComparison.OrdinalIgnoreCase) ||
+         modelAlias.StartsWith("gemini-3.8-flash-lite-tts", StringComparison.OrdinalIgnoreCase));
+
     public static bool IsCosyVoiceAlias(string? modelAlias) =>
         string.Equals(modelAlias, CosyVoiceModelAlias, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(modelAlias, CosyVoiceKey, StringComparison.OrdinalIgnoreCase);
@@ -387,7 +414,7 @@ public static class TtsModelOverrideSettings
          modelAlias.Equals("qwen-tts", StringComparison.OrdinalIgnoreCase));
 
     public static bool IsCloudAlias(string? modelAlias) =>
-        IsElevenLabsAlias(modelAlias) || IsOpenAiTtsAlias(modelAlias) || IsGoogleTtsAlias(modelAlias);
+        IsElevenLabsAlias(modelAlias) || IsOpenAiTtsAlias(modelAlias) || IsGoogleTtsAlias(modelAlias) || IsGeminiTtsAlias(modelAlias);
 }
 
 public enum SeparationModelOverride

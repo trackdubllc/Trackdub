@@ -150,6 +150,8 @@ internal sealed record SessionPoolKey
             // (256 MB) ensures admission accounting stays conservative but may trigger
             // unnecessary evictions if the actual model is smaller.
             // File is inaccessible or the path is malformed; fall back to the pessimistic default.
+            System.Diagnostics.Trace.TraceWarning(
+                $"SessionPoolKey: failed to estimate VRAM for '{modelPath}': {ex.Message}");
         }
 
         return DefaultEstimatedVramMb;

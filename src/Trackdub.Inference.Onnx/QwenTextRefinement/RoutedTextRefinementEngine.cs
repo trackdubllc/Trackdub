@@ -40,7 +40,9 @@ public sealed class RoutedTextRefinementEngine(IEnumerable<ITextRefinementEngine
         {
             string normalizedAlias = preferredModelAlias.Trim();
             ITextRefinementEngine? aliasMatch = engines.FirstOrDefault(candidate =>
-                string.Equals(candidate.EngineFamily, normalizedAlias, StringComparison.OrdinalIgnoreCase));
+                string.Equals(candidate.EngineFamily, normalizedAlias, StringComparison.OrdinalIgnoreCase) ||
+                (normalizedAlias.StartsWith("gemini", StringComparison.OrdinalIgnoreCase) &&
+                 candidate.EngineFamily.StartsWith("gemini", StringComparison.OrdinalIgnoreCase)));
             if (aliasMatch is not null)
             {
                 return aliasMatch;

@@ -45,7 +45,7 @@ public sealed class DeviceOomExceptionHelperClassifyTests
         Assert.Null(kind);
     }
 
-    // Strings are exactly what the bundled cudart64_12.dll returns from cudaGetErrorString /
+    // Strings are exactly what the CUDA runtime returns from cudaGetErrorString /
     // cudaGetErrorName; CUDA documents these as leaving the process's CUDA state unusable.
     [Theory]
     [InlineData("[ErrorCode:RuntimeException] CUDA failure 700: an illegal memory access was encountered")]

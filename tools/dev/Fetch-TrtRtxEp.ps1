@@ -40,15 +40,15 @@ function Get-RepoRoot {
 function Get-DefaultRuntimeIdentifier {
     if ($IsWindows) { return 'win-x64' }
     if ($IsLinux) { return 'linux-x64' }
-    throw 'TensorRT RTX EP ABI v0.3.0 is supported on Windows and Linux x64 only.'
+    throw 'TensorRT RTX EP ABI is supported on Windows and Linux x64 only.'
 }
 
 function Get-RequiredFileNames([string]$Rid) {
     if ($Rid -eq 'win-x64') {
         return @(
             'onnxruntime_providers_nv_tensorrt_rtx.dll',
-            'tensorrt_rtx_1_5.dll',
-            'tensorrt_onnxparser_rtx_1_5.dll'
+            'tensorrt_rtx_1_6.dll',
+            'tensorrt_onnxparser_rtx_1_6.dll'
         )
     }
 
@@ -84,7 +84,13 @@ function Expand-TrtArchive([string]$ArchivePath, [string]$ArchiveKind, [string]$
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     switch ($ArchiveKind.ToLowerInvariant()) {
         'zip' {
-            Expand-Archive -Path $ArchivePath -DestinationPath $Destination -Force
+            if ($IsWindows) {
+                Expand-Archive -Path $ArchivePath -DestinationPath $Destination -Force
+            } else {
+                # Expand-Archive drops Unix symlinks (the linux asset's SONAME chain); unzip keeps them.
+                unzip -q -o $ArchivePath -d $Destination
+                if ($LASTEXITCODE -ne 0) { throw "unzip failed with exit code $LASTEXITCODE." }
+            }
         }
         'tar.gz' {
             tar -xzf $ArchivePath -C $Destination
@@ -100,7 +106,12 @@ function Copy-NativeLibrariesFlat([string]$SourceRoot, [string]$DestinationRoot)
         Get-ChildItem -Path $SourceRoot -Filter $pattern -Recurse -File |
             Where-Object { $_.Extension -ine '.pdb' } |
             ForEach-Object {
-                Copy-Item -Path $_.FullName -Destination (Join-Path $DestinationRoot $_.Name) -Force
+                if ($IsWindows) {
+                    Copy-Item -Path $_.FullName -Destination (Join-Path $DestinationRoot $_.Name) -Force
+                } else {
+                    # -P keeps SONAME symlinks as links instead of duplicating the 200+ MB runtime.
+                    cp -P -f $_.FullName (Join-Path $DestinationRoot $_.Name)
+                }
             }
     }
 }
@@ -140,7 +151,9 @@ $userDataRoot = if ($InstallRoot) {
     Join-Path $env:HOME '.local/share/Trackdub'
 }
 
-$installDirectory = Join-Path $userDataRoot "Providers/trt-rtx/$($manifest.version)/$($manifest.cudaVariant)/$rid"
+# Packages may pin their own EP ABI release when NVIDIA does not publish every platform on every tag.
+$packageVersion = if ($package.PSObject.Properties.Name -contains 'version' -and $package.version) { $package.version } else { $manifest.version }
+$installDirectory = Join-Path $userDataRoot "Providers/trt-rtx/$packageVersion/$($manifest.cudaVariant)/$rid"
 
 if (-not $Force -and (Test-BundleReady $installDirectory $requiredFiles)) {
     Write-Host "TensorRT RTX EP bundle already installed at '$installDirectory'."
@@ -149,7 +162,7 @@ if (-not $Force -and (Test-BundleReady $installDirectory $requiredFiles)) {
     exit 0
 }
 
-Write-Host "Downloading TensorRT RTX EP ABI v$($manifest.version) $($manifest.cudaVariant) ($rid)..."
+Write-Host "Downloading TensorRT RTX EP ABI v$packageVersion $($manifest.cudaVariant) ($rid)..."
 $parentDirectory = Split-Path $installDirectory -Parent
 New-Item -ItemType Directory -Path $parentDirectory -Force | Out-Null
 

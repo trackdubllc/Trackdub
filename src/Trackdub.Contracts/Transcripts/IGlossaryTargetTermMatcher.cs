@@ -1,4 +1,4 @@
-﻿using Trackdub.Domain.Translation;
+using Trackdub.Domain.Translation;
 
 namespace Trackdub.Contracts.Transcripts;
 

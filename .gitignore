@@ -155,6 +155,7 @@ credentials.xml
 # --- Reports and benchmark output ---
 reports/**/*.json
 benchmark-report*.json
+BenchmarkDotNet.Artifacts/
 
 # --- Design workspace (local HTML/PNG prototypes; not product docs) ---
 /docs/design/
@@ -328,4 +329,4 @@ __pycache__/
 # Olive validator outputs (tools/olive/Validate-*.ps1): staged models and Olive workflow cache
 /build/
 /cache/
-/BenchmarkDotNet.Artifacts
+/.agents/teamwork

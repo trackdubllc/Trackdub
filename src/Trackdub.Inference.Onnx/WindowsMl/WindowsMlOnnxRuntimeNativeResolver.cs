@@ -25,6 +25,10 @@ internal static class WindowsMlOnnxRuntimeNativeResolver
         {
             TryLoadOnnxRuntimeNative("onnxruntime.dll", out _);
             TryLoadOnnxRuntimeNative("onnxruntime_providers_shared.dll", out _);
+            // DirectML's provider DLL is resolved by onnxruntime.dll at AppendExecutionProvider_DML
+            // time. Preloading it here (before any OrtEnv touch) keeps headless hosts from
+            // silently appending nothing and falling back to CPU.
+            TryLoadOnnxRuntimeNative("onnxruntime_providers_dml.dll", out _);
 
             NativeLibrary.SetDllImportResolver(typeof(OrtEnv).Assembly, ResolveNativeLibrary);
         }

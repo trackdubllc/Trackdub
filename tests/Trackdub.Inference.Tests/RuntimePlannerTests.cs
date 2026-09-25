@@ -1723,7 +1723,6 @@ public sealed class RuntimePlannerTests
     [Theory]
     [InlineData("ResembleAI/chatterbox-turbo-ONNX", VoiceCloningDefaults.ChatterboxPrimaryAlias, "chatterbox", "q4f16", true)]
     [InlineData("ResembleAI/chatterbox-turbo-ONNX", VoiceCloningDefaults.ChatterboxPrimaryAlias, "chatterbox", "q4f16", false)]
-    [InlineData("tonythethompson/CosyVoice-300M-ONNX", "cosyvoice", "cosyvoice", "default", true)]
     [InlineData("tonythethompson/Qwen3-TTS-12Hz-0.6B-CustomVoice-ONNX", "qwen3-tts", "qwen3-tts", "default", true)]
     public async Task PlanAsync_TensorRTRtxNotAllowedForTtsFamilies_PlansDirectMlWithoutTrtSmoke(
         string modelId,
@@ -1774,6 +1773,49 @@ public sealed class RuntimePlannerTests
                 && warning.Detail is not null
                 && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal)
                 && warning.Detail.Contains(engineFamily, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PlanAsync_CosyVoiceAllowedForTensorRtRtx_PlansTrtWhenSmokePasses()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = LoadBundledRegistry();
+
+        const string modelId = "tonythethompson/CosyVoice-300M-ONNX";
+        string cacheRoot = workspace.CreateCacheRoot(modelId);
+        WriteBundledCacheFiles(workspace, registry, "cosyvoice", cacheRoot, "default");
+
+        var smokeRequests = new List<ExecutionProviderSmokeTestRequest>();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [CreateCacheRecord(registry, modelId, cacheRoot)],
+            [
+                new(ExecutionProviderKind.DirectMl, true),
+                new(ExecutionProviderKind.TensorRTRtx, true),
+                new(ExecutionProviderKind.Cpu, true)
+            ],
+            request =>
+            {
+                smokeRequests.Add(request);
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Tts,
+            PreferredModelAlias: "cosyvoice",
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true));
+
+        Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
+        Assert.Equal("cosyvoice", plan.EngineFamily);
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
+        Assert.Contains(
+            smokeRequests,
+            request => request.ExecutionProvider == ExecutionProviderKind.TensorRTRtx);
+        Assert.DoesNotContain(
+            plan.Warnings,
+            warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
     }
 
     [Fact]

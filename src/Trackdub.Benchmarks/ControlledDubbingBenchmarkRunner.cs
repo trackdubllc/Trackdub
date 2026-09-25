@@ -195,6 +195,67 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 }
             }
 
+            long runStart = Stopwatch.GetTimestamp();
+            var stageClock = new StageTimingCollector(runStart);
+            var phases = new BenchmarkPhaseCapture();
+            DubbingRunResult result;
+            using (BenchmarkPhaseCapture.Activate(phases))
+            {
+                result = await ExecuteAsync(
+                    host, fixtureCopy, projectPath, options, filter, options.Mode != "artifact-resume", cancellationToken,
+                    stageClock).ConfigureAwait(false);
+            }
+            timings["pipeline"] = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
+            foreach ((string name, double? duration) in phases.SnapshotMilliseconds())
+                timings[name] = duration;
+            timings["import"] = timings.GetValueOrDefault("phase:import");
+            timings["preflight"] = timings.GetValueOrDefault("phase:preflight");
+            timings["export"] = stageClock.GetMilliseconds("Export");
+            runId = result.RunId;
+            RunArtifacts artifacts = await ReadRunArtifactsAsync(host, projectPath, options, cancellationToken)
+                .ConfigureAwait(false);
+            stages = MapStages(result, artifacts.StageRuns, options.Model, stageClock);
+            if (artifacts.HasUsableTranscript)
+                timings["firstUsableTranscript"] = stageClock.GetCompletionMilliseconds("Asr");
+            if (artifacts.HasPlayableTake)
+                timings["firstPlayableAudio"] = stageClock.GetCompletionMilliseconds("Tts");
+            BenchmarkEvidenceStage? requestedStage = stage is null
+                ? null
+                : stages.LastOrDefault(x => x.Name.Equals(stage, StringComparison.OrdinalIgnoreCase));
+            actualModel = requestedStage?.ActualModel;
+            actualProvider = requestedStage?.ActualProvider;
+            if (stage is not null && requestedStage?.Status != BenchmarkEvidenceStatus.Completed)
+            {
+                status = requestedStage?.Status ?? BenchmarkEvidenceStatus.Skipped;
+                reason = requestedStage?.Reason
+                    ?? (result.PreFlightFailures is { Count: > 0 }
+                        ? "Preflight failed: " + string.Join("; ", result.PreFlightFailures)
+                        : "Requested stage produced no successful outcome.");
+            }
+            else if (result.OverallStatus != DubbingRunStatus.Succeeded)
+            {
+                status = result.OverallStatus == DubbingRunStatus.PartialSuccess
+                    ? BenchmarkEvidenceStatus.PartiallyCompleted
+                    : BenchmarkEvidenceStatus.Failed;
+                reason = result.PreFlightFailures is { Count: > 0 }
+                    ? "Preflight failed."
+                    : string.Join("; ", stages
+                        .Where(measured => measured.Status != BenchmarkEvidenceStatus.Completed)
+                        .Select(measured => $"{measured.Name}:{measured.Reason ?? measured.Status.ToString()}"));
+                if (string.IsNullOrWhiteSpace(reason))
+                    reason = "Pipeline did not complete successfully.";
+            }
+            else if (options.Provider is not null &&
+                     (actualProvider is null ||
+                     !BenchmarkComparison.ProviderMatches(options.Provider, actualProvider)))
+            {
+                status = BenchmarkEvidenceStatus.PartiallyCompleted;
+                reason = "Actual provider was unavailable or differed from requested provider.";
+            }
+            else
+            {
+                status = BenchmarkEvidenceStatus.Completed;
+            }
             MeasuredPipelineResult measured = await MeasurePipelineAsync(
                 host, fixtureCopy, projectPath, options, stage, filter, timings, cancellationToken).ConfigureAwait(false);
             runId = measured.RunId;

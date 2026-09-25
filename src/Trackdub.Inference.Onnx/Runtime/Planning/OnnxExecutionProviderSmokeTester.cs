@@ -6,6 +6,7 @@ using Trackdub.Inference.Onnx.ExecutionProviders;
 using Trackdub.Inference.Onnx.Qwen3Asr;
 using Trackdub.Inference.Onnx.NemotronAsr;
 using Trackdub.Inference.Onnx.ParakeetTdt;
+using Trackdub.Inference.Onnx.CosyVoice;
 using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.SortFormer;
 using Trackdub.Inference.Onnx.Whisper;
@@ -614,6 +615,11 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         {
             await WarmChatterboxSidecarsAsync(modelRootPath, entryPath, variant, cancellationToken).ConfigureAwait(false);
         }
+        else if (IsCosyVoiceTtsModel(modelId, modelAlias))
+        {
+            await ProbeCosyVoiceGraphsAsync(modelRootPath, entryPath, variant, provider, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     private static string ResolveTtsPoolFamily(string modelId, string modelAlias)
@@ -623,13 +629,60 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             return "chatterbox";
         }
 
-        if (modelId.Contains("cosyvoice", StringComparison.OrdinalIgnoreCase) ||
-            modelAlias.Contains("cosyvoice", StringComparison.OrdinalIgnoreCase))
+        if (IsCosyVoiceTtsModel(modelId, modelAlias))
         {
             return "cosyvoice";
         }
 
         return "kokoro";
+    }
+
+    /// <summary>
+    /// Creates pooled TRT-pinned sessions for every remaining CosyVoice graph so a hard
+    /// pin cannot hit an unproven graph at first synthesis: the verified TTS smoke verdict
+    /// persists, so each graph must pass session init here to be safe later without
+    /// fallback. Inference stays on the primary probe; the side graphs are init-only,
+    /// mirroring the Chatterbox sidecar warmup.
+    /// </summary>
+    private static async Task ProbeCosyVoiceGraphsAsync(
+        string modelRootPath,
+        string entryPath,
+        string variant,
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken)
+    {
+        string rootPath = !string.IsNullOrWhiteSpace(modelRootPath)
+            ? modelRootPath
+            : Path.GetDirectoryName(entryPath)
+                ?? throw new InvalidOperationException("Cannot resolve CosyVoice TTS smoke-test root path.");
+        CosyVoiceModelFiles modelFiles = CosyVoiceModelFiles.Resolve(rootPath, variant);
+        string entryFullPath = Path.GetFullPath(entryPath);
+        string[] graphPaths =
+        [
+            modelFiles.CampPlusPath,
+            modelFiles.SpeechTokenizerPath,
+            modelFiles.TextEncoderPath,
+            modelFiles.TokenGeneratorPath,
+            modelFiles.FlowEncoderPath,
+            modelFiles.FlowDecoderEstimatorPath,
+            modelFiles.HiftF0PredictorPath,
+            modelFiles.HiftSourcePath,
+            modelFiles.HiftVocoderPath,
+        ];
+
+        foreach (string graphPath in graphPaths)
+        {
+            if (string.Equals(Path.GetFullPath(graphPath), entryFullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                // The primary probe already created and ran this graph's session.
+                continue;
+            }
+
+            using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
+                .CreatePooledSingleAsync("cosyvoice", graphPath, provider, cancellationToken, allowTrtInitFallback: false)
+                .ConfigureAwait(false);
+            EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
+        }
     }
 
     /// <summary>
@@ -1118,6 +1171,10 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     private static bool IsChatterboxTtsModel(string modelId, string modelAlias) =>
         modelId.Contains("chatterbox", StringComparison.OrdinalIgnoreCase) ||
         modelAlias.Contains("chatterbox", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCosyVoiceTtsModel(string modelId, string modelAlias) =>
+        modelId.Contains("cosyvoice", StringComparison.OrdinalIgnoreCase) ||
+        modelAlias.Contains("cosyvoice", StringComparison.OrdinalIgnoreCase);
 
     private static (string WaveformName, string? LengthName) ResolveDiarizationInputNames(
         IReadOnlyDictionary<string, Type> inputElementTypes)
