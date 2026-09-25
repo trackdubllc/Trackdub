@@ -42,9 +42,15 @@ public static class EngineCacheProbe
         return new Snapshot(directory, DirectoryExists: true, fileCount, totalBytes);
     }
 
-    public static string ClassifyOutcome(Snapshot before, Snapshot after, BenchmarkProviderPreference provider)
+    /// <summary>
+    /// Providers whose session create can populate an on-disk engine cache (TensorRT family).
+    /// </summary>
+    public static bool IsEngineCacheRelevantProvider(BenchmarkProviderPreference provider) =>
+        provider is BenchmarkProviderPreference.TensorRtRtx or BenchmarkProviderPreference.TensorRt or BenchmarkProviderPreference.Migraphx;
+
+    public static string ClassifyOutcome(Snapshot before, Snapshot after, bool isEngineCacheRelevantProvider)
     {
-        if (provider is not (BenchmarkProviderPreference.TensorRtRtx or BenchmarkProviderPreference.TensorRt or BenchmarkProviderPreference.Migraphx))
+        if (!isEngineCacheRelevantProvider)
         {
             return "not-applicable";
         }
@@ -59,7 +65,10 @@ public static class EngineCacheProbe
 
         if (before.FileCount > 0)
         {
-            return "hit";
+            // The directory has entries, but we cannot confirm they belong to this specific
+            // model/provider (no engine-cache filename parsing) — a stale cache from an
+            // unrelated model would look identical. Do not claim a hit without that evidence.
+            return "unknown";
         }
 
         return "empty";
@@ -67,27 +76,11 @@ public static class EngineCacheProbe
 
     /// <summary>
     /// Evidence-based dominant phase of session construct. We only claim compile when the
-    /// engine cache actually grew; otherwise construct is weights/deserialize work.
+    /// engine cache actually grew during this cold load; every other outcome lacks the phase
+    /// timing needed to attribute dominance, so it stays unknown rather than guessed.
     /// </summary>
-    public static string ClassifyDominantPhase(string? engineCacheOutcome, BenchmarkProviderPreference provider)
-    {
-        if (engineCacheOutcome is "wrote")
-        {
-            return "engine-compile";
-        }
-
-        if (engineCacheOutcome is "hit")
-        {
-            return "model-deserialize";
-        }
-
-        if (engineCacheOutcome is "not-applicable")
-        {
-            return "model-deserialize";
-        }
-
-        return "unknown";
-    }
+    public static string ClassifyDominantPhase(string? engineCacheOutcome) =>
+        engineCacheOutcome is "wrote" ? "engine-compile" : "unknown";
 
     public static string FormatNote(
         double coldLoadMilliseconds,

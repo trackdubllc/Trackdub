@@ -220,7 +220,7 @@ public sealed class FileSmokeVerdictStoreTests
             TrtRtxEpVersion: "0.3.0");
 
     private static string NewStorePath() =>
-        Path.Combine(Path.GetTempPath(), $"trackdub-smoke-verdicts-{Guid.NewGuid():N}", "smoke-verdicts.json");
+        Path.Join(Path.GetTempPath(), $"trackdub-smoke-verdicts-{Guid.NewGuid():N}", "smoke-verdicts.json");
 
     private static void DeleteStore(string path)
     {

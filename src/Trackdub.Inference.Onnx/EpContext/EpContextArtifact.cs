@@ -41,7 +41,8 @@ public static class EpContextArtifact
             source.LastWriteTimeUtc.Ticks == SourceLastWriteUtcTicks &&
             (externalData?.Exists ?? false) == ExternalDataLengthBytes.HasValue &&
             (!ExternalDataLengthBytes.HasValue ||
-                (externalData!.Length == ExternalDataLengthBytes.Value &&
+                (externalData is not null &&
+                 externalData.Length == ExternalDataLengthBytes.Value &&
                  externalData.LastWriteTimeUtc.Ticks == ExternalDataLastWriteUtcTicks));
 
         private static string Normalize(string? value) =>
