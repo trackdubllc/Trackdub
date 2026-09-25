@@ -805,7 +805,7 @@ internal static class OnnxExecutionSessionFactory
         // Bound retries: when the pool is full of leased/pinned entries, GetLeaseAsync
         // returns an ephemeral lease that never reaches `entries`, so TryPinExisting
         // can never succeed — infinite session create/dispose churn.
-        const int maxPinAttempts = 3;
+        const int maxPinAttempts = 5;
         for (int attempt = 1; attempt <= maxPinAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -819,7 +819,11 @@ internal static class OnnxExecutionSessionFactory
                 break;
             }
 
-            // Evicted before pin — recreate and retry.
+            // Evicted before pin — recreate and retry with exponential backoff.
+            // Retry delays: 50ms, 100ms, 200ms, 400ms (maxPinAttempts=5).
+            int delayMs = 25 * (1 << attempt);
+            await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+
             using (await AcquireAsync(cancellationToken).ConfigureAwait(false))
             {
             }

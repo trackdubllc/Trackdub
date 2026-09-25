@@ -357,6 +357,14 @@ internal sealed class InferenceSessionPool : IDisposable
                     continue;
                 }
 
+                // If memory admission is enabled and model exceeds budget, fail fast before
+                // attempting to create an unbudgeted session (audit §3B).
+                long needMb = ResolveReservationMb(key);
+                if (enableMemoryAdmission && needMb > memoryBudgetMb)
+                {
+                    throw new InvalidOperationException($"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the device admission budget of {memoryBudgetMb} MB.");
+                }
+
                 if (creationFailures.TryGetValue(key, out var recentFailure))
                 {
                     if (recentFailure.Wave > observedCreationWave)
@@ -372,20 +380,6 @@ internal sealed class InferenceSessionPool : IDisposable
                 }
 
                 long needMb = ResolveReservationMb(key);
-                int device = DeviceOf(key);
-
-                if (enableMemoryAdmission && needMb > memoryBudgetMb)
-                {
-                    throw new InvalidOperationException(
-                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
-                        $"device {device} admission budget of {memoryBudgetMb} MB.");
-                }
-
-                bool ephemeral = false;
-                PoolEntry? lruEvicted1 = null;
-                bool reserved = false;
-                using (BenchmarkPhaseCapture.Start("pool-creation-lock-wait"))
-                    await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
                     ObjectDisposedException.ThrowIf(disposed, this);
@@ -446,7 +440,9 @@ internal sealed class InferenceSessionPool : IDisposable
                 {
                     if (reserved)
                     {
-                        ReleaseReservation(device, needMb);
+                    // Always release reservation on factory failure to prevent a reservation leak
+                    // (audit §3A: VRAM accounting integrity).
+                    if (reserved)
                     }
 
                     throw;
