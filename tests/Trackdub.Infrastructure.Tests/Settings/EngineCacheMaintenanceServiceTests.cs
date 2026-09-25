@@ -109,7 +109,7 @@ public sealed class EngineCacheMaintenanceServiceTests
     [Fact]
     public void Clear_also_clears_smoke_verdict_store()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-engine-cache-verdicts-{Guid.NewGuid():N}");
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-engine-cache-verdicts-{Guid.NewGuid():N}");
         var paths = new TrackdubStoragePaths(root);
         Directory.CreateDirectory(paths.EngineCacheDirectory);
         File.WriteAllText(Path.Combine(paths.EngineCacheDirectory, "engine.cache"), "x");
