@@ -142,6 +142,35 @@ public sealed class EngineCacheMaintenanceServiceTests
     }
 
     [Fact]
+    public void Clear_removes_ep_context_external_initializer_sidecars()
+    {
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-engine-cache-epc-sidecar-{Guid.NewGuid():N}");
+        var paths = new TrackdubStoragePaths(root);
+        Directory.CreateDirectory(paths.ModelCacheDirectory);
+
+        string artifact = Path.Join(paths.ModelCacheDirectory, "model.epc.onnx");
+        string stamp = Path.Join(paths.ModelCacheDirectory, "model.epc.stamp.json");
+        string sidecar = Path.Join(paths.ModelCacheDirectory, "model.epc.ext_init");
+        File.WriteAllText(artifact, "artifact");
+        File.WriteAllText(stamp, "stamp");
+        File.WriteAllText(sidecar, "sidecar");
+
+        try
+        {
+            var service = new EngineCacheMaintenanceService(paths);
+            service.Clear();
+
+            Assert.False(File.Exists(artifact));
+            Assert.False(File.Exists(stamp));
+            Assert.False(File.Exists(sidecar));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Describe_reports_size_and_count()
     {
         string root = Path.Join(Path.GetTempPath(), $"trackdub-engine-cache-describe-{Guid.NewGuid():N}");

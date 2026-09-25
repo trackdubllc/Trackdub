@@ -96,7 +96,14 @@ public sealed class EpContextCompiler
             // Externalize initializers only when embedding is off, so sub-2GB models stay one file.
             bool embed = EpContextArtifact.ShouldEmbedEpContext(sourceModelPath);
             compileOptions.SetEpContextEmbedMode(embed);
-            if (!embed)
+            if (embed)
+            {
+                // A previous non-embedded compile may have left a sidecar next to this artifact.
+                // The new artifact embeds initializers, so that sidecar is stale and must not
+                // survive as an orphan or be mistaken for part of this artifact.
+                TryDeleteExternalInitializers(epContextPath);
+            }
+            else
             {
                 compileOptions.SetOutputModelExternalInitializersFile(
                     Path.GetFileNameWithoutExtension(epContextPath) + ".ext_init",
@@ -104,6 +111,12 @@ public sealed class EpContextCompiler
             }
 
             compileOptions.CompileModel();
+            if (embed)
+            {
+                // Keep the artifact self-contained; the stamp/load path expects no sidecar for
+                // embedded outputs.
+                TryDeleteExternalInitializers(epContextPath);
+            }
             stopwatch.Stop();
 
             // CompileModel() can succeed yet emit a plain reserialized graph (no com.microsoft.ep.context
@@ -249,6 +262,23 @@ public sealed class EpContextCompiler
             if ((next & 0x80) == 0) return value;
         }
         throw new InvalidDataException("Invalid ONNX varint.");
+    }
+
+    private static void TryDeleteExternalInitializers(string epContextPath)
+    {
+        try
+        {
+            string sidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
+            if (File.Exists(sidecarPath))
+            {
+                File.Delete(sidecarPath);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best-effort stale-sidecar cleanup; the artifact validation will reject a stale
+            // sidecar if it cannot be removed here.
+        }
     }
 
     private static void TryDeletePartial(string epContextPath)
