@@ -364,9 +364,12 @@ internal sealed class InferenceSessionPool : IDisposable
                 // If memory admission is enabled and model exceeds budget, fail fast before
                 // attempting to create an unbudgeted session (audit §3B).
                 long needMb = ResolveReservationMb(key);
+                int device = DeviceOf(key);
                 if (enableMemoryAdmission && needMb > memoryBudgetMb)
                 {
-                    throw new InvalidOperationException($"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the device admission budget of {memoryBudgetMb} MB.");
+                    throw new InvalidOperationException(
+                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
+                        $"device {device} admission budget of {memoryBudgetMb} MB.");
                 }
 
                 if (queuedBehindCreator
@@ -384,6 +387,11 @@ internal sealed class InferenceSessionPool : IDisposable
                     creationFailures.TryRemove(new KeyValuePair<SessionPoolKey, (Exception Error, long Wave)>(key, recentFailure));
                 }
 
+                bool ephemeral = false;
+                PoolEntry? lruEvicted1 = null;
+                bool reserved = false;
+                using (BenchmarkPhaseCapture.Start("pool-creation-lock-wait"))
+                    await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
                     ObjectDisposedException.ThrowIf(disposed, this);
