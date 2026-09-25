@@ -150,17 +150,22 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
             int phonemeTokenCount = Math.Max(0, inputIds.Length - 2);
             float[] styleVector = KokoroVoicepackLoader.LoadStyleVector(binPath, phonemeTokenCount);
 
+            // Residency pin keeps the session warm; the execution lease is taken only for Run()
+            // (audit §3A: residency ≠ exclusivity).
+            using OnnxExecutionSessionFactory.SingleSessionLease lease = await session.Pin
+                .AcquireAsync(cancellationToken)
+                .ConfigureAwait(false);
             float[] audioSamples = RunInference(
-                session.Lease.Session, inputIds, styleVector, request.Speed, cancellationToken);
+                lease.Session, inputIds, styleVector, request.Speed, cancellationToken);
             byte[] wavBytes = KokoroPcmConverter.EncodePcm16Wav(audioSamples, SampleRate);
 
             LastExecutionSummary = new StageRuntimeExecutionSummary(
-                session.Lease.RequestedProvider,
-                session.Lease.SelectedProvider,
+                lease.RequestedProvider,
+                lease.SelectedProvider,
                 plan.ModelId,
                 plan.ModelAlias,
                 plan.Variant,
-                session.Lease.BootstrapDetail);
+                lease.BootstrapDetail);
 
             return new TtsSynthesisResult(
                 wavBytes,
@@ -168,7 +173,7 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
                 SampleRate: SampleRate,
                 ModelId: plan.ModelId ?? ModelAlias,
                 VoiceId: request.Voice.VoiceId,
-                Provider: session.Lease.SelectedProvider);
+                Provider: lease.SelectedProvider);
         }
         finally
         {
@@ -193,7 +198,7 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         }
         try
         {
-            pinnedSession?.Lease.Dispose();
+            pinnedSession?.Pin.Dispose();
             pinnedSession = null;
         }
         finally
@@ -220,10 +225,10 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
             return pinnedSession;
         }
 
-        pinnedSession?.Lease.Dispose();
+        pinnedSession?.Pin.Dispose();
         pinnedSession = null;
-        OnnxExecutionSessionFactory.SingleSessionLease lease = await OnnxExecutionSessionFactory
-            .CreatePooledSingleAsync(
+        OnnxExecutionSessionFactory.PooledSingleSessionPin pin = await OnnxExecutionSessionFactory
+            .PinPooledSingleAsync(
                 "kokoro",
                 modelPath,
                 provider,
@@ -246,13 +251,13 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
                 modelRootPath,
                 provider,
                 allowTrtInitFallback,
-                lease,
+                pin,
                 tokenizer,
                 voiceCatalog);
         }
         catch
         {
-            lease.Dispose();
+            pin.Dispose();
             throw;
         }
 
@@ -309,24 +314,18 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         string modelRootPath,
         ExecutionProviderKind provider,
         bool allowTrtInitFallback,
-        OnnxExecutionSessionFactory.SingleSessionLease lease,
+        OnnxExecutionSessionFactory.PooledSingleSessionPin pin,
         KokoroTokenizer tokenizer,
         KokoroVoiceCatalog voiceCatalog)
-        : IDisposable
     {
         public string ModelPath { get; } = modelPath;
         public string ModelRootPath { get; } = modelRootPath;
         public ExecutionProviderKind Provider { get; } = provider;
 
         public bool AllowTrtInitFallback { get; } = allowTrtInitFallback;
-        public OnnxExecutionSessionFactory.SingleSessionLease Lease { get; } = lease;
+        public OnnxExecutionSessionFactory.PooledSingleSessionPin Pin { get; } = pin;
         public KokoroTokenizer Tokenizer { get; } = tokenizer;
         public KokoroVoiceCatalog VoiceCatalog { get; } = voiceCatalog;
-
-        public void Dispose()
-        {
-            Lease.Dispose();
-        }
     }
 
     private static void EnsurePlanReady(StageRuntimePlan plan)

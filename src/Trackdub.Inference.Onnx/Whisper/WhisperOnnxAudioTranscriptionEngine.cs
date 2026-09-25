@@ -770,7 +770,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
         throw new FileNotFoundException("Whisper decoder model was not found next to the encoder model.", decoderModelPath);
     }
 
-    private static Dictionary<string, string> BuildTrtEncoderOptions(int melBins) => new()
+    internal static Dictionary<string, string> BuildTrtEncoderOptions(int melBins) => new()
     {
         ["trt_profile_min_shapes"] = $"input_features:1x{melBins}x1",
         ["trt_profile_max_shapes"] = $"input_features:1x{melBins}x3000",
@@ -778,7 +778,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
     };
 
     // large-v3 uses 128 mel bins; earlier sizes use 80.
-    private static int ReadMelBins(string modelRootPath)
+    internal static int ReadMelBins(string modelRootPath)
     {
         string configPath = Path.Combine(modelRootPath, "preprocessor_config.json");
         if (!File.Exists(configPath))

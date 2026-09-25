@@ -87,7 +87,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         try
         {
             ThrowIfDisposed();
-            PinnedSessions sessions = await GetOrCreatePinnedSessionsAsync(
+            PinnedSessions pinned = await GetOrCreatePinnedSessionsAsync(
                 modelFiles,
                 plan.ExecutionProvider!.Value,
                 cancellationToken,
@@ -97,7 +97,12 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
                 request.Text,
                 request.LanguageCode,
                 modelFiles.IsMultilingual);
-            long[] inputIds = BuildTextInputIds(conditionedText, sessions.Tokenizer, modelFiles.IsTurbo);
+            long[] inputIds = BuildTextInputIds(conditionedText, pinned.Tokenizer, modelFiles.IsTurbo);
+
+            // Residency pins keep graphs warm; execution leases last only for this synthesis.
+            using LeasedSessions sessions = await pinned
+                .AcquireLeasesAsync(cancellationToken)
+                .ConfigureAwait(false);
             ChatterboxGenerationResult generation = GenerateSpeechTokens(
                 request,
                 inputIds,
@@ -750,17 +755,17 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         pinnedSessions?.Dispose();
         pinnedSessions = null;
 
-        OnnxExecutionSessionFactory.SingleSessionLease? speechEncoder = null;
-        OnnxExecutionSessionFactory.SingleSessionLease? embedTokens = null;
-        OnnxExecutionSessionFactory.SingleSessionLease? languageModel = null;
-        OnnxExecutionSessionFactory.SingleSessionLease? conditionalDecoder = null;
+        OnnxExecutionSessionFactory.PooledSingleSessionPin? speechEncoder = null;
+        OnnxExecutionSessionFactory.PooledSingleSessionPin? embedTokens = null;
+        OnnxExecutionSessionFactory.PooledSingleSessionPin? languageModel = null;
+        OnnxExecutionSessionFactory.PooledSingleSessionPin? conditionalDecoder = null;
         try
         {
             ExecutionProviderKind conditioningProvider = ResolveReferenceConditioningProvider(provider);
             ExecutionProviderKind languageModelProvider = ResolveLanguageModelProvider(provider);
             ExecutionProviderKind conditionalDecoderProvider = ResolveConditionalDecoderProvider(provider);
             speechEncoder = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync(
+                .PinPooledSingleAsync(
                     "chatterbox",
                     modelFiles.SpeechEncoderPath,
                     conditioningProvider,
@@ -768,7 +773,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
                     allowTrtInitFallback: allowTrtInitFallback)
                 .ConfigureAwait(false);
             embedTokens = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync(
+                .PinPooledSingleAsync(
                     "chatterbox",
                     modelFiles.EmbedTokensPath,
                     conditioningProvider,
@@ -776,7 +781,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
                     allowTrtInitFallback: allowTrtInitFallback)
                 .ConfigureAwait(false);
             languageModel = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync(
+                .PinPooledSingleAsync(
                     "chatterbox",
                     modelFiles.LanguageModelPath,
                     languageModelProvider,
@@ -784,7 +789,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
                     allowTrtInitFallback: allowTrtInitFallback)
                 .ConfigureAwait(false);
             conditionalDecoder = await OnnxExecutionSessionFactory
-                .CreatePooledSingleAsync(
+                .PinPooledSingleAsync(
                     "chatterbox",
                     modelFiles.ConditionalDecoderPath,
                     conditionalDecoderProvider,
@@ -852,10 +857,10 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         string conditionalDecoderPath,
         ExecutionProviderKind provider,
         bool allowTrtInitFallback,
-        OnnxExecutionSessionFactory.SingleSessionLease speechEncoder,
-        OnnxExecutionSessionFactory.SingleSessionLease embedTokens,
-        OnnxExecutionSessionFactory.SingleSessionLease languageModel,
-        OnnxExecutionSessionFactory.SingleSessionLease conditionalDecoder,
+        OnnxExecutionSessionFactory.PooledSingleSessionPin speechEncoder,
+        OnnxExecutionSessionFactory.PooledSingleSessionPin embedTokens,
+        OnnxExecutionSessionFactory.PooledSingleSessionPin languageModel,
+        OnnxExecutionSessionFactory.PooledSingleSessionPin conditionalDecoder,
         ChatterboxTokenizer tokenizer)
         : IDisposable
     {
@@ -866,11 +871,56 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         public string ConditionalDecoderPath { get; } = conditionalDecoderPath;
         public ExecutionProviderKind Provider { get; } = provider;
         public bool AllowTrtInitFallback { get; } = allowTrtInitFallback;
+        private OnnxExecutionSessionFactory.PooledSingleSessionPin SpeechEncoderPin { get; } = speechEncoder;
+        private OnnxExecutionSessionFactory.PooledSingleSessionPin EmbedTokensPin { get; } = embedTokens;
+        private OnnxExecutionSessionFactory.PooledSingleSessionPin LanguageModelPin { get; } = languageModel;
+        private OnnxExecutionSessionFactory.PooledSingleSessionPin ConditionalDecoderPin { get; } = conditionalDecoder;
+        public ChatterboxTokenizer Tokenizer { get; } = tokenizer;
+
+        /// <summary>Short execution leases for one synthesis (audit §3A: residency ≠ exclusivity).</summary>
+        public async Task<LeasedSessions> AcquireLeasesAsync(CancellationToken cancellationToken)
+        {
+            OnnxExecutionSessionFactory.SingleSessionLease? speech = null;
+            OnnxExecutionSessionFactory.SingleSessionLease? embed = null;
+            OnnxExecutionSessionFactory.SingleSessionLease? lm = null;
+            OnnxExecutionSessionFactory.SingleSessionLease? decoder = null;
+            try
+            {
+                speech = await SpeechEncoderPin.AcquireAsync(cancellationToken).ConfigureAwait(false);
+                embed = await EmbedTokensPin.AcquireAsync(cancellationToken).ConfigureAwait(false);
+                lm = await LanguageModelPin.AcquireAsync(cancellationToken).ConfigureAwait(false);
+                decoder = await ConditionalDecoderPin.AcquireAsync(cancellationToken).ConfigureAwait(false);
+                return new LeasedSessions(speech, embed, lm, decoder);
+            }
+            catch
+            {
+                speech?.Dispose();
+                embed?.Dispose();
+                lm?.Dispose();
+                decoder?.Dispose();
+                throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            SpeechEncoderPin.Dispose();
+            EmbedTokensPin.Dispose();
+            LanguageModelPin.Dispose();
+            ConditionalDecoderPin.Dispose();
+        }
+    }
+
+    private sealed class LeasedSessions(
+        OnnxExecutionSessionFactory.SingleSessionLease speechEncoder,
+        OnnxExecutionSessionFactory.SingleSessionLease embedTokens,
+        OnnxExecutionSessionFactory.SingleSessionLease languageModel,
+        OnnxExecutionSessionFactory.SingleSessionLease conditionalDecoder) : IDisposable
+    {
         public OnnxExecutionSessionFactory.SingleSessionLease SpeechEncoder { get; } = speechEncoder;
         public OnnxExecutionSessionFactory.SingleSessionLease EmbedTokens { get; } = embedTokens;
         public OnnxExecutionSessionFactory.SingleSessionLease LanguageModel { get; } = languageModel;
         public OnnxExecutionSessionFactory.SingleSessionLease ConditionalDecoder { get; } = conditionalDecoder;
-        public ChatterboxTokenizer Tokenizer { get; } = tokenizer;
 
         public void Dispose()
         {

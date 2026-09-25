@@ -104,7 +104,11 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
                 WarmLatencyMinimumMilliseconds: execution.WarmLatencyMinimumMilliseconds,
                 WarmLatencyMaximumMilliseconds: execution.WarmLatencyMaximumMilliseconds,
                 AudioDurationSeconds: execution.AudioDurationSeconds,
-                RealTimeFactorAverage: realTimeFactorAverage);
+                RealTimeFactorAverage: realTimeFactorAverage,
+                EngineCacheOutcome: execution.EngineCacheOutcome,
+                EngineCacheBytesAdded: execution.EngineCacheBytesAdded,
+                EngineCacheFilesAdded: execution.EngineCacheFilesAdded,
+                ColdLoadDominantPhase: execution.ColdLoadDominantPhase);
 
             return CreateReport(
                 scenario: execution.Scenario,
@@ -200,9 +204,12 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         int runCount,
         ICollection<string> notes)
     {
+        EngineCacheProbe.Snapshot cacheBefore = EngineCacheProbe.Capture();
         var coldLoadStopwatch = Stopwatch.StartNew();
         using var sessionLease = CreateSession(modelPath, preference, notes);
         coldLoadStopwatch.Stop();
+        ColdLoadAttribution attribution = AttributeColdLoad(
+            coldLoadStopwatch.Elapsed.TotalMilliseconds, sessionLease.SelectedProvider, cacheBefore, notes);
 
         var inputSet = CreateInputs(modelPath, sessionLease.Session.InputMetadata);
 
@@ -232,7 +239,39 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
             WarmLatencyAverageMilliseconds: latencySamples.Average(),
             WarmLatencyMinimumMilliseconds: latencySamples.Min(),
             WarmLatencyMaximumMilliseconds: latencySamples.Max(),
-            AudioDurationSeconds: inputSet.AudioDurationSeconds);
+            AudioDurationSeconds: inputSet.AudioDurationSeconds,
+            EngineCacheOutcome: attribution.Outcome,
+            EngineCacheBytesAdded: attribution.BytesAdded,
+            EngineCacheFilesAdded: attribution.FilesAdded,
+            ColdLoadDominantPhase: attribution.DominantPhase);
+    }
+
+    private readonly record struct ColdLoadAttribution(
+        string Outcome,
+        long BytesAdded,
+        int FilesAdded,
+        string DominantPhase);
+
+    private static readonly string[] EngineCacheRelevantProviderLabels = ["tensorrt-rtx", "tensorrt", "migraphx"];
+
+    private static ColdLoadAttribution AttributeColdLoad(
+        double coldLoadMilliseconds,
+        string selectedProvider,
+        EngineCacheProbe.Snapshot cacheBefore,
+        ICollection<string> notes)
+    {
+        // Classify from the provider the session actually selected, not the requested
+        // preference — a TRT-RTX request that fell back to CPU never touches the engine
+        // cache, so scoring it as a GPU cache run can produce a false "hit".
+        bool isEngineCacheRelevant = EngineCacheRelevantProviderLabels.Contains(
+            selectedProvider, StringComparer.OrdinalIgnoreCase);
+        EngineCacheProbe.Snapshot cacheAfter = EngineCacheProbe.Capture();
+        string outcome = EngineCacheProbe.ClassifyOutcome(cacheBefore, cacheAfter, isEngineCacheRelevant);
+        string dominant = EngineCacheProbe.ClassifyDominantPhase(outcome);
+        long bytesAdded = Math.Max(0, cacheAfter.TotalBytes - cacheBefore.TotalBytes);
+        int filesAdded = Math.Max(0, cacheAfter.FileCount - cacheBefore.FileCount);
+        notes.Add(EngineCacheProbe.FormatNote(coldLoadMilliseconds, outcome, cacheBefore, cacheAfter, dominant));
+        return new ColdLoadAttribution(outcome, bytesAdded, filesAdded, dominant);
     }
 
     private static BenchmarkExecution RunWhisperExecution(
@@ -247,9 +286,12 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
 
         notes.Add($"Whisper decoder discovered at '{decoderModelPath}'.");
 
+        EngineCacheProbe.Snapshot cacheBefore = EngineCacheProbe.Capture();
         var coldLoadStopwatch = Stopwatch.StartNew();
         using var whisperLease = CreateWhisperSessionLease(encoderModelPath, decoderModelPath, preference, notes);
         coldLoadStopwatch.Stop();
+        ColdLoadAttribution attribution = AttributeColdLoad(
+            coldLoadStopwatch.Elapsed.TotalMilliseconds, whisperLease.SelectedProvider, cacheBefore, notes);
 
         var encoderInputSet = CreateInputs(encoderModelPath, whisperLease.EncoderSession.InputMetadata);
         var decoderStartTokenId = ResolveWhisperDecoderStartTokenId(fullConfigPath);
@@ -278,7 +320,11 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
             WarmLatencyAverageMilliseconds: latencySamples.Average(),
             WarmLatencyMinimumMilliseconds: latencySamples.Min(),
             WarmLatencyMaximumMilliseconds: latencySamples.Max(),
-            AudioDurationSeconds: encoderInputSet.AudioDurationSeconds);
+            AudioDurationSeconds: encoderInputSet.AudioDurationSeconds,
+            EngineCacheOutcome: attribution.Outcome,
+            EngineCacheBytesAdded: attribution.BytesAdded,
+            EngineCacheFilesAdded: attribution.FilesAdded,
+            ColdLoadDominantPhase: attribution.DominantPhase);
     }
 
     private static BenchmarkExecution RunOpusExecution(
@@ -293,9 +339,12 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
 
         notes.Add($"Opus decoder discovered at '{decoderModelPath}'.");
 
+        EngineCacheProbe.Snapshot cacheBefore = EngineCacheProbe.Capture();
         var coldLoadStopwatch = Stopwatch.StartNew();
         using var opusLease = CreateOpusSessionLease(encoderModelPath, decoderModelPath, preference, notes);
         coldLoadStopwatch.Stop();
+        ColdLoadAttribution attribution = AttributeColdLoad(
+            coldLoadStopwatch.Elapsed.TotalMilliseconds, opusLease.SelectedProvider, cacheBefore, notes);
 
         var encoderInputSet = CreateInputs(encoderModelPath, opusLease.EncoderSession.InputMetadata);
         var decoderStartTokenId = ResolveOpusDecoderStartTokenId(fullConfigPath);
@@ -324,7 +373,11 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
             WarmLatencyAverageMilliseconds: latencySamples.Average(),
             WarmLatencyMinimumMilliseconds: latencySamples.Min(),
             WarmLatencyMaximumMilliseconds: latencySamples.Max(),
-            AudioDurationSeconds: null);
+            AudioDurationSeconds: null,
+            EngineCacheOutcome: attribution.Outcome,
+            EngineCacheBytesAdded: attribution.BytesAdded,
+            EngineCacheFilesAdded: attribution.FilesAdded,
+            ColdLoadDominantPhase: attribution.DominantPhase);
     }
 
     private static bool ShouldUseCatalogDevicePolicyForPreference(BenchmarkProviderPreference preference)
@@ -1632,7 +1685,11 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         double WarmLatencyAverageMilliseconds,
         double WarmLatencyMinimumMilliseconds,
         double WarmLatencyMaximumMilliseconds,
-        double? AudioDurationSeconds);
+        double? AudioDurationSeconds,
+        string? EngineCacheOutcome = null,
+        long? EngineCacheBytesAdded = null,
+        int? EngineCacheFilesAdded = null,
+        string? ColdLoadDominantPhase = null);
 
     private enum BenchmarkModelProfile
     {

@@ -408,6 +408,133 @@ public sealed class PipelineReadinessServiceTests
         Assert.Equal(1, planCalls);
     }
 
+    [Fact]
+    public async Task EvaluateAsync_preserves_stage_order_under_parallel_evaluation()
+    {
+        var planner = new FakeRuntimePlanner
+        {
+            PlanHandlerAsync = async (req, ct) =>
+            {
+                // Stagger completions so out-of-order finishes would show up if slots were wrong.
+                await Task.Delay(req.Stage == RuntimeStage.Asr ? 40 : 5, ct);
+                return new StageRuntimePlan { Stage = req.Stage, Status = StageRuntimePlanStatus.Ready };
+            }
+        };
+
+        var service = new PipelineReadinessService(
+            planner,
+            new NullCloudApiKeyProvider(),
+            new FakeConsentService(),
+            maxConcurrentStageEvaluations: 4);
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            HardwareOverrides: new Dictionary<string, ExecutionProviderKind>());
+
+        RuntimeStage[] stages = [RuntimeStage.Vad, RuntimeStage.Asr, RuntimeStage.Diarization, RuntimeStage.Translation];
+        PipelineReadinessReport report = await service.EvaluateAsync(stages, selections, state: null);
+
+        Assert.Equal(
+            stages.Select(StageNameForTest),
+            report.Stages.Select(s => s.StageName));
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_limits_concurrent_stage_evaluations()
+    {
+        int concurrent = 0;
+        int maxConcurrent = 0;
+        var gate = new object();
+        var planner = new FakeRuntimePlanner
+        {
+            PlanHandlerAsync = async (req, ct) =>
+            {
+                lock (gate)
+                {
+                    concurrent++;
+                    maxConcurrent = Math.Max(maxConcurrent, concurrent);
+                }
+
+                await Task.Delay(30, ct);
+
+                lock (gate)
+                {
+                    concurrent--;
+                }
+
+                return new StageRuntimePlan { Stage = req.Stage, Status = StageRuntimePlanStatus.Ready };
+            }
+        };
+
+        var service = new PipelineReadinessService(
+            planner,
+            new NullCloudApiKeyProvider(),
+            new FakeConsentService(),
+            maxConcurrentStageEvaluations: 2);
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            HardwareOverrides: new Dictionary<string, ExecutionProviderKind>());
+
+        await service.EvaluateAsync(
+            [RuntimeStage.Vad, RuntimeStage.Asr, RuntimeStage.Diarization, RuntimeStage.Translation, RuntimeStage.Tts],
+            selections,
+            state: null);
+
+        Assert.InRange(maxConcurrent, 1, 2);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_reports_timeout_as_runtime_missing_without_aborting_sweep()
+    {
+        var planner = new FakeRuntimePlanner
+        {
+            PlanHandlerAsync = async (req, ct) =>
+            {
+                if (req.Stage == RuntimeStage.Tts)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
+                }
+
+                return new StageRuntimePlan { Stage = req.Stage, Status = StageRuntimePlanStatus.Ready };
+            }
+        };
+
+        var service = new PipelineReadinessService(
+            planner,
+            new NullCloudApiKeyProvider(),
+            new FakeConsentService(),
+            maxConcurrentStageEvaluations: 4,
+            stageEvaluationTimeout: TimeSpan.FromMilliseconds(80));
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            HardwareOverrides: new Dictionary<string, ExecutionProviderKind>());
+
+        PipelineReadinessReport report = await service.EvaluateAsync(
+            [RuntimeStage.Vad, RuntimeStage.Tts, RuntimeStage.Asr],
+            selections,
+            state: null);
+
+        Assert.Equal(3, report.Stages.Count);
+        Assert.Equal(ReadinessState.Ready, report.Stages[0].Status);
+        StageReadiness timedOut = report.Stages[1];
+        Assert.Equal(ReadinessState.RuntimeMissing, timedOut.Status);
+        Assert.Contains("timed out", timedOut.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ReadinessState.Ready, report.Stages[2].Status);
+        Assert.False(report.IsRunReady);
+    }
+
+    private static string StageNameForTest(RuntimeStage stage) => stage switch
+    {
+        RuntimeStage.Vad => StageNames.Vad,
+        RuntimeStage.Asr => StageNames.Asr,
+        RuntimeStage.Diarization => StageNames.Diarization,
+        RuntimeStage.Translation => StageNames.Translation,
+        RuntimeStage.Tts => StageNames.Tts,
+        _ => stage.ToString(),
+    };
+
     private static TranscriptProjectState CreateStateWithVoiceCloneAssignment()
     {
         Guid projectId = Guid.NewGuid();

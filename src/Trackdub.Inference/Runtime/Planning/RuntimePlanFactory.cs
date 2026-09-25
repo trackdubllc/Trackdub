@@ -1,13 +1,24 @@
 using System.Collections.Concurrent;
+using Trackdub.Contracts;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.Migraphx;
 using Trackdub.Inference.Runtime.ModelManifest;
+using Trackdub.Inference.Runtime.TensorRtRtx;
 
 namespace Trackdub.Inference.Runtime.Planning;
 
-internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester executionProviderSmokeTester)
+internal sealed class RuntimePlanFactory
 {
-    private readonly IExecutionProviderSmokeTester executionProviderSmokeTester = executionProviderSmokeTester ?? throw new ArgumentNullException(nameof(executionProviderSmokeTester));
+    private readonly IExecutionProviderSmokeTester executionProviderSmokeTester;
+    private readonly ISmokeVerdictStore smokeVerdictStore;
+
+    public RuntimePlanFactory(
+        IExecutionProviderSmokeTester executionProviderSmokeTester,
+        ISmokeVerdictStore? smokeVerdictStore = null)
+    {
+        this.executionProviderSmokeTester = executionProviderSmokeTester ?? throw new ArgumentNullException(nameof(executionProviderSmokeTester));
+        this.smokeVerdictStore = smokeVerdictStore ?? NullSmokeVerdictStore.Instance;
+    }
 
     public async Task<StageRuntimePlan?> TryCreateReadyPlanAsync(
         RuntimeStage stage,
@@ -72,7 +83,8 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                         out string? entryPath,
                         out string? rootPath,
                         out RuntimeModelIntegrityStatus modelIntegrityStatus,
-                        out _))
+                        out _,
+                        out string? modelSha256))
                 {
                     continue;
                 }
@@ -91,6 +103,35 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                         modelIntegrityStatus,
                         providerFallback,
                         includeCpuFallbackWarning: providerFallback is not null && provider is ExecutionProviderKind.Cpu,
+                        isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
+                        modelRootPath: rootPath,
+                        modelEntryRelativePath: variant.RelativeEntryPath,
+                        requiredModelRelativePaths: variant.RequiredRelativePaths,
+                        preferredExecutionProviderSkippedForEngine: preferredForbiddenForEngine
+                            ? preferredExecutionProvider
+                            : null);
+                }
+
+                // A local optimized variant is a different graph file from its source model;
+                // a source-sha verdict cannot prove it. Always smoke variants and record
+                // verdicts only for the graph file smoke actually loaded.
+                SmokeVerdictKey? verdictKey = variant.IsLocalOptimizedVariant
+                    ? null
+                    : TryBuildVerdictKey(modelSha256, provider, hardwareProfile);
+                if (verdictKey is not null && smokeVerdictStore.IsVerified(verdictKey))
+                {
+                    // Proven on a previous launch under the same model/EP/environment identity.
+                    // File and manifest integrity were already checked above.
+                    return CreatePlan(
+                        stage,
+                        StageRuntimePlanStatus.Verified,
+                        candidate,
+                        provider,
+                        variant.Alias,
+                        entryPath,
+                        modelIntegrityStatus,
+                        fallback: null,
+                        includeCpuFallbackWarning: false,
                         isLocalOptimizedVariant: variant.IsLocalOptimizedVariant,
                         modelRootPath: rootPath,
                         modelEntryRelativePath: variant.RelativeEntryPath,
@@ -126,6 +167,11 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
 
                 if (smokeResult.Passed)
                 {
+                    if (verdictKey is not null)
+                    {
+                        smokeVerdictStore.RecordVerified(verdictKey);
+                    }
+
                     // Non-CPU providers that pass smoke test report Verified — strictly stronger
                     // than Ready, which is reserved for CPU's file-only check above.
                     return CreatePlan(
@@ -220,7 +266,8 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                         out _,
                         out _,
                         out _,
-                        out RuntimePlanFallback? integrityFallback))
+                        out RuntimePlanFallback? integrityFallback,
+                        out _))
                 {
                     continue;
                 }
@@ -692,7 +739,10 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
             IsLocalOptimizedVariant: true,
             LocalRootPath: variantRoot,
             LocalIntegrityFailed: variant.IntegrityFailed,
-            InvalidReason: invalidReason));
+            InvalidReason: invalidReason,
+            SourceModelSha256: !string.IsNullOrWhiteSpace(variant.SourceModelSha256)
+                ? variant.SourceModelSha256
+                : cacheRecord.Sha256));
     }
 
     private static void AddVariant(
@@ -754,12 +804,14 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? entryPath,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? rootPath,
         out RuntimeModelIntegrityStatus integrityStatus,
-        out RuntimePlanFallback? integrityFallback)
+        out RuntimePlanFallback? integrityFallback,
+        out string? modelSha256)
     {
         entryPath = null;
         rootPath = null;
         integrityStatus = RuntimeModelIntegrityStatus.Unknown;
         integrityFallback = null;
+        modelSha256 = null;
         if (cacheRecords is null)
         {
             return false;
@@ -773,7 +825,8 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                 out entryPath,
                 out rootPath,
                 out integrityStatus,
-                out integrityFallback);
+                out integrityFallback,
+                out modelSha256);
         }
 
         foreach (LocalModelCacheRecord cacheRecord in cacheRecords)
@@ -800,6 +853,7 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
                 entryPath = candidatePath;
                 rootPath = cacheRecord.RootPath;
                 integrityStatus = ResolveIntegrityStatus(entry, cacheRecord);
+                modelSha256 = ResolveModelSha256(entry, cacheRecord);
                 return true;
             }
         }
@@ -813,12 +867,14 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? entryPath,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? rootPath,
         out RuntimeModelIntegrityStatus integrityStatus,
-        out RuntimePlanFallback? integrityFallback)
+        out RuntimePlanFallback? integrityFallback,
+        out string? modelSha256)
     {
         entryPath = null;
         rootPath = null;
         integrityStatus = RuntimeModelIntegrityStatus.Unknown;
         integrityFallback = null;
+        modelSha256 = variant.SourceModelSha256;
 
         if (!string.IsNullOrWhiteSpace(variant.InvalidReason))
         {
@@ -879,6 +935,28 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         string.IsNullOrWhiteSpace(entry.Sha256) || string.IsNullOrWhiteSpace(cacheRecord.Sha256)
             ? RuntimeModelIntegrityStatus.Skipped
             : RuntimeModelIntegrityStatus.Verified;
+
+    private static string? ResolveModelSha256(
+        BundledModelManifestEntry entry,
+        LocalModelCacheRecord cacheRecord) =>
+        !string.IsNullOrWhiteSpace(cacheRecord.Sha256)
+            ? cacheRecord.Sha256
+            : !string.IsNullOrWhiteSpace(entry.Sha256)
+                ? entry.Sha256
+                : null;
+
+    private static SmokeVerdictKey? TryBuildVerdictKey(
+        string? modelSha256,
+        ExecutionProviderKind provider,
+        HardwareProfile hardwareProfile) =>
+        string.IsNullOrWhiteSpace(modelSha256)
+            ? null
+            : new SmokeVerdictKey(
+                modelSha256,
+                provider,
+                hardwareProfile.NvidiaGpuArchitecture,
+                hardwareProfile.GpuDriverVersion,
+                TensorRtRtxProviderConstants.BundledFingerprintVersion);
 
     private static bool HasManifestHashMismatch(
         BundledModelManifestEntry entry,
@@ -1018,5 +1096,6 @@ internal sealed class RuntimePlanFactory(IExecutionProviderSmokeTester execution
         bool IsLocalOptimizedVariant = false,
         string? LocalRootPath = null,
         bool LocalIntegrityFailed = false,
-        string? InvalidReason = null);
+        string? InvalidReason = null,
+        string? SourceModelSha256 = null);
 }

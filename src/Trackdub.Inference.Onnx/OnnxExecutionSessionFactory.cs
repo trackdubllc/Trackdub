@@ -12,6 +12,7 @@ using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.WindowsMl;
 #endif
 using Trackdub.Inference.Onnx.Migraphx;
+using Trackdub.Inference.Onnx.TensorRtRtx;
 using Trackdub.Inference.Runtime.Migraphx;
 using Trackdub.Inference.Runtime.TensorRtRtx;
 using Trackdub.Inference.Runtime.WinMlCatalog;
@@ -94,11 +95,17 @@ internal static class OnnxExecutionSessionFactory
         string? BootstrapDetail);
 
     private sealed record DualPooledLeasePair(
-        SessionLease EncoderLease,
-        SessionLease DecoderLease,
+        SessionLeaseBundle Bundle,
         string RequestedProviderLabel,
         string SelectedProviderLabel,
-        string? BootstrapDetail);
+        string? BootstrapDetail)
+    {
+        /// <summary>Caller-order index 0 (encoder). See <c>AcquireDualPooledSessionsAsync</c>.</summary>
+        public SessionLease EncoderLease => Bundle.LeaseAt(0);
+
+        /// <summary>Caller-order index 1 (decoder).</summary>
+        public SessionLease DecoderLease => Bundle.LeaseAt(1);
+    }
 
     private static async Task<BootstrapContext> BootstrapForProviderAsync(
         ExecutionProviderKind provider,
@@ -109,6 +116,25 @@ internal static class OnnxExecutionSessionFactory
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
         return new BootstrapContext(bootstrapResult, devicePolicy, FormatProviderLabel(provider));
+    }
+
+    /// <summary>
+    /// Readiness-only registration for smoke probes: never downloads, and reports the provider
+    /// the bootstrapper can actually select. Callers must treat <see cref="ExecutionProviders.ExecutionProviderBootstrapResult.IsRequestFulfilled"/>
+    /// of <see langword="false"/> as an unproven pair — registration alone is not readiness.
+    /// </summary>
+    internal static async Task<ExecutionProviders.ExecutionProviderBootstrapResult> BootstrapForSmokeAsync(
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken)
+    {
+        // Native ONNX Runtime / DirectML provider DLLs must be resolvable before the first
+        // OrtEnv touch; smoke runs in headless hosts that otherwise hit OrtEnv via discovery
+        // first and can no longer append DirectML.
+#if WINDOWS
+        WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
+#endif
+        return await _bootstrapper.BootstrapAsync(provider, allowDownloads: false, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static DualOptionsSelections CreateDualOptionsSelections(
@@ -198,36 +224,33 @@ internal static class OnnxExecutionSessionFactory
         CancellationToken cancellationToken,
         Func<string, SessionOptions, InferenceSession>? sessionFactory)
     {
-        SessionLease? encoderPoolLease = null;
-        SessionLease? decoderPoolLease = null;
+        // Atomic bundle (audit §3A): never hold the encoder lease while blocked on the decoder.
+        // Lease order in the bundle is caller order (encoder, decoder).
+        SessionLeaseBundle bundle = await pool.GetLeaseBundleAsync(
+            [
+                new SessionLeaseRequest(
+                    encoderKey,
+                    ct => Task.FromResult(CreateSession(encoderModelPath, selections.Encoder.Options, sessionFactory, ct, selections.Encoder.SelectedProvider))),
+                new SessionLeaseRequest(
+                    decoderKey,
+                    ct => Task.FromResult(CreateSession(decoderModelPath, selections.Decoder.Options, sessionFactory, ct, selections.Decoder.SelectedProvider))),
+            ],
+            cancellationToken).ConfigureAwait(false);
+
         try
         {
-            encoderPoolLease = await pool
-                .GetLeaseAsync(
-                    encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, selections.Encoder.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            decoderPoolLease = await pool
-                .GetLeaseAsync(
-                    decoderKey,
-                    ct => Task.FromResult(CreateSession(decoderModelPath, selections.Decoder.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 requestedProvider, bootstrap, selections,
-                encoderPoolLease.Session, decoderPoolLease.Session);
+                bundle.LeaseAt(0).Session, bundle.LeaseAt(1).Session);
             return new DualPooledLeasePair(
-                encoderPoolLease, decoderPoolLease,
+                bundle,
                 bootstrap.RequestedProviderLabel,
                 metadata.SelectedProviderLabel,
                 metadata.BootstrapDetail);
         }
         catch
         {
-            encoderPoolLease?.Dispose();
-            decoderPoolLease?.Dispose();
+            bundle.Dispose();
             throw;
         }
     }
@@ -289,13 +312,19 @@ internal static class OnnxExecutionSessionFactory
         string modelPath,
         SessionOptions options,
         Func<string, SessionOptions, InferenceSession>? sessionFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ExecutionProviderKind selectedProvider)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var phase = BenchmarkPhaseCapture.Start("onnx-session-create");
+        // EP-context artifacts embed a TensorRT-RTX-serialized engine that only that EP can
+        // deserialize; only TRT-RTX sessions may load one (see EpContextWarmupService).
+        string loadPath = selectedProvider is ExecutionProviderKind.TensorRTRtx
+            ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath
+            : modelPath;
         return sessionFactory is null
-            ? new InferenceSession(modelPath, options)
-            : sessionFactory(modelPath, options);
+            ? new InferenceSession(loadPath, options)
+            : sessionFactory(loadPath, options);
     }
 
     /// <summary>
@@ -313,13 +342,34 @@ internal static class OnnxExecutionSessionFactory
         CancellationToken cancellationToken,
         bool allowTrtInitFallback = true)
     {
+        // Honest skip: graphs with com.microsoft contrib fusions cannot be imported by
+        // TensorRT-RTX (all-or-nothing ONNX catalog). Do not attempt TRT and do not emit
+        // the ModelImporter error storm — fall through to DirectML/CPU immediately.
+        if (initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+            && TrtRtxUnsupportedOpScanner.FindUnsupportedOps(modelPath) is { Count: > 0 } unsupportedOps)
+        {
+            string opList = string.Join(", ", unsupportedOps);
+            string skipReason =
+                $"TensorRT-RTX cannot import '{Path.GetFileName(modelPath)}' (unsupported ops: {opList}).";
+
+            if (!allowTrtInitFallback)
+            {
+                initialSelection.Options.Dispose();
+                throw new InvalidOperationException($"{skipReason} Hard-pin route has no fallback.");
+            }
+
+            return CreateUnsupportedGraphFallback(modelPath, initialSelection, devicePolicy,
+                sessionFactory, cancellationToken, skipReason);
+        }
+
         try
         {
             InferenceSession session = CreateSession(
                 modelPath,
                 initialSelection.Options,
                 sessionFactory,
-                cancellationToken);
+                cancellationToken,
+                initialSelection.SelectedProvider);
             return (session, initialSelection);
         }
         catch (Exception ex) when (
@@ -327,49 +377,114 @@ internal static class OnnxExecutionSessionFactory
             && initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
             && LooksLikeTrtSessionInitFailure(ex))
         {
-            string trtError = SummarizeExceptionMessage(ex);
-            Exception? lastFailure = ex;
+            return CreateTrtInitFailureFallback(modelPath, initialSelection, devicePolicy,
+                sessionFactory, cancellationToken, ex);
+        }
+    }
 
-            foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
-                         .Select(fallbackProvider => CreateSessionOptions(
-                             fallbackProvider,
-                             devicePolicy,
-                             additionalTrtOptions: null)))
+    private static (InferenceSession Session, SessionOptionsSelection Selection) CreateUnsupportedGraphFallback(
+        string modelPath, SessionOptionsSelection initialSelection, WindowsMlExecutionDevicePolicy devicePolicy,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory, CancellationToken cancellationToken,
+        string skipReason)
+    {
+        Exception? lastFailure = null;
+        foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
+                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
+        {
+            try
             {
-                try
-                {
-                    InferenceSession session = CreateSession(
-                        modelPath,
-                        fallbackSelection.Options,
-                        sessionFactory,
-                        cancellationToken);
-                    // Transfer ownership: dispose the failed TRT options; caller owns the fallback Options.
-                    initialSelection.Options.Dispose();
-                    string effectiveLabel = FormatProviderLabel(fallbackSelection.SelectedProvider);
-                    string trtFallbackReason =
-                        $"TensorRT RTX session init failed ({trtError}); fell back to {effectiveLabel}.";
-                    return (
-                        session,
-                        new SessionOptionsSelection(
-                            fallbackSelection.Options,
-                            fallbackSelection.SelectedProvider,
-                            MergeFallbackReasons(trtFallbackReason, fallbackSelection.FallbackReason)));
-                }
-                catch (Exception fallbackEx)
-                {
-                    fallbackSelection.Options.Dispose();
-                    if (!IsRecoverableTrtFallbackInitFailure(fallbackEx))
-                    {
-                        throw;
-                    }
+                InferenceSession session = CreateSession(modelPath, fallbackSelection.Options, sessionFactory,
+                    cancellationToken, fallbackSelection.SelectedProvider);
+                initialSelection.Options.Dispose();
+                string label = FormatProviderLabel(fallbackSelection.SelectedProvider);
+                return (session, new SessionOptionsSelection(fallbackSelection.Options,
+                    fallbackSelection.SelectedProvider,
+                    MergeFallbackReasons($"{skipReason} Selected {label}.", fallbackSelection.FallbackReason)));
+            }
+            catch (Exception fallbackEx)
+            {
+                fallbackSelection.Options.Dispose();
+                if (!IsRecoverableTrtFallbackInitFailure(fallbackEx)) throw;
+                lastFailure = fallbackEx;
+            }
+        }
 
-                    lastFailure = fallbackEx;
-                }
+        initialSelection.Options.Dispose();
+        throw lastFailure ?? new InvalidOperationException(skipReason);
+    }
+
+    private static (InferenceSession Session, SessionOptionsSelection Selection) CreateTrtInitFailureFallback(
+        string modelPath, SessionOptionsSelection initialSelection, WindowsMlExecutionDevicePolicy devicePolicy,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory, CancellationToken cancellationToken,
+        Exception originalFailure)
+    {
+        string trtError = SummarizeExceptionMessage(originalFailure);
+        Exception lastFailure = originalFailure;
+        foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
+                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
+        {
+            try
+            {
+                InferenceSession session = CreateSession(modelPath, fallbackSelection.Options, sessionFactory,
+                    cancellationToken, fallbackSelection.SelectedProvider);
+                // Transfer ownership: the caller owns fallback options after success.
+                initialSelection.Options.Dispose();
+                string label = FormatProviderLabel(fallbackSelection.SelectedProvider);
+                string reason = $"TensorRT RTX session init failed ({trtError}); fell back to {label}.";
+                return (session, new SessionOptionsSelection(fallbackSelection.Options,
+                    fallbackSelection.SelectedProvider, MergeFallbackReasons(reason, fallbackSelection.FallbackReason)));
+            }
+            catch (Exception fallbackEx)
+            {
+                fallbackSelection.Options.Dispose();
+                if (!IsRecoverableTrtFallbackInitFailure(fallbackEx)) throw;
+                lastFailure = fallbackEx;
+            }
+        }
+
+        // Leave initialSelection.Options for the caller to dispose.
+        throw lastFailure;
+    }
+
+    /// <summary>
+    /// Rewrites a TensorRT-RTX request to DirectML/CPU when any model graph contains
+    /// contrib ops the TRT-RTX ONNX parser cannot import. Multi-session factories call this
+    /// before building session options so they never open a doomed TRT session.
+    /// </summary>
+    private static ExecutionProviderKind DowngradeTrtRtxForUnsupportedGraphs(
+        ExecutionProviderKind provider,
+        IReadOnlyList<string> modelPaths,
+        out string? fallbackReason)
+    {
+        fallbackReason = null;
+        if (provider is not ExecutionProviderKind.TensorRTRtx)
+        {
+            return provider;
+        }
+
+        foreach (string path in modelPaths)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                continue;
             }
 
-            // Leave initialSelection.Options for the caller to dispose.
-            throw lastFailure ?? ex;
+            IReadOnlyList<string> unsupported = TensorRtRtx.TrtRtxUnsupportedOpScanner.FindUnsupportedOps(path);
+            if (unsupported.Count == 0)
+            {
+                continue;
+            }
+
+            ExecutionProviderKind next = OperatingSystem.IsWindows()
+                ? ExecutionProviderKind.DirectMl
+                : ExecutionProviderKind.Cpu;
+            fallbackReason =
+                $"TensorRT-RTX cannot import '{Path.GetFileName(path)}' (unsupported ops: {string.Join(", ", unsupported)}); " +
+                $"selected {FormatProviderLabel(next)} without attempting TensorRT-RTX.";
+            return next;
         }
+
+        return provider;
     }
 
     private static IEnumerable<ExecutionProviderKind> EnumerateTrtInitFallbackProviders()
@@ -517,6 +632,28 @@ internal static class OnnxExecutionSessionFactory
         }
     }
 
+    /// <summary>
+    /// Pre-warms a pooled single session and immediately releases it, leaving the warm
+    /// session in <see cref="InferenceSessionPool"/> for a later stage run. Use at startup
+    /// or after plan resolution to amortise first-call latency.
+    /// </summary>
+    public static async Task WarmPooledSingleAsync(
+        string engineFamily,
+        string modelPath,
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
+        bool allowTrtInitFallback = true)
+    {
+        using SingleSessionLease _ = await CreatePooledSingleAsync(
+            engineFamily,
+            modelPath,
+            provider,
+            cancellationToken,
+            additionalTrtOptions: additionalTrtOptions,
+            allowTrtInitFallback: allowTrtInitFallback).ConfigureAwait(false);
+    }
+
     public static async Task<SingleSessionLease> CreatePooledSingleAsync(
         string engineFamily,
         string modelPath,
@@ -599,7 +736,8 @@ internal static class OnnxExecutionSessionFactory
 
             return new SingleSessionLease(poolLease.Session, requestedProvider, selectedProvider, bootstrapDetail)
             {
-                PoolLease = poolLease
+                PoolLease = poolLease,
+                ResolvedPoolKey = key,
             };
         }
         catch
@@ -607,6 +745,96 @@ internal static class OnnxExecutionSessionFactory
             poolLease?.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Pins a pooled single session for engine residency (audit §3A) without holding the
+    /// execution lease between calls. Use <see cref="PooledSingleSessionPin.AcquireAsync"/>
+    /// for a short exclusive lease around each Run().
+    /// </summary>
+    public static async Task<PooledSingleSessionPin> PinPooledSingleAsync(
+        string engineFamily,
+        string modelPath,
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken,
+        InferenceSessionPool? pool = null,
+        string? modelId = null,
+        string? variant = null,
+        IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory = null,
+        bool allowTrtInitFallback = true)
+    {
+        pool ??= InferenceSessionPool.Shared;
+
+        SessionPoolKey? key = null;
+        string requestedProvider = FormatProviderLabel(provider);
+        string selectedProvider = requestedProvider;
+        string? bootstrapDetail = null;
+
+        async Task<SingleSessionLease> AcquireAsync(CancellationToken ct)
+        {
+            SingleSessionLease lease = await CreatePooledSingleAsync(
+                engineFamily,
+                modelPath,
+                provider,
+                ct,
+                pool,
+                modelId,
+                variant,
+                additionalTrtOptions,
+                sessionFactory,
+                allowTrtInitFallback).ConfigureAwait(false);
+            if (key is null)
+            {
+                key = lease.ResolvedPoolKey;
+                selectedProvider = lease.SelectedProvider;
+                bootstrapDetail = lease.BootstrapDetail;
+            }
+
+            return lease;
+        }
+
+        // Establish the session and capture the pool key / provider metadata.
+        using (await AcquireAsync(cancellationToken).ConfigureAwait(false))
+        {
+        }
+
+        SessionPoolKey resolvedKey = key
+            ?? throw new InvalidOperationException("Pooled single session did not resolve a pool key.");
+
+        // Bound retries: when the pool is full of leased/pinned entries, GetLeaseAsync
+        // returns an ephemeral lease that never reaches `entries`, so TryPinExisting
+        // can never succeed — infinite session create/dispose churn.
+        const int maxPinAttempts = 5;
+        for (int attempt = 1; attempt <= maxPinAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (pool.TryPinExisting(resolvedKey, out SessionResidency? pinned) && pinned is not null)
+            {
+                return new PooledSingleSessionPin(pinned, AcquireAsync, requestedProvider, selectedProvider, bootstrapDetail);
+            }
+
+            if (attempt == maxPinAttempts)
+            {
+                break;
+            }
+
+            // Evicted before pin — recreate and retry with exponential backoff.
+            // Retry delays: 50ms, 100ms, 200ms, 400ms (maxPinAttempts=5).
+            int delayMs = 25 * (1 << attempt);
+            await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+
+            using (await AcquireAsync(cancellationToken).ConfigureAwait(false))
+            {
+            }
+        }
+
+        // Pool stayed at capacity (leased/pinned) across every retry: fall back to no
+        // residency instead of failing engine init. Each AcquireAsync call still creates a
+        // short, working (possibly ephemeral) lease — callers just lose the "stay resident
+        // between calls" guarantee until pool pressure eases.
+        return new PooledSingleSessionPin(
+            new SessionResidency(static () => { }), AcquireAsync, requestedProvider, selectedProvider, bootstrapDetail);
     }
 
     public static async Task<WhisperSessionLease> CreatePooledWhisperAsync(
@@ -624,6 +852,11 @@ internal static class OnnxExecutionSessionFactory
     {
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
+
+        provider = DowngradeTrtRtxForUnsupportedGraphs(
+            provider,
+            [encoderModelPath, decoderModelPath],
+            out string? graphFallbackReason);
 
         BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
@@ -645,7 +878,8 @@ internal static class OnnxExecutionSessionFactory
 
         return new WhisperSessionLease(
             pair.EncoderLease.Session, pair.DecoderLease.Session,
-            pair.RequestedProviderLabel, pair.SelectedProviderLabel, pair.BootstrapDetail)
+            pair.RequestedProviderLabel, pair.SelectedProviderLabel,
+            MergeFallbackReasons(graphFallbackReason, pair.BootstrapDetail))
         {
             EncoderPoolLease = pair.EncoderLease,
             DecoderPoolLease = pair.DecoderLease
@@ -669,17 +903,38 @@ internal static class OnnxExecutionSessionFactory
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
 
+        // Per-role TRT eligibility: a contrib-op decoder must not force the (often much larger)
+        // encoder off TensorRT RTX. Encoder is the cold-load hot path (qwen3-asr encoder ~711MB).
+        ExecutionProviderKind encoderProvider = DowngradeTrtRtxForUnsupportedGraphs(
+            provider,
+            [encoderModelPath],
+            out string? encoderGraphReason);
+        ExecutionProviderKind decoderProvider = DowngradeTrtRtxForUnsupportedGraphs(
+            provider,
+            [decoderInitModelPath, decoderStepModelPath],
+            out string? decoderGraphReason);
+        string? graphFallbackReason = MergeFallbackReasons(encoderGraphReason, decoderGraphReason);
+
         string requestedProvider = FormatProviderLabel(provider);
-        var bootstrapResult = await _bootstrapper.BootstrapAsync(provider, allowDownloads: true, cancellationToken)
+        ExecutionProviderKind bootstrapProvider =
+            encoderProvider is ExecutionProviderKind.TensorRTRtx ||
+            decoderProvider is ExecutionProviderKind.TensorRTRtx
+                ? ExecutionProviderKind.TensorRTRtx
+                : encoderProvider;
+        var bootstrapResult = await _bootstrapper.BootstrapAsync(bootstrapProvider, allowDownloads: true, cancellationToken)
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
         SessionOptionsSelection encoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            encoderProvider == bootstrapProvider
+                ? ResolveSessionOptionsProvider(encoderProvider, bootstrapResult.SelectedProvider)
+                : encoderProvider,
             devicePolicy,
             additionalTrtEncoderOptions);
         SessionOptionsSelection decoderOptionsSelection = CreateSessionOptions(
-            ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
+            decoderProvider == bootstrapProvider
+                ? ResolveSessionOptionsProvider(decoderProvider, bootstrapResult.SelectedProvider)
+                : decoderProvider,
             devicePolicy,
             additionalTrtDecoderOptions);
 
@@ -715,29 +970,26 @@ internal static class OnnxExecutionSessionFactory
             variant,
             optionsFingerprint: decoderOptionsFingerprint);
 
-        SessionLease? encoderPoolLease = null;
-        SessionLease? decoderInitPoolLease = null;
-        SessionLease? decoderStepPoolLease = null;
+        // Atomic bundle (audit §3A): never hold the encoder while waiting on decoders.
+        SessionLeaseBundle bundle = await pool.GetLeaseBundleAsync(
+            [
+                new SessionLeaseRequest(
+                    encoderKey,
+                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct, encoderOptionsSelection.SelectedProvider))),
+                new SessionLeaseRequest(
+                    decoderInitKey,
+                    ct => Task.FromResult(CreateSession(decoderInitModelPath, decoderInitOptions, sessionFactory, ct, decoderOptionsSelectedProvider))),
+                new SessionLeaseRequest(
+                    decoderStepKey,
+                    ct => Task.FromResult(CreateSession(decoderStepModelPath, decoderStepOptions, sessionFactory, ct, decoderOptionsSelectedProvider))),
+            ],
+            cancellationToken).ConfigureAwait(false);
+
         try
         {
-            encoderPoolLease = await pool
-                .GetLeaseAsync(
-                    encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            decoderInitPoolLease = await pool
-                .GetLeaseAsync(
-                    decoderInitKey,
-                    ct => Task.FromResult(CreateSession(decoderInitModelPath, decoderInitOptions, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            decoderStepPoolLease = await pool
-                .GetLeaseAsync(
-                    decoderStepKey,
-                    ct => Task.FromResult(CreateSession(decoderStepModelPath, decoderStepOptions, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            SessionLease encoderPoolLease = bundle.LeaseAt(0);
+            SessionLease decoderInitPoolLease = bundle.LeaseAt(1);
+            SessionLease decoderStepPoolLease = bundle.LeaseAt(2);
 
             ExecutionProviderKind effectiveProvider = ResolveEffectiveTripleSessionProvider(
                 provider,
@@ -772,8 +1024,10 @@ internal static class OnnxExecutionSessionFactory
             string? bootstrapDetail = FormatBootstrapDetail(
                 bootstrapResult.Detail,
                 MergeFallbackReasons(
-                    encoderFallbackReason,
-                    MergeFallbackReasons(decoderInitFallbackReason, decoderStepFallbackReason)));
+                    graphFallbackReason,
+                    MergeFallbackReasons(
+                        encoderFallbackReason,
+                        MergeFallbackReasons(decoderInitFallbackReason, decoderStepFallbackReason))));
 
             return new Qwen3AsrSessionLease(
                 encoderPoolLease.Session,
@@ -783,6 +1037,7 @@ internal static class OnnxExecutionSessionFactory
                 selectedProvider,
                 bootstrapDetail)
             {
+                PoolBundle = bundle,
                 EncoderPoolLease = encoderPoolLease,
                 DecoderInitPoolLease = decoderInitPoolLease,
                 DecoderStepPoolLease = decoderStepPoolLease,
@@ -790,9 +1045,7 @@ internal static class OnnxExecutionSessionFactory
         }
         catch
         {
-            encoderPoolLease?.Dispose();
-            decoderInitPoolLease?.Dispose();
-            decoderStepPoolLease?.Dispose();
+            bundle.Dispose();
             throw;
         }
     }
@@ -841,36 +1094,30 @@ internal static class OnnxExecutionSessionFactory
         SessionPoolKey whisperKey = SessionPoolKey.ForLatentSyncWhisperEncoder(
             whisperEncoderModelPath, whisperOptionsSelection.SelectedProvider, modelId, variant);
 
-        SessionLease? unetPoolLease = null;
-        SessionLease? vaeEncPoolLease = null;
-        SessionLease? vaeDecPoolLease = null;
-        SessionLease? whisperPoolLease = null;
+        // Atomic bundle (audit §3A): acquire all four graphs or none.
+        SessionLeaseBundle bundle = await pool.GetLeaseBundleAsync(
+            [
+                new SessionLeaseRequest(
+                    unetKey,
+                    ct => Task.FromResult(CreateSession(unetModelPath, unetOptions, sessionFactory, ct, unetSelectedProvider))),
+                new SessionLeaseRequest(
+                    vaeEncKey,
+                    ct => Task.FromResult(CreateSession(vaeEncoderModelPath, vaeEncOptions, sessionFactory, ct, vaeEncOptionsSelection.SelectedProvider))),
+                new SessionLeaseRequest(
+                    vaeDecKey,
+                    ct => Task.FromResult(CreateSession(vaeDecoderModelPath, vaeDecOptions, sessionFactory, ct, vaeDecOptionsSelection.SelectedProvider))),
+                new SessionLeaseRequest(
+                    whisperKey,
+                    ct => Task.FromResult(CreateSession(whisperEncoderModelPath, whisperOptions, sessionFactory, ct, whisperSelectedProvider))),
+            ],
+            cancellationToken).ConfigureAwait(false);
+
         try
         {
-            unetPoolLease = await pool
-                .GetLeaseAsync(
-                    unetKey,
-                    ct => Task.FromResult(CreateSession(unetModelPath, unetOptions, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            vaeEncPoolLease = await pool
-                .GetLeaseAsync(
-                    vaeEncKey,
-                    ct => Task.FromResult(CreateSession(vaeEncoderModelPath, vaeEncOptions, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            vaeDecPoolLease = await pool
-                .GetLeaseAsync(
-                    vaeDecKey,
-                    ct => Task.FromResult(CreateSession(vaeDecoderModelPath, vaeDecOptions, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            whisperPoolLease = await pool
-                .GetLeaseAsync(
-                    whisperKey,
-                    ct => Task.FromResult(CreateSession(whisperEncoderModelPath, whisperOptions, sessionFactory, ct)),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            SessionLease unetPoolLease = bundle.LeaseAt(0);
+            SessionLease vaeEncPoolLease = bundle.LeaseAt(1);
+            SessionLease vaeDecPoolLease = bundle.LeaseAt(2);
+            SessionLease whisperPoolLease = bundle.LeaseAt(3);
 
             ExecutionProviderKind effective = ResolveEffectiveQuadSessionProvider(
                 provider,
@@ -922,6 +1169,7 @@ internal static class OnnxExecutionSessionFactory
                 selectedProvider,
                 bootstrapDetail)
             {
+                PoolBundle = bundle,
                 UNetPoolLease = unetPoolLease,
                 VaeEncoderPoolLease = vaeEncPoolLease,
                 VaeDecoderPoolLease = vaeDecPoolLease,
@@ -930,10 +1178,7 @@ internal static class OnnxExecutionSessionFactory
         }
         catch
         {
-            unetPoolLease?.Dispose();
-            vaeEncPoolLease?.Dispose();
-            vaeDecPoolLease?.Dispose();
-            whisperPoolLease?.Dispose();
+            bundle.Dispose();
             throw;
         }
     }
@@ -953,6 +1198,11 @@ internal static class OnnxExecutionSessionFactory
     {
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
+
+        provider = DowngradeTrtRtxForUnsupportedGraphs(
+            provider,
+            [encoderModelPath, decoderJointModelPath],
+            out _);
 
         BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
@@ -1063,6 +1313,11 @@ internal static class OnnxExecutionSessionFactory
     {
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
+
+        provider = DowngradeTrtRtxForUnsupportedGraphs(
+            provider,
+            [encoderModelPath, decoderModelPath],
+            out _);
 
         BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
@@ -1176,7 +1431,8 @@ internal static class OnnxExecutionSessionFactory
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, provider);
         SessionOptions options = CreateBaseSessionOptions(
             useCatalogDevicePolicy ? devicePolicy : WindowsMlExecutionDevicePolicy.Explicit,
-            out bool devicePolicyApplied);
+            out bool devicePolicyApplied,
+            tensorRtRtx: provider is ExecutionProviderKind.TensorRTRtx);
 
         if (provider is ExecutionProviderKind.Cpu)
         {
@@ -1221,13 +1477,14 @@ internal static class OnnxExecutionSessionFactory
 
     private static SessionOptionsSelection CreateDirectMlSelection(SessionOptions options)
     {
-        if (!TryAppendDirectMlProvider(options, out _) &&
-            !TryAppendDirectMlProviderDirect(options, out _))
+        if (!TryAppendDirectMlProvider(options, out string? catalogFailure) &&
+            !TryAppendDirectMlProviderDirect(options, out string? directFailure))
         {
             return new SessionOptionsSelection(
                 options,
                 ExecutionProviderKind.Cpu,
-                "Requested dml but DirectML append failed; CPU fallback activated.");
+                "Requested dml but DirectML append failed; CPU fallback activated. "
+                + $"catalog: {catalogFailure ?? "n/a"}; direct: {directFailure ?? "n/a"}");
         }
 
         return new SessionOptionsSelection(options, ExecutionProviderKind.DirectMl);
@@ -1839,11 +2096,18 @@ internal static class OnnxExecutionSessionFactory
 
     private static SessionOptions CreateBaseSessionOptions(
         WindowsMlExecutionDevicePolicy devicePolicy,
-        out bool devicePolicyApplied)
+        out bool devicePolicyApplied,
+        bool tensorRtRtx = false)
     {
         SessionOptions options = new()
         {
-            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+            // ORT_ENABLE_ALL re-fuses LayerNormalization+Skip / Bias+Gelu into com.microsoft
+            // contrib ops (SkipLayerNormalization, BiasGelu) at graph resolve. TensorRT-RTX
+            // cannot import those, so the TRT session gets a parse-error storm and falls back.
+            // BASIC keeps standard Add / LayerNormalization / Gelu nodes the TRT-RTX parser accepts.
+            GraphOptimizationLevel = tensorRtRtx
+                ? GraphOptimizationLevel.ORT_ENABLE_BASIC
+                : GraphOptimizationLevel.ORT_ENABLE_ALL,
             ExecutionMode = ExecutionMode.ORT_SEQUENTIAL
         };
 
@@ -1967,6 +2231,9 @@ internal static class OnnxExecutionSessionFactory
     {
         internal SessionLease? PoolLease { get; init; }
 
+        /// <summary>Set when the lease came from the shared pool — used for residency pinning.</summary>
+        internal SessionPoolKey? ResolvedPoolKey { get; init; }
+
         public void Dispose()
         {
             if (PoolLease is not null)
@@ -1980,6 +2247,42 @@ internal static class OnnxExecutionSessionFactory
         }
     }
 
+    /// <summary>
+    /// Engine-lifetime residency pin (audit §3A). Keeps the pooled session warm without
+    /// holding an execution lease; call <see cref="AcquireAsync"/> only around each Run().
+    /// </summary>
+    internal sealed class PooledSingleSessionPin : IDisposable
+    {
+        private readonly SessionResidency residency;
+        private readonly Func<CancellationToken, Task<SingleSessionLease>> acquire;
+        private readonly string requestedProvider;
+        private readonly string selectedProvider;
+        private readonly string? bootstrapDetail;
+
+        internal PooledSingleSessionPin(
+            SessionResidency residency,
+            Func<CancellationToken, Task<SingleSessionLease>> acquire,
+            string requestedProvider,
+            string selectedProvider,
+            string? bootstrapDetail)
+        {
+            this.residency = residency;
+            this.acquire = acquire;
+            this.requestedProvider = requestedProvider;
+            this.selectedProvider = selectedProvider;
+            this.bootstrapDetail = bootstrapDetail;
+        }
+
+        public string RequestedProvider => requestedProvider;
+        public string SelectedProvider => selectedProvider;
+        public string? BootstrapDetail => bootstrapDetail;
+
+        public Task<SingleSessionLease> AcquireAsync(CancellationToken cancellationToken) =>
+            acquire(cancellationToken);
+
+        public void Dispose() => residency.Dispose();
+    }
+
     internal sealed record Qwen3AsrSessionLease(
         InferenceSession EncoderSession,
         InferenceSession DecoderInitSession,
@@ -1988,12 +2291,19 @@ internal static class OnnxExecutionSessionFactory
         string SelectedProvider,
         string? BootstrapDetail) : IDisposable
     {
+        internal SessionLeaseBundle? PoolBundle { get; init; }
         internal SessionLease? EncoderPoolLease { get; init; }
         internal SessionLease? DecoderInitPoolLease { get; init; }
         internal SessionLease? DecoderStepPoolLease { get; init; }
 
         public void Dispose()
         {
+            if (PoolBundle is not null)
+            {
+                PoolBundle.Dispose();
+                return;
+            }
+
             EncoderPoolLease?.Dispose();
             DecoderInitPoolLease?.Dispose();
             DecoderStepPoolLease?.Dispose();
@@ -2009,6 +2319,7 @@ internal static class OnnxExecutionSessionFactory
         string SelectedProvider,
         string? BootstrapDetail) : IDisposable
     {
+        internal SessionLeaseBundle? PoolBundle { get; init; }
         internal SessionLease? UNetPoolLease { get; init; }
         internal SessionLease? VaeEncoderPoolLease { get; init; }
         internal SessionLease? VaeDecoderPoolLease { get; init; }
@@ -2016,6 +2327,12 @@ internal static class OnnxExecutionSessionFactory
 
         public void Dispose()
         {
+            if (PoolBundle is not null)
+            {
+                PoolBundle.Dispose();
+                return;
+            }
+
             UNetPoolLease?.Dispose();
             VaeEncoderPoolLease?.Dispose();
             VaeDecoderPoolLease?.Dispose();
