@@ -75,7 +75,7 @@ public sealed class TrtRtxBundlePinTests
         string directory = TensorRtRtxProviderConstants.GetDefaultInstallDirectory(root, "win-x64");
 
         Assert.Equal(
-            Path.Combine(
+            Path.Join(
                 Path.GetFullPath(root),
                 "Providers",
                 "trt-rtx",
