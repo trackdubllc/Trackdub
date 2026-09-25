@@ -14,7 +14,9 @@ public sealed record BenchmarkOptions(
     ReportFormat ReportFormat,
     string? WindowsMlDevicePolicyKey,
     string? Scope,
-    bool ShowHelp)
+    bool ShowHelp,
+    bool Mock = false,
+    bool DryRun = false)
 {
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -31,6 +33,8 @@ public sealed record BenchmarkOptions(
         string? windowsMlDevicePolicyKey = null;
         string? scope = null;
         var showHelp = false;
+        var mock = false;
+        var dryRun = false;
 
         for (var index = 0; index < args.Count; index++)
         {
@@ -42,6 +46,15 @@ public sealed record BenchmarkOptions(
                 case "-h":
                 case "/?":
                     showHelp = true;
+                    break;
+
+                case "--mock":
+                    mock = true;
+                    break;
+
+                case "--dry-run":
+                    dryRun = true;
+                    mock = true;
                     break;
 
                 case "--model":
@@ -227,7 +240,9 @@ public sealed record BenchmarkOptions(
             reportFormat,
             windowsMlDevicePolicyKey,
             string.IsNullOrWhiteSpace(scope) ? null : scope,
-            ShowHelp: false);
+            ShowHelp: false,
+            Mock: mock,
+            DryRun: dryRun);
 
         return true;
     }
@@ -243,7 +258,9 @@ public sealed record BenchmarkOptions(
             ReportFormat.Both,
             null,
             null,
-            ShowHelp: true);
+            ShowHelp: true,
+            Mock: false,
+            DryRun: false);
 
     private static bool TryParseProviderPreference(string value, out BenchmarkProviderPreference preference)
     {

@@ -143,4 +143,39 @@ public static class BenchmarkReportWriter
             options: FileOptions.Asynchronous);
         await JsonSerializer.SerializeAsync(stream, report, SerializerOptions, cancellationToken).ConfigureAwait(false);
     }
+
+    public static async Task WriteAsync(
+        Trackdub.Benchmarks.Scenarios.ExecutionProviderMatrixReport report,
+        string outputPath,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        await using var stream = new FileStream(
+            outputPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 4096,
+            options: FileOptions.Asynchronous);
+        await JsonSerializer.SerializeAsync(stream, report, SerializerOptions, cancellationToken).ConfigureAwait(false);
+    }
+
+    public static async Task WriteAsync(
+        Trackdub.Benchmarks.Scenarios.ExecutionProviderMatrixReport report,
+        string outputPath,
+        ReportFormat format,
+        CancellationToken cancellationToken)
+    {
+        if (format is ReportFormat.Console)
+        {
+            return;
+        }
+
+        await WriteAsync(report, outputPath, cancellationToken).ConfigureAwait(false);
+    }
 }

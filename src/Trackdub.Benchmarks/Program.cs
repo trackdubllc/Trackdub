@@ -65,6 +65,14 @@ public static class Program
         }
 
         if (args.Length > 0 &&
+            (args[0].Equals("matrix", StringComparison.OrdinalIgnoreCase) ||
+             args[0].Equals("provider-matrix", StringComparison.OrdinalIgnoreCase)))
+        {
+            return await RunProviderMatrixAsync(args.Skip(1).ToArray(), output, error, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (args.Length > 0 &&
             args[0].Equals("audio-prep", StringComparison.OrdinalIgnoreCase))
         {
             return await RunAudioPrepAsync(args.Skip(1).ToArray(), output, error, cancellationToken).ConfigureAwait(false);
@@ -155,7 +163,7 @@ public static class Program
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
-            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>]");
+            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>] [--mock] [--dry-run]");
             return args.Length == 0 ? 1 : 0;
         }
         string? outputDirectory = null, stage = null, model = null, provider = null;
@@ -163,12 +171,25 @@ public static class Program
         string? expectedSha256 = null;
         string language = "es", mode = "fresh-process";
         bool reuseCache = false;
+        bool mock = false;
+        bool dryRun = false;
         int runCount = 1;
         for (int index = 1; index < args.Length; index++)
         {
             if (args[index] == "--reuse-engine-cache")
             {
                 reuseCache = true;
+                continue;
+            }
+            if (args[index] == "--mock")
+            {
+                mock = true;
+                continue;
+            }
+            if (args[index] == "--dry-run")
+            {
+                dryRun = true;
+                mock = true;
                 continue;
             }
             if (index + 1 >= args.Length)
@@ -227,10 +248,155 @@ public static class Program
                     FfmpegPath = ffmpeg,
                     FfprobePath = ffprobe,
                     RunCount = runCount,
+                    Mock = mock,
+                    DryRun = dryRun,
                 }, cancellationToken).ConfigureAwait(false);
             output.WriteLine($"Evidence {report.RunId:N}: {report.Status} ({report.RunMode}, {report.Scenario})");
             if (report.Reason is not null) output.WriteLine(report.Reason);
             return report.Status == Trackdub.Contracts.Benchmarking.BenchmarkEvidenceStatus.Completed ? 0 : 1;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
+    private static async Task<int> RunProviderMatrixAsync(
+        string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken)
+    {
+        if (args.Length == 0 || args.Any(a => a is "--help" or "-h" or "/?"))
+        {
+            output.WriteLine("matrix <fixture> --output <directory> [--providers <comma-separated>] [--baseline <provider>] [--scenario <name>] [--runs <count>] [--mock] [--dry-run] [--format <console|json|both>]");
+            output.WriteLine("Evaluates comparative execution provider performance (speedup, latency deltas, throughput, memory) across configured providers.");
+            return args.Length == 0 ? 1 : 0;
+        }
+
+        string fixturePath = args[0];
+        string? outputDirectory = null;
+        string? scenario = "full-pipeline";
+        string baselineProvider = "cpu";
+        IReadOnlyList<string>? providers = null;
+        int runCount = 1;
+        bool mock = false;
+        bool dryRun = false;
+        ReportFormat format = ReportFormat.Both;
+
+        for (int index = 1; index < args.Length; index++)
+        {
+            string arg = args[index];
+            if (arg == "--mock")
+            {
+                mock = true;
+                continue;
+            }
+            if (arg == "--dry-run")
+            {
+                dryRun = true;
+                mock = true;
+                continue;
+            }
+            if (index + 1 >= args.Length)
+            {
+                error.WriteLine($"Missing value for {arg}.");
+                return 1;
+            }
+            string value = args[++index];
+            switch (arg)
+            {
+                case "--output":
+                    outputDirectory = value;
+                    break;
+                case "--scenario":
+                    scenario = value;
+                    break;
+                case "--baseline":
+                    baselineProvider = value;
+                    break;
+                case "--providers":
+                    providers = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    break;
+                case "--runs":
+                    if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
+                    {
+                        error.WriteLine($"Invalid run count '{value}'. Expected a positive integer.");
+                        return 1;
+                    }
+                    runCount = parsedRuns;
+                    break;
+                case "--format":
+                    if (!Enum.TryParse(value, ignoreCase: true, out format))
+                    {
+                        error.WriteLine($"Unknown format '{value}'. Expected console, json, or both.");
+                        return 1;
+                    }
+                    break;
+                default:
+                    error.WriteLine($"Unknown option {arg}.");
+                    return 1;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            error.WriteLine("--output is required.");
+            return 1;
+        }
+
+        providers ??= ["cpu", "directml"];
+
+        string[] validProviders = ["cpu", "dml", "directml", "cuda", "tensorrt", "trt", "tensorrtrtx", "trt-rtx", "openvino", "migraphx", "rocm", "coreml", "nnapi", "xnnpack", "snpe", "qnn"];
+        foreach (string p in providers)
+        {
+            if (!validProviders.Contains(BenchmarkComparison.NormalizeProvider(p), StringComparer.OrdinalIgnoreCase) &&
+                !validProviders.Contains(p, StringComparer.OrdinalIgnoreCase))
+            {
+                error.WriteLine($"Unknown provider '{p}'. Expected one of: cpu, directml, cuda, tensorrt, openvino, etc.");
+                return 1;
+            }
+        }
+
+        try
+        {
+            using var runner = new Trackdub.Benchmarks.Scenarios.ExecutionProviderMatrixRunner();
+            var options = new Trackdub.Benchmarks.Scenarios.ExecutionProviderMatrixOptions
+            {
+                FixturePath = fixturePath,
+                OutputDirectory = outputDirectory,
+                Scenario = scenario ?? "full-pipeline",
+                BaselineProvider = baselineProvider,
+                Providers = providers,
+                RunCount = runCount,
+                Mock = mock || dryRun,
+                Format = format,
+            };
+
+            var report = await runner.RunAsync(options, cancellationToken).ConfigureAwait(false);
+
+            if (format is ReportFormat.Console or ReportFormat.Both)
+            {
+                output.WriteLine($"Execution Provider Matrix: {report.Scenario} (Baseline: {report.BaselineProvider})");
+                foreach (var comp in report.Comparisons)
+                {
+                    output.WriteLine($"  {comp.Provider}: P50={comp.P50Milliseconds:F1}ms, Speedup={comp.SpeedupFactor:F2}x, LatencyDelta={comp.LatencyDeltaMilliseconds:F1}ms, ThroughputRatio={comp.ThroughputRatio:F2}x, MemoryDelta={comp.PeakWorkingSetDeltaBytes / (1024 * 1024):+0;-0;0}MB");
+                }
+            }
+
+            if (format is ReportFormat.Json or ReportFormat.Both)
+            {
+                string reportPath = Path.Join(outputDirectory, "execution-provider-matrix.json");
+                output.WriteLine($"Report written to: {reportPath}");
+            }
+
+            return 0;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -268,7 +434,8 @@ public static class Program
                     .FirstOrDefault(candidate => candidate.Name.Equals(result.Stage, StringComparison.OrdinalIgnoreCase));
                 output.WriteLine(
                     $"  {result.Stage}: {result.Evidence.Status}"
-                    + (stage?.DurationMilliseconds is double duration ? $" ({duration:F1} ms)" : string.Empty));
+                    + (stage?.DurationMilliseconds is double duration ? $" ({duration:F1} ms)" : string.Empty)
+                    + (!string.IsNullOrWhiteSpace(result.Evidence.Reason) ? $" - Reason: {result.Evidence.Reason}" : string.Empty));
             }
 
             return report.Success ? 0 : 1;

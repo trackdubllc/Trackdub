@@ -15,6 +15,7 @@ using Trackdub.Inference.Runtime.ModelManifest;
 using Trackdub.Infrastructure.Persistence.Repositories;
 using Trackdub.Infrastructure.Persistence.Sqlite;
 using Trackdub.Infrastructure.Settings;
+using Trackdub.Benchmarks.Scenarios;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trackdub.Benchmarks;
@@ -337,6 +338,37 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 timings[$"stage:{stageName}:throughput"] = stageStats.ThroughputUnitsPerSecond;
                 timings[$"stage:{stageName}:sampleCount"] = (double)stageStats.SampleCount;
                 timings[$"stage:{stageName}"] = stageStats.P50Milliseconds;
+
+                string canonical = MockDubbingPipelineServices.CanonicalBenchmarkStage(stageName);
+                if (!canonical.Equals(stageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    timings[$"stage:{canonical}:min"] = stageStats.MinMilliseconds;
+                    timings[$"stage:{canonical}:max"] = stageStats.MaxMilliseconds;
+                    timings[$"stage:{canonical}:mean"] = stageStats.MeanMilliseconds;
+                    timings[$"stage:{canonical}:p50"] = stageStats.P50Milliseconds;
+                    timings[$"stage:{canonical}:p90"] = stageStats.P90Milliseconds;
+                    timings[$"stage:{canonical}:p99"] = stageStats.P99Milliseconds;
+                    timings[$"stage:{canonical}:throughput"] = stageStats.ThroughputUnitsPerSecond;
+                    timings[$"stage:{canonical}:sampleCount"] = (double)stageStats.SampleCount;
+                    timings[$"stage:{canonical}"] = stageStats.P50Milliseconds;
+                }
+            }
+
+            if (stage is not null && !timings.ContainsKey($"stage:{stage}:p50"))
+            {
+                string canonical = MockDubbingPipelineServices.CanonicalBenchmarkStage(stage);
+                if (timings.TryGetValue($"stage:{canonical}:p50", out double? canP50))
+                {
+                    timings[$"stage:{stage}:p50"] = canP50;
+                    timings[$"stage:{stage}:min"] = timings.GetValueOrDefault($"stage:{canonical}:min");
+                    timings[$"stage:{stage}:max"] = timings.GetValueOrDefault($"stage:{canonical}:max");
+                    timings[$"stage:{stage}:mean"] = timings.GetValueOrDefault($"stage:{canonical}:mean");
+                    timings[$"stage:{stage}:p90"] = timings.GetValueOrDefault($"stage:{canonical}:p90");
+                    timings[$"stage:{stage}:p99"] = timings.GetValueOrDefault($"stage:{canonical}:p99");
+                    timings[$"stage:{stage}:throughput"] = timings.GetValueOrDefault($"stage:{canonical}:throughput");
+                    timings[$"stage:{stage}:sampleCount"] = timings.GetValueOrDefault($"stage:{canonical}:sampleCount");
+                    timings[$"stage:{stage}"] = canP50;
+                }
             }
 
             foreach (string stageName in stageSamples.Keys)
@@ -355,6 +387,16 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     memory[$"stage:{stageName}:gen0"] = gen0;
                     memory[$"stage:{stageName}:gen1"] = gen1;
                     memory[$"stage:{stageName}:gen2"] = gen2;
+
+                    string canonical = MockDubbingPipelineServices.CanonicalBenchmarkStage(stageName);
+                    if (!canonical.Equals(stageName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        memory[$"stage:{canonical}:allocatedBytes"] = allocated;
+                        memory[$"stage:{canonical}:peakWorkingSet"] = peakWs;
+                        memory[$"stage:{canonical}:gen0"] = gen0;
+                        memory[$"stage:{canonical}:gen1"] = gen1;
+                        memory[$"stage:{canonical}:gen2"] = gen2;
+                    }
                 }
                 else if (lastClock?.GetMemoryDelta(stageName) is ResourceTelemetryDelta delta)
                 {
@@ -363,6 +405,16 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     memory[$"stage:{stageName}:gen0"] = delta.Gen0Collections;
                     memory[$"stage:{stageName}:gen1"] = delta.Gen1Collections;
                     memory[$"stage:{stageName}:gen2"] = delta.Gen2Collections;
+
+                    string canonical = MockDubbingPipelineServices.CanonicalBenchmarkStage(stageName);
+                    if (!canonical.Equals(stageName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        memory[$"stage:{canonical}:allocatedBytes"] = delta.ManagedAllocatedBytes;
+                        memory[$"stage:{canonical}:peakWorkingSet"] = delta.PeakWorkingSetBytes;
+                        memory[$"stage:{canonical}:gen0"] = delta.Gen0Collections;
+                        memory[$"stage:{canonical}:gen1"] = delta.Gen1Collections;
+                        memory[$"stage:{canonical}:gen2"] = delta.Gen2Collections;
+                    }
                 }
             }
 
@@ -419,7 +471,10 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
             BenchmarkEvidenceStage? requestedStage = stage is null
                 ? null
-                : stages.LastOrDefault(x => x.Name.Equals(stage, StringComparison.OrdinalIgnoreCase));
+                : stages.LastOrDefault(x =>
+                    x.Name.Equals(stage, StringComparison.OrdinalIgnoreCase) ||
+                    x.Name.Equals(MockDubbingPipelineServices.CanonicalBenchmarkStage(stage), StringComparison.OrdinalIgnoreCase) ||
+                    MockDubbingPipelineServices.CanonicalBenchmarkStage(x.Name).Equals(MockDubbingPipelineServices.CanonicalBenchmarkStage(stage), StringComparison.OrdinalIgnoreCase));
             actualModel = requestedStage?.ActualModel;
             actualProvider = requestedStage?.ActualProvider;
             if (stage is not null && requestedStage?.Status != BenchmarkEvidenceStatus.Completed)
@@ -625,7 +680,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             throw new ArgumentException("Mode must be fresh-process, warm-host, or artifact-resume.");
         if (options.Provider is not null && !Enum.TryParse<ExecutionProviderKind>(options.Provider, true, out _))
             throw new ArgumentException("Unknown provider.");
-        if (options.Provider is not null &&
+        if (!options.Mock && !options.DryRun && options.Provider is not null &&
             (ResolveStage(options.Stage) is not string stage || RuntimeStageFor(stage) is null))
             throw new ArgumentException("Provider pin requires a runtime-backed focused stage.");
         if (options.Model is not null)
@@ -649,9 +704,18 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     private static string? ResolveStage(string? requested)
     {
         if (requested is null) return null;
-        return DubbingPipelineStages.ExtendedStageOrder.SingleOrDefault(x =>
-            x.Equals(requested, StringComparison.OrdinalIgnoreCase))
-            ?? throw new ArgumentException("Unknown stage.", nameof(requested));
+        string? match = DubbingPipelineStages.ExtendedStageOrder.SingleOrDefault(x =>
+            x.Equals(requested, StringComparison.OrdinalIgnoreCase));
+        if (match is not null) return match;
+
+        return requested.ToLowerInvariant() switch
+        {
+            "audio-prep" => StageNames.AudioPreparation,
+            "transcription" => StageNames.Asr,
+            "alignment" => StageNames.LipSync,
+            "dubbing" => StageNames.Tts,
+            _ => throw new ArgumentException("Unknown stage.", nameof(requested)),
+        };
     }
 
     private static IReadOnlyList<string> PrerequisitesFor(string stage)
@@ -672,15 +736,20 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     private static void CopyDirectory(string sourceDir, string destinationDir)
     {
         Directory.CreateDirectory(destinationDir);
+        if (!Directory.Exists(sourceDir))
+        {
+            return;
+        }
+
         foreach (string file in Directory.GetFiles(sourceDir))
         {
-            string destFile = Path.Combine(destinationDir, Path.GetFileName(file));
+            string destFile = Path.Join(destinationDir, Path.GetFileName(file));
             File.Copy(file, destFile, overwrite: true);
         }
 
         foreach (string subDir in Directory.GetDirectories(sourceDir))
         {
-            string destSubDir = Path.Combine(destinationDir, Path.GetFileName(subDir));
+            string destSubDir = Path.Join(destinationDir, Path.GetFileName(subDir));
             CopyDirectory(subDir, destSubDir);
         }
     }
@@ -697,6 +766,39 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 [runtimeStage.ToString()] = Enum.Parse<ExecutionProviderKind>(options.Provider, true),
             };
         }
+
+        Action<IServiceCollection>? configurator = _serviceConfigurator;
+        if (options.Mock || options.DryRun)
+        {
+            var prev = configurator;
+            configurator = services =>
+            {
+                prev?.Invoke(services);
+                var existingDescriptor = services.FirstOrDefault(s => s.ServiceType == typeof(MockPipelineOptions));
+                if (existingDescriptor?.ImplementationInstance is MockPipelineOptions existingOpts)
+                {
+                    existingOpts.DryRun = options.DryRun;
+                    if (options.Provider is not null) existingOpts.DefaultProvider = options.Provider;
+                    if (options.Model is not null) existingOpts.DefaultModel = options.Model;
+                }
+                else
+                {
+                    MockDubbingPipelineServices.ConfigureMockPipeline(services, mockOpts =>
+                    {
+                        mockOpts.DryRun = options.DryRun;
+                        if (options.Provider is not null)
+                        {
+                            mockOpts.DefaultProvider = options.Provider;
+                        }
+                        if (options.Model is not null)
+                        {
+                            mockOpts.DefaultModel = options.Model;
+                        }
+                    });
+                }
+            };
+        }
+
         return HeadlessDubbingHost.Create(new HeadlessTrackdubOptions
         {
             ModelDirectory = options.ModelDirectory,
@@ -704,7 +806,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             FfprobePath = options.FfprobePath,
             HardwareOverrides = pins,
             RequirePreferredExecutionProviders = pins is not null,
-            ServiceConfigurator = _serviceConfigurator,
+            ServiceConfigurator = configurator,
         });
     }
 
@@ -751,6 +853,20 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         IReadOnlyList<string>? stages, bool forceRerun, CancellationToken cancellationToken,
         IProgress<PipelineProgressEvent>? progress = null)
     {
+        if (host.Services.GetService<IDubbingPipelineService>() is { } mockService)
+        {
+            return mockService.ExecuteAsync(new DubbingSessionOptions
+            {
+                SourceMediaPath = fixture,
+                ProjectOutputDirectory = project,
+                SourceLanguageCode = options.SourceLanguage,
+                TargetLanguageCode = options.TargetLanguage,
+                StageFilter = stages,
+                ModelPreferences = options.Model is null || options.Stage is null ? null : new Dictionary<string, string> { [options.Stage] = options.Model },
+                ForceRerun = forceRerun,
+            }, progress, cancellationToken);
+        }
+
         string? stage = ResolveStage(options.Stage);
         IReadOnlyDictionary<string, string>? models = options.Model is null || stage is null
             ? null : new Dictionary<string, string> { [stage] = options.Model };
@@ -770,6 +886,15 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         HeadlessDubbingHost host, string project, ControlledDubbingBenchmarkOptions options,
         CancellationToken cancellationToken)
     {
+        if (host.Services.GetService<IDubbingPipelineService>() is { } mockService)
+        {
+            return new RunArtifacts(
+                mockService.GetStageRuns(project, options.Provider, options.Model),
+                HasUsableTranscript: true,
+                HasPlayableTake: true,
+                MediaDurationSeconds: 1.0);
+        }
+
         await using IDubbingSession session = host.SessionFactory.CreateSession(project,
             StudioSettings.Default with
             {

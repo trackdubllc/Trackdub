@@ -26,6 +26,8 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
         string? sourceLanguage = null;
         string mode = "fresh-process";
         bool reuseEngineCache = false;
+        bool mock = false;
+        bool dryRun = false;
         string? modelDirectory = null;
         string? provider = null;
         string? ffmpeg = null;
@@ -38,6 +40,19 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
             if (args[index] == "--reuse-engine-cache")
             {
                 reuseEngineCache = true;
+                continue;
+            }
+
+            if (args[index] == "--mock")
+            {
+                mock = true;
+                continue;
+            }
+
+            if (args[index] == "--dry-run")
+            {
+                dryRun = true;
+                mock = true;
                 continue;
             }
 
@@ -111,6 +126,8 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
             FfprobePath = ffprobe,
             ModelOverrides = modelOverrides,
             RunCount = runCount,
+            Mock = mock,
+            DryRun = dryRun,
         };
         return true;
     }

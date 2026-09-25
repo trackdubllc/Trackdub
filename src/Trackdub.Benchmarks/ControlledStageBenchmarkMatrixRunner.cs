@@ -25,7 +25,12 @@ public sealed record ControlledStageBenchmarkMatrixReport
 /// <summary>Runs the existing controlled benchmark once for each selected pipeline stage.</summary>
 public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
 {
-    private readonly ControlledDubbingBenchmarkRunner runner = new();
+    private readonly ControlledDubbingBenchmarkRunner runner;
+
+    public ControlledStageBenchmarkMatrixRunner(ControlledDubbingBenchmarkRunner? runner = null)
+    {
+        this.runner = runner ?? new();
+    }
 
     public async Task<ControlledStageBenchmarkMatrixReport> RunAsync(
         ControlledStageBenchmarkMatrixOptions options,
@@ -57,6 +62,8 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     FfmpegPath = options.FfmpegPath,
                     FfprobePath = options.FfprobePath,
                     RunCount = options.RunCount,
+                    Mock = options.Mock,
+                    DryRun = options.DryRun,
                 }, cancellationToken).ConfigureAwait(false);
 
             LatencyStatistics? stats = null;
