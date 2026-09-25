@@ -25,7 +25,9 @@ function Invoke-Run([string]$stage, [string]$provider, [string]$model, [string]$
         try {
             $r = Get-Content $f.FullName -Raw | ConvertFrom-Json
             if ($r.kind -eq "Benchmark") { return $r }
-        } catch {}
+        } catch {
+            Write-Verbose "Skipping unparseable report $($f.FullName): $($_.Exception.Message)"
+        }
     }
     return $null
 }
