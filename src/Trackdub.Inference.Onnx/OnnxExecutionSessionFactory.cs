@@ -312,13 +312,14 @@ internal static class OnnxExecutionSessionFactory
         string modelPath,
         SessionOptions options,
         Func<string, SessionOptions, InferenceSession>? sessionFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ExecutionProviderKind? provider = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var phase = BenchmarkPhaseCapture.Start("onnx-session-create");
-        // Prefer a valid AOT EP-context artifact when present (see EpContextWarmupService);
+        // Prefer a valid AOT EP-context artifact only when TensorRT RTX is selected (see EpContextWarmupService);
         // fall back to the source ONNX so residual JIT still works via nv_runtime_cache_path.
-        string loadPath = EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath;
+        string loadPath = (provider is ExecutionProviderKind.TensorRTRtx ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) : null) ?? modelPath;
         return sessionFactory is null
             ? new InferenceSession(loadPath, options)
             : sessionFactory(loadPath, options);

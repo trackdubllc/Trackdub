@@ -69,13 +69,11 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
                                 _ => dedicatedVramMb
                             };
 
-                            if (string.IsNullOrWhiteSpace(gpuDriverVersion))
+                            if (desc.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
                             {
                                 gpuDriverVersion = subkey?.GetValue("DriverVersion") as string;
-                            }
-
-                            if (desc.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
                                 break;
+                            }
                         }
                     }
                 }

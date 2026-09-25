@@ -92,7 +92,6 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
                     continue;
                 }
 
-                EpContextArtifact.WriteStamp(sourcePath, currentStamp);
                 compiled++;
             }
             else
@@ -108,7 +107,17 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
             {
                 failed++;
                 items.Add(new EpContextWarmItem(sourcePath, "failed", epContextPath, compileMs, warmMs, warmFailure));
+                if (epContextPath is not null)
+                {
+                    try { File.Delete(epContextPath); }
+                    catch { }
+                }
                 continue;
+            }
+
+            if (wasCompiled)
+            {
+                EpContextArtifact.WriteStamp(sourcePath, currentStamp);
             }
 
             items.Add(new EpContextWarmItem(
