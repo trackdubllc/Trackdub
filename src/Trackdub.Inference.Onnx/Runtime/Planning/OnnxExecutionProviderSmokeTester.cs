@@ -490,7 +490,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         using OnnxExecutionSessionFactory.SingleSessionLease preprocessor = await OnnxExecutionSessionFactory
             .CreatePooledSingleAsync(
                 "parakeet-tdt-preprocessor",
-                Path.Combine(root, "nemo128.onnx"),
+                Path.Join(root, "nemo128.onnx"),
                 ExecutionProviderKind.Cpu,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -500,7 +500,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             .CreatePooledNemotronAsrAsync(
                 ParakeetTdtOnnxAudioTranscriptionEngine.EngineFamilyName,
                 encoderModelPath,
-                Path.Combine(root, "decoder_joint-model.onnx"),
+                Path.Join(root, "decoder_joint-model.onnx"),
                 request.ExecutionProvider,
                 cancellationToken,
                 modelId: request.ModelId,
@@ -649,7 +649,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 ?? throw new InvalidOperationException("Cannot resolve Chatterbox TTS warmup root path.");
         string onnxDirectory = string.Equals(Path.GetFileName(rootPath), "onnx", StringComparison.OrdinalIgnoreCase)
             ? rootPath
-            : Path.Combine(rootPath, "onnx");
+            : Path.Join(rootPath, "onnx");
 
         foreach (string graphName in new[] { "speech_encoder", "embed_tokens", "language_model" })
         {
@@ -669,17 +669,18 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
     private static string ResolveChatterboxGraphPath(string onnxDirectory, string graphName, string? variant)
     {
-        if (!string.IsNullOrWhiteSpace(variant) &&
-            !variant.Equals("default", StringComparison.OrdinalIgnoreCase))
+        string? sanitizedVariant = string.IsNullOrWhiteSpace(variant) ? null : Path.GetFileName(variant);
+        if (!string.IsNullOrWhiteSpace(sanitizedVariant) &&
+            !sanitizedVariant.Equals("default", StringComparison.OrdinalIgnoreCase))
         {
-            string variantPath = Path.Combine(onnxDirectory, $"{graphName}_{variant}.onnx");
+            string variantPath = Path.Join(onnxDirectory, $"{graphName}_{sanitizedVariant}.onnx");
             if (File.Exists(variantPath))
             {
                 return variantPath;
             }
         }
 
-        return Path.Combine(onnxDirectory, $"{graphName}.onnx");
+        return Path.Join(onnxDirectory, $"{graphName}.onnx");
     }
 
     private static InputSet CreateVadInputs()

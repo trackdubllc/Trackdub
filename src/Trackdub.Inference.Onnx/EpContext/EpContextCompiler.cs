@@ -29,7 +29,7 @@ public sealed class EpContextCompiler
     /// </summary>
     private static ITensorRtRtxProviderBootstrap CreateDefaultBootstrap()
     {
-        string userDataRoot = Path.Combine(
+        string userDataRoot = Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Trackdub");
         return TensorRtRtxProviderBootstrapFactory.CreateWithDefaultInstallPath(userDataRoot);
