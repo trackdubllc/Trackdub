@@ -58,7 +58,7 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     nameof(options));
             }
 
-            string combinedOutputDirectory = Path.GetFullPath(Path.Combine(outputBasePath, stageDirectoryName));
+            string combinedOutputDirectory = Path.GetFullPath(Path.Join(outputBasePath, stageDirectoryName));
             if (!combinedOutputDirectory.StartsWith(outputBasePath, StringComparison.OrdinalIgnoreCase))
             {
                 throw new ArgumentException(
