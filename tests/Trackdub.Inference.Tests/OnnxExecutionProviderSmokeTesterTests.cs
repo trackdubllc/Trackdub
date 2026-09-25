@@ -20,6 +20,20 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     }
 
     [Fact]
+    public void IsSortFormerStreamingInputSet_requires_the_complete_streaming_contract()
+    {
+        MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
+            .GetMethod("IsSortFormerStreamingInputSet", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate SortFormer streaming-input detector.");
+        string[] inputNames = [
+            "chunk", "chunk_lengths", "spkcache", "spkcache_lengths", "fifo", "fifo_lengths"];
+
+        Assert.True(Assert.IsType<bool>(method.Invoke(null, [inputNames])));
+        Assert.False(Assert.IsType<bool>(method.Invoke(null, [inputNames[..^1]])));
+        Assert.False(Assert.IsType<bool>(method.Invoke(null, [new[] { "waveform", "waveform_lengths" }])));
+    }
+
+    [Fact]
     public void ResolveDiarizationInputNames_prefers_audio_length_and_generic_single_float_waveform_inputs()
     {
         MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
