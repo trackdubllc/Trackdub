@@ -48,11 +48,15 @@ public sealed class GeminiCloudTranscriptionEngine(
         byte[] audioBytes = await File.ReadAllBytesAsync(
             request.NormalizedAudioPath, cancellationToken).ConfigureAwait(false);
 
-        if (audioBytes.Length > 20 * 1024 * 1024)
+        // Base64 expands raw bytes by ~4/3, so gate on the pre-encoding size that keeps the
+        // encoded payload under Gemini's 20 MB inline limit rather than the raw file size.
+        const long InlinePayloadLimitBytes = 20 * 1024 * 1024;
+        const long MaxRawAudioBytes = InlinePayloadLimitBytes * 3 / 4;
+        if (audioBytes.Length > MaxRawAudioBytes)
         {
             throw new InvalidOperationException(
-                $"Audio file size ({audioBytes.Length / (1024 * 1024)} MB) exceeds Gemini inline audio payload limit (20 MB). " +
-                "Please use compressed audio (MP3/OGG) or split into shorter segments.");
+                $"Audio file size ({audioBytes.Length / (1024 * 1024)} MB) would exceed Gemini's 20 MB inline " +
+                "payload limit once base64-encoded. Please use compressed audio (MP3/OGG) or split into shorter segments.");
         }
 
         string base64Audio = Convert.ToBase64String(audioBytes);
