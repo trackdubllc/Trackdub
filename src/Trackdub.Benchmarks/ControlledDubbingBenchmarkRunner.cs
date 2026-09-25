@@ -555,10 +555,12 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
     private static IReadOnlyList<string> PrerequisitesFor(string stage)
     {
-        int index = DubbingPipelineStages.DefaultStageOrder.ToList().FindIndex(x =>
+        int index = DubbingPipelineStages.ExtendedStageOrder.ToList().FindIndex(x =>
             x.Equals(stage, StringComparison.OrdinalIgnoreCase));
         if (index <= 0) return [];
-        return DubbingPipelineStages.DefaultStageOrder.Take(index).ToArray();
+        return DubbingPipelineStages.ExtendedStageOrder.Take(index)
+            .Where(x => DubbingPipelineStages.DefaultStageOrder.Contains(x, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
     }
 
     private HeadlessDubbingHost CreateHost(ControlledDubbingBenchmarkOptions options)
