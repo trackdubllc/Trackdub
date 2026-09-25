@@ -44,13 +44,21 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     nameof(options));
             }
 
+            string stageDirectoryName = Path.GetFileName(stage);
+            if (string.IsNullOrWhiteSpace(stageDirectoryName) || Path.IsPathRooted(stageDirectoryName))
+            {
+                throw new ArgumentException(
+                    "Stage names must resolve to a relative directory name.",
+                    nameof(options));
+            }
+
             options.ModelOverrides.TryGetValue(stage, out string? model);
             BenchmarkEvidenceReport evidence = await runner.RunAsync(
                 new ControlledDubbingBenchmarkOptions
                 {
                     FixturePath = options.FixturePath,
                     ExpectedFixtureSha256 = options.ExpectedFixtureSha256,
-                    OutputDirectory = Path.Combine(options.OutputDirectory, Path.GetFileName(stage)),
+                    OutputDirectory = Path.Combine(options.OutputDirectory, stageDirectoryName),
                     Stage = stage,
                     Model = model,
                     Provider = options.Provider,
