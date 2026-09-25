@@ -135,8 +135,9 @@ public sealed class EngineCacheMaintenanceServiceTests
         {
             Directory.Delete(root, recursive: true);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            Console.WriteLine($"Cleanup failed for '{root}': {ex.Message}");
         }
     }
 

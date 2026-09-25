@@ -97,7 +97,8 @@ public sealed class EngineCacheProbeTests
         finally
         {
             Environment.SetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT", previous);
-            try { Directory.Delete(temp, recursive: true); } catch (IOException) { }
+            try { Directory.Delete(temp, recursive: true); }
+            catch (IOException ex) { Console.Error.WriteLine($"Cleanup failed for '{temp}': {ex.Message}"); }
         }
     }
 }

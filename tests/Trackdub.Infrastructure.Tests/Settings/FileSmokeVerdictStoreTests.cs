@@ -232,11 +232,13 @@ public sealed class FileSmokeVerdictStoreTests
                 Directory.Delete(directory, recursive: true);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            Console.Error.WriteLine($"Cleanup failed for '{path}': {ex.Message}");
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            Console.Error.WriteLine($"Cleanup failed for '{path}': {ex.Message}");
         }
     }
 }
