@@ -83,6 +83,12 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     ? BenchmarkEvidenceStatus.Failed
                     : BenchmarkEvidenceStatus.PartiallyCompleted;
 
+        string reportFileName = $"stage-matrix-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json";
+        if (Path.IsPathRooted(reportFileName))
+        {
+            throw new InvalidOperationException("Report file name must be a relative path.");
+        }
+
         return new ControlledStageBenchmarkMatrixReport
         {
             FixturePath = options.FixturePath,
@@ -90,9 +96,7 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
             Status = status,
             StartedAtUtc = startedAt,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            ReportPath = Path.Combine(
-                options.OutputDirectory,
-                $"stage-matrix-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json"),
+            ReportPath = Path.Combine(options.OutputDirectory, reportFileName),
         };
     }
 
