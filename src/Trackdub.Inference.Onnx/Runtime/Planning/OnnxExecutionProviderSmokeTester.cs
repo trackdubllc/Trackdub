@@ -881,7 +881,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             NamedOnnxValue.CreateFromTensor("chunk_lengths", new DenseTensor<long>(new long[] { chunkFrames }, [1])),
             NamedOnnxValue.CreateFromTensor("spkcache", new DenseTensor<float>(Array.Empty<float>(), [1, 0, embeddingDimension])),
             NamedOnnxValue.CreateFromTensor("spkcache_lengths", new DenseTensor<long>(new long[] { 0 }, [1])),
-            NamedOnnxValue.CreateFromTensor("fifo", new DenseTensor<float>(new float[0], [1, 0, embeddingDimension])),
+            NamedOnnxValue.CreateFromTensor("fifo", new DenseTensor<float>(Array.Empty<float>(), [1, 0, embeddingDimension])),
             NamedOnnxValue.CreateFromTensor("fifo_lengths", new DenseTensor<long>(new long[] { 0 }, [1])),
         ];
 
