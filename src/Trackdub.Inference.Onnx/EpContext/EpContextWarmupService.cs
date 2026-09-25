@@ -88,9 +88,6 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
                 "Excluded family or already an EP-context artifact."), false, false);
         }
 
-        EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
-            sourcePath, new FileInfo(sourcePath), sourceSha256: null,
-            hardware.NvidiaGpuArchitecture.ToString(), hardware.GpuDriverVersion);
         string epContextPath = EpContextArtifact.GetEpContextPath(sourcePath);
         bool haveValid = EpContextArtifact.TryResolveValidLoadPath(
             sourcePath, EpContextLoadPathResolver.CurrentEnvironmentFingerprint) is not null;
@@ -106,6 +103,12 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
                 return (new EpContextWarmItem(sourcePath, "failed", null, compileMs, 0, compile.FailureReason), false, false);
             }
 
+            // Create the stamp only after compilation has produced the final artifact. For
+            // large graphs ORT writes an external-initializers sidecar alongside the model;
+            // stamping before CompileModel would record the previous sidecar (or none).
+            EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
+                sourcePath, new FileInfo(sourcePath), sourceSha256: null,
+                hardware.NvidiaGpuArchitecture.ToString(), hardware.GpuDriverVersion);
             EpContextArtifact.WriteStamp(sourcePath, stamp);
         }
 

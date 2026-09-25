@@ -43,4 +43,82 @@ public sealed class EpContextArtifactStampTests
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    [Fact]
+    public void Legacy_stamp_rejects_missing_required_artifact_external_initializers()
+    {
+        var legacyStamp = new EpContextArtifact.Stamp(
+            SchemaVersion: 1,
+            SourceFileName: "model.onnx",
+            SourceLengthBytes: 4,
+            SourceLastWriteUtcTicks: DateTimeOffset.UtcNow.Ticks,
+            SourceSha256: null,
+            GpuArchitecture: "Ada",
+            DriverVersion: "560.35.03",
+            TrtRtxEpVersion: null,
+            CreatedAtUtc: DateTimeOffset.UtcNow);
+
+        Assert.False(legacyStamp.MatchesArtifactExternalInitializers(null, sidecarRequired: true));
+    }
+
+    [Fact]
+    public void Stamp_invalidates_when_external_model_data_is_replaced()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-epc-external-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Join(directory, "model.onnx");
+        string externalDataPath = EpContextArtifact.GetSourceExternalDataPath(sourcePath);
+        try
+        {
+            File.WriteAllBytes(sourcePath, [1, 2, 3, 4]);
+            File.WriteAllBytes(externalDataPath, [5, 6, 7, 8]);
+            File.WriteAllBytes(EpContextArtifact.GetEpContextPath(sourcePath), [9, 10, 11, 12]);
+
+            EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
+                sourcePath, new FileInfo(sourcePath), sourceSha256: null,
+                gpuArchitecture: "Ada", driverVersion: "560.35.03");
+            EpContextArtifact.WriteStamp(sourcePath, stamp);
+            Assert.Equal(
+                EpContextArtifact.GetEpContextPath(sourcePath),
+                EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
+
+            File.WriteAllBytes(externalDataPath, [5, 6, 7, 9]);
+            Assert.Null(EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Stamp_invalidates_when_artifact_external_initializers_change()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-epc-sidecar-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Join(directory, "model.onnx");
+        string epContextPath = EpContextArtifact.GetEpContextPath(sourcePath);
+        string sidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
+        try
+        {
+            File.WriteAllBytes(sourcePath, [1, 2, 3, 4]);
+            File.WriteAllBytes(epContextPath, [5, 6, 7, 8]);
+            File.WriteAllBytes(sidecarPath, [9, 10, 11, 12]);
+
+            EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
+                sourcePath, new FileInfo(sourcePath), sourceSha256: null,
+                gpuArchitecture: "Ada", driverVersion: "560.35.03");
+            EpContextArtifact.WriteStamp(sourcePath, stamp);
+            Assert.Equal(
+                epContextPath,
+                EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
+
+            File.WriteAllBytes(sidecarPath, [9, 10, 11, 13]);
+            Assert.Null(EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }

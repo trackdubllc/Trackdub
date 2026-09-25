@@ -12,6 +12,7 @@ public sealed class EngineCacheMaintenanceService(
     // engine cache must drop them too, or load paths keep preferring a stale precompile.
     private const string EpContextArtifactSuffix = ".epc.onnx";
     private const string EpContextStampSuffix = ".epc.stamp.json";
+    private const string EpContextExternalInitializersSuffix = ".epc.ext_init";
     public EngineCacheDescription Describe()
     {
         string directory = storagePaths.EngineCacheDirectory;
@@ -111,7 +112,8 @@ public sealed class EngineCacheMaintenanceService(
             foreach (string filePath in Directory.EnumerateFiles(storagePaths.ModelCacheDirectory, "*", SearchOption.AllDirectories))
             {
                 if (!filePath.EndsWith(EpContextArtifactSuffix, StringComparison.OrdinalIgnoreCase) &&
-                    !filePath.EndsWith(EpContextStampSuffix, StringComparison.OrdinalIgnoreCase))
+                    !filePath.EndsWith(EpContextStampSuffix, StringComparison.OrdinalIgnoreCase) &&
+                    !filePath.EndsWith(EpContextExternalInitializersSuffix, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
