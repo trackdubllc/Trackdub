@@ -83,6 +83,9 @@ public sealed class EpContextArtifactStampTests
                 EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
 
             File.WriteAllBytes(externalDataPath, [5, 6, 7, 9]);
+            File.SetLastWriteTimeUtc(
+                externalDataPath,
+                new DateTime(stamp.ExternalDataLastWriteUtcTicks!.Value, DateTimeKind.Utc).AddDays(1));
             Assert.Null(EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
         }
         finally
@@ -114,6 +117,9 @@ public sealed class EpContextArtifactStampTests
                 EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
 
             File.WriteAllBytes(sidecarPath, [9, 10, 11, 13]);
+            File.SetLastWriteTimeUtc(
+                sidecarPath,
+                new DateTime(stamp.ArtifactExternalInitializersLastWriteUtcTicks!.Value, DateTimeKind.Utc).AddDays(1));
             Assert.Null(EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
         }
         finally
