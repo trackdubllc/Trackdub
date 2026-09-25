@@ -1,3 +1,5 @@
+using Trackdub.Application.Pipeline;
+using Trackdub.Application.Transcripts;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Contracts.StarterPacks;
