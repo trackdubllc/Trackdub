@@ -368,7 +368,6 @@ public sealed class SpeechAudioPreparationStageHandler(
 
     private static string FormatNullable(double? value) =>
         value is null ? "n/a" : $"{value.Value:F1}dB";
-
 }
 
 public sealed record SpeechAudioPreparationStageRequest(
