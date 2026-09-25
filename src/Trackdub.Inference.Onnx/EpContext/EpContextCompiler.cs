@@ -111,11 +111,11 @@ public sealed class EpContextCompiler
             // ORT embeds in the model (derived from the output path's filename) then matches the
             // name GetArtifactExternalInitializersPath computes for the final published path, so
             // publishing (a same-name move) never breaks the external-initializers reference.
-            tempDir = Path.Combine(
-                Path.GetDirectoryName(Path.GetFullPath(epContextPath))!,
-                ".epc-tmp-" + Guid.NewGuid().ToString("N"));
+            string tempDirName = Path.GetFileName(".epc-tmp-" + Guid.NewGuid().ToString("N"));
+            tempDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(epContextPath))!, tempDirName);
             Directory.CreateDirectory(tempDir);
-            tempPath = Path.Combine(tempDir, Path.GetFileName(epContextPath));
+            string outputFileName = Path.GetFileName(epContextPath);
+            tempPath = Path.Combine(tempDir, outputFileName);
             using (var compileOptions = new OrtModelCompilationOptions(sessionOptions))
             {
                 compileOptions.SetInputModelPath(sourceModelPath);
