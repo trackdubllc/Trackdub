@@ -437,7 +437,12 @@ public sealed class PipelineReadinessService(
         };
 
     private static bool IsGeminiRefinementAlias(string? alias) =>
-        string.Equals(alias, GeminiCloudTextRefinementEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrWhiteSpace(alias) &&
+        (string.Equals(alias, GeminiCloudTextRefinementEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-refinement", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-3.8", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-3.5", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-2.5", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsCloudTranslationAlias(string? alias) =>
         TranslationModelOverrideSettings.IsDeepLModelAlias(alias)

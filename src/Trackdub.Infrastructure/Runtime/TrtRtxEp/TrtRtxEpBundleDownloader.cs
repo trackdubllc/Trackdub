@@ -276,6 +276,12 @@ public sealed class TrtRtxEpBundleDownloader(
                 continue;
             }
 
+            if (Path.IsPathRooted(target))
+            {
+                throw new InvalidOperationException(
+                    $"TensorRT RTX EP archive symlink '{linkPath}' has rooted target '{target}'.");
+            }
+
             string resolved = Path.Combine(Path.GetDirectoryName(linkPath)!, target);
             for (int depth = 0; links.TryGetValue(resolved, out string? next); depth++)
             {

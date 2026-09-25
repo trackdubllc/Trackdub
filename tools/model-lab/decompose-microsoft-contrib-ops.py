@@ -32,7 +32,7 @@ from pathlib import Path
 
 import numpy as np
 import onnx
-from onnx import helper, numpy_helper
+from onnx import TensorProto, helper, numpy_helper
 
 
 CONTRIB_DOMAIN = "com.microsoft"
@@ -77,11 +77,23 @@ def main() -> int:
         graph.initializer.append(numpy_helper.from_array(array, key))
         return key
 
+    infos = {
+        value.name: value
+        for value in [*graph.value_info, *graph.input, *graph.output]
+    }
+
+    def elem_type(name: str) -> int:
+        info = infos.get(name)
+        if info is not None and info.type.HasField("tensor_type"):
+            return info.type.tensor_type.elem_type
+        return TensorProto.FLOAT
+
     def _erf_gelu_nodes(main_input: str, output: str, prefix: str) -> list:
         # Gelu(x) = 0.5 * x * (1 + Erf(x / sqrt(2)))
-        half = add_initializer(f"{prefix}/half", np.array(0.5, dtype=np.float32))
-        one = add_initializer(f"{prefix}/one", np.array(1.0, dtype=np.float32))
-        inv_sqrt2 = add_initializer(f"{prefix}/inv_sqrt2", np.array(1.0 / np.sqrt(2.0), dtype=np.float32))
+        scalar_dtype = np.float16 if elem_type(main_input) == TensorProto.FLOAT16 else np.float32
+        half = add_initializer(f"{prefix}/half", np.array(0.5, dtype=scalar_dtype))
+        one = add_initializer(f"{prefix}/one", np.array(1.0, dtype=scalar_dtype))
+        inv_sqrt2 = add_initializer(f"{prefix}/inv_sqrt2", np.array(1.0 / np.sqrt(2.0), dtype=scalar_dtype))
         scaled = f"{prefix}/scaled"
         erf_out = f"{prefix}/erf"
         plus_one = f"{prefix}/plus_one"

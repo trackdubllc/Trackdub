@@ -39,7 +39,7 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
     [Fact]
     public void DiscoverSearchDirectories_prefers_plugin_directory_first()
     {
-        string pluginDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-trt-plugin-{Guid.NewGuid():N}");
+        string pluginDirectory = Path.Join(Path.GetTempPath(), $"trackdub-trt-plugin-{Guid.NewGuid():N}");
         Directory.CreateDirectory(pluginDirectory);
 
         try
