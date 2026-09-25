@@ -28,11 +28,11 @@ function Invoke-Controlled([string]$stage, [string]$provider, [string]$model, [s
     $out = Join-Path $outRoot $label
     New-Item -ItemType Directory -Force -Path $out | Out-Null
     $before = (Get-Date).AddSeconds(-1)
-    $args = @("run","--project",$proj,"-f",$tfm,"--no-build","--","controlled",$fixture,"--output",$out,"--mode","fresh-process","--reuse-engine-cache")
-    if ($stage) { $args += @("--stage",$stage) }
-    if ($provider) { $args += @("--provider",$provider) }
-    if ($model) { $args += @("--model",$model) }
-    $null = & dotnet @args 2>&1
+    $dotnetArgs = @("run","--project",$proj,"-f",$tfm,"--no-build","--","controlled",$fixture,"--output",$out,"--mode","fresh-process","--reuse-engine-cache")
+    if ($stage) { $dotnetArgs += @("--stage",$stage) }
+    if ($provider) { $dotnetArgs += @("--provider",$provider) }
+    if ($model) { $dotnetArgs += @("--model",$model) }
+    $null = & dotnet @dotnetArgs 2>&1
     $files = Get-ChildItem $reports -Filter *.json | Where-Object { $_.LastWriteTime -gt $before } | Sort-Object LastWriteTime -Descending
     foreach ($f in $files) {
         try {
