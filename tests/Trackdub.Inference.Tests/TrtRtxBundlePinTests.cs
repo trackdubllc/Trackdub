@@ -71,7 +71,7 @@ public sealed class TrtRtxBundlePinTests
     [Fact]
     public void Default_install_directory_uses_platform_version_and_cuda_variant()
     {
-        string root = Path.Combine(Path.GetTempPath(), "trackdub-pin");
+        string root = Path.Join(Path.GetTempPath(), "trackdub-pin");
         string directory = TensorRtRtxProviderConstants.GetDefaultInstallDirectory(root, "win-x64");
 
         Assert.Equal(
