@@ -329,3 +329,4 @@ __pycache__/
 # Olive validator outputs (tools/olive/Validate-*.ps1): staged models and Olive workflow cache
 /build/
 /cache/
+/.agents/teamwork
