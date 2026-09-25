@@ -904,9 +904,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     private static InputSet CreateDiarizationInputs(InferenceSession session)
     {
         IReadOnlyDictionary<string, NodeMetadata> inputs = session.InputMetadata;
-        if (SortFormerDiarizationEngine.IsStreamingExportInputSet(inputs.Keys))
+        if (IsSortFormerStreamingInputSet(inputs.Keys))
         {
-            return CreateSortFormerStreamingInputs();
+            return CreateSortFormerStreamingInputs(inputs);
         }
 
         if (TryCreateWaveformDiarizationInputs(inputs, out InputSet? waveformInputs))
@@ -917,28 +917,64 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         return CreateMetadataDrivenInputs(inputs);
     }
 
-    // The streaming export takes chunk/spkcache/fifo, not the waveform-only profile in
-    // SortFormerDiarizationEngine.TrtOptions. Chunk is a fixed 1x3040x128 window (the
-    // engine's optimization profile); spkcache/fifo use the valid empty-cache shape
-    // (0 frames) that a streaming session's first chunk always starts from.
-    private static InputSet CreateSortFormerStreamingInputs()
+    private static bool IsSortFormerStreamingInputSet(IEnumerable<string> inputNames)
     {
-        const int chunkFrames = SortFormerDiarizationEngine.StreamingFeedFeatureFrames;
-        const int melBins = SortFormerFeatureExtractor.MelBins;
-        const int embeddingDimension = SortFormerDiarizationEngine.StreamingEmbeddingDimension;
+        HashSet<string> names = inputNames.ToHashSet(StringComparer.Ordinal);
+        return names.Contains("chunk") && names.Contains("chunk_lengths") &&
+               names.Contains("spkcache") && names.Contains("spkcache_lengths") &&
+               names.Contains("fifo") && names.Contains("fifo_lengths");
+    }
 
-        IReadOnlyList<NamedOnnxValue> values =
-        [
-            NamedOnnxValue.CreateFromTensor(
-                "chunk", new DenseTensor<float>(new float[chunkFrames * melBins], [1, chunkFrames, melBins])),
-            NamedOnnxValue.CreateFromTensor("chunk_lengths", new DenseTensor<long>(new long[] { chunkFrames }, [1])),
-            NamedOnnxValue.CreateFromTensor("spkcache", new DenseTensor<float>(Array.Empty<float>(), [1, 0, embeddingDimension])),
-            NamedOnnxValue.CreateFromTensor("spkcache_lengths", new DenseTensor<long>(new long[] { 0 }, [1])),
-            NamedOnnxValue.CreateFromTensor("fifo", new DenseTensor<float>(Array.Empty<float>(), [1, 0, embeddingDimension])),
-            NamedOnnxValue.CreateFromTensor("fifo_lengths", new DenseTensor<long>(new long[] { 0 }, [1])),
-        ];
-
+    // The streaming export expects a fixed 1x3040x128 chunk. Cache and FIFO begin empty.
+    private static InputSet CreateSortFormerStreamingInputs(
+        IReadOnlyDictionary<string, NodeMetadata> inputMetadata)
+    {
+        const int chunkFrames = 3040;
+        const int melBins = 128;
+        const int embeddingDimensions = 512;
+        var values = new List<NamedOnnxValue>(6);
+        AddFloatInput("chunk", [1, chunkFrames, melBins]);
+        AddInt64Input("chunk_lengths", [1], [chunkFrames]);
+        AddFloatInput("spkcache", [1, 0, embeddingDimensions]);
+        AddInt64Input("spkcache_lengths", [1], [0]);
+        AddFloatInput("fifo", [1, 0, embeddingDimensions]);
+        AddInt64Input("fifo_lengths", [1], [0]);
         return new InputSet(values);
+
+        void AddFloatInput(string name, int[] dimensions)
+        {
+            ValidateStreamingInput(name, dimensions, TensorElementType.Float);
+            int elementCount = dimensions.Aggregate(1, static (product, dimension) => checked(product * dimension));
+            values.Add(NamedOnnxValue.CreateFromTensor(
+                name, new DenseTensor<float>(new float[elementCount], dimensions)));
+        }
+
+        void AddInt64Input(string name, int[] dimensions, long[] data)
+        {
+            ValidateStreamingInput(name, dimensions, TensorElementType.Int64);
+            values.Add(NamedOnnxValue.CreateFromTensor(
+                name, new DenseTensor<long>(data, dimensions)));
+        }
+
+        void ValidateStreamingInput(string name, int[] dimensions, TensorElementType elementType)
+        {
+            if (!inputMetadata.TryGetValue(name, out NodeMetadata? metadata) ||
+                !metadata.IsTensor || metadata.ElementDataType != elementType ||
+                metadata.Dimensions.Length != dimensions.Length)
+            {
+                throw new InvalidOperationException(
+                    $"SortFormer streaming input '{name}' does not match the expected tensor contract.");
+            }
+
+            for (int axis = 0; axis < dimensions.Length; axis++)
+            {
+                if (metadata.Dimensions[axis] > 0 && metadata.Dimensions[axis] != dimensions[axis])
+                {
+                    throw new InvalidOperationException(
+                        $"SortFormer streaming input '{name}' has an incompatible fixed dimension at axis {axis}.");
+                }
+            }
+        }
     }
 
     private static bool TryCreateWaveformDiarizationInputs(
