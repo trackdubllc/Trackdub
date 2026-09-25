@@ -230,6 +230,12 @@ public sealed class TrtRtxEpBundleDownloader(
         {
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
+                if (Path.IsPathRooted(entry.FullName))
+                {
+                    throw new InvalidOperationException(
+                        $"TensorRT RTX EP archive entry '{entry.FullName}' must be a relative path.");
+                }
+
                 string destinationPath = Path.GetFullPath(Path.Combine(root, entry.FullName));
                 if (!destinationPath.StartsWith(rootPrefix, pathComparison))
                 {
@@ -270,6 +276,12 @@ public sealed class TrtRtxEpBundleDownloader(
                 continue;
             }
 
+            if (Path.IsPathRooted(target))
+            {
+                throw new InvalidOperationException(
+                    $"TensorRT RTX EP archive symlink '{linkPath}' has rooted target '{target}'.");
+            }
+
             string resolved = Path.Combine(Path.GetDirectoryName(linkPath)!, target);
             for (int depth = 0; links.TryGetValue(resolved, out string? next); depth++)
             {
@@ -277,6 +289,12 @@ public sealed class TrtRtxEpBundleDownloader(
                 {
                     throw new InvalidOperationException(
                         $"TensorRT RTX EP archive symlink chain at '{linkPath}' is too deep or cyclic.");
+                }
+
+                if (Path.IsPathRooted(next))
+                {
+                    throw new InvalidOperationException(
+                        $"TensorRT RTX EP archive symlink chain at '{linkPath}' has rooted target '{next}'.");
                 }
 
                 resolved = Path.Combine(Path.GetDirectoryName(resolved)!, next);

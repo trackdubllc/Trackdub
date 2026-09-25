@@ -162,6 +162,7 @@ def main() -> int:
                 np.array(-10000.0, dtype=np.float16 if dtype_ok else np.float32),
             )
             one_i = add_init(f"{prefix}/one_i64", np.array(1, dtype=np.int64))
+            zero_axis_k = add_init(f"{prefix}/zero_axis_k", np.array(0, dtype=np.int64))
             two_i = add_init(f"{prefix}/two_i64", np.array(2, dtype=np.int64))
             zero_f = add_init(f"{prefix}/zero_f", np.array(0.0, dtype=np.float16 if dtype_ok else np.float32))
 
@@ -181,7 +182,7 @@ def main() -> int:
                                           f"{prefix}/q_seq", one_i], [q_idx], name=f"{prefix}/RangeQ"),
                 helper.make_node("Add", [q_idx, past_len], [f"{prefix}/q_idx_off"], name=f"{prefix}/AddQOff"),
                 helper.make_node("Unsqueeze", [f"{prefix}/q_idx_off", one_i], [q_pos], name=f"{prefix}/UnsqQ"),
-                helper.make_node("Unsqueeze", [k_range, one_i], [f"{prefix}/k_pos"], name=f"{prefix}/UnsqK"),
+                helper.make_node("Unsqueeze", [k_range, zero_axis_k], [f"{prefix}/k_pos"], name=f"{prefix}/UnsqK"),
                 helper.make_node("Greater", [f"{prefix}/k_pos", q_pos], [mask], name=f"{prefix}/CausalMask"),
                 helper.make_node("Where", [mask, neg_inf, zero_f], [f"{prefix}/mask_add"], name=f"{prefix}/WhereMask"),
                 helper.make_node("Add", [scaled, f"{prefix}/mask_add"], [f"{prefix}/masked"], name=f"{prefix}/AddMask"),
@@ -266,9 +267,24 @@ def main() -> int:
             else:
                 full_k, full_v = f"{prefix}/full_k", f"{prefix}/full_v"
                 if past_key and past_value:
+                    # Current K/V are [B, S, H]; past is [B, N, S_past, D].
+                    # Split current K/V to [B, N, S, D] before Concat, then
+                    # transpose back to [B, S, N, D] for make_attention_body.
+                    kv_shape = add_init(
+                        f"{prefix}/kv_split_shape",
+                        np.array([0, 0, num_heads, head_size], dtype=np.int64),
+                    )
+                    cur_k_4d, cur_v_4d = f"{prefix}/cur_k_4d", f"{prefix}/cur_v_4d"
+                    cat_k_4d, cat_v_4d = f"{prefix}/cat_k_4d", f"{prefix}/cat_v_4d"
                     new_nodes += [
-                        helper.make_node("Concat", [past_key, k], [full_k], name=f"{prefix}/ConcatK", axis=2),
-                        helper.make_node("Concat", [past_value, v], [full_v], name=f"{prefix}/ConcatV", axis=2),
+                        helper.make_node("Reshape", [k, kv_shape], [f"{prefix}/cur_k_r"], name=f"{prefix}/ReshapeCurK"),
+                        helper.make_node("Transpose", [f"{prefix}/cur_k_r"], [cur_k_4d], name=f"{prefix}/CurKToBNSD", perm=[0, 2, 1, 3]),
+                        helper.make_node("Reshape", [v, kv_shape], [f"{prefix}/cur_v_r"], name=f"{prefix}/ReshapeCurV"),
+                        helper.make_node("Transpose", [f"{prefix}/cur_v_r"], [cur_v_4d], name=f"{prefix}/CurVToBNSD", perm=[0, 2, 1, 3]),
+                        helper.make_node("Concat", [past_key, cur_k_4d], [cat_k_4d], name=f"{prefix}/ConcatK", axis=2),
+                        helper.make_node("Concat", [past_value, cur_v_4d], [cat_v_4d], name=f"{prefix}/ConcatV", axis=2),
+                        helper.make_node("Transpose", [cat_k_4d], [full_k], name=f"{prefix}/FullKToBSND", perm=[0, 2, 1, 3]),
+                        helper.make_node("Transpose", [cat_v_4d], [full_v], name=f"{prefix}/FullVToBSND", perm=[0, 2, 1, 3]),
                     ]
                 else:
                     new_nodes += [

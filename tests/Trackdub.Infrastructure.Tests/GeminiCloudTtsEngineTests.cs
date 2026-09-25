@@ -50,7 +50,8 @@ public sealed class GeminiCloudTtsEngineTests
 
         Assert.NotNull(handler.RequestUri);
         Assert.Contains("models/gemini-3.8-flash-tts:generateContent", handler.RequestUri.ToString());
-        Assert.Contains("key=test-gemini-key", handler.RequestUri.Query);
+        Assert.Equal("test-gemini-key", handler.ApiKeyHeader);
+        Assert.Empty(handler.RequestUri.Query);
         Assert.Equal("gemini", result.Provider);
         Assert.Equal("gemini-3.8-flash-tts", result.ModelId);
         Assert.Equal("Kore", result.VoiceId);
@@ -136,9 +137,16 @@ public sealed class GeminiCloudTtsEngineTests
     {
         public Uri? RequestUri { get; private set; }
 
+        public string? ApiKeyHeader { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestUri = request.RequestUri;
+            if (request.Headers.TryGetValues("x-goog-api-key", out IEnumerable<string>? values))
+            {
+                ApiKeyHeader = values.FirstOrDefault();
+            }
+
             return Task.FromResult(handler(request));
         }
     }

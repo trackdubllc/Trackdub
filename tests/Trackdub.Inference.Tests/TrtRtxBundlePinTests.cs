@@ -75,7 +75,7 @@ public sealed class TrtRtxBundlePinTests
         string directory = TensorRtRtxProviderConstants.GetDefaultInstallDirectory(root, "win-x64");
 
         Assert.Equal(
-            Path.Combine(
+            Path.Join(
                 Path.GetFullPath(root),
                 "Providers",
                 "trt-rtx",
@@ -88,8 +88,8 @@ public sealed class TrtRtxBundlePinTests
     [Fact]
     public void Resolve_skips_superseded_managed_bundle_persisted_in_settings_and_uses_current_bundle()
     {
-        string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
-        string stale = Path.Combine(root, "0.3.0", "cu12", "win-x64");
+        string root = Path.GetFullPath(Path.Join(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
+        string stale = Path.Join(root, "0.3.0", "cu12", "win-x64");
         string current = Path.Combine(root, TensorRtRtxProviderConstants.BundledVersion, TensorRtRtxProviderConstants.BundledCudaVariant, "win-x64");
 
         TensorRtRtxPluginResolution resolution = TensorRtRtxPluginLocator.Resolve(

@@ -33,6 +33,12 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
         IReadOnlyList<string> selectedStages = ResolveStages(options.Stages);
         DateTimeOffset startedAt = DateTimeOffset.UtcNow;
         var results = new List<ControlledStageBenchmarkMatrixResult>(selectedStages.Count);
+        string outputBasePath = Path.GetFullPath(options.OutputDirectory);
+        if (!outputBasePath.EndsWith(Path.DirectorySeparatorChar) &&
+            !outputBasePath.EndsWith(Path.AltDirectorySeparatorChar))
+        {
+            outputBasePath += Path.DirectorySeparatorChar;
+        }
 
         foreach (string stage in selectedStages)
         {
@@ -44,13 +50,29 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     nameof(options));
             }
 
+            string stageDirectoryName = Path.GetFileName(stage);
+            if (string.IsNullOrWhiteSpace(stageDirectoryName) || Path.IsPathRooted(stageDirectoryName))
+            {
+                throw new ArgumentException(
+                    "Stage names must resolve to a relative directory name.",
+                    nameof(options));
+            }
+
+            string combinedOutputDirectory = Path.GetFullPath(Path.Join(outputBasePath, stageDirectoryName));
+            if (!combinedOutputDirectory.StartsWith(outputBasePath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    "Stage names must resolve within the output directory.",
+                    nameof(options));
+            }
+
             options.ModelOverrides.TryGetValue(stage, out string? model);
             BenchmarkEvidenceReport evidence = await runner.RunAsync(
                 new ControlledDubbingBenchmarkOptions
                 {
                     FixturePath = options.FixturePath,
                     ExpectedFixtureSha256 = options.ExpectedFixtureSha256,
-                    OutputDirectory = Path.Combine(options.OutputDirectory, Path.GetFileName(stage)),
+                    OutputDirectory = combinedOutputDirectory,
                     Stage = stage,
                     Model = model,
                     Provider = options.Provider,
@@ -75,6 +97,12 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     ? BenchmarkEvidenceStatus.Failed
                     : BenchmarkEvidenceStatus.PartiallyCompleted;
 
+        string reportFileName = $"stage-matrix-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json";
+        if (Path.IsPathRooted(reportFileName))
+        {
+            throw new InvalidOperationException("Report file name must be a relative path.");
+        }
+
         return new ControlledStageBenchmarkMatrixReport
         {
             FixturePath = options.FixturePath,
@@ -82,9 +110,7 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
             Status = status,
             StartedAtUtc = startedAt,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            ReportPath = Path.Combine(
-                options.OutputDirectory,
-                $"stage-matrix-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json"),
+            ReportPath = Path.Combine(options.OutputDirectory, reportFileName),
         };
     }
 

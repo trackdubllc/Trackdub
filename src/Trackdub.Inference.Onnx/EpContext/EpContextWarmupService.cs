@@ -60,8 +60,8 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
             (EpContextWarmItem item, bool didCompile, bool didReuse) = await WarmSourceAsync(
                 sourcePath, hardware, progress, cancellationToken).ConfigureAwait(false);
             items.Add(item);
-            if (didCompile) compiled++;
-            if (didReuse) reused++;
+            if (didCompile && item.Status != "failed") compiled++;
+            if (didReuse && item.Status != "failed") reused++;
             if (item.Status == "skipped") skipped++;
             if (item.Status == "failed") failed++;
         }

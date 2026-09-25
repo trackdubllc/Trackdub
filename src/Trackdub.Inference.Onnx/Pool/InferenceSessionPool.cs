@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
@@ -769,12 +770,9 @@ internal sealed class InferenceSessionPool : IDisposable
     private long CurrentReservedMb(int device)
     {
         long pooled = 0;
-        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries.Where(pair => DeviceOf(pair.Key) == device))
         {
-            if (DeviceOf(pair.Key) == device)
-            {
-                pooled += ResolveReservationMb(pair.Key);
-            }
+            pooled += ResolveReservationMb(pair.Key);
         }
 
         pendingCreateMbByDevice.TryGetValue(device, out long pending);
