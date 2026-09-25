@@ -51,6 +51,12 @@ dotnet test Trackdub.slnx --configuration Release --no-build -m:1
 # Headless CLI
 dotnet run --project src/Trackdub.Cli -- --help
 dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows (multi-targeted)
+```
+
+## packages.lock.json conflicts
+Don't hand-resolve merge conflicts in `packages.lock.json`. Take either side (`git checkout --ours` or `--theirs`), then regenerate:
+```bash
+dotnet restore Trackdub.slnx --force-evaluate -m:1
 
 # Filter builds & benchmarks
 dotnet build Trackdub.Inference.slnx -m:1

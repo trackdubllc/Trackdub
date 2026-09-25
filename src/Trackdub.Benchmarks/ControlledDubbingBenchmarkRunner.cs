@@ -66,11 +66,17 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             ["firstUsableTranscript"] = null,
             ["firstPlayableAudio"] = null,
         };
+        ResourceTelemetrySnapshot processTelemetryStart = ResourceTelemetry.CaptureProcess();
         var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
         {
-            ["processWorkingSetStart"] = Process.GetCurrentProcess().WorkingSet64,
+            ["processWorkingSetStart"] = processTelemetryStart.WorkingSetBytes,
             ["processWorkingSetEnd"] = null,
+            ["processPeakWorkingSet"] = processTelemetryStart.PeakWorkingSetBytes,
+            ["peakWorkingSetBytes"] = processTelemetryStart.PeakWorkingSetBytes,
             ["managedAllocatedBytes"] = null,
+            ["gen0Collections"] = null,
+            ["gen1Collections"] = null,
+            ["gen2Collections"] = null,
             ["gpuDedicatedBytes"] = null,
         };
         string? fixtureHash = null;
@@ -86,7 +92,6 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         HeadlessDubbingHost? host = null;
         IDisposable? cacheScope = null;
         bool ownsHost = false;
-        long allocatedStart = GC.GetTotalAllocatedBytes(precise: true);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -224,6 +229,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             }
 
             var stageSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
+            var stageMemorySamples = new Dictionary<string, List<ResourceTelemetryDelta>>(StringComparer.OrdinalIgnoreCase);
             var pipelineSamples = new List<double>(runCount);
             var phaseSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
             DubbingRunResult lastResult = null!;
@@ -287,6 +293,18 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
                         list.Add(stageMs);
                     }
+
+                    ResourceTelemetryDelta? memDelta = stageClock.GetMemoryDelta(outcome.StageName);
+                    if (memDelta is not null)
+                    {
+                        if (!stageMemorySamples.TryGetValue(outcome.StageName, out var memList))
+                        {
+                            memList = [];
+                            stageMemorySamples[outcome.StageName] = memList;
+                        }
+
+                        memList.Add(memDelta);
+                    }
                 }
 
                 lastResult = iterResult;
@@ -319,6 +337,48 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 timings[$"stage:{stageName}:throughput"] = stageStats.ThroughputUnitsPerSecond;
                 timings[$"stage:{stageName}:sampleCount"] = (double)stageStats.SampleCount;
                 timings[$"stage:{stageName}"] = stageStats.P50Milliseconds;
+            }
+
+            foreach (string stageName in stageSamples.Keys)
+            {
+                if (stageMemorySamples.TryGetValue(stageName, out var mSamples) && mSamples.Count > 0)
+                {
+                    var sortedAlloc = mSamples.Select(s => (double)s.ManagedAllocatedBytes).OrderBy(x => x).ToArray();
+                    long allocated = (long)Math.Round(PercentileCalculator.CalculatePercentile(sortedAlloc, 0.5));
+                    long peakWs = mSamples.Max(s => s.PeakWorkingSetBytes);
+                    int gen0 = (int)Math.Round(PercentileCalculator.CalculatePercentile(mSamples.Select(s => (double)s.Gen0Collections).OrderBy(x => x).ToArray(), 0.5));
+                    int gen1 = (int)Math.Round(PercentileCalculator.CalculatePercentile(mSamples.Select(s => (double)s.Gen1Collections).OrderBy(x => x).ToArray(), 0.5));
+                    int gen2 = (int)Math.Round(PercentileCalculator.CalculatePercentile(mSamples.Select(s => (double)s.Gen2Collections).OrderBy(x => x).ToArray(), 0.5));
+
+                    memory[$"stage:{stageName}:allocatedBytes"] = allocated;
+                    memory[$"stage:{stageName}:peakWorkingSet"] = peakWs;
+                    memory[$"stage:{stageName}:gen0"] = gen0;
+                    memory[$"stage:{stageName}:gen1"] = gen1;
+                    memory[$"stage:{stageName}:gen2"] = gen2;
+                }
+                else if (lastClock?.GetMemoryDelta(stageName) is ResourceTelemetryDelta delta)
+                {
+                    memory[$"stage:{stageName}:allocatedBytes"] = delta.ManagedAllocatedBytes;
+                    memory[$"stage:{stageName}:peakWorkingSet"] = delta.PeakWorkingSetBytes;
+                    memory[$"stage:{stageName}:gen0"] = delta.Gen0Collections;
+                    memory[$"stage:{stageName}:gen1"] = delta.Gen1Collections;
+                    memory[$"stage:{stageName}:gen2"] = delta.Gen2Collections;
+                }
+            }
+
+            if (lastClock is not null)
+            {
+                foreach ((string stageKey, ResourceTelemetryDelta delta) in lastClock.GetAllMemoryDeltas())
+                {
+                    if (!memory.ContainsKey($"stage:{stageKey}:allocatedBytes"))
+                    {
+                        memory[$"stage:{stageKey}:allocatedBytes"] = delta.ManagedAllocatedBytes;
+                        memory[$"stage:{stageKey}:peakWorkingSet"] = delta.PeakWorkingSetBytes;
+                        memory[$"stage:{stageKey}:gen0"] = delta.Gen0Collections;
+                        memory[$"stage:{stageKey}:gen1"] = delta.Gen1Collections;
+                        memory[$"stage:{stageKey}:gen2"] = delta.Gen2Collections;
+                    }
+                }
             }
 
             if (pipelineSamples.Count > 0)
@@ -424,8 +484,17 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         async Task<BenchmarkEvidenceReport> FinishAsync()
         {
             clock.Stop();
-            memory["processWorkingSetEnd"] = Process.GetCurrentProcess().WorkingSet64;
-            memory["managedAllocatedBytes"] = GC.GetTotalAllocatedBytes(precise: true) - allocatedStart;
+            ResourceTelemetrySnapshot processTelemetryEnd = ResourceTelemetry.CaptureProcess();
+            ResourceTelemetryDelta processDelta = ResourceTelemetry.CalculateDelta(processTelemetryStart, processTelemetryEnd);
+
+            memory["processWorkingSetEnd"] = processTelemetryEnd.WorkingSetBytes;
+            memory["processPeakWorkingSet"] = processDelta.PeakWorkingSetBytes;
+            memory["peakWorkingSetBytes"] = processDelta.PeakWorkingSetBytes;
+            memory["managedAllocatedBytes"] = processDelta.ManagedAllocatedBytes;
+            memory["gen0Collections"] = processDelta.Gen0Collections;
+            memory["gen1Collections"] = processDelta.Gen1Collections;
+            memory["gen2Collections"] = processDelta.Gen2Collections;
+
             timings["total"] = clock.Elapsed.TotalMilliseconds;
             var configuration = new Dictionary<string, string>
             {

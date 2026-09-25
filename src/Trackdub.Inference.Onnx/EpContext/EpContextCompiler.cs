@@ -150,52 +150,100 @@ public sealed class EpContextCompiler
     }
 
     /// <summary>
-    /// Cheap marker scan: ONNX protobuf stores op-type and attribute names as plain ASCII. A real
-    /// EP-context graph carries <c>EPContext</c> nodes (domain <c>com.microsoft</c>) whose engine
-    /// payload or engine-file path lives in the <c>ep_cache_context</c> attribute; both must be
-    /// present. Reads in chunks so multi-hundred-MB models never land in RAM.
+    /// Inspect the top-level ONNX graph's nodes without loading model weights into memory.
     /// </summary>
     internal static bool TryContainsEpContextNodes(string modelPath)
     {
-        byte[][] needles =
-        [
-            "EPContext"u8.ToArray(),
-            "ep_cache_context"u8.ToArray(),
-        ];
-        var found = new bool[needles.Length];
-        const int chunkSize = 8 * 1024 * 1024;
-        const int overlap = 32;
-
         try
         {
             using FileStream stream = File.OpenRead(modelPath);
-            var buffer = new byte[chunkSize + overlap];
-            int carry = 0;
-            int read;
-            while ((read = stream.Read(buffer, carry, chunkSize)) > 0)
-            {
-                int span = carry + read;
-                for (int i = 0; i < needles.Length; i++)
-                {
-                    found[i] |= buffer.AsSpan(0, span).IndexOf(needles[i]) >= 0;
-                }
-
-                if (Array.TrueForAll(found, static hit => hit))
-                {
-                    return true;
-                }
-
-                carry = Math.Min(overlap, span);
-                Buffer.BlockCopy(buffer, span - carry, buffer, 0, carry);
-            }
-
-            return false;
+            return ContainsNode(stream, stream.Length, 7, inspectNodes: false);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or OverflowException)
         {
             // Cannot verify; treat as missing so we never keep an unproven artifact.
             return false;
         }
+    }
+
+    private static bool ContainsNode(Stream stream, long end, int childField, bool inspectNodes)
+    {
+        while (stream.Position < end)
+        {
+            ulong tag = ReadVarint(stream, end);
+            int field = (int)(tag >> 3);
+            int wireType = (int)(tag & 7);
+            if (field == 0) throw new InvalidDataException("Invalid ONNX field tag.");
+            if (wireType == 2)
+            {
+                long length = checked((long)ReadVarint(stream, end));
+                long fieldEnd = checked(stream.Position + length);
+                if (fieldEnd > end) throw new InvalidDataException("Truncated ONNX field.");
+                if (field == childField && (inspectNodes ? IsEpContextNode(stream, fieldEnd) : ContainsNode(stream, fieldEnd, 1, inspectNodes: true)))
+                    return true;
+                stream.Position = fieldEnd;
+            }
+            else if (wireType == 0) ReadVarint(stream, end);
+            else if (wireType is 1 or 5)
+            {
+                stream.Position = checked(stream.Position + (wireType == 1 ? 8 : 4));
+                if (stream.Position > end) throw new InvalidDataException("Truncated ONNX field.");
+            }
+            else throw new InvalidDataException("Unsupported ONNX wire type.");
+        }
+        return false;
+    }
+
+    private static bool IsEpContextNode(Stream stream, long end)
+    {
+        bool opType = false;
+        bool domain = false;
+        while (stream.Position < end)
+        {
+            ulong tag = ReadVarint(stream, end);
+            int field = (int)(tag >> 3);
+            int wireType = (int)(tag & 7);
+            if (field == 0) throw new InvalidDataException("Invalid ONNX node tag.");
+            if (wireType == 2)
+            {
+                long length = checked((long)ReadVarint(stream, end));
+                long fieldEnd = checked(stream.Position + length);
+                if (fieldEnd > end) throw new InvalidDataException("Truncated ONNX node.");
+                if (field == 4) opType = Matches(stream, length, "EPContext"u8);
+                if (field == 7) domain = Matches(stream, length, "com.microsoft"u8);
+                stream.Position = fieldEnd;
+            }
+            else if (wireType == 0) ReadVarint(stream, end);
+            else if (wireType is 1 or 5)
+            {
+                stream.Position = checked(stream.Position + (wireType == 1 ? 8 : 4));
+                if (stream.Position > end) throw new InvalidDataException("Truncated ONNX node.");
+            }
+            else throw new InvalidDataException("Unsupported ONNX wire type.");
+        }
+        return opType && domain;
+    }
+
+    private static bool Matches(Stream stream, long length, ReadOnlySpan<byte> expected)
+    {
+        if (length != expected.Length) return false;
+        Span<byte> actual = stackalloc byte[expected.Length];
+        stream.ReadExactly(actual);
+        return actual.SequenceEqual(expected);
+    }
+
+    private static ulong ReadVarint(Stream stream, long end)
+    {
+        ulong value = 0;
+        for (int shift = 0; shift < 70 && stream.Position < end; shift += 7)
+        {
+            int next = stream.ReadByte();
+            if (next < 0) break;
+            if (shift == 63 && next > 1) break;
+            value |= (ulong)(next & 0x7f) << shift;
+            if ((next & 0x80) == 0) return value;
+        }
+        throw new InvalidDataException("Invalid ONNX varint.");
     }
 
     private static void TryDeletePartial(string epContextPath)
