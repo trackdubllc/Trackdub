@@ -34,7 +34,7 @@ public sealed class EpContextCompilerValidationTests
 
     private static void AssertModel(byte[] model, bool expected)
     {
-        string path = Path.Combine(Path.GetTempPath(), $"trackdub-epc-{Guid.NewGuid():N}.onnx");
+        string path = Path.Join(Path.GetTempPath(), $"trackdub-epc-{Guid.NewGuid():N}.onnx");
         try
         {
             File.WriteAllBytes(path, model);
