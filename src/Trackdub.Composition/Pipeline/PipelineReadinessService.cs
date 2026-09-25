@@ -20,7 +20,9 @@ public sealed class PipelineReadinessService(
     IRuntimePlanner runtimePlanner,
     ICloudApiKeyProvider cloudApiKeyProvider,
     IConsentService consentService,
-    IRuntimePlanningPreferences? runtimePlanningPreferences = null)
+    IRuntimePlanningPreferences? runtimePlanningPreferences = null,
+    int? maxConcurrentStageEvaluations = null,
+    TimeSpan? stageEvaluationTimeout = null)
     : IPipelineReadinessService
 {
     private readonly IRuntimePlanner _runtimePlanner =
@@ -30,6 +32,39 @@ public sealed class PipelineReadinessService(
     private readonly IConsentService _consentService =
         consentService ?? throw new ArgumentNullException(nameof(consentService));
     private readonly IRuntimePlanningPreferences? _runtimePlanningPreferences = runtimePlanningPreferences;
+
+    // Readiness smoke tests cold-load full ONNX graphs. Cap parallel stage checks so a
+    // multi-stage sweep overlaps load work without stampeding GPU/RAM admission.
+    private const int DefaultMaxConcurrentStageEvaluations = 3;
+
+    // Hard per-stage ceiling (audit: hard timeouts with cleanup). Linked to the caller
+    // token so user cancel still wins; a timeout is reported as RuntimeMissing rather
+    // than aborting the whole sweep. Cancellation is cooperative: native ONNX session
+    // construction already in flight may ignore the token and keep this throttle slot
+    // occupied until it returns. Large multi-GB graphs (qwen3-asr-1.7b encoder) can
+    // exceed 180s on cold load + smoke, so the default is 10 minutes.
+    private static readonly TimeSpan DefaultStageEvaluationTimeout = TimeSpan.FromSeconds(600);
+
+    private readonly int _maxConcurrentStageEvaluations =
+        maxConcurrentStageEvaluations is null
+            ? DefaultMaxConcurrentStageEvaluations
+            : maxConcurrentStageEvaluations.Value > 0
+                ? maxConcurrentStageEvaluations.Value
+                : throw new ArgumentOutOfRangeException(nameof(maxConcurrentStageEvaluations));
+            ? DefaultMaxConcurrentStageEvaluations
+        stageEvaluationTimeout is null
+            ? DefaultStageEvaluationTimeout
+            : stageEvaluationTimeout.Value > TimeSpan.Zero || stageEvaluationTimeout.Value == Timeout.InfiniteTimeSpan
+                ? stageEvaluationTimeout.Value
+                : throw new ArgumentOutOfRangeException(nameof(stageEvaluationTimeout));
+                ? maxConcurrentStageEvaluations.Value
+                : throw new ArgumentOutOfRangeException(nameof(maxConcurrentStageEvaluations));
+    private readonly TimeSpan _stageEvaluationTimeout =
+        stageEvaluationTimeout is null
+            ? DefaultStageEvaluationTimeout
+            : stageEvaluationTimeout.Value > TimeSpan.Zero || stageEvaluationTimeout.Value == Timeout.InfiniteTimeSpan
+                ? stageEvaluationTimeout.Value
+                : throw new ArgumentOutOfRangeException(nameof(stageEvaluationTimeout));
 
     // Cache key covers every input that reaches the runtime planner: stage, model alias,
     // language context, validation mode, per-stage execution-provider override, the
@@ -61,106 +96,184 @@ public sealed class PipelineReadinessService(
         ArgumentNullException.ThrowIfNull(enabledStages);
         ArgumentNullException.ThrowIfNull(selections);
 
-        var stageReadinesses = new List<StageReadiness>(enabledStages.Count);
         string? preferredModelTier = _runtimePlanningPreferences is null
             ? null
             : await _runtimePlanningPreferences
                 .GetPreferredModelTierAsync(cancellationToken)
                 .ConfigureAwait(false);
 
-        foreach (RuntimeStage stage in enabledStages)
+        var stageReadinesses = new StageReadiness[enabledStages.Count];
+        using var throttle = new SemaphoreSlim(_maxConcurrentStageEvaluations, _maxConcurrentStageEvaluations);
+        var stageTasks = new Task[enabledStages.Count];
+
+        for (int index = 0; index < enabledStages.Count; index++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            string? modelAlias = GetModelAlias(stage, selections);
-            string? planningSourceLanguageCode = stage == RuntimeStage.Translation
-                ? TranscriptWorkflowUtilities.NormalizeTranscriptLanguageCode(sourceLanguageCode)
-                : sourceLanguageCode;
-            string? planningTargetLanguageCode = stage == RuntimeStage.Translation
-                ? TranscriptWorkflowUtilities.NormalizeTranslationTargetLanguageCodeOrNull(targetLanguageCode)
-                : targetLanguageCode;
-            StageReadiness readiness;
-
-            // Optional separation: if alias explicitly set to "skip", report as SkippableOptional.
-            if (stage == RuntimeStage.Separation && IsSeparationSkipped(selections))
-            {
-                readiness = new StageReadiness(
-                    StageName: StageNameFor(stage),
-                    Status: ReadinessState.SkippableOptional,
-                    Detail: "Separation is optional and currently disabled",
-                    ModelId: null,
-                    ModelAlias: null,
-                    ResolveAction: null);
-                stageReadinesses.Add(readiness);
-                continue;
-            }
-
-            if (stage == RuntimeStage.TextRefinement && !selections.EnableAsrTextRefinement)
-            {
-                readiness = new StageReadiness(
-                    StageName: StageNames.TextRefinementAsr,
-                    Status: ReadinessState.SkippableOptional,
-                    Detail: "ASR text polish is disabled.",
-                    ModelId: null,
-                    ModelAlias: null,
-                    ResolveAction: null);
-                stageReadinesses.Add(readiness);
-                continue;
-            }
-
-            // The planning request carries every planner input; its fields double as the
-            // rest of the cache key so plans computed under different provider, variant,
-            // or tier inputs can never collide.
-            StageRuntimePlanningRequest planningRequest = BuildPlanningRequest(
-                stage,
-                modelAlias,
-                selections,
-                planningSourceLanguageCode,
-                planningTargetLanguageCode,
-                skipProviderSmokeTest: !validateRuntime);
-            var cacheKey = new ReadinessCacheKey(
-                stage,
-                modelAlias,
-                planningSourceLanguageCode,
-                planningTargetLanguageCode,
-                validateRuntime,
-                planningRequest.PreferredExecutionProvider,
-                planningRequest.RequirePreferredExecutionProvider,
-                planningRequest.PreferredModelVariantAlias,
-                preferredModelTier);
-
-            if (!_cache.TryGetValue(cacheKey, out readiness!))
-            {
-                readiness = IsCloudAlias(stage, modelAlias)
-                    ? await EvaluateCloudStageAsync(stage, modelAlias!, cancellationToken).ConfigureAwait(false)
-                    : await EvaluateLocalStageAsync(
-                        planningRequest,
-                        stage,
-                        preferredModelTier,
-                        cancellationToken).ConfigureAwait(false);
-                _cache[cacheKey] = readiness;
-            }
-
-            // TTS: additionally check voice-clone consent when local TTS is ready.
-            // Applied per call (never cached) so a consent change takes effect
-            // immediately without requiring cache invalidation.
-            if (stage == RuntimeStage.Tts
-                && readiness.Status is ReadinessState.Ready or ReadinessState.Unverified
-                && !_consentService.IsVoiceCloningConsentGranted
-                && HasVoiceCloneRequest(state))
-            {
-                readiness = readiness with
-                {
-                    Status = ReadinessState.ConsentRequired,
-                    Detail = "Voice cloning requires session consent",
-                    ResolveAction = "grant-consent",
-                };
-            }
-
-            stageReadinesses.Add(readiness);
+            int slot = index;
+            RuntimeStage stage = enabledStages[index];
+            stageTasks[slot] = Task.Run(
+                () => EvaluateStageSlotAsync(
+                    slot,
+                    stage,
+                    selections,
+                    state,
+                    preferredModelTier,
+                    sourceLanguageCode,
+                    targetLanguageCode,
+                    validateRuntime,
+                    stageReadinesses,
+                    throttle,
+                    cancellationToken),
+                cancellationToken);
         }
 
+        await Task.WhenAll(stageTasks).ConfigureAwait(false);
         return new PipelineReadinessReport(stageReadinesses);
+    }
+
+    private async Task EvaluateStageSlotAsync(
+        int slot,
+        RuntimeStage stage,
+        RuntimeModelSelections selections,
+        TranscriptProjectState? state,
+        string? preferredModelTier,
+        string? sourceLanguageCode,
+        string? targetLanguageCode,
+        bool validateRuntime,
+        StageReadiness[] stageReadinesses,
+        SemaphoreSlim throttle,
+        CancellationToken cancellationToken)
+    {
+        await throttle.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_stageEvaluationTimeout);
+            CancellationToken stageToken = timeoutCts.Token;
+
+            try
+            {
+                stageReadinesses[slot] = await EvaluateStageAsync(
+                        stage,
+                        selections,
+                        state,
+                        preferredModelTier,
+                        sourceLanguageCode,
+                        targetLanguageCode,
+                        validateRuntime,
+                        stageToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && stageToken.IsCancellationRequested)
+            {
+                // Per-stage timeout only: keep the sweep alive and surface a blocking state.
+                stageReadinesses[slot] = new StageReadiness(
+                    StageName: StageNameFor(stage),
+                    Status: ReadinessState.RuntimeMissing,
+                    Detail: $"Readiness check timed out after {_stageEvaluationTimeout.TotalSeconds:0}s; verify runtime installation",
+                    ModelId: null,
+                    ModelAlias: GetModelAlias(stage, selections),
+                    ResolveAction: "install-runtime");
+            }
+        }
+        finally
+        {
+            throttle.Release();
+        }
+    }
+
+    private async Task<StageReadiness> EvaluateStageAsync(
+        RuntimeStage stage,
+        RuntimeModelSelections selections,
+        TranscriptProjectState? state,
+        string? preferredModelTier,
+        string? sourceLanguageCode,
+        string? targetLanguageCode,
+        bool validateRuntime,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string? modelAlias = GetModelAlias(stage, selections);
+        string? planningSourceLanguageCode = stage == RuntimeStage.Translation
+            ? TranscriptWorkflowUtilities.NormalizeTranscriptLanguageCode(sourceLanguageCode)
+            : sourceLanguageCode;
+        string? planningTargetLanguageCode = stage == RuntimeStage.Translation
+            ? TranscriptWorkflowUtilities.NormalizeTranslationTargetLanguageCodeOrNull(targetLanguageCode)
+            : targetLanguageCode;
+
+        StageReadiness? skipped = GetDisabledOptionalStage(stage, selections);
+        if (skipped is not null) return skipped;
+
+        // The planning request carries every planner input; its fields double as the
+        // rest of the cache key so plans computed under different provider, variant,
+        // or tier inputs can never collide.
+        StageRuntimePlanningRequest planningRequest = BuildPlanningRequest(
+            stage,
+            modelAlias,
+            selections,
+            planningSourceLanguageCode,
+            planningTargetLanguageCode,
+            skipProviderSmokeTest: !validateRuntime);
+        var cacheKey = new ReadinessCacheKey(
+            stage,
+            modelAlias,
+            planningSourceLanguageCode,
+            planningTargetLanguageCode,
+            validateRuntime,
+            planningRequest.PreferredExecutionProvider,
+            planningRequest.RequirePreferredExecutionProvider,
+            planningRequest.PreferredModelVariantAlias,
+            preferredModelTier);
+
+        if (!_cache.TryGetValue(cacheKey, out StageReadiness? readiness))
+        {
+            readiness = IsCloudAlias(stage, modelAlias)
+                ? await EvaluateCloudStageAsync(stage, modelAlias!, cancellationToken).ConfigureAwait(false)
+                : await EvaluateLocalStageAsync(
+                    planningRequest,
+                    stage,
+                    preferredModelTier,
+                    cancellationToken).ConfigureAwait(false);
+            _cache[cacheKey] = readiness;
+        }
+
+        return ApplyVoiceCloneConsent(stage, state, readiness);
+    }
+
+    private static StageReadiness? GetDisabledOptionalStage(RuntimeStage stage, RuntimeModelSelections selections)
+    {
+        if (stage == RuntimeStage.Separation && IsSeparationSkipped(selections))
+        {
+            return new StageReadiness(StageNameFor(stage), ReadinessState.SkippableOptional,
+                "Separation is optional and currently disabled", null, null, null);
+        }
+
+        if (stage == RuntimeStage.TextRefinement && !selections.EnableAsrTextRefinement)
+        {
+            return new StageReadiness(StageNames.TextRefinementAsr, ReadinessState.SkippableOptional,
+                "ASR text polish is disabled.", null, null, null);
+        }
+
+        return null;
+    }
+
+    // Applied per call, never cached, so consent changes take effect immediately.
+    private StageReadiness ApplyVoiceCloneConsent(RuntimeStage stage, TranscriptProjectState? state, StageReadiness readiness)
+    {
+        if (stage == RuntimeStage.Tts
+            && readiness.Status is ReadinessState.Ready or ReadinessState.Unverified
+            && !_consentService.IsVoiceCloningConsentGranted
+            && HasVoiceCloneRequest(state))
+        {
+            return readiness with
+            {
+                Status = ReadinessState.ConsentRequired,
+                Detail = "Voice cloning requires session consent",
+                ResolveAction = "grant-consent",
+            };
+        }
+
+        return readiness;
     }
 
     public void InvalidateCache(IReadOnlyList<RuntimeStage>? stages = null)

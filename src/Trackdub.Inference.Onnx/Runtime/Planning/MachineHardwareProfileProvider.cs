@@ -26,6 +26,7 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
         bool hasGpu = false;
         long dedicatedVramMb = 0;
         long totalRamMb = 0;
+        string? gpuDriverVersion = null;
 
         try
         {
@@ -67,6 +68,10 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
                                 byte[] { Length: 4 } b4 => (long)(BitConverter.ToUInt32(b4, 0) / (1024 * 1024)),
                                 _ => dedicatedVramMb
                             };
+
+                            // Keep in sync with gpuDescription: both must come from the same
+                            // selected adapter, so a later adapter overwrites both together.
+                            gpuDriverVersion = subkey?.GetValue("DriverVersion") as string;
 
                             if (desc.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
                                 break;
@@ -127,7 +132,8 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
             CpuName: cpuName,
             TotalRamMb: totalRamMb,
             DedicatedVramMb: dedicatedVramMb,
-            NvidiaGpuArchitecture: ResolveNvidiaGpuArchitecture(gpuDescription)));
+            NvidiaGpuArchitecture: ResolveNvidiaGpuArchitecture(gpuDescription),
+            GpuDriverVersion: gpuDriverVersion));
     }
 
     private static NvidiaGpuArchitectureBucket ResolveNvidiaGpuArchitecture(string? gpuDescription)

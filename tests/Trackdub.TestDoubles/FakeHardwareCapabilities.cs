@@ -50,10 +50,17 @@ public sealed class FakeRuntimePlanner : IRuntimePlanner
 {
     public Func<StageRuntimePlanningRequest, StageRuntimePlan>? PlanHandler { get; set; }
 
+    public Func<StageRuntimePlanningRequest, CancellationToken, Task<StageRuntimePlan>>? PlanHandlerAsync { get; set; }
+
     public Task<StageRuntimePlan> PlanAsync(
         StageRuntimePlanningRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (PlanHandlerAsync is not null)
+        {
+            return PlanHandlerAsync(request, cancellationToken);
+        }
+
         return Task.FromResult(PlanHandler?.Invoke(request) ?? new StageRuntimePlan { Stage = request.Stage, Status = StageRuntimePlanStatus.Ready });
     }
 }

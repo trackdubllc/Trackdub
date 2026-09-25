@@ -8,14 +8,14 @@ public sealed class EngineCacheMaintenanceServiceTests
     [Fact]
     public void Clear_removes_files_preserves_directory_and_reports_bytes()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-engine-cache-{Guid.NewGuid():N}");
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-engine-cache-{Guid.NewGuid():N}");
         var paths = new TrackdubStoragePaths(root);
         Directory.CreateDirectory(paths.EngineCacheDirectory);
 
-        string nested = Path.Combine(paths.EngineCacheDirectory, "trt", "session");
+        string nested = Path.Join(paths.EngineCacheDirectory, "trt", "session");
         Directory.CreateDirectory(nested);
-        string fileOne = Path.Combine(nested, "engine.cache");
-        string fileTwo = Path.Combine(paths.EngineCacheDirectory, "root.cache");
+        string fileOne = Path.Join(nested, "engine.cache");
+        string fileTwo = Path.Join(paths.EngineCacheDirectory, "root.cache");
         File.WriteAllText(fileOne, new string('a', 128));
         File.WriteAllText(fileTwo, new string('b', 64));
 
@@ -42,7 +42,7 @@ public sealed class EngineCacheMaintenanceServiceTests
     [Fact]
     public void Clear_missing_directory_is_idempotent()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-engine-cache-missing-{Guid.NewGuid():N}");
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-engine-cache-missing-{Guid.NewGuid():N}");
         var paths = new TrackdubStoragePaths(root);
         var service = new EngineCacheMaintenanceService(paths);
 
@@ -57,12 +57,12 @@ public sealed class EngineCacheMaintenanceServiceTests
     [Fact]
     public void Clear_skips_read_only_files_and_reports_partial_counts()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-engine-cache-readonly-{Guid.NewGuid():N}");
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-engine-cache-readonly-{Guid.NewGuid():N}");
         var paths = new TrackdubStoragePaths(root);
         Directory.CreateDirectory(paths.EngineCacheDirectory);
 
-        string removable = Path.Combine(paths.EngineCacheDirectory, "removable.cache");
-        string readOnly = Path.Combine(paths.EngineCacheDirectory, "readonly.cache");
+        string removable = Path.Join(paths.EngineCacheDirectory, "removable.cache");
+        string readOnly = Path.Join(paths.EngineCacheDirectory, "readonly.cache");
         File.WriteAllText(removable, new string('a', 32));
         File.WriteAllText(readOnly, new string('b', 16));
         File.SetAttributes(readOnly, FileAttributes.ReadOnly);
@@ -107,12 +107,47 @@ public sealed class EngineCacheMaintenanceServiceTests
     }
 
     [Fact]
-    public void Describe_reports_size_and_count()
+    public void Clear_also_clears_smoke_verdict_store()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-engine-cache-describe-{Guid.NewGuid():N}");
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-engine-cache-verdicts-{Guid.NewGuid():N}");
         var paths = new TrackdubStoragePaths(root);
         Directory.CreateDirectory(paths.EngineCacheDirectory);
-        File.WriteAllText(Path.Combine(paths.EngineCacheDirectory, "a.cache"), "12345");
+        File.WriteAllText(Path.Join(paths.EngineCacheDirectory, "engine.cache"), "x");
+
+        string verdictPath = Path.Join(root, "smoke-verdicts.json");
+        var verdictStore = new FileSmokeVerdictStore(verdictPath);
+        var key = new SmokeVerdictKey(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            Trackdub.Domain.ExecutionProviderKind.TensorRTRtx,
+            Trackdub.Domain.NvidiaGpuArchitectureBucket.Ada,
+            "560.35.03",
+            "0.3.0");
+        verdictStore.RecordVerified(key);
+        Assert.True(File.Exists(verdictPath));
+
+        var service = new EngineCacheMaintenanceService(paths, verdictStore);
+        service.Clear();
+
+        Assert.False(verdictStore.IsVerified(key));
+        Assert.False(File.Exists(verdictPath));
+
+        try
+        {
+            Directory.Delete(root, recursive: true);
+        }
+        catch (IOException ex)
+        {
+            Console.WriteLine($"Cleanup failed for '{root}': {ex.Message}");
+        }
+    }
+
+    [Fact]
+    public void Describe_reports_size_and_count()
+    {
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-engine-cache-describe-{Guid.NewGuid():N}");
+        var paths = new TrackdubStoragePaths(root);
+        Directory.CreateDirectory(paths.EngineCacheDirectory);
+        File.WriteAllText(Path.Join(paths.EngineCacheDirectory, "a.cache"), "12345");
 
         var service = new EngineCacheMaintenanceService(paths);
         EngineCacheDescription description = service.Describe();

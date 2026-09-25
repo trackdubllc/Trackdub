@@ -32,12 +32,14 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     private const int StreamingFeatureSubsampling = 8;
     private const int StreamingFifoFrames = 40;
     private const int StreamingSpeakerCacheFrames = 188;
-    private const int StreamingEmbeddingDimension = 512;
+    internal const int StreamingEmbeddingDimension = 512;
     private const int StreamingChunkStrideFeatureFrames = StreamingChunkModelFrames * StreamingFeatureSubsampling;
-    private const int StreamingFeedFeatureFrames =
+    // Shared with the smoke tester so probe inputs match the streaming export's fixed
+    // optimization profile instead of the (unrelated) waveform-only TRT profile.
+    internal const int StreamingFeedFeatureFrames =
         (StreamingChunkModelFrames + StreamingRightContextModelFrames) * StreamingFeatureSubsampling;
 
-    private static readonly IReadOnlyDictionary<string, string> TrtOptions = new Dictionary<string, string>
+    internal static readonly IReadOnlyDictionary<string, string> TrtOptions = new Dictionary<string, string>
     {
         ["trt_profile_min_shapes"] = "waveform:1x16000",
         ["trt_profile_max_shapes"] = "waveform:1x57600000",
@@ -153,9 +155,20 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     }
 
     private static bool UsesStreamingFeatureInputs(InferenceSession session) =>
-        session.InputMetadata.ContainsKey("chunk") &&
-        session.InputMetadata.ContainsKey("spkcache") &&
-        session.InputMetadata.ContainsKey("fifo");
+        IsStreamingExportInputSet(session.InputMetadata.Keys);
+
+    /// <summary>
+    /// True when the graph exposes the streaming SortFormer feature inputs
+    /// (chunk / spkcache / fifo). Shared with the smoke tester so probe inputs
+    /// match the engine's streaming path.
+    /// </summary>
+    internal static bool IsStreamingExportInputSet(IEnumerable<string> inputNames)
+    {
+        var names = inputNames as IReadOnlyCollection<string> ?? inputNames.ToArray();
+        return names.Contains("chunk", StringComparer.Ordinal)
+            && names.Contains("spkcache", StringComparer.Ordinal)
+            && names.Contains("fifo", StringComparer.Ordinal);
+    }
 
     private static DenseTensor<float> RunStreamingFeatureModel(
         InferenceSession session,

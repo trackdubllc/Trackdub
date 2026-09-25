@@ -15,6 +15,8 @@ public static class BenchmarkConsole
         writer.WriteLine("  Trackdub.Benchmarks ingest --help");
         writer.WriteLine("  Trackdub.Benchmarks audio-prep --manifest <path> [--output <path>] [--format console|json|both]");
         writer.WriteLine("  Trackdub.Benchmarks audio-prep --help");
+        writer.WriteLine("  Trackdub.Benchmarks controlled-matrix <fixture> --output <dir> [--stages <comma-separated>] [--model <stage=alias>] [--provider <kind>]");
+        writer.WriteLine("  Trackdub.Benchmarks controlled-matrix --help");
         writer.WriteLine("  Trackdub.Benchmarks dubbing <input-path> [--language <code>] [--source-language <code>] [--output <dir>] [--force-rerun]");
         writer.WriteLine("  Trackdub.Benchmarks dubbing --batch <videos-dir> --languages fr,de [--source-language <code>] [--output <dir>] [--force-rerun]");
         writer.WriteLine("  Trackdub.Benchmarks dubbing --help");
@@ -83,6 +85,14 @@ public static class BenchmarkConsole
         writer.WriteLine($"Model size: {report.ModelSizeBytes} bytes");
         writer.WriteLine($"Cold load: {FormatMilliseconds(report.Measurements.ColdLoadMilliseconds)}");
         writer.WriteLine($"Warmup: {FormatMilliseconds(report.Measurements.WarmupMilliseconds)}");
+        if (!string.IsNullOrWhiteSpace(report.Measurements.EngineCacheOutcome)
+            || !string.IsNullOrWhiteSpace(report.Measurements.ColdLoadDominantPhase))
+        {
+            writer.WriteLine(
+                $"Cold load attribution: engine cache={report.Measurements.EngineCacheOutcome ?? "unknown"} "
+                + $"(+{report.Measurements.EngineCacheFilesAdded ?? 0} file(s), +{report.Measurements.EngineCacheBytesAdded ?? 0} byte(s)); "
+                + $"dominant={report.Measurements.ColdLoadDominantPhase ?? "unknown"}");
+        }
         writer.WriteLine($"Warm latency avg/min/max: {FormatMilliseconds(report.Measurements.WarmLatencyAverageMilliseconds)} / {FormatMilliseconds(report.Measurements.WarmLatencyMinimumMilliseconds)} / {FormatMilliseconds(report.Measurements.WarmLatencyMaximumMilliseconds)}");
         writer.WriteLine($"Audio duration: {FormatSeconds(report.Measurements.AudioDurationSeconds)}");
         writer.WriteLine($"Real-time factor: {FormatFactor(report.Measurements.RealTimeFactorAverage)}");

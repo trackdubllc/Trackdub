@@ -70,7 +70,8 @@ public sealed record HardwareProfile(
     string? CpuName = null,
     long TotalRamMb = 0,
     long DedicatedVramMb = 0,
-    NvidiaGpuArchitectureBucket NvidiaGpuArchitecture = NvidiaGpuArchitectureBucket.Unknown);
+    NvidiaGpuArchitectureBucket NvidiaGpuArchitecture = NvidiaGpuArchitectureBucket.Unknown,
+    string? GpuDriverVersion = null);
 
 public sealed record ExecutionProviderAvailability(
     ExecutionProviderKind Provider,

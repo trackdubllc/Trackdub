@@ -107,6 +107,8 @@ public sealed class Qwen3AsrOnnxAudioTranscriptionEngine(
                 modelPaths.DecoderStepPath,
                 plan.ExecutionProvider!.Value,
                 cancellationToken,
+                // Keep modelId/variant off the pool key: smoke tests omit them too, so a
+                // verified smoke session is the same entry the ASR stage reuses.
                 additionalTrtEncoderOptions: TrtEncoderOptions)
             .ConfigureAwait(false);
 

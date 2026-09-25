@@ -161,6 +161,11 @@ public static class CompositionRoot
         services.TryAddSingleton(storagePaths);
         services.TryAddSingleton<IAppStoragePaths>(storagePaths);
         services.TryAddSingleton<IEngineCacheMaintenanceService, EngineCacheMaintenanceService>();
+        services.TryAddSingleton<IEpContextWarmupService>(sp => new Trackdub.Inference.Onnx.EpContext.EpContextWarmupService(
+            sp.GetRequiredService<IAppStoragePaths>(),
+            sp.GetRequiredService<IHardwareProfileProvider>(),
+            new Trackdub.Inference.Onnx.EpContext.EpContextCompiler(
+                sp.GetRequiredService<ITensorRtRtxProviderBootstrap>())));
         // Readiness probes are wrapped in thread-safe caching decorators so a single
         // `providers list` invocation runs each underlying native/ORT readiness check exactly
         // once. Both OnnxExecutionProviderDiscovery and the *RuntimeReadinessService wrappers
@@ -547,6 +552,10 @@ public static class CompositionRoot
                         .ConfigureAwait(false))
                     .NvidiaTensorRtRtxLicenseAccepted));
         services.TryAddSingleton<IExecutionProviderSmokeTester, OnnxExecutionProviderSmokeTester>();
+        services.TryAddSingleton<ISmokeVerdictStore>(sp =>
+            new FileSmokeVerdictStore(Path.Join(
+                sp.GetRequiredService<TrackdubStoragePaths>().UserCacheRoot,
+                "smoke-verdicts.json")));
         services.TryAddSingleton<IRuntimePlanner, RuntimePlanner>();
         // Wire the model cache directory explicitly: the bare-type registration would fall back
         // to the constructor default (no cache), making downloaded models invisible to alias

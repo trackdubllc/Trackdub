@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Trackdub.Application.Transcripts;
+using Trackdub.Contracts;
 using Trackdub.Domain;
 using Trackdub.Inference.Runtime.ModelManifest;
 using Trackdub.Inference.Runtime.Planning;
@@ -2252,7 +2253,8 @@ public sealed class RuntimePlannerTests
         IReadOnlyList<ExecutionProviderAvailability> availabilities,
         Func<ExecutionProviderSmokeTestRequest, ExecutionProviderSmokeTestResult> smokeHandler,
         IPipelineDeviceExclusionProvider? deviceExclusionProvider = null,
-        IDeviceEnumerator? deviceEnumerator = null)
+        IDeviceEnumerator? deviceEnumerator = null,
+        ISmokeVerdictStore? smokeVerdictStore = null)
     {
         return new RuntimePlanner(
             registry,
@@ -2262,7 +2264,8 @@ public sealed class RuntimePlannerTests
             new InMemoryModelCacheInventory(cacheRecords),
             stageRequirements: null,
             deviceExclusionProvider,
-            deviceEnumerator);
+            deviceEnumerator,
+            smokeVerdictStore);
     }
 
     private static LocalModelCacheRecord CreateCacheRecord(
@@ -2805,6 +2808,126 @@ public sealed class RuntimePlannerTests
         Assert.Equal(0, smokeCallCount);
     }
 
+    [Fact]
+    public async Task PlanAsync_VerifiedVerdictInStore_SkipsSmokeOnNextLaunch()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateQwenAsrSpec());
+
+        string cacheRoot = workspace.CreateCacheRoot("tonythethompson/qwen3-asr-0.6b-onnx");
+        workspace.WriteCacheFile(cacheRoot, "encoder.onnx");
+
+        var cacheRecords = new[]
+        {
+            new LocalModelCacheRecord("tonythethompson/qwen3-asr-0.6b-onnx", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow),
+        };
+        var availabilities = new[]
+        {
+            new ExecutionProviderAvailability(ExecutionProviderKind.DirectMl, true),
+            new ExecutionProviderAvailability(ExecutionProviderKind.TensorRTRtx, true),
+        };
+        var verdictStore = new InMemorySmokeVerdictStore();
+        var smokeRequests = new List<ExecutionProviderSmokeTestRequest>();
+
+        // Launch 1: no verdict yet → smoke runs and is recorded.
+        RuntimePlanner firstLaunch = CreatePlanner(
+            registry, cacheRecords, availabilities,
+            request =>
+            {
+                smokeRequests.Add(request);
+                return new ExecutionProviderSmokeTestResult(true);
+            },
+            smokeVerdictStore: verdictStore);
+        StageRuntimePlan firstPlan = await firstLaunch.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true));
+
+        // Launch 2: fresh planner (in-memory plan cache empty, as in a new process) → smoke skipped.
+        RuntimePlanner secondLaunch = CreatePlanner(
+            registry, cacheRecords, availabilities,
+            request =>
+            {
+                smokeRequests.Add(request);
+                return new ExecutionProviderSmokeTestResult(true);
+            },
+            smokeVerdictStore: verdictStore);
+        StageRuntimePlan secondPlan = await secondLaunch.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true));
+
+        Assert.Equal(StageRuntimePlanStatus.Verified, firstPlan.Status);
+        Assert.Equal(StageRuntimePlanStatus.Verified, secondPlan.Status);
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, secondPlan.ExecutionProvider);
+        Assert.Single(smokeRequests);
+        Assert.Single(verdictStore.RecordedKeys);
+    }
+
+    [Fact]
+    public async Task PlanAsync_VerdictInStore_StillRequiresCachedFiles()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateQwenAsrSpec());
+
+        var verdictStore = new InMemorySmokeVerdictStore();
+        verdictStore.RecordVerified(new SmokeVerdictKey(
+            ValidSha256,
+            ExecutionProviderKind.TensorRTRtx,
+            NvidiaGpuArchitectureBucket.Unknown,
+            DriverVersion: null,
+            TrtRtxEpVersion: Trackdub.Inference.Runtime.TensorRtRtx.TensorRtRtxProviderConstants.BundledFingerprintVersion));
+
+        int smokeCallCount = 0;
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [],
+            [new(ExecutionProviderKind.TensorRTRtx, true)],
+            _ =>
+            {
+                smokeCallCount++;
+                return new ExecutionProviderSmokeTestResult(true);
+            },
+            smokeVerdictStore: verdictStore);
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true));
+
+        // Cheap file checks run before any verdict is consulted: no model → DownloadRequired.
+        Assert.Equal(StageRuntimePlanStatus.DownloadRequired, plan.Status);
+        Assert.Equal(0, smokeCallCount);
+    }
+
+    [Fact]
+    public async Task PlanAsync_SmokeFailure_IsNotRecordedAsVerified()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateQwenAsrSpec());
+
+        string cacheRoot = workspace.CreateCacheRoot("tonythethompson/qwen3-asr-0.6b-onnx");
+        workspace.WriteCacheFile(cacheRoot, "encoder.onnx");
+
+        var verdictStore = new InMemorySmokeVerdictStore();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("tonythethompson/qwen3-asr-0.6b-onnx", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [new(ExecutionProviderKind.TensorRTRtx, true)],
+            _ => new ExecutionProviderSmokeTestResult(false, "compile failed"),
+            smokeVerdictStore: verdictStore);
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true));
+
+        // A failed smoke may fall back to CPU (Ready) or block; it must never become Verified
+        // or leave a reusable verdict behind.
+        Assert.NotEqual(StageRuntimePlanStatus.Verified, plan.Status);
+        Assert.Empty(verdictStore.RecordedKeys);
+    }
+
     private sealed class CountingHardwareProfileProvider : IHardwareProfileProvider
     {
         public int CallCount { get; private set; }
@@ -2944,6 +3067,27 @@ public sealed class RuntimePlannerTests
             ExecutionProviderSmokeTestRequest request,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(handler(request));
+    }
+
+    private sealed class InMemorySmokeVerdictStore : ISmokeVerdictStore
+    {
+        private readonly HashSet<string> verified = new(StringComparer.Ordinal);
+
+        public List<SmokeVerdictKey> RecordedKeys { get; } = [];
+
+        public bool IsVerified(SmokeVerdictKey key) => verified.Contains(key.ToStableString());
+
+        public void RecordVerified(SmokeVerdictKey key)
+        {
+            verified.Add(key.ToStableString());
+            RecordedKeys.Add(key);
+        }
+
+        public void Clear()
+        {
+            verified.Clear();
+            RecordedKeys.Clear();
+        }
     }
 
     private sealed class InMemoryModelCacheInventory(IReadOnlyList<LocalModelCacheRecord> records)

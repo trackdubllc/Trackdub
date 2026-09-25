@@ -120,6 +120,41 @@ internal sealed record SessionPoolKey
     /// <summary>Estimated VRAM footprint of this session in MB. Used for VRAM-budget eviction.</summary>
     public long EstimatedVramMb { get; init; } = 0;
 
+    /// <summary>
+    /// Conservative resident estimate when the caller does not supply
+    /// <see cref="EstimatedVramMb"/>: 2× model file size (weights + init/activation slack)
+    /// with a floor. Unknown/missing files get the floor so admission stays pessimistic.
+    /// </summary>
+    public const long DefaultEstimatedVramMb = 256;
+
+    internal static long EstimateVramMb(string? modelPath)
+    {
+        if (string.IsNullOrWhiteSpace(modelPath))
+        {
+            return DefaultEstimatedVramMb;
+        }
+
+        try
+        {
+            var info = new FileInfo(modelPath);
+            if (info.Exists)
+            {
+                long sizeMb = info.Length / (1024L * 1024L);
+                return Math.Max(64L, (sizeMb * 2L) + 128L);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // Log file access failure to aid debugging VRAM estimation issues (model file inaccessible,
+            // malformed path). Falling back to the pessimistic DefaultEstimatedVramMb
+            // (256 MB) ensures admission accounting stays conservative but may trigger
+            // unnecessary evictions if the actual model is smaller.
+            // File is inaccessible or the path is malformed; fall back to the pessimistic default.
+        }
+
+        return DefaultEstimatedVramMb;
+    }
+
     /// <summary>Builds a key for a single-session model (graph role = "default").</summary>
     public static SessionPoolKey ForSingle(
         string engineFamily,
@@ -129,7 +164,10 @@ internal sealed record SessionPoolKey
         string? variant = null,
         int? deviceId = null,
         string? optionsFingerprint = null) =>
-        new(engineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "default", optionsFingerprint);
+        new(engineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "default", optionsFingerprint)
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     /// <summary>Builds an encoder key for a dual-session model.</summary>
     public static SessionPoolKey ForEncoder(
@@ -140,7 +178,10 @@ internal sealed record SessionPoolKey
         string? variant = null,
         int? deviceId = null,
         string? optionsFingerprint = null) =>
-        new(engineFamily, modelId, variant, provider, HashPath(encoderPath), deviceId, "encoder", optionsFingerprint);
+        new(engineFamily, modelId, variant, provider, HashPath(encoderPath), deviceId, "encoder", optionsFingerprint)
+        {
+            EstimatedVramMb = EstimateVramMb(encoderPath),
+        };
 
     /// <summary>Builds a decoder key for a dual-session model.</summary>
     public static SessionPoolKey ForDecoder(
@@ -151,7 +192,10 @@ internal sealed record SessionPoolKey
         string? variant = null,
         int? deviceId = null,
         string? optionsFingerprint = null) =>
-        new(engineFamily, modelId, variant, provider, HashPath(decoderPath), deviceId, "decoder", optionsFingerprint);
+        new(engineFamily, modelId, variant, provider, HashPath(decoderPath), deviceId, "decoder", optionsFingerprint)
+        {
+            EstimatedVramMb = EstimateVramMb(decoderPath),
+        };
 
     public static SessionPoolKey ForDecoderInit(
         string engineFamily,
@@ -161,7 +205,10 @@ internal sealed record SessionPoolKey
         string? variant = null,
         int? deviceId = null,
         string? optionsFingerprint = null) =>
-        new(engineFamily, modelId, variant, provider, HashPath(decoderInitPath), deviceId, "decoder-init", optionsFingerprint);
+        new(engineFamily, modelId, variant, provider, HashPath(decoderInitPath), deviceId, "decoder-init", optionsFingerprint)
+        {
+            EstimatedVramMb = EstimateVramMb(decoderInitPath),
+        };
 
     public static SessionPoolKey ForDecoderStep(
         string engineFamily,
@@ -171,7 +218,10 @@ internal sealed record SessionPoolKey
         string? variant = null,
         int? deviceId = null,
         string? optionsFingerprint = null) =>
-        new(engineFamily, modelId, variant, provider, HashPath(decoderStepPath), deviceId, "decoder-step", optionsFingerprint);
+        new(engineFamily, modelId, variant, provider, HashPath(decoderStepPath), deviceId, "decoder-step", optionsFingerprint)
+        {
+            EstimatedVramMb = EstimateVramMb(decoderStepPath),
+        };
 
     // ── Chatterbox four-graph helpers ─────────────────────────────────────────
 
@@ -186,7 +236,10 @@ internal sealed record SessionPoolKey
         string? modelId = null,
         string? variant = null,
         int? deviceId = null) =>
-        new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "speech-encoder");
+        new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "speech-encoder")
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     /// <summary>
     /// Builds an embed-tokens key for the Chatterbox model
@@ -199,7 +252,10 @@ internal sealed record SessionPoolKey
         string? modelId = null,
         string? variant = null,
         int? deviceId = null) =>
-        new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "embed-tokens");
+        new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "embed-tokens")
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     /// <summary>
     /// Builds a language-model key for the Chatterbox model
@@ -212,7 +268,10 @@ internal sealed record SessionPoolKey
         string? modelId = null,
         string? variant = null,
         int? deviceId = null) =>
-        new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "lm");
+        new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "lm")
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     /// <summary>
     /// Builds a conditional-decoder key for the Chatterbox model
@@ -225,7 +284,10 @@ internal sealed record SessionPoolKey
         string? modelId = null,
         string? variant = null,
         int? deviceId = null) =>
-        new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "conditional-decoder");
+        new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "conditional-decoder")
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     /// <summary>Engine-family constant used by the Chatterbox factory helpers.</summary>
     private const string ChatterboxEngineFamily = "chatterbox";
@@ -238,7 +300,10 @@ internal sealed record SessionPoolKey
         string? modelId = null,
         string? variant = null,
         int? deviceId = null) =>
-        new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "unet");
+        new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "unet")
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     public static SessionPoolKey ForLatentSyncVaeEncoder(
         string modelPath,
@@ -246,7 +311,10 @@ internal sealed record SessionPoolKey
         string? modelId = null,
         string? variant = null,
         int? deviceId = null) =>
-        new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "vae-encoder");
+        new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "vae-encoder")
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     public static SessionPoolKey ForLatentSyncVaeDecoder(
         string modelPath,
@@ -254,7 +322,10 @@ internal sealed record SessionPoolKey
         string? modelId = null,
         string? variant = null,
         int? deviceId = null) =>
-        new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "vae-decoder");
+        new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "vae-decoder")
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     public static SessionPoolKey ForLatentSyncWhisperEncoder(
         string modelPath,
@@ -262,9 +333,89 @@ internal sealed record SessionPoolKey
         string? modelId = null,
         string? variant = null,
         int? deviceId = null) =>
-        new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "whisper-encoder");
+        new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "whisper-encoder")
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+        };
 
     private const string LatentSyncEngineFamily = "latentsync-diffusion";
+
+    /// <summary>
+    /// Total order for multi-graph bundle acquisition. Callers must take bundle leases in
+    /// this order or encoder/decoder pairs can deadlock against each other.
+    /// </summary>
+    public static IComparer<SessionPoolKey> StableComparer { get; } = new StableKeyComparer();
+
+    private sealed class StableKeyComparer : IComparer<SessionPoolKey>
+    {
+        public int Compare(SessionPoolKey? x, SessionPoolKey? y)
+        {
+            if (ReferenceEquals(x, y))
+            {
+                return 0;
+            }
+
+            if (x is null)
+            {
+                return -1;
+            }
+
+            if (y is null)
+            {
+                return 1;
+            }
+
+            int c = CompareGraphIdentity(x, y);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = string.CompareOrdinal(x.OptionsFingerprint, y.OptionsFingerprint);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = x.Provider.CompareTo(y.Provider);
+            return c != 0 ? c : (x.DeviceId ?? -1).CompareTo(y.DeviceId ?? -1);
+        }
+
+        private static int CompareGraphIdentity(SessionPoolKey x, SessionPoolKey y)
+        {
+            int c = string.CompareOrdinal(x.EngineFamily, y.EngineFamily);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = string.CompareOrdinal(x.GraphRole, y.GraphRole);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = string.CompareOrdinal(x.PathHash, y.PathHash);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = string.CompareOrdinal(x.ModelId ?? string.Empty, y.ModelId ?? string.Empty);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = string.CompareOrdinal(x.Variant ?? string.Empty, y.Variant ?? string.Empty);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            return c;
+        }
+    }
 
     /// <summary>
     /// Computes a stable, lowercase hex SHA-256 hash of the given model file path.

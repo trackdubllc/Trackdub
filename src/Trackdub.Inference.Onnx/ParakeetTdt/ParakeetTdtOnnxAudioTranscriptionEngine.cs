@@ -112,8 +112,14 @@ public sealed class ParakeetTdtOnnxAudioTranscriptionEngine(
             : durationSeconds < 30.0 ? [new SpeechRegion(0, 0.0, durationSeconds)] : [];
 
         // The preprocessor is a tiny STFT/mel graph; CPU keeps it off the TRT shape-profile path.
+        // Pooled so repeated transcription calls do not rebuild the session every time.
+        // Smoke warms this same key ("parakeet-tdt-preprocessor").
         using OnnxExecutionSessionFactory.SingleSessionLease preprocessor = await OnnxExecutionSessionFactory
-            .CreateSingleAsync(paths.PreprocessorPath, ExecutionProviderKind.Cpu, cancellationToken)
+            .CreatePooledSingleAsync(
+                "parakeet-tdt-preprocessor",
+                paths.PreprocessorPath,
+                ExecutionProviderKind.Cpu,
+                cancellationToken)
             .ConfigureAwait(false);
         using OnnxExecutionSessionFactory.NemotronAsrSessionLease sessions = await OnnxExecutionSessionFactory
             .CreatePooledNemotronAsrAsync(
