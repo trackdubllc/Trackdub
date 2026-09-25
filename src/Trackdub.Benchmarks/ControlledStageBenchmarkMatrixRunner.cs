@@ -33,6 +33,12 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
         IReadOnlyList<string> selectedStages = ResolveStages(options.Stages);
         DateTimeOffset startedAt = DateTimeOffset.UtcNow;
         var results = new List<ControlledStageBenchmarkMatrixResult>(selectedStages.Count);
+        string outputBasePath = Path.GetFullPath(options.OutputDirectory);
+        if (!outputBasePath.EndsWith(Path.DirectorySeparatorChar) &&
+            !outputBasePath.EndsWith(Path.AltDirectorySeparatorChar))
+        {
+            outputBasePath += Path.DirectorySeparatorChar;
+        }
 
         foreach (string stage in selectedStages)
         {
@@ -52,13 +58,21 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     nameof(options));
             }
 
+            string combinedOutputDirectory = Path.GetFullPath(Path.Combine(outputBasePath, stageDirectoryName));
+            if (!combinedOutputDirectory.StartsWith(outputBasePath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException(
+                    "Stage names must resolve within the output directory.",
+                    nameof(options));
+            }
+
             options.ModelOverrides.TryGetValue(stage, out string? model);
             BenchmarkEvidenceReport evidence = await runner.RunAsync(
                 new ControlledDubbingBenchmarkOptions
                 {
                     FixturePath = options.FixturePath,
                     ExpectedFixtureSha256 = options.ExpectedFixtureSha256,
-                    OutputDirectory = Path.Combine(options.OutputDirectory, stageDirectoryName),
+                    OutputDirectory = combinedOutputDirectory,
                     Stage = stage,
                     Model = model,
                     Provider = options.Provider,
