@@ -643,6 +643,8 @@ internal sealed class InferenceSessionPool : IDisposable
         try
         {
             int consecutiveMisses = 0;
+            int rewarmAttempts = 0;
+            const int maxRewarmAttempts = 25; // ~5s of real re-warm tries at the 200ms cadence below.
             while (true)
             {
                 ObjectDisposedException.ThrowIf(disposed, this);
@@ -704,10 +706,27 @@ internal sealed class InferenceSessionPool : IDisposable
                 consecutiveMisses++;
                 if (consecutiveMisses % 20 == 0)
                 {
+                    bool anyMissing = false;
                     foreach (SessionLeaseRequest request in ordered.Where(request => !entries.ContainsKey(request.Key)))
                     {
+                        anyMissing = true;
                         using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
                             .ConfigureAwait(false);
+                    }
+
+                    // The pool stays at capacity (every entry leased or pinned) if a re-warm
+                    // still leaves a key ephemeral — GetLeaseAsync succeeded but the lease was
+                    // never added to `entries`. Bound the retries instead of spinning until the
+                    // caller's cancellation token fires while holding bundleAcquireLock.
+                    if (anyMissing && ordered.Any(request => !entries.ContainsKey(request.Key)))
+                    {
+                        rewarmAttempts++;
+                        if (rewarmAttempts >= maxRewarmAttempts)
+                        {
+                            throw new InvalidOperationException(
+                                "Unable to acquire session bundle: the pool stayed at capacity " +
+                                $"(every entry leased or pinned) across {maxRewarmAttempts} re-warm attempts.");
+                        }
                     }
                 }
 

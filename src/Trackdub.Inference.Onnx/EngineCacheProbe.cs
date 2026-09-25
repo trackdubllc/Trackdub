@@ -75,12 +75,11 @@ public static class EngineCacheProbe
     }
 
     /// <summary>
-    /// Evidence-based dominant phase of session construct. We only claim compile when the
-    /// engine cache actually grew during this cold load; every other outcome lacks the phase
-    /// timing needed to attribute dominance, so it stays unknown rather than guessed.
+    /// No engine-cache outcome proves which phase of session construct dominated total cold-load
+    /// time — a cache write is evidence of compile activity, not evidence it took the most time —
+    /// so this stays unknown until real phase timings are available.
     /// </summary>
-    public static string ClassifyDominantPhase(string? engineCacheOutcome) =>
-        engineCacheOutcome is "wrote" ? "engine-compile" : "unknown";
+    public static string ClassifyDominantPhase(string? engineCacheOutcome) => "unknown";
 
     public static string FormatNote(
         double coldLoadMilliseconds,

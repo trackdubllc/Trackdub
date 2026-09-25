@@ -62,12 +62,11 @@ public sealed class EngineCacheProbeTests
     }
 
     [Fact]
-    public void ClassifyDominantPhase_only_claims_compile_on_actual_cache_growth()
+    public void ClassifyDominantPhase_never_infers_from_cache_outcome()
     {
-        // "wrote" is the only outcome with real evidence (bytes were observed). Every other
-        // outcome — including a cache hit — lacks phase timing, so it stays unknown rather
-        // than guessed.
-        Assert.Equal("engine-compile", EngineCacheProbe.ClassifyDominantPhase("wrote"));
+        // A cache write proves compile activity happened, not that it dominated total
+        // cold-load time — no outcome justifies a phase claim without real phase timings.
+        Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("wrote"));
         Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("unknown"));
         Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("not-applicable"));
         Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("empty"));
@@ -89,7 +88,7 @@ public sealed class EngineCacheProbeTests
 
         Assert.Contains("total=26927.8", note, StringComparison.Ordinal);
         Assert.Contains("engine cache=wrote", note, StringComparison.Ordinal);
-        Assert.Contains("dominant=engine-compile", note, StringComparison.Ordinal);
+        Assert.Contains("dominant=unknown", note, StringComparison.Ordinal);
         Assert.Contains("+1 file", note, StringComparison.Ordinal);
     }
 
