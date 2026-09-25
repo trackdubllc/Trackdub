@@ -152,6 +152,16 @@ jobs:
             **/packages.lock.json
             NuGet.config
 
+      - name: Validate ONNX Model Path
+        run: |
+          if [ -z "$TRACKDUB_BDN_ONNX_MODEL" ] || [ ! -f "$TRACKDUB_BDN_ONNX_MODEL" ]; then
+            echo "::error::onnx_model_path must point to a .onnx file already present on this runner." \
+              "The hosted ubuntu-latest runner has no model cache, so re-run this dispatch on a" \
+              "self-hosted runner with the model pre-staged, or point onnx_model_path at a path" \
+              "produced by an earlier step in a custom workflow run."
+            exit 1
+          fi
+
       - name: Restore Dependencies
         run: dotnet restore Trackdub.slnx -m:1
 
