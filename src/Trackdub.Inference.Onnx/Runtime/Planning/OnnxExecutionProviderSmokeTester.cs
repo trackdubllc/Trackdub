@@ -864,21 +864,26 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         return CreateMetadataDrivenInputs(inputs);
     }
 
-    // The streaming export's TRT engine is built for the engine's optimization profile (chunk is a
-    // fixed 1x3040x128 window), so probe inputs must sit inside it; "1 for every dynamic dim" does not.
+    // The streaming export takes chunk/spkcache/fifo, not the waveform-only profile in
+    // SortFormerDiarizationEngine.TrtOptions. Chunk is a fixed 1x3040x128 window (the
+    // engine's optimization profile); spkcache/fifo use the valid empty-cache shape
+    // (0 frames) that a streaming session's first chunk always starts from.
     private static InputSet CreateSortFormerStreamingInputs()
     {
-        var values = new List<NamedOnnxValue>();
-        foreach (string entry in SortFormerDiarizationEngine.TrtOptions["trt_profile_opt_shapes"].Split(','))
-        {
-            string[] parts = entry.Split(':');
-            int[] dimensions = parts[1].Split('x').Select(int.Parse).ToArray();
-            int elementCount = dimensions.Aggregate(1, static (product, dimension) => checked(product * dimension));
-            values.Add(NamedOnnxValue.CreateFromTensor(parts[0], new DenseTensor<float>(new float[elementCount], dimensions)));
-            values.Add(NamedOnnxValue.CreateFromTensor(
-                parts[0] + "_lengths",
-                new DenseTensor<long>(new long[] { dimensions[1] }, [1])));
-        }
+        const int chunkFrames = SortFormerDiarizationEngine.StreamingFeedFeatureFrames;
+        const int melBins = SortFormerFeatureExtractor.MelBins;
+        const int embeddingDimension = SortFormerDiarizationEngine.StreamingEmbeddingDimension;
+
+        IReadOnlyList<NamedOnnxValue> values =
+        [
+            NamedOnnxValue.CreateFromTensor(
+                "chunk", new DenseTensor<float>(new float[chunkFrames * melBins], [1, chunkFrames, melBins])),
+            NamedOnnxValue.CreateFromTensor("chunk_lengths", new DenseTensor<long>(new long[] { chunkFrames }, [1])),
+            NamedOnnxValue.CreateFromTensor("spkcache", new DenseTensor<float>(new float[0], [1, 0, embeddingDimension])),
+            NamedOnnxValue.CreateFromTensor("spkcache_lengths", new DenseTensor<long>(new long[] { 0 }, [1])),
+            NamedOnnxValue.CreateFromTensor("fifo", new DenseTensor<float>(new float[0], [1, 0, embeddingDimension])),
+            NamedOnnxValue.CreateFromTensor("fifo_lengths", new DenseTensor<long>(new long[] { 0 }, [1])),
+        ];
 
         return new InputSet(values);
     }

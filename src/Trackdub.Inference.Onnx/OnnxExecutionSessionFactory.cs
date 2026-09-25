@@ -815,25 +815,21 @@ internal static class OnnxExecutionSessionFactory
         SessionPoolKey resolvedKey = key
             ?? throw new InvalidOperationException("Pooled single session did not resolve a pool key.");
 
-        SessionResidency residency;
         // Bound retries: when the pool is full of leased/pinned entries, GetLeaseAsync
         // returns an ephemeral lease that never reaches `entries`, so TryPinExisting
         // can never succeed — infinite session create/dispose churn.
         const int maxPinAttempts = 3;
-        for (int attempt = 1; ; attempt++)
+        for (int attempt = 1; attempt <= maxPinAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (pool.TryPinExisting(resolvedKey, out SessionResidency? pinned) && pinned is not null)
             {
-                residency = pinned;
-                break;
+                return new PooledSingleSessionPin(pinned, AcquireAsync, requestedProvider, selectedProvider, bootstrapDetail);
             }
 
-            if (attempt >= maxPinAttempts)
+            if (attempt == maxPinAttempts)
             {
-                throw new InvalidOperationException(
-                    $"Unable to pin pooled session '{resolvedKey.EngineFamily}' after {maxPinAttempts} attempts " +
-                    "(pool at capacity with leased or pinned entries; ephemeral creates are not retained).");
+                break;
             }
 
             // Evicted before pin — recreate and retry.
@@ -842,7 +838,12 @@ internal static class OnnxExecutionSessionFactory
             }
         }
 
-        return new PooledSingleSessionPin(residency, AcquireAsync, requestedProvider, selectedProvider, bootstrapDetail);
+        // Pool stayed at capacity (leased/pinned) across every retry: fall back to no
+        // residency instead of failing engine init. Each AcquireAsync call still creates a
+        // short, working (possibly ephemeral) lease — callers just lose the "stay resident
+        // between calls" guarantee until pool pressure eases.
+        return new PooledSingleSessionPin(
+            new SessionResidency(static () => { }), AcquireAsync, requestedProvider, selectedProvider, bootstrapDetail);
     }
 
     public static async Task<WhisperSessionLease> CreatePooledWhisperAsync(
