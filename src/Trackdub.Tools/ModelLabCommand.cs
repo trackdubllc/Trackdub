@@ -414,7 +414,7 @@ public static class ModelLabCommand
         TextWriter error,
         CancellationToken cancellationToken)
     {
-        string scriptPath = Path.Combine(
+        string scriptPath = Path.Join(
             options.RepositoryRootPath,
             "tools".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             "model-lab".TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
