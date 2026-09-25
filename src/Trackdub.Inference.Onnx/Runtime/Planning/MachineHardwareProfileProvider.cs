@@ -57,7 +57,6 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
                         if (!string.IsNullOrEmpty(desc))
                         {
                             gpuDescription = desc;
-                            gpuDriverVersion = subkey?.GetValue("DriverVersion") as string;
 
                             object? vramObj = subkey?.GetValue("HardwareInformation.MemorySize")
                                           ?? subkey?.GetValue("HardwareInformation.qwMemorySize");

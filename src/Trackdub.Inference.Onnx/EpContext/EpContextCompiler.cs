@@ -68,7 +68,12 @@ public sealed class EpContextCompiler
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(epContextPath))!);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        string tempPath = epContextPath + ".tmp-" + Guid.NewGuid().ToString("N");
+        // Compile into a guid-named temp subdirectory rather than a temp-suffixed final path: the
+        // model and sidecar keep their FINAL filenames while isolated, so the sidecar name ORT embeds
+        // in the compiled model (derived from the output path it was given) matches the name
+        // GetArtifactExternalInitializersPath computes from the published epContextPath after move.
+        string? tempDir = null;
+        string? tempPath = null;
         string? tempSidecarPath = null;
         try
         {
@@ -94,6 +99,15 @@ public sealed class EpContextCompiler
             }
 
             bool embed = EpContextArtifact.ShouldEmbedEpContext(sourceModelPath);
+            // Compile under the FINAL filename inside an isolated temp directory: the sidecar name
+            // ORT embeds in the model (derived from the output path's filename) then matches the
+            // name GetArtifactExternalInitializersPath computes for the final published path, so
+            // publishing (a same-name move) never breaks the external-initializers reference.
+            tempDir = Path.Combine(
+                Path.GetDirectoryName(Path.GetFullPath(epContextPath))!,
+                ".epc-tmp-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            tempPath = Path.Combine(tempDir, Path.GetFileName(epContextPath));
             using (var compileOptions = new OrtModelCompilationOptions(sessionOptions))
             {
                 compileOptions.SetInputModelPath(sourceModelPath);
@@ -103,10 +117,9 @@ public sealed class EpContextCompiler
                 compileOptions.SetEpContextEmbedMode(embed);
                 if (!embed)
                 {
-                    string tempSidecarName = Path.GetFileNameWithoutExtension(tempPath) + ".ext_init";
-                    tempSidecarPath = Path.Combine(Path.GetDirectoryName(tempPath)!, Path.GetFileName(tempSidecarName));
+                    tempSidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(tempPath);
                     compileOptions.SetOutputModelExternalInitializersFile(
-                        Path.GetFileNameWithoutExtension(tempPath) + ".ext_init",
+                        Path.GetFileNameWithoutExtension(epContextPath) + ".ext_init",
                         64);
                 }
 
@@ -132,17 +145,18 @@ public sealed class EpContextCompiler
                     selectedLabel);
             }
 
-            // Atomic publish: write to temp then rename, so concurrent readers never see a half-written
-            // artifact whose truncated ONNX error would escape the TRT fallback (see review 5313875883).
+            // Atomic publish: move from the temp dir then rename, so concurrent readers never see a
+            // half-written artifact whose truncated ONNX error would escape the TRT fallback (see
+            // review 5313875883). Both files keep their final filenames throughout, so the sidecar
+            // name embedded in the model always matches GetArtifactExternalInitializersPath.
             PublishAtomically(tempPath, epContextPath);
+            string finalSidecar = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
             if (!embed && tempSidecarPath is not null && File.Exists(tempSidecarPath))
             {
-                string finalSidecar = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
                 PublishAtomically(tempSidecarPath, finalSidecar);
             }
             else if (embed)
             {
-                string finalSidecar = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
                 TryDeleteFile(finalSidecar);
             }
 
@@ -151,23 +165,26 @@ public sealed class EpContextCompiler
         catch (Exception ex) when (ex is OnnxRuntimeException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
         {
             stopwatch.Stop();
-            TryDeletePartial(tempPath);
-            if (tempSidecarPath is not null)
-            {
-                TryDeleteFile(tempSidecarPath);
-            }
-
             // Best-effort remove any half-published final (e.g. Move succeeded for .onnx but not sidecar).
             TryDeletePartial(epContextPath);
             return new CompileResult(false, null, stopwatch.Elapsed.TotalMilliseconds, ex.Message);
         }
         finally
         {
-            // Ensure temp files do not leak if publish succeeded (Move already removed them) or on early return.
-            TryDeletePartial(tempPath);
+            // Ensure temp files/dir do not leak if publish succeeded (Move already removed them) or on early return.
+            if (tempPath is not null)
+            {
+                TryDeletePartial(tempPath);
+            }
+
             if (tempSidecarPath is not null)
             {
                 TryDeleteFile(tempSidecarPath);
+            }
+
+            if (tempDir is not null)
+            {
+                TryDeleteEmptyDirectory(tempDir);
             }
         }
     }
@@ -323,6 +340,22 @@ public sealed class EpContextCompiler
         {
             System.Diagnostics.Trace.TraceWarning(
                 $"EpContextCompiler: failed to delete file '{path}': {ex.Message}");
+        }
+    }
+
+    private static void TryDeleteEmptyDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"EpContextCompiler: failed to delete temp directory '{path}': {ex.Message}");
         }
     }
 

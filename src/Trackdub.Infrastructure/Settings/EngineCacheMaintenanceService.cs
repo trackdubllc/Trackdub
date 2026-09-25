@@ -123,12 +123,16 @@ public sealed class EngineCacheMaintenanceService(
                 catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
                 {
                     // Best-effort per-file cleanup; a locked or missing file does not fail the clear.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"EngineCacheMaintenanceService: failed to delete EP-context artifact '{filePath}': {ex.Message}");
                 }
             }
         }
         catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
         {
             // Best-effort cleanup; enumeration/access failure leaves the remaining cache untouched.
+            System.Diagnostics.Trace.TraceWarning(
+                $"EngineCacheMaintenanceService: failed to enumerate '{storagePaths.ModelCacheDirectory}': {ex.Message}");
         }
     }
 
