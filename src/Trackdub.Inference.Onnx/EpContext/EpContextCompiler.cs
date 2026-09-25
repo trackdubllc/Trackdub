@@ -68,6 +68,8 @@ public sealed class EpContextCompiler
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(epContextPath))!);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        string tempPath = epContextPath + ".tmp-" + Guid.NewGuid().ToString("N");
+        string? tempSidecarPath = null;
         try
         {
 #if WINDOWS
@@ -91,30 +93,35 @@ public sealed class EpContextCompiler
                     selectedLabel);
             }
 
-            using var compileOptions = new OrtModelCompilationOptions(sessionOptions);
-            compileOptions.SetInputModelPath(sourceModelPath);
-            compileOptions.SetOutputModelPath(epContextPath);
-            // Embed the compiled engine in the EP-context graph under 2GB (NVIDIA protobuf limit).
-            // Externalize initializers only when embedding is off, so sub-2GB models stay one file.
             bool embed = EpContextArtifact.ShouldEmbedEpContext(sourceModelPath);
-            compileOptions.SetEpContextEmbedMode(embed);
-            if (!embed)
+            using (var compileOptions = new OrtModelCompilationOptions(sessionOptions))
             {
-                compileOptions.SetOutputModelExternalInitializersFile(
-                    Path.GetFileNameWithoutExtension(epContextPath) + ".ext_init",
-                    64);
+                compileOptions.SetInputModelPath(sourceModelPath);
+                compileOptions.SetOutputModelPath(tempPath);
+                // Embed the compiled engine in the EP-context graph under 2GB (NVIDIA protobuf limit).
+                // Externalize initializers only when embedding is off, so sub-2GB models stay one file.
+                compileOptions.SetEpContextEmbedMode(embed);
+                if (!embed)
+                {
+                    string tempSidecarName = Path.GetFileNameWithoutExtension(tempPath) + ".ext_init";
+                    tempSidecarPath = Path.Combine(Path.GetDirectoryName(tempPath)!, tempSidecarName);
+                    compileOptions.SetOutputModelExternalInitializersFile(
+                        Path.GetFileNameWithoutExtension(tempPath) + ".ext_init",
+                        64);
+                }
+
+                compileOptions.CompileModel();
             }
 
-            compileOptions.CompileModel();
             stopwatch.Stop();
 
             // CompileModel() can succeed yet emit a plain reserialized graph (no com.microsoft EPContext
             // nodes) when the EP performs no AOT capture. Loading such an artifact rebuilds engines just
             // like the source and adds parse overhead, so refuse to keep it — measured: +146KB of extra
             // Conv/Squeeze nodes and a ~6s cold-load regression versus the source graph.
-            if (!TryContainsEpContextNodes(epContextPath))
+            if (!TryContainsEpContextNodes(tempPath))
             {
-                TryDeletePartial(epContextPath);
+                TryDeletePartial(tempPath);
                 return new CompileResult(
                     false,
                     null,
@@ -125,13 +132,43 @@ public sealed class EpContextCompiler
                     selectedLabel);
             }
 
+            // Atomic publish: write to temp then rename, so concurrent readers never see a half-written
+            // artifact whose truncated ONNX error would escape the TRT fallback (see review 5313875883).
+            PublishAtomically(tempPath, epContextPath);
+            if (!embed && tempSidecarPath is not null && File.Exists(tempSidecarPath))
+            {
+                string finalSidecar = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
+                PublishAtomically(tempSidecarPath, finalSidecar);
+            }
+            else if (embed)
+            {
+                string finalSidecar = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
+                TryDeleteFile(finalSidecar);
+            }
+
             return new CompileResult(true, epContextPath, stopwatch.Elapsed.TotalMilliseconds, null, selectedLabel);
         }
         catch (Exception ex) when (ex is OnnxRuntimeException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
         {
             stopwatch.Stop();
+            TryDeletePartial(tempPath);
+            if (tempSidecarPath is not null)
+            {
+                TryDeleteFile(tempSidecarPath);
+            }
+
+            // Best-effort remove any half-published final (e.g. Move succeeded for .onnx but not sidecar).
             TryDeletePartial(epContextPath);
             return new CompileResult(false, null, stopwatch.Elapsed.TotalMilliseconds, ex.Message);
+        }
+        finally
+        {
+            // Ensure temp files do not leak if publish succeeded (Move already removed them) or on early return.
+            TryDeletePartial(tempPath);
+            if (tempSidecarPath is not null)
+            {
+                TryDeleteFile(tempSidecarPath);
+            }
         }
     }
 
@@ -270,6 +307,37 @@ public sealed class EpContextCompiler
             // Best-effort cleanup of a rejected compile's partial output; failure to delete is non-fatal.
             System.Diagnostics.Trace.TraceWarning(
                 $"EpContextCompiler: failed to delete partial output '{epContextPath}': {ex.Message}");
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"EpContextCompiler: failed to delete file '{path}': {ex.Message}");
+        }
+    }
+
+    private static void PublishAtomically(string sourcePath, string destinationPath)
+    {
+        // Same directory => rename is atomic on NTFS/ext4. Overwrite atomically.
+        try
+        {
+            File.Move(sourcePath, destinationPath, overwrite: true);
+        }
+        catch (IOException)
+        {
+            // Fallback for runtimes without the overwrite overload or cross-volume move.
+            TryDeleteFile(destinationPath);
+            File.Move(sourcePath, destinationPath);
         }
     }
 }
