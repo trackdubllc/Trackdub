@@ -704,13 +704,10 @@ internal sealed class InferenceSessionPool : IDisposable
                 consecutiveMisses++;
                 if (consecutiveMisses % 20 == 0)
                 {
-                    foreach (SessionLeaseRequest request in ordered)
+                    foreach (SessionLeaseRequest request in ordered.Where(request => !entries.ContainsKey(request.Key)))
                     {
-                        if (!entries.ContainsKey(request.Key))
-                        {
-                            using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
-                                .ConfigureAwait(false);
-                        }
+                        using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
+                            .ConfigureAwait(false);
                     }
                 }
 
