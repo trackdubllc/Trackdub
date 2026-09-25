@@ -88,9 +88,13 @@ def main() -> int:
             return info.type.tensor_type.elem_type
         return TensorProto.FLOAT
 
-    def _erf_gelu_nodes(main_input: str, output: str, prefix: str) -> list:
+    def _erf_gelu_nodes(main_input: str, output: str, prefix: str, dtype: int) -> list:
         # Gelu(x) = 0.5 * x * (1 + Erf(x / sqrt(2)))
-        scalar_dtype = np.float16 if elem_type(main_input) == TensorProto.FLOAT16 else np.float32
+        # dtype must be resolved by the caller from a name present in `infos` (e.g. the
+        # original node input) — main_input here can be a freshly created intermediate
+        # (e.g. BiasGelu's Add output) that `infos` never contains, which would silently
+        # fall back to float32 and produce a dtype-mismatched graph for FP16 models.
+        scalar_dtype = np.float16 if dtype == TensorProto.FLOAT16 else np.float32
         half = add_initializer(f"{prefix}/half", np.array(0.5, dtype=scalar_dtype))
         one = add_initializer(f"{prefix}/one", np.array(1.0, dtype=scalar_dtype))
         inv_sqrt2 = add_initializer(f"{prefix}/inv_sqrt2", np.array(1.0 / np.sqrt(2.0), dtype=scalar_dtype))
@@ -178,10 +182,13 @@ def main() -> int:
             output = node.output[0]
             prefix = f"/trackdub/decomposed_bias_gelu_{replaced_biasgelu}"
             summed = f"{prefix}/summed"
+            # Resolve dtype from the original input (present in `infos`) before it is shadowed
+            # by `summed`, the freshly created Add output that `infos` never contains.
+            dtype = elem_type(main_input)
             new_nodes.append(
                 helper.make_node("Add", [main_input, bias], [summed], name=f"{prefix}/AddBias")
             )
-            new_nodes.extend(_erf_gelu_nodes(summed, output, prefix))
+            new_nodes.extend(_erf_gelu_nodes(summed, output, prefix, dtype))
             replaced_biasgelu += 1
             continue
 
@@ -191,7 +198,7 @@ def main() -> int:
             main_input = node.input[0]
             output = node.output[0]
             prefix = f"/trackdub/decomposed_contrib_gelu_{replaced_biasgelu}"
-            new_nodes.extend(_erf_gelu_nodes(main_input, output, prefix))
+            new_nodes.extend(_erf_gelu_nodes(main_input, output, prefix, elem_type(main_input)))
             replaced_biasgelu += 1
             continue
 
