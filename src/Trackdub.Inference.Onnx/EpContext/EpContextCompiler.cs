@@ -133,13 +133,23 @@ public sealed class EpContextCompiler
         }
     }
 
+    /// <summary>
+    /// Known divergence from the production session path: production also passes each model's
+    /// <c>nv_profile_min/max/opt_shapes</c> (see <c>OnnxExecutionSessionFactory</c> call sites),
+    /// which this generic, per-family-agnostic compile path does not have. The compiled engine
+    /// can therefore capture a different (TRT-RTX-auto-inferred) shape window than production's
+    /// profiled one. <see cref="TryContainsEpContextNodes"/> only catches the zero-capture case,
+    /// not a shape mismatch — accepted for now since threading per-model profiles through the
+    /// generic warmup scan would need a family-to-profile lookup this path doesn't have.
+    /// </summary>
     private static SessionOptions CreateCompileSessionOptions(out ExecutionProviderKind selectedProvider)
     {
         var options = new SessionOptions
         {
-            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+            // ORT_ENABLE_ALL re-fuses contrib ops (SkipLayerNormalization, BiasGelu) the TRT-RTX
+            // parser cannot import — same reasoning as CreateBaseSessionOptions(tensorRtRtx: true).
+            GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_BASIC,
         };
-        // Match production TRT RTX options so the compiled engines match the inference path.
         selectedProvider = OnnxExecutionSessionFactory.AppendTensorRtRtxOrFallbackProvider(options);
         return options;
     }
