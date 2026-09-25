@@ -134,5 +134,12 @@
          src/Trackdub.Analyzers/.editorconfig. See docs/adr/ADR-0012-wave-pcm16-loudness-policy.md. -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
+    <!-- Repo-wide banned-API analyzer (RS0030): bans Path.Combine in favor of Path.Join.
+         CodeQL/CodeFactor flag every Path.Combine call whose second-or-later argument isn't
+         provably non-rooted (it silently drops earlier segments if it is); Path.Join has no
+         such reset behavior and is the drop-in replacement for every case in this codebase.
+         Wired repo-wide via Directory.Build.props + BannedSymbols.txt so the build fails
+         locally instead of catching this in CI review comments one call at a time. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="4.14.0" />
   </ItemGroup>
 </Project>
