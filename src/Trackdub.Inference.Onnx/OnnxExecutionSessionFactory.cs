@@ -230,10 +230,10 @@ internal static class OnnxExecutionSessionFactory
             [
                 new SessionLeaseRequest(
                     encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, selections.Encoder.Options, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(encoderModelPath, selections.Encoder.Options, sessionFactory, ct, selections.Encoder.SelectedProvider))),
                 new SessionLeaseRequest(
                     decoderKey,
-                    ct => Task.FromResult(CreateSession(decoderModelPath, selections.Decoder.Options, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(decoderModelPath, selections.Decoder.Options, sessionFactory, ct, selections.Decoder.SelectedProvider))),
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -312,13 +312,16 @@ internal static class OnnxExecutionSessionFactory
         string modelPath,
         SessionOptions options,
         Func<string, SessionOptions, InferenceSession>? sessionFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ExecutionProviderKind selectedProvider)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var phase = BenchmarkPhaseCapture.Start("onnx-session-create");
-        // Prefer a valid AOT EP-context artifact when present (see EpContextWarmupService);
-        // fall back to the source ONNX so residual JIT still works via nv_runtime_cache_path.
-        string loadPath = EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath;
+        // EP-context artifacts embed a TensorRT-RTX-serialized engine that only that EP can
+        // deserialize; only TRT-RTX sessions may load one (see EpContextWarmupService).
+        string loadPath = selectedProvider is ExecutionProviderKind.TensorRTRtx
+            ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath
+            : modelPath;
         return sessionFactory is null
             ? new InferenceSession(loadPath, options)
             : sessionFactory(loadPath, options);
@@ -368,7 +371,8 @@ internal static class OnnxExecutionSessionFactory
                         modelPath,
                         fallbackSelection.Options,
                         sessionFactory,
-                        cancellationToken);
+                        cancellationToken,
+                        fallbackSelection.SelectedProvider);
                     initialSelection.Options.Dispose();
                     string effectiveLabel = FormatProviderLabel(fallbackSelection.SelectedProvider);
                     return (
@@ -400,7 +404,8 @@ internal static class OnnxExecutionSessionFactory
                 modelPath,
                 initialSelection.Options,
                 sessionFactory,
-                cancellationToken);
+                cancellationToken,
+                initialSelection.SelectedProvider);
             return (session, initialSelection);
         }
         catch (Exception ex) when (
@@ -423,7 +428,8 @@ internal static class OnnxExecutionSessionFactory
                         modelPath,
                         fallbackSelection.Options,
                         sessionFactory,
-                        cancellationToken);
+                        cancellationToken,
+                        fallbackSelection.SelectedProvider);
                     // Transfer ownership: dispose the failed TRT options; caller owns the fallback Options.
                     initialSelection.Options.Dispose();
                     string effectiveLabel = FormatProviderLabel(fallbackSelection.SelectedProvider);
@@ -977,13 +983,13 @@ internal static class OnnxExecutionSessionFactory
             [
                 new SessionLeaseRequest(
                     encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct, encoderOptionsSelection.SelectedProvider))),
                 new SessionLeaseRequest(
                     decoderInitKey,
-                    ct => Task.FromResult(CreateSession(decoderInitModelPath, decoderInitOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(decoderInitModelPath, decoderInitOptions, sessionFactory, ct, decoderOptionsSelectedProvider))),
                 new SessionLeaseRequest(
                     decoderStepKey,
-                    ct => Task.FromResult(CreateSession(decoderStepModelPath, decoderStepOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(decoderStepModelPath, decoderStepOptions, sessionFactory, ct, decoderOptionsSelectedProvider))),
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -1101,16 +1107,16 @@ internal static class OnnxExecutionSessionFactory
             [
                 new SessionLeaseRequest(
                     unetKey,
-                    ct => Task.FromResult(CreateSession(unetModelPath, unetOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(unetModelPath, unetOptions, sessionFactory, ct, unetSelectedProvider))),
                 new SessionLeaseRequest(
                     vaeEncKey,
-                    ct => Task.FromResult(CreateSession(vaeEncoderModelPath, vaeEncOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(vaeEncoderModelPath, vaeEncOptions, sessionFactory, ct, vaeEncOptionsSelection.SelectedProvider))),
                 new SessionLeaseRequest(
                     vaeDecKey,
-                    ct => Task.FromResult(CreateSession(vaeDecoderModelPath, vaeDecOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(vaeDecoderModelPath, vaeDecOptions, sessionFactory, ct, vaeDecOptionsSelection.SelectedProvider))),
                 new SessionLeaseRequest(
                     whisperKey,
-                    ct => Task.FromResult(CreateSession(whisperEncoderModelPath, whisperOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(whisperEncoderModelPath, whisperOptions, sessionFactory, ct, whisperSelectedProvider))),
             ],
             cancellationToken).ConfigureAwait(false);
 

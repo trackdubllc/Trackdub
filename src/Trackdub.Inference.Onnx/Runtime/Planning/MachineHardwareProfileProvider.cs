@@ -69,10 +69,9 @@ public sealed class MachineHardwareProfileProvider : IHardwareProfileProvider
                                 _ => dedicatedVramMb
                             };
 
-                            if (string.IsNullOrWhiteSpace(gpuDriverVersion))
-                            {
-                                gpuDriverVersion = subkey?.GetValue("DriverVersion") as string;
-                            }
+                            // Keep in sync with gpuDescription: both must come from the same
+                            // selected adapter, so a later adapter overwrites both together.
+                            gpuDriverVersion = subkey?.GetValue("DriverVersion") as string;
 
                             if (desc.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
                                 break;

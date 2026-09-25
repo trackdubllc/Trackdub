@@ -152,13 +152,25 @@ public sealed class CosyVoiceTtsEngine(
         }
 
         pinnedRuntime?.Dispose();
+        pinnedRuntime = null;
         CosyVoiceSessionPins pins = await CosyVoiceSessionPins.CreateAsync(
             modelFiles,
             provider,
             cancellationToken,
             allowTrtInitFallback).ConfigureAwait(false);
-        CosyVoiceEmbeddingTables embeddings = CosyVoiceEmbeddingTables.Load(modelFiles.ModelRootPath);
-        CosyVoiceWhisperTokenizer tokenizer = CosyVoiceWhisperTokenizer.Load(modelFiles.ModelRootPath);
+        CosyVoiceEmbeddingTables embeddings;
+        CosyVoiceWhisperTokenizer tokenizer;
+        try
+        {
+            embeddings = CosyVoiceEmbeddingTables.Load(modelFiles.ModelRootPath);
+            tokenizer = CosyVoiceWhisperTokenizer.Load(modelFiles.ModelRootPath);
+        }
+        catch
+        {
+            pins.Dispose();
+            throw;
+        }
+
         pinnedRuntime = new PinnedRuntime(
             modelFiles.ModelRootPath,
             modelFiles.Variant,

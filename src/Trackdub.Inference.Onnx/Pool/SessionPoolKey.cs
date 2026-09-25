@@ -145,6 +145,7 @@ internal sealed record SessionPoolKey
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
+            // File is inaccessible or the path is malformed; fall back to the pessimistic default.
         }
 
         return DefaultEstimatedVramMb;

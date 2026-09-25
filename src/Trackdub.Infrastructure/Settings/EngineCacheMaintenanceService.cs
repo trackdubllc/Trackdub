@@ -122,11 +122,13 @@ public sealed class EngineCacheMaintenanceService(
                 }
                 catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
                 {
+                    // Best-effort per-file cleanup; a locked or missing file does not fail the clear.
                 }
             }
         }
         catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
         {
+            // Best-effort cleanup; enumeration/access failure leaves the remaining cache untouched.
         }
     }
 
@@ -143,6 +145,7 @@ public sealed class EngineCacheMaintenanceService(
             }
             catch (Exception ex) when (IsBestEffortFileAccessFailure(ex))
             {
+                // Best-effort cleanup; a directory that can't be removed is left in place.
             }
         }
     }

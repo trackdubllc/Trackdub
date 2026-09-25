@@ -171,10 +171,10 @@ internal sealed class InferenceSessionPool : IDisposable
     /// re-invoking the factory (single-flight: one factory call per creation wave).
     /// </summary>
     /// <summary>
-/// Monotonic creation-wave id. Incremented only when a factory fails and the failure is
-/// recorded; waiters capture the observed wave before queueing so only failures from a
-/// later wave (i.e. a creator they actually waited behind) are propagated.
-/// </summary>
+    /// Monotonic creation-wave id. Incremented only when a factory fails and the failure is
+    /// recorded; waiters capture the observed wave before queueing so only failures from a
+    /// later wave (i.e. a creator they actually waited behind) are propagated.
+    /// </summary>
     private long creationWave;
     private readonly ConcurrentDictionary<SessionPoolKey, (Exception Error, long Wave)> creationFailures = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
@@ -373,6 +373,14 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 long needMb = ResolveReservationMb(key);
                 int device = DeviceOf(key);
+
+                if (enableMemoryAdmission && needMb > memoryBudgetMb)
+                {
+                    throw new InvalidOperationException(
+                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
+                        $"device {device} admission budget of {memoryBudgetMb} MB.");
+                }
+
                 bool ephemeral = false;
                 PoolEntry? lruEvicted1 = null;
                 bool reserved = false;
@@ -383,10 +391,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     ObjectDisposedException.ThrowIf(disposed, this);
                     if (entries.ContainsKey(key))
                     {
-                        if (reserved)
-                        {
-                            ReleaseReservation(device, needMb);
-                        }
+                        // No reservation is held yet at this point (reserved is only set below).
                         continue;
                     }
 
@@ -413,22 +418,13 @@ internal sealed class InferenceSessionPool : IDisposable
                         // else: do not hold a reservation while waiting — that deadlocks
                         // when every waiter reserves and nobody can release.
                     }
-                    else
-                    {
-                        lruEvicted1 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
-                        ephemeral = pooledCount >= maxSessions && lruEvicted1 is null;
-                    }
+                    // else (count mode): do not evict or decide ephemeral here — the entry we'd
+                    // evict is still usable and factory() has not succeeded yet. The lruEvicted2
+                    // path after a successful create handles capacity instead.
                 }
                 finally
                 {
                     creationLock.Release();
-                }
-
-                if (enableMemoryAdmission && needMb > memoryBudgetMb)
-                {
-                    throw new InvalidOperationException(
-                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
-                        $"device {device} admission budget of {memoryBudgetMb} MB.");
                 }
 
                 if (enableMemoryAdmission && !reserved)
