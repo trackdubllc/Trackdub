@@ -81,7 +81,7 @@ public static class ResourceTelemetryAggregator
         {
             Stage = stage,
             Phase = phase,
-            IterationCount = samples.Length,
+            IterationCount = samples.Select(sample => sample.Iteration).Distinct().Count(),
             Metrics = metrics,
         };
     }

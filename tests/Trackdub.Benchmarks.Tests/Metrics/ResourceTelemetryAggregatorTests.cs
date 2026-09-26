@@ -71,6 +71,22 @@ public sealed class ResourceTelemetryAggregatorTests
     }
 
     [Fact]
+    public void Aggregate_counts_retry_attempts_within_an_iteration_once()
+    {
+        // A stage that retried once within iteration 1 emits two samples (attempt 1 and 2) but
+        // must not be reported as two iterations.
+        ResourceTelemetryDistribution distribution = Assert.Single(Aggregate(
+        [
+            Sample(1, 60d, 100d, 1d, attempt: 1),
+            Sample(1, 10d, 100d, 1d, attempt: 2),
+            Sample(2, 10d, 100d, 1d, attempt: 1),
+        ]));
+
+        Assert.Equal(2, distribution.IterationCount);
+        Assert.Equal(3, Metric(distribution, "cpuPercent").SampleCount);
+    }
+
+    [Fact]
     public void Aggregate_counts_unavailable_iterations_separately_from_samples()
     {
         ResourceMetricStatistics vram = Metric(Assert.Single(Aggregate(
@@ -154,12 +170,13 @@ public sealed class ResourceTelemetryAggregatorTests
         double allocated,
         string phase = "measured",
         (long? Value, string? Reason)? vram = null,
-        double? cpuThreshold = 50) => new()
+        double? cpuThreshold = 50,
+        int attempt = 1) => new()
         {
             Stage = "audio-prep",
             Phase = phase,
             Iteration = iteration,
-            Attempt = 1,
+            Attempt = attempt,
             ExecutionStatus = BenchmarkEvidenceStatus.Completed,
             Validation = new ResourceTelemetryValidation
             {
