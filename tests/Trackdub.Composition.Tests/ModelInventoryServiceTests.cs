@@ -67,10 +67,10 @@ public sealed class ModelInventoryServiceTests : IDisposable
     public async Task GetByModelIdAsync_returns_active_entry_when_a_deprecated_entry_shares_the_model_id()
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
+        string manifestPath = Path.Join(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-        Directory.CreateDirectory(Path.Combine(storagePaths.ModelCacheDirectory, "example-model-old"));
-        Directory.CreateDirectory(Path.Combine(storagePaths.ModelCacheDirectory, "example-model-new"));
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model-old"));
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model-new"));
         File.WriteAllText(
             manifestPath,
             """
