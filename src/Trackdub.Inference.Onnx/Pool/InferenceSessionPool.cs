@@ -52,11 +52,26 @@ internal sealed class InferenceSessionPool : IDisposable
     /// Spleeter, SortFormer, Silero-VAD) consume this pool via the
     /// <c>CreatePooled*</c> factory methods in <see cref="OnnxExecutionSessionFactory"/>.
     /// </remarks>
-    public static readonly InferenceSessionPool Shared = new();
+    /// <remarks>
+    /// The shared instance is built from <see cref="SharedPoolOptions"/>, which reads
+    /// <c>TRACKDUB_SESSION_ADMISSION</c> and <c>TRACKDUB_SESSION_VRAM_BUDGET_MB</c>. It is
+    /// resolved lazily on first use so an operator can opt into budgeted admission, but the
+    /// default is admission <em>off</em> — the historical behaviour, where a miss past
+    /// <c>maxSessions</c> creates a short-lived ephemeral session. See
+    /// <see cref="SharedPoolOptions"/> for the activation contract.
+    /// </remarks>
+    public static InferenceSessionPool Shared => SharedPool.Value;
+
+    private static readonly Lazy<InferenceSessionPool> SharedPool = new(
+        static () => new InferenceSessionPool(
+            maxSessions: SharedPoolOptions.MaxSessions,
+            enableMemoryAdmission: SharedPoolOptions.EnableMemoryAdmission,
+            memoryBudgetMb: SharedPoolOptions.MemoryBudgetMb),
+        LazyThreadSafetyMode.ExecutionAndPublication);
 
     // Sized for a full dub working set (VAD + separation + diarization + ASR encoder/decoder
     // + translation encoder/decoder + multi-graph TTS) so LRU does not thrash mid-pipeline.
-    private const int DefaultMaxSessions = 12;
+    public const int DefaultMaxSessions = 12;
 
     /// <summary>Default VRAM admission budget when <c>enableMemoryAdmission</c> is on.</summary>
     public const long DefaultMemoryBudgetMb = 4096;

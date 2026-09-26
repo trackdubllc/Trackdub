@@ -857,6 +857,120 @@ public sealed class InferenceSessionPoolTests
         }
     }
 
+    // ── SharedPoolOptions (production activation contract) ────────────────────
+
+    [Theory]
+    [InlineData("1", true)]
+    [InlineData("true", true)]
+    [InlineData("TRUE", true)]
+    [InlineData("on", true)]
+    [InlineData("enabled", true)]
+    [InlineData(" 1 ", true)]
+    [InlineData("0", false)]
+    [InlineData("false", false)]
+    [InlineData("off", false)]
+    [InlineData("", false)]
+    [InlineData("yes", false)]
+    [InlineData("2", false)]
+    public void SharedPoolOptions_AdmissionFlag_OnlyAcceptsExplicitOptIn(string raw, bool expected)
+    {
+        // Admission stays off unless explicitly enabled: a typo must not silently turn a
+        // blocking wait into production behaviour.
+        Assert.Equal(expected, SharedPoolOptions.ParseAdmissionFlag(raw));
+    }
+
+    [Fact]
+    public void SharedPoolOptions_AdmissionFlag_UnsetIsOff()
+    {
+        using var env = new ScopedEnvironment();
+        env.Clear(SharedPoolOptions.AdmissionVariable);
+
+        Assert.False(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData("4096", 4096L)]
+    [InlineData(" 8192 ", 8192L)]
+    [InlineData("0", null)]
+    [InlineData("-1", null)]
+    [InlineData("abc", null)]
+    [InlineData("12.5", null)]
+    public void SharedPoolOptions_PositiveInt64_RejectsUnsetAndInvalid(string? raw, long? expected)
+    {
+        Assert.Equal(expected, SharedPoolOptions.ParsePositiveInt64(raw));
+    }
+
+    [Fact]
+    public void SharedPoolOptions_BudgetAndCapacity_AreReadFromEnvironment()
+    {
+        using var env = new ScopedEnvironment();
+        env.Set(SharedPoolOptions.BudgetMbVariable, "8192");
+        env.Set(SharedPoolOptions.MaxSessionsVariable, "20");
+        env.Set(SharedPoolOptions.AdmissionVariable, "enabled");
+
+        Assert.True(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
+        Assert.Equal(8192L, SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.BudgetMbVariable));
+        Assert.Equal(20L, SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.MaxSessionsVariable));
+    }
+
+    [Fact]
+    public void SharedPoolOptions_Defaults_MatchPoolDefaults()
+    {
+        // With no environment set, the shared pool must behave exactly as it did before
+        // this seam existed: admission off, pool default capacity, default budget.
+        using var env = new ScopedEnvironment();
+        env.Clear(SharedPoolOptions.AdmissionVariable);
+        env.Clear(SharedPoolOptions.BudgetMbVariable);
+        env.Clear(SharedPoolOptions.MaxSessionsVariable);
+
+        Assert.False(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
+        Assert.Null(SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.BudgetMbVariable));
+        Assert.Null(SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.MaxSessionsVariable));
+        Assert.Equal(12, InferenceSessionPool.DefaultMaxSessions);
+        Assert.Equal(4096L, InferenceSessionPool.DefaultMemoryBudgetMb);
+    }
+
+    [Fact]
+    public void Shared_IsStable_AcrossAccesses()
+    {
+        // Shared is now lazily built; every consumer must observe the same instance.
+        Assert.Same(InferenceSessionPool.Shared, InferenceSessionPool.Shared);
+    }
+
+    /// <summary>
+    /// Sets an environment variable for the duration of a test and restores it afterwards,
+    /// so option parsing can be exercised without leaking state across the test run.
+    /// </summary>
+    private sealed class ScopedEnvironment : IDisposable
+    {
+        private readonly Dictionary<string, string?> original = new();
+
+        public void Set(string variable, string? value) => SetCore(variable, value);
+
+        public void Clear(string variable) => SetCore(variable, null);
+
+        public void Dispose()
+        {
+            foreach ((string variable, string? value) in original)
+            {
+                Environment.SetEnvironmentVariable(variable, value);
+            }
+        }
+
+        private void SetCore(string variable, string? value)
+        {
+            if (!original.ContainsKey(variable))
+            {
+                original[variable] = Environment.GetEnvironmentVariable(variable);
+            }
+
+            Environment.SetEnvironmentVariable(variable, value);
+        }
+    }
+
     // ── RecommendedMaxSessions ────────────────────────────────────────────────
 
     [Fact]
