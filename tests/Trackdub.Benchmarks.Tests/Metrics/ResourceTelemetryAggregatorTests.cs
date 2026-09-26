@@ -155,16 +155,16 @@ public sealed class ResourceTelemetryAggregatorTests
         string phase = "measured",
         (long? Value, string? Reason)? vram = null,
         double? cpuThreshold = 50) => new()
-    {
-        Stage = "audio-prep",
-        Phase = phase,
-        Iteration = iteration,
-        Attempt = 1,
-        ExecutionStatus = BenchmarkEvidenceStatus.Completed,
-        Validation = new ResourceTelemetryValidation
         {
-            Status = ResourceTelemetryStatus.Passed,
-            Checks =
+            Stage = "audio-prep",
+            Phase = phase,
+            Iteration = iteration,
+            Attempt = 1,
+            ExecutionStatus = BenchmarkEvidenceStatus.Completed,
+            Validation = new ResourceTelemetryValidation
+            {
+                Status = ResourceTelemetryStatus.Passed,
+                Checks =
             [
                 Check("cpuPercent", cpu, cpuThreshold),
                 Check("workingSetBytes", workingSet, 1000),
@@ -174,8 +174,8 @@ public sealed class ResourceTelemetryAggregatorTests
                     : new ResourceTelemetryCheck("availableVramMb", ResourceTelemetryStatus.Unavailable,
                         vram.Value.Value, 1000, vram.Value.Reason),
             ],
-        },
-    };
+            },
+        };
 
     private static ResourceTelemetryCheck Check(string metric, double? observed, double? threshold)
     {

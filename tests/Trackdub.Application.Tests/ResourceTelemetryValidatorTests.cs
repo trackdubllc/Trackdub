@@ -9,13 +9,21 @@ public sealed class ResourceTelemetryValidatorTests
     private readonly ResourceTelemetryValidator validator = new();
     private static ResourceUsageSnapshot Start => new()
     {
-        CpuTimeMilliseconds = 100, MonotonicMilliseconds = 1000, ProcessorCount = 4,
-        WorkingSetBytes = 1000, ManagedAllocatedBytes = 100, AvailableVramMb = 500
+        CpuTimeMilliseconds = 100,
+        MonotonicMilliseconds = 1000,
+        ProcessorCount = 4,
+        WorkingSetBytes = 1000,
+        ManagedAllocatedBytes = 100,
+        AvailableVramMb = 500
     };
     private static ResourceUsageSnapshot End => new()
     {
-        CpuTimeMilliseconds = 300, MonotonicMilliseconds = 1100, ProcessorCount = 4,
-        WorkingSetBytes = 800, ManagedAllocatedBytes = 400, AvailableVramMb = 400
+        CpuTimeMilliseconds = 300,
+        MonotonicMilliseconds = 1100,
+        ProcessorCount = 4,
+        WorkingSetBytes = 800,
+        ManagedAllocatedBytes = 400,
+        AvailableVramMb = 400
     };
 
     [Fact]
@@ -23,8 +31,10 @@ public sealed class ResourceTelemetryValidatorTests
     {
         var result = validator.Validate(Start, End, new ResourceTelemetryBounds
         {
-            MaxCpuPercent = 50, MaxWorkingSetBytes = 1000,
-            MaxManagedAllocatedBytes = 300, MinAvailableVramMb = 400
+            MaxCpuPercent = 50,
+            MaxWorkingSetBytes = 1000,
+            MaxManagedAllocatedBytes = 300,
+            MinAvailableVramMb = 400
         });
         Assert.Equal(ResourceTelemetryStatus.Passed, result.Status);
         Assert.Equal(200, result.CpuTimeMilliseconds);
@@ -35,6 +45,32 @@ public sealed class ResourceTelemetryValidatorTests
             check => AssertCheck(check, "workingSetBytes", 1000),
             check => AssertCheck(check, "managedAllocatedBytes", 300),
             check => AssertCheck(check, "availableVramMb", 400));
+    }
+
+    [Fact]
+    public void Validate_uses_measured_peak_working_set_when_it_exceeds_both_endpoints()
+    {
+        ResourceUsageSnapshot peak = End with { PeakWorkingSetBytes = 1500 };
+
+        ResourceTelemetryValidation result = validator.Validate(Start, peak, new() { MaxWorkingSetBytes = 1200 });
+
+        Assert.Equal(ResourceTelemetryStatus.Failed, result.Status);
+        Assert.Equal(1500d, Check(result, "workingSetBytes").ObservedValue);
+    }
+
+    [Fact]
+    public void Validate_reports_working_set_unavailable_when_continuous_sampling_failed()
+    {
+        ResourceTelemetrySnapshot failedPeak = End with
+        {
+            PeakWorkingSetUnavailableReason = "Continuous working-set sampling unavailable (InvalidOperationException)."
+        };
+
+        ResourceTelemetryValidation result = validator.Validate(Start, failedPeak, new() { MaxWorkingSetBytes = 1200 });
+
+        Assert.Equal(ResourceTelemetryStatus.Unavailable, Check(result, "workingSetBytes").Status);
+        Assert.Null(Check(result, "workingSetBytes").ObservedValue);
+        Assert.Contains("InvalidOperationException", Check(result, "workingSetBytes").Reason, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -145,8 +181,10 @@ public sealed class ResourceTelemetryValidatorTests
         const string reason = "No VRAM reader is registered for this host.";
         var result = validator.Validate(Start, End with
         {
-            CpuTimeMilliseconds = null, CpuUnavailableReason = "CPU unavailable",
-            AvailableVramMb = null, VramUnavailableReason = reason
+            CpuTimeMilliseconds = null,
+            CpuUnavailableReason = "CPU unavailable",
+            AvailableVramMb = null,
+            VramUnavailableReason = reason
         }, new());
         Assert.Equal(ResourceTelemetryStatus.Unavailable, result.Status);
         Assert.Equal("CPU unavailable", Check(result, "cpuPercent").Reason);
