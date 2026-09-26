@@ -18,9 +18,9 @@ public sealed class BenchmarkReportExportTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_tempDir, recursive: true); }
-        catch (DirectoryNotFoundException) { }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (DirectoryNotFoundException ex) { Console.Error.WriteLine($"Best-effort temp cleanup failed: {ex}"); }
+        catch (IOException ex) { Console.Error.WriteLine($"Best-effort temp cleanup failed: {ex}"); }
+        catch (UnauthorizedAccessException ex) { Console.Error.WriteLine($"Best-effort temp cleanup failed: {ex}"); }
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────

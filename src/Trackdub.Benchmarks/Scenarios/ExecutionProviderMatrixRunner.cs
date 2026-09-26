@@ -272,8 +272,8 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
         foreach (IDisposable disposable in _disposables)
         {
             try { disposable.Dispose(); }
-            catch (ObjectDisposedException) { }
-            catch (InvalidOperationException) { }
+            catch (ObjectDisposedException ex) { System.Diagnostics.Trace.WriteLine($"Ignored during best-effort dispose: {ex}"); }
+            catch (InvalidOperationException ex) { System.Diagnostics.Trace.WriteLine($"Ignored during best-effort dispose: {ex}"); }
         }
         _disposables.Clear();
     }

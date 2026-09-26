@@ -65,10 +65,9 @@ public sealed class MockPipelineExecutionTests : IDisposable
         });
 
         string[] expectedStages = ["audio-prep", "separation", "transcription", "alignment", "dubbing"];
-        foreach (string expected in expectedStages)
+        foreach (BenchmarkEvidenceStage? stage in expectedStages.Select(expected =>
+            report.Stages.FirstOrDefault(s => s.Name.Equals(expected, StringComparison.OrdinalIgnoreCase))))
         {
-            BenchmarkEvidenceStage? stage = report.Stages.FirstOrDefault(s =>
-                s.Name.Equals(expected, StringComparison.OrdinalIgnoreCase));
             Assert.NotNull(stage);
             Assert.Equal(BenchmarkEvidenceStatus.Completed, stage.Status);
             Assert.True(stage.DurationMilliseconds >= 0);

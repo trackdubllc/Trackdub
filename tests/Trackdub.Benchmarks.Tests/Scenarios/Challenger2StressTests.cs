@@ -32,8 +32,8 @@ public sealed class Challenger2StressTests : IDisposable
         if (Directory.Exists(_tempOutputDir))
         {
             try { Directory.Delete(_tempOutputDir, recursive: true); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (IOException ex) { Console.Error.WriteLine($"Best-effort temp cleanup failed: {ex}"); }
+            catch (UnauthorizedAccessException ex) { Console.Error.WriteLine($"Best-effort temp cleanup failed: {ex}"); }
         }
     }
 
@@ -97,10 +97,9 @@ public sealed class Challenger2StressTests : IDisposable
 
         // 2. Verify all 5 canonical stages exist in Stages list
         string[] canonicalStages = ["audio-prep", "separation", "transcription", "alignment", "dubbing"];
-        foreach (string stageName in canonicalStages)
+        foreach (BenchmarkEvidenceStage? stage in canonicalStages.Select(stageName =>
+            report.Stages.FirstOrDefault(s => s.Name.Equals(stageName, StringComparison.OrdinalIgnoreCase))))
         {
-            BenchmarkEvidenceStage? stage = report.Stages.FirstOrDefault(s =>
-                s.Name.Equals(stageName, StringComparison.OrdinalIgnoreCase));
             Assert.NotNull(stage);
             Assert.Equal(BenchmarkEvidenceStatus.Completed, stage.Status);
             Assert.NotNull(stage.ActualModel);
