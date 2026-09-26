@@ -14,7 +14,9 @@ public sealed record BenchmarkOptions(
     ReportFormat ReportFormat,
     string? WindowsMlDevicePolicyKey,
     string? Scope,
-    bool ShowHelp)
+    bool ShowHelp,
+    bool Mock = false,
+    bool DryRun = false)
 {
     public static bool TryParse(
         IReadOnlyList<string> args,
@@ -22,7 +24,7 @@ public sealed record BenchmarkOptions(
         out BenchmarkOptions options)
     {
         string? modelPath = null;
-        var outputPath = Path.Combine(Environment.CurrentDirectory, "benchmark-report.json");
+        var outputPath = Path.Join(Environment.CurrentDirectory, "benchmark-report.json");
         var providerPreference = BenchmarkProviderPreference.Cpu;
         var runCount = 5;
         string? variant = null;
@@ -31,6 +33,8 @@ public sealed record BenchmarkOptions(
         string? windowsMlDevicePolicyKey = null;
         string? scope = null;
         var showHelp = false;
+        var mock = false;
+        var dryRun = false;
 
         for (var index = 0; index < args.Count; index++)
         {
@@ -43,6 +47,12 @@ public sealed record BenchmarkOptions(
                 case "/?":
                     showHelp = true;
                     break;
+
+                case "--mock":
+                case "--dry-run":
+                    errorWriter.WriteLine($"{arg} is only supported by the controlled, controlled-matrix, and matrix commands.");
+                    options = DefaultWithHelp();
+                    return false;
 
                 case "--model":
                     if (!TryReadValue(args, ref index, arg, errorWriter, out modelPath))
@@ -227,7 +237,9 @@ public sealed record BenchmarkOptions(
             reportFormat,
             windowsMlDevicePolicyKey,
             string.IsNullOrWhiteSpace(scope) ? null : scope,
-            ShowHelp: false);
+            ShowHelp: false,
+            Mock: mock,
+            DryRun: dryRun);
 
         return true;
     }
@@ -235,7 +247,7 @@ public sealed record BenchmarkOptions(
     private static BenchmarkOptions DefaultWithHelp() =>
         new(
             string.Empty,
-            Path.Combine(Environment.CurrentDirectory, "benchmark-report.json"),
+            Path.Join(Environment.CurrentDirectory, "benchmark-report.json"),
             BenchmarkProviderPreference.Cpu,
             5,
             null,
@@ -243,7 +255,9 @@ public sealed record BenchmarkOptions(
             ReportFormat.Both,
             null,
             null,
-            ShowHelp: true);
+            ShowHelp: true,
+            Mock: false,
+            DryRun: false);
 
     private static bool TryParseProviderPreference(string value, out BenchmarkProviderPreference preference)
     {

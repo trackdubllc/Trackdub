@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
@@ -31,6 +31,7 @@
     <ProjectReference Include="..\..\src\Trackdub.Domain\Trackdub.Domain.csproj" />
     <ProjectReference Include="..\..\src\Trackdub.Inference\Trackdub.Inference.csproj" />
     <ProjectReference Include="..\..\src\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj" />
+    <ProjectReference Include="..\..\src\Trackdub.Application\Trackdub.Application.csproj" />
     <ProjectReference Include="..\..\src\Trackdub.Tools\Trackdub.Tools.csproj" />
   </ItemGroup>
 
@@ -43,6 +44,9 @@
 
   <ItemGroup>
     <Compile Include="..\Trackdub.TestDoubles\RequiresBundledModelFactAttribute.cs" Link="TestDoubles\RequiresBundledModelFactAttribute.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeWavHelper.cs" Link="TestDoubles\FakeWavHelper.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeMediaProbe.cs" Link="TestDoubles\FakeMediaProbe.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakePipelinePreFlightChecker.cs" Link="TestDoubles\FakePipelinePreFlightChecker.cs" />
   </ItemGroup>
 
 </Project>

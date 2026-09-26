@@ -23,7 +23,7 @@ public static class BenchmarkComparison
     internal static bool ProviderMatches(string requested, string actual) =>
         string.Equals(NormalizeProvider(requested), NormalizeProvider(actual), StringComparison.Ordinal);
 
-    private static string NormalizeProvider(string provider)
+    internal static string NormalizeProvider(string provider)
     {
         string key = new(provider.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
         if (key.EndsWith("executionprovider", StringComparison.Ordinal))

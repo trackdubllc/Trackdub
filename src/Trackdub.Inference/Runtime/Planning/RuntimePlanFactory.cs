@@ -839,7 +839,7 @@ internal sealed class RuntimePlanFactory
                 continue;
             }
 
-            string candidatePath = Path.GetFullPath(Path.Combine(cacheRecord.RootPath, variant.RelativeEntryPath));
+            string candidatePath = Path.GetFullPath(Path.Join(cacheRecord.RootPath, variant.RelativeEntryPath));
             if (RequiredFilesExist(cacheRecord.RootPath, variant.RequiredRelativePaths, fileExistenceCache))
             {
                 if (HasManifestHashMismatch(entry, cacheRecord, out string? detail))
@@ -853,7 +853,7 @@ internal sealed class RuntimePlanFactory
                 entryPath = candidatePath;
                 rootPath = cacheRecord.RootPath;
                 integrityStatus = ResolveIntegrityStatus(entry, cacheRecord);
-                modelSha256 = ResolveModelSha256(entry, cacheRecord);
+                modelSha256 = ResolveModelSha256(entry, cacheRecord, variant);
                 return true;
             }
         }
@@ -938,12 +938,26 @@ internal sealed class RuntimePlanFactory
 
     private static string? ResolveModelSha256(
         BundledModelManifestEntry entry,
-        LocalModelCacheRecord cacheRecord) =>
-        !string.IsNullOrWhiteSpace(cacheRecord.Sha256)
+        LocalModelCacheRecord cacheRecord,
+        VariantCandidate variant)
+    {
+        // Bundled variants (e.g. Silero fp16 vs int8) are distinct graph files with their own
+        // hash in the manifest's per-file table. Falling back to the shared model-level hash
+        // would key the smoke verdict by model instead of by graph, letting a verdict for one
+        // variant wrongly verify a different, never-tested variant.
+        string normalizedRelativeEntryPath = variant.RelativeEntryPath.Replace('\\', '/');
+        if (entry.DownloadFileHashes.TryGetValue(normalizedRelativeEntryPath, out string? fileHash) &&
+            !string.IsNullOrWhiteSpace(fileHash))
+        {
+            return fileHash;
+        }
+
+        return !string.IsNullOrWhiteSpace(cacheRecord.Sha256)
             ? cacheRecord.Sha256
             : !string.IsNullOrWhiteSpace(entry.Sha256)
                 ? entry.Sha256
                 : null;
+    }
 
     private static SmokeVerdictKey? TryBuildVerdictKey(
         string? modelSha256,
@@ -986,7 +1000,7 @@ internal sealed class RuntimePlanFactory
     {
         foreach (string relativePath in requiredRelativePaths)
         {
-            string requiredPath = Path.GetFullPath(Path.Combine(rootPath, relativePath));
+            string requiredPath = Path.GetFullPath(Path.Join(rootPath, relativePath));
             if (!FileExists(fileExistenceCache, requiredPath))
             {
                 return false;
@@ -1058,7 +1072,7 @@ internal sealed class RuntimePlanFactory
         }
 
         string root = Path.GetFullPath(rootPath);
-        string candidatePath = Path.GetFullPath(Path.Combine(root, Path.Combine(normalizedRelativePath.Split('/'))));
+        string candidatePath = Path.GetFullPath(Path.Join(root, Path.Join(normalizedRelativePath.Split('/'))));
         if (!IsSameOrUnderRoot(root, candidatePath))
         {
             return false;

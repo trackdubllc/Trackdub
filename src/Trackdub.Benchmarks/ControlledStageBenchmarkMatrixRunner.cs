@@ -1,4 +1,5 @@
 using Trackdub.Application.Dubbing;
+using Trackdub.Benchmarks.Metrics;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain.StageRuns;
 
@@ -6,7 +7,8 @@ namespace Trackdub.Benchmarks;
 
 public sealed record ControlledStageBenchmarkMatrixResult(
     string Stage,
-    BenchmarkEvidenceReport Evidence);
+    BenchmarkEvidenceReport Evidence,
+    LatencyStatistics? Statistics = null);
 
 public sealed record ControlledStageBenchmarkMatrixReport
 {
@@ -23,7 +25,12 @@ public sealed record ControlledStageBenchmarkMatrixReport
 /// <summary>Runs the existing controlled benchmark once for each selected pipeline stage.</summary>
 public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
 {
-    private readonly ControlledDubbingBenchmarkRunner runner = new();
+    private readonly ControlledDubbingBenchmarkRunner runner;
+
+    public ControlledStageBenchmarkMatrixRunner(ControlledDubbingBenchmarkRunner? runner = null)
+    {
+        this.runner = runner ?? new();
+    }
 
     public async Task<ControlledStageBenchmarkMatrixReport> RunAsync(
         ControlledStageBenchmarkMatrixOptions options,
@@ -33,46 +40,20 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
         IReadOnlyList<string> selectedStages = ResolveStages(options.Stages);
         DateTimeOffset startedAt = DateTimeOffset.UtcNow;
         var results = new List<ControlledStageBenchmarkMatrixResult>(selectedStages.Count);
-        string outputBasePath = Path.GetFullPath(options.OutputDirectory);
-        if (!outputBasePath.EndsWith(Path.DirectorySeparatorChar) &&
-            !outputBasePath.EndsWith(Path.AltDirectorySeparatorChar))
-        {
-            outputBasePath += Path.DirectorySeparatorChar;
-        }
 
         foreach (string stage in selectedStages)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (Path.IsPathRooted(stage))
-            {
-                throw new ArgumentException(
-                    "Stage names must be relative path segments.",
-                    nameof(options));
-            }
-
-            string stageDirectoryName = Path.GetFileName(stage);
-            if (string.IsNullOrWhiteSpace(stageDirectoryName) || Path.IsPathRooted(stageDirectoryName))
-            {
-                throw new ArgumentException(
-                    "Stage names must resolve to a relative directory name.",
-                    nameof(options));
-            }
-
-            string combinedOutputDirectory = Path.GetFullPath(Path.Join(outputBasePath, stageDirectoryName));
-            if (!combinedOutputDirectory.StartsWith(outputBasePath, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new ArgumentException(
-                    "Stage names must resolve within the output directory.",
-                    nameof(options));
-            }
-
             options.ModelOverrides.TryGetValue(stage, out string? model);
             BenchmarkEvidenceReport evidence = await runner.RunAsync(
                 new ControlledDubbingBenchmarkOptions
                 {
                     FixturePath = options.FixturePath,
                     ExpectedFixtureSha256 = options.ExpectedFixtureSha256,
-                    OutputDirectory = combinedOutputDirectory,
+                    // stage is already constrained to DubbingPipelineStages.ExtendedStageOrder by
+                    // ResolveStages, but Path.GetFileName is a cheap extra guard against any
+                    // future caller passing an unvalidated stage name straight through.
+                    OutputDirectory = Path.Join(options.OutputDirectory, Path.GetFileName(stage)),
                     Stage = stage,
                     Model = model,
                     Provider = options.Provider,
@@ -83,9 +64,26 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     ModelDirectory = options.ModelDirectory,
                     FfmpegPath = options.FfmpegPath,
                     FfprobePath = options.FfprobePath,
+                    RunCount = options.RunCount,
+                    Mock = options.Mock,
+                    DryRun = options.DryRun,
                 }, cancellationToken).ConfigureAwait(false);
 
-            results.Add(new ControlledStageBenchmarkMatrixResult(stage, evidence));
+            LatencyStatistics? stats = null;
+            if (evidence.TimingsMilliseconds.TryGetValue($"stage:{stage}:p50", out double? p50) && p50.HasValue)
+            {
+                stats = new LatencyStatistics(
+                    MinMilliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:min") ?? p50.Value,
+                    MaxMilliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:max") ?? p50.Value,
+                    MeanMilliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:mean") ?? p50.Value,
+                    P50Milliseconds: p50.Value,
+                    P90Milliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:p90") ?? p50.Value,
+                    P99Milliseconds: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:p99") ?? p50.Value,
+                    ThroughputUnitsPerSecond: evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:throughput") ?? 0d,
+                    SampleCount: (int)(evidence.TimingsMilliseconds.GetValueOrDefault($"stage:{stage}:sampleCount") ?? 1d));
+            }
+
+            results.Add(new ControlledStageBenchmarkMatrixResult(stage, evidence, stats));
         }
 
         BenchmarkEvidenceStatus status = results.All(
@@ -97,12 +95,6 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     ? BenchmarkEvidenceStatus.Failed
                     : BenchmarkEvidenceStatus.PartiallyCompleted;
 
-        string reportFileName = $"stage-matrix-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json";
-        if (Path.IsPathRooted(reportFileName))
-        {
-            throw new InvalidOperationException("Report file name must be a relative path.");
-        }
-
         return new ControlledStageBenchmarkMatrixReport
         {
             FixturePath = options.FixturePath,
@@ -110,7 +102,9 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
             Status = status,
             StartedAtUtc = startedAt,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            ReportPath = Path.Combine(options.OutputDirectory, reportFileName),
+            ReportPath = Path.Join(
+                options.OutputDirectory,
+                $"stage-matrix-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json"),
         };
     }
 

@@ -853,15 +853,16 @@ internal static class OnnxExecutionSessionFactory
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
 
-        provider = DowngradeTrtRtxForUnsupportedGraphs(
+        string requestedProvider = FormatProviderLabel(provider);
+        ExecutionProviderKind selectedProviderKind = DowngradeTrtRtxForUnsupportedGraphs(
             provider,
             [encoderModelPath, decoderModelPath],
             out string? graphFallbackReason);
 
-        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
+        BootstrapContext bootstrap = await BootstrapForProviderAsync(selectedProviderKind, cancellationToken)
             .ConfigureAwait(false);
         DualOptionsSelections selections = CreateDualOptionsSelections(
-            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+            selectedProviderKind, bootstrap.Bootstrap, bootstrap.DevicePolicy,
             additionalTrtEncoderOptions, additionalTrtDecoderOptions);
         using SessionOptions encoderOptions = selections.Encoder.Options;
         using SessionOptions decoderOptions = selections.Decoder.Options;
@@ -871,14 +872,14 @@ internal static class OnnxExecutionSessionFactory
             modelId, variant);
 
         DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
-            provider, bootstrap, selections,
+            selectedProviderKind, bootstrap, selections,
             encoderModelPath, decoderModelPath,
             encoderKey, decoderKey, pool, cancellationToken, sessionFactory)
             .ConfigureAwait(false);
 
         return new WhisperSessionLease(
             pair.EncoderLease.Session, pair.DecoderLease.Session,
-            pair.RequestedProviderLabel, pair.SelectedProviderLabel,
+            requestedProvider, pair.SelectedProviderLabel,
             MergeFallbackReasons(graphFallbackReason, pair.BootstrapDetail))
         {
             EncoderPoolLease = pair.EncoderLease,
@@ -2025,7 +2026,7 @@ internal static class OnnxExecutionSessionFactory
         string? cacheRoot = Environment.GetEnvironmentVariable(CacheRootEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(cacheRoot))
         {
-            return Path.Combine(NormalizePath(cacheRoot), "EngineCache");
+            return Path.Join(NormalizePath(cacheRoot), "EngineCache");
         }
 
         string localAppDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -2034,7 +2035,7 @@ internal static class OnnxExecutionSessionFactory
             localAppDataRoot = AppContext.BaseDirectory;
         }
 
-        return Path.Combine(localAppDataRoot, "Trackdub", "EngineCache");
+        return Path.Join(localAppDataRoot, "Trackdub", "EngineCache");
     }
 
     private static string NormalizePath(string path) =>
@@ -2210,7 +2211,7 @@ internal static class OnnxExecutionSessionFactory
 #else
         return new ExecutionProviders.PortableExecutionProviderBootstrapper(
             TensorRtRtx.TensorRtRtxProviderBootstrapFactory.CreateWithDefaultInstallPath(
-                Path.Combine(
+                Path.Join(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "Trackdub")));
 #endif

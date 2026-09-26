@@ -26,10 +26,13 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
         string? sourceLanguage = null;
         string mode = "fresh-process";
         bool reuseEngineCache = false;
+        bool mock = false;
+        bool dryRun = false;
         string? modelDirectory = null;
         string? provider = null;
         string? ffmpeg = null;
         string? ffprobe = null;
+        int runCount = 1;
         var modelOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         for (int index = 1; index < args.Length; index++)
@@ -37,6 +40,19 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
             if (args[index] == "--reuse-engine-cache")
             {
                 reuseEngineCache = true;
+                continue;
+            }
+
+            if (args[index] == "--mock")
+            {
+                mock = true;
+                continue;
+            }
+
+            if (args[index] == "--dry-run")
+            {
+                dryRun = true;
+                mock = true;
                 continue;
             }
 
@@ -60,6 +76,15 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
                 case "--provider": provider = value; break;
                 case "--ffmpeg": ffmpeg = value; break;
                 case "--ffprobe": ffprobe = value; break;
+                case "--runs":
+                    if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
+                    {
+                        error.WriteLine($"Invalid run count '{value}'. Expected a positive integer.");
+                        return false;
+                    }
+
+                    runCount = parsedRuns;
+                    break;
                 case "--model":
                     if (!TryParseModelOverride(value, error, modelOverrides))
                     {
@@ -100,6 +125,9 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
             FfmpegPath = ffmpeg,
             FfprobePath = ffprobe,
             ModelOverrides = modelOverrides,
+            RunCount = runCount,
+            Mock = mock,
+            DryRun = dryRun,
         };
         return true;
     }

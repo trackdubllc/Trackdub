@@ -1,0 +1,128 @@
+name: Benchmark Report Validation
+
+on:
+  push:
+    branches: [main, benchmark]
+    paths:
+      - 'src/Trackdub.Benchmarks/**'
+      - 'tests/Trackdub.Benchmarks.Tests/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/Trackdub.Benchmarks/**'
+      - 'tests/Trackdub.Benchmarks.Tests/**'
+  workflow_dispatch:
+
+concurrency:
+  group: benchmark-report-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-reports:
+    name: Validate Benchmark Report Export
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore Dependencies
+        run: dotnet restore Trackdub.slnx -m:1
+
+      - name: Compile
+        run: dotnet build Trackdub.slnx -c Release --no-restore -m:1
+
+      - name: Run Report Export Tests
+        run: >-
+          dotnet test tests/Trackdub.Benchmarks.Tests
+          -c Release --no-build -m:1
+          --filter "FullyQualifiedName~BenchmarkReportExportTests"
+
+      - name: Validate Mock Matrix JSON Output
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPORT_DIR="$RUNNER_TEMP/benchmark-report-validation"
+          mkdir -p "$REPORT_DIR"
+
+          # Create a minimal fixture file for the mock runner
+          echo "mock-fixture-content" > "$RUNNER_TEMP/mock-fixture.wav"
+
+          # Run the matrix benchmark in mock/dry-run mode
+          dotnet run --project src/Trackdub.Benchmarks -c Release --no-build -f net10.0 -- \
+            matrix "$RUNNER_TEMP/mock-fixture.wav" \
+            --output "$REPORT_DIR" \
+            --providers cpu,directml \
+            --mock \
+            --format json
+
+          # Verify JSON file exists
+          if [ ! -f "$REPORT_DIR/execution-provider-matrix.json" ]; then
+            echo "ERROR: JSON report not found at $REPORT_DIR/execution-provider-matrix.json"
+            exit 1
+          fi
+
+          # Verify Markdown file exists
+          if [ ! -f "$REPORT_DIR/execution-provider-matrix.md" ]; then
+            echo "ERROR: Markdown report not found at $REPORT_DIR/execution-provider-matrix.md"
+            exit 1
+          fi
+
+          # Validate JSON structure with jq
+          echo "=== JSON Report ==="
+          jq . "$REPORT_DIR/execution-provider-matrix.json"
+
+          # Check required fields
+          SCENARIO=$(jq -r '.Scenario' "$REPORT_DIR/execution-provider-matrix.json")
+          BASELINE=$(jq -r '.BaselineProvider' "$REPORT_DIR/execution-provider-matrix.json")
+          COMPARISONS=$(jq '.Comparisons | length' "$REPORT_DIR/execution-provider-matrix.json")
+
+          if [ "$SCENARIO" = "null" ] || [ -z "$SCENARIO" ]; then
+            echo "ERROR: Scenario field is missing or empty"
+            exit 1
+          fi
+
+          if [ "$BASELINE" = "null" ] || [ -z "$BASELINE" ]; then
+            echo "ERROR: BaselineProvider field is missing or empty"
+            exit 1
+          fi
+
+          if [ "$COMPARISONS" -lt 2 ]; then
+            echo "ERROR: Expected at least 2 provider comparisons, got $COMPARISONS"
+            exit 1
+          fi
+
+          # Verify each comparison has finite numeric values
+          jq -e '.Comparisons[] | select(.P50Milliseconds == null or (.P50Milliseconds | isnan) or (.P50Milliseconds | isinfinite))' \
+            "$REPORT_DIR/execution-provider-matrix.json" && {
+            echo "ERROR: Found comparison with non-finite P50 value"
+            exit 1
+          } || true
+
+          echo "=== Markdown Report (first 30 lines) ==="
+          head -30 "$REPORT_DIR/execution-provider-matrix.md"
+
+          echo ""
+          echo "✅ All report validations passed"
+
+      - name: Upload Report Artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-report-validation
+          path: ${{ runner.temp }}/benchmark-report-validation/
+          if-no-files-found: ignore

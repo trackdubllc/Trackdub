@@ -27,6 +27,11 @@ public sealed class HeadlessDubbingHost : IDisposable
     public IDubbingSessionFactory SessionFactory => _sessionFactory;
 
     /// <summary>
+    /// The root service provider backing this headless host.
+    /// </summary>
+    public IServiceProvider Services => _serviceProvider;
+
+    /// <summary>
     /// Builds a headless host with the given options.
     /// </summary>
     public static HeadlessDubbingHost Create(HeadlessTrackdubOptions? options = null)

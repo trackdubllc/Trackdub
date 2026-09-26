@@ -91,7 +91,7 @@ public sealed class WindowsMlExecutionProviderBootstrapper
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (WindowsMlCatalogProviderFilter.IsExcludedFromBulkRegistration(provider.Name) ||
-(!allowDownloads && provider.ReadyState is not ExecutionProviderReadyState.Ready))
+                (!allowDownloads && provider.ReadyState is not ExecutionProviderReadyState.Ready))
             {
                 continue;
             }
@@ -123,7 +123,7 @@ public sealed class WindowsMlExecutionProviderBootstrapper
 
     private static bool TryEnsureWinMlProjectionDeployed(out string? failureReason)
     {
-        string projectionPath = Path.Combine(
+        string projectionPath = Path.Join(
             AppContext.BaseDirectory,
             "Microsoft.Windows.AI.MachineLearning.Projection.dll");
         if (File.Exists(projectionPath))
