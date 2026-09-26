@@ -50,7 +50,10 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                 {
                     FixturePath = options.FixturePath,
                     ExpectedFixtureSha256 = options.ExpectedFixtureSha256,
-                    OutputDirectory = Path.Combine(options.OutputDirectory, stage),
+                    // stage is already constrained to DubbingPipelineStages.ExtendedStageOrder by
+                    // ResolveStages, but Path.GetFileName is a cheap extra guard against any
+                    // future caller passing an unvalidated stage name straight through.
+                    OutputDirectory = Path.Join(options.OutputDirectory, Path.GetFileName(stage)),
                     Stage = stage,
                     Model = model,
                     Provider = options.Provider,
@@ -99,7 +102,7 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
             Status = status,
             StartedAtUtc = startedAt,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            ReportPath = Path.Combine(
+            ReportPath = Path.Join(
                 options.OutputDirectory,
                 $"stage-matrix-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json"),
         };

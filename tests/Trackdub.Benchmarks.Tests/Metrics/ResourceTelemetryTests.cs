@@ -79,7 +79,7 @@ public sealed class ResourceTelemetryTests
         ResourceTelemetryDelta delta = ResourceTelemetry.CalculateDelta(start, end);
 
         Assert.Equal(60_000_000, delta.WorkingSetDeltaBytes);
-        Assert.Equal(180_000_000, delta.PeakWorkingSetBytes);
+        Assert.Equal(160_000_000, delta.PeakWorkingSetBytes);
         Assert.Equal(45_000_000, delta.ManagedAllocatedBytes);
         Assert.Equal(6, delta.Gen0Collections);
         Assert.Equal(2, delta.Gen1Collections);
@@ -100,7 +100,7 @@ public sealed class ResourceTelemetryTests
         ResourceTelemetryDelta delta = ResourceTelemetry.CalculateDelta(snapshot, snapshot);
 
         Assert.Equal(0, delta.WorkingSetDeltaBytes);
-        Assert.Equal(250_000_000, delta.PeakWorkingSetBytes);
+        Assert.Equal(200_000_000, delta.PeakWorkingSetBytes);
         Assert.Equal(0, delta.ManagedAllocatedBytes);
         Assert.Equal(0, delta.Gen0Collections);
         Assert.Equal(0, delta.Gen1Collections);
@@ -130,7 +130,7 @@ public sealed class ResourceTelemetryTests
         ResourceTelemetryDelta delta = ResourceTelemetry.CalculateDelta(start, end);
 
         Assert.Equal(-150_000_000, delta.WorkingSetDeltaBytes);
-        Assert.Equal(550_000_000, delta.PeakWorkingSetBytes);
+        Assert.Equal(500_000_000, delta.PeakWorkingSetBytes);
         Assert.Equal(10_000_000, delta.ManagedAllocatedBytes);
         Assert.Equal(1, delta.Gen0Collections);
         Assert.Equal(1, delta.Gen1Collections);
@@ -138,17 +138,20 @@ public sealed class ResourceTelemetryTests
     }
 
     [Fact]
-    public void CalculateDelta_PeakWorkingSet_PreservesHighestBetweenStartAndEnd()
+    public void CalculateDelta_PeakWorkingSet_UsesHigherOfBoundaryWorkingSets()
     {
-        // Scenario 1: End has higher peak
+        // The delta's PeakWorkingSetBytes is an endpoint-sampled max of the two snapshots'
+        // WorkingSetBytes, not the snapshots' own (process-lifetime) PeakWorkingSetBytes field.
+
+        // Scenario 1: End has higher working set
         var s1 = new ResourceTelemetrySnapshot(100, 150, 50, 0, 0, 0);
         var e1 = new ResourceTelemetrySnapshot(120, 200, 60, 0, 0, 0);
-        Assert.Equal(200, ResourceTelemetry.CalculateDelta(s1, e1).PeakWorkingSetBytes);
+        Assert.Equal(120, ResourceTelemetry.CalculateDelta(s1, e1).PeakWorkingSetBytes);
 
-        // Scenario 2: Start has higher peak (e.g. synthetic test)
-        var s2 = new ResourceTelemetrySnapshot(100, 300, 50, 0, 0, 0);
+        // Scenario 2: Start has higher working set
+        var s2 = new ResourceTelemetrySnapshot(130, 300, 50, 0, 0, 0);
         var e2 = new ResourceTelemetrySnapshot(120, 200, 60, 0, 0, 0);
-        Assert.Equal(300, ResourceTelemetry.CalculateDelta(s2, e2).PeakWorkingSetBytes);
+        Assert.Equal(130, ResourceTelemetry.CalculateDelta(s2, e2).PeakWorkingSetBytes);
     }
 
     [Fact]

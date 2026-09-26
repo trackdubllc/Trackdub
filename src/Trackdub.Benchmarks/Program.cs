@@ -602,7 +602,7 @@ public static class Program
             {
                 if (!string.IsNullOrWhiteSpace(options.OutputDirectory))
                 {
-                    string reportPath = Path.Combine(
+                    string reportPath = Path.Join(
                         options.OutputDirectory,
                         $"{Path.GetFileNameWithoutExtension(options.InputPath)}-{options.TargetLanguage}.json");
                     report = report with { ReportPath = reportPath };
@@ -682,7 +682,7 @@ public static class Program
                 cancellationToken).ConfigureAwait(false);
 
             // Write JSON reports and print console summary.
-            string reportsDir = batchOptions.OutputDirectory ?? Path.Combine(
+            string reportsDir = batchOptions.OutputDirectory ?? Path.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "TrackdubBenchmarks");
             Directory.CreateDirectory(reportsDir);
@@ -694,7 +694,7 @@ public static class Program
                 string baseName = Path.GetFileNameWithoutExtension(report.InputPath);
                 string fileNameBase = $"{baseName}-{pathHash}-{report.TargetLanguage}";
                 string safeFile = new string(fileNameBase.Where(c => !Path.GetInvalidFileNameChars().Contains(c)).ToArray());
-                string jsonPath = Path.Combine(reportsDir, $"{safeFile}.json");
+                string jsonPath = Path.Join(reportsDir, $"{safeFile}.json");
                 DubbingBenchmarkReport writtenReport = report with { ReportPath = jsonPath };
                 await BenchmarkReportWriter.WriteAsync(
                     writtenReport,
@@ -707,7 +707,7 @@ public static class Program
             BenchmarkConsole.WriteDubbingBatchSummary(writtenReports, output);
 
             // Write aggregate report.
-            string aggregatePath = Path.Combine(reportsDir, $"dubbing-batch-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json");
+            string aggregatePath = Path.Join(reportsDir, $"dubbing-batch-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json");
             await using var stream = new FileStream(aggregatePath, FileMode.Create, FileAccess.Write);
             await System.Text.Json.JsonSerializer.SerializeAsync(stream, writtenReports, BenchmarkReportWriter.SerializerOptions, cancellationToken);
             output.WriteLine();
@@ -1007,7 +1007,7 @@ public static class Program
         string extension = Path.GetExtension(aggregateReportPath);
         string suffix = candidate.VariantAlias ?? Path.GetFileNameWithoutExtension(candidate.ModelPath);
         string sanitizedSuffix = SanitizeFileNameSegment(suffix);
-        return Path.Combine(directory, $"{fileNameWithoutExtension}-{sanitizedSuffix}{extension}");
+        return Path.Join(directory, $"{fileNameWithoutExtension}-{sanitizedSuffix}{extension}");
     }
 
     private static string SanitizeFileNameSegment(string value)

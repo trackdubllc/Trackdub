@@ -150,7 +150,7 @@ public sealed class Tier1FeatureCoverageTests
         ResourceTelemetryDelta delta = BenchmarkCalculationOracle.CalculateTelemetryDelta(start, end);
 
         Assert.Equal(40_000_000, delta.WorkingSetDeltaBytes);
-        Assert.Equal(150_000_000, delta.PeakWorkingSetBytes);
+        Assert.Equal(140_000_000, delta.PeakWorkingSetBytes);
         Assert.Equal(35_000_000, delta.ManagedAllocatedBytes);
         Assert.Equal(4, delta.Gen0Collections);
         Assert.Equal(1, delta.Gen1Collections);

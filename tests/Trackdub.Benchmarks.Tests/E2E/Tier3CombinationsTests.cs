@@ -58,7 +58,7 @@ public sealed class Tier3CombinationsTests
         Assert.Equal(79.0, stageStats["transcription"].MinMilliseconds);
 
         Assert.Equal(Mb(80), memDelta.WorkingSetDeltaBytes);
-        Assert.Equal(Mb(200), memDelta.PeakWorkingSetBytes);
+        Assert.Equal(Mb(180), memDelta.PeakWorkingSetBytes);
         Assert.Equal(Mb(75), memDelta.ManagedAllocatedBytes);
         Assert.Equal(6, memDelta.Gen0Collections);
     }

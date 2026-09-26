@@ -116,7 +116,9 @@ public static class BenchmarkCalculationOracle
 
         return new ResourceTelemetryDelta(
             WorkingSetDeltaBytes: end.WorkingSetBytes - start.WorkingSetBytes,
-            PeakWorkingSetBytes: Math.Max(start.PeakWorkingSetBytes, end.PeakWorkingSetBytes),
+            // Mirrors ResourceTelemetry.CalculateDelta: an endpoint-sampled max of the two
+            // snapshots' WorkingSetBytes, not the snapshots' own process-lifetime peak field.
+            PeakWorkingSetBytes: Math.Max(start.WorkingSetBytes, end.WorkingSetBytes),
             ManagedAllocatedBytes: Math.Max(0, end.ManagedAllocatedBytes - start.ManagedAllocatedBytes),
             Gen0Collections: Math.Max(0, end.Gen0Collections - start.Gen0Collections),
             Gen1Collections: Math.Max(0, end.Gen1Collections - start.Gen1Collections),

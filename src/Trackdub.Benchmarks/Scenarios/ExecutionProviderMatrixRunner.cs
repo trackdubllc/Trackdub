@@ -122,13 +122,17 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
 
         foreach ((string provider, BenchmarkEvidenceReport report) in providerReports)
         {
-            // A run that failed, was skipped, or fell back to a different execution provider
-            // than requested has no valid timing to compare — including it would silently
-            // report a 0ms P50 as "identical to baseline" instead of flagging the problem.
+            // A run that failed or was skipped outright has no valid timing to compare.
+            // Note: full-pipeline evidence reports are routinely "PartiallyCompleted" (the
+            // runner has no per-stage ActualProvider to check against in that mode — see
+            // ControlledDubbingBenchmarkRunner's full-pipeline status branch), so that status
+            // alone must not disqualify a report; only a genuine provider fallback (detected via
+            // RequestedProvider/ActualProvider, when both are known) does.
             bool fellBackToDifferentProvider = report.RequestedProvider is not null &&
                 report.ActualProvider is not null &&
                 !BenchmarkComparison.ProviderMatches(report.RequestedProvider, report.ActualProvider);
-            if (report.Status != BenchmarkEvidenceStatus.Completed || fellBackToDifferentProvider)
+            bool didNotRun = report.Status is BenchmarkEvidenceStatus.Failed or BenchmarkEvidenceStatus.Skipped;
+            if (didNotRun || fellBackToDifferentProvider)
             {
                 skipped.Add(provider);
                 continue;

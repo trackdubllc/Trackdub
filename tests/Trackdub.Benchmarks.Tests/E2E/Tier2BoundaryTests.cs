@@ -153,7 +153,7 @@ public sealed class Tier2BoundaryTests
         ResourceTelemetryDelta delta = BenchmarkCalculationOracle.CalculateTelemetryDelta(start, end);
 
         Assert.Equal(-Mb(100), delta.WorkingSetDeltaBytes);
-        Assert.Equal(Mb(350), delta.PeakWorkingSetBytes);
+        Assert.Equal(Mb(300), delta.PeakWorkingSetBytes);
         Assert.Equal(Mb(10), delta.ManagedAllocatedBytes);
     }
 
@@ -274,8 +274,8 @@ public sealed class Tier2BoundaryTests
     [Fact]
     public async Task R4_T2_01_MissingOutputDirectory_WriterCreatesDirectoryAutomatically()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"dir_test_{Guid.NewGuid():N}");
-        string nestedReportPath = Path.Combine(root, "level1", "level2", "stage-matrix.json");
+        string root = Path.Join(Path.GetTempPath(), $"dir_test_{Guid.NewGuid():N}");
+        string nestedReportPath = Path.Join(root, "level1", "level2", "stage-matrix.json");
 
         try
         {

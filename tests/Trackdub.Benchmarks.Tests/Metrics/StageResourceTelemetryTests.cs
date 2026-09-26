@@ -32,7 +32,7 @@ public sealed class StageResourceTelemetryTests
 
         Assert.NotNull(delta);
         Assert.Equal(40_000_000, delta.WorkingSetDeltaBytes);
-        Assert.Equal(150_000_000, delta.PeakWorkingSetBytes);
+        Assert.Equal(140_000_000, delta.PeakWorkingSetBytes);
         Assert.Equal(35_000_000, delta.ManagedAllocatedBytes);
         Assert.Equal(4, delta.Gen0Collections);
         Assert.Equal(2, delta.Gen1Collections);
@@ -64,7 +64,7 @@ public sealed class StageResourceTelemetryTests
 
         Assert.NotNull(delta);
         Assert.Equal(5_000_000, delta.ManagedAllocatedBytes);
-        Assert.Equal(65_000_000, delta.PeakWorkingSetBytes);
+        Assert.Equal(60_000_000, delta.PeakWorkingSetBytes);
     }
 
     [Fact]

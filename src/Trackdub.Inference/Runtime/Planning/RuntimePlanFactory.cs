@@ -839,7 +839,7 @@ internal sealed class RuntimePlanFactory
                 continue;
             }
 
-            string candidatePath = Path.GetFullPath(Path.Combine(cacheRecord.RootPath, variant.RelativeEntryPath));
+            string candidatePath = Path.GetFullPath(Path.Join(cacheRecord.RootPath, variant.RelativeEntryPath));
             if (RequiredFilesExist(cacheRecord.RootPath, variant.RequiredRelativePaths, fileExistenceCache))
             {
                 if (HasManifestHashMismatch(entry, cacheRecord, out string? detail))
@@ -1000,7 +1000,7 @@ internal sealed class RuntimePlanFactory
     {
         foreach (string relativePath in requiredRelativePaths)
         {
-            string requiredPath = Path.GetFullPath(Path.Combine(rootPath, relativePath));
+            string requiredPath = Path.GetFullPath(Path.Join(rootPath, relativePath));
             if (!FileExists(fileExistenceCache, requiredPath))
             {
                 return false;
@@ -1072,7 +1072,7 @@ internal sealed class RuntimePlanFactory
         }
 
         string root = Path.GetFullPath(rootPath);
-        string candidatePath = Path.GetFullPath(Path.Combine(root, Path.Combine(normalizedRelativePath.Split('/'))));
+        string candidatePath = Path.GetFullPath(Path.Join(root, Path.Join(normalizedRelativePath.Split('/'))));
         if (!IsSameOrUnderRoot(root, candidatePath))
         {
             return false;

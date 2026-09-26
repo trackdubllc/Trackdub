@@ -24,7 +24,7 @@ public sealed record BenchmarkOptions(
         out BenchmarkOptions options)
     {
         string? modelPath = null;
-        var outputPath = Path.Combine(Environment.CurrentDirectory, "benchmark-report.json");
+        var outputPath = Path.Join(Environment.CurrentDirectory, "benchmark-report.json");
         var providerPreference = BenchmarkProviderPreference.Cpu;
         var runCount = 5;
         string? variant = null;
@@ -247,7 +247,7 @@ public sealed record BenchmarkOptions(
     private static BenchmarkOptions DefaultWithHelp() =>
         new(
             string.Empty,
-            Path.Combine(Environment.CurrentDirectory, "benchmark-report.json"),
+            Path.Join(Environment.CurrentDirectory, "benchmark-report.json"),
             BenchmarkProviderPreference.Cpu,
             5,
             null,

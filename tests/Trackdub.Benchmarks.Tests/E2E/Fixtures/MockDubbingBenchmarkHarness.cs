@@ -16,7 +16,7 @@ public sealed class MockDubbingBenchmarkHarness : IDisposable
     /// </summary>
     public string CreateTempAudioFixture(double durationSeconds = 1.0, int sampleRate = 16000)
     {
-        string path = Path.Combine(Path.GetTempPath(), $"trackdub_bench_{Guid.NewGuid():N}.wav");
+        string path = Path.Join(Path.GetTempPath(), $"trackdub_bench_{Guid.NewGuid():N}.wav");
         byte[] wavBytes = FakeWavHelper.MinimalPcm16(durationSeconds, sampleRate);
         File.WriteAllBytes(path, wavBytes);
         _tempFiles.Add(path);
@@ -130,7 +130,7 @@ public sealed class MockDubbingBenchmarkHarness : IDisposable
             Status = BenchmarkEvidenceStatus.Completed,
             StartedAtUtc = startedAt,
             CompletedAtUtc = completedAt,
-            ReportPath = Path.Combine(Path.GetTempPath(), $"mock_stage_matrix_{Guid.NewGuid():N}.json"),
+            ReportPath = Path.Join(Path.GetTempPath(), $"mock_stage_matrix_{Guid.NewGuid():N}.json"),
         };
     }
 

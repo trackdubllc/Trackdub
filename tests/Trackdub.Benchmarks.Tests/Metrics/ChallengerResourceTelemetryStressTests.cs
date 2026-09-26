@@ -54,7 +54,7 @@ public sealed class ChallengerResourceTelemetryStressTests
         ResourceTelemetryDelta delta = ResourceTelemetry.CalculateDelta(start, end);
 
         Assert.Equal(expectedDelta, delta.WorkingSetDeltaBytes);
-        Assert.Equal(end.PeakWorkingSetBytes, delta.PeakWorkingSetBytes);
+        Assert.Equal(end.WorkingSetBytes, delta.PeakWorkingSetBytes);
         Assert.Equal(expectedDelta, delta.ManagedAllocatedBytes);
         Assert.Equal(50, delta.Gen0Collections);
         Assert.Equal(10, delta.Gen1Collections);
@@ -143,7 +143,7 @@ public sealed class ChallengerResourceTelemetryStressTests
 
         Assert.Equal(expectedDelta, delta.WorkingSetDeltaBytes);
         Assert.True(delta.WorkingSetDeltaBytes < 0, "Working set delta must be negative on memory trim/drop.");
-        Assert.Equal(peak, delta.PeakWorkingSetBytes);
+        Assert.Equal(startWorkingSet, delta.PeakWorkingSetBytes);
         Assert.Equal(2_000_000, delta.ManagedAllocatedBytes);
         Assert.Equal(1, delta.Gen0Collections);
         Assert.Equal(1, delta.Gen1Collections);
@@ -151,9 +151,12 @@ public sealed class ChallengerResourceTelemetryStressTests
     }
 
     [Fact]
-    public void CalculateDelta_WorkingSetDropsWhilePeakIncreases_PeakTracksMaximum()
+    public void CalculateDelta_WorkingSetDropsBetweenSnapshots_PeakUsesHigherBoundary()
     {
-        // Rare scenario where working set spiked and then was trimmed, so end has higher peak but lower current
+        // Working set was trimmed between the two snapshots. PeakWorkingSetBytes on the
+        // snapshots themselves (the OS-reported process-lifetime peak) is intentionally not
+        // used here — CalculateDelta's PeakWorkingSetBytes is the higher of the two
+        // snapshots' WorkingSetBytes, i.e. start's, since it dropped by the end.
         var start = new ResourceTelemetrySnapshot(
             WorkingSetBytes: 40_000_000_000L, // 40 GB
             PeakWorkingSetBytes: 45_000_000_000L, // 45 GB
@@ -173,7 +176,7 @@ public sealed class ChallengerResourceTelemetryStressTests
         ResourceTelemetryDelta delta = ResourceTelemetry.CalculateDelta(start, end);
 
         Assert.Equal(-30_000_000_000L, delta.WorkingSetDeltaBytes);
-        Assert.Equal(60_000_000_000L, delta.PeakWorkingSetBytes);
+        Assert.Equal(40_000_000_000L, delta.PeakWorkingSetBytes);
     }
 
     // =========================================================================

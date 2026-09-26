@@ -87,9 +87,9 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         Guid runId = reportId;
         string? actualModel = null;
         string? actualProvider = null;
-        string projectRoot = Path.Combine(options.OutputDirectory, "projects", reportId.ToString("N"));
-        string fixtureCopy = Path.Combine(projectRoot, "fixture" + Path.GetExtension(options.FixturePath));
-        string projectPath = Path.Combine(projectRoot, "project.trackdub");
+        string projectRoot = Path.Join(options.OutputDirectory, "projects", reportId.ToString("N"));
+        string fixtureCopy = Path.Join(projectRoot, "fixture" + Path.GetExtension(options.FixturePath));
+        string projectPath = Path.Join(projectRoot, "project.trackdub");
         HeadlessDubbingHost? host = null;
         IDisposable? cacheScope = null;
         bool ownsHost = false;
@@ -119,7 +119,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
             if (options.Mode == "fresh-process" && !options.ReuseEngineCache)
             {
-                string cache = Path.Combine(projectRoot, "engine-cache");
+                string cache = Path.Join(projectRoot, "engine-cache");
                 Directory.CreateDirectory(cache);
                 cacheScope = new EnvironmentOverride(TrackdubStoragePathResolver.EngineCacheRootEnvironmentVariable, cache);
                 ((EnvironmentOverride)cacheScope).Apply();
@@ -151,7 +151,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             timings["hostCreation"] = Stopwatch.GetElapsedTime(hostStart).TotalMilliseconds;
 
             int runCount = Math.Max(1, options.RunCount);
-            string baselineProjectPath = Path.Combine(projectRoot, "baseline", "project.trackdub");
+            string baselineProjectPath = Path.Join(projectRoot, "baseline", "project.trackdub");
             bool hasPrerequisites = false;
 
             if (stage is not null)
@@ -187,7 +187,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             IReadOnlyList<string>? filter = stage is null ? null : [stage];
             if (options.Mode == "warm-host")
             {
-                string warmupProjectPath = Path.Combine(projectRoot, "warmup", "project.trackdub");
+                string warmupProjectPath = Path.Join(projectRoot, "warmup", "project.trackdub");
                 if (hasPrerequisites)
                 {
                     CopyDirectory(baselineProjectPath, warmupProjectPath);
@@ -209,7 +209,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             string? primingProjectPath = null;
             if (options.Mode == "artifact-resume")
             {
-                primingProjectPath = Path.Combine(projectRoot, "priming", "project.trackdub");
+                primingProjectPath = Path.Join(projectRoot, "priming", "project.trackdub");
                 if (hasPrerequisites)
                 {
                     CopyDirectory(baselineProjectPath, primingProjectPath);
@@ -241,7 +241,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             for (int runIndex = 1; runIndex <= runCount; runIndex++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string iterProjectPath = Path.Combine(projectRoot, $"run_{runIndex}", "project.trackdub");
+                string iterProjectPath = Path.Join(projectRoot, $"run_{runIndex}", "project.trackdub");
 
                 if (options.Mode == "artifact-resume")
                 {
@@ -933,7 +933,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             take.Status == TtsTakeStatus.Completed && take.ArtifactId is Guid id &&
             state.ProjectState.Artifacts.Any(artifact =>
                 artifact.Id == id && artifact.SizeBytes > 0 &&
-                File.Exists(Path.Combine(project, artifact.RelativePath))));
+                File.Exists(Path.Join(project, artifact.RelativePath))));
         return new RunArtifacts(
             rawStageRuns,
             state.TranscriptSegments.Any(segment => !string.IsNullOrWhiteSpace(segment.Text)),

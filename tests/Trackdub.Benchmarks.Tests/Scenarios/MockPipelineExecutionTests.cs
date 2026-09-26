@@ -22,8 +22,8 @@ public sealed class MockPipelineExecutionTests : IDisposable
         if (Directory.Exists(_tempOutputDir))
         {
             try { Directory.Delete(_tempOutputDir, recursive: true); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            catch (IOException ex) { Console.Error.WriteLine($"Best-effort temp cleanup failed for {_tempOutputDir}: {ex}"); }
+            catch (UnauthorizedAccessException ex) { Console.Error.WriteLine($"Best-effort temp cleanup failed for {_tempOutputDir}: {ex}"); }
         }
     }
 
