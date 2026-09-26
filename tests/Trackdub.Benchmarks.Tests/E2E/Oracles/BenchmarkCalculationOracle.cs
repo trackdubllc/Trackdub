@@ -35,18 +35,18 @@ public static class BenchmarkCalculationOracle
         double p90 = InterpolatePercentile(sorted, 0.90);
         double p99 = InterpolatePercentile(sorted, 0.99);
 
-        double throughput;
-        if (totalDurationSeconds > 0)
+        // Mirrors PercentileCalculator.Calculate: throughput is 0 when there are no units, and
+        // the fallback duration is the sum of sample durations, not the mean.
+        double throughput = 0;
+        if (totalUnits > 0)
         {
-            throughput = totalUnits / totalDurationSeconds;
-        }
-        else if (totalUnits > 0 && mean > 0)
-        {
-            throughput = totalUnits / (mean / 1000.0);
-        }
-        else
-        {
-            throughput = mean > 0 ? 1000.0 / mean : 0;
+            double effectiveDurationSeconds = totalDurationSeconds > 0
+                ? totalDurationSeconds
+                : sorted.Sum() / 1000.0;
+            if (effectiveDurationSeconds > 0)
+            {
+                throughput = totalUnits / effectiveDurationSeconds;
+            }
         }
 
         return new LatencyStatistics(
@@ -151,9 +151,13 @@ public static class BenchmarkCalculationOracle
         var comparisons = new List<ProviderComparisonMetrics>(providerStats.Count);
         foreach ((string provider, var stats) in providerStats)
         {
-            double speedup = stats.P50 > 0 ? baseline.P50 / stats.P50 : 1.0;
+            // Mirrors ExecutionProviderMatrixRunner.CompareProviders: both P50s (not just the
+            // provider's own) must be positive for a real ratio, otherwise it falls back to 1.0.
+            double speedup = stats.P50 > 0 && baseline.P50 > 0 ? baseline.P50 / stats.P50 : 1.0;
             double latencyDelta = stats.P50 - baseline.P50;
-            double throughputRatio = baseline.Throughput > 0 ? stats.Throughput / baseline.Throughput : 1.0;
+            double throughputRatio = baseline.Throughput > 0
+                ? stats.Throughput / baseline.Throughput
+                : 1.0;
             long peakMemoryDelta = stats.PeakMemory - baseline.PeakMemory;
             long managedAllocDelta = stats.ManagedAlloc - baseline.ManagedAlloc;
 
