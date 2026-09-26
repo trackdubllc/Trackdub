@@ -34,6 +34,8 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
     {
         get
         {
+            if (!HasValidatedRepairPipeline())
+                return false;
             try
             {
                 BenchmarkModelResolutionResult discovery = modelPathResolver.Discover(LatentSyncModelPaths.ManifestAlias);
@@ -95,6 +97,13 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         string modelRoot = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
         if (!LatentSyncModelPaths.AreLatentSyncFilesPresent(modelRoot))
             return Skipped(request, "LatentSync model files are not present.");
+
+        // The existing renderer is a single-frame, full-frame scaffold. It does
+        // not provide the temporal conditioning or tracked face compositor used
+        // by the released model. Preserve the source video until those pieces
+        // pass the clip-level acceptance tests.
+        if (!HasValidatedRepairPipeline())
+            return Skipped(request, "LatentSync repair is unavailable: the ONNX temporal pipeline and face compositor have not passed validation.");
 
         ExecutionProviderKind provider = plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
 
@@ -397,6 +406,12 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
             noise[length - 1] = (float)Math.Sqrt(-2.0 * Math.Log(u1)) * (float)Math.Cos(2.0 * Math.PI * u2);
         }
         return noise;
+    }
+
+    internal static bool HasValidatedRepairPipeline()
+    {
+        // Explicit rollout gate: no version has a validated video repair path.
+        return false;
     }
 
     private static LipSynthesisResult Skipped(LipSynthesisRequest request, string reason) =>

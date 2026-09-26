@@ -7,6 +7,12 @@ namespace Trackdub.Inference.Onnx.Tests;
 public sealed class LatentSyncOnnxLipSynthesisEngineTests
 {
     [Fact]
+    public void Repair_pipeline_remains_unavailable_until_temporal_and_face_validation()
+    {
+        Assert.False(LatentSyncOnnxLipSynthesisEngine.HasValidatedRepairPipeline());
+    }
+
+    [Fact]
     public void IsExperimentalFromManifest_resolves_latentsync_alias_and_is_commercial_when_verified()
     {
         Assert.True(BundledModelManifestRegistry.TryLoadDefault(out BundledModelManifestRegistry? registry, out string? error), error);
