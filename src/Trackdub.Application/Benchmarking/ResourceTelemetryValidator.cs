@@ -27,8 +27,7 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         ResourceTelemetryCheck[] checks =
         [
             CheckCpu(start, end, cpuTime, elapsed, processors, bounds.MaxCpuPercent),
-            CheckBytes("workingSetBytes", start?.WorkingSetBytes, end?.WorkingSetBytes,
-                bounds.MaxWorkingSetBytes, false, start?.MemoryUnavailableReason, end?.MemoryUnavailableReason),
+            CheckWorkingSet(start, end, bounds.MaxWorkingSetBytes),
             CheckBytes("managedAllocatedBytes", start?.ManagedAllocatedBytes, end?.ManagedAllocatedBytes,
                 bounds.MaxManagedAllocatedBytes, true, start?.MemoryUnavailableReason, end?.MemoryUnavailableReason),
             CheckMinimum("availableVramMb", end?.AvailableVramMb, bounds.MinAvailableVramMb,
@@ -62,15 +61,16 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         }
         if (start?.CpuTimeMilliseconds is null || end?.CpuTimeMilliseconds is null)
         {
-            return Unavailable(metric, maximum,
-                start?.CpuTimeMilliseconds is null ? start?.CpuUnavailableReason : end?.CpuUnavailableReason,
-                "CPU counter sample unavailable.");
+            string? unavailableReason = start?.CpuTimeMilliseconds is null
+                ? start?.CpuUnavailableReason
+                : end?.CpuUnavailableReason;
+            return Unavailable(metric, maximum, unavailableReason, "CPU counter sample unavailable.");
         }
         if (start is { ProcessorCount: <= 0 } || end is { ProcessorCount: <= 0 })
         {
             return Failed(metric, maximum, "Processor count must be positive.");
         }
-        if (start is not null && end is not null && start.ProcessorCount != end.ProcessorCount)
+        if (start.ProcessorCount != end.ProcessorCount)
         {
             return Failed(metric, maximum, "Processor count changed between samples.");
         }
@@ -82,7 +82,7 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         {
             return Failed(metric, maximum, "Monotonic timestamp regressed between samples.");
         }
-        if (start?.MonotonicMilliseconds is null || end?.MonotonicMilliseconds is null)
+        if (start.MonotonicMilliseconds is null || end.MonotonicMilliseconds is null)
         {
             return Unavailable(metric, maximum, null, "Monotonic timestamp sample unavailable.");
         }
@@ -106,6 +106,57 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
             exceeded ? ResourceTelemetryStatus.Failed : ResourceTelemetryStatus.Passed,
             observed, maximum, exceeded ? "Configured upper bound exceeded." : null);
     }
+
+    private static ResourceTelemetryCheck CheckWorkingSet(
+        ResourceUsageSnapshot? start, ResourceUsageSnapshot? end, long? maximum)
+    {
+        if (start?.WorkingSetBytes is < 0 || end?.WorkingSetBytes is < 0)
+        {
+            return Failed("workingSetBytes", maximum, "Working-set counters must be nonnegative.");
+        }
+
+        long? knownPeak = end?.PeakWorkingSetBytes;
+        if (knownPeak is < 0)
+        {
+            return Failed("workingSetBytes", maximum, "Sampled peak working set must be nonnegative.");
+        }
+        if (!knownPeak.HasValue && !string.IsNullOrWhiteSpace(end?.PeakWorkingSetUnavailableReason))
+        {
+            long? knownEndpoint = Maximum(start?.WorkingSetBytes, end?.WorkingSetBytes);
+            if (knownEndpoint.HasValue && maximum.HasValue && knownEndpoint.Value > maximum.Value)
+            {
+                return new("workingSetBytes", ResourceTelemetryStatus.Failed, knownEndpoint.Value, maximum,
+                    "Available endpoint exceeds the configured upper bound; continuous peak sampling was unavailable.");
+            }
+            return Unavailable("workingSetBytes", maximum, end!.PeakWorkingSetUnavailableReason,
+                "Continuous working-set sampling unavailable.");
+        }
+
+        bool bothEndpointsKnown = start?.WorkingSetBytes is not null && end?.WorkingSetBytes is not null;
+        long? observed = knownPeak.HasValue || bothEndpointsKnown
+            ? Maximum(Maximum(start?.WorkingSetBytes, end?.WorkingSetBytes), knownPeak)
+            : null;
+        if (!observed.HasValue)
+        {
+            long? knownEndpoint = Maximum(start?.WorkingSetBytes, end?.WorkingSetBytes);
+            if (knownEndpoint.HasValue && maximum.HasValue && knownEndpoint.Value > maximum.Value)
+            {
+                return new("workingSetBytes", ResourceTelemetryStatus.Failed, knownEndpoint.Value, maximum,
+                    "Available endpoint exceeds the configured upper bound; the other endpoint is unavailable.");
+            }
+            return Unavailable("workingSetBytes", maximum,
+                start?.WorkingSetBytes is null ? start?.MemoryUnavailableReason : end?.MemoryUnavailableReason,
+                "Working-set sample unavailable.");
+        }
+
+        bool exceeded = maximum.HasValue && observed.Value > maximum.Value;
+        return new ResourceTelemetryCheck("workingSetBytes",
+            exceeded ? ResourceTelemetryStatus.Failed : ResourceTelemetryStatus.Passed,
+            observed.Value, maximum, exceeded ? "Configured upper bound exceeded." : null);
+    }
+
+    private static long? Maximum(long? first, long? second) =>
+        first.HasValue && second.HasValue ? Math.Max(first.Value, second.Value) : first ?? second;
 
     private static ResourceTelemetryCheck CheckBytes(
         string metric, long? start, long? end, long? maximum, bool cumulative,

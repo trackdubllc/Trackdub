@@ -61,7 +61,7 @@ public sealed class ResourceTelemetryValidatorTests
     [Fact]
     public void Validate_reports_working_set_unavailable_when_continuous_sampling_failed()
     {
-        ResourceTelemetrySnapshot failedPeak = End with
+        ResourceUsageSnapshot failedPeak = End with
         {
             PeakWorkingSetUnavailableReason = "Continuous working-set sampling unavailable (InvalidOperationException)."
         };

@@ -19,8 +19,12 @@ public sealed class ProcessResourceTelemetryCollectorTests
         double after = Stopwatch.GetTimestamp() * 1000d / Stopwatch.Frequency;
 
         Assert.Equal(Environment.ProcessorCount, end.ProcessorCount);
-        Assert.InRange(start.MonotonicMilliseconds!.Value, before, after);
-        Assert.InRange(end.MonotonicMilliseconds!.Value, start.MonotonicMilliseconds.Value, after);
+        Assert.NotNull(start.MonotonicMilliseconds);
+        Assert.NotNull(end.MonotonicMilliseconds);
+        double startMonotonicMilliseconds = start.MonotonicMilliseconds.Value;
+        double endMonotonicMilliseconds = end.MonotonicMilliseconds.Value;
+        Assert.InRange(startMonotonicMilliseconds, before, after);
+        Assert.InRange(endMonotonicMilliseconds, startMonotonicMilliseconds, after);
         Assert.True(end.ManagedAllocatedBytes >= start.ManagedAllocatedBytes);
         Assert.True(start.ManagedAllocatedBytes >= 0);
         AssertCounterOrReason(start.CpuTimeMilliseconds, start.CpuUnavailableReason);
@@ -33,6 +37,16 @@ public sealed class ProcessResourceTelemetryCollectorTests
         }
         Assert.Null(end.AvailableVramMb);
         Assert.Equal("No VRAM reader is registered for this host.", end.VramUnavailableReason);
+    }
+
+    [Fact]
+    public void Process_working_set_sampler_returns_a_nonnegative_sample()
+    {
+        var sampler = new ProcessWorkingSetSampler();
+
+        long sample = sampler.CaptureWorkingSetBytes();
+
+        Assert.True(sample > 0);
     }
 
     [Fact]
