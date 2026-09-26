@@ -374,6 +374,23 @@ public static class Program
             }
         }
 
+        if (!providers.Any(p => BenchmarkComparison.NormalizeProvider(p).Equals(
+                BenchmarkComparison.NormalizeProvider(baselineProvider), StringComparison.OrdinalIgnoreCase)))
+        {
+            error.WriteLine($"Baseline provider '{baselineProvider}' must be one of --providers ({string.Join(", ", providers)}).");
+            return 1;
+        }
+
+        string effectiveScenario = scenario ?? "full-pipeline";
+        if (!mock && !dryRun && effectiveScenario.Equals("full-pipeline", StringComparison.OrdinalIgnoreCase))
+        {
+            error.WriteLine(
+                "The default 'full-pipeline' scenario requires --mock or --dry-run for a real (non-mock) run, " +
+                "because a whole-pipeline provider pin is not supported outside mock mode. Pass --scenario " +
+                "with a specific stage name, or run with --mock.");
+            return 1;
+        }
+
         try
         {
             using var runner = new Trackdub.Benchmarks.Scenarios.ExecutionProviderMatrixRunner();
@@ -381,15 +398,24 @@ public static class Program
             {
                 FixturePath = fixturePath,
                 OutputDirectory = outputDirectory,
-                Scenario = scenario ?? "full-pipeline",
+                Scenario = effectiveScenario,
                 BaselineProvider = baselineProvider,
                 Providers = providers,
                 RunCount = runCount,
                 Mock = mock || dryRun,
+                DryRun = dryRun,
                 Format = format,
             };
 
             var report = await runner.RunAsync(options, cancellationToken).ConfigureAwait(false);
+
+            if (report.SkippedProviders.Count > 0)
+            {
+                error.WriteLine(
+                    $"Provider(s) skipped from comparison (failed, incomplete, or fell back to a different " +
+                    $"provider than requested): {string.Join(", ", report.SkippedProviders)}.");
+                return 1;
+            }
 
             if (format is ReportFormat.Console or ReportFormat.Both)
             {

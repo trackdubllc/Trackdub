@@ -54,7 +54,7 @@ dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help   # Windows 
 ```
 
 ## packages.lock.json conflicts
-Don't hand-resolve merge conflicts in `packages.lock.json`. Take either side (`git checkout --ours` or `--theirs`), then regenerate:
+Don't hand-resolve merge conflicts in `packages.lock.json`. Take either side (`git checkout --ours -- <path-to-packages.lock.json>` or `git checkout --theirs -- <path-to-packages.lock.json>`), then regenerate:
 ```bash
 dotnet restore Trackdub.slnx --force-evaluate -m:1
 

@@ -375,7 +375,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
     public void RenderMatrixMarkdown_EmptyComparisons_ProducesHeaderOnly()
     {
         var report = new ExecutionProviderMatrixReport(
-            "test-scenario", "cpu", [], DateTimeOffset.UtcNow);
+            "test-scenario", "cpu", [], DateTimeOffset.UtcNow, []);
 
         string markdown = BenchmarkReportExporter.RenderMatrixMarkdown(report);
 

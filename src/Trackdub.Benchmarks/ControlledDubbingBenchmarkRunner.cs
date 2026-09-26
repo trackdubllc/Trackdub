@@ -206,9 +206,10 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     out reason, out status, out stages);
             }
 
+            string? primingProjectPath = null;
             if (options.Mode == "artifact-resume")
             {
-                string primingProjectPath = Path.Combine(projectRoot, "priming", "project.trackdub");
+                primingProjectPath = Path.Combine(projectRoot, "priming", "project.trackdub");
                 if (hasPrerequisites)
                 {
                     CopyDirectory(baselineProjectPath, primingProjectPath);
@@ -242,7 +243,13 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 string iterProjectPath = Path.Combine(projectRoot, $"run_{runIndex}", "project.trackdub");
 
-                if (hasPrerequisites)
+                if (options.Mode == "artifact-resume")
+                {
+                    // Seed from the primed project so the measured run actually resumes/skips
+                    // the already-completed stages instead of doing a full cold run.
+                    CopyDirectory(primingProjectPath!, iterProjectPath);
+                }
+                else if (hasPrerequisites)
                 {
                     CopyDirectory(baselineProjectPath, iterProjectPath);
                 }
@@ -729,6 +736,20 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
         int index = DubbingPipelineStages.DefaultStageOrder.ToList().FindIndex(x =>
             x.Equals(stage, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            // Extended-only stages (OverlapRescue, TextRefinementAsr, LipSynthesis) have no
+            // index in DefaultStageOrder; derive their prerequisites from the ExtendedStageOrder
+            // prefix instead, filtered down to the default-order stages the runner can prepare.
+            int extendedIndex = DubbingPipelineStages.ExtendedStageOrder.ToList().FindIndex(x =>
+                x.Equals(stage, StringComparison.OrdinalIgnoreCase));
+            if (extendedIndex <= 0) return [];
+            return DubbingPipelineStages.ExtendedStageOrder
+                .Take(extendedIndex)
+                .Where(candidate => DubbingPipelineStages.DefaultStageOrder.Any(defaultStage =>
+                    defaultStage.Equals(candidate, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+        }
         if (index <= 0) return [];
         return DubbingPipelineStages.DefaultStageOrder.Take(index).ToArray();
     }

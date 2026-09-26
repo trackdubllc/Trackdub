@@ -49,13 +49,10 @@ public sealed record BenchmarkOptions(
                     break;
 
                 case "--mock":
-                    mock = true;
-                    break;
-
                 case "--dry-run":
-                    dryRun = true;
-                    mock = true;
-                    break;
+                    errorWriter.WriteLine($"{arg} is only supported by the controlled, controlled-matrix, and matrix commands.");
+                    options = DefaultWithHelp();
+                    return false;
 
                 case "--model":
                     if (!TryReadValue(args, ref index, arg, errorWriter, out modelPath))

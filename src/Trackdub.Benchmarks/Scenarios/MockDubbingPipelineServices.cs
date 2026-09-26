@@ -311,7 +311,10 @@ public sealed class MockDubbingPipelineService(
             {
                 canonicalStagesRun.Add(stageName);
             }
-            string outcomeStageName = sessionOptions.StageFilter is { Count: > 0 } ? stageName : canonical;
+            // Progress events (and StageTimingCollector, which keys off them) always use the
+            // canonical name, so the outcome must match it or percentile sampling silently
+            // misses aliased stages (audio-preparation, asr, lip-sync, tts).
+            string outcomeStageName = canonical;
             DateTimeOffset stageStart = DateTimeOffset.UtcNow;
 
             progress?.Report(new PipelineProgressEvent(
@@ -369,7 +372,6 @@ public sealed class MockDubbingPipelineService(
                     OverallStatus = DubbingRunStatus.Failed,
                     StageOutcomes = outcomes.AsReadOnly(),
                     ExecutionSnapshot = new Dictionary<string, string>(),
-                    PreFlightFailures = [reason]
                 };
             }
 

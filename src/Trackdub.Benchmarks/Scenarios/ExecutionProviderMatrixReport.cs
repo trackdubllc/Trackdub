@@ -26,8 +26,14 @@ public sealed record ProviderComparisonMetrics(
 /// <param name="BaselineProvider">The baseline provider used as the benchmark reference (typically "cpu").</param>
 /// <param name="Comparisons">The collection of comparison metrics for each evaluated execution provider.</param>
 /// <param name="Timestamp">The UTC timestamp when the matrix comparison was generated.</param>
+/// <param name="SkippedProviders">
+/// Providers whose evidence report did not complete, or whose actual execution provider did
+/// not match what was requested (e.g. a TensorRT-RTX request that fell back to CPU). These are
+/// excluded from <see cref="Comparisons"/> rather than compared as if they had valid timings.
+/// </param>
 public sealed record ExecutionProviderMatrixReport(
     string Scenario,
     string BaselineProvider,
     IReadOnlyList<ProviderComparisonMetrics> Comparisons,
-    DateTimeOffset Timestamp);
+    DateTimeOffset Timestamp,
+    IReadOnlyList<string> SkippedProviders);

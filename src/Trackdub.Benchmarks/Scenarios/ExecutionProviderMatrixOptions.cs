@@ -54,6 +54,9 @@ public sealed record ExecutionProviderMatrixOptions
     /// <summary>Whether to execute in deterministic mock/dry-run mode without live models or GPU.</summary>
     public bool Mock { get; init; }
 
+    /// <summary>Whether mock stages should report zero simulated latency instead of their normal mock delay.</summary>
+    public bool DryRun { get; init; }
+
     /// <summary>Report output format: Console, Json, or Both.</summary>
     public ReportFormat ReportFormat { get; init; } = ReportFormat.Both;
 

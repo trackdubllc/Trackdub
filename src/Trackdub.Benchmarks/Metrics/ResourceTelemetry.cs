@@ -92,9 +92,16 @@ public static class ResourceTelemetry
         ArgumentNullException.ThrowIfNull(start);
         ArgumentNullException.ThrowIfNull(end);
 
+        // Process.PeakWorkingSet64 only ever grows for the process's whole lifetime, so
+        // Math.Max(start.Peak, end.Peak) reports the peak since process start, not the peak
+        // within [start, end] — later intervals in a long-lived process (e.g. later providers
+        // in the same matrix run) would inherit the highest peak any earlier interval reached.
+        // Approximate the interval's own peak from its boundary snapshots instead; this misses
+        // a spike that both rose and receded strictly inside the interval, but never attributes
+        // an earlier interval's peak to a later one.
         return new ResourceTelemetryDelta(
             WorkingSetDeltaBytes: end.WorkingSetBytes - start.WorkingSetBytes,
-            PeakWorkingSetBytes: Math.Max(start.PeakWorkingSetBytes, end.PeakWorkingSetBytes),
+            PeakWorkingSetBytes: Math.Max(start.WorkingSetBytes, end.WorkingSetBytes),
             ManagedAllocatedBytes: Math.Max(0, end.ManagedAllocatedBytes - start.ManagedAllocatedBytes),
             Gen0Collections: Math.Max(0, end.Gen0Collections - start.Gen0Collections),
             Gen1Collections: Math.Max(0, end.Gen1Collections - start.Gen1Collections),

@@ -101,7 +101,8 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
             Scenario: scenario,
             BaselineProvider: baselineProvider,
             Comparisons: comparisons,
-            Timestamp: timestamp ?? DateTimeOffset.UtcNow);
+            Timestamp: timestamp ?? DateTimeOffset.UtcNow,
+            SkippedProviders: []);
     }
 
     /// <summary>
@@ -117,9 +118,22 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
 
         var stats = new Dictionary<string, (double P50, double Throughput, long PeakMemory, long ManagedAlloc)>(
             StringComparer.OrdinalIgnoreCase);
+        var skipped = new List<string>();
 
         foreach ((string provider, BenchmarkEvidenceReport report) in providerReports)
         {
+            // A run that failed, was skipped, or fell back to a different execution provider
+            // than requested has no valid timing to compare — including it would silently
+            // report a 0ms P50 as "identical to baseline" instead of flagging the problem.
+            bool fellBackToDifferentProvider = report.RequestedProvider is not null &&
+                report.ActualProvider is not null &&
+                !BenchmarkComparison.ProviderMatches(report.RequestedProvider, report.ActualProvider);
+            if (report.Status != BenchmarkEvidenceStatus.Completed || fellBackToDifferentProvider)
+            {
+                skipped.Add(provider);
+                continue;
+            }
+
             double p50 = report.TimingsMilliseconds.GetValueOrDefault("pipeline:p50")
                 ?? report.TimingsMilliseconds.GetValueOrDefault("pipeline")
                 ?? 0.0;
@@ -134,7 +148,16 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
             stats[provider] = (p50, throughput, peakMemory, managedAlloc);
         }
 
-        return CompareProviders(scenario, baselineProvider, stats, timestamp);
+        if (!stats.ContainsKey(baselineProvider) &&
+            !stats.Keys.Any(k => BenchmarkComparison.ProviderMatches(k, baselineProvider)))
+        {
+            throw new ArgumentException(
+                $"Baseline provider '{baselineProvider}' has no completed, on-target evidence to compare.",
+                nameof(baselineProvider));
+        }
+
+        ExecutionProviderMatrixReport compared = CompareProviders(scenario, baselineProvider, stats, timestamp);
+        return compared with { SkippedProviders = skipped };
     }
 
     /// <summary>
@@ -183,6 +206,7 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
                 configurator = services => MockDubbingPipelineServices.ConfigureMockPipeline(services, mockOpts =>
                 {
                     mockOpts.DefaultProvider = provider;
+                    mockOpts.DryRun = options.DryRun;
                     double speedMultiplier = GetMockProviderSpeedMultiplier(provider);
                     mockOpts.SimulatedStageLatencies["audio-prep"] = TimeSpan.FromMilliseconds(10.0 * speedMultiplier);
                     mockOpts.SimulatedStageLatencies["separation"] = TimeSpan.FromMilliseconds(20.0 * speedMultiplier);
@@ -212,6 +236,7 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
                     FfprobePath = options.FfprobePath,
                     RunCount = options.RunCount,
                     Mock = options.Mock,
+                    DryRun = options.DryRun,
                 },
                 cancellationToken).ConfigureAwait(false);
 
