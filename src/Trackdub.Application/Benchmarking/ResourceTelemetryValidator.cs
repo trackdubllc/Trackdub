@@ -110,7 +110,9 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
     private static ResourceTelemetryCheck CheckWorkingSet(
         ResourceUsageSnapshot? start, ResourceUsageSnapshot? end, long? maximum)
     {
-        if (start?.WorkingSetBytes is < 0 || end?.WorkingSetBytes is < 0)
+        long? startWorkingSet = start?.WorkingSetBytes;
+        long? endWorkingSet = end?.WorkingSetBytes;
+        if (startWorkingSet is < 0 || endWorkingSet is < 0)
         {
             return Failed("workingSetBytes", maximum, "Working-set counters must be nonnegative.");
         }
@@ -120,32 +122,32 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         {
             return Failed("workingSetBytes", maximum, "Sampled peak working set must be nonnegative.");
         }
-        if (!knownPeak.HasValue && !string.IsNullOrWhiteSpace(end?.PeakWorkingSetUnavailableReason))
+        if (!knownPeak.HasValue && end is not null && !string.IsNullOrWhiteSpace(end.PeakWorkingSetUnavailableReason))
         {
-            long? knownEndpoint = Maximum(start?.WorkingSetBytes, end?.WorkingSetBytes);
+            long? knownEndpoint = Maximum(startWorkingSet, endWorkingSet);
             if (knownEndpoint.HasValue && maximum.HasValue && knownEndpoint.Value > maximum.Value)
             {
                 return new("workingSetBytes", ResourceTelemetryStatus.Failed, knownEndpoint.Value, maximum,
                     "Available endpoint exceeds the configured upper bound; continuous peak sampling was unavailable.");
             }
-            return Unavailable("workingSetBytes", maximum, end!.PeakWorkingSetUnavailableReason,
+            return Unavailable("workingSetBytes", maximum, end.PeakWorkingSetUnavailableReason,
                 "Continuous working-set sampling unavailable.");
         }
 
-        bool bothEndpointsKnown = start?.WorkingSetBytes is not null && end?.WorkingSetBytes is not null;
+        bool bothEndpointsKnown = startWorkingSet.HasValue && endWorkingSet.HasValue;
         long? observed = knownPeak.HasValue || bothEndpointsKnown
-            ? Maximum(Maximum(start?.WorkingSetBytes, end?.WorkingSetBytes), knownPeak)
+            ? Maximum(Maximum(startWorkingSet, endWorkingSet), knownPeak)
             : null;
         if (!observed.HasValue)
         {
-            long? knownEndpoint = Maximum(start?.WorkingSetBytes, end?.WorkingSetBytes);
+            long? knownEndpoint = Maximum(startWorkingSet, endWorkingSet);
             if (knownEndpoint.HasValue && maximum.HasValue && knownEndpoint.Value > maximum.Value)
             {
                 return new("workingSetBytes", ResourceTelemetryStatus.Failed, knownEndpoint.Value, maximum,
                     "Available endpoint exceeds the configured upper bound; the other endpoint is unavailable.");
             }
             return Unavailable("workingSetBytes", maximum,
-                start?.WorkingSetBytes is null ? start?.MemoryUnavailableReason : end?.MemoryUnavailableReason,
+                startWorkingSet is null ? start?.MemoryUnavailableReason : end?.MemoryUnavailableReason,
                 "Working-set sample unavailable.");
         }
 

@@ -19,10 +19,14 @@ public sealed class ProcessResourceTelemetryCollectorTests
         double after = Stopwatch.GetTimestamp() * 1000d / Stopwatch.Frequency;
 
         Assert.Equal(Environment.ProcessorCount, end.ProcessorCount);
-        Assert.NotNull(start.MonotonicMilliseconds);
-        Assert.NotNull(end.MonotonicMilliseconds);
-        double startMonotonicMilliseconds = start.MonotonicMilliseconds.Value;
-        double endMonotonicMilliseconds = end.MonotonicMilliseconds.Value;
+        if (start.MonotonicMilliseconds is not double startMonotonicMilliseconds)
+        {
+            throw new Xunit.Sdk.XunitException("start.MonotonicMilliseconds was null.");
+        }
+        if (end.MonotonicMilliseconds is not double endMonotonicMilliseconds)
+        {
+            throw new Xunit.Sdk.XunitException("end.MonotonicMilliseconds was null.");
+        }
         Assert.InRange(startMonotonicMilliseconds, before, after);
         Assert.InRange(endMonotonicMilliseconds, startMonotonicMilliseconds, after);
         Assert.True(end.ManagedAllocatedBytes >= start.ManagedAllocatedBytes);
