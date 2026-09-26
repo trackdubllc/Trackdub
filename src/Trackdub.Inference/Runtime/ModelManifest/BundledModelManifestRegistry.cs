@@ -90,6 +90,12 @@ public sealed class BundledModelManifestRegistry
                     existing.RootDirectory.Equals(entry.RootDirectory, StringComparison.OrdinalIgnoreCase));
                 if (existingIndex >= 0)
                 {
+                    // A fragment that omits "deprecated" is silent, not an assertion of "not
+                    // deprecated"; inherit the base entry's value instead of rejecting the merge.
+                    if (model.Deprecated is null)
+                    {
+                        entry = entry with { Deprecated = mergedEntries[existingIndex].Deprecated };
+                    }
                     mergedEntries[existingIndex] = MergeEntry(mergedEntries[existingIndex], entry, manifestPath);
                 }
                 else
@@ -224,11 +230,11 @@ public sealed class BundledModelManifestRegistry
         }
 
         string rootDirectory = ResolveRootDirectory(manifestDirectory, model);
-        string defaultBenchmarkEntryPath = Path.GetFullPath(Path.Combine(rootDirectory, model.BenchmarkEntry));
+        string defaultBenchmarkEntryPath = Path.GetFullPath(Path.Join(rootDirectory, model.BenchmarkEntry));
         BundledModelManifestVariant[] variants = model.Variants
             .Select(variant => new BundledModelManifestVariant(
                 variant.Alias,
-                Path.GetFullPath(Path.Combine(rootDirectory, variant.EntryPath)),
+                Path.GetFullPath(Path.Join(rootDirectory, variant.EntryPath)),
                 variant.DownloadFiles,
                 variant.DisplayName,
                 variant.Description,
@@ -270,7 +276,7 @@ public sealed class BundledModelManifestRegistry
             OliveOptimizationProfile: model.Optimization?.Olive,
             ProviderId: model.ProviderId,
             ExpectedRuntime: model.ExpectedRuntime,
-            Deprecated: model.Deprecated,
+            Deprecated: model.Deprecated ?? false,
             DeprecatedReason: model.DeprecatedReason);
     }
 
@@ -477,7 +483,7 @@ public sealed class BundledModelManifestRegistry
         {
             foreach (string ancestor in EnumerateAncestors(seed))
             {
-                string candidate = Path.Combine(
+                string candidate = Path.Join(
                     ancestor,
                     "src",
                     "Trackdub.Inference",
@@ -500,14 +506,14 @@ public sealed class BundledModelManifestRegistry
         string? current = Path.GetDirectoryName(manifestPath);
         while (current is not null)
         {
-            string candidate = Path.Combine(current, "models", "manifest-fragments");
+            string candidate = Path.Join(current, "models", "manifest-fragments");
             if (Directory.Exists(candidate))
             {
                 return candidate;
             }
 
-            if (File.Exists(Path.Combine(current, "Trackdub.slnx")) ||
-                Directory.Exists(Path.Combine(current, ".git")))
+            if (File.Exists(Path.Join(current, "Trackdub.slnx")) ||
+                Directory.Exists(Path.Join(current, ".git")))
             {
                 return null;
             }
@@ -525,8 +531,12 @@ public sealed class BundledModelManifestRegistry
             return manifestDirectory;
         }
 
-        // Default behavior: relative to manifest as defined in json (usually ../../../../models/...)
+        // Default behavior: relative to manifest as defined in json (usually ../../../../models/...).
+        // model.RootPath may be an absolute override outside the configured cache; Path.Combine's
+        // rooted-path reset is required here, so this call is intentionally not Path.Join.
+#pragma warning disable RS0030
         string defaultPath = Path.GetFullPath(Path.Combine(manifestDirectory, model.RootPath));
+#pragma warning restore RS0030
         if (Directory.Exists(defaultPath))
         {
             return defaultPath;
@@ -536,13 +546,13 @@ public sealed class BundledModelManifestRegistry
         string? current = manifestDirectory;
         while (current is not null)
         {
-            string candidateModels = Path.Combine(current, "models");
+            string candidateModels = Path.Join(current, "models");
             if (Directory.Exists(candidateModels))
             {
                 string modelPathWithinModels = GetModelPathWithinModels(model.RootPath);
                 if (!string.IsNullOrWhiteSpace(modelPathWithinModels))
                 {
-                    string specificModelPath = Path.Combine(candidateModels, modelPathWithinModels);
+                    string specificModelPath = Path.Join(candidateModels, modelPathWithinModels);
                     if (Directory.Exists(specificModelPath))
                     {
                         return Path.GetFullPath(specificModelPath);
@@ -550,7 +560,7 @@ public sealed class BundledModelManifestRegistry
                 }
             }
 
-            if (Directory.Exists(Path.Combine(current, ".git")))
+            if (Directory.Exists(Path.Join(current, ".git")))
             {
                 break;
             }
@@ -579,7 +589,7 @@ public sealed class BundledModelManifestRegistry
 
         if (modelsSegmentIndex >= 0 && modelsSegmentIndex + 1 < pathSegments.Length)
         {
-            return Path.Combine(pathSegments[(modelsSegmentIndex + 1)..]);
+            return Path.Join(pathSegments[(modelsSegmentIndex + 1)..]);
         }
 
         return pathSegments[^1];

@@ -1,8 +1,13 @@
 using Trackdub.Contracts;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Pipeline;
+using Trackdub.Application.Benchmarking;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Composition.DeepFilterNet;
+using Trackdub.Composition.Runtime;
+using Trackdub.Infrastructure.Diagnostics;
 using Trackdub.Infrastructure.Settings;
+using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Runtime.ModelManifest;
 using Trackdub.Inference.Runtime.Planning;
 using Trackdub.Media.Enhancement;
@@ -128,6 +133,20 @@ public static class HeadlessCompositionRoot
         {
             services.Replace(ServiceDescriptor.Singleton(options.Logger));
         }
+
+        // Resource telemetry defaults remain replaceable by headless hosts.
+#if WINDOWS
+        // DXGI can report free VRAM on Windows; IVramMonitor carries the existing adapter query.
+        services.TryAddSingleton<IVramMonitor>(sp => new WindowsVramMonitor(
+            sp.GetRequiredService<IDeviceEnumerator>()));
+        services.TryAddSingleton<IAvailableVramReader>(sp =>
+            new WindowsAvailableVramReader(sp.GetRequiredService<IVramMonitor>()));
+#else
+        // No DXGI on this platform: telemetry records an explicit unavailable reading.
+        services.TryAddSingleton<IAvailableVramReader, UnavailableAvailableVramReader>();
+#endif
+        services.TryAddSingleton<IResourceTelemetryCollector, ProcessResourceTelemetryCollector>();
+        services.TryAddSingleton<IResourceTelemetryValidator, ResourceTelemetryValidator>();
 
         // Step 7: Apply user-provided service overrides.
         options.ServiceConfigurator?.Invoke(services);

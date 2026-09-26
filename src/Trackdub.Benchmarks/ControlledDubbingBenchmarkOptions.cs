@@ -1,3 +1,5 @@
+using Trackdub.Domain.Benchmarking;
+
 namespace Trackdub.Benchmarks;
 
 /// <summary>One isolated, explicit pipeline measurement.</summary>
@@ -17,6 +19,7 @@ public sealed record ControlledDubbingBenchmarkOptions
     public string? FfmpegPath { get; init; }
     public string? FfprobePath { get; init; }
     public int RunCount { get; init; } = 1;
+    public ResourceTelemetryBounds ResourceTelemetryBounds { get; init; } = new();
     public bool Mock { get; init; }
     public bool DryRun { get; init; }
 }

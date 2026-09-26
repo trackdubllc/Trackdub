@@ -1,3 +1,5 @@
+using Trackdub.Domain.Benchmarking;
+
 namespace Trackdub.Contracts.Benchmarking;
 
 public enum BenchmarkEvidenceKind { Observation, Benchmark }
@@ -41,4 +43,21 @@ public sealed record BenchmarkEvidenceReport
     public IReadOnlyDictionary<string, double?> TimingsMilliseconds { get; init; } = new Dictionary<string, double?>();
     public IReadOnlyDictionary<string, long?> MemoryBytes { get; init; } = new Dictionary<string, long?>();
     public IReadOnlyList<BenchmarkEvidenceStage> Stages { get; init; } = [];
+    public ResourceTelemetryBounds? ResourceTelemetryBounds { get; init; }
+    public ResourceTelemetryStatus? ResourceValidationStatus { get; init; }
+    public IReadOnlyList<BenchmarkStageResourceTelemetry> ResourceTelemetry { get; init; } = [];
+
+    /// <summary>Per-stage, per-phase distributions over the iterations in <see cref="ResourceTelemetry"/>.</summary>
+    public IReadOnlyList<ResourceTelemetryDistribution> ResourceDistribution { get; init; } = [];
+}
+
+public sealed record BenchmarkStageResourceTelemetry
+{
+    public required string Stage { get; init; }
+    public required string Phase { get; init; }
+    public int Iteration { get; init; }
+    public int Attempt { get; init; }
+    public required BenchmarkEvidenceStatus ExecutionStatus { get; init; }
+    public string? Reason { get; init; }
+    public required ResourceTelemetryValidation Validation { get; init; }
 }

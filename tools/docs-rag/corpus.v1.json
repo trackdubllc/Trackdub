@@ -185,6 +185,19 @@
       ]
     },
     {
+      "id": "lip-sync-alignment",
+      "prefix": "vendor/lip-sync-alignment",
+      "sources": [
+        ["wav2vec2-lv60-espeak", "https://huggingface.co/onnx-community/wav2vec2-lv-60-espeak-cv-ft-ONNX"],
+        ["wav2vec2-lv60-espeak-upstream", "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft"],
+        ["qwen3-forced-aligner", "https://huggingface.co/tonythethompson/Qwen3-ForcedAligner-0.6B-ONNX"],
+        ["latentsync-1.6", "https://huggingface.co/ByteDance/LatentSync-1.6"],
+        ["latentsync-1.6-onnx", "https://huggingface.co/tonythethompson/latentsync-1.6-onnx"],
+        ["insightface-buffalo-s", "https://huggingface.co/tonythethompson/insightface-buffalo-s-onnx"],
+        ["insightface", "https://github.com/deepinsight/insightface"]
+      ]
+    },
+    {
       "id": "olive",
       "prefix": "vendor/olive",
       "sources": [

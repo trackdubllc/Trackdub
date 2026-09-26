@@ -12,7 +12,7 @@ public sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
 {
     private readonly object _lock = new();
     private readonly long _runStart;
-    private readonly Func<ResourceTelemetrySnapshot> _snapshotProvider;
+    private readonly Func<ResourceTelemetrySnapshot?> _snapshotProvider;
 
     private readonly Dictionary<string, long> _starts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, double> _durations = new(StringComparer.OrdinalIgnoreCase);
@@ -30,10 +30,10 @@ public sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
 
     public StageTimingCollector(
         long runStart,
-        Func<ResourceTelemetrySnapshot>? snapshotProvider)
+        Func<ResourceTelemetrySnapshot?>? snapshotProvider)
     {
         _runStart = runStart;
-        _snapshotProvider = snapshotProvider ?? ResourceTelemetry.CaptureProcess;
+        _snapshotProvider = snapshotProvider ?? ResourceTelemetry.TryCaptureProcess;
     }
 
     public void Report(PipelineProgressEvent value)
@@ -45,16 +45,18 @@ public sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
             if (value.EventKind == PipelineProgressEventKind.Started)
             {
                 long timestamp = Stopwatch.GetTimestamp();
-                ResourceTelemetrySnapshot memorySnapshot = _snapshotProvider();
+                ResourceTelemetrySnapshot? memorySnapshot = _snapshotProvider();
 
                 _starts[value.StageKey] = timestamp;
-                _memoryStarts[value.StageKey] = memorySnapshot;
+                _memoryStarts.Remove(value.StageKey);
+                if (memorySnapshot is not null) _memoryStarts[value.StageKey] = memorySnapshot;
 
                 if (!string.IsNullOrWhiteSpace(value.StageName) &&
                     !string.Equals(value.StageName, value.StageKey, StringComparison.OrdinalIgnoreCase))
                 {
                     _starts[value.StageName] = timestamp;
-                    _memoryStarts[value.StageName] = memorySnapshot;
+                    _memoryStarts.Remove(value.StageName);
+                    if (memorySnapshot is not null) _memoryStarts[value.StageName] = memorySnapshot;
                 }
             }
             else if (value.EventKind is PipelineProgressEventKind.Completed or
@@ -79,9 +81,8 @@ public sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
                     }
                 }
 
-                if (hasMemoryStart && startMemory is not null)
+                if (hasMemoryStart && startMemory is not null && _snapshotProvider() is { } endMemory)
                 {
-                    ResourceTelemetrySnapshot endMemory = _snapshotProvider();
                     ResourceTelemetryDelta delta = ResourceTelemetry.CalculateDelta(startMemory, endMemory);
 
                     RecordMemory(value.StageKey, delta);

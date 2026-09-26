@@ -7,6 +7,34 @@ namespace Trackdub.Benchmarks.Tests;
 public sealed class ControlledDubbingBenchmarkRunnerTests
 {
     [Fact]
+    public async Task Controlled_run_includes_resource_validation_in_evidenceAsync()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"telemetry-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string fixture = Path.Join(directory, "fixture.wav");
+        await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
+        try
+        {
+            using var runner = new ControlledDubbingBenchmarkRunner(new NoHistory());
+            var report = await runner.RunAsync(new ControlledDubbingBenchmarkOptions
+            {
+                FixturePath = fixture,
+                OutputDirectory = Path.Join(directory, "output"),
+                Mock = true,
+                Stage = "audio-preparation",
+            });
+            Assert.Equal(BenchmarkEvidenceStatus.Completed, report.Status);
+            var json = System.Text.Json.JsonSerializer.SerializeToElement(report);
+            Assert.True(json.TryGetProperty("ResourceTelemetry", out var telemetry));
+            Assert.NotEmpty(telemetry.EnumerateArray());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Unknown_model_alias_is_rejected_before_running()
     {
         string fixture = Path.GetTempFileName();

@@ -208,6 +208,143 @@ public sealed class BenchmarkReportExportTests : IDisposable
     }
 
     [Fact]
+    public void RenderEvidenceMarkdown_ContainsResourceValidationTable()
+    {
+        BenchmarkEvidenceReport report = CreateSampleEvidenceReport() with
+        {
+            ResourceTelemetryBounds = new Trackdub.Domain.Benchmarking.ResourceTelemetryBounds { MaxCpuPercent = 75 },
+            ResourceValidationStatus = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+            ResourceTelemetry =
+            [
+                new BenchmarkStageResourceTelemetry
+                {
+                    Stage = "audio-prep",
+                    Phase = "measured",
+                    Iteration = 2,
+                    Attempt = 1,
+                    ExecutionStatus = BenchmarkEvidenceStatus.Completed,
+                    Validation = new Trackdub.Domain.Benchmarking.ResourceTelemetryValidation
+                    {
+                        Status = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                        Checks =
+                        [
+                            new Trackdub.Domain.Benchmarking.ResourceTelemetryCheck(
+                                "cpuPercent",
+                                Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                                ObservedValue: 91.5,
+                                Threshold: 75,
+                                Reason: "Configured upper bound exceeded."),
+                            new Trackdub.Domain.Benchmarking.ResourceTelemetryCheck(
+                                "availableVramMb",
+                                Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Unavailable,
+                                ObservedValue: null,
+                                Threshold: null,
+                                Reason: "No VRAM reader is registered for this host."),
+                        ],
+                    },
+                },
+            ],
+        };
+
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
+
+        Assert.Contains("## Resource Validation", markdown);
+        Assert.Contains("| audio-prep | measured | 2 | 1 | cpuPercent | 91.5 | 75 | Failed | Configured upper bound exceeded. |", markdown);
+        // An unavailable metric renders its cause instead of a fabricated zero.
+        Assert.Contains("| availableVramMb | unavailable | not configured | Unavailable | No VRAM reader is registered for this host. |", markdown);
+    }
+
+    [Fact]
+    public void RenderEvidenceMarkdown_EscapesPipeAndNewlineInResourceValidationReason()
+    {
+        BenchmarkEvidenceReport report = CreateSampleEvidenceReport() with
+        {
+            ResourceTelemetryBounds = new Trackdub.Domain.Benchmarking.ResourceTelemetryBounds { MaxCpuPercent = 75 },
+            ResourceValidationStatus = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+            ResourceTelemetry =
+            [
+                new BenchmarkStageResourceTelemetry
+                {
+                    Stage = "audio-prep",
+                    Phase = "measured",
+                    Iteration = 1,
+                    Attempt = 1,
+                    ExecutionStatus = BenchmarkEvidenceStatus.Completed,
+                    Validation = new Trackdub.Domain.Benchmarking.ResourceTelemetryValidation
+                    {
+                        Status = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                        Checks =
+                        [
+                            new Trackdub.Domain.Benchmarking.ResourceTelemetryCheck(
+                                "cpuPercent",
+                                Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                                ObservedValue: 91.5,
+                                Threshold: 75,
+                                Reason: "Stage failed | retrying\nsecond line"),
+                        ],
+                    },
+                },
+            ],
+        };
+
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
+
+        // A raw "|" or newline in a free-text reason would split the table row across columns
+        // or lines; the exporter must escape it instead.
+        Assert.Contains("Stage failed \\| retrying second line |", markdown);
+        Assert.DoesNotContain("retrying\nsecond line", markdown);
+    }
+
+    [Fact]
+    public void RenderEvidenceMarkdown_EscapesBackslashBeforePipeInResourceValidationReason()
+    {
+        // A reason containing a literal backslash immediately before a pipe must not become
+        // "\\|" in the escaped output: GFM reads that as an escaped backslash followed by an
+        // unescaped column-separating pipe, splitting the row exactly as if unescaped at all.
+        BenchmarkEvidenceReport report = CreateSampleEvidenceReport() with
+        {
+            ResourceTelemetryBounds = new Trackdub.Domain.Benchmarking.ResourceTelemetryBounds { MaxCpuPercent = 75 },
+            ResourceValidationStatus = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+            ResourceTelemetry =
+            [
+                new BenchmarkStageResourceTelemetry
+                {
+                    Stage = "audio-prep",
+                    Phase = "measured",
+                    Iteration = 1,
+                    Attempt = 1,
+                    ExecutionStatus = BenchmarkEvidenceStatus.Completed,
+                    Validation = new Trackdub.Domain.Benchmarking.ResourceTelemetryValidation
+                    {
+                        Status = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                        Checks =
+                        [
+                            new Trackdub.Domain.Benchmarking.ResourceTelemetryCheck(
+                                "cpuPercent",
+                                Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                                ObservedValue: 91.5,
+                                Threshold: 75,
+                                Reason: "path C:\\|weird"),
+                        ],
+                    },
+                },
+            ],
+        };
+
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
+
+        Assert.Contains("path C:\\\\\\|weird |", markdown);
+    }
+
+    [Fact]
+    public void RenderEvidenceMarkdown_OmitsResourceValidationSectionWithoutTelemetry()
+    {
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(CreateSampleEvidenceReport());
+
+        Assert.DoesNotContain("## Resource Validation", markdown);
+    }
+
+    [Fact]
     public void RenderEvidenceMarkdown_ContainsStageTable()
     {
         BenchmarkEvidenceReport report = CreateSampleEvidenceReport();
