@@ -29,6 +29,7 @@ public sealed class ModelInventoryService(
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
 
         return manifestRegistry.Entries
+            .Where(static entry => !entry.Deprecated)
             .Select(entry => BuildEntry(entry, cacheIndex, providerCapabilities))
             .ToList();
     }
@@ -39,7 +40,7 @@ public sealed class ModelInventoryService(
 
         BundledModelManifestEntry? entry = manifestRegistry.Entries
             .FirstOrDefault(e => e.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase));
-        if (entry is null)
+        if (entry is null || entry.Deprecated)
             return null;
 
         IReadOnlyList<LocalModelCacheRecord> cacheRecords = await cacheStore.LoadAsync(cancellationToken).ConfigureAwait(false);
