@@ -95,9 +95,14 @@ public static class BenchmarkCalculationOracle
     public static ResourceTelemetrySnapshot CaptureProcessTelemetry()
     {
         using var process = Process.GetCurrentProcess();
+        // Mirrors ResourceTelemetry.CaptureProcess: some platforms (e.g. macOS) don't report a
+        // peak distinct from the current working set, so PeakWorkingSet64 can come back below
+        // WorkingSet64. Clamp it so it always reflects at least the current usage.
+        long workingSet = process.WorkingSet64;
+        long peakWorkingSet = Math.Max(process.PeakWorkingSet64, workingSet);
         return new ResourceTelemetrySnapshot(
-            WorkingSetBytes: process.WorkingSet64,
-            PeakWorkingSetBytes: process.PeakWorkingSet64,
+            WorkingSetBytes: workingSet,
+            PeakWorkingSetBytes: peakWorkingSet,
             ManagedAllocatedBytes: GC.GetTotalAllocatedBytes(precise: false),
             Gen0Collections: GC.CollectionCount(0),
             Gen1Collections: GC.CollectionCount(1),

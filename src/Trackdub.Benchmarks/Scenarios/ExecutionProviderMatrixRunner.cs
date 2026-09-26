@@ -131,7 +131,8 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
             bool fellBackToDifferentProvider = report.RequestedProvider is not null &&
                 report.ActualProvider is not null &&
                 !BenchmarkComparison.ProviderMatches(report.RequestedProvider, report.ActualProvider);
-            bool didNotRun = report.Status is BenchmarkEvidenceStatus.Failed or BenchmarkEvidenceStatus.Skipped;
+            bool didNotRun = report.Status is BenchmarkEvidenceStatus.Failed or BenchmarkEvidenceStatus.Skipped
+                or BenchmarkEvidenceStatus.Canceled;
             if (didNotRun || fellBackToDifferentProvider)
             {
                 skipped.Add(provider);
