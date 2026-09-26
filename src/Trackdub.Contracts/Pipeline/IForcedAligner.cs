@@ -86,15 +86,33 @@ public sealed record PhonemeStretchPlan(
     TimeSpan OriginalStart,
     TimeSpan OriginalEnd,
     double StretchRatio,
-    bool WithinBounds);
+    bool WithinBounds,
+    string? PlanningReason = null);
+
+public enum PhonemeStretchRegionStatus
+{
+    Stretched,
+    Unchanged,
+    Unmatched,
+    UnsafeRatio,
+    TooShort,
+}
+
+public sealed record PhonemeStretchRegionResult(
+    int PlanIndex,
+    PhonemeStretchRegionStatus Status);
+
+public sealed record PhonemeStretchResult(
+    TimeSpan Duration,
+    IReadOnlyList<PhonemeStretchRegionResult> Regions);
 
 public interface IPhonemeStretchService
 {
     /// <summary>
     /// Apply phoneme-level time-stretching to a WAV file; write result to <paramref name="outputPath"/>.
-    /// Returns the aligned duration, or null if the stretch was skipped.
+    /// Returns the duration and actual per-region work, or null when no region was changed.
     /// </summary>
-    Task<TimeSpan?> StretchAsync(
+    Task<PhonemeStretchResult?> StretchAsync(
         string inputPath,
         string outputPath,
         IReadOnlyList<PhonemeStretchPlan> plan,

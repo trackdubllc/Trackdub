@@ -7,11 +7,12 @@ public sealed class FakePhonemeStretchService : IPhonemeStretchService
     public bool ReturnNull { get; set; }
     public TimeSpan AlignedDurationToReturn { get; set; } = TimeSpan.FromSeconds(1.0);
     public bool ThrowOnStretch { get; set; }
+    public IReadOnlyList<PhonemeStretchRegionResult>? RegionsToReturn { get; set; }
     public int CallCount { get; private set; }
     public string? LastInputPath { get; private set; }
     public string? LastOutputPath { get; private set; }
 
-    public Task<TimeSpan?> StretchAsync(
+    public Task<PhonemeStretchResult?> StretchAsync(
         string inputPath,
         string outputPath,
         IReadOnlyList<PhonemeStretchPlan> plan,
@@ -26,13 +27,19 @@ public sealed class FakePhonemeStretchService : IPhonemeStretchService
             throw new InvalidOperationException("FakePhonemeStretchService: simulated failure.");
 
         if (ReturnNull)
-            return Task.FromResult<TimeSpan?>(null);
+            return Task.FromResult<PhonemeStretchResult?>(null);
 
         // Simulate output file creation so artifact commit can proceed.
         var dir = Path.GetDirectoryName(outputPath);
         if (dir is not null) Directory.CreateDirectory(dir);
         File.WriteAllBytes(outputPath, []);
 
-        return Task.FromResult<TimeSpan?>(AlignedDurationToReturn);
+        IReadOnlyList<PhonemeStretchRegionResult> regions = RegionsToReturn ??
+            plan.Select(static (entry, index) => new PhonemeStretchRegionResult(
+                index, entry.WithinBounds
+                    ? PhonemeStretchRegionStatus.Stretched
+                    : PhonemeStretchRegionStatus.UnsafeRatio)).ToArray();
+        return Task.FromResult<PhonemeStretchResult?>(
+            new PhonemeStretchResult(AlignedDurationToReturn, regions));
     }
 }

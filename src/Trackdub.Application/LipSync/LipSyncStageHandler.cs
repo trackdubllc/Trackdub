@@ -580,7 +580,8 @@ public sealed class LipSyncStageHandler(
 
         if (IsUnsafeStretch(stretchPlan))
         {
-            return await CreateUnsafeStretchSegmentAsync(take, request, stageRunId, sourceTiming, alignmentResult, sourceAlignmentResult)
+            return await CreateUnsafeStretchSegmentAsync(take, request, stageRunId, sourceTiming, alignmentResult, sourceAlignmentResult,
+                    stretchPlan.All(static p => p.PlanningReason == "unmatched_viseme"))
                 .ConfigureAwait(false);
         }
 
@@ -594,9 +595,9 @@ public sealed class LipSyncStageHandler(
         }
 
         return await PersistStretchedOutputAsync(
-                take, request, stageRunId, stretchPlan,
+                take, request, stageRunId, stretch.Result!,
                 sourceTiming, alignmentResult, sourceAlignmentResult,
-                stretch.OutputPath!, stretch.AlignedDuration!.Value, cancellationToken)
+                stretch.OutputPath!, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -611,26 +612,33 @@ public sealed class LipSyncStageHandler(
         Guid stageRunId,
         SegmentSourceTiming sourceTiming,
         ForcedAlignmentResult alignmentResult,
-        ForcedAlignmentResult sourceAlignmentResult)
+        ForcedAlignmentResult sourceAlignmentResult,
+        bool inventoryMismatch)
     {
         Guid segmentId = take.TranslatedSegmentId!.Value;
         await WriteDegradationAsync(
             request, stageRunId,
-            "LipSyncUnsafeStretch", "All phoneme stretch ratios are out of safe bounds; original TTS take preserved.",
+            inventoryMismatch ? "LipSyncInventoryMismatch" : "LipSyncUnsafeStretch",
+            inventoryMismatch ? "No cross-inventory viseme correspondence; original TTS take preserved."
+                : "All phoneme stretch ratios are out of safe bounds; original TTS take preserved.",
             $"SegmentId={take.TranslatedSegmentId}", "original-tts-take", null)
             .ConfigureAwait(false);
 
-        return BuildSegment(segmentId, LipSyncSegmentStatus.SkippedUnsafeStretchRatio,
+        return BuildSegment(segmentId, inventoryMismatch
+                ? LipSyncSegmentStatus.SkippedInventoryMismatch
+                : LipSyncSegmentStatus.SkippedUnsafeStretchRatio,
             sourceAlignmentId: sourceAlignmentResult.SegmentId,
             ttsAlignmentId: alignmentResult.SegmentId,
             sourceDuration: SourceDuration(sourceTiming),
             ttsDuration: ToDuration(take.PreStretchDurationSeconds),
             planConfidence: alignmentResult.Confidence.Overall,
-            skipReason: "All phoneme stretch ratios are outside safe bounds.",
+            skipReason: inventoryMismatch
+                ? "No source and dubbed phonemes share a supported viseme class."
+                : "All phoneme stretch ratios are outside safe bounds.",
             providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
     }
 
-    private sealed record StretchOutcome(bool Succeeded, string? OutputPath, TimeSpan? AlignedDuration, LipSyncSegment? FailureSegment);
+    private sealed record StretchOutcome(bool Succeeded, string? OutputPath, PhonemeStretchResult? Result, LipSyncSegment? FailureSegment);
 
     private async Task<StretchOutcome> TryStretchTtsAsync(
         TtsTake take,
@@ -643,10 +651,10 @@ public sealed class LipSyncStageHandler(
         CancellationToken cancellationToken)
     {
         string stretchedOutputPath = Path.Combine(Path.GetTempPath(), $"trackdub-lip-stretched-{segmentId:N}.wav");
-        TimeSpan? alignedDuration;
+        PhonemeStretchResult? stretchResult;
         try
         {
-            alignedDuration = await _phonemeStretchService
+            stretchResult = await _phonemeStretchService
                 .StretchAsync(ttsTakeAudioPath, stretchedOutputPath, stretchPlan, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -662,54 +670,54 @@ public sealed class LipSyncStageHandler(
             return new StretchOutcome(false, null, null, failed);
         }
 
-        if (alignedDuration is null)
+        if (stretchResult is null)
         {
             try { File.Delete(stretchedOutputPath); } catch { /* best-effort */ }
-            var skipped = BuildSegment(segmentId, LipSyncSegmentStatus.SkippedUnsafeStretchRatio,
+            var skipped = BuildSegment(segmentId, LipSyncSegmentStatus.SkippedNoApplicableStretch,
                 sourceAlignmentId: sourceAlignmentResult.SegmentId,
                 ttsAlignmentId: alignmentResult.SegmentId,
                 sourceDuration: SourceDuration(sourceTiming),
                 ttsDuration: ToDuration(take.PreStretchDurationSeconds),
                 planConfidence: alignmentResult.Confidence.Overall,
-                skipReason: "Stretch service skipped: all phoneme ratios out of bounds.",
+                skipReason: "No phoneme region could be safely stretched.",
                 providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
             return new StretchOutcome(false, null, null, skipped);
         }
 
-        return new StretchOutcome(true, stretchedOutputPath, alignedDuration, null);
+        return new StretchOutcome(true, stretchedOutputPath, stretchResult, null);
     }
 
     private async Task<LipSyncSegment> PersistStretchedOutputAsync(
         TtsTake take,
         LipSyncStageRequest request,
         Guid stageRunId,
-        IReadOnlyList<PhonemeStretchPlan> stretchPlan,
+        PhonemeStretchResult stretchResult,
         SegmentSourceTiming sourceTiming,
         ForcedAlignmentResult alignmentResult,
         ForcedAlignmentResult sourceAlignmentResult,
         string stretchedOutputPath,
-        TimeSpan alignedDuration,
         CancellationToken cancellationToken)
     {
         Guid segmentId = take.TranslatedSegmentId!.Value;
-        bool anyOutOfBounds = stretchPlan.Any(static p => !p.WithinBounds);
+        bool anyUnchanged = stretchResult.Regions.Any(static p =>
+            p.Status != PhonemeStretchRegionStatus.Stretched);
         string relativeOutputPath = ProjectArtifactPaths.GetLipSyncTakeRelativePath(segmentId, stageRunId);
 
         string absOutputPath = await CommitStretchedFileAsync(relativeOutputPath, stretchedOutputPath, cancellationToken)
             .ConfigureAwait(false);
 
-        await RegisterLipSyncArtifactAsync(take, request, stageRunId, relativeOutputPath, absOutputPath, alignedDuration, cancellationToken)
+        await RegisterLipSyncArtifactAsync(take, request, stageRunId, relativeOutputPath, absOutputPath, stretchResult.Duration, cancellationToken)
             .ConfigureAwait(false);
 
         return BuildSegment(segmentId,
-            anyOutOfBounds ? LipSyncSegmentStatus.Partial : LipSyncSegmentStatus.Aligned,
+            anyUnchanged ? LipSyncSegmentStatus.Partial : LipSyncSegmentStatus.Aligned,
             sourceAlignmentId: sourceAlignmentResult.SegmentId,
             ttsAlignmentId: alignmentResult.SegmentId,
             sourceDuration: SourceDuration(sourceTiming),
             ttsDuration: ToDuration(take.PreStretchDurationSeconds),
-            alignedDuration: alignedDuration,
+            alignedDuration: stretchResult.Duration,
             planConfidence: alignmentResult.Confidence.Overall,
-            skipReason: anyOutOfBounds ? "Some phoneme ratios were clamped to safe bounds." : null,
+            skipReason: anyUnchanged ? "Some phoneme regions were not stretched." : null,
             providerId: alignmentResult.ProviderId, modelId: alignmentResult.ModelId);
     }
 

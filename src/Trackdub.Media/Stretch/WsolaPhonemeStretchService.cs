@@ -5,20 +5,7 @@ namespace Trackdub.Media.Stretch;
 
 public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
 {
-    // Analysis window length in samples.
-    private const int WindowSize = 1024;
-
-    // Step size used for the OUTPUT buffer per synthesis frame (= window / 2 → 50 % overlap).
-    // Named "analysisHop" in the brief; represents how far the output advances per frame.
-    private const int OutputHop = 512;
-
-    // Maximum source-position perturbation searched for the best-matching frame (±samples).
-    private const int SearchDelta = 64;
-
-    // Correlation window: half of OutputHop — enough to anchor the overlap without excess cost.
-    private const int CorrelationLength = OutputHop / 2;
-
-    public async Task<TimeSpan?> StretchAsync(
+    public async Task<PhonemeStretchResult?> StretchAsync(
         string inputPath,
         string outputPath,
         IReadOnlyList<PhonemeStretchPlan> plan,
@@ -44,14 +31,14 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
         for (int c = 0; c < channelCount; c++)
             outputChannels[c] = new List<float>(totalFrames);
 
-        float[] hann = BuildHannWindow(WindowSize);
-
-        IEnumerable<PhonemeStretchPlan> sortedPlan = plan
-            .OrderBy(static p => p.OriginalStart);
+        var outcomes = new List<PhonemeStretchRegionResult>(plan.Count);
+        IEnumerable<(PhonemeStretchPlan Entry, int Index)> sortedPlan = plan
+            .Select(static (entry, index) => (Entry: entry, Index: index))
+            .OrderBy(static p => p.Entry.OriginalStart);
 
         int currentFrame = 0;
 
-        foreach (PhonemeStretchPlan entry in sortedPlan)
+        foreach ((PhonemeStretchPlan entry, int index) in sortedPlan)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -72,34 +59,52 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
 
             int regionLength = regionEnd - currentFrame;
             if (regionLength <= 0)
+            {
+                outcomes.Add(new(index, PhonemeStretchRegionStatus.TooShort));
                 continue;
+            }
+
+            int windowSize = Math.Min(Math.Max(64, sampleRate / 50), regionLength / 2);
+            int outputHop = windowSize / 2;
+            int searchDelta = Math.Max(1, sampleRate / 250);
 
             bool shouldCopyDirect =
                 !entry.WithinBounds
                 || Math.Abs(entry.StretchRatio - 1.0) < 1e-9
-                || regionLength < WindowSize;
+                || windowSize < 64;
 
             if (shouldCopyDirect)
             {
+                PhonemeStretchRegionStatus status = !entry.WithinBounds
+                    ? entry.PlanningReason == "unmatched_viseme"
+                        ? PhonemeStretchRegionStatus.Unmatched
+                        : PhonemeStretchRegionStatus.UnsafeRatio
+                    : windowSize < 64
+                        ? PhonemeStretchRegionStatus.TooShort
+                        : PhonemeStretchRegionStatus.Unchanged;
+                outcomes.Add(new(index, status));
                 AppendRegion(channels, outputChannels, currentFrame,
                     regionLength, channelCount);
             }
             else
             {
-                // sourceHop = round(OutputHop / ratio):
+                // sourceHop = round(outputHop / ratio):
                 //   source advances by sourceHop per frame;
-                //   output advances by OutputHop per frame.
-                //   → output length ≈ sourceLength * OutputHop / sourceHop
+                //   output advances by outputHop per frame.
+                //   → output length ≈ sourceLength * outputHop / sourceHop
                 //                   ≈ sourceLength * ratio.
                 int sourceHop = Math.Max(1,
-                    (int)Math.Round(OutputHop / entry.StretchRatio));
+                    (int)Math.Round(outputHop / entry.StretchRatio));
+                float[] hann = BuildHannWindow(windowSize);
 
                 for (int c = 0; c < channelCount; c++)
                 {
                     float[] stretched = WsolaStretch(
-                        channels[c], currentFrame, regionLength, sourceHop, hann);
+                        channels[c], currentFrame, regionLength, sourceHop,
+                        outputHop, searchDelta, hann);
                     outputChannels[c].AddRange(stretched);
                 }
+                outcomes.Add(new(index, PhonemeStretchRegionStatus.Stretched));
             }
 
             currentFrame = regionEnd;
@@ -112,6 +117,9 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
                 totalFrames - currentFrame, channelCount);
         }
 
+        if (!outcomes.Any(static o => o.Status == PhonemeStretchRegionStatus.Stretched))
+            return null;
+
         int outputFrameCount = outputChannels[0].Count;
         float[] interleaved = Interleave(outputChannels, channelCount, outputFrameCount);
 
@@ -119,7 +127,8 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
             .WriteSamplesAsync(outputPath, interleaved, sampleRate, channelCount, cancellationToken)
             .ConfigureAwait(false);
 
-        return TimeSpan.FromSeconds((double)outputFrameCount / sampleRate);
+        return new PhonemeStretchResult(
+            TimeSpan.FromSeconds((double)outputFrameCount / sampleRate), outcomes);
     }
 
     // ---------------------------------------------------------------------------
@@ -131,6 +140,8 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
         int sourceOffset,
         int sourceLength,
         int sourceHop,
+        int outputHop,
+        int searchDelta,
         float[] hann)
     {
         if (sourceLength <= 0)
@@ -140,33 +151,32 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
         int numFrames = (int)Math.Ceiling((double)sourceLength / sourceHop);
 
         // Expected output sample count.
-        int expectedLength = (int)Math.Round((double)sourceLength * OutputHop / sourceHop);
+        int windowSize = hann.Length;
+        int correlationLength = outputHop / 2;
+        int expectedLength = (int)Math.Round((double)sourceLength * outputHop / sourceHop);
 
-        int bufferSize = (numFrames * OutputHop) + WindowSize;
+        int bufferSize = (numFrames * outputHop) + windowSize;
         var outputBuffer = new float[bufferSize];
         var normBuffer = new float[bufferSize];
 
         for (int k = 0; k < numFrames; k++)
         {
             int nomSourcePos = k * sourceHop;   // nominal source position
-            int outputPos = k * OutputHop;       // write position in output
+            int outputPos = k * outputHop;       // write position in output
 
             // Search window for best source position (skip correlation on first frame).
-            int searchMin = Math.Max(0, nomSourcePos - SearchDelta);
-            int searchMax = Math.Min(sourceLength - WindowSize, nomSourcePos + SearchDelta);
-            if (searchMax < 0)
-                searchMax = 0;
-            if (searchMax < searchMin)
-                searchMax = searchMin;
+            int lastFullWindowStart = Math.Max(0, sourceLength - windowSize);
+            int searchMin = Math.Clamp(nomSourcePos - searchDelta, 0, lastFullWindowStart);
+            int searchMax = Math.Clamp(nomSourcePos + searchDelta, searchMin, lastFullWindowStart);
 
             int bestPos = k == 0
-                ? nomSourcePos
+                ? Math.Min(nomSourcePos, lastFullWindowStart)
                 : FindBestSourcePosition(
                     source, sourceOffset, outputBuffer, outputPos,
-                    searchMin, searchMax);
+                    searchMin, searchMax, correlationLength);
 
             // Overlap-add: window the source grain and accumulate into the output.
-            int grainSamples = Math.Min(WindowSize, sourceLength - bestPos);
+            int grainSamples = Math.Min(windowSize, sourceLength - bestPos);
             for (int n = 0; n < grainSamples; n++)
             {
                 int outIdx = outputPos + n;
@@ -199,16 +209,17 @@ public sealed class WsolaPhonemeStretchService : IPhonemeStretchService
         float[] outputSoFar,
         int outputPos,
         int searchMin,
-        int searchMax)
+        int searchMax,
+        int correlationLength)
     {
-        int outStart = outputPos - CorrelationLength;
+        int outStart = outputPos - correlationLength;
         int bestPos = searchMin;
         double bestCorr = double.MinValue;
 
         for (int candidate = searchMin; candidate <= searchMax; candidate++)
         {
             double corr = 0.0;
-            for (int n = 0; n < CorrelationLength; n++)
+            for (int n = 0; n < correlationLength; n++)
             {
                 int outIdx = outStart + n;
                 if (outIdx < 0 || outIdx >= outputSoFar.Length)

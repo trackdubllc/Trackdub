@@ -31,7 +31,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
             new("IH", TimeSpan.FromSeconds(0.5), TimeSpan.FromSeconds(1.0), 0.8, WithinBounds: false),
         };
 
-        TimeSpan? result = await new WsolaPhonemeStretchService()
+        PhonemeStretchResult? result = await new WsolaPhonemeStretchService()
             .StretchAsync(inputPath, outputPath, plan, TestContext.Current.CancellationToken);
 
         Assert.Null(result);
@@ -43,7 +43,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
         string inputPath = await WriteSineWavAsync(TimeSpan.FromSeconds(0.5));
         string outputPath = Path.Combine(_tempDir, "out_empty.wav");
 
-        TimeSpan? result = await new WsolaPhonemeStretchService()
+        PhonemeStretchResult? result = await new WsolaPhonemeStretchService()
             .StretchAsync(inputPath, outputPath, [], TestContext.Current.CancellationToken);
 
         Assert.Null(result);
@@ -54,7 +54,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
     // -----------------------------------------------------------------
 
     [Fact]
-    public async Task StretchAsync_SinglePhonemeRatio1_OutputDurationMatchesInput()
+    public async Task StretchAsync_SinglePhonemeRatio1_ReturnsNullWithoutWriting()
     {
         const double inputDurationSeconds = 1.0;
         string inputPath = await WriteSineWavAsync(TimeSpan.FromSeconds(inputDurationSeconds));
@@ -65,11 +65,11 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
                 StretchRatio: 1.0, WithinBounds: true),
         };
 
-        TimeSpan? result = await new WsolaPhonemeStretchService()
+        PhonemeStretchResult? result = await new WsolaPhonemeStretchService()
             .StretchAsync(inputPath, outputPath, plan, TestContext.Current.CancellationToken);
 
-        Assert.NotNull(result);
-        Assert.InRange(result!.Value.TotalSeconds, 0.95, 1.05);
+        Assert.Null(result);
+        Assert.False(File.Exists(outputPath));
     }
 
     [Fact]
@@ -84,13 +84,53 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
                 StretchRatio: 2.0, WithinBounds: true),
         };
 
-        TimeSpan? result = await new WsolaPhonemeStretchService()
+        PhonemeStretchResult? result = await new WsolaPhonemeStretchService()
             .StretchAsync(inputPath, outputPath, plan, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.InRange(result!.Value.TotalSeconds,
+        Assert.InRange(result!.Duration.TotalSeconds,
             (inputDurationSeconds * 2.0) - 0.1,
             (inputDurationSeconds * 2.0) + 0.1);
+        Assert.Equal(PhonemeStretchRegionStatus.Stretched, Assert.Single(result.Regions).Status);
+    }
+
+    [Theory]
+    [InlineData(16_000)]
+    [InlineData(48_000)]
+    public async Task StretchAsync_ShortPhoneme_UsesSampleRateScaledWindow(int sampleRate)
+    {
+        string inputPath = await WriteSineWavAsync(TimeSpan.FromMilliseconds(50), sampleRate);
+        string outputPath = Path.Join(_tempDir, $"short-{sampleRate}.wav");
+        var plan = new[]
+        {
+            new PhonemeStretchPlan("p", TimeSpan.Zero, TimeSpan.FromMilliseconds(50),
+                1.5, WithinBounds: true),
+        };
+
+        PhonemeStretchResult? result = await new WsolaPhonemeStretchService()
+            .StretchAsync(inputPath, outputPath, plan, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(PhonemeStretchRegionStatus.Stretched, Assert.Single(result.Regions).Status);
+        Assert.True(File.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task StretchAsync_TooShortToOverlap_PreservesTake()
+    {
+        string inputPath = await WriteSineWavAsync(TimeSpan.FromMilliseconds(4));
+        string outputPath = Path.Join(_tempDir, "too-short.wav");
+        var plan = new[]
+        {
+            new PhonemeStretchPlan("p", TimeSpan.Zero, TimeSpan.FromMilliseconds(4),
+                1.5, WithinBounds: true),
+        };
+
+        PhonemeStretchResult? result = await new WsolaPhonemeStretchService()
+            .StretchAsync(inputPath, outputPath, plan, TestContext.Current.CancellationToken);
+
+        Assert.Null(result);
+        Assert.False(File.Exists(outputPath));
     }
 
     // -----------------------------------------------------------------
@@ -105,7 +145,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
         var plan = new PhonemeStretchPlan[]
         {
             new("AH", TimeSpan.Zero, TimeSpan.FromSeconds(0.5),
-                StretchRatio: 1.0, WithinBounds: true),
+                StretchRatio: 1.5, WithinBounds: true),
         };
 
         await new WsolaPhonemeStretchService()
@@ -127,7 +167,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
                 StretchRatio: 1.5, WithinBounds: false),
         };
 
-        TimeSpan? result = await new WsolaPhonemeStretchService()
+        PhonemeStretchResult? result = await new WsolaPhonemeStretchService()
             .StretchAsync(inputPath, outputPath, plan, TestContext.Current.CancellationToken);
 
         Assert.Null(result);

@@ -26,7 +26,7 @@ public enum LipSyncSegmentStatus
     SkippedUnsafeStretchRatio = 13,
     SkippedLicenseGate = 14,
     SkippedRuntimeUnavailable = 15,
+    SkippedNoApplicableStretch = 16,
     Failed = 20
 }
-
 
