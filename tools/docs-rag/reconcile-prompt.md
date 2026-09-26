@@ -28,7 +28,7 @@ Ground rules
 
 Step 1 — Build the pairing inventory
 Read tools/docs-rag/corpus.v1.json and apply the key rules above. Seed mapping (extend if you find other overlapping first-party docs):
-- docs/reference/tensorrt-rtx-ep-abi-plugin.md  <-> vendor/nvidia/ep-abi-v030.md, ep-abi-readme.md, trt-rtx-arch.md/how.md/porting.md/c-api.md/advanced.md/support-matrix.md/best-practices.md
+- docs/reference/tensorrt-rtx-ep-abi-plugin.md  <-> vendor/nvidia/ep-abi-v042.md, ep-abi-v040.md, ep-abi-readme.md, trt-rtx-arch.md/how.md/porting.md/c-api.md/advanced.md/support-matrix.md/best-practices.md
 - docs/reference/gpu-execution-providers.md     <-> vendor/onnxruntime/ep-overview.md, trt-rtx-ep.md, plugin-ep.md, cuda-ep.md, directml-ep.md, migraphx-ep.md, openvino-ep.md, qnn-ep.md
 - docs/reference/windows-ml-*.md                <-> vendor/microsoft/winml-*.md
 - docs/reference/migraphx-phase0-seams.md       <-> vendor/amd/migraphx-*.md

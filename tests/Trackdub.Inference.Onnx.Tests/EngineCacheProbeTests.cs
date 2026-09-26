@@ -13,7 +13,7 @@ public sealed class EngineCacheProbeTests
 
         Assert.Equal(
             "not-applicable",
-            EngineCacheProbe.ClassifyOutcome(before, after, BenchmarkProviderPreference.Cpu));
+            EngineCacheProbe.ClassifyOutcome(before, after, isEngineCacheRelevantProvider: false));
     }
 
     [Fact]
@@ -24,18 +24,20 @@ public sealed class EngineCacheProbeTests
 
         Assert.Equal(
             "wrote",
-            EngineCacheProbe.ClassifyOutcome(before, after, BenchmarkProviderPreference.TensorRtRtx));
+            EngineCacheProbe.ClassifyOutcome(before, after, isEngineCacheRelevantProvider: true));
     }
 
     [Fact]
-    public void ClassifyOutcome_hit_when_cache_nonempty_and_unchanged()
+    public void ClassifyOutcome_unknown_when_cache_nonempty_and_unchanged()
     {
+        // Cannot confirm pre-existing entries belong to this model/provider without parsing
+        // engine-cache filenames, so an unchanged-but-nonempty cache is "unknown", not "hit".
         var before = new EngineCacheProbe.Snapshot("x", true, 3, 4096);
         var after = new EngineCacheProbe.Snapshot("x", true, 3, 4096);
 
         Assert.Equal(
-            "hit",
-            EngineCacheProbe.ClassifyOutcome(before, after, BenchmarkProviderPreference.TensorRtRtx));
+            "unknown",
+            EngineCacheProbe.ClassifyOutcome(before, after, isEngineCacheRelevantProvider: true));
     }
 
     [Fact]
@@ -46,16 +48,28 @@ public sealed class EngineCacheProbeTests
 
         Assert.Equal(
             "empty",
-            EngineCacheProbe.ClassifyOutcome(before, after, BenchmarkProviderPreference.TensorRtRtx));
+            EngineCacheProbe.ClassifyOutcome(before, after, isEngineCacheRelevantProvider: true));
     }
 
     [Fact]
-    public void ClassifyDominantPhase_maps_cache_outcome_evidence()
+    public void IsEngineCacheRelevantProvider_true_only_for_tensorrt_family()
     {
-        Assert.Equal("engine-compile", EngineCacheProbe.ClassifyDominantPhase("wrote", BenchmarkProviderPreference.TensorRtRtx));
-        Assert.Equal("model-deserialize", EngineCacheProbe.ClassifyDominantPhase("hit", BenchmarkProviderPreference.TensorRtRtx));
-        Assert.Equal("model-deserialize", EngineCacheProbe.ClassifyDominantPhase("not-applicable", BenchmarkProviderPreference.Cpu));
-        Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("empty", BenchmarkProviderPreference.TensorRtRtx));
+        Assert.True(EngineCacheProbe.IsEngineCacheRelevantProvider(BenchmarkProviderPreference.TensorRtRtx));
+        Assert.True(EngineCacheProbe.IsEngineCacheRelevantProvider(BenchmarkProviderPreference.TensorRt));
+        Assert.True(EngineCacheProbe.IsEngineCacheRelevantProvider(BenchmarkProviderPreference.Migraphx));
+        Assert.False(EngineCacheProbe.IsEngineCacheRelevantProvider(BenchmarkProviderPreference.Cpu));
+        Assert.False(EngineCacheProbe.IsEngineCacheRelevantProvider(BenchmarkProviderPreference.Dml));
+    }
+
+    [Fact]
+    public void ClassifyDominantPhase_never_infers_from_cache_outcome()
+    {
+        // A cache write proves compile activity happened, not that it dominated total
+        // cold-load time — no outcome justifies a phase claim without real phase timings.
+        Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("wrote"));
+        Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("unknown"));
+        Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("not-applicable"));
+        Assert.Equal("unknown", EngineCacheProbe.ClassifyDominantPhase("empty"));
     }
 
     [Fact]
@@ -64,16 +78,17 @@ public sealed class EngineCacheProbeTests
         var before = new EngineCacheProbe.Snapshot("x", true, 0, 0);
         var after = new EngineCacheProbe.Snapshot("x", true, 1, 2048);
 
+        string outcome = EngineCacheProbe.ClassifyOutcome(before, after, isEngineCacheRelevantProvider: true);
         string note = EngineCacheProbe.FormatNote(
             26927.75,
-            EngineCacheProbe.ClassifyOutcome(before, after, BenchmarkProviderPreference.TensorRtRtx),
+            outcome,
             before,
             after,
-            EngineCacheProbe.ClassifyDominantPhase("wrote", BenchmarkProviderPreference.TensorRtRtx));
+            EngineCacheProbe.ClassifyDominantPhase(outcome));
 
         Assert.Contains("total=26927.8", note, StringComparison.Ordinal);
         Assert.Contains("engine cache=wrote", note, StringComparison.Ordinal);
-        Assert.Contains("dominant=engine-compile", note, StringComparison.Ordinal);
+        Assert.Contains("dominant=unknown", note, StringComparison.Ordinal);
         Assert.Contains("+1 file", note, StringComparison.Ordinal);
     }
 
@@ -81,11 +96,11 @@ public sealed class EngineCacheProbeTests
     public void Capture_reads_environment_overrides_without_throwing()
     {
         string? previous = Environment.GetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT");
-        string temp = Path.Combine(Path.GetTempPath(), $"engine-cache-probe-{Guid.NewGuid():N}");
+        string temp = Path.Join(Path.GetTempPath(), $"engine-cache-probe-{Guid.NewGuid():N}");
         try
         {
             Directory.CreateDirectory(temp);
-            File.WriteAllBytes(Path.Combine(temp, "engine.bin"), new byte[128]);
+            File.WriteAllBytes(Path.Join(temp, "engine.bin"), new byte[128]);
             Environment.SetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT", temp);
 
             EngineCacheProbe.Snapshot snapshot = EngineCacheProbe.Capture();
@@ -97,7 +112,8 @@ public sealed class EngineCacheProbeTests
         finally
         {
             Environment.SetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT", previous);
-            try { Directory.Delete(temp, recursive: true); } catch (IOException) { }
+            try { Directory.Delete(temp, recursive: true); }
+            catch (IOException ex) { Console.Error.WriteLine($"Cleanup failed for '{temp}': {ex.Message}"); }
         }
     }
 }

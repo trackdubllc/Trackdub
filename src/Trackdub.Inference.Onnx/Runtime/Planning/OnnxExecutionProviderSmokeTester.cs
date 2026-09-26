@@ -491,7 +491,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         using OnnxExecutionSessionFactory.SingleSessionLease preprocessor = await OnnxExecutionSessionFactory
             .CreatePooledSingleAsync(
                 "parakeet-tdt-preprocessor",
-                Path.Combine(root, "nemo128.onnx"),
+                Path.Join(root, "nemo128.onnx"),
                 ExecutionProviderKind.Cpu,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -501,7 +501,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             .CreatePooledNemotronAsrAsync(
                 ParakeetTdtOnnxAudioTranscriptionEngine.EngineFamilyName,
                 encoderModelPath,
-                Path.Combine(root, "decoder_joint-model.onnx"),
+                Path.Join(root, "decoder_joint-model.onnx"),
                 request.ExecutionProvider,
                 cancellationToken,
                 modelId: request.ModelId,
@@ -702,7 +702,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 ?? throw new InvalidOperationException("Cannot resolve Chatterbox TTS warmup root path.");
         string onnxDirectory = string.Equals(Path.GetFileName(rootPath), "onnx", StringComparison.OrdinalIgnoreCase)
             ? rootPath
-            : Path.Combine(rootPath, "onnx");
+            : Path.Join(rootPath, "onnx");
 
         foreach (string graphName in new[] { "speech_encoder", "embed_tokens", "language_model" })
         {
@@ -722,17 +722,18 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
     private static string ResolveChatterboxGraphPath(string onnxDirectory, string graphName, string? variant)
     {
-        if (!string.IsNullOrWhiteSpace(variant) &&
-            !variant.Equals("default", StringComparison.OrdinalIgnoreCase))
+        string? sanitizedVariant = string.IsNullOrWhiteSpace(variant) ? null : Path.GetFileName(variant);
+        if (!string.IsNullOrWhiteSpace(sanitizedVariant) &&
+            !sanitizedVariant.Equals("default", StringComparison.OrdinalIgnoreCase))
         {
-            string variantPath = Path.Combine(onnxDirectory, $"{graphName}_{variant}.onnx");
+            string variantPath = Path.Join(onnxDirectory, $"{graphName}_{sanitizedVariant}.onnx");
             if (File.Exists(variantPath))
             {
                 return variantPath;
             }
         }
 
-        return Path.Combine(onnxDirectory, $"{graphName}.onnx");
+        return Path.Join(onnxDirectory, $"{graphName}.onnx");
     }
 
     private static InputSet CreateVadInputs()
@@ -903,9 +904,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     private static InputSet CreateDiarizationInputs(InferenceSession session)
     {
         IReadOnlyDictionary<string, NodeMetadata> inputs = session.InputMetadata;
-        if (SortFormerDiarizationEngine.IsStreamingExportInputSet(inputs.Keys))
+        if (IsSortFormerStreamingInputSet(inputs.Keys))
         {
-            return CreateSortFormerStreamingInputs();
+            return CreateSortFormerStreamingInputs(inputs);
         }
 
         if (TryCreateWaveformDiarizationInputs(inputs, out InputSet? waveformInputs))
@@ -916,23 +917,64 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         return CreateMetadataDrivenInputs(inputs);
     }
 
-    // The streaming export's TRT engine is built for the engine's optimization profile (chunk is a
-    // fixed 1x3040x128 window), so probe inputs must sit inside it; "1 for every dynamic dim" does not.
-    private static InputSet CreateSortFormerStreamingInputs()
+    private static bool IsSortFormerStreamingInputSet(IEnumerable<string> inputNames)
     {
-        var values = new List<NamedOnnxValue>();
-        foreach (string entry in SortFormerDiarizationEngine.TrtOptions["trt_profile_opt_shapes"].Split(','))
+        HashSet<string> names = inputNames.ToHashSet(StringComparer.Ordinal);
+        return names.Contains("chunk") && names.Contains("chunk_lengths") &&
+               names.Contains("spkcache") && names.Contains("spkcache_lengths") &&
+               names.Contains("fifo") && names.Contains("fifo_lengths");
+    }
+
+    // The streaming export expects a fixed 1x3040x128 chunk. Cache and FIFO begin empty.
+    private static InputSet CreateSortFormerStreamingInputs(
+        IReadOnlyDictionary<string, NodeMetadata> inputMetadata)
+    {
+        const int chunkFrames = 3040;
+        const int melBins = 128;
+        const int embeddingDimensions = 512;
+        var values = new List<NamedOnnxValue>(6);
+        AddFloatInput("chunk", [1, chunkFrames, melBins]);
+        AddInt64Input("chunk_lengths", [1], [chunkFrames]);
+        AddFloatInput("spkcache", [1, 0, embeddingDimensions]);
+        AddInt64Input("spkcache_lengths", [1], [0]);
+        AddFloatInput("fifo", [1, 0, embeddingDimensions]);
+        AddInt64Input("fifo_lengths", [1], [0]);
+        return new InputSet(values);
+
+        void AddFloatInput(string name, int[] dimensions)
         {
-            string[] parts = entry.Split(':');
-            int[] dimensions = parts[1].Split('x').Select(int.Parse).ToArray();
+            ValidateStreamingInput(name, dimensions, TensorElementType.Float);
             int elementCount = dimensions.Aggregate(1, static (product, dimension) => checked(product * dimension));
-            values.Add(NamedOnnxValue.CreateFromTensor(parts[0], new DenseTensor<float>(new float[elementCount], dimensions)));
             values.Add(NamedOnnxValue.CreateFromTensor(
-                parts[0] + "_lengths",
-                new DenseTensor<long>(new long[] { dimensions[1] }, [1])));
+                name, new DenseTensor<float>(new float[elementCount], dimensions)));
         }
 
-        return new InputSet(values);
+        void AddInt64Input(string name, int[] dimensions, long[] data)
+        {
+            ValidateStreamingInput(name, dimensions, TensorElementType.Int64);
+            values.Add(NamedOnnxValue.CreateFromTensor(
+                name, new DenseTensor<long>(data, dimensions)));
+        }
+
+        void ValidateStreamingInput(string name, int[] dimensions, TensorElementType elementType)
+        {
+            if (!inputMetadata.TryGetValue(name, out NodeMetadata? metadata) ||
+                !metadata.IsTensor || metadata.ElementDataType != elementType ||
+                metadata.Dimensions.Length != dimensions.Length)
+            {
+                throw new InvalidOperationException(
+                    $"SortFormer streaming input '{name}' does not match the expected tensor contract.");
+            }
+
+            for (int axis = 0; axis < dimensions.Length; axis++)
+            {
+                if (metadata.Dimensions[axis] > 0 && metadata.Dimensions[axis] != dimensions[axis])
+                {
+                    throw new InvalidOperationException(
+                        $"SortFormer streaming input '{name}' has an incompatible fixed dimension at axis {axis}.");
+                }
+            }
+        }
     }
 
     private static bool TryCreateWaveformDiarizationInputs(

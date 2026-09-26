@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -70,9 +71,10 @@ public sealed class GeminiCloudTextRefinementEngine(
             Contents: [new GeminiContent([new GeminiPart(userContent)])],
             GenerationConfig: new GeminiGenerationConfig("application/json"));
 
-        string endpoint = $"{EndpointBase}/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
+        string endpoint = $"{EndpointBase}/{model}:generateContent";
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        httpRequest.Headers.Add("x-goog-api-key", apiKey);
         httpRequest.Content = new StringContent(
             JsonSerializer.Serialize(payload, JsonOptions),
             Encoding.UTF8,
@@ -239,8 +241,9 @@ public sealed class GeminiCloudTextRefinementEngine(
                     .ToArray();
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            Debug.WriteLine($"Failed to parse JSON string array content: {ex}");
         }
 
         return null;

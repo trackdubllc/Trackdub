@@ -209,7 +209,7 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         using var sessionLease = CreateSession(modelPath, preference, notes);
         coldLoadStopwatch.Stop();
         ColdLoadAttribution attribution = AttributeColdLoad(
-            coldLoadStopwatch.Elapsed.TotalMilliseconds, preference, cacheBefore, notes);
+            coldLoadStopwatch.Elapsed.TotalMilliseconds, sessionLease.SelectedProvider, cacheBefore, notes);
 
         var inputSet = CreateInputs(modelPath, sessionLease.Session.InputMetadata);
 
@@ -252,15 +252,22 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         int FilesAdded,
         string DominantPhase);
 
+    private static readonly string[] EngineCacheRelevantProviderLabels = ["tensorrt-rtx", "tensorrt", "migraphx"];
+
     private static ColdLoadAttribution AttributeColdLoad(
         double coldLoadMilliseconds,
-        BenchmarkProviderPreference preference,
+        string selectedProvider,
         EngineCacheProbe.Snapshot cacheBefore,
         ICollection<string> notes)
     {
+        // Classify from the provider the session actually selected, not the requested
+        // preference — a TRT-RTX request that fell back to CPU never touches the engine
+        // cache, so scoring it as a GPU cache run can produce a false "hit".
+        bool isEngineCacheRelevant = EngineCacheRelevantProviderLabels.Contains(
+            selectedProvider, StringComparer.OrdinalIgnoreCase);
         EngineCacheProbe.Snapshot cacheAfter = EngineCacheProbe.Capture();
-        string outcome = EngineCacheProbe.ClassifyOutcome(cacheBefore, cacheAfter, preference);
-        string dominant = EngineCacheProbe.ClassifyDominantPhase(outcome, preference);
+        string outcome = EngineCacheProbe.ClassifyOutcome(cacheBefore, cacheAfter, isEngineCacheRelevant);
+        string dominant = EngineCacheProbe.ClassifyDominantPhase(outcome);
         long bytesAdded = Math.Max(0, cacheAfter.TotalBytes - cacheBefore.TotalBytes);
         int filesAdded = Math.Max(0, cacheAfter.FileCount - cacheBefore.FileCount);
         notes.Add(EngineCacheProbe.FormatNote(coldLoadMilliseconds, outcome, cacheBefore, cacheAfter, dominant));
@@ -284,7 +291,7 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         using var whisperLease = CreateWhisperSessionLease(encoderModelPath, decoderModelPath, preference, notes);
         coldLoadStopwatch.Stop();
         ColdLoadAttribution attribution = AttributeColdLoad(
-            coldLoadStopwatch.Elapsed.TotalMilliseconds, preference, cacheBefore, notes);
+            coldLoadStopwatch.Elapsed.TotalMilliseconds, whisperLease.SelectedProvider, cacheBefore, notes);
 
         var encoderInputSet = CreateInputs(encoderModelPath, whisperLease.EncoderSession.InputMetadata);
         var decoderStartTokenId = ResolveWhisperDecoderStartTokenId(fullConfigPath);
@@ -337,7 +344,7 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         using var opusLease = CreateOpusSessionLease(encoderModelPath, decoderModelPath, preference, notes);
         coldLoadStopwatch.Stop();
         ColdLoadAttribution attribution = AttributeColdLoad(
-            coldLoadStopwatch.Elapsed.TotalMilliseconds, preference, cacheBefore, notes);
+            coldLoadStopwatch.Elapsed.TotalMilliseconds, opusLease.SelectedProvider, cacheBefore, notes);
 
         var encoderInputSet = CreateInputs(encoderModelPath, opusLease.EncoderSession.InputMetadata);
         var decoderStartTokenId = ResolveOpusDecoderStartTokenId(fullConfigPath);

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
@@ -179,6 +180,7 @@ internal sealed class InferenceSessionPool : IDisposable
     private readonly ConcurrentDictionary<SessionPoolKey, (Exception Error, long Wave)> creationFailures = new();
     private readonly SemaphoreSlim creationLock = new(1, 1);
     private readonly SemaphoreSlim bundleAcquireLock = new(1, 1);
+    private TaskCompletionSource<bool> bundleStateChanged = CreateBundleStateChangedSignal();
     private readonly bool enableMemoryAdmission;
     private readonly long memoryBudgetMb;
     /// <summary>Pending create reservations per device (audit §3A: budget is per physical device).</summary>
@@ -205,6 +207,21 @@ internal sealed class InferenceSessionPool : IDisposable
     /// DirectML and TensorRT on the same GPU share this budget — provider is not part of the key.
     /// </summary>
     private static int DeviceOf(SessionPoolKey key) => key.DeviceId ?? 0;
+
+    private static TaskCompletionSource<bool> CreateBundleStateChangedSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Wakes bundle acquisition after a gate or pool membership changes. The exchange makes the
+    /// signal one-shot: a waiter captures the current source before its attempt, while a later
+    /// transition installs a fresh source for the next waiter.
+    /// </summary>
+    private void SignalBundleStateChanged()
+    {
+        TaskCompletionSource<bool> previous =
+            Interlocked.Exchange(ref bundleStateChanged, CreateBundleStateChangedSignal());
+        previous.TrySetResult(true);
+    }
 
     /// <summary>
     /// Returns an appropriate default max-session count for the current hardware.
@@ -360,6 +377,17 @@ internal sealed class InferenceSessionPool : IDisposable
                     continue;
                 }
 
+                // If memory admission is enabled and model exceeds budget, fail fast before
+                // attempting to create an unbudgeted session (audit §3B).
+                long needMb = ResolveReservationMb(key);
+                int device = DeviceOf(key);
+                if (enableMemoryAdmission && needMb > memoryBudgetMb)
+                {
+                    throw new InvalidOperationException(
+                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
+                        $"device {device} admission budget of {memoryBudgetMb} MB.");
+                }
+
                 if (queuedBehindCreator
                     && creationFailures.TryGetValue(key, out var recentFailure))
                 {
@@ -375,8 +403,6 @@ internal sealed class InferenceSessionPool : IDisposable
                     creationFailures.TryRemove(new KeyValuePair<SessionPoolKey, (Exception Error, long Wave)>(key, recentFailure));
                 }
 
-                long needMb = ResolveReservationMb(key);
-                int device = DeviceOf(key);
                 bool ephemeral = false;
                 PoolEntry? lruEvicted1 = null;
                 bool reserved = false;
@@ -387,10 +413,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     ObjectDisposedException.ThrowIf(disposed, this);
                     if (entries.ContainsKey(key))
                     {
-                        if (reserved)
-                        {
-                            ReleaseReservation(device, needMb);
-                        }
+                        // No reservation is held yet at this point (reserved is only set below).
                         continue;
                     }
 
@@ -417,22 +440,13 @@ internal sealed class InferenceSessionPool : IDisposable
                         // else: do not hold a reservation while waiting — that deadlocks
                         // when every waiter reserves and nobody can release.
                     }
-                    else
-                    {
-                        lruEvicted1 = pooledCount >= maxSessions ? TryEvictLruIdle() : null;
-                        ephemeral = pooledCount >= maxSessions && lruEvicted1 is null;
-                    }
+                    // else (count mode): do not evict or decide ephemeral here — the entry we'd
+                    // evict is still usable and factory() has not succeeded yet. The lruEvicted2
+                    // path after a successful create handles capacity instead.
                 }
                 finally
                 {
                     creationLock.Release();
-                }
-
-                if (enableMemoryAdmission && needMb > memoryBudgetMb)
-                {
-                    throw new InvalidOperationException(
-                        $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
-                        $"device {device} admission budget of {memoryBudgetMb} MB.");
                 }
 
                 if (enableMemoryAdmission && !reserved)
@@ -454,6 +468,8 @@ internal sealed class InferenceSessionPool : IDisposable
                 {
                     if (reserved)
                     {
+                        // Always release reservation on factory failure to prevent a reservation leak
+                        // (audit §3A: VRAM accounting integrity).
                         ReleaseReservation(device, needMb);
                     }
 
@@ -507,6 +523,7 @@ internal sealed class InferenceSessionPool : IDisposable
                                 else
                                 {
                                     pooledCount++;
+                                    SignalBundleStateChanged();
                                 }
                             }
                         }
@@ -616,15 +633,157 @@ internal sealed class InferenceSessionPool : IDisposable
         IReadOnlyList<SessionLeaseRequest> requests,
         CancellationToken cancellationToken)
     {
+        SessionLeaseRequest[] ordered = await PrepareBundleRequestsAsync(requests, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Phase 2: all-or-nothing exclusive acquire in stable order. TryWait(0) per key
+        // so we never block on key N while holding keys 1..N-1. One bundle at a time
+        // (bundleAcquireLock) so opposing caller orders cannot livelock each other.
+        await bundleAcquireLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            int rewarmAttempts = 0;
+            const int maxRewarmAttempts = 25; // ~5s of real re-warm tries at the 200ms cadence below.
+            var rewarmStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            while (true)
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Capture the signal before attempting the bundle. A lease release or pool
+                // publication that races this attempt either wakes this waiter or is observed
+                // by the next iteration, so no state change can be lost between check and wait.
+                Task bundleStateSignal = Volatile.Read(ref bundleStateChanged).Task;
+                SessionLeaseBundle? bundle = TryAcquireBundle(ordered, requests);
+                if (bundle is not null) return bundle;
+
+                // A key can be permanently missing from `entries` — phase 1's GetLeaseAsync
+                // returns an ephemeral (unpooled) lease when admission is off and the pool is
+                // full, or an entry can be idle-evicted between phase 1 and here. Blindly
+                // waiting never recovers that. Re-warm on a throttled cadence (~200ms) gated by
+                // elapsed wall-clock time rather than iteration count: each iteration can wait
+                // up to 1s on bundleStateSignal, so a miss-count-based cadence would stretch the
+                // re-warm interval (and the maxRewarmAttempts give-up bound) far past ~5s.
+                if (rewarmStopwatch.Elapsed >= TimeSpan.FromMilliseconds(200))
+                {
+                    rewarmStopwatch.Restart();
+                    bool anyMissing = false;
+                    foreach (SessionLeaseRequest request in ordered.Where(request => !entries.ContainsKey(request.Key)))
+                    {
+                        anyMissing = true;
+                        using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    // The pool stays at capacity (every entry leased or pinned) if a re-warm
+                    // still leaves a key ephemeral — GetLeaseAsync succeeded but the lease was
+                    // never added to `entries`. Bound the retries instead of spinning until the
+                    // caller's cancellation token fires while holding bundleAcquireLock.
+                    if (anyMissing && ordered.Any(request => !entries.ContainsKey(request.Key)))
+                    {
+                        rewarmAttempts++;
+                        if (rewarmAttempts >= maxRewarmAttempts)
+                        {
+                            throw new InvalidOperationException(
+                                "Unable to acquire session bundle: the pool stayed at capacity " +
+                                $"(every entry leased or pinned) across {maxRewarmAttempts} re-warm attempts.");
+                        }
+                    }
+                }
+
+                // Wait for a state transition rather than polling every 10ms. The timeout is
+                // only a lost-wakeup safety net; normal progress is signaled by release,
+                // publication, and eviction paths below. Kept at the same ~200ms cadence as the
+                // re-warm gate above so the stuck-pool give-up bound stays near the documented
+                // ~5s (maxRewarmAttempts * 200ms) even when no signal ever fires.
+                try
+                {
+                    await bundleStateSignal.WaitAsync(TimeSpan.FromMilliseconds(200), cancellationToken).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    // Lost-wakeup safety net; retry the bundle attempt.
+                }
+            }
+        }
+        finally
+        {
+            bundleAcquireLock.Release();
+        }
+    }
+
+    private SessionLeaseBundle? TryAcquireBundle(
+        SessionLeaseRequest[] ordered, IReadOnlyList<SessionLeaseRequest> requests)
+    {
+        var held = new List<(SessionPoolKey Key, PoolEntry Entry)>(ordered.Length);
+        bool allAcquired = true;
+        foreach (SessionLeaseRequest request in ordered)
+        {
+            if (!entries.TryGetValue(request.Key, out PoolEntry? entry) || !TryAcquireGate(entry))
+            {
+                allAcquired = false;
+                break;
+            }
+
+            if (entry.IsEvicted)
+            {
+                entry.ReleaseGateWithoutTouchingLru();
+                allAcquired = false;
+                break;
+            }
+
+            held.Add((request.Key, entry));
+        }
+
+        if (allAcquired && held.Count == ordered.Length)
+        {
+            return BuildBundleInRequestOrder(ordered, requests, held);
+        }
+
+        foreach ((SessionPoolKey _, PoolEntry entry) in held)
+        {
+            entry.ReleaseGateWithoutTouchingLru();
+        }
+
+        return null;
+    }
+
+    private SessionLeaseBundle BuildBundleInRequestOrder(
+        SessionLeaseRequest[] ordered,
+        IReadOnlyList<SessionLeaseRequest> requests,
+        List<(SessionPoolKey Key, PoolEntry Entry)> held)
+    {
+        var leases = new SessionLease[ordered.Length];
+        for (int i = 0; i < ordered.Length; i++)
+        {
+            SessionPoolKey key = ordered[i].Key;
+            int requestIndex = -1;
+            for (int r = 0; r < requests.Count; r++)
+            {
+                if (Equals(requests[r].Key, key))
+                {
+                    requestIndex = r;
+                    break;
+                }
+            }
+
+            PoolEntry entry = held.First(h => Equals(h.Key, key)).Entry;
+            leases[requestIndex] = BuildLease(entry);
+        }
+
+        return new SessionLeaseBundle(leases);
+    }
+
+    private async Task<SessionLeaseRequest[]> PrepareBundleRequestsAsync(
+        IReadOnlyList<SessionLeaseRequest> requests, CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(requests);
         if (requests.Count == 0)
         {
             throw new ArgumentException("Bundle requires at least one session.", nameof(requests));
         }
 
-        var ordered = requests
-            .OrderBy(r => r.Key, SessionPoolKey.StableComparer)
-            .ToArray();
+        SessionLeaseRequest[] ordered = requests.OrderBy(r => r.Key, SessionPoolKey.StableComparer).ToArray();
         for (int i = 1; i < ordered.Length; i++)
         {
             if (Equals(ordered[i - 1].Key, ordered[i].Key))
@@ -635,8 +794,7 @@ internal sealed class InferenceSessionPool : IDisposable
             }
         }
 
-        // Phase 1: make sure every session exists (warm). Individual GetLeaseAsync is
-        // single-flight and safe here — we release immediately so no gate is held.
+        // Warm each session before holding any bundle gate.
         foreach (SessionLeaseRequest request in ordered)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -644,86 +802,15 @@ internal sealed class InferenceSessionPool : IDisposable
                 .ConfigureAwait(false);
         }
 
-        // Phase 2: all-or-nothing exclusive acquire in stable order. TryWait(0) per key
-        // so we never block on key N while holding keys 1..N-1. One bundle at a time
-        // (bundleAcquireLock) so opposing caller orders cannot livelock each other.
-        await bundleAcquireLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            while (true)
-            {
-                ObjectDisposedException.ThrowIf(disposed, this);
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var held = new List<(SessionPoolKey Key, PoolEntry Entry)>(ordered.Length);
-                bool allAcquired = true;
-                foreach (SessionLeaseRequest request in ordered)
-                {
-                    if (!entries.TryGetValue(request.Key, out PoolEntry? entry) || !TryAcquireGate(entry))
-                    {
-                        allAcquired = false;
-                        break;
-                    }
-
-                    if (entry.IsEvicted)
-                    {
-                        entry.ReleaseGateWithoutTouchingLru();
-                        allAcquired = false;
-                        break;
-                    }
-
-                    held.Add((request.Key, entry));
-                }
-
-                if (allAcquired && held.Count == ordered.Length)
-                {
-                    var leases = new SessionLease[ordered.Length];
-                    for (int i = 0; i < ordered.Length; i++)
-                    {
-                        SessionPoolKey key = ordered[i].Key;
-                        int requestIndex = -1;
-                        for (int r = 0; r < requests.Count; r++)
-                        {
-                            if (Equals(requests[r].Key, key))
-                            {
-                                requestIndex = r;
-                                break;
-                            }
-                        }
-
-                        PoolEntry entry = held.First(h => Equals(h.Key, key)).Entry;
-                        leases[requestIndex] = BuildLease(entry);
-                    }
-
-                    return new SessionLeaseBundle(leases);
-                }
-
-                foreach ((SessionPoolKey _, PoolEntry entry) in held)
-                {
-                    entry.ReleaseGateWithoutTouchingLru();
-                }
-
-                lock (createGates)
-                {
-                    Monitor.Wait(createGates, 10);
-                }
-            }
-        }
-        finally
-        {
-            bundleAcquireLock.Release();
-        }
+        return ordered;
     }
 
     private long CurrentReservedMb(int device)
     {
         long pooled = 0;
-        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries.Where(pair => DeviceOf(pair.Key) == device))
         {
-            if (DeviceOf(pair.Key) == device)
-            {
-                pooled += ResolveReservationMb(pair.Key);
-            }
+            pooled += ResolveReservationMb(pair.Key);
         }
 
         pendingCreateMbByDevice.TryGetValue(device, out long pending);
@@ -733,14 +820,8 @@ internal sealed class InferenceSessionPool : IDisposable
     private void AddPendingReservation(int device, long mb) =>
         pendingCreateMbByDevice.AddOrUpdate(device, mb, (_, existing) => existing + mb);
 
-    private void ReleaseReservation(int device, long mb)
-    {
+    private void ReleaseReservation(int device, long mb) =>
         pendingCreateMbByDevice.AddOrUpdate(device, 0, (_, existing) => Math.Max(0, existing - mb));
-        lock (createGates)
-        {
-            Monitor.PulseAll(createGates);
-        }
-    }
 
     /// <summary>
     /// Waits until <paramref name="needMb"/> fits in <paramref name="device"/>'s budget
@@ -799,16 +880,12 @@ internal sealed class InferenceSessionPool : IDisposable
                     return;
                 }
 
-                lock (createGates)
+                if (CurrentReservedMb(device) + needMb > memoryBudgetMb)
                 {
-                    if (CurrentReservedMb(device) + needMb <= memoryBudgetMb)
-                    {
-                        // Fits now; loop to take the reservation under creationLock.
-                    }
-                    else
-                    {
-                        Monitor.Wait(createGates, 50);
-                    }
+                    // Doesn't fit yet — poll instead of blocking a thread-pool thread on
+                    // Monitor.Wait. Bounded delay; loops back to retake creationLock and
+                    // recheck (an eviction or release elsewhere may have freed budget).
+                    await Task.Delay(50, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -851,6 +928,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 if (entries.TryRemove(new KeyValuePair<SessionPoolKey, PoolEntry>(key, entry)))
                 {
                     pooledCount--;
+                    SignalBundleStateChanged();
                     entry.MarkEvicted();
                     toDispose.Add(entry);
                     count++;
@@ -911,6 +989,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     if (entries.TryRemove(new KeyValuePair<SessionPoolKey, PoolEntry>(key, entry)))
                     {
                         pooledCount--;
+                        SignalBundleStateChanged();
                         entry.MarkEvicted();
                         toDispose.Add(entry); // dispose outside the lock below
                         count++;
@@ -983,6 +1062,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 if (entries.TryRemove(new KeyValuePair<SessionPoolKey, PoolEntry>(key, entry)))
                 {
                     pooledCount--;
+                    SignalBundleStateChanged();
                     entry.MarkEvicted();
                     currentVram -= key.EstimatedVramMb;
                     toDispose.Add(entry);
@@ -1034,6 +1114,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     if (entries.TryRemove(key, out PoolEntry? entry))
                     {
                         pooledCount--;
+                        SignalBundleStateChanged();
                         entry.MarkEvicted(); // defence-in-depth alongside `disposed` flag
                         // Atomically try to acquire the gate. If we win, schedule the entry for
                         // disposal outside the lock. If the entry is still leased, the BuildLease
@@ -1091,6 +1172,7 @@ internal sealed class InferenceSessionPool : IDisposable
         // and dispose, or — if it has already backed off — we detect the eviction below and
         // perform disposal ourselves.
         entry.Release();
+        SignalBundleStateChanged();
 
         if (entry.IsEvicted || disposed)
         {
@@ -1136,65 +1218,10 @@ internal sealed class InferenceSessionPool : IDisposable
         long now = Environment.TickCount64;
         long recentCutoff = now - RecentReleaseWindowMs;
 
-        SessionPoolKey? candidateKey = null;
-        PoolEntry? candidateEntry = null;
-        long candidateLastReleasedTicks = long.MaxValue;
-
-        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
-        {
-            if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
-            {
-                continue;
-            }
-
-            PoolEntry entry = pair.Value;
-            if (!entry.IsIdle)
-            {
-                continue;
-            }
-
-            long lastReleasedTicks = entry.LastReleasedTicks;
-            if (lastReleasedTicks >= recentCutoff)
-            {
-                continue;
-            }
-
-            if (entry.PinCount > 0)
-            {
-                continue;
-            }
-
-            if (candidateEntry is null || lastReleasedTicks < candidateLastReleasedTicks)
-            {
-                candidateKey = pair.Key;
-                candidateEntry = entry;
-                candidateLastReleasedTicks = lastReleasedTicks;
-            }
-        }
-
+        (SessionPoolKey? candidateKey, PoolEntry? candidateEntry) = FindOldestIdle(onlyDevice, recentCutoff);
         if (candidateEntry is null)
         {
-            foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
-            {
-                if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
-                {
-                    continue;
-                }
-
-                PoolEntry entry = pair.Value;
-                if (!entry.IsIdle || entry.PinCount > 0)
-                {
-                    continue;
-                }
-
-                long lastReleasedTicks = entry.LastReleasedTicks;
-                if (candidateEntry is null || lastReleasedTicks < candidateLastReleasedTicks)
-                {
-                    candidateKey = pair.Key;
-                    candidateEntry = entry;
-                    candidateLastReleasedTicks = lastReleasedTicks;
-                }
-            }
+            (candidateKey, candidateEntry) = FindOldestIdle(onlyDevice, recentCutoff: null);
         }
 
         if (candidateEntry is null)
@@ -1214,6 +1241,7 @@ internal sealed class InferenceSessionPool : IDisposable
             if (removed)
             {
                 pooledCount--;
+                SignalBundleStateChanged();
                 evicted.MarkEvicted();
                 return evicted; // Caller must dispose outside creationLock.
             }
@@ -1227,6 +1255,41 @@ internal sealed class InferenceSessionPool : IDisposable
         }
 
         return null;
+    }
+
+    private (SessionPoolKey? Key, PoolEntry? Entry) FindOldestIdle(int? onlyDevice, long? recentCutoff)
+    {
+        SessionPoolKey? candidateKey = null;
+        PoolEntry? candidateEntry = null;
+        long candidateLastReleasedTicks = long.MaxValue;
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
+        {
+            if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
+            {
+                continue;
+            }
+
+            PoolEntry entry = pair.Value;
+            if (!entry.IsIdle || entry.PinCount > 0)
+            {
+                continue;
+            }
+
+            long lastReleasedTicks = entry.LastReleasedTicks;
+            if (recentCutoff is not null && lastReleasedTicks >= recentCutoff.Value)
+            {
+                continue;
+            }
+
+            if (candidateEntry is null || lastReleasedTicks < candidateLastReleasedTicks)
+            {
+                candidateKey = pair.Key;
+                candidateEntry = entry;
+                candidateLastReleasedTicks = lastReleasedTicks;
+            }
+        }
+
+        return (candidateKey, candidateEntry);
     }
 
     private static bool TryAcquireGate(PoolEntry entry)

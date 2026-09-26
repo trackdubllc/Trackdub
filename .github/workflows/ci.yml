@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -48,7 +50,36 @@ jobs:
 
       - name: Verify Format Style Limits
         shell: bash
-        run: dotnet format Trackdub.slnx --verify-no-changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            base_sha="$PUSH_BEFORE_SHA"
+          else
+            base_sha="$(git rev-parse HEAD^)"
+          fi
+
+          if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+            echo "No base commit available; verifying the full solution."
+            dotnet format Trackdub.slnx --verify-no-changes
+            exit $?
+          fi
+
+          mapfile -t changed_cs_files < <(
+            git diff --name-only --diff-filter=ACMR "$base_sha"...HEAD -- '*.cs'
+          )
+
+          if (( ${#changed_cs_files[@]} == 0 )); then
+            echo "No changed C# files to format."
+            exit 0
+          fi
+
+          printf 'Verifying format for %s changed C# file(s).\n' "${#changed_cs_files[@]}"
+          dotnet format Trackdub.slnx --verify-no-changes --include "${changed_cs_files[@]}"
 
   repository-boundary:
     name: Verify Repository Boundary

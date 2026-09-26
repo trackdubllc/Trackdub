@@ -32,9 +32,11 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
     private const int StreamingFeatureSubsampling = 8;
     private const int StreamingFifoFrames = 40;
     private const int StreamingSpeakerCacheFrames = 188;
-    private const int StreamingEmbeddingDimension = 512;
+    internal const int StreamingEmbeddingDimension = 512;
     private const int StreamingChunkStrideFeatureFrames = StreamingChunkModelFrames * StreamingFeatureSubsampling;
-    private const int StreamingFeedFeatureFrames =
+    // Shared with the smoke tester so probe inputs match the streaming export's fixed
+    // optimization profile instead of the (unrelated) waveform-only TRT profile.
+    internal const int StreamingFeedFeatureFrames =
         (StreamingChunkModelFrames + StreamingRightContextModelFrames) * StreamingFeatureSubsampling;
 
     // Streaming export inputs: chunk is always fed padded to the full feed window; the speaker cache

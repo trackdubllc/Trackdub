@@ -145,6 +145,13 @@ internal sealed record SessionPoolKey
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
+            // Log file access failure to aid debugging VRAM estimation issues (model file inaccessible,
+            // malformed path). Falling back to the pessimistic DefaultEstimatedVramMb
+            // (256 MB) ensures admission accounting stays conservative but may trigger
+            // unnecessary evictions if the actual model is smaller.
+            // File is inaccessible or the path is malformed; fall back to the pessimistic default.
+            System.Diagnostics.Trace.TraceWarning(
+                $"SessionPoolKey: failed to estimate VRAM for '{modelPath}': {ex.Message}");
         }
 
         return DefaultEstimatedVramMb;
@@ -360,6 +367,24 @@ internal sealed record SessionPoolKey
                 return 1;
             }
 
+            int c = CompareGraphIdentity(x, y);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = string.CompareOrdinal(x.OptionsFingerprint, y.OptionsFingerprint);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = x.Provider.CompareTo(y.Provider);
+            return c != 0 ? c : (x.DeviceId ?? -1).CompareTo(y.DeviceId ?? -1);
+        }
+
+        private static int CompareGraphIdentity(SessionPoolKey x, SessionPoolKey y)
+        {
             int c = string.CompareOrdinal(x.EngineFamily, y.EngineFamily);
             if (c != 0)
             {
@@ -390,19 +415,7 @@ internal sealed record SessionPoolKey
                 return c;
             }
 
-            c = string.CompareOrdinal(x.OptionsFingerprint, y.OptionsFingerprint);
-            if (c != 0)
-            {
-                return c;
-            }
-
-            c = x.Provider.CompareTo(y.Provider);
-            if (c != 0)
-            {
-                return c;
-            }
-
-            return (x.DeviceId ?? -1).CompareTo(y.DeviceId ?? -1);
+            return c;
         }
     }
 

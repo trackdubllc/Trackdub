@@ -8,6 +8,7 @@ using Trackdub.Domain;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Inference.Onnx.Runtime.Planning;
 using Trackdub.Inference.Runtime.Planning;
+using Trackdub.Infrastructure.Transcripts;
 
 namespace Trackdub.Composition.Pipeline;
 
@@ -193,28 +194,8 @@ public sealed class PipelineReadinessService(
             ? TranscriptWorkflowUtilities.NormalizeTranslationTargetLanguageCodeOrNull(targetLanguageCode)
             : targetLanguageCode;
 
-        // Optional separation: if alias explicitly set to "skip", report as SkippableOptional.
-        if (stage == RuntimeStage.Separation && IsSeparationSkipped(selections))
-        {
-            return new StageReadiness(
-                StageName: StageNameFor(stage),
-                Status: ReadinessState.SkippableOptional,
-                Detail: "Separation is optional and currently disabled",
-                ModelId: null,
-                ModelAlias: null,
-                ResolveAction: null);
-        }
-
-        if (stage == RuntimeStage.TextRefinement && !selections.EnableAsrTextRefinement)
-        {
-            return new StageReadiness(
-                StageName: StageNames.TextRefinementAsr,
-                Status: ReadinessState.SkippableOptional,
-                Detail: "ASR text polish is disabled.",
-                ModelId: null,
-                ModelAlias: null,
-                ResolveAction: null);
-        }
+        StageReadiness? skipped = GetDisabledOptionalStage(stage, selections);
+        if (skipped is not null) return skipped;
 
         // The planning request carries every planner input; its fields double as the
         // rest of the cache key so plans computed under different provider, variant,
@@ -249,15 +230,35 @@ public sealed class PipelineReadinessService(
             _cache[cacheKey] = readiness;
         }
 
-        // TTS: additionally check voice-clone consent when local TTS is ready.
-        // Applied per call (never cached) so a consent change takes effect
-        // immediately without requiring cache invalidation.
+        return ApplyVoiceCloneConsent(stage, state, readiness);
+    }
+
+    private static StageReadiness? GetDisabledOptionalStage(RuntimeStage stage, RuntimeModelSelections selections)
+    {
+        if (stage == RuntimeStage.Separation && IsSeparationSkipped(selections))
+        {
+            return new StageReadiness(StageNameFor(stage), ReadinessState.SkippableOptional,
+                "Separation is optional and currently disabled", null, null, null);
+        }
+
+        if (stage == RuntimeStage.TextRefinement && !selections.EnableAsrTextRefinement)
+        {
+            return new StageReadiness(StageNames.TextRefinementAsr, ReadinessState.SkippableOptional,
+                "ASR text polish is disabled.", null, null, null);
+        }
+
+        return null;
+    }
+
+    // Applied per call, never cached, so consent changes take effect immediately.
+    private StageReadiness ApplyVoiceCloneConsent(RuntimeStage stage, TranscriptProjectState? state, StageReadiness readiness)
+    {
         if (stage == RuntimeStage.Tts
             && readiness.Status is ReadinessState.Ready or ReadinessState.Unverified
             && !_consentService.IsVoiceCloningConsentGranted
             && HasVoiceCloneRequest(state))
         {
-            readiness = readiness with
+            return readiness with
             {
                 Status = ReadinessState.ConsentRequired,
                 Detail = "Voice cloning requires session consent",
@@ -431,8 +432,17 @@ public sealed class PipelineReadinessService(
             RuntimeStage.Asr => AsrModelOverrideSettings.IsCloudAlias(alias),
             RuntimeStage.Translation => IsCloudTranslationAlias(alias),
             RuntimeStage.Tts => TtsModelOverrideSettings.IsCloudAlias(alias),
+            RuntimeStage.TextRefinement => IsGeminiRefinementAlias(alias),
             _ => false,
         };
+
+    private static bool IsGeminiRefinementAlias(string? alias) =>
+        !string.IsNullOrWhiteSpace(alias) &&
+        (string.Equals(alias, GeminiCloudTextRefinementEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-refinement", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-3.8", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-3.5", StringComparison.OrdinalIgnoreCase) ||
+         alias.StartsWith("gemini-2.5", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsCloudTranslationAlias(string? alias) =>
         TranslationModelOverrideSettings.IsDeepLModelAlias(alias)
@@ -449,6 +459,8 @@ public sealed class PipelineReadinessService(
         if (TtsModelOverrideSettings.IsElevenLabsAlias(alias)) return "elevenlabs";
         if (TtsModelOverrideSettings.IsOpenAiTtsAlias(alias)) return "openai";
         if (TtsModelOverrideSettings.IsGoogleTtsAlias(alias)) return "google";
+        if (TtsModelOverrideSettings.IsGeminiTtsAlias(alias)) return "gemini";
+        if (IsGeminiRefinementAlias(alias)) return "gemini";
         return "unknown";
     }
 

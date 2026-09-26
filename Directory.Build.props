@@ -8,4 +8,16 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
+  <!-- Repo-wide banned-API analyzer: see the PackageVersion comment in Directory.Packages.props.
+       RS0030 is kept as a warning (not TreatWarningsAsErrors) because ~337 files already call
+       Path.Combine; ratcheting those down is tracked separately. New/changed Path.Combine calls
+       still show up loudly in every local build instead of only surfacing as a CI review comment
+       one call at a time. -->
+  <PropertyGroup>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);RS0030</WarningsNotAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
 </Project>

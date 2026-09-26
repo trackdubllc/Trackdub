@@ -42,9 +42,15 @@ public static class EngineCacheProbe
         return new Snapshot(directory, DirectoryExists: true, fileCount, totalBytes);
     }
 
-    public static string ClassifyOutcome(Snapshot before, Snapshot after, BenchmarkProviderPreference provider)
+    /// <summary>
+    /// Providers whose session create can populate an on-disk engine cache (TensorRT family).
+    /// </summary>
+    public static bool IsEngineCacheRelevantProvider(BenchmarkProviderPreference provider) =>
+        provider is BenchmarkProviderPreference.TensorRtRtx or BenchmarkProviderPreference.TensorRt or BenchmarkProviderPreference.Migraphx;
+
+    public static string ClassifyOutcome(Snapshot before, Snapshot after, bool isEngineCacheRelevantProvider)
     {
-        if (provider is not (BenchmarkProviderPreference.TensorRtRtx or BenchmarkProviderPreference.TensorRt or BenchmarkProviderPreference.Migraphx))
+        if (!isEngineCacheRelevantProvider)
         {
             return "not-applicable";
         }
@@ -59,35 +65,21 @@ public static class EngineCacheProbe
 
         if (before.FileCount > 0)
         {
-            return "hit";
+            // The directory has entries, but we cannot confirm they belong to this specific
+            // model/provider (no engine-cache filename parsing) — a stale cache from an
+            // unrelated model would look identical. Do not claim a hit without that evidence.
+            return "unknown";
         }
 
         return "empty";
     }
 
     /// <summary>
-    /// Evidence-based dominant phase of session construct. We only claim compile when the
-    /// engine cache actually grew; otherwise construct is weights/deserialize work.
+    /// No engine-cache outcome proves which phase of session construct dominated total cold-load
+    /// time — a cache write is evidence of compile activity, not evidence it took the most time —
+    /// so this stays unknown until real phase timings are available.
     /// </summary>
-    public static string ClassifyDominantPhase(string? engineCacheOutcome, BenchmarkProviderPreference provider)
-    {
-        if (engineCacheOutcome is "wrote")
-        {
-            return "engine-compile";
-        }
-
-        if (engineCacheOutcome is "hit")
-        {
-            return "model-deserialize";
-        }
-
-        if (engineCacheOutcome is "not-applicable")
-        {
-            return "model-deserialize";
-        }
-
-        return "unknown";
-    }
+    public static string ClassifyDominantPhase(string? engineCacheOutcome) => "unknown";
 
     public static string FormatNote(
         double coldLoadMilliseconds,
@@ -115,7 +107,7 @@ public static class EngineCacheProbe
         string? cacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_CACHE_ROOT");
         if (!string.IsNullOrWhiteSpace(cacheRoot))
         {
-            return Path.Combine(
+            return Path.Join(
                 Path.GetFullPath(Environment.ExpandEnvironmentVariables(cacheRoot)),
                 "EngineCache");
         }
@@ -126,6 +118,6 @@ public static class EngineCacheProbe
             localAppDataRoot = AppContext.BaseDirectory;
         }
 
-        return Path.Combine(localAppDataRoot, "Trackdub", "EngineCache");
+        return Path.Join(localAppDataRoot, "Trackdub", "EngineCache");
     }
 }

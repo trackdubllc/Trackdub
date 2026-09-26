@@ -78,6 +78,12 @@ dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 ## Coding Style & Testing
 - Style: File-scoped namespaces, `sealed` where extension not intended, `Async` on async methods, immutable `record` in Domain.
 - Treat warnings as errors (`TreatWarningsAsErrors=true`). Do not suppress casually.
+- Prefer `Path.Join` over `Path.Combine` for new/changed code. `Path.Combine` silently drops
+  earlier segments if a later one is rooted; CodeQL/CodeFactor flag it whenever that can't be
+  proven false, which in practice is almost every call. `Path.Join` has no such reset behavior
+  and is a drop-in replacement everywhere in this codebase. Enforced repo-wide as a build
+  warning via `Microsoft.CodeAnalysis.BannedApiAnalyzers` (see `BannedSymbols.txt`,
+  `Directory.Build.props`) — not an error yet since ~337 existing files still use `Path.Combine`.
 - Domain tests: fast, pure, zero I/O.
 - Application tests: fakes from `tests/Trackdub.TestDoubles/` (shared source via `<Compile Include>`).
 - Pipeline tests: must cover success, disabled/skipped, missing-prerequisite, and failure paths.

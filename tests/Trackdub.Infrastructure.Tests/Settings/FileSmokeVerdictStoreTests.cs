@@ -220,7 +220,7 @@ public sealed class FileSmokeVerdictStoreTests
             TrtRtxEpVersion: "0.3.0");
 
     private static string NewStorePath() =>
-        Path.Combine(Path.GetTempPath(), $"trackdub-smoke-verdicts-{Guid.NewGuid():N}", "smoke-verdicts.json");
+        Path.Join(Path.GetTempPath(), $"trackdub-smoke-verdicts-{Guid.NewGuid():N}", "smoke-verdicts.json");
 
     private static void DeleteStore(string path)
     {
@@ -232,11 +232,13 @@ public sealed class FileSmokeVerdictStoreTests
                 Directory.Delete(directory, recursive: true);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            Console.Error.WriteLine($"Cleanup failed for '{path}': {ex.Message}");
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            Console.Error.WriteLine($"Cleanup failed for '{path}': {ex.Message}");
         }
     }
 }

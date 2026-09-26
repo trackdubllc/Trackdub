@@ -363,6 +363,51 @@ class HtmlToTextTests(unittest.TestCase):
         html = "<body><main><nav><img src='a'><br>menu</nav><p>kept<br>line</p></main></body>"
         self.assertEqual(sync_corpus.html_to_text(html), "kept\nline")
 
+    def test_content_links_are_preserved_as_markdown(self):
+        html = "<body><main><p>See the <a href='/docs/performance/best-practices.html'>Best Practices</a> guide.</p></main></body>"
+        text = sync_corpus.html_to_text(html, base_url="https://docs.nvidia.com/x/")
+        self.assertEqual(text, "See the [Best Practices](<https://docs.nvidia.com/docs/performance/best-practices.html>) guide.")
+
+    def test_fragment_only_links_keep_plain_text(self):
+        html = "<body><main><p>Jump to <a href='#install'>Install</a> section.</p></main></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "Jump to Install section.")
+
+    def test_links_inside_chrome_are_still_dropped(self):
+        html = "<body><nav><a href='/docs/x.html'>Home</a></nav><main><p>Body text.</p></main></body>"
+        self.assertEqual(sync_corpus.html_to_text(html), "Body text.")
+
+    def test_link_label_spans_text_nodes_keeps_boundary_spaces(self):
+        html = "<body><main><p><a href='/docs/x.html'>Read <strong>more</strong> now</a></p></main></body>"
+        text = sync_corpus.html_to_text(html, base_url="https://docs.nvidia.com/")
+        self.assertEqual(text, "[Read more now](<https://docs.nvidia.com/docs/x.html>)")
+
+    def test_link_label_and_destination_are_escaped(self):
+        html = "<body><main><p><a href='/guide a[b]'>Label [x]</a></p></main></body>"
+        text = sync_corpus.html_to_text(html, base_url="https://docs.example.com/")
+        self.assertEqual(text, "[Label \\[x\\]](<https://docs.example.com/guide a[b]>)")
+
+    def test_unclosed_anchor_keeps_its_text_as_plain(self):
+        html = "<body><main><p>See <a href='/guide.html'>the guide</p><p>more detail</p></main></body>"
+        text = sync_corpus.html_to_text(html, base_url="https://docs.example.com/")
+        self.assertEqual(text, "See the guide more detail")
+
+    def test_anchor_straddling_chrome_flushes_label_as_plain(self):
+        html = "<body><main><a href='/x.html'>label <nav>chrome</a>tail</nav></main></body>"
+        text = sync_corpus.html_to_text(html, base_url="https://docs.example.com/")
+        self.assertEqual(text, "label")
+
+    def test_small_card_with_links_still_yields_to_main(self):
+        # A link-heavy card must not beat <main> through inflated rendered URLs.
+        links = " ".join(
+            f"<a href='/datasets/nvidia/parakeet-tdt-0.6b-v3/resolve/main/README.md'>source {i}</a>"
+            for i in range(4)
+        )
+        card = f"<article><p>{links}</p></article>"
+        body = "<p>" + "Streaming ASR model card with usage and limits. " * 10 + "</p>"
+        html = f"<body><main><div>{card}</div><div class='model-card'>{body}</div></main></body>"
+        text = sync_corpus.html_to_text(html, base_url="https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/")
+        self.assertIn("Streaming ASR model card", text)
+
 
 if __name__ == "__main__":
     unittest.main()

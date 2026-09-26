@@ -45,7 +45,8 @@ public sealed class GeminiCloudTranslationEngineTests
 
         Assert.NotNull(handler.RequestUri);
         Assert.Contains("models/gemini-3.8-flash:generateContent", handler.RequestUri.ToString());
-        Assert.Contains("key=test-gemini-key", handler.RequestUri.Query);
+        Assert.Equal("test-gemini-key", handler.ApiKeyHeader);
+        Assert.Empty(handler.RequestUri.Query);
         Assert.Equal(2, result.Count);
         Assert.Equal("Hola", result[0].Text);
         Assert.Equal("Mundo", result[1].Text);
@@ -195,6 +196,7 @@ public sealed class GeminiCloudTranslationEngineTests
         public Uri? RequestUri { get; private set; }
         public HttpMethod? Method { get; private set; }
         public string RequestBody { get; private set; } = string.Empty;
+        public string? ApiKeyHeader { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -202,6 +204,11 @@ public sealed class GeminiCloudTranslationEngineTests
         {
             RequestUri = request.RequestUri;
             Method = request.Method;
+            if (request.Headers.TryGetValues("x-goog-api-key", out IEnumerable<string>? values))
+            {
+                ApiKeyHeader = values.FirstOrDefault();
+            }
+
             RequestBody = request.Content is null
                 ? string.Empty
                 : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);

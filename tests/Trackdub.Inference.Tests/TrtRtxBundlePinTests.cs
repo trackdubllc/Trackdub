@@ -71,11 +71,11 @@ public sealed class TrtRtxBundlePinTests
     [Fact]
     public void Default_install_directory_uses_platform_version_and_cuda_variant()
     {
-        string root = Path.Combine(Path.GetTempPath(), "trackdub-pin");
+        string root = Path.Join(Path.GetTempPath(), "trackdub-pin");
         string directory = TensorRtRtxProviderConstants.GetDefaultInstallDirectory(root, "win-x64");
 
         Assert.Equal(
-            Path.Combine(
+            Path.Join(
                 Path.GetFullPath(root),
                 "Providers",
                 "trt-rtx",
@@ -88,9 +88,9 @@ public sealed class TrtRtxBundlePinTests
     [Fact]
     public void Resolve_skips_superseded_managed_bundle_persisted_in_settings_and_uses_current_bundle()
     {
-        string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
-        string stale = Path.Combine(root, "0.3.0", "cu12", "win-x64");
-        string current = Path.Combine(root, TensorRtRtxProviderConstants.BundledVersion, TensorRtRtxProviderConstants.BundledCudaVariant, "win-x64");
+        string root = Path.GetFullPath(Path.Join(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
+        string stale = Path.Join(root, "0.3.0", "cu12", "win-x64");
+        string current = Path.Join(root, TensorRtRtxProviderConstants.BundledVersion, TensorRtRtxProviderConstants.BundledCudaVariant, "win-x64");
 
         TensorRtRtxPluginResolution resolution = TensorRtRtxPluginLocator.Resolve(
             explicitPluginDirectory: stale,
@@ -107,9 +107,9 @@ public sealed class TrtRtxBundlePinTests
     [Fact]
     public void Resolve_skips_superseded_managed_bundle_from_environment_variable()
     {
-        string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
-        string stale = Path.Combine(root, "0.3.0", "cu12", "win-x64");
-        string current = Path.Combine(root, TensorRtRtxProviderConstants.BundledVersion, TensorRtRtxProviderConstants.BundledCudaVariant, "win-x64");
+        string root = Path.GetFullPath(Path.Join(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
+        string stale = Path.Join(root, "0.3.0", "cu12", "win-x64");
+        string current = Path.Join(root, TensorRtRtxProviderConstants.BundledVersion, TensorRtRtxProviderConstants.BundledCudaVariant, "win-x64");
 
         TensorRtRtxPluginResolution resolution = TensorRtRtxPluginLocator.Resolve(
             explicitPluginDirectory: null,
@@ -126,9 +126,9 @@ public sealed class TrtRtxBundlePinTests
     [Fact]
     public void Resolve_keeps_user_chosen_directory_authoritative_even_when_incomplete()
     {
-        string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
-        string userChosen = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "my-trt-rtx-build"));
-        string current = Path.Combine(root, TensorRtRtxProviderConstants.BundledVersion, TensorRtRtxProviderConstants.BundledCudaVariant, "win-x64");
+        string root = Path.GetFullPath(Path.Join(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
+        string userChosen = Path.GetFullPath(Path.Join(Path.GetTempPath(), "my-trt-rtx-build"));
+        string current = Path.Join(root, TensorRtRtxProviderConstants.BundledVersion, TensorRtRtxProviderConstants.BundledCudaVariant, "win-x64");
 
         TensorRtRtxPluginResolution resolution = TensorRtRtxPluginLocator.Resolve(
             explicitPluginDirectory: userChosen,
@@ -148,11 +148,11 @@ public sealed class TrtRtxBundlePinTests
     [InlineData(@"CURRENT", false)]
     public void IsSupersededManagedInstallDirectory_detects_other_versions_under_the_managed_root(string relative, bool expected)
     {
-        string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
-        string current = Path.Combine(root, "0.4.2", "cu13", "win-x64");
+        string root = Path.GetFullPath(Path.Join(Path.GetTempPath(), "trackdub-pin", "Providers", "trt-rtx"));
+        string current = Path.Join(root, "0.4.2", "cu13", "win-x64");
         string candidate = relative == "CURRENT"
             ? current
-            : Path.Combine(root, relative.Replace('\\', Path.DirectorySeparatorChar));
+            : Path.Join(root, relative.Replace('\\', Path.DirectorySeparatorChar));
 
         Assert.Equal(expected, TensorRtRtxProviderConstants.IsSupersededManagedInstallDirectory(candidate, current));
     }
@@ -162,7 +162,7 @@ public sealed class TrtRtxBundlePinTests
         string? dir = AppContext.BaseDirectory;
         for (int i = 0; i < 8 && dir is not null; i++)
         {
-            string candidate = Path.Combine(dir, "runtime", "trt-rtx-ep.manifest.json");
+            string candidate = Path.Join(dir, "runtime", "trt-rtx-ep.manifest.json");
             if (File.Exists(candidate))
             {
                 return candidate;

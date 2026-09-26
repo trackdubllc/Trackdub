@@ -230,10 +230,10 @@ internal static class OnnxExecutionSessionFactory
             [
                 new SessionLeaseRequest(
                     encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, selections.Encoder.Options, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(encoderModelPath, selections.Encoder.Options, sessionFactory, ct, selections.Encoder.SelectedProvider))),
                 new SessionLeaseRequest(
                     decoderKey,
-                    ct => Task.FromResult(CreateSession(decoderModelPath, selections.Decoder.Options, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(decoderModelPath, selections.Decoder.Options, sessionFactory, ct, selections.Decoder.SelectedProvider))),
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -312,13 +312,16 @@ internal static class OnnxExecutionSessionFactory
         string modelPath,
         SessionOptions options,
         Func<string, SessionOptions, InferenceSession>? sessionFactory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ExecutionProviderKind selectedProvider)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var phase = BenchmarkPhaseCapture.Start("onnx-session-create");
-        // Prefer a valid AOT EP-context artifact when present (see EpContextWarmupService);
-        // fall back to the source ONNX so residual JIT still works via nv_runtime_cache_path.
-        string loadPath = EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath;
+        // EP-context artifacts embed a TensorRT-RTX-serialized engine that only that EP can
+        // deserialize; only TRT-RTX sessions may load one (see EpContextWarmupService).
+        string loadPath = selectedProvider is ExecutionProviderKind.TensorRTRtx
+            ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath
+            : modelPath;
         return sessionFactory is null
             ? new InferenceSession(loadPath, options)
             : sessionFactory(loadPath, options);
@@ -355,43 +358,8 @@ internal static class OnnxExecutionSessionFactory
                 throw new InvalidOperationException($"{skipReason} Hard-pin route has no fallback.");
             }
 
-            Exception? lastFailure = null;
-            foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
-                         .Select(fallbackProvider => CreateSessionOptions(
-                             fallbackProvider,
-                             devicePolicy,
-                             additionalTrtOptions: null)))
-            {
-                try
-                {
-                    InferenceSession session = CreateSession(
-                        modelPath,
-                        fallbackSelection.Options,
-                        sessionFactory,
-                        cancellationToken);
-                    initialSelection.Options.Dispose();
-                    string effectiveLabel = FormatProviderLabel(fallbackSelection.SelectedProvider);
-                    return (
-                        session,
-                        new SessionOptionsSelection(
-                            fallbackSelection.Options,
-                            fallbackSelection.SelectedProvider,
-                            MergeFallbackReasons($"{skipReason} Selected {effectiveLabel}.", fallbackSelection.FallbackReason)));
-                }
-                catch (Exception fallbackEx)
-                {
-                    fallbackSelection.Options.Dispose();
-                    if (!IsRecoverableTrtFallbackInitFailure(fallbackEx))
-                    {
-                        throw;
-                    }
-
-                    lastFailure = fallbackEx;
-                }
-            }
-
-            initialSelection.Options.Dispose();
-            throw lastFailure ?? new InvalidOperationException(skipReason);
+            return CreateUnsupportedGraphFallback(modelPath, initialSelection, devicePolicy,
+                sessionFactory, cancellationToken, skipReason);
         }
 
         try
@@ -400,7 +368,8 @@ internal static class OnnxExecutionSessionFactory
                 modelPath,
                 initialSelection.Options,
                 sessionFactory,
-                cancellationToken);
+                cancellationToken,
+                initialSelection.SelectedProvider);
             return (session, initialSelection);
         }
         catch (Exception ex) when (
@@ -408,49 +377,73 @@ internal static class OnnxExecutionSessionFactory
             && initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
             && LooksLikeTrtSessionInitFailure(ex))
         {
-            string trtError = SummarizeExceptionMessage(ex);
-            Exception? lastFailure = ex;
-
-            foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
-                         .Select(fallbackProvider => CreateSessionOptions(
-                             fallbackProvider,
-                             devicePolicy,
-                             additionalTrtOptions: null)))
-            {
-                try
-                {
-                    InferenceSession session = CreateSession(
-                        modelPath,
-                        fallbackSelection.Options,
-                        sessionFactory,
-                        cancellationToken);
-                    // Transfer ownership: dispose the failed TRT options; caller owns the fallback Options.
-                    initialSelection.Options.Dispose();
-                    string effectiveLabel = FormatProviderLabel(fallbackSelection.SelectedProvider);
-                    string trtFallbackReason =
-                        $"TensorRT RTX session init failed ({trtError}); fell back to {effectiveLabel}.";
-                    return (
-                        session,
-                        new SessionOptionsSelection(
-                            fallbackSelection.Options,
-                            fallbackSelection.SelectedProvider,
-                            MergeFallbackReasons(trtFallbackReason, fallbackSelection.FallbackReason)));
-                }
-                catch (Exception fallbackEx)
-                {
-                    fallbackSelection.Options.Dispose();
-                    if (!IsRecoverableTrtFallbackInitFailure(fallbackEx))
-                    {
-                        throw;
-                    }
-
-                    lastFailure = fallbackEx;
-                }
-            }
-
-            // Leave initialSelection.Options for the caller to dispose.
-            throw lastFailure ?? ex;
+            return CreateTrtInitFailureFallback(modelPath, initialSelection, devicePolicy,
+                sessionFactory, cancellationToken, ex);
         }
+    }
+
+    private static (InferenceSession Session, SessionOptionsSelection Selection) CreateUnsupportedGraphFallback(
+        string modelPath, SessionOptionsSelection initialSelection, WindowsMlExecutionDevicePolicy devicePolicy,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory, CancellationToken cancellationToken,
+        string skipReason)
+    {
+        Exception? lastFailure = null;
+        foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
+                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
+        {
+            try
+            {
+                InferenceSession session = CreateSession(modelPath, fallbackSelection.Options, sessionFactory,
+                    cancellationToken, fallbackSelection.SelectedProvider);
+                initialSelection.Options.Dispose();
+                string label = FormatProviderLabel(fallbackSelection.SelectedProvider);
+                return (session, new SessionOptionsSelection(fallbackSelection.Options,
+                    fallbackSelection.SelectedProvider,
+                    MergeFallbackReasons($"{skipReason} Selected {label}.", fallbackSelection.FallbackReason)));
+            }
+            catch (Exception fallbackEx)
+            {
+                fallbackSelection.Options.Dispose();
+                if (!IsRecoverableTrtFallbackInitFailure(fallbackEx)) throw;
+                lastFailure = fallbackEx;
+            }
+        }
+
+        initialSelection.Options.Dispose();
+        throw lastFailure ?? new InvalidOperationException(skipReason);
+    }
+
+    private static (InferenceSession Session, SessionOptionsSelection Selection) CreateTrtInitFailureFallback(
+        string modelPath, SessionOptionsSelection initialSelection, WindowsMlExecutionDevicePolicy devicePolicy,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory, CancellationToken cancellationToken,
+        Exception originalFailure)
+    {
+        string trtError = SummarizeExceptionMessage(originalFailure);
+        Exception lastFailure = originalFailure;
+        foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
+                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
+        {
+            try
+            {
+                InferenceSession session = CreateSession(modelPath, fallbackSelection.Options, sessionFactory,
+                    cancellationToken, fallbackSelection.SelectedProvider);
+                // Transfer ownership: the caller owns fallback options after success.
+                initialSelection.Options.Dispose();
+                string label = FormatProviderLabel(fallbackSelection.SelectedProvider);
+                string reason = $"TensorRT RTX session init failed ({trtError}); fell back to {label}.";
+                return (session, new SessionOptionsSelection(fallbackSelection.Options,
+                    fallbackSelection.SelectedProvider, MergeFallbackReasons(reason, fallbackSelection.FallbackReason)));
+            }
+            catch (Exception fallbackEx)
+            {
+                fallbackSelection.Options.Dispose();
+                if (!IsRecoverableTrtFallbackInitFailure(fallbackEx)) throw;
+                lastFailure = fallbackEx;
+            }
+        }
+
+        // Leave initialSelection.Options for the caller to dispose.
+        throw lastFailure;
     }
 
     /// <summary>
@@ -809,34 +802,39 @@ internal static class OnnxExecutionSessionFactory
         SessionPoolKey resolvedKey = key
             ?? throw new InvalidOperationException("Pooled single session did not resolve a pool key.");
 
-        SessionResidency residency;
         // Bound retries: when the pool is full of leased/pinned entries, GetLeaseAsync
         // returns an ephemeral lease that never reaches `entries`, so TryPinExisting
         // can never succeed — infinite session create/dispose churn.
-        const int maxPinAttempts = 3;
-        for (int attempt = 1; ; attempt++)
+        const int maxPinAttempts = 5;
+        for (int attempt = 1; attempt <= maxPinAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (pool.TryPinExisting(resolvedKey, out SessionResidency? pinned) && pinned is not null)
             {
-                residency = pinned;
+                return new PooledSingleSessionPin(pinned, AcquireAsync, requestedProvider, selectedProvider, bootstrapDetail);
+            }
+
+            if (attempt == maxPinAttempts)
+            {
                 break;
             }
 
-            if (attempt >= maxPinAttempts)
-            {
-                throw new InvalidOperationException(
-                    $"Unable to pin pooled session '{resolvedKey.EngineFamily}' after {maxPinAttempts} attempts " +
-                    "(pool at capacity with leased or pinned entries; ephemeral creates are not retained).");
-            }
+            // Evicted before pin — recreate and retry with exponential backoff.
+            // Retry delays: 50ms, 100ms, 200ms, 400ms (maxPinAttempts=5).
+            int delayMs = 25 * (1 << attempt);
+            await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
 
-            // Evicted before pin — recreate and retry.
             using (await AcquireAsync(cancellationToken).ConfigureAwait(false))
             {
             }
         }
 
-        return new PooledSingleSessionPin(residency, AcquireAsync, requestedProvider, selectedProvider, bootstrapDetail);
+        // Pool stayed at capacity (leased/pinned) across every retry: fall back to no
+        // residency instead of failing engine init. Each AcquireAsync call still creates a
+        // short, working (possibly ephemeral) lease — callers just lose the "stay resident
+        // between calls" guarantee until pool pressure eases.
+        return new PooledSingleSessionPin(
+            new SessionResidency(static () => { }), AcquireAsync, requestedProvider, selectedProvider, bootstrapDetail);
     }
 
     public static async Task<WhisperSessionLease> CreatePooledWhisperAsync(
@@ -977,13 +975,13 @@ internal static class OnnxExecutionSessionFactory
             [
                 new SessionLeaseRequest(
                     encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct, encoderOptionsSelection.SelectedProvider))),
                 new SessionLeaseRequest(
                     decoderInitKey,
-                    ct => Task.FromResult(CreateSession(decoderInitModelPath, decoderInitOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(decoderInitModelPath, decoderInitOptions, sessionFactory, ct, decoderOptionsSelectedProvider))),
                 new SessionLeaseRequest(
                     decoderStepKey,
-                    ct => Task.FromResult(CreateSession(decoderStepModelPath, decoderStepOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(decoderStepModelPath, decoderStepOptions, sessionFactory, ct, decoderOptionsSelectedProvider))),
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -1101,16 +1099,16 @@ internal static class OnnxExecutionSessionFactory
             [
                 new SessionLeaseRequest(
                     unetKey,
-                    ct => Task.FromResult(CreateSession(unetModelPath, unetOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(unetModelPath, unetOptions, sessionFactory, ct, unetSelectedProvider))),
                 new SessionLeaseRequest(
                     vaeEncKey,
-                    ct => Task.FromResult(CreateSession(vaeEncoderModelPath, vaeEncOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(vaeEncoderModelPath, vaeEncOptions, sessionFactory, ct, vaeEncOptionsSelection.SelectedProvider))),
                 new SessionLeaseRequest(
                     vaeDecKey,
-                    ct => Task.FromResult(CreateSession(vaeDecoderModelPath, vaeDecOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(vaeDecoderModelPath, vaeDecOptions, sessionFactory, ct, vaeDecOptionsSelection.SelectedProvider))),
                 new SessionLeaseRequest(
                     whisperKey,
-                    ct => Task.FromResult(CreateSession(whisperEncoderModelPath, whisperOptions, sessionFactory, ct))),
+                    ct => Task.FromResult(CreateSession(whisperEncoderModelPath, whisperOptions, sessionFactory, ct, whisperSelectedProvider))),
             ],
             cancellationToken).ConfigureAwait(false);
 

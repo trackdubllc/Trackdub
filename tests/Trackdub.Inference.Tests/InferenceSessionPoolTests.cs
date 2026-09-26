@@ -666,7 +666,7 @@ public sealed class InferenceSessionPoolTests
     [Fact]
     public void SessionPoolKey_EstimateVramMb_FromFileSize()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"vram-est-{Guid.NewGuid():N}.bin");
+        string path = Path.Join(Path.GetTempPath(), $"vram-est-{Guid.NewGuid():N}.bin");
         try
         {
             File.WriteAllBytes(path, new byte[3 * 1024 * 1024]); // 3 MB → 3*2+128 = 134
