@@ -213,11 +213,14 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
                     mockOpts.DefaultProvider = provider;
                     mockOpts.DryRun = options.DryRun;
                     double speedMultiplier = GetMockProviderSpeedMultiplier(provider);
-                    mockOpts.SimulatedStageLatencies["audio-prep"] = TimeSpan.FromMilliseconds(10.0 * speedMultiplier);
-                    mockOpts.SimulatedStageLatencies["separation"] = TimeSpan.FromMilliseconds(20.0 * speedMultiplier);
-                    mockOpts.SimulatedStageLatencies["transcription"] = TimeSpan.FromMilliseconds(30.0 * speedMultiplier);
-                    mockOpts.SimulatedStageLatencies["alignment"] = TimeSpan.FromMilliseconds(15.0 * speedMultiplier);
-                    mockOpts.SimulatedStageLatencies["dubbing"] = TimeSpan.FromMilliseconds(25.0 * speedMultiplier);
+                    // Base delays are large enough (sum ~1s at 1.0x) that OS scheduler jitter on
+                    // loaded CI runners (observed on macOS) can't swamp the relative gap between
+                    // providers' simulated speeds; smaller (~10-30ms) delays were flaky here.
+                    mockOpts.SimulatedStageLatencies["audio-prep"] = TimeSpan.FromMilliseconds(100.0 * speedMultiplier);
+                    mockOpts.SimulatedStageLatencies["separation"] = TimeSpan.FromMilliseconds(200.0 * speedMultiplier);
+                    mockOpts.SimulatedStageLatencies["transcription"] = TimeSpan.FromMilliseconds(300.0 * speedMultiplier);
+                    mockOpts.SimulatedStageLatencies["alignment"] = TimeSpan.FromMilliseconds(150.0 * speedMultiplier);
+                    mockOpts.SimulatedStageLatencies["dubbing"] = TimeSpan.FromMilliseconds(250.0 * speedMultiplier);
                 });
             }
 
