@@ -135,26 +135,29 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         }
 
         bool bothEndpointsKnown = startWorkingSet.HasValue && endWorkingSet.HasValue;
-        long? observed = knownPeak.HasValue || bothEndpointsKnown
-            ? Maximum(Maximum(startWorkingSet, endWorkingSet), knownPeak)
-            : null;
-        if (!observed.HasValue)
+        long? observed = Maximum(Maximum(startWorkingSet, endWorkingSet), knownPeak);
+        if (!bothEndpointsKnown)
         {
-            long? knownEndpoint = Maximum(startWorkingSet, endWorkingSet);
-            if (knownEndpoint.HasValue && maximum.HasValue && knownEndpoint.Value > maximum.Value)
+            // A missing endpoint sample means we can't be fully confident nothing spiked past
+            // what the peak sampler's finite cadence could miss (e.g. a crash right at the
+            // memory high-water mark); only report Failed when the data we do have already
+            // proves a breach, otherwise report Unavailable rather than an optimistic Passed.
+            if (observed.HasValue && maximum.HasValue && observed.Value > maximum.Value)
             {
-                return new("workingSetBytes", ResourceTelemetryStatus.Failed, knownEndpoint.Value, maximum,
-                    "Available endpoint exceeds the configured upper bound; the other endpoint is unavailable.");
+                return new("workingSetBytes", ResourceTelemetryStatus.Failed, observed.Value, maximum,
+                    "Available reading exceeds the configured upper bound; an endpoint sample was unavailable.");
             }
             return Unavailable("workingSetBytes", maximum,
                 startWorkingSet is null ? start?.MemoryUnavailableReason : end?.MemoryUnavailableReason,
                 "Working-set sample unavailable.");
         }
 
-        bool exceeded = maximum.HasValue && observed.Value > maximum.Value;
+        // Both endpoints are known here, so Maximum(...) is guaranteed non-null.
+        long observedValue = observed!.Value;
+        bool exceeded = maximum.HasValue && observedValue > maximum.Value;
         return new ResourceTelemetryCheck("workingSetBytes",
             exceeded ? ResourceTelemetryStatus.Failed : ResourceTelemetryStatus.Passed,
-            observed.Value, maximum, exceeded ? "Configured upper bound exceeded." : null);
+            observedValue, maximum, exceeded ? "Configured upper bound exceeded." : null);
     }
 
     private static long? Maximum(long? first, long? second) =>

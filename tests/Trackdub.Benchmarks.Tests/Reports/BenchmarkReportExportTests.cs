@@ -296,6 +296,47 @@ public sealed class BenchmarkReportExportTests : IDisposable
     }
 
     [Fact]
+    public void RenderEvidenceMarkdown_EscapesBackslashBeforePipeInResourceValidationReason()
+    {
+        // A reason containing a literal backslash immediately before a pipe must not become
+        // "\\|" in the escaped output: GFM reads that as an escaped backslash followed by an
+        // unescaped column-separating pipe, splitting the row exactly as if unescaped at all.
+        BenchmarkEvidenceReport report = CreateSampleEvidenceReport() with
+        {
+            ResourceTelemetryBounds = new Trackdub.Domain.Benchmarking.ResourceTelemetryBounds { MaxCpuPercent = 75 },
+            ResourceValidationStatus = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+            ResourceTelemetry =
+            [
+                new BenchmarkStageResourceTelemetry
+                {
+                    Stage = "audio-prep",
+                    Phase = "measured",
+                    Iteration = 1,
+                    Attempt = 1,
+                    ExecutionStatus = BenchmarkEvidenceStatus.Completed,
+                    Validation = new Trackdub.Domain.Benchmarking.ResourceTelemetryValidation
+                    {
+                        Status = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                        Checks =
+                        [
+                            new Trackdub.Domain.Benchmarking.ResourceTelemetryCheck(
+                                "cpuPercent",
+                                Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                                ObservedValue: 91.5,
+                                Threshold: 75,
+                                Reason: "path C:\\|weird"),
+                        ],
+                    },
+                },
+            ],
+        };
+
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
+
+        Assert.Contains("path C:\\\\\\|weird |", markdown);
+    }
+
+    [Fact]
     public void RenderEvidenceMarkdown_OmitsResourceValidationSectionWithoutTelemetry()
     {
         string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(CreateSampleEvidenceReport());

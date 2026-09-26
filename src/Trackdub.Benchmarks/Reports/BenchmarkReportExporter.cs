@@ -384,7 +384,9 @@ public static class BenchmarkReportExporter
     /// split the row across columns, and an embedded newline would split it across rows.
     /// </summary>
     private static string EscapeMarkdownCell(string? value) =>
-        value is null ? string.Empty : value.Replace("|", "\\|").Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
+        value is null
+            ? string.Empty
+            : value.Replace("\\", "\\\\").Replace("|", "\\|").Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
 
     private static string FormatBytes(long bytes)
     {

@@ -59,6 +59,20 @@ public sealed class ResourceTelemetryValidatorTests
     }
 
     [Fact]
+    public void Validate_reports_unavailable_when_an_endpoint_is_missing_even_with_a_known_peak_under_bound()
+    {
+        // A successful peak sample does not excuse a missing endpoint sample: the peak sampler's
+        // finite cadence can miss a spike that only the endpoint reading would have caught, so
+        // this must not report an optimistic Passed.
+        ResourceUsageSnapshot peak = End with { WorkingSetBytes = null, PeakWorkingSetBytes = 1100 };
+
+        ResourceTelemetryValidation result = validator.Validate(Start, peak, new() { MaxWorkingSetBytes = 1200 });
+
+        Assert.Equal(ResourceTelemetryStatus.Unavailable, Check(result, "workingSetBytes").Status);
+        Assert.Null(Check(result, "workingSetBytes").ObservedValue);
+    }
+
+    [Fact]
     public void Validate_reports_working_set_unavailable_when_continuous_sampling_failed()
     {
         ResourceUsageSnapshot failedPeak = End with
