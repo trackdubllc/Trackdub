@@ -240,7 +240,7 @@ public sealed class ModelInventoryService(
         }
 
         string root = Path.GetFullPath(variantRootPath);
-        string candidate = Path.GetFullPath(Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
+        string candidate = Path.GetFullPath(Path.Join(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
         if (!ModelDownloadPathGuard.IsStrictSubpathOrEqual(candidate, root))
         {
             error = $"Optimized variant path is invalid: {relativePath}.";
@@ -286,7 +286,7 @@ public sealed class ModelInventoryService(
         {
             string genAiConfigPath = manifest.DefaultBenchmarkEntryPath.EndsWith("genai_config.json", StringComparison.OrdinalIgnoreCase)
                 ? ModelDownloadPathGuard.ResolveCachedManifestPath(manifest, modelRootPath, manifest.DefaultBenchmarkEntryPath)
-                : Path.Combine(modelRootPath, "genai_config.json");
+                : Path.Join(modelRootPath, "genai_config.json");
             if (!File.Exists(genAiConfigPath))
             {
                 return Blocked(profile, entryRelativePath, "genai_config.json not found — model may not be fully downloaded.");
@@ -512,7 +512,7 @@ public sealed class ModelInventoryService(
         }
 
         string root = Path.GetFullPath(modelRootPath);
-        string candidate = Path.GetFullPath(Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
+        string candidate = Path.GetFullPath(Path.Join(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
         if (!ModelDownloadPathGuard.IsStrictSubpathOrEqual(candidate, root))
         {
             error = $"Optimization component path is invalid: {componentRelativePath}.";

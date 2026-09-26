@@ -122,7 +122,7 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         {
             return Failed("workingSetBytes", maximum, "Sampled peak working set must be nonnegative.");
         }
-        if (!knownPeak.HasValue && end is not null && !string.IsNullOrWhiteSpace(end.PeakWorkingSetUnavailableReason))
+        if (!knownPeak.HasValue && end is { } endSnapshot && !string.IsNullOrWhiteSpace(endSnapshot.PeakWorkingSetUnavailableReason))
         {
             long? knownEndpoint = Maximum(startWorkingSet, endWorkingSet);
             if (knownEndpoint.HasValue && maximum.HasValue && knownEndpoint.Value > maximum.Value)
@@ -130,7 +130,7 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
                 return new("workingSetBytes", ResourceTelemetryStatus.Failed, knownEndpoint.Value, maximum,
                     "Available endpoint exceeds the configured upper bound; continuous peak sampling was unavailable.");
             }
-            return Unavailable("workingSetBytes", maximum, end.PeakWorkingSetUnavailableReason,
+            return Unavailable("workingSetBytes", maximum, endSnapshot.PeakWorkingSetUnavailableReason,
                 "Continuous working-set sampling unavailable.");
         }
 
