@@ -6,7 +6,7 @@ Endpoint: `https://trackdub-docs-rag.trackdub.workers.dev`
 Owner: Tony Thompson
 Code: `api.trackdub/src/docs-rag/` (Worker), `Trackdub/tools/docs-rag/` (ingest)
 
-## 1. What it is
+## 1\. What it is
 
 A hosted, bearer-authenticated MCP server backed by Cloudflare AI Search
 (AutoRAG) over a curated corpus of Trackdub implementation documentation. It
@@ -15,36 +15,36 @@ pin-accurate vendor docs, for any MCP-capable agent (Cursor, Claude Code, etc).
 
 It is one of three complementary doc sources an agent may use:
 
-| Source | Covers | When to prefer |
-|---|---|---|
-| **trackdub-docs-rag** (this) | Trackdub first-party docs + pinned vendor docs | Implementation facts, pin policy, provider wiring, "how does Trackdub do X" |
-| NVIDIA CUDA MCP (`search_cuda_docs`) | CUDA toolkit internals | CUDA kernel/driver questions outside the RAG corpus |
-| `tools/mcp-trackdub-gpu-docs` (local) | Offline TRT-RTX keyword lookup | No-network / fast local lookup; same Trackdub pin docs |
+|Source|Covers|When to prefer|
+|-|-|-|
+|**trackdub-docs-rag** (this)|Trackdub first-party docs + pinned vendor docs|Implementation facts, pin policy, provider wiring, "how does Trackdub do X"|
+|NVIDIA CUDA MCP (`search\_cuda\_docs`)|CUDA toolkit internals|CUDA kernel/driver questions outside the RAG corpus|
+|`tools/mcp-trackdub-gpu-docs` (local)|Offline TRT-RTX keyword lookup|No-network / fast local lookup; same Trackdub pin docs|
 
-## 2. Architecture
+## 2\. Architecture
 
 ```text
 Agent (Cursor / Claude Code)
-   |  Authorization: Bearer <DOCS_RAG_TOKEN>
+   |  Authorization: Bearer <DOCS\_RAG\_TOKEN>
    v
 trackdub-docs-rag Worker (api.trackdub, agents-SDK MCP)
-   |  tools: search / ask / get_doc
+   |  tools: search / ask / get\_doc
    |  rate limits: burst / steady / ask (per client)
    v
 Cloudflare AI Search instance "trackdub-docs"
-   |  Authorization: Bearer <AI_SEARCH_API_TOKEN>   (REST, server-side only)
+   |  Authorization: Bearer <AI\_SEARCH\_API\_TOKEN>   (REST, server-side only)
    v
 R2 bucket trackdub-docs-corpus
 ```
 
 Two credentials, different jobs:
 
-| Secret | What it is | Who presents it | Rotate by |
-|---|---|---|---|
-| `DOCS_RAG_TOKEN` | Random string (>=16 chars), no Cloudflare meaning | Agents -> Worker (in `mcp.json` / `.claude.json`) | `wrangler secret put DOCS_RAG_TOKEN` + update agent configs |
-| `AI_SEARCH_API_TOKEN` | Real Cloudflare API token (Account > AI Search Edit + Run) | Worker -> AI Search REST API, server-side only | Rotate in dashboard, `wrangler secret put AI_SEARCH_API_TOKEN` |
+|Secret|What it is|Who presents it|Rotate by|
+|-|-|-|-|
+|`DOCS\_RAG\_TOKEN`|Random string (>=16 chars), no Cloudflare meaning|Agents -> Worker (in `mcp.json` / `.claude.json`)|`wrangler secret put DOCS\_RAG\_TOKEN` + update agent configs|
+|`AI\_SEARCH\_API\_TOKEN`|Real Cloudflare API token (Account > AI Search Edit + Run)|Worker -> AI Search REST API, server-side only|Rotate in dashboard, `wrangler secret put AI\_SEARCH\_API\_TOKEN`|
 
-## 3. The corpus
+## 3\. The corpus
 
 R2 bucket `trackdub-docs-corpus` contains **197 uploaded documents**. Instance
 `trackdub-docs` indexes them with `@cf/qwen/qwen3-embedding-0.6b`, hybrid search
@@ -54,37 +54,37 @@ item status and metadata as well. See [HANDOFF.md](HANDOFF.md) for dated verific
 
 ### Instance settings
 
-| Setting | Value |
-|---|---|
-| Scheduled sync | `sync_interval: 86400` (24h) |
-| Keyword tokenizer | `trigram`, for code identifier substrings |
-| Keyword match mode | `and`; Worker retries `or` once only on an empty successful search |
-| Custom metadata | `is_first_party`, boolean |
-| Relevance boost | `is_first_party`, direction `exists` |
-| Chunking | 1024 tokens, 10% overlap (unchanged) |
-| Similarity cache | `close_enough`, 172800 seconds (48h, unchanged) |
+|Setting|Value|
+|-|-|
+|Scheduled sync|`sync\_interval: 86400` (24h)|
+|Keyword tokenizer|`trigram`, for code identifier substrings|
+|Keyword match mode|`and`; Worker retries `or` once only on an empty successful search|
+|Custom metadata|`is\_first\_party`, boolean|
+|Relevance boost|`is\_first\_party`, direction `exists`|
+|Chunking|1024 tokens, 10% overlap (unchanged)|
+|Similarity cache|`close\_enough`, 172800 seconds (48h, unchanged)|
 
-First-party objects carry R2 custom metadata `is_first_party: "true"`;
+First-party objects carry R2 custom metadata `is\_first\_party: "true"`;
 vendors omit that field entirely. Setting `false` would still match the
 existence boost. Boosting biases candidates before reranking; it is not a
 hard guarantee that every first-party hit outranks every vendor hit. Changing
 the tokenizer or metadata schema requires full reindexing.
 
-| Folder | Contents |
-|---|---|
-| `first-party/trackdub/` | Public core docs, AGENTS.md, TRT-RTX pin manifest, olive-recipe NvTensorRtRtx READMEs |
-| `first-party/trackdub-gated/` | Gated repo docs |
-| `first-party/api/` | api.trackdub docs |
-| `vendor/nvidia/` | TRT-RTX docs (arch, AOT/JIT, support matrix, best practices, troubleshooting, APIs) + EP ABI releases + Sortformer/Nemotron model cards |
-| `vendor/microsoft/` | Windows ML (overview, EP selection, initialization), DirectML |
-| `vendor/onnxruntime/` | EP docs (TRT-RTX, plugin EP, CUDA, DirectML, OpenVINO, QNN, MIGraphX), ORT GenAI, performance tuning, quantization |
-| `vendor/olive/` | Microsoft Olive docs (the pinned Olive 0.13.0 recipe engine) |
-| `vendor/amd/` | MIGraphX (install, driver, C++ API, operators, quantization) |
-| `vendor/intel/` | OpenVINO (get started, workflow, generative) |
-| `vendor/qualcomm/` | QNN (overview, integration guide, backends) |
-| `vendor/qwen/` | Qwen2.5-1.5B and Qwen3-Embedding model cards |
-| `vendor/whisper/` | OpenAI Whisper + faster-whisper |
-| `vendor/speech-models/` | Kokoro-82M, Opus-MT, MADLAD400, Spleeter |
+|Folder|Contents|
+|-|-|
+|`first-party/trackdub/`|Public core docs, AGENTS.md, TRT-RTX pin manifest, olive-recipe NvTensorRtRtx READMEs|
+|`first-party/trackdub-gated/`|Gated repo docs|
+|`first-party/api/`|api.trackdub docs|
+|`vendor/nvidia/`|TRT-RTX docs (arch, AOT/JIT, support matrix, best practices, troubleshooting, APIs) + EP ABI releases + Sortformer/Nemotron model cards|
+|`vendor/microsoft/`|Windows ML (overview, EP selection, initialization), DirectML|
+|`vendor/onnxruntime/`|EP docs (TRT-RTX, plugin EP, CUDA, DirectML, OpenVINO, QNN, MIGraphX), ORT GenAI, performance tuning, quantization|
+|`vendor/olive/`|Microsoft Olive docs (the pinned 0.3.0-cu12 recipe engine)|
+|`vendor/amd/`|MIGraphX (install, driver, C++ API, operators, quantization)|
+|`vendor/intel/`|OpenVINO (get started, workflow, generative)|
+|`vendor/qualcomm/`|QNN (overview, integration guide, backends)|
+|`vendor/qwen/`|Qwen2.5-1.5B and Qwen3-Embedding model cards|
+|`vendor/whisper/`|OpenAI Whisper + faster-whisper|
+|`vendor/speech-models/`|Kokoro-82M, Opus-MT, MADLAD400, Spleeter|
 
 ### Model-family coverage check (v1.2)
 
@@ -100,10 +100,10 @@ upstream wiki, DeepFilterNet3, SepFormer, CosyVoice/Chatterbox HF cards
 From the Trackdub repo root:
 
 ```bash
-python tools/docs-rag/sync_corpus.py --upload          # fetch + upload + request reindex
-python tools/docs-rag/sync_corpus.py --upload --prune  # also delete bucket objects absent from staging
-python tools/docs-rag/sync_corpus.py --skip-fetch --upload  # repo files only + request reindex
-python tools/docs-rag/sync_corpus.py --reuse-staging --upload  # cached tree + request reindex
+python tools/docs-rag/sync\_corpus.py --upload          # fetch + upload + request reindex
+python tools/docs-rag/sync\_corpus.py --upload --prune  # also delete bucket objects absent from staging
+python tools/docs-rag/sync\_corpus.py --skip-fetch --upload  # repo files only + request reindex
+python tools/docs-rag/sync\_corpus.py --reuse-staging --upload  # cached tree + request reindex
 ```
 
 Uploads list the bucket once and skip a document whose stored size, MD5 `etag`,
@@ -141,7 +141,7 @@ npx wrangler ai-search jobs list trackdub-docs
 npx wrangler ai-search jobs create trackdub-docs
 ```
 
-From core, `node tools/docs-rag/verify_index.mjs --account <account-id> --api-root ../api.trackdub`
+From core, `node tools/docs-rag/verify\_index.mjs --account <account-id> --api-root ../api.trackdub`
 performs bounded read-only source/index verification. It checks unique keys, item
 status, source/index first-party flags, indexed scope folders, chunks, sizes and
 last-seen time, refuses active or changing jobs, and requires an uncached
@@ -149,31 +149,31 @@ canonical-symbol content canary. It does not equate job completion with metadata
 readiness or prove every chunk's bytes.
 See [README](README.md#verify-indexing-separately) for exit semantics and limits.
 
-Wrangler uses `CLOUDFLARE_API_TOKEN` or its existing OAuth login, not
-`AI_SEARCH_API_TOKEN`. Unset stale `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_API_KEY`
+Wrangler uses `CLOUDFLARE\_API\_TOKEN` or its existing OAuth login, not
+`AI\_SEARCH\_API\_TOKEN`. Unset stale `CLOUDFLARE\_API\_TOKEN` / `CLOUDFLARE\_API\_KEY`
 overrides in the calling shell when using OAuth. No environment settings or
 credentials are changed by the sync script.
 
-Adding a vendor page: add `[id, url]` under the vendor in
+Adding a vendor page: add `\[id, url]` under the vendor in
 `corpus.v1.json`, run sync. Adding a new scope (agent-visible filter): update
-`DOC_SCOPES`, `FOLDER`, and the `filterForScope` switch in
+`DOC\_SCOPES`, `FOLDER`, and the `filterForScope` switch in
 `api.trackdub/src/docs-rag/scopes.ts`, then add a scope test row.
 
 Windows notes: the script invokes Wrangler via
-`node node_modules/wrangler/bin/wrangler.js` (the `.bin` shim is POSIX-only).
+`node node\_modules/wrangler/bin/wrangler.js` (the `.bin` shim is POSIX-only).
 Child output streams directly to the terminal without Python decoding;
 use `PYTHONUTF8=1` for Python's own output.
 
-## 4. Agent tools
+## 4\. Agent tools
 
 Stateless agents-SDK MCP server (`createMcpHandler`, streamable HTTP at
 `POST /mcp`). Fresh `McpServer` per request (SDK >= 1.26 CVE guidance).
 
-| Tool | Input | Returns |
-|---|---|---|
-| `search_trackdub_docs` | `query`, `scope?`, `limit?` (1-20, default 8) | Chunks: `score`, `key` (R2 path), `text` (<=4000 chars), plus `matchMode`. Hybrid vector+keyword, reranked except the bounded symbol fallback below. |
-| `ask_trackdub_docs` | `query`, `scope?`, `limit?` | AI answer + scope-enforced source chunks. Prompt prefers first-party over vendor; refuses to invent readiness/APIs. |
-| `get_trackdub_doc` | `key`, `max_chars?` (default 50000) | Full document text straight from R2 (4MB cap). Use when chunks are truncated. |
+|Tool|Input|Returns|
+|-|-|-|
+|`search\_trackdub\_docs`|`query`, `scope?`, `limit?` (1-20, default 8)|Chunks: `score`, `key` (R2 path), `text` (<=4000 chars), plus `matchMode`. Hybrid vector+keyword, reranked except the bounded symbol fallback below.|
+|`ask\_trackdub\_docs`|`query`, `scope?`, `limit?`|AI answer + scope-enforced source chunks. Prompt prefers first-party over vendor; refuses to invent readiness/APIs.|
+|`get\_trackdub\_doc`|`key`, `max\_chars?` (default 50000)|Full document text straight from R2 (4MB cap). Use when chunks are truncated.|
 
 `scope` values: `all`, `first-party`, `trackdub`, `trackdub-gated`, `api`,
 `vendor`, `nvidia`, `microsoft`, `amd`, `intel`, `qualcomm`, `qwen`,
@@ -201,10 +201,10 @@ Upstream errors and rate limits propagate at every step. Global models, threshol
 and reranking configuration are unchanged.
 
 `ask` makes one REST chat-completions call with system/user `messages`,
-`ai_search_options.query_rewrite.enabled: true`, and scope/limit inside
-`ai_search_options.retrieval`. Returned hits are the same chunks supplied to
+`ai\_search\_options.query\_rewrite.enabled: true`, and scope/limit inside
+`ai\_search\_options.retrieval`. Returned hits are the same chunks supplied to
 generation, not a separate search's results. `searchQuery` is null when the
-upstream chat response does not expose `search_query`.
+upstream chat response does not expose `search\_query`.
 
 **Query rewriting limitation:** Cloudflare rewrites follow-up messages, not
 the first user message. This stateless, single-query tool does not supply
@@ -212,26 +212,25 @@ conversation history, so enabling the option does not establish that a rewrite
 occurred. Do not fabricate history or report the original query as evidence of
 rewriting. See [Cloudflare query rewriting](https://developers.cloudflare.com/ai-search/configuration/retrieval/query-rewriting/).
 
-## 5. Rate limits
+## 5\. Rate limits
 
 Per client (key = SHA-256-ish hash of bearer token, never the raw value):
 
-| Binding | Window | Cap | Applies |
-|---|---|---|---|
-| `RL_BURST` | 10s | 30 | all endpoints |
-| `RL_STEADY` | 60s | 300 | all endpoints |
-| `RL_ASK` | 10s | 5 | `/v1/ask` + `ask` tool only |
+|Binding|Window|Cap|Applies|
+|-|-|-|-|
+|`RL\_BURST`|10s|30|all endpoints|
+|`RL\_STEADY`|60s|300|all endpoints|
+|`RL\_ASK`|10s|5|`/v1/ask` + `ask` tool only|
 
-Responses: HTTP 429 with `Retry-After` and `{"error":"rate_limited",
-"limiter":"burst|steady|ask|upstream"}`. AI Search's own backpressure
+Responses: HTTP 429 with `Retry-After` and `{"error":"rate\_limited", "limiter":"burst|steady|ask|upstream"}`. AI Search's own backpressure
 (code 2003) is re-mapped to the same clean 429. Note the binding counters are
 per-Cloudflare-location (eventual consistency), so these are abuse caps, not
 exact quotas.
 
-## 6. How to connect an agent
+## 6\. How to connect an agent
 
 Endpoint: `https://trackdub-docs-rag.trackdub.workers.dev/mcp`
-Auth: `Authorization: Bearer <DOCS_RAG_TOKEN>` on every request.
+Auth: `Authorization: Bearer <DOCS\_RAG\_TOKEN>` on every request.
 
 ### Cursor (project, committed)
 
@@ -241,22 +240,22 @@ Auth: `Authorization: Bearer <DOCS_RAG_TOKEN>` on every request.
 "trackdub-docs-rag": {
   "type": "http",
   "url": "https://trackdub-docs-rag.trackdub.workers.dev/mcp",
-  "headers": { "Authorization": "Bearer <DOCS_RAG_TOKEN>" }
+  "headers": { "Authorization": "Bearer <DOCS\_RAG\_TOKEN>" }
 }
 ```
 
 ### Cursor (global)
 
-`~/.cursor/mcp.json`, same shape.
+`\~/.cursor/mcp.json`, same shape.
 
 ### Claude Code
 
 Already registered in user scope:
 
 ```bash
-claude mcp add -s user --transport http trackdub-docs-rag \
-  "https://trackdub-docs-rag.trackdub.workers.dev/mcp" \
-  --header "Authorization: Bearer <DOCS_RAG_TOKEN>"
+claude mcp add -s user --transport http trackdub-docs-rag \\
+  "https://trackdub-docs-rag.trackdub.workers.dev/mcp" \\
+  --header "Authorization: Bearer <DOCS\_RAG\_TOKEN>"
 ```
 
 ### Other MCP clients (generic)
@@ -274,17 +273,17 @@ generate a token per agent, store an allowlist mapping
 revoke by removal. Not built yet; the limiter key derivation already avoids
 storing raw tokens so the extension is small (`auth.ts`).
 
-## 7. Operations quick reference
+## 7\. Operations quick reference
 
 ```bash
 # Deploy the Worker
-cd api.trackdub && npm run deploy:docs-rag
+cd api.trackdub \&\& npm run deploy:docs-rag
 
 # Health check
 curl https://trackdub-docs-rag.trackdub.workers.dev/health
 
 # Refresh corpus + automatically request reindex (from Trackdub)
-python tools/docs-rag/sync_corpus.py --upload
+python tools/docs-rag/sync\_corpus.py --upload
 
 # Inspect index state (from api.trackdub)
 npx wrangler ai-search get trackdub-docs
@@ -294,23 +293,24 @@ npx wrangler ai-search jobs list trackdub-docs
 # Dashboard -> AI Search -> trackdub-docs -> Sync
 ```
 
-## 8. If something breaks
+## 8\. If something breaks
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `unauthorized` from Worker | Wrong `DOCS_RAG_TOKEN` header | Re-set secret + update agent config |
-| 429 `limiter: upstream` often | Corpus too hot / shared key | Space out; or add per-agent tokens (section 6) |
-| Empty scoped results but `all` works | Indexing lag after adding docs | Trigger `jobs create`; check `jobs list` |
-| `AI Search REST 401` in Worker logs | `AI_SEARCH_API_TOKEN` rotated/expired | Create token w/ AI Search Edit+Run, `wrangler secret put` |
-| `AutoRAGNotFoundError` | Instance name mismatch | `AI_SEARCH_INSTANCE` var must equal dashboard name |
-| Model 404 on `ask` | Model retired | `npx wrangler ai models`, update `AI_SEARCH_MODEL` |
-| Upload `WinError 193` | POSIX `.bin` shim | Fixed in script (uses `node wrangler.js`); if regressed, see section 3 |
-| Upload `UnicodeDecodeError` | cp1252 locale | Child output is inherited; run with `PYTHONUTF8=1` for Python output |
-| Reindex request HTTP 524 | Cloudflare timed out before acknowledging the request | Check `jobs list` and job logs first; the job may already have started |
+|Symptom|Likely cause|Fix|
+|-|-|-|
+|`unauthorized` from Worker|Wrong `DOCS\_RAG\_TOKEN` header|Re-set secret + update agent config|
+|429 `limiter: upstream` often|Corpus too hot / shared key|Space out; or add per-agent tokens (section 6)|
+|Empty scoped results but `all` works|Indexing lag after adding docs|Trigger `jobs create`; check `jobs list`|
+|`AI Search REST 401` in Worker logs|`AI\_SEARCH\_API\_TOKEN` rotated/expired|Create token w/ AI Search Edit+Run, `wrangler secret put`|
+|`AutoRAGNotFoundError`|Instance name mismatch|`AI\_SEARCH\_INSTANCE` var must equal dashboard name|
+|Model 404 on `ask`|Model retired|`npx wrangler ai models`, update `AI\_SEARCH\_MODEL`|
+|Upload `WinError 193`|POSIX `.bin` shim|Fixed in script (uses `node wrangler.js`); if regressed, see section 3|
+|Upload `UnicodeDecodeError`|cp1252 locale|Child output is inherited; run with `PYTHONUTF8=1` for Python output|
+|Reindex request HTTP 524|Cloudflare timed out before acknowledging the request|Check `jobs list` and job logs first; the job may already have started|
 
-## 9. Related docs in the repos
+## 9\. Related docs in the repos
 
-- `Trackdub/tools/docs-rag/README.md` — short setup/usage
-- `Trackdub/tools/mcp-trackdub-gpu-docs/README.md` — the local v0 MCP
-- `Trackdub/docs/reference/tensorrt-rtx-ep-abi-plugin.md` — the pin this corpus is keyed to (EP ABI 0.4.2 win / 0.4.0 linux, cu13, TRT-RTX 1.6.1)
-- `Trackdub-gated/docs/audits/2026-09-19-four-repo-audit/` — corpus includes this audit set
+* `Trackdub/tools/docs-rag/README.md` — short setup/usage
+* `Trackdub/tools/mcp-trackdub-gpu-docs/README.md` — the local v0 MCP
+* `Trackdub/docs/reference/tensorrt-rtx-ep-abi-plugin.md` — the pin this corpus is keyed to (EP ABI 0.4.2 win / 0.4.0 linux, cu13, TRT-RTX 1.6.1)
+* `Trackdub-gated/docs/audits/2026-09-19-four-repo-audit/` — corpus includes this audit set
+

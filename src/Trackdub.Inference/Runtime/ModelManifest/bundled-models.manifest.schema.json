@@ -98,6 +98,8 @@
         "requires_user_consent": { "type": "boolean" },
         "voice_cloning": { "type": "boolean" },
         "commercial_use_verified": { "type": "boolean" },
+        "deprecated": { "type": "boolean" },
+        "deprecated_reason": { "type": "string" },
         "source_url": { "type": "string" },
         "revision": { "type": "string" },
         "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },

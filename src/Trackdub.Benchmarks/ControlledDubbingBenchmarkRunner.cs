@@ -9,6 +9,7 @@ using Trackdub.Contracts.Dubbing;
 using Trackdub.Contracts.Persistence;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
+using Trackdub.Domain.Benchmarking;
 using Trackdub.Domain.StageRuns;
 using Trackdub.Domain.Tts;
 using Trackdub.Inference.Runtime.ModelManifest;
@@ -67,18 +68,19 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             ["firstUsableTranscript"] = null,
             ["firstPlayableAudio"] = null,
         };
-        ResourceTelemetrySnapshot processTelemetryStart = ResourceTelemetry.CaptureProcess();
+        var resourceTelemetry = new List<BenchmarkStageResourceTelemetry>();
+        ResourceTelemetrySnapshot? processTelemetryStart = ResourceTelemetry.TryCaptureProcess();
         var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
         {
-            ["processWorkingSetStart"] = processTelemetryStart.WorkingSetBytes,
+            ["processWorkingSetStart"] = processTelemetryStart?.WorkingSetBytes,
             ["processWorkingSetEnd"] = null,
-            ["processPeakWorkingSet"] = processTelemetryStart.PeakWorkingSetBytes,
-            ["peakWorkingSetBytes"] = processTelemetryStart.PeakWorkingSetBytes,
+            ["processPeakWorkingSet"] = processTelemetryStart?.PeakWorkingSetBytes,
+            ["peakWorkingSetBytes"] = processTelemetryStart?.PeakWorkingSetBytes,
             ["managedAllocatedBytes"] = null,
             ["gen0Collections"] = null,
             ["gen1Collections"] = null,
             ["gen2Collections"] = null,
-            ["gpuDedicatedBytes"] = null,
+            ["availableVramMb"] = null,
         };
         string? fixtureHash = null;
         string? reason = null;
@@ -162,8 +164,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     hasPrerequisites = true;
                     Directory.CreateDirectory(Path.GetDirectoryName(baselineProjectPath)!);
                     long prerequisiteStart = Stopwatch.GetTimestamp();
-                    DubbingRunResult preparation = await ExecuteAsync(
-                        host, fixtureCopy, baselineProjectPath, options, prerequisites, true, cancellationToken).ConfigureAwait(false);
+                    DubbingRunResult preparation = await ExecuteWithTelemetryAsync(
+                        baselineProjectPath, prerequisites, true, "prerequisites", 0).ConfigureAwait(false);
                     timings["prerequisites"] = Stopwatch.GetElapsedTime(prerequisiteStart).TotalMilliseconds;
                     RequirePreparationSucceeded(
                         preparation, "Prerequisite preparation did not complete successfully.",
@@ -198,8 +200,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 }
 
                 long warmupStart = Stopwatch.GetTimestamp();
-                DubbingRunResult warmup = await ExecuteAsync(
-                    host, fixtureCopy, warmupProjectPath, options, filter, true, cancellationToken).ConfigureAwait(false);
+                DubbingRunResult warmup = await ExecuteWithTelemetryAsync(
+                    warmupProjectPath, filter, true, "warmup", 0).ConfigureAwait(false);
                 timings["warmup"] = Stopwatch.GetElapsedTime(warmupStart).TotalMilliseconds;
                 RequirePreparationSucceeded(
                     warmup, "Warm-host preparation did not complete successfully.",
@@ -219,8 +221,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     Directory.CreateDirectory(primingProjectPath);
                 }
 
-                DubbingRunResult priming = await ExecuteAsync(
-                    host, fixtureCopy, primingProjectPath, options, filter, true, cancellationToken).ConfigureAwait(false);
+                DubbingRunResult priming = await ExecuteWithTelemetryAsync(
+                    primingProjectPath, filter, true, "priming", 0).ConfigureAwait(false);
                 if (priming.OverallStatus != DubbingRunStatus.Succeeded)
                 {
                     reason = "Artifact-resume preparation did not complete successfully.";
@@ -264,11 +266,9 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 DubbingRunResult iterResult;
                 using (BenchmarkPhaseCapture.Activate(phases))
                 {
-                    iterResult = await ExecuteAsync(
-                        host, fixtureCopy, iterProjectPath, options, filter,
-                        options.Mode != "artifact-resume",
-                        cancellationToken,
-                        stageClock).ConfigureAwait(false);
+                    iterResult = await ExecuteWithTelemetryAsync(
+                        iterProjectPath, filter, options.Mode != "artifact-resume",
+                        "measured", runIndex, stageClock).ConfigureAwait(false);
                 }
 
                 double pipeDuration = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
@@ -546,16 +546,60 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         async Task<BenchmarkEvidenceReport> FinishAsync()
         {
             clock.Stop();
-            ResourceTelemetrySnapshot processTelemetryEnd = ResourceTelemetry.CaptureProcess();
-            ResourceTelemetryDelta processDelta = ResourceTelemetry.CalculateDelta(processTelemetryStart, processTelemetryEnd);
+            ResourceTelemetrySnapshot? processTelemetryEnd = ResourceTelemetry.TryCaptureProcess();
+            ResourceTelemetryDelta? processDelta = processTelemetryStart is not null && processTelemetryEnd is not null
+                ? ResourceTelemetry.CalculateDelta(processTelemetryStart, processTelemetryEnd) : null;
 
-            memory["processWorkingSetEnd"] = processTelemetryEnd.WorkingSetBytes;
-            memory["processPeakWorkingSet"] = processDelta.PeakWorkingSetBytes;
-            memory["peakWorkingSetBytes"] = processDelta.PeakWorkingSetBytes;
-            memory["managedAllocatedBytes"] = processDelta.ManagedAllocatedBytes;
-            memory["gen0Collections"] = processDelta.Gen0Collections;
-            memory["gen1Collections"] = processDelta.Gen1Collections;
-            memory["gen2Collections"] = processDelta.Gen2Collections;
+            memory["processWorkingSetEnd"] = processTelemetryEnd?.WorkingSetBytes;
+            memory["processPeakWorkingSet"] = processDelta?.PeakWorkingSetBytes;
+            memory["peakWorkingSetBytes"] = processDelta?.PeakWorkingSetBytes;
+            memory["managedAllocatedBytes"] = processDelta?.ManagedAllocatedBytes;
+            memory["gen0Collections"] = processDelta?.Gen0Collections;
+            memory["gen1Collections"] = processDelta?.Gen1Collections;
+            memory["gen2Collections"] = processDelta?.Gen2Collections;
+
+            // The legacy memory map carried a permanently-null GPU placeholder; report the real
+            // adapter-wide free VRAM instead. Reuses the last measured sample's reading so the
+            // report costs no extra process sample.
+            BenchmarkStageResourceTelemetry? lastMeasured = resourceTelemetry
+                .LastOrDefault(sample => sample.Phase == "measured");
+            memory["availableVramMb"] = lastMeasured is null
+                ? null
+                : (long?)lastMeasured.Validation.Checks
+                    .FirstOrDefault(check => check.Metric == "availableVramMb")?.ObservedValue;
+
+            if (!resourceTelemetry.Any(sample => sample.Phase == "measured"))
+            {
+                resourceTelemetry.Add(new()
+                {
+                    Stage = stage ?? "full-pipeline",
+                    Phase = "measured",
+                    ExecutionStatus = BenchmarkEvidenceStatus.Skipped,
+                    Reason = reason ?? "No measured pipeline stages ran.",
+                    Validation = new()
+                    {
+                        Status = ResourceTelemetryStatus.Skipped,
+                        Checks = [new("stage", ResourceTelemetryStatus.Skipped, null, null,
+                            reason ?? "No measured pipeline stages ran.")],
+                    },
+                });
+            }
+            string[] resourceFailures = resourceTelemetry.SelectMany(sample => sample.Validation.Checks
+                .Where(check => check.Status == ResourceTelemetryStatus.Failed)
+                .Select(check => $"{sample.Stage} ({sample.Phase}, iteration {sample.Iteration}, attempt {sample.Attempt}): {check.Metric}: {check.Reason}"))
+                .ToArray();
+            if (resourceFailures.Length > 0)
+            {
+                if (status != BenchmarkEvidenceStatus.Canceled) status = BenchmarkEvidenceStatus.Failed;
+                reason = string.Join("; ", new[] { reason, "Resource validation failed: " + string.Join("; ", resourceFailures) }
+                    .Where(text => !string.IsNullOrWhiteSpace(text)));
+            }
+            ResourceTelemetryStatus resourceStatus = resourceFailures.Length > 0
+                ? ResourceTelemetryStatus.Failed
+                : resourceTelemetry.Any(sample => sample.Validation.Status == ResourceTelemetryStatus.Unavailable)
+                    ? ResourceTelemetryStatus.Unavailable
+                    : resourceTelemetry.All(sample => sample.Validation.Status == ResourceTelemetryStatus.Skipped)
+                        ? ResourceTelemetryStatus.Skipped : ResourceTelemetryStatus.Passed;
 
             timings["total"] = clock.Elapsed.TotalMilliseconds;
             var configuration = new Dictionary<string, string>
@@ -564,6 +608,10 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 ["sourceLanguage"] = options.SourceLanguage ?? "auto",
                 ["stage"] = stage ?? "all",
                 ["hardware"] = BenchmarkHardwareInfo.Capture(),
+                ["resourceScope"] = "Process-wide; includes concurrent work; excludes child processes.",
+                ["cpuNormalization"] = "100 * delta CPU milliseconds / (monotonic elapsed milliseconds * processor count)",
+                ["memorySampling"] = "Maximum of stage endpoint working sets; transient peaks are not captured.",
+                ["vramScope"] = "Adapter-wide free VRAM (budget minus current usage), not this process's allocation; moves with other processes on the same GPU.",
             };
             foreach (BenchmarkEvidenceStage measuredStage in stages)
             {
@@ -607,6 +655,10 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 TimingsMilliseconds = timings,
                 MemoryBytes = memory,
                 Stages = stages,
+                ResourceTelemetryBounds = options.ResourceTelemetryBounds,
+                ResourceValidationStatus = resourceStatus,
+                ResourceTelemetry = resourceTelemetry.ToArray(),
+                ResourceDistribution = ResourceTelemetryAggregator.Aggregate(resourceTelemetry),
             };
             using var saveTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             CancellationToken saveToken = status == BenchmarkEvidenceStatus.Canceled
@@ -614,6 +666,38 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 : cancellationToken;
             await _history.SaveAsync(report, saveToken).ConfigureAwait(false);
             return report;
+        }
+
+        async Task<DubbingRunResult> ExecuteWithTelemetryAsync(
+            string project, IReadOnlyList<string>? filter, bool forceRerun,
+            string phase, int iteration, StageTimingCollector? stageClock = null)
+        {
+            var capture = new StageResourceTelemetryCapture(
+                host!.Services.GetRequiredService<IResourceTelemetryCollector>(),
+                host.Services.GetRequiredService<IResourceTelemetryValidator>(),
+                options.ResourceTelemetryBounds, phase, iteration, stageClock);
+            try
+            {
+                DubbingRunResult result = await ExecuteAsync(host, fixtureCopy, project, options,
+                    filter, forceRerun, cancellationToken, capture).ConfigureAwait(false);
+                capture.CompleteOutcomes(result.StageOutcomes);
+                capture.CompletePending(BenchmarkEvidenceStatus.Failed, "Stage emitted no terminal outcome.");
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                capture.CompletePending(BenchmarkEvidenceStatus.Canceled, "Canceled.");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                capture.CompletePending(BenchmarkEvidenceStatus.Failed, $"{ex.GetType().Name}: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                resourceTelemetry.AddRange(capture.Snapshot());
+            }
         }
     }
 

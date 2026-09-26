@@ -36,7 +36,9 @@ public sealed record ModelManifest(
     IReadOnlyDictionary<string, string>? DownloadFileHashes = null,
     int EstimatedVramMb = 0,
     int MinVramMb = 0,
-    bool SupportsPartialOffload = false)
+    bool SupportsPartialOffload = false,
+    bool Deprecated = false,
+    string? DeprecatedReason = null)
 {
     public bool CommercialSafeMode => CommercialUseVerified;
 

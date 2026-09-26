@@ -15,6 +15,55 @@ public sealed class ModelInventoryServiceTests : IDisposable
         Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task GetAllAsync_excludes_deprecated_models()
+    {
+        (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths) = CreateRegistry(
+            """
+            "language_coverage": {
+              "language_pairs": [
+                { "source": "en", "target": "es" }
+              ]
+            },
+            """,
+            extraModelJson:
+            """
+            "deprecated": true,
+            "deprecated_reason": "Superseded by a newer model.",
+            """);
+        var service = new ModelInventoryService(registry, new LocalModelCacheRecordStore(storagePaths), storagePaths);
+
+        IReadOnlyList<ModelInventoryEntry> entries = await service.GetAllAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(entries);
+    }
+
+    [Fact]
+    public async Task GetByModelIdAsync_returns_null_for_deprecated_model()
+    {
+        (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths) = CreateRegistry(
+            """
+            "language_coverage": {
+              "language_pairs": [
+                { "source": "en", "target": "es" }
+              ]
+            },
+            """,
+            extraModelJson:
+            """
+            "deprecated": true,
+            "deprecated_reason": "Superseded by a newer model.",
+            """);
+        var service = new ModelInventoryService(registry, new LocalModelCacheRecordStore(storagePaths), storagePaths);
+
+        ModelInventoryEntry? entry = await service.GetByModelIdAsync(
+            "example/translation-model",
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(entry);
+    }
+
+    [Fact]
     public async Task GetByModelIdAsync_includes_expected_runtime_hint_from_manifest()
     {
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths) = CreateRegistry(

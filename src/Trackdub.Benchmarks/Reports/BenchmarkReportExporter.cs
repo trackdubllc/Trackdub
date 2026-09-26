@@ -284,6 +284,48 @@ public static class BenchmarkReportExporter
             }
         }
 
+        if (report.ResourceTelemetry.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Resource Validation");
+            sb.AppendLine();
+            sb.AppendLine("Process-wide CPU, excluding child processes; memory maxima are endpoint-sampled.");
+            sb.AppendLine("Threshold is an inclusive maximum for usage metrics and an inclusive minimum for the free-VRAM floor.");
+            sb.AppendLine();
+            sb.AppendLine("| Stage | Phase | Iteration | Attempt | Metric | Observed | Threshold | Status | Reason |");
+            sb.AppendLine("| --- | --- | ---: | ---: | --- | ---: | ---: | --- | --- |");
+            foreach (BenchmarkStageResourceTelemetry sample in report.ResourceTelemetry)
+            {
+                foreach (var check in sample.Validation.Checks)
+                {
+                    string observed = check.ObservedValue?.ToString("G", CultureInfo.InvariantCulture) ?? "unavailable";
+                    string threshold = check.Threshold?.ToString("G", CultureInfo.InvariantCulture) ?? "not configured";
+                    sb.AppendLine(CultureInfo.InvariantCulture,
+                        $"| {sample.Stage} | {sample.Phase} | {sample.Iteration} | {sample.Attempt} | {check.Metric} | {observed} | {threshold} | {check.Status} | {check.Reason ?? sample.Reason} |");
+                }
+            }
+        }
+
+        if (report.ResourceDistribution.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Resource Distribution");
+            sb.AppendLine();
+            sb.AppendLine("Percentiles over all iterations of each stage/phase (Type 7, same formula as latency percentiles).");
+            sb.AppendLine();
+            sb.AppendLine("| Stage | Phase | Metric | N | Unavailable | Failed | Min | P50 | P95 | P99 | Max | Threshold | Status |");
+            sb.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
+            foreach (var distribution in report.ResourceDistribution)
+            {
+                foreach (var metric in distribution.Metrics)
+                {
+                    string threshold = metric.Threshold?.ToString("G", CultureInfo.InvariantCulture) ?? "not configured";
+                    sb.AppendLine(CultureInfo.InvariantCulture,
+                        $"| {distribution.Stage} | {distribution.Phase} | {metric.Metric} | {metric.SampleCount} | {metric.UnavailableSampleCount} | {metric.FailingSampleCount} | {metric.Minimum} | {metric.P50} | {metric.P95} | {metric.P99} | {metric.Maximum} | {threshold} | {metric.Status} |");
+                }
+            }
+        }
+
         // Stages
         if (report.Stages.Count > 0)
         {

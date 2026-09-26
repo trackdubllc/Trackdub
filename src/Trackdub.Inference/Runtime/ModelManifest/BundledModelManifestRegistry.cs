@@ -269,7 +269,9 @@ public sealed class BundledModelManifestRegistry
             OliveOptimizable: model.OliveOptimizable,
             OliveOptimizationProfile: model.Optimization?.Olive,
             ProviderId: model.ProviderId,
-            ExpectedRuntime: model.ExpectedRuntime);
+            ExpectedRuntime: model.ExpectedRuntime,
+            Deprecated: model.Deprecated,
+            DeprecatedReason: model.DeprecatedReason);
     }
 
     private static BundledModelManifestEntry MergeEntry(
@@ -285,7 +287,8 @@ public sealed class BundledModelManifestRegistry
             existing.RedistributionAllowed != incoming.RedistributionAllowed ||
             existing.RequiresAttribution != incoming.RequiresAttribution ||
             existing.RequiresUserConsent != incoming.RequiresUserConsent ||
-            existing.VoiceCloning != incoming.VoiceCloning)
+            existing.VoiceCloning != incoming.VoiceCloning ||
+            existing.Deprecated != incoming.Deprecated)
         {
             throw new InvalidOperationException(
                 $"Generated manifest '{incomingManifestPath}' cannot merge model '{incoming.ModelId}' because its governance metadata does not match the base entry.");
@@ -671,7 +674,9 @@ public sealed record BundledModelManifestEntry(
     bool OliveOptimizable = false,
     ModelOliveOptimizationProfile? OliveOptimizationProfile = null,
     string? ProviderId = null,
-    string? ExpectedRuntime = null)
+    string? ExpectedRuntime = null,
+    bool Deprecated = false,
+    string? DeprecatedReason = null)
 {
     public bool CommercialSafeMode => CommercialUseVerified;
 }

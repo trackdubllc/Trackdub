@@ -94,6 +94,8 @@ public static class ModelManifestLoader
         string? displayName = ReadOptionalNullableString(element, "display_name", path, sourceName);
         string? providerId = ReadOptionalNullableString(element, "provider_id", path, sourceName);
         string? expectedRuntime = ReadOptionalNullableString(element, "expected_runtime", path, sourceName);
+        bool deprecated = ReadOptionalBoolean(element, "deprecated", path, sourceName, defaultValue: false);
+        string? deprecatedReason = ReadOptionalNullableString(element, "deprecated_reason", path, sourceName);
         IReadOnlyList<string> aliases = ReadAliases(element, path, sourceName);
         IReadOnlyList<ModelVariantManifest> variants = ReadVariants(element, path, sourceName);
         ValidateVariants(variants, path, sourceName);
@@ -178,7 +180,9 @@ public static class ModelManifestLoader
             downloadFileHashes,
             estimatedVramMb,
             minVramMb,
-            supportsPartialOffload);
+            supportsPartialOffload,
+            deprecated,
+            deprecatedReason);
     }
 
     private static ModelLane ReadModelLane(
