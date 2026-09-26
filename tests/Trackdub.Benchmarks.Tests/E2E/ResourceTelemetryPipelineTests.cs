@@ -648,8 +648,9 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             int index = CaptureCount++;
             int pair = index / 2;
             bool end = index % 2 == 1;
-            double endCpuTimeMilliseconds = pair == outlierPair ? 300d : 200d;
-            double cpuTimeMilliseconds = pair * 1000d + (end ? endCpuTimeMilliseconds : 0d);
+            double baseCpuTimeMilliseconds = pair * 1000d;
+            double endCpuTimeMilliseconds = end ? (pair == outlierPair ? 300d : 200d) : 0d;
+            double cpuTimeMilliseconds = baseCpuTimeMilliseconds + endCpuTimeMilliseconds;
             return new()
             {
                 CpuTimeMilliseconds = cpuTimeMilliseconds,
