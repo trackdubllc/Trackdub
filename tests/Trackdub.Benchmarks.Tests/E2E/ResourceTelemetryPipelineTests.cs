@@ -650,7 +650,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             bool end = index % 2 == 1;
             return new()
             {
-                CpuTimeMilliseconds = pair * 1000d + (end ? pair == outlierPair ? 300d : 200d : 0d),
+                CpuTimeMilliseconds = pair * 1000d + (end ? (pair == outlierPair ? 300d : 200d) : 0d),
                 MonotonicMilliseconds = index * 100d,
                 ProcessorCount = 4,
                 WorkingSetBytes = 1000,
