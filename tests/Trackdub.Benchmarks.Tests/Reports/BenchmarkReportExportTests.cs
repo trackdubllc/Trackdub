@@ -17,7 +17,10 @@ public sealed class BenchmarkReportExportTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_tempDir, recursive: true); } catch { }
+        try { Directory.Delete(_tempDir, recursive: true); }
+        catch (DirectoryNotFoundException) { }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────
