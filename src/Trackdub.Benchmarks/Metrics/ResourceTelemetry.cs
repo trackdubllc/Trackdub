@@ -29,7 +29,12 @@ public sealed record ResourceTelemetrySnapshot(
 /// Differential resource consumption between two point-in-time snapshots.
 /// </summary>
 /// <param name="WorkingSetDeltaBytes">Change in physical memory allocated (may be negative if memory was trimmed).</param>
-/// <param name="PeakWorkingSetBytes">Highest peak physical memory observed across both snapshots (bytes).</param>
+/// <param name="PeakWorkingSetBytes">
+/// The higher of the two snapshots' working set (bytes) — an endpoint-sampled maximum, not the
+/// true peak reached at any point during the interval. A spike that both rose and receded
+/// strictly between the two snapshots is not captured; capturing that would require polling
+/// <c>Process.WorkingSet64</c> throughout the interval rather than sampling only its endpoints.
+/// </param>
 /// <param name="ManagedAllocatedBytes">Net managed memory allocated between start and end snapshots (bytes).</param>
 /// <param name="Gen0Collections">Net Generation 0 garbage collections between start and end snapshots.</param>
 /// <param name="Gen1Collections">Net Generation 1 garbage collections between start and end snapshots.</param>
