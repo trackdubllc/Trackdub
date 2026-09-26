@@ -70,13 +70,17 @@ class _TextExtractor(HTMLParser):
     role="main" (Just-the-Docs), else the whole page. Chrome inside the root (nav, header,
     footer, sidebars, Sphinx "#" header links) is always dropped. Non-chrome links inside the
     content are preserved as Markdown ``[text](url)`` so a reader can follow them (fragment-only
-    anchors are left as plain text).
+    anchors are left as plain text). Labels and destinations are escaped and destinations are
+    wrapped in angle brackets so they survive ingestion verbatim. With ``emit_links=False``
+    link text is emitted as plain text instead (used to size candidate roots without letting
+    rendered URLs inflate the comparison).
     """
 
-    def __init__(self, root: str | None = None, base_url: str | None = None) -> None:
+    def __init__(self, root: str | None = None, base_url: str | None = None, emit_links: bool = True) -> None:
         super().__init__()
         self._root = root
         self._base_url = base_url
+        self._emit_links = emit_links
         self._root_tag: str | None = None  # actual tag of the matched root (role="main" can sit on a div)
         self._root_depth = 0  # open elements named _root_tag, counting the root itself
         self._root_done = False
@@ -132,7 +136,12 @@ class _TextExtractor(HTMLParser):
             href, parts = self._link_stack.pop()
             inner = " ".join("".join(parts).split())
             if inner:
-                self._parts.append(f"[{inner}]({href}) ")
+                if self._emit_links:
+                    label = inner.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+                    destination = href.replace("\\", "\\\\").replace("<", "\\<").replace(">", "\\>")
+                    self._parts.append(f"[{label}](<{destination}>) ")
+                else:
+                    self._parts.append(inner + " ")
             return
         if self._root_depth and tag == self._root_tag:
             self._root_depth -= 1
@@ -141,26 +150,40 @@ class _TextExtractor(HTMLParser):
                 self._root_done = True
                 return
         if self._capturing() and tag in _BLOCK_TAGS:
-            self._parts.append("\n")
+            if self._link_stack:
+                self._link_stack[-1][1].append("\n")
+            else:
+                self._parts.append("\n")
 
     def handle_data(self, data: str) -> None:
         if not self._capturing():
             return
-        text = data.strip()
-        if text:
-            if self._link_stack:
-                self._link_stack[-1][1].append(text)
-            else:
+        if self._link_stack:
+            # Keep raw data (including whitespace) so handle_endtag can normalize the complete
+            # link label without fusing boundaries between nested text nodes.
+            self._link_stack[-1][1].append(data)
+        else:
+            text = data.strip()
+            if text:
                 self._parts.append(text + " ")
 
     def text(self) -> str:
+        # html.parser does not synthesize a missing </a>, and a closing </a> that arrives while a
+        # chrome element opened inside the anchor is still open is swallowed by the skip branch;
+        # both orphan the _link_stack entry and would silently drop everything after it. Flush any
+        # stragglers as plain text instead of losing the content.
+        while self._link_stack:
+            _, parts = self._link_stack.pop(0)
+            inner = " ".join("".join(parts).split())
+            if inner:
+                self._parts.append(inner + " ")
         raw = "".join(self._parts)
         lines = [" ".join(line.split()) for line in raw.splitlines()]
         return "\n".join(line for line in lines if line).strip()
 
 
-def _extract(html: str, root: str | None, base_url: str | None = None) -> str:
-    extractor = _TextExtractor(root, base_url)
+def _extract(html: str, root: str | None, base_url: str | None = None, emit_links: bool = True) -> str:
+    extractor = _TextExtractor(root, base_url, emit_links)
     extractor.feed(html)
     return extractor.text()
 
@@ -173,13 +196,18 @@ _ARTICLE_MIN_SHARE_OF_MAIN = 0.25
 def html_to_text(html: str, base_url: str | None = None) -> str:
     probe = _RootProbe()
     probe.feed(html)
-    text = ""
+    # Choose the content root by visible-text size, not rendered size: markdown destinations would
+    # inflate a small <article> card past the share threshold and discard the real page body. Render
+    # links only for the selected root.
+    root: str | None = None
     if probe.has_article:
-        text = _extract(html, "article", base_url)
-    if probe.has_main:
-        main_text = _extract(html, "main", base_url)
-        if len(text) < len(main_text) * _ARTICLE_MIN_SHARE_OF_MAIN:
-            text = main_text
+        if probe.has_main and len(_extract(html, "article", emit_links=False)) < len(_extract(html, "main", emit_links=False)) * _ARTICLE_MIN_SHARE_OF_MAIN:
+            root = "main"
+        else:
+            root = "article"
+    elif probe.has_main:
+        root = "main"
+    text = _extract(html, root, base_url) if root is not None else ""
     if not text:
         # No content region, or it was empty (client-rendered page); use the whole document.
         text = _extract(html, None, base_url)
