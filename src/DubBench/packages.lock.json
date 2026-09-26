@@ -46,16 +46,6 @@
           "Microsoft.IO.RecyclableMemoryStream": "3.0.1"
         }
       },
-      "AvaloniaUI.DiagnosticsSupport": {
-        "type": "Direct",
-        "requested": "[2.2.1, )",
-        "resolved": "2.2.1",
-        "contentHash": "PXviRj+8t6IT7JdnVhs1EET+VgGB/K1Ju3yL/Q9sXR2YD9NzkIYybyfJG3DPXcTYXpEJZJvxGiCTjH1N8AkLhQ==",
-        "dependencies": {
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.0",
-          "Microsoft.IO.RecyclableMemoryStream": "3.0.1"
-        }
-      },
       "CommunityToolkit.Mvvm": {
         "type": "Direct",
         "requested": "[8.4.2, )",
@@ -64,9 +54,9 @@
       },
       "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
         "type": "Direct",
-        "requested": "[4.14.0, )",
-        "resolved": "4.14.0",
-        "contentHash": "gSWJlDWwmDhtbrEJGiHqvEjz9KthIiFD0qYB8zZ6a7z+xpMSPEtM9yTYELSa58iFWYlzSRqP9FXO6KoT3+ZMtg=="
+        "requested": "[5.6.0, )",
+        "resolved": "5.6.0",
+        "contentHash": "Kcobt3pnOdO0A+6CKiMHZdTEluJpsfxiV20axtZdmfBQnDmiWTKPJADlgAfdTuKNAnVarrkJa0UEGwuOo91muw=="
       },
       "Avalonia.Angle.Windows.Natives": {
         "type": "Transitive",
@@ -502,7 +492,7 @@
       "trackdub.infrastructure": {
         "type": "Project",
         "dependencies": {
-          "Dapper": "[2.1.86, )",
+          "Dapper": "[2.1.89, )",
           "Lucene.Net.Analysis.Common": "[4.8.0-beta00018, )",
           "Lucene.Net.Analysis.Kuromoji": "[4.8.0-beta00018, )",
           "Lucene.Net.Analysis.SmartCn": "[4.8.0-beta00018, )",
@@ -554,9 +544,9 @@
       },
       "Dapper": {
         "type": "CentralTransitive",
-        "requested": "[2.1.86, )",
-        "resolved": "2.1.86",
-        "contentHash": "v5wQfl9GfHhfTeFhorWTefa8c1Ev4HO8VF8i8wbSdZkq+P/az+1DTcqpkz8s9lMGyFf9kvoeJ+b2ABShW4cuIA=="
+        "requested": "[2.1.89, )",
+        "resolved": "2.1.89",
+        "contentHash": "1VjFE664wnxvuhlgP8kS4PeFFF4jqD3VkbIHW6Zlc52zuibgcz5ICnIHcQXlTp6pURpPNGLV0ZpNe5x9KePJnA=="
       },
       "LibVLCSharp": {
         "type": "CentralTransitive",
@@ -688,7 +678,7 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Managed": {
         "type": "CentralTransitive",
-        "requested": "[0.16.0, )",
+        "requested": "[0.17.0, )",
         "resolved": "0.16.0",
         "contentHash": "XOfY99JN/biTsXiQDe4AVHYDVrc0+sGhPcYBofjyLLLQnDzU8xOhnbesSY9dKzLD9xeYvTKzaVod5LDlhPLnVg==",
         "dependencies": {

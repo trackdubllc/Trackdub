@@ -140,6 +140,6 @@
          such reset behavior and is the drop-in replacement for every case in this codebase.
          Wired repo-wide via Directory.Build.props + BannedSymbols.txt so the build fails
          locally instead of catching this in CI review comments one call at a time. -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="4.14.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
   </ItemGroup>
 </Project>
