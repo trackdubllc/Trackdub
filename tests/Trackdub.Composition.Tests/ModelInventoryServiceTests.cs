@@ -9,7 +9,7 @@ namespace Trackdub.Composition.Tests;
 
 public sealed class ModelInventoryServiceTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(
+    private readonly string tempRoot = Path.Join(
         Path.GetTempPath(),
         "Trackdub.ModelInventoryService.Tests",
         Guid.NewGuid().ToString("N"));
@@ -485,8 +485,8 @@ public sealed class ModelInventoryServiceTests : IDisposable
             benchmarkEntry: "nested/model.onnx");
         LocalModelCacheRecordStore store = await InstallModelAsync(storagePaths, "nested/model.onnx");
         LocalModelCacheRecord cacheRecord = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
-        string variantRoot = Path.Combine(cacheRecord.RootPath, "optimized", "olive-cpu-fp32");
-        string variantModelPath = Path.Combine(variantRoot, "nested", "model.onnx");
+        string variantRoot = Path.Join(cacheRecord.RootPath, "optimized", "olive-cpu-fp32");
+        string variantModelPath = Path.Join(variantRoot, "nested", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(variantModelPath)!);
         await File.WriteAllTextAsync(variantModelPath, "optimized", TestContext.Current.CancellationToken);
         DateTimeOffset createdAt = new(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
@@ -550,9 +550,9 @@ public sealed class ModelInventoryServiceTests : IDisposable
         string extraModelJson = "")
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
+        string manifestPath = Path.Join(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-        Directory.CreateDirectory(Path.Combine(storagePaths.ModelCacheDirectory, "example-model"));
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model"));
         File.WriteAllText(
             manifestPath,
             $$"""
@@ -592,11 +592,11 @@ public sealed class ModelInventoryServiceTests : IDisposable
         TrackdubStoragePaths storagePaths,
         params string[] relativeFiles)
     {
-        string rootPath = Path.Combine(storagePaths.ModelCacheDirectory, "example-model");
+        string rootPath = Path.Join(storagePaths.ModelCacheDirectory, "example-model");
         Directory.CreateDirectory(rootPath);
         foreach (string relativeFile in relativeFiles)
         {
-            string path = Path.Combine(rootPath, relativeFile.Replace('/', Path.DirectorySeparatorChar));
+            string path = Path.Join(rootPath, relativeFile.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllTextAsync(path, "onnx", TestContext.Current.CancellationToken);
         }
