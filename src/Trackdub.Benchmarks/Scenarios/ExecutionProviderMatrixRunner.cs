@@ -246,7 +246,9 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
     {
         foreach (IDisposable disposable in _disposables)
         {
-            try { disposable.Dispose(); } catch (Exception) { }
+            try { disposable.Dispose(); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
         }
         _disposables.Clear();
     }

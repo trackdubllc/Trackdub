@@ -21,7 +21,9 @@ public sealed class MockPipelineExecutionTests : IDisposable
         _harness.Dispose();
         if (Directory.Exists(_tempOutputDir))
         {
-            try { Directory.Delete(_tempOutputDir, recursive: true); } catch { }
+            try { Directory.Delete(_tempOutputDir, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
     }
 

@@ -63,9 +63,15 @@ public static class ResourceTelemetry
         using var process = Process.GetCurrentProcess();
         process.Refresh();
 
+        // On some platforms (e.g. macOS) the OS does not report a peak working set distinct
+        // from the current one, so PeakWorkingSet64 can come back as 0 or below WorkingSet64.
+        // Clamp it to WorkingSet64 so it always reflects at least the current usage.
+        long workingSet = process.WorkingSet64;
+        long peakWorkingSet = Math.Max(process.PeakWorkingSet64, workingSet);
+
         return new ResourceTelemetrySnapshot(
-            WorkingSetBytes: process.WorkingSet64,
-            PeakWorkingSetBytes: process.PeakWorkingSet64,
+            WorkingSetBytes: workingSet,
+            PeakWorkingSetBytes: peakWorkingSet,
             ManagedAllocatedBytes: GC.GetTotalAllocatedBytes(precise: true),
             Gen0Collections: GC.CollectionCount(0),
             Gen1Collections: GC.CollectionCount(1),

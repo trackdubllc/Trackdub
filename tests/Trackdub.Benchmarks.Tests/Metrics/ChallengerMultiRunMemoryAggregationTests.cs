@@ -229,9 +229,8 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
         string[] requiredStageMetrics = ["allocatedBytes", "peakWorkingSet", "gen0", "gen1", "gen2"];
         foreach (string stage in canonicalStages)
         {
-            foreach (string metric in requiredStageMetrics)
+            foreach (string key in requiredStageMetrics.Select(metric => $"stage:{stage}:{metric}"))
             {
-                string key = $"stage:{stage}:{metric}";
                 Assert.True(report.MemoryBytes.ContainsKey(key), $"Missing required stage key: {key}");
                 Assert.NotNull(report.MemoryBytes[key]);
                 Assert.True(report.MemoryBytes[key] >= 0, $"Stage metric '{key}' must be non-negative.");

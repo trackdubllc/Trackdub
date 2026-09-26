@@ -932,17 +932,11 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 x.StageName.Equals(outcome.StageName, StringComparison.OrdinalIgnoreCase) &&
                 x.StartedAtUtc >= result.StartTime.AddSeconds(-1));
 
-            double? duration = null;
-            if (stageSamples is not null &&
+            double? duration = stageSamples is not null &&
                 stageSamples.TryGetValue(outcome.StageName, out var samples) &&
-                samples.Count > 0)
-            {
-                duration = PercentileCalculator.Calculate(samples).P50Milliseconds;
-            }
-            else
-            {
-                duration = stageClock?.GetMilliseconds(outcome.StageName);
-            }
+                samples.Count > 0
+                    ? PercentileCalculator.Calculate(samples).P50Milliseconds
+                    : stageClock?.GetMilliseconds(outcome.StageName);
 
             return new BenchmarkEvidenceStage
             {

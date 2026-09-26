@@ -95,9 +95,8 @@ public sealed class BenchmarkMemoryEvidenceReportTests
 
         foreach (string stage in canonicalStages)
         {
-            foreach (string metric in stageMetrics)
+            foreach (string key in stageMetrics.Select(metric => $"stage:{stage}:{metric}"))
             {
-                string key = $"stage:{stage}:{metric}";
                 Assert.True(report.MemoryBytes.ContainsKey(key), $"Report MemoryBytes missing stage key '{key}'.");
                 Assert.NotNull(report.MemoryBytes[key]);
                 Assert.True(report.MemoryBytes[key] >= 0, $"Stage metric '{key}' should be non-negative.");

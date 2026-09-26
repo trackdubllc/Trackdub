@@ -275,7 +275,8 @@ public sealed class ExecutionProviderMatrixChallengerStressTests
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException or
+                AccessViolationException or AppDomainUnloadedException or BadImageFormatException))
             {
                 exceptions.Add(ex);
             }

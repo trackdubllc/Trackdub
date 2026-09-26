@@ -196,9 +196,8 @@ public sealed class ControlledStageTimingTests
         string[] requiredMetrics = ["min", "max", "mean", "p50", "p90", "p99", "throughput", "sampleCount"];
         foreach (string stage in stageSamples.Keys)
         {
-            foreach (string metric in requiredMetrics)
+            foreach (string key in requiredMetrics.Select(metric => $"stage:{stage}:{metric}"))
             {
-                string key = $"stage:{stage}:{metric}";
                 Assert.True(timings.ContainsKey(key), $"Timings dictionary missing expected key '{key}'.");
                 Assert.NotNull(timings[key]);
             }

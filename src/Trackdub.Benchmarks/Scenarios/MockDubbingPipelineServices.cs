@@ -351,12 +351,10 @@ public sealed class MockDubbingPipelineService(
                         (_, existing) =>
                         {
                             var combined = new List<string>(existing);
-                            foreach (string s in canonicalStagesRun)
+                            foreach (string s in canonicalStagesRun.Where(
+                                s => !combined.Contains(s, StringComparer.OrdinalIgnoreCase)))
                             {
-                                if (!combined.Contains(s, StringComparer.OrdinalIgnoreCase))
-                                {
-                                    combined.Add(s);
-                                }
+                                combined.Add(s);
                             }
                             return combined;
                         });
@@ -440,12 +438,10 @@ public sealed class MockDubbingPipelineService(
                 (_, existing) =>
                 {
                     var combined = new List<string>(existing);
-                    foreach (string s in canonicalStagesRun)
+                    foreach (string s in canonicalStagesRun.Where(
+                        s => !combined.Contains(s, StringComparer.OrdinalIgnoreCase)))
                     {
-                        if (!combined.Contains(s, StringComparer.OrdinalIgnoreCase))
-                        {
-                            combined.Add(s);
-                        }
+                        combined.Add(s);
                     }
                     return combined;
                 });
