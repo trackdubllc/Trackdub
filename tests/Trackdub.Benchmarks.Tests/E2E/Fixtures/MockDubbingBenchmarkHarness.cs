@@ -145,7 +145,11 @@ public sealed class MockDubbingBenchmarkHarness : IDisposable
                     File.Delete(file);
                 }
             }
-            catch
+            catch (IOException)
+            {
+                // Best effort cleanup in tests
+            }
+            catch (UnauthorizedAccessException)
             {
                 // Best effort cleanup in tests
             }

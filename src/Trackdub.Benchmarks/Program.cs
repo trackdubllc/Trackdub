@@ -269,7 +269,7 @@ public static class Program
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException)
         {
             error.WriteLine(ex.Message);
             return 1;
@@ -429,7 +429,7 @@ public static class Program
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException)
         {
             error.WriteLine(ex.Message);
             return 1;

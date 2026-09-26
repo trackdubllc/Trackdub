@@ -238,7 +238,7 @@ public sealed class ChallengerResourceTelemetryStressTests
         var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
         var snapshots = new ResourceTelemetrySnapshot[totalInvocations];
 
-        var barrier = new Barrier(threadCount);
+        using var barrier = new Barrier(threadCount);
 
         Parallel.For(0, threadCount, new ParallelOptions { MaxDegreeOfParallelism = threadCount }, threadIdx =>
         {
@@ -251,7 +251,11 @@ public sealed class ChallengerResourceTelemetryStressTests
                     snapshots[index] = ResourceTelemetry.CaptureProcess();
                 }
             }
-            catch (Exception ex)
+            catch (OperationCanceledException ex)
+            {
+                exceptions.Add(ex);
+            }
+            catch (InvalidOperationException ex)
             {
                 exceptions.Add(ex);
             }
@@ -271,8 +275,7 @@ public sealed class ChallengerResourceTelemetryStressTests
             Assert.True(s.Gen1Collections >= s.Gen2Collections, $"Gen1 >= Gen2 at index {i}");
         }
 
-        // Force GC and wait to settle before handle count check
-        GC.Collect();
+        // Wait for pending finalizers to settle before handle count check
         GC.WaitForPendingFinalizers();
 
         using var procAfter = Process.GetCurrentProcess();
@@ -350,7 +353,7 @@ public sealed class ChallengerResourceTelemetryStressTests
                         EventKind: PipelineProgressEventKind.Completed));
                 }
             }
-            catch (Exception ex)
+            catch (OperationCanceledException ex) when (cts.Token.IsCancellationRequested)
             {
                 writeExceptions.Add(ex);
             }

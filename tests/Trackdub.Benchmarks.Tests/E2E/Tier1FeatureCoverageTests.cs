@@ -306,7 +306,7 @@ public sealed class Tier1FeatureCoverageTests
         Assert.Equal("cpu", report.BaselineProvider);
         Assert.Equal(timestamp, report.Timestamp);
         Assert.Equal(3, report.Comparisons.Count);
-        Assert.Contains(report.Comparisons, c => c.Provider == "cpu" && c.SpeedupFactor == 1.0);
+        Assert.Contains(report.Comparisons, c => c.Provider == "cpu" && Math.Abs(c.SpeedupFactor - 1.0) < 1e-9);
     }
 
     // =========================================================================

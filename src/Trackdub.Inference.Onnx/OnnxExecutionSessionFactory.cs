@@ -853,15 +853,16 @@ internal static class OnnxExecutionSessionFactory
         ArgumentNullException.ThrowIfNull(engineFamily);
         pool ??= InferenceSessionPool.Shared;
 
-        provider = DowngradeTrtRtxForUnsupportedGraphs(
+        string requestedProvider = FormatProviderLabel(provider);
+        ExecutionProviderKind selectedProviderKind = DowngradeTrtRtxForUnsupportedGraphs(
             provider,
             [encoderModelPath, decoderModelPath],
             out string? graphFallbackReason);
 
-        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
+        BootstrapContext bootstrap = await BootstrapForProviderAsync(selectedProviderKind, cancellationToken)
             .ConfigureAwait(false);
         DualOptionsSelections selections = CreateDualOptionsSelections(
-            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+            selectedProviderKind, bootstrap.Bootstrap, bootstrap.DevicePolicy,
             additionalTrtEncoderOptions, additionalTrtDecoderOptions);
         using SessionOptions encoderOptions = selections.Encoder.Options;
         using SessionOptions decoderOptions = selections.Decoder.Options;
@@ -871,14 +872,14 @@ internal static class OnnxExecutionSessionFactory
             modelId, variant);
 
         DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
-            provider, bootstrap, selections,
+            selectedProviderKind, bootstrap, selections,
             encoderModelPath, decoderModelPath,
             encoderKey, decoderKey, pool, cancellationToken, sessionFactory)
             .ConfigureAwait(false);
 
         return new WhisperSessionLease(
             pair.EncoderLease.Session, pair.DecoderLease.Session,
-            pair.RequestedProviderLabel, pair.SelectedProviderLabel,
+            requestedProvider, pair.SelectedProviderLabel,
             MergeFallbackReasons(graphFallbackReason, pair.BootstrapDetail))
         {
             EncoderPoolLease = pair.EncoderLease,
