@@ -285,4 +285,24 @@ public sealed class TrackdubDubbingEngineStageRunOutcomeTests
 
         Assert.False(TrackdubDubbingEngine.ShouldRunPostLipSynthesisExport(stages, outcomes));
     }
+
+    [Fact]
+    public void ShouldRunPostLipSynthesisExport_WhenStandaloneRepairSucceeds_ReturnsTrue()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var outcomes = new List<StageOutcome>
+        {
+            new()
+            {
+                StageName = StageNames.LipSynthesis,
+                Status = StageStatus.PartiallySucceeded,
+                StartTime = now,
+                EndTime = now,
+                ArtifactPaths = [],
+            },
+        };
+
+        Assert.True(TrackdubDubbingEngine.ShouldRunPostLipSynthesisExport(
+            [StageNames.LipSynthesis], outcomes));
+    }
 }

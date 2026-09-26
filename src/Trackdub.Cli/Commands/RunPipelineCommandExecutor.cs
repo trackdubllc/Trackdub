@@ -19,6 +19,8 @@ internal sealed class PipelineRunState
     public string? ExportFormat;
     public string? FromStage;
     public string[] OnlyStages = [];
+    public bool LipSync;
+    public bool RepairLips;
     public bool ForceRerun;
     public bool? EnableAsrTextRefinement;
     public bool VoiceClone;
@@ -90,6 +92,8 @@ internal static class RunPipelineCommandExecutor
         state.ExportFormat = parseResult.GetValue(options.ExportFormat);
         state.FromStage = parseResult.GetValue(options.FromStage);
         state.OnlyStages = parseResult.GetValue(options.Only) ?? [];
+        state.LipSync = parseResult.GetValue(options.LipSync);
+        state.RepairLips = parseResult.GetValue(options.RepairLips);
         state.ForceRerun = parseResult.GetValue(options.ForceRerun);
         state.EnableAsrTextRefinement = parseResult.GetValue(options.EnableAsrTextRefinement);
         state.VoiceClone = parseResult.GetValue(options.VoiceClone);
@@ -243,7 +247,7 @@ internal static class RunPipelineCommandExecutor
             return discoveryExitCode;
         }
 
-        IReadOnlyList<string>? stageFilter = CliStageFilter.Build(state.FromStage, state.OnlyStages);
+        IReadOnlyList<string>? stageFilter = CliStageFilter.Build(state.FromStage, state.OnlyStages, state.LipSync, state.RepairLips);
         if (stageFilter is { Count: 0 })
         {
             return Program.ExitArgumentError;
@@ -315,7 +319,7 @@ internal static class RunPipelineCommandExecutor
             return Program.ExitArgumentError;
         }
 
-        IReadOnlyList<string>? stageFilter = CliStageFilter.Build(state.FromStage, state.OnlyStages);
+        IReadOnlyList<string>? stageFilter = CliStageFilter.Build(state.FromStage, state.OnlyStages, state.LipSync, state.RepairLips);
         if (stageFilter is { Count: 0 })
         {
             return Program.ExitArgumentError;
@@ -404,7 +408,7 @@ internal static class RunPipelineCommandExecutor
 
     private static Task<bool> RequiresSourceMediaAsync(PipelineRunState state)
     {
-        IReadOnlyList<string>? filter = CliStageFilter.Build(state.FromStage, state.OnlyStages);
+        IReadOnlyList<string>? filter = CliStageFilter.Build(state.FromStage, state.OnlyStages, state.LipSync, state.RepairLips);
         bool requires = filter is null || filter.Any(TrackdubPipelineStages.RequiresSourceMedia);
         return Task.FromResult(requires);
     }

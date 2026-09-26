@@ -118,6 +118,10 @@ internal static class RunStageHandler
 
         StageOutcome? stageOutcome = result.StageOutcomes
             .FirstOrDefault(o => string.Equals(o.StageName, stageName, StringComparison.OrdinalIgnoreCase));
+        StageOutcome? postExport = string.Equals(stageName, StageNames.LipSynthesis, StringComparison.OrdinalIgnoreCase)
+            ? result.StageOutcomes.LastOrDefault(o =>
+                string.Equals(o.StageName, StageNames.Export, StringComparison.OrdinalIgnoreCase))
+            : null;
 
         if (result.OverallStatus == DubbingRunStatus.PreFlightFailed)
         {
@@ -153,12 +157,24 @@ internal static class RunStageHandler
             return Program.ExitPipelineFailure;
         }
 
+        if (postExport?.Status == StageStatus.Failed)
+        {
+            CliErrorReporter.ReportStageFailure(
+                ErrorCode.StageFailed,
+                StageNames.Export,
+                postExport.ReasonCode ?? "Post-repair export failed",
+                postExport.ArtifactPaths);
+            return Program.ExitPipelineFailure;
+        }
+
         var payload = new RunStageOutput
         {
             Stage = stageName,
             Status = stageOutcome.Status.ToString(),
             ArtifactPaths = stageOutcome.ArtifactPaths.Count > 0 ? stageOutcome.ArtifactPaths : null,
             ElapsedSeconds = (stageOutcome.EndTime - stageOutcome.StartTime).TotalSeconds,
+            ExportStatus = postExport?.Status.ToString(),
+            ExportArtifactPaths = postExport?.ArtifactPaths.Count > 0 ? postExport.ArtifactPaths : null,
         };
 
         string json = JsonSerializer.Serialize(payload, s_outputJsonOptions);
@@ -185,5 +201,7 @@ internal static class RunStageHandler
         public string? Status { get; init; }
         public IReadOnlyList<string>? ArtifactPaths { get; init; }
         public double ElapsedSeconds { get; init; }
+        public string? ExportStatus { get; init; }
+        public IReadOnlyList<string>? ExportArtifactPaths { get; init; }
     }
 }

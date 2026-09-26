@@ -12,6 +12,8 @@ internal sealed record PipelineCommandOptions(
     Option<string?> ExportFormat,
     Option<string?> FromStage,
     Option<string[]> Only,
+    Option<bool> LipSync,
+    Option<bool> RepairLips,
     Option<bool> ForceRerun,
     Option<bool?> EnableAsrTextRefinement,
     Option<bool> VoiceClone,
@@ -45,6 +47,14 @@ internal static class RunPipelineCommandOptions
         var exportFormat = CreateExportFormatOption();
         var fromStage = CreateFromStageOption(acceptedStageNames);
         var only = CreateOnlyOption();
+        var lipSync = new Option<bool>("--lip-sync")
+        {
+            Description = "Align dubbed speech to source mouth cadence (stage: lip-sync)",
+        };
+        var repairLips = new Option<bool>("--repair-lips")
+        {
+            Description = "Repair video mouth motion after mixing audio (stage: lip-synthesis)",
+        };
         var forceRerun = CreateForceRerunOption();
         var refinement = CreateRefinementOption();
         var voiceClone = CreateVoiceCloneOption();
@@ -62,7 +72,7 @@ internal static class RunPipelineCommandOptions
 
         return new PipelineCommandOptions(
             media, targetLanguage, sourceLanguage, output, model, exportFormat,
-            fromStage, only, forceRerun, refinement, voiceClone, timbre, noTimbre,
+            fromStage, only, lipSync, repairLips, forceRerun, refinement, voiceClone, timbre, noTimbre,
             restorePan, matchLoudness, voice, subtitleFormat, subtitleSource,
             burnIn, videoEncoder, preset, batch, inputGlob, recursive, continueOnError,
             ttsRubberband, noTtsRubberband, ttsRubberbandThreshold);
@@ -78,6 +88,8 @@ internal static class RunPipelineCommandOptions
         command.Add(options.ExportFormat);
         command.Add(options.FromStage);
         command.Add(options.Only);
+        command.Add(options.LipSync);
+        command.Add(options.RepairLips);
         command.Add(options.ForceRerun);
         command.Add(options.EnableAsrTextRefinement);
         command.Add(options.VoiceClone);

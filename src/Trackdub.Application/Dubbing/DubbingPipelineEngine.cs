@@ -431,8 +431,8 @@ public sealed class DubbingPipelineEngine(
     }
 
     /// <summary>
-    /// Re-runs Export after LipSynthesis when both were requested and lip synthesis
-    /// succeeded, replacing the earlier export outcome.
+    /// Exports the repaired video after successful lip synthesis, replacing any
+    /// earlier mix-producing Export outcome.
     /// </summary>
     private async Task RunPostLipSynthesisExportIfNeededAsync(
         IDubbingSession session,
@@ -2540,9 +2540,7 @@ public sealed class DubbingPipelineEngine(
         IReadOnlyList<StageOutcome> outcomes)
     {
         if (!stagesToRun.Any(static stage =>
-                string.Equals(stage, StageNames.LipSynthesis, StringComparison.OrdinalIgnoreCase))
-            || !stagesToRun.Any(static stage =>
-                string.Equals(stage, StageNames.Export, StringComparison.OrdinalIgnoreCase)))
+                string.Equals(stage, StageNames.LipSynthesis, StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }
