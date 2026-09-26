@@ -115,14 +115,14 @@ public sealed class ChallengerResourceTelemetryStressTests
 
     [Theory]
     [InlineData(64L * 1024 * 1024 * 1024, 2L * 1024 * 1024 * 1024, -62L * 1024 * 1024 * 1024)] // 64 GB -> 2 GB = -62 GB
-    [InlineData(50L * 1024 * 1024 * 1024, 100L * 1024 * 1024, -(50L * 1024 * 1024 * 1024 - 100L * 1024 * 1024))] // 50 GB -> 100 MB
+    [InlineData(50L * 1024 * 1024 * 1024, 100L * 1024 * 1024, -((50L * 1024 * 1024 * 1024) - (100L * 1024 * 1024)))] // 50 GB -> 100 MB
     [InlineData(500_000_000L, 50_000_000L, -450_000_000L)] // 500 MB -> 50 MB
     public void CalculateDelta_NegativeWorkingSetDrops_CorrectlyCapturesNegativeDeltaAndPreservesPeak(
         long startWorkingSet,
         long endWorkingSet,
         long expectedDelta)
     {
-        long peak = startWorkingSet + 1024 * 1024;
+        long peak = startWorkingSet + (1024 * 1024);
         var start = new ResourceTelemetrySnapshot(
             WorkingSetBytes: startWorkingSet,
             PeakWorkingSetBytes: peak,
