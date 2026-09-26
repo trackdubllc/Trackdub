@@ -39,8 +39,8 @@ public sealed class ModelInventoryService(
         ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
 
         BundledModelManifestEntry? entry = manifestRegistry.Entries
-            .FirstOrDefault(e => e.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase));
-        if (entry is null || entry.Deprecated)
+            .FirstOrDefault(e => e.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase) && !e.Deprecated);
+        if (entry is null)
             return null;
 
         IReadOnlyList<LocalModelCacheRecord> cacheRecords = await cacheStore.LoadAsync(cancellationToken).ConfigureAwait(false);

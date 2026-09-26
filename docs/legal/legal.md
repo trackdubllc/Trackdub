@@ -377,7 +377,7 @@ Entries mirror `src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.mani
 - version / revision: `8e1dd855e910df770732bb1be7d77666dd28ee45` (Trackdub ONNX mirror pin)
 - source URL: https://huggingface.co/ByteDance/LatentSync-1.6 (weights); ONNX mirror https://huggingface.co/tonythethompson/latentsync-1.6-onnx
 - license: openrail++ (upstream ByteDance weights; behavioral restrictions apply)
-- commercial use allowed? yes (`commercial_allowed: true`; `commercial_use_verified: true` — flipped 2026-06-25 on explicit sign-off; see `docs/internal/model-audits/latentsync-1-6-approved.md`)
+- commercial use allowed? yes, pending integration smoke (`commercial_allowed: true`; `commercial_use_verified: false` until real-model smoke passes — see `docs/internal/model-audits/latentsync-1-6-approved.md`)
 - redistribution allowed? yes (per manifest)
 - attribution required? yes
 - notes: M23 original-footage lip repair (`task`: `lip-synthesis`). ONNX bundle includes `unet.onnx`, `vae_encoder.onnx`, `vae_decoder.onnx`, and `whisper_encoder.onnx` with per-file sha256 pins in bundled manifest. Companion face models for quality gating: `InsightFace/scrfd-500m` (MIT) and `InsightFace/2d106det` (MIT). MuseTalk remains experimental and is not the shipping lane. Cite ByteDance LatentSync where attribution is shown.

@@ -300,8 +300,9 @@ public static class BenchmarkReportExporter
                 {
                     string observed = check.ObservedValue?.ToString("G", CultureInfo.InvariantCulture) ?? "unavailable";
                     string threshold = check.Threshold?.ToString("G", CultureInfo.InvariantCulture) ?? "not configured";
+                    string reason = EscapeMarkdownCell(check.Reason ?? sample.Reason);
                     sb.AppendLine(CultureInfo.InvariantCulture,
-                        $"| {sample.Stage} | {sample.Phase} | {sample.Iteration} | {sample.Attempt} | {check.Metric} | {observed} | {threshold} | {check.Status} | {check.Reason ?? sample.Reason} |");
+                        $"| {EscapeMarkdownCell(sample.Stage)} | {EscapeMarkdownCell(sample.Phase)} | {sample.Iteration} | {sample.Attempt} | {EscapeMarkdownCell(check.Metric)} | {observed} | {threshold} | {check.Status} | {reason} |");
                 }
             }
         }
@@ -321,7 +322,7 @@ public static class BenchmarkReportExporter
                 {
                     string threshold = metric.Threshold?.ToString("G", CultureInfo.InvariantCulture) ?? "not configured";
                     sb.AppendLine(CultureInfo.InvariantCulture,
-                        $"| {distribution.Stage} | {distribution.Phase} | {metric.Metric} | {metric.SampleCount} | {metric.UnavailableSampleCount} | {metric.FailingSampleCount} | {metric.Minimum} | {metric.P50} | {metric.P95} | {metric.P99} | {metric.Maximum} | {threshold} | {metric.Status} |");
+                        $"| {EscapeMarkdownCell(distribution.Stage)} | {EscapeMarkdownCell(distribution.Phase)} | {EscapeMarkdownCell(metric.Metric)} | {metric.SampleCount} | {metric.UnavailableSampleCount} | {metric.FailingSampleCount} | {metric.Minimum} | {metric.P50} | {metric.P95} | {metric.P99} | {metric.Maximum} | {threshold} | {metric.Status} |");
                 }
             }
         }
@@ -377,6 +378,13 @@ public static class BenchmarkReportExporter
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Escapes text for a pipe-delimited markdown table cell: a literal <c>|</c> would otherwise
+    /// split the row across columns, and an embedded newline would split it across rows.
+    /// </summary>
+    private static string EscapeMarkdownCell(string? value) =>
+        value is null ? string.Empty : value.Replace("|", "\\|").Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
 
     private static string FormatBytes(long bytes)
     {

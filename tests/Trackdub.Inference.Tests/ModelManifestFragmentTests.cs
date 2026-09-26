@@ -109,6 +109,103 @@ public sealed class ModelManifestFragmentTests
     }
 
     [Fact]
+    public void LoadWithFragments_PreservesBaseDeprecatedFlagWhenFragmentOmitsIt()
+    {
+        string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-manifest-deprecated", Guid.NewGuid().ToString("N"));
+        string manifestDirectory = Path.Combine(tempRoot, "src", "Trackdub.Inference", "Runtime", "ModelManifest");
+        string modelsRoot = Path.Combine(tempRoot, "models", "whisper-tiny-genai");
+        string fragmentDirectory = Path.Combine(tempRoot, "models", "manifest-fragments");
+        string manifestPath = Path.Combine(manifestDirectory, "bundled-models.manifest.json");
+        string fragmentPath = Path.Combine(fragmentDirectory, "trackdub-model-lab.manifest.json");
+
+        Directory.CreateDirectory(manifestDirectory);
+        Directory.CreateDirectory(modelsRoot);
+        Directory.CreateDirectory(fragmentDirectory);
+        File.WriteAllText(Path.Combine(modelsRoot, "encoder.onnx"), "base");
+
+        File.WriteAllText(
+            manifestPath,
+            """
+            {
+              "models": [
+                {
+                  "model_id": "openai/whisper-tiny",
+                  "task": "asr",
+                  "engine_family": "whisper-genai",
+                  "capabilities": [ "asr", "language-detection" ],
+                  "language_coverage": { "source_languages": [ "auto" ] },
+                  "tier": "fast",
+                  "license": "Apache-2.0",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_use_verified": true,
+                  "source_url": "https://huggingface.co/openai/whisper-tiny",
+                  "revision": "base",
+                  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "aliases": [ "whisper-tiny-genai" ],
+                  "root_path": "../../../../models/whisper-tiny-genai",
+                  "benchmark_entry": "encoder.onnx",
+                  "deprecated": true,
+                  "deprecated_reason": "Superseded by a newer checkpoint.",
+                  "variants": []
+                }
+              ]
+            }
+            """);
+        File.WriteAllText(
+            fragmentPath,
+            """
+            {
+              "models": [
+                {
+                  "model_id": "openai/whisper-tiny",
+                  "task": "asr",
+                  "engine_family": "whisper-genai",
+                  "capabilities": [ "asr", "language-detection" ],
+                  "language_coverage": { "source_languages": [ "auto" ] },
+                  "tier": "fast",
+                  "license": "Apache-2.0",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_use_verified": true,
+                  "source_url": "https://huggingface.co/openai/whisper-tiny",
+                  "revision": "model-lab",
+                  "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "aliases": [ "whisper-tiny-genai", "whisper-tiny-genai-model-lab" ],
+                  "root_path": "../whisper-tiny-genai",
+                  "benchmark_entry": "encoder.onnx",
+                  "variants": []
+                }
+              ]
+            }
+            """);
+
+        try
+        {
+            // The fragment omits "deprecated" entirely (it doesn't assert "not deprecated"), so the
+            // merge must not throw and must inherit the base entry's deprecated status.
+            BundledModelManifestRegistry registry = BundledModelManifestRegistry.LoadWithFragments(manifestPath, fragmentDirectory);
+
+            Assert.True(registry.TryResolve("whisper-tiny-genai", out BundledModelManifestResolution? resolution));
+            Assert.NotNull(resolution);
+            Assert.True(resolution!.Entry.Deprecated);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void Load_AllowsSameModelIdForDistinctModelRoots()
     {
         string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-manifest-roots", Guid.NewGuid().ToString("N"));

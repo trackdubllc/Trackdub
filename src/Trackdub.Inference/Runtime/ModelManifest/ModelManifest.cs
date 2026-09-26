@@ -37,7 +37,7 @@ public sealed record ModelManifest(
     int EstimatedVramMb = 0,
     int MinVramMb = 0,
     bool SupportsPartialOffload = false,
-    bool Deprecated = false,
+    bool? Deprecated = null,
     string? DeprecatedReason = null)
 {
     public bool CommercialSafeMode => CommercialUseVerified;

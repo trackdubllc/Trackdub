@@ -49,9 +49,7 @@ public static class ResourceTelemetryAggregator
                 .ToArray();
 
             double? threshold = checks.FirstOrDefault(check => check.Threshold.HasValue)?.Threshold;
-            int failing = threshold.HasValue
-                ? checks.Count(check => check.Status == ResourceTelemetryStatus.Failed)
-                : 0;
+            int failing = checks.Count(check => check.Status == ResourceTelemetryStatus.Failed);
 
             metrics.Add(new ResourceMetricStatistics
             {

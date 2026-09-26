@@ -64,6 +64,82 @@ public sealed class ModelInventoryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetByModelIdAsync_returns_active_entry_when_a_deprecated_entry_shares_the_model_id()
+    {
+        TrackdubStoragePaths storagePaths = new(tempRoot);
+        string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        Directory.CreateDirectory(Path.Combine(storagePaths.ModelCacheDirectory, "example-model-old"));
+        Directory.CreateDirectory(Path.Combine(storagePaths.ModelCacheDirectory, "example-model-new"));
+        File.WriteAllText(
+            manifestPath,
+            """
+            {
+              "models": [
+                {
+                  "model_id": "example/translation-model",
+                  "task": "translation",
+                  "engine_family": "opus-mt",
+                  "capabilities": [ "translation" ],
+                  "language_coverage": {
+                    "language_pairs": [ { "source": "en", "target": "es" } ]
+                  },
+                  "tier": "fast",
+                  "license": "MIT",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_use_verified": false,
+                  "source_url": "https://huggingface.co/example/translation-model",
+                  "revision": "main",
+                  "sha256": "",
+                  "aliases": [ "example-translation-old" ],
+                  "root_path": "../example-model-old",
+                  "benchmark_entry": "model.onnx",
+                  "deprecated": true,
+                  "deprecated_reason": "Superseded by a newer model at a different root.",
+                  "variants": []
+                },
+                {
+                  "model_id": "example/translation-model",
+                  "task": "translation",
+                  "engine_family": "opus-mt",
+                  "capabilities": [ "translation" ],
+                  "language_coverage": {
+                    "language_pairs": [ { "source": "en", "target": "es" } ]
+                  },
+                  "tier": "fast",
+                  "license": "MIT",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_use_verified": false,
+                  "source_url": "https://huggingface.co/example/translation-model",
+                  "revision": "main",
+                  "sha256": "",
+                  "aliases": [ "example-translation-new" ],
+                  "root_path": "../example-model-new",
+                  "benchmark_entry": "model.onnx",
+                  "variants": []
+                }
+              ]
+            }
+            """);
+        BundledModelManifestRegistry registry = BundledModelManifestRegistry.Load(manifestPath);
+        var service = new ModelInventoryService(registry, new LocalModelCacheRecordStore(storagePaths), storagePaths);
+
+        ModelInventoryEntry? entry = await service.GetByModelIdAsync(
+            "example/translation-model",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(entry);
+    }
+
+    [Fact]
     public async Task GetByModelIdAsync_includes_expected_runtime_hint_from_manifest()
     {
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths) = CreateRegistry(

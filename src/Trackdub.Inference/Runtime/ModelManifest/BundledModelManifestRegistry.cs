@@ -90,6 +90,12 @@ public sealed class BundledModelManifestRegistry
                     existing.RootDirectory.Equals(entry.RootDirectory, StringComparison.OrdinalIgnoreCase));
                 if (existingIndex >= 0)
                 {
+                    // A fragment that omits "deprecated" is silent, not an assertion of "not
+                    // deprecated"; inherit the base entry's value instead of rejecting the merge.
+                    if (model.Deprecated is null)
+                    {
+                        entry = entry with { Deprecated = mergedEntries[existingIndex].Deprecated };
+                    }
                     mergedEntries[existingIndex] = MergeEntry(mergedEntries[existingIndex], entry, manifestPath);
                 }
                 else
@@ -270,7 +276,7 @@ public sealed class BundledModelManifestRegistry
             OliveOptimizationProfile: model.Optimization?.Olive,
             ProviderId: model.ProviderId,
             ExpectedRuntime: model.ExpectedRuntime,
-            Deprecated: model.Deprecated,
+            Deprecated: model.Deprecated ?? false,
             DeprecatedReason: model.DeprecatedReason);
     }
 

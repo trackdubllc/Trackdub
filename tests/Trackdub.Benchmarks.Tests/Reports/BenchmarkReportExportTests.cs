@@ -255,6 +255,47 @@ public sealed class BenchmarkReportExportTests : IDisposable
     }
 
     [Fact]
+    public void RenderEvidenceMarkdown_EscapesPipeAndNewlineInResourceValidationReason()
+    {
+        BenchmarkEvidenceReport report = CreateSampleEvidenceReport() with
+        {
+            ResourceTelemetryBounds = new Trackdub.Domain.Benchmarking.ResourceTelemetryBounds { MaxCpuPercent = 75 },
+            ResourceValidationStatus = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+            ResourceTelemetry =
+            [
+                new BenchmarkStageResourceTelemetry
+                {
+                    Stage = "audio-prep",
+                    Phase = "measured",
+                    Iteration = 1,
+                    Attempt = 1,
+                    ExecutionStatus = BenchmarkEvidenceStatus.Completed,
+                    Validation = new Trackdub.Domain.Benchmarking.ResourceTelemetryValidation
+                    {
+                        Status = Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                        Checks =
+                        [
+                            new Trackdub.Domain.Benchmarking.ResourceTelemetryCheck(
+                                "cpuPercent",
+                                Trackdub.Domain.Benchmarking.ResourceTelemetryStatus.Failed,
+                                ObservedValue: 91.5,
+                                Threshold: 75,
+                                Reason: "Stage failed | retrying\nsecond line"),
+                        ],
+                    },
+                },
+            ],
+        };
+
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
+
+        // A raw "|" or newline in a free-text reason would split the table row across columns
+        // or lines; the exporter must escape it instead.
+        Assert.Contains("Stage failed \\| retrying second line |", markdown);
+        Assert.DoesNotContain("retrying\nsecond line", markdown);
+    }
+
+    [Fact]
     public void RenderEvidenceMarkdown_OmitsResourceValidationSectionWithoutTelemetry()
     {
         string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(CreateSampleEvidenceReport());

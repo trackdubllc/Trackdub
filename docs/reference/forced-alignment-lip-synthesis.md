@@ -30,7 +30,9 @@ abstractions by design.
 list of `IForcedAlignerAdapter`s and selects one per request:
 
 1. If `ForcedAlignmentOptions.PreferredModelAlias` names an available adapter
-   (matched on `ModelId` or `ProviderId`, case-insensitive), use it.
+   (matched on `ModelId` or `ProviderId`, case-insensitive), use it — but only if
+   it satisfies the phoneme-timing requirement. If `RequirePhonemeTimings` is set
+   and the preferred adapter is word-level only, fall back to rule 2 instead.
 2. Else if `Options.RequirePhonemeTimings` is set, pick the first available adapter
    with `SupportsPhonemeTimings == true`.
 3. Else pick the first available adapter (DI registration order).
@@ -40,8 +42,10 @@ Two routing rules are load-bearing:
 - A request that **requires phoneme timings** must never land on a word-level-only
   aligner. If only a word-level aligner is installed, the router returns a
   structured `Skipped` result instead of silently returning zero phonemes.
-- The router **never throws** on no-adapter or adapter failure; it always returns a
-  `ForcedAlignmentResult` with an explicit `Status` and reason.
+- The router **never throws** on no-adapter or non-cancellation adapter failure; it
+  always returns a `ForcedAlignmentResult` with an explicit `Status` and reason.
+  `OperationCanceledException` from an adapter propagates rather than being
+  converted to a result.
 
 The router is the only `IForcedAligner`; callers (the `LipSyncStageHandler`) depend
 on the interface, never on a concrete adapter.

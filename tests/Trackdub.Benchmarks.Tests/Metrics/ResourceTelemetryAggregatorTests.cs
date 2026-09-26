@@ -156,6 +156,36 @@ public sealed class ResourceTelemetryAggregatorTests
         Assert.Equal(50d, cpu.Threshold);
     }
 
+    [Fact]
+    public void Aggregate_counts_a_thresholdless_structural_failure()
+    {
+        // A structural failure (e.g. processor count changed between samples) reports
+        // Threshold = null since it isn't a bound breach, but it must still count as a
+        // failing sample rather than reporting Status = Failed with FailingSampleCount = 0.
+        BenchmarkStageResourceTelemetry sample = new()
+        {
+            Stage = "audio-prep",
+            Phase = "measured",
+            Iteration = 1,
+            Attempt = 1,
+            ExecutionStatus = BenchmarkEvidenceStatus.Completed,
+            Validation = new ResourceTelemetryValidation
+            {
+                Status = ResourceTelemetryStatus.Failed,
+                Checks =
+                [
+                    new ResourceTelemetryCheck("cpuPercent", ResourceTelemetryStatus.Failed, null, null,
+                        "Processor count changed between samples."),
+                ],
+            },
+        };
+
+        ResourceMetricStatistics cpu = Metric(Assert.Single(Aggregate([sample])), "cpuPercent");
+
+        Assert.Equal(ResourceTelemetryStatus.Failed, cpu.Status);
+        Assert.Equal(1, cpu.FailingSampleCount);
+    }
+
     private static IReadOnlyList<ResourceTelemetryDistribution> Aggregate(
         IReadOnlyList<BenchmarkStageResourceTelemetry> samples) =>
         ResourceTelemetryAggregator.Aggregate(samples);
