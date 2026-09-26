@@ -421,7 +421,6 @@ public sealed class MockDubbingPipelineService(
                 Message: $"Completed {canonical}",
                 ElapsedDuration: stageEnd - stageStart));
 
-
             outcomes.Add(new StageOutcome
             {
                 StageName = outcomeStageName,

@@ -190,12 +190,12 @@ public sealed class ExecutionProviderMatrixChallengerStressTests
         {
             try
             {
-                var random = new Random(unchecked(threadId * 10007 + 42));
+                var random = new Random(unchecked((threadId * 10007) + 42));
 
                 for (int iter = 0; iter < iterationsPerThread; iter++)
                 {
-                    double baseP50 = random.NextDouble() * 1000.0 + 0.1;
-                    double baseThroughput = random.NextDouble() * 100.0 + 1.0;
+                    double baseP50 = (random.NextDouble() * 1000.0) + 0.1;
+                    double baseThroughput = (random.NextDouble() * 100.0) + 1.0;
                     long basePeak = (long)(random.NextDouble() * 50 * OneTb) + 1024L;
                     long baseAlloc = (long)(random.NextDouble() * 50 * OneTb) + 1024L;
 
@@ -214,12 +214,12 @@ public sealed class ExecutionProviderMatrixChallengerStressTests
                         double p50 = (c % 4) switch
                         {
                             0 => 0.001 * (random.NextDouble() + 0.01), // microsecond
-                            1 => random.NextDouble() * 50_000.0 + 1000.0, // degraded
-                            2 => baseP50 / (random.NextDouble() * 9999.0 + 1.0), // high speedup
-                            _ => random.NextDouble() * 500.0 + 1.0,
+                            1 => (random.NextDouble() * 50_000.0) + 1000.0, // degraded
+                            2 => baseP50 / ((random.NextDouble() * 9999.0) + 1.0), // high speedup
+                            _ => (random.NextDouble() * 500.0) + 1.0,
                         };
 
-                        double throughput = random.NextDouble() * 10_000.0 + 0.01;
+                        double throughput = (random.NextDouble() * 10_000.0) + 0.01;
                         long peak = (long)(random.NextDouble() * 100 * OneTb);
                         long alloc = (long)(random.NextDouble() * 100 * OneTb);
 
