@@ -152,3 +152,16 @@ When a request is ambiguous in a way that materially changes the work, ask one
 focused question. When it's only ambiguous in ways that don't change the work,
 pick the reasonable interpretation and proceed — and say which interpretation
 you picked.
+
+## GitHub stacked PRs
+
+This repository uses GitHub's `gh stack` workflow.
+
+For multi-part dependent changes, use the `gh-stack` skill and `gh stack`
+rather than manually creating chains of dependent branches/PRs.
+
+Before modifying an existing stack, inspect it with:
+
+    gh stack view --json
+
+Prefer non-interactive gh-stack commands when running autonomously.
