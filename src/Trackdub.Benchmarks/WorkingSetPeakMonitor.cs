@@ -127,5 +127,11 @@ internal sealed class WorkingSetPeakMonitor
             Volatile.Write(ref unavailableReason,
                 $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
         }
+        catch (Exception exception)
+        {
+            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
+            Volatile.Write(ref unavailableReason,
+                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
+        }
     }
 }
