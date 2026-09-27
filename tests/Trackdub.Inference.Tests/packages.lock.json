@@ -383,7 +383,7 @@
           "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.ML.OnnxRuntime": "[1.30.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )",
-          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26461.1, )",
+          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26473.1, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )"
@@ -569,9 +569,9 @@
       },
       "Microsoft.ML.Tokenizers": {
         "type": "CentralTransitive",
-        "requested": "[3.0.0-preview.26461.1, )",
-        "resolved": "3.0.0-preview.26461.1",
-        "contentHash": "Y5Rk4XS42Cxn5qokZp3/+Q0FQ26+v7ZZvFYfphlXVDZzxIly2gkOXWYvQSz/DHWaxjCmE8RxSRi/Thvs0pWCcw=="
+        "requested": "[3.0.0-preview.26473.1, )",
+        "resolved": "3.0.0-preview.26473.1",
+        "contentHash": "GCz2IZbFXkKjFCaKpd9qQxuPDfkj6yr/3JI71zu274069gZ84QBAY6TP/x8wSRRjfRNJCPyVWqDp/lc7QLg5mw=="
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "CentralTransitive",
@@ -1018,7 +1018,7 @@
           "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.30.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )",
-          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26461.1, )",
+          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26473.1, )",
           "Microsoft.WindowsAppSDK.ML": "[1.8.2109, )",
           "Microsoft.WindowsAppSDK.Runtime": "[1.8.251106002, )",
           "Trackdub.Contracts": "[1.0.0, )",
@@ -1218,9 +1218,9 @@
       },
       "Microsoft.ML.Tokenizers": {
         "type": "CentralTransitive",
-        "requested": "[3.0.0-preview.26461.1, )",
-        "resolved": "3.0.0-preview.26461.1",
-        "contentHash": "Y5Rk4XS42Cxn5qokZp3/+Q0FQ26+v7ZZvFYfphlXVDZzxIly2gkOXWYvQSz/DHWaxjCmE8RxSRi/Thvs0pWCcw=="
+        "requested": "[3.0.0-preview.26473.1, )",
+        "resolved": "3.0.0-preview.26473.1",
+        "contentHash": "GCz2IZbFXkKjFCaKpd9qQxuPDfkj6yr/3JI71zu274069gZ84QBAY6TP/x8wSRRjfRNJCPyVWqDp/lc7QLg5mw=="
       },
       "Microsoft.WindowsAppSDK.ML": {
         "type": "CentralTransitive",

@@ -198,8 +198,8 @@
         "dependencies": {
           "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.ML.OnnxRuntime": "[1.30.0, )",
-          "Microsoft.ML.OnnxRuntimeGenAI": "[0.16.0, )",
-          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26461.1, )",
+          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )",
+          "Microsoft.ML.Tokenizers": "[3.0.0-preview.26473.1, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )"
@@ -243,28 +243,28 @@
       },
       "Microsoft.ML.OnnxRuntimeGenAI": {
         "type": "CentralTransitive",
-        "requested": "[0.16.0, )",
-        "resolved": "0.16.0",
-        "contentHash": "bXNdLsld1KtnAV9Yc/8Nsw5gM5ieQkVpVAZmi/mUL1nmZzaNKyEMRcpHcVCqRUCeRct5lFEgS9YDNJdYhoiZeg==",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
         "dependencies": {
           "Microsoft.ML.OnnxRuntime": "1.30.0",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.16.0"
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
         }
       },
       "Microsoft.ML.OnnxRuntimeGenAI.Managed": {
         "type": "CentralTransitive",
-        "requested": "[0.16.0, )",
-        "resolved": "0.16.0",
-        "contentHash": "XOfY99JN/biTsXiQDe4AVHYDVrc0+sGhPcYBofjyLLLQnDzU8xOhnbesSY9dKzLD9xeYvTKzaVod5LDlhPLnVg==",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "iuZIAGs3HMm0sKHPusKiRo7AjFE1rMsF1H8FAyXwlidDcShcCdpLUjfU4acK8dDnpecRBzmy+ZOUwXYWzMRYTQ==",
         "dependencies": {
           "Microsoft.Extensions.AI.Abstractions": "9.8.0"
         }
       },
       "Microsoft.ML.Tokenizers": {
         "type": "CentralTransitive",
-        "requested": "[3.0.0-preview.26461.1, )",
-        "resolved": "3.0.0-preview.26461.1",
-        "contentHash": "Y5Rk4XS42Cxn5qokZp3/+Q0FQ26+v7ZZvFYfphlXVDZzxIly2gkOXWYvQSz/DHWaxjCmE8RxSRi/Thvs0pWCcw=="
+        "requested": "[3.0.0-preview.26473.1, )",
+        "resolved": "3.0.0-preview.26473.1",
+        "contentHash": "GCz2IZbFXkKjFCaKpd9qQxuPDfkj6yr/3JI71zu274069gZ84QBAY6TP/x8wSRRjfRNJCPyVWqDp/lc7QLg5mw=="
       }
     }
   }
