@@ -9,7 +9,7 @@ namespace Trackdub.Composition.Tests;
 
 public sealed class ModelInventoryServiceTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(
+    private readonly string tempRoot = Path.Join(
         Path.GetTempPath(),
         "Trackdub.ModelInventoryService.Tests",
         Guid.NewGuid().ToString("N"));
@@ -61,6 +61,82 @@ public sealed class ModelInventoryServiceTests : IDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Null(entry);
+    }
+
+    [Fact]
+    public async Task GetByModelIdAsync_returns_active_entry_when_a_deprecated_entry_shares_the_model_id()
+    {
+        TrackdubStoragePaths storagePaths = new(tempRoot);
+        string manifestPath = Path.Join(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model-old"));
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model-new"));
+        File.WriteAllText(
+            manifestPath,
+            """
+            {
+              "models": [
+                {
+                  "model_id": "example/translation-model",
+                  "task": "translation",
+                  "engine_family": "opus-mt",
+                  "capabilities": [ "translation" ],
+                  "language_coverage": {
+                    "language_pairs": [ { "source": "en", "target": "es" } ]
+                  },
+                  "tier": "fast",
+                  "license": "MIT",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_use_verified": false,
+                  "source_url": "https://huggingface.co/example/translation-model",
+                  "revision": "main",
+                  "sha256": "",
+                  "aliases": [ "example-translation-old" ],
+                  "root_path": "../example-model-old",
+                  "benchmark_entry": "model.onnx",
+                  "deprecated": true,
+                  "deprecated_reason": "Superseded by a newer model at a different root.",
+                  "variants": []
+                },
+                {
+                  "model_id": "example/translation-model",
+                  "task": "translation",
+                  "engine_family": "opus-mt",
+                  "capabilities": [ "translation" ],
+                  "language_coverage": {
+                    "language_pairs": [ { "source": "en", "target": "es" } ]
+                  },
+                  "tier": "fast",
+                  "license": "MIT",
+                  "commercial_allowed": true,
+                  "redistribution_allowed": true,
+                  "requires_attribution": false,
+                  "requires_user_consent": false,
+                  "voice_cloning": false,
+                  "commercial_use_verified": false,
+                  "source_url": "https://huggingface.co/example/translation-model",
+                  "revision": "main",
+                  "sha256": "",
+                  "aliases": [ "example-translation-new" ],
+                  "root_path": "../example-model-new",
+                  "benchmark_entry": "model.onnx",
+                  "variants": []
+                }
+              ]
+            }
+            """);
+        BundledModelManifestRegistry registry = BundledModelManifestRegistry.Load(manifestPath);
+        var service = new ModelInventoryService(registry, new LocalModelCacheRecordStore(storagePaths), storagePaths);
+
+        ModelInventoryEntry? entry = await service.GetByModelIdAsync(
+            "example/translation-model",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(entry);
     }
 
     [Fact]
@@ -409,8 +485,8 @@ public sealed class ModelInventoryServiceTests : IDisposable
             benchmarkEntry: "nested/model.onnx");
         LocalModelCacheRecordStore store = await InstallModelAsync(storagePaths, "nested/model.onnx");
         LocalModelCacheRecord cacheRecord = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
-        string variantRoot = Path.Combine(cacheRecord.RootPath, "optimized", "olive-cpu-fp32");
-        string variantModelPath = Path.Combine(variantRoot, "nested", "model.onnx");
+        string variantRoot = Path.Join(cacheRecord.RootPath, "optimized", "olive-cpu-fp32");
+        string variantModelPath = Path.Join(variantRoot, "nested", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(variantModelPath)!);
         await File.WriteAllTextAsync(variantModelPath, "optimized", TestContext.Current.CancellationToken);
         DateTimeOffset createdAt = new(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
@@ -474,9 +550,9 @@ public sealed class ModelInventoryServiceTests : IDisposable
         string extraModelJson = "")
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
+        string manifestPath = Path.Join(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-        Directory.CreateDirectory(Path.Combine(storagePaths.ModelCacheDirectory, "example-model"));
+        Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model"));
         File.WriteAllText(
             manifestPath,
             $$"""
@@ -516,11 +592,11 @@ public sealed class ModelInventoryServiceTests : IDisposable
         TrackdubStoragePaths storagePaths,
         params string[] relativeFiles)
     {
-        string rootPath = Path.Combine(storagePaths.ModelCacheDirectory, "example-model");
+        string rootPath = Path.Join(storagePaths.ModelCacheDirectory, "example-model");
         Directory.CreateDirectory(rootPath);
         foreach (string relativeFile in relativeFiles)
         {
-            string path = Path.Combine(rootPath, relativeFile.Replace('/', Path.DirectorySeparatorChar));
+            string path = Path.Join(rootPath, relativeFile.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllTextAsync(path, "onnx", TestContext.Current.CancellationToken);
         }

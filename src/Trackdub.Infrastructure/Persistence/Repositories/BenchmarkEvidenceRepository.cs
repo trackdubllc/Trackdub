@@ -18,7 +18,7 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private string ReportsDirectory => Path.Combine(Path.GetDirectoryName(database.DatabasePath)!, "benchmark-reports");
+    private string ReportsDirectory => Path.Join(Path.GetDirectoryName(database.DatabasePath)!, "benchmark-reports");
 
     public async Task SaveAsync(BenchmarkEvidenceReport report, CancellationToken cancellationToken = default)
     {
@@ -37,9 +37,9 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
 
         BenchmarkEvidenceReport safe = Sanitize(report);
         string fileName = $"{report.RunId:N}.json";
-        string destination = Path.Combine(ReportsDirectory, fileName);
+        string destination = Path.Join(ReportsDirectory, fileName);
         Directory.CreateDirectory(ReportsDirectory);
-        string temporary = Path.Combine(ReportsDirectory, $".{report.RunId:N}.{Guid.NewGuid():N}.tmp");
+        string temporary = Path.Join(ReportsDirectory, $".{report.RunId:N}.{Guid.NewGuid():N}.tmp");
         try
         {
             await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(safe, JsonOptions), cancellationToken)
@@ -78,7 +78,7 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
     public async Task<BenchmarkEvidenceReport?> GetAsync(Guid runId, CancellationToken cancellationToken = default)
     {
         if (runId == Guid.Empty) return null;
-        string path = Path.Combine(ReportsDirectory, $"{runId:N}.json");
+        string path = Path.Join(ReportsDirectory, $"{runId:N}.json");
         if (!File.Exists(path)) return null;
         await using FileStream stream = File.OpenRead(path);
         return await JsonSerializer.DeserializeAsync<BenchmarkEvidenceReport>(stream, JsonOptions, cancellationToken)
@@ -126,7 +126,7 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
             new { Ids = stale }, cancellationToken: cancellationToken)).ConfigureAwait(false);
         foreach (string id in stale)
         {
-            string path = Path.Combine(ReportsDirectory, $"{Guid.Parse(id):N}.json");
+            string path = Path.Join(ReportsDirectory, $"{Guid.Parse(id):N}.json");
             if (File.Exists(path)) File.Delete(path);
         }
     }
@@ -146,6 +146,29 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
         RuntimeVersions = report.RuntimeVersions.ToDictionary(x => Scrub(x.Key)!, x => Scrub(x.Value)!),
         TimingsMilliseconds = report.TimingsMilliseconds.ToDictionary(x => Scrub(x.Key)!, x => x.Value),
         MemoryBytes = report.MemoryBytes.ToDictionary(x => Scrub(x.Key)!, x => x.Value),
+        ResourceTelemetry = report.ResourceTelemetry.Select(sample => sample with
+        {
+            Stage = Scrub(sample.Stage)!,
+            Phase = Scrub(sample.Phase)!,
+            Reason = Scrub(sample.Reason),
+            Validation = sample.Validation with
+            {
+                Checks = sample.Validation.Checks.Select(check => check with
+                {
+                    Metric = Scrub(check.Metric)!,
+                    Reason = Scrub(check.Reason),
+                }).ToArray(),
+            },
+        }).ToArray(),
+        ResourceDistribution = report.ResourceDistribution.Select(distribution => distribution with
+        {
+            Stage = Scrub(distribution.Stage)!,
+            Phase = Scrub(distribution.Phase)!,
+            Metrics = distribution.Metrics.Select(metric => metric with
+            {
+                Metric = Scrub(metric.Metric)!,
+            }).ToArray(),
+        }).ToArray(),
         Stages = report.Stages.Select(stage => stage with
         {
             StartedAtUtc = stage.StartedAtUtc?.ToUniversalTime(),

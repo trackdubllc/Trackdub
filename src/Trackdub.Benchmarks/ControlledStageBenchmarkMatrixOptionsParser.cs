@@ -1,4 +1,5 @@
 using Trackdub.Application.Dubbing;
+using Trackdub.Domain.Benchmarking;
 
 namespace Trackdub.Benchmarks;
 
@@ -33,6 +34,7 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
         string? ffmpeg = null;
         string? ffprobe = null;
         int runCount = 1;
+        var resourceTelemetryBounds = new ResourceTelemetryBounds();
         var modelOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         for (int index = 1; index < args.Length; index++)
@@ -76,6 +78,17 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
                 case "--provider": provider = value; break;
                 case "--ffmpeg": ffmpeg = value; break;
                 case "--ffprobe": ffprobe = value; break;
+                case "--max-cpu-percent":
+                case "--max-working-set-bytes":
+                case "--max-allocated-bytes":
+                case "--min-available-vram-mb":
+                    if (!ResourceTelemetryOptionsParser.TryApply(
+                        option, value, resourceTelemetryBounds, error, out resourceTelemetryBounds))
+                    {
+                        return false;
+                    }
+
+                    break;
                 case "--runs":
                     if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
                     {
@@ -126,6 +139,7 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
             FfprobePath = ffprobe,
             ModelOverrides = modelOverrides,
             RunCount = runCount,
+            ResourceTelemetryBounds = resourceTelemetryBounds,
             Mock = mock,
             DryRun = dryRun,
         };

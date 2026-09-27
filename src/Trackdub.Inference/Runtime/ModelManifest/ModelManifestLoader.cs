@@ -94,7 +94,7 @@ public static class ModelManifestLoader
         string? displayName = ReadOptionalNullableString(element, "display_name", path, sourceName);
         string? providerId = ReadOptionalNullableString(element, "provider_id", path, sourceName);
         string? expectedRuntime = ReadOptionalNullableString(element, "expected_runtime", path, sourceName);
-        bool deprecated = ReadOptionalBoolean(element, "deprecated", path, sourceName, defaultValue: false);
+        bool? deprecated = ReadOptionalNullableBoolean(element, "deprecated", path, sourceName);
         string? deprecatedReason = ReadOptionalNullableString(element, "deprecated_reason", path, sourceName);
         IReadOnlyList<string> aliases = ReadAliases(element, path, sourceName);
         IReadOnlyList<ModelVariantManifest> variants = ReadVariants(element, path, sourceName);
@@ -1149,6 +1149,20 @@ public static class ModelManifestLoader
 
         throw new ModelManifestValidationException(
             $"Manifest '{sourceName}' field '{path}.{propertyName}' must be an integer or null.");
+    }
+
+    private static bool? ReadOptionalNullableBoolean(
+        JsonElement element,
+        string propertyName,
+        string path,
+        string sourceName)
+    {
+        if (!element.TryGetProperty(propertyName, out JsonElement property))
+        {
+            return null;
+        }
+
+        return ReadBooleanElement(property, propertyName, path, sourceName);
     }
 
     private static bool ReadOptionalBooleanAlias(

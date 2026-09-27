@@ -1,3 +1,5 @@
+using Trackdub.Domain.Benchmarking;
+
 namespace Trackdub.Benchmarks;
 
 /// <summary>Options for running the controlled benchmark once per focused pipeline stage.</summary>
@@ -18,6 +20,7 @@ public sealed record ControlledStageBenchmarkMatrixOptions
     public IReadOnlyDictionary<string, string> ModelOverrides { get; init; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public int RunCount { get; init; } = 1;
+    public ResourceTelemetryBounds ResourceTelemetryBounds { get; init; } = new();
     public bool Mock { get; init; }
     public bool DryRun { get; init; }
 }

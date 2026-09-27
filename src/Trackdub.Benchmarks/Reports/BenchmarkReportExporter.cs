@@ -284,6 +284,49 @@ public static class BenchmarkReportExporter
             }
         }
 
+        if (report.ResourceTelemetry.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Resource Validation");
+            sb.AppendLine();
+            sb.AppendLine("Process-wide CPU, excluding child processes; memory maxima are endpoint-sampled.");
+            sb.AppendLine("Threshold is an inclusive maximum for usage metrics and an inclusive minimum for the free-VRAM floor.");
+            sb.AppendLine();
+            sb.AppendLine("| Stage | Phase | Iteration | Attempt | Metric | Observed | Threshold | Status | Reason |");
+            sb.AppendLine("| --- | --- | ---: | ---: | --- | ---: | ---: | --- | --- |");
+            foreach (BenchmarkStageResourceTelemetry sample in report.ResourceTelemetry)
+            {
+                foreach (var check in sample.Validation.Checks)
+                {
+                    string observed = check.ObservedValue?.ToString("G", CultureInfo.InvariantCulture) ?? "unavailable";
+                    string threshold = check.Threshold?.ToString("G", CultureInfo.InvariantCulture) ?? "not configured";
+                    string reason = EscapeMarkdownCell(check.Reason ?? sample.Reason);
+                    sb.AppendLine(CultureInfo.InvariantCulture,
+                        $"| {EscapeMarkdownCell(sample.Stage)} | {EscapeMarkdownCell(sample.Phase)} | {sample.Iteration} | {sample.Attempt} | {EscapeMarkdownCell(check.Metric)} | {observed} | {threshold} | {check.Status} | {reason} |");
+                }
+            }
+        }
+
+        if (report.ResourceDistribution.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Resource Distribution");
+            sb.AppendLine();
+            sb.AppendLine("Percentiles over all iterations of each stage/phase (Type 7, same formula as latency percentiles).");
+            sb.AppendLine();
+            sb.AppendLine("| Stage | Phase | Metric | N | Unavailable | Failed | Min | P50 | P95 | P99 | Max | Threshold | Status |");
+            sb.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
+            foreach (var distribution in report.ResourceDistribution)
+            {
+                foreach (var metric in distribution.Metrics)
+                {
+                    string threshold = metric.Threshold?.ToString("G", CultureInfo.InvariantCulture) ?? "not configured";
+                    sb.AppendLine(CultureInfo.InvariantCulture,
+                        $"| {EscapeMarkdownCell(distribution.Stage)} | {EscapeMarkdownCell(distribution.Phase)} | {EscapeMarkdownCell(metric.Metric)} | {metric.SampleCount} | {metric.UnavailableSampleCount} | {metric.FailingSampleCount} | {metric.Minimum} | {metric.P50} | {metric.P95} | {metric.P99} | {metric.Maximum} | {threshold} | {metric.Status} |");
+                }
+            }
+        }
+
         // Stages
         if (report.Stages.Count > 0)
         {
@@ -335,6 +378,15 @@ public static class BenchmarkReportExporter
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Escapes text for a pipe-delimited markdown table cell: a literal <c>|</c> would otherwise
+    /// split the row across columns, and an embedded newline would split it across rows.
+    /// </summary>
+    private static string EscapeMarkdownCell(string? value) =>
+        value is null
+            ? string.Empty
+            : value.Replace("\\", "\\\\").Replace("|", "\\|").Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
 
     private static string FormatBytes(long bytes)
     {

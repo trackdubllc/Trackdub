@@ -93,6 +93,34 @@ jobs:
         shell: bash
         run: python3 scripts/ci/check-repository-boundary.py
 
+  controlled-matrix-cpu-budget:
+    name: Controlled Matrix CPU Budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore Dependencies
+        run: dotnet restore Trackdub.slnx -m:1
+
+      - name: Build Benchmark Host
+        run: dotnet build src/Trackdub.Benchmarks.DevHost -c Release --no-restore -f net10.0 -m:1
+
+      - name: Enforce Controlled-Matrix CPU Budget
+        run: python3 scripts/ci/check_controlled_matrix_cpu_budget.py
+
   build-windows:
     name: Build & Test (Windows)
     timeout-minutes: 45

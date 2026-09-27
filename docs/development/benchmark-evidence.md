@@ -30,6 +30,21 @@ It is intentionally separate from BenchmarkDotNet microbenchmarks; the matrix
 measures real stage execution and evidence semantics, while BDN measures
 small operations and allocations.
 
+Working-set limits use an interval sampler at a 25 ms cadence, starting at the
+stage boundary and stopping at its terminal event. The reported peak is the
+maximum observed sample plus the two endpoint samples; short spikes between
+polls may be missed. A sampler failure is explicit `Unavailable` evidence
+unless a known endpoint already breaches the configured limit. The benchmark
+report also records a run-level sampled peak across setup, pipeline, and
+teardown. This samples the benchmark process only, including concurrent work
+and excluding child processes.
+
+CI runs a deterministic, three-iteration mock controlled-matrix CPU budget
+gate via `scripts/ci/check_controlled_matrix_cpu_budget.py`. It enforces the
+normalized CPU limit of 95% per measured stage sample and verifies the typed
+report contains all expected iterations; it does not require models, GPUs, or
+machine-local fixtures.
+
 ## Baseline fixture set, 2026-09-23
 
 The fixtures are machine-local and are not checked into the repository. Their local manifest is `%LOCALAPPDATA%\Trackdub\benchmark-fixtures\baseline-v1\manifest.json`. This table identifies contents without publishing media paths.

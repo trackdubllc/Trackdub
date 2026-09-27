@@ -58,6 +58,18 @@ public sealed record ResourceTelemetryDelta(
 /// </summary>
 public static class ResourceTelemetry
 {
+    public static ResourceTelemetrySnapshot? TryCaptureProcess()
+    {
+        try
+        {
+            return CaptureProcess();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or NotSupportedException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Captures a fresh point-in-time snapshot of the current process resource usage.
     /// Refreshes process metrics from the OS and captures precise GC allocated bytes and collection counts.

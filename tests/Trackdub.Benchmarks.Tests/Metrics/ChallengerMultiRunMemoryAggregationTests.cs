@@ -160,7 +160,7 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
             ["gen0Collections"] = 12,
             ["gen1Collections"] = 4,
             ["gen2Collections"] = 1,
-            ["gpuDedicatedBytes"] = null,
+            ["availableVramMb"] = null,
         };
 
         foreach (string stage in canonicalStages)
@@ -255,7 +255,7 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
             ["gen0Collections"] = 7,
             ["gen1Collections"] = 2,
             ["gen2Collections"] = 1,
-            ["gpuDedicatedBytes"] = null,
+            ["availableVramMb"] = null,
             ["stage:Asr:allocatedBytes"] = 20_000_000,
             ["stage:Asr:peakWorkingSet"] = 160_000_000,
             ["stage:Asr:gen0"] = 4,
@@ -348,12 +348,12 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
     }
 
     [Fact]
-    public void JsonRoundTrip_NullAndGpuDedicatedBytes_HandledGracefully()
+    public void JsonRoundTrip_NullAndAvailableVramMb_HandledGracefully()
     {
         var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
         {
             ["processWorkingSetStart"] = 100_000_000,
-            ["gpuDedicatedBytes"] = null,
+            ["availableVramMb"] = null,
             ["stage:Tts:allocatedBytes"] = null,
         };
 
@@ -373,7 +373,7 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
         BenchmarkEvidenceReport? restored = JsonSerializer.Deserialize<BenchmarkEvidenceReport>(json, BenchmarkReportWriter.SerializerOptions);
 
         Assert.NotNull(restored);
-        Assert.Null(restored.MemoryBytes["gpuDedicatedBytes"]);
+        Assert.Null(restored.MemoryBytes["availableVramMb"]);
         Assert.Null(restored.MemoryBytes["stage:Tts:allocatedBytes"]);
     }
 

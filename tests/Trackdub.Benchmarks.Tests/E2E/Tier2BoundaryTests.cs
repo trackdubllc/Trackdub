@@ -92,6 +92,26 @@ public sealed class Tier2BoundaryTests
         Assert.False(double.IsInfinity(zeroDurationStats.ThroughputUnitsPerSecond));
         Assert.False(double.IsNaN(zeroDurationStats.ThroughputUnitsPerSecond));
         Assert.True(zeroDurationStats.ThroughputUnitsPerSecond > 0);
+
+        // The oracle's fallback throughput must match production's exactly (sum of sample
+        // durations, not mean), so a regression in either implementation is caught here.
+        Trackdub.Benchmarks.Metrics.LatencyStatistics production =
+            Trackdub.Benchmarks.Metrics.PercentileCalculator.Calculate(samples, totalUnits: 10, totalDurationSeconds: 0);
+        Assert.Equal(production.ThroughputUnitsPerSecond, zeroDurationStats.ThroughputUnitsPerSecond, precision: 10);
+    }
+
+    [Fact]
+    public void R1_T2_06_NoUnits_ThroughputIsZeroMatchingProduction()
+    {
+        double[] samples = [50.0, 60.0];
+
+        LatencyStatistics oracle = BenchmarkCalculationOracle.CalculatePercentiles(
+            samples, totalUnits: 0, totalDurationSeconds: 0);
+        Trackdub.Benchmarks.Metrics.LatencyStatistics production =
+            Trackdub.Benchmarks.Metrics.PercentileCalculator.Calculate(samples, totalUnits: 0, totalDurationSeconds: 0);
+
+        Assert.Equal(0.0, oracle.ThroughputUnitsPerSecond);
+        Assert.Equal(production.ThroughputUnitsPerSecond, oracle.ThroughputUnitsPerSecond);
     }
 
     // =========================================================================
@@ -249,6 +269,34 @@ public sealed class Tier2BoundaryTests
         ProviderComparisonMetrics c = report.Comparisons.First(p => p.Provider == "directml");
         Assert.False(double.IsInfinity(c.SpeedupFactor));
         Assert.False(double.IsNaN(c.SpeedupFactor));
+    }
+
+    [Fact]
+    public void R3_T2_06_ZeroBaselineWithPositiveTarget_MatchesProductionSpeedupFallback()
+    {
+        // Baseline P50 is 0 (e.g. a degenerate/failed measurement) but the target provider has a
+        // real, positive P50. Production falls back to SpeedupFactor 1.0 in this case rather than
+        // computing 0/positive; the oracle must match that exactly, not just avoid NaN/Infinity.
+        var stats = new Dictionary<string, (double P50, double Throughput, long PeakMemory, long ManagedAlloc)>
+        {
+            ["cpu"] = (P50: 0.0, Throughput: 0.0, PeakMemory: Mb(500), ManagedAlloc: Mb(50)),
+            ["directml"] = (P50: 50.0, Throughput: 20.0, PeakMemory: Mb(500), ManagedAlloc: Mb(50)),
+        };
+
+        ExecutionProviderMatrixReport oracleReport = BenchmarkCalculationOracle.CompareProviders(
+            scenario: "zero-baseline", baselineProvider: "cpu", providerStats: stats);
+        Trackdub.Benchmarks.Scenarios.ExecutionProviderMatrixReport productionReport =
+            Trackdub.Benchmarks.Scenarios.ExecutionProviderMatrixRunner.CompareProviders(
+                scenario: "zero-baseline", baselineProvider: "cpu", providerStats: stats);
+
+        ProviderComparisonMetrics oracleDml = oracleReport.Comparisons.First(p => p.Provider == "directml");
+        Trackdub.Benchmarks.Scenarios.ProviderComparisonMetrics productionDml =
+            productionReport.Comparisons.First(p => p.Provider == "directml");
+
+        Assert.Equal(1.0, oracleDml.SpeedupFactor);
+        Assert.Equal(1.0, oracleDml.ThroughputRatio);
+        Assert.Equal(productionDml.SpeedupFactor, oracleDml.SpeedupFactor);
+        Assert.Equal(productionDml.ThroughputRatio, oracleDml.ThroughputRatio);
     }
 
     [Fact]

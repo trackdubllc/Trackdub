@@ -3,6 +3,7 @@ using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
+using Trackdub.Domain.Benchmarking;
 using Trackdub.Inference;
 using Trackdub.Inference.Onnx;
 
@@ -163,7 +164,8 @@ public static class Program
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
-            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>] [--mock] [--dry-run] [--report-dir <directory>]");
+            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>] [--mock] [--dry-run] [--report-dir <directory>] " + ResourceTelemetryOptionsParser.Usage);
+            output.WriteLine(ResourceTelemetryOptionsParser.Description);
             return args.Length == 0 ? 1 : 0;
         }
         string? outputDirectory = null, stage = null, model = null, provider = null;
@@ -175,6 +177,7 @@ public static class Program
         bool mock = false;
         bool dryRun = false;
         int runCount = 1;
+        var resourceTelemetryBounds = new ResourceTelemetryBounds();
         for (int index = 1; index < args.Length; index++)
         {
             if (args[index] == "--reuse-engine-cache")
@@ -213,6 +216,17 @@ public static class Program
                 case "--ffprobe": ffprobe = value; break;
                 case "--sha256": expectedSha256 = value; break;
                 case "--report-dir": reportDirectory = value; break;
+                case "--max-cpu-percent":
+                case "--max-working-set-bytes":
+                case "--max-allocated-bytes":
+                case "--min-available-vram-mb":
+                    if (!ResourceTelemetryOptionsParser.TryApply(
+                        args[index - 1], value, resourceTelemetryBounds, error, out resourceTelemetryBounds))
+                    {
+                        return 1;
+                    }
+
+                    break;
                 case "--runs":
                     if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
                     {
@@ -250,6 +264,7 @@ public static class Program
                     FfmpegPath = ffmpeg,
                     FfprobePath = ffprobe,
                     RunCount = runCount,
+                    ResourceTelemetryBounds = resourceTelemetryBounds,
                     Mock = mock,
                     DryRun = dryRun,
                 }, cancellationToken).ConfigureAwait(false);
@@ -467,8 +482,9 @@ public static class Program
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
-            output.WriteLine("controlled-matrix <fixture> --output <directory> [--stages <comma-separated>] [--model <stage=alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>]");
+            output.WriteLine("controlled-matrix <fixture> --output <directory> [--stages <comma-separated>] [--model <stage=alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>] " + ResourceTelemetryOptionsParser.Usage);
             output.WriteLine("With no --stages, runs the full extended pipeline stage catalog in canonical order.");
+            output.WriteLine(ResourceTelemetryOptionsParser.Description);
             return args.Length == 0 ? 1 : 0;
         }
 

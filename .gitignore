@@ -330,3 +330,6 @@ __pycache__/
 /build/
 /cache/
 /.agents/teamwork
+
+# Local agent/tooling state (never part of the source tree)
+/.freebuff/

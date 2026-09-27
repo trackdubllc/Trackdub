@@ -65,6 +65,7 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     FfmpegPath = options.FfmpegPath,
                     FfprobePath = options.FfprobePath,
                     RunCount = options.RunCount,
+                    ResourceTelemetryBounds = options.ResourceTelemetryBounds,
                     Mock = options.Mock,
                     DryRun = options.DryRun,
                 }, cancellationToken).ConfigureAwait(false);
