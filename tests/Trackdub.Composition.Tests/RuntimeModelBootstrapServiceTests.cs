@@ -12,14 +12,14 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
 {
     private const string ValidSha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     private const string MismatchedSha256 = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
-    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.RuntimeModelBootstrap.Tests", Guid.NewGuid().ToString("N"));
+    private readonly string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.RuntimeModelBootstrap.Tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
     public async Task DownloadRequiredModelAsync_downloads_manifest_package_files_and_registers_cache()
     {
         BundledModelManifestRegistry registry = CreateRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string expectedEntryPath = Path.Combine(
+        string expectedEntryPath = Path.Join(
             storagePaths.ModelCacheDirectory,
             "example",
             "model",
@@ -54,11 +54,11 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
             ["tokenizer.json", "onnx/model_q4.onnx_data", "onnx/model_q4.onnx"],
             downloader.DownloadedFiles);
         Assert.Equal(["main", "main", "main"], downloader.DownloadedRevisions);
-        Assert.True(File.Exists(Path.Combine(storagePaths.ModelCacheDirectory, "example", "model", "tokenizer.json")));
+        Assert.True(File.Exists(Path.Join(storagePaths.ModelCacheDirectory, "example", "model", "tokenizer.json")));
         Assert.True(File.Exists(expectedEntryPath));
         Assert.NotNull(registrar.LastRecord);
         Assert.Equal("example/model", registrar.LastRecord!.ModelId);
-        Assert.Equal(Path.Combine(storagePaths.ModelCacheDirectory, "example", "model"), registrar.LastRecord.RootPath);
+        Assert.Equal(Path.Join(storagePaths.ModelCacheDirectory, "example", "model"), registrar.LastRecord.RootPath);
     }
 
     [Fact]
@@ -66,8 +66,8 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string modelRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
-        string entryPath = Path.Combine(modelRoot, "onnx", "model_q4.onnx");
+        string modelRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string entryPath = Path.Join(modelRoot, "onnx", "model_q4.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(entryPath)!);
         File.WriteAllBytes(entryPath, [1, 2, 3]);
         var planner = new QueueRuntimePlanner(CreatePlan(StageRuntimePlanStatus.Ready, entryPath));
@@ -93,8 +93,8 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string variantRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model", "optimized", "olive-cpu-fp32");
-        string entryPath = Path.Combine(variantRoot, "model.onnx");
+        string variantRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model", "optimized", "olive-cpu-fp32");
+        string entryPath = Path.Join(variantRoot, "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(entryPath)!);
         File.WriteAllBytes(entryPath, [1, 2, 3]);
         var planner = new QueueRuntimePlanner(CreatePlan(StageRuntimePlanStatus.DownloadRequired, entryPath) with
@@ -136,8 +136,8 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string variantRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model", "optimized", "olive-cpu-fp32");
-        string entryPath = Path.Combine(variantRoot, "model.onnx");
+        string variantRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model", "optimized", "olive-cpu-fp32");
+        string entryPath = Path.Join(variantRoot, "model.onnx");
         var planner = new QueueRuntimePlanner(CreatePlan(StageRuntimePlanStatus.DownloadRequired, entryPath) with
         {
             Variant = "olive-cpu-fp32",
@@ -177,8 +177,8 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string variantRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model", "optimized", "olive-cpu-fp32");
-        string entryPath = Path.Combine(variantRoot, "model.onnx");
+        string variantRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model", "optimized", "olive-cpu-fp32");
+        string entryPath = Path.Join(variantRoot, "model.onnx");
         var planner = new QueueRuntimePlanner(CreatePlan(StageRuntimePlanStatus.DownloadRequired, entryPath) with
         {
             Variant = "olive-cpu-fp32",
@@ -217,8 +217,8 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string variantRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model", "optimized", "olive-cpu-fp32");
-        string entryPath = Path.Combine(variantRoot, "model.onnx");
+        string variantRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model", "optimized", "olive-cpu-fp32");
+        string entryPath = Path.Join(variantRoot, "model.onnx");
         var planner = new QueueRuntimePlanner(CreatePlan(StageRuntimePlanStatus.DownloadRequired, entryPath) with
         {
             Variant = "olive-cpu-fp32",
@@ -254,11 +254,11 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string modelRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example", "model");
-        string entryPath = Path.Combine(modelRoot, "onnx", "model_q4.onnx");
+        string modelRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        string entryPath = Path.Join(modelRoot, "onnx", "model_q4.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(entryPath)!);
-        File.WriteAllBytes(Path.Combine(modelRoot, "tokenizer.json"), [1]);
-        File.WriteAllBytes(Path.Combine(modelRoot, "onnx", "model_q4.onnx_data"), [2]);
+        File.WriteAllBytes(Path.Join(modelRoot, "tokenizer.json"), [1]);
+        File.WriteAllBytes(Path.Join(modelRoot, "onnx", "model_q4.onnx_data"), [2]);
         File.WriteAllBytes(entryPath, [3]);
         var planner = new QueueRuntimePlanner(
             CreatePlan(StageRuntimePlanStatus.DownloadRequired),
@@ -296,7 +296,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateHushRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string expectedEntryPath = Path.Combine(
+        string expectedEntryPath = Path.Join(
             storagePaths.ModelCacheDirectory,
             "weya-ai",
             "hush",
@@ -337,7 +337,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
             ["https://example.test/hush/weya_nc.dll"],
             downloader.DownloadedUris);
         Assert.True(File.Exists(expectedEntryPath));
-        Assert.True(File.Exists(Path.Combine(storagePaths.ModelCacheDirectory, "weya-ai", "hush", "deployment", "lib", "weya_nc.dll")));
+        Assert.True(File.Exists(Path.Join(storagePaths.ModelCacheDirectory, "weya-ai", "hush", "deployment", "lib", "weya_nc.dll")));
         Assert.NotNull(registrar.LastRecord);
         Assert.Equal("weya-ai/hush", registrar.LastRecord!.ModelId);
     }
@@ -347,7 +347,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateHushRegistry();
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string entryPath = Path.Combine(
+        string entryPath = Path.Join(
             storagePaths.ModelCacheDirectory,
             "weya-ai",
             "hush",
@@ -377,7 +377,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
         Assert.Contains("weya_nc.dll", status.FailureReason, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("deployment/lib/weya_nc.dll", status.ExpectedFileName);
         Assert.Equal(
-            Path.Combine(storagePaths.ModelCacheDirectory, "weya-ai", "hush", "deployment", "lib", "weya_nc.dll"),
+            Path.Join(storagePaths.ModelCacheDirectory, "weya-ai", "hush", "deployment", "lib", "weya_nc.dll"),
             status.ModelPath);
     }
 
@@ -386,7 +386,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     {
         BundledModelManifestRegistry registry = CreateRegistryWithSha256(MismatchedSha256);
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string expectedEntryPath = Path.Combine(
+        string expectedEntryPath = Path.Join(
             storagePaths.ModelCacheDirectory,
             "example", "model", "onnx", "model_q4.onnx");
         var planner = new QueueRuntimePlanner(
@@ -419,7 +419,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
         const string knownSha256 = "4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a";
         BundledModelManifestRegistry registry = CreateRegistryWithSha256(knownSha256);
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string expectedEntryPath = Path.Combine(
+        string expectedEntryPath = Path.Join(
             storagePaths.ModelCacheDirectory,
             "example", "model", "onnx", "model_q4.onnx");
         // Slot 1: DownloadRequiredModelAsync's planning call
@@ -462,7 +462,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
 
     private BundledModelManifestRegistry CreateRegistry()
     {
-        string manifestPath = Path.Combine(tempRoot, "manifest.json");
+        string manifestPath = Path.Join(tempRoot, "manifest.json");
         Directory.CreateDirectory(tempRoot);
         File.WriteAllText(
             manifestPath,
@@ -509,7 +509,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
 
     private BundledModelManifestRegistry CreateRegistryWithSha256(string sha256)
     {
-        string manifestPath = Path.Combine(tempRoot, "manifest-sha.json");
+        string manifestPath = Path.Join(tempRoot, "manifest-sha.json");
         Directory.CreateDirectory(tempRoot);
         File.WriteAllText(
             manifestPath,
@@ -559,7 +559,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
 
     private BundledModelManifestRegistry CreateHushRegistry()
     {
-        string manifestPath = Path.Combine(tempRoot, "hush-manifest.json");
+        string manifestPath = Path.Join(tempRoot, "hush-manifest.json");
         Directory.CreateDirectory(tempRoot);
         File.WriteAllText(
             manifestPath,

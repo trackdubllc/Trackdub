@@ -177,7 +177,7 @@ public sealed class CompositionRootTests : IDisposable
         using ServiceProvider provider = BuildProvider();
 
         var logger = Assert.IsType<RollingFileApplicationLogger>(provider.GetRequiredService<IApplicationLogger>());
-        Assert.EndsWith(Path.Combine("Trackdub", "trackdub.log"), logger.LogFilePath);
+        Assert.EndsWith(Path.Join("Trackdub", "trackdub.log"), logger.LogFilePath);
         Assert.Equal(ApplicationLogLevel.Information, logger.MinimumLevel);
         Assert.Equal(1 * 1024 * 1024, logger.MaxFileBytes);
         Assert.Equal(RollingFileApplicationLogger.SessionMaxArchiveFiles, logger.MaxArchiveFiles);
@@ -340,7 +340,7 @@ public sealed class CompositionRootTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "Trackdub.Composition.Tests", Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "Trackdub.Composition.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         tempDirectories.Add(path);
         return path;

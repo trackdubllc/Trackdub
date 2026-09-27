@@ -11,7 +11,7 @@ namespace Trackdub.Infrastructure.Updates;
 public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService, IDisposable
 {
     private const string DefaultReleaseManifestUrl = "https://releases.trackdub.ai/manifest.json";
-    private static readonly string UpdateTempSubDir = Path.Combine("Trackdub", "updates");
+    private static readonly string UpdateTempSubDir = Path.Join("Trackdub", "updates");
     private const int BufferSize = 65536;
 
     private readonly HttpClient httpClient;
@@ -118,7 +118,7 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
         Directory.CreateDirectory(tempDir);
 
         string installerFileName = ResolveInstallerFileName(release.Version);
-        string tempPath = Path.Combine(tempDir, installerFileName);
+        string tempPath = Path.Join(tempDir, installerFileName);
         string tempPartialPath = tempPath + ".partial";
 
         try
@@ -391,7 +391,7 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
             ? storagePaths.UserCacheRoot
             : Path.GetTempPath();
 
-        return Path.Combine(baseDir, "Trackdub", "updates");
+        return Path.Join(baseDir, "Trackdub", "updates");
     }
 
     private static string ResolveInstallerFileName(string version)

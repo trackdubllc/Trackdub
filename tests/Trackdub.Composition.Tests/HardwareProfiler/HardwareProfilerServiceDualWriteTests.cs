@@ -14,7 +14,7 @@ public sealed class HardwareProfilerServiceDualWriteTests
     [Fact]
     public async Task RunBenchmarkSuiteAsync_WhenHistoryWriteFails_ThrowsWithoutUpdatingStudioSettings()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         try
         {
             var storagePaths = new TestAppStoragePaths(tempRoot);
@@ -38,7 +38,7 @@ public sealed class HardwareProfilerServiceDualWriteTests
                 () => service.RunBenchmarkSuiteAsync());
 
             Assert.Equal("benchmark history write failed", exception.Message);
-            Assert.True(File.Exists(Path.Combine(tempRoot, "hardware-profiler", "latest.json")));
+            Assert.True(File.Exists(Path.Join(tempRoot, "hardware-profiler", "latest.json")));
             Assert.Equal(evidenceBefore, settingsService.CurrentSettings.HardwareProfilerEvidenceId);
         }
         finally
@@ -92,17 +92,17 @@ public sealed class HardwareProfilerServiceDualWriteTests
     {
         public string RootDirectory { get; } = userDataRoot;
         public string UserDataRoot { get; } = userDataRoot;
-        public string UserCacheRoot { get; } = Path.Combine(userDataRoot, "cache");
+        public string UserCacheRoot { get; } = Path.Join(userDataRoot, "cache");
         public string? SharedAssetRoot { get; } = null;
         public bool IsPortable { get; } = false;
-        public string ModelCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "models");
-        public string ModelCacheIndexPath { get; } = Path.Combine(userDataRoot, "cache", "models", "index.json");
-        public string LogFilePath { get; } = Path.Combine(userDataRoot, "trackdub.log");
-        public string SettingsPath { get; } = Path.Combine(userDataRoot, "settings.json");
-        public string LayoutPath { get; } = Path.Combine(userDataRoot, "layout.json");
-        public string ToolCacheDirectory { get; } = Path.Combine(userDataRoot, "tools");
-        public string FfmpegToolCacheDirectory { get; } = Path.Combine(userDataRoot, "tools", "ffmpeg");
-        public string EngineCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "engines");
-        public string ComponentCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "components");
+        public string ModelCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "models");
+        public string ModelCacheIndexPath { get; } = Path.Join(userDataRoot, "cache", "models", "index.json");
+        public string LogFilePath { get; } = Path.Join(userDataRoot, "trackdub.log");
+        public string SettingsPath { get; } = Path.Join(userDataRoot, "settings.json");
+        public string LayoutPath { get; } = Path.Join(userDataRoot, "layout.json");
+        public string ToolCacheDirectory { get; } = Path.Join(userDataRoot, "tools");
+        public string FfmpegToolCacheDirectory { get; } = Path.Join(userDataRoot, "tools", "ffmpeg");
+        public string EngineCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "engines");
+        public string ComponentCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "components");
     }
 }

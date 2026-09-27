@@ -606,7 +606,7 @@ internal static class RunPipelineCommandExecutor
                 return false;
             }
 
-            resolvedOutputDirectory = Path.Combine(
+            resolvedOutputDirectory = Path.Join(
                 Path.GetDirectoryName(resolvedMediaPath) ?? ".",
                 Path.GetFileNameWithoutExtension(resolvedMediaPath) + ".trackdub");
         }

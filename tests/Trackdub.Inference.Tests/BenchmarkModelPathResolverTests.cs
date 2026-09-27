@@ -8,14 +8,14 @@ public sealed class BenchmarkModelPathResolverTests
     [Fact]
     public void Discover_when_manifest_alias_has_no_onnx_file_returns_missing_entry_error()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
 
         try
         {
-            string manifestDirectory = Path.Combine(tempDirectory, "manifest");
+            string manifestDirectory = Path.Join(tempDirectory, "manifest");
             Directory.CreateDirectory(manifestDirectory);
-            string manifestPath = Path.Combine(manifestDirectory, "bundled-models.manifest.json");
+            string manifestPath = Path.Join(manifestDirectory, "bundled-models.manifest.json");
             File.WriteAllText(
                 manifestPath,
                 """
@@ -66,14 +66,14 @@ public sealed class BenchmarkModelPathResolverTests
     [Fact]
     public void Discover_when_bundled_root_missing_uses_model_cache_directory()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
 
         try
         {
-            string manifestDirectory = Path.Combine(tempDirectory, "manifest");
+            string manifestDirectory = Path.Join(tempDirectory, "manifest");
             Directory.CreateDirectory(manifestDirectory);
-            string manifestPath = Path.Combine(manifestDirectory, "bundled-models.manifest.json");
+            string manifestPath = Path.Join(manifestDirectory, "bundled-models.manifest.json");
             File.WriteAllText(
                 manifestPath,
                 """
@@ -102,15 +102,15 @@ public sealed class BenchmarkModelPathResolverTests
                 }
                 """);
 
-            string cacheRoot = Path.Combine(tempDirectory, "model-cache", "example", "kokoro-cache", "onnx");
+            string cacheRoot = Path.Join(tempDirectory, "model-cache", "example", "kokoro-cache", "onnx");
             Directory.CreateDirectory(cacheRoot);
-            string modelPath = Path.Combine(cacheRoot, "model.onnx");
+            string modelPath = Path.Join(cacheRoot, "model.onnx");
             File.WriteAllText(modelPath, "fake-onnx");
 
             BundledModelManifestRegistry registry = BundledModelManifestRegistry.Load(manifestPath);
             var resolver = new BenchmarkModelPathResolver(
                 registry,
-                Path.Combine(tempDirectory, "model-cache"));
+                Path.Join(tempDirectory, "model-cache"));
 
             BenchmarkModelResolutionResult result = resolver.Discover("kokoro-cache");
             BenchmarkModelCandidate candidate = resolver.ResolveSingle("kokoro-cache");

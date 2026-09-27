@@ -12,8 +12,8 @@ public sealed class MediaIngestCommandOptionsTests
     [Fact]
     public void TryParse_CreateModeParsesExpectedValues()
     {
-        string projectPath = Path.Combine("artifacts", "Sample.trackdub");
-        string mediaPath = Path.Combine("fixtures", "sample.mp4");
+        string projectPath = Path.Join("artifacts", "Sample.trackdub");
+        string mediaPath = Path.Join("fixtures", "sample.mp4");
 
         bool success = MediaIngestCommandOptions.TryParse(
             ["--project", projectPath, "--name", "Sample", "--media", mediaPath, "--ffmpeg", "ffmpeg.exe", "--ffprobe", "ffprobe.exe"],
@@ -33,7 +33,7 @@ public sealed class MediaIngestCommandOptionsTests
     [Fact]
     public void TryParse_OpenModeParsesExpectedValues()
     {
-        string projectPath = Path.Combine("artifacts", "Sample.trackdub");
+        string projectPath = Path.Join("artifacts", "Sample.trackdub");
 
         bool success = MediaIngestCommandOptions.TryParse(
             ["--project", projectPath, "--open"],
@@ -63,7 +63,7 @@ public sealed class MediaIngestCommandTests
     [Fact]
     public async Task RunAsync_CreateModePrintsArtifactSummary()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Benchmarks.Tests", Guid.NewGuid().ToString("N"), "Sample.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Benchmarks.Tests", Guid.NewGuid().ToString("N"), "Sample.trackdub");
         using var output = new StringWriter();
         using var error = new StringWriter();
         var runner = new FakeMediaIngestCommandRunner();
@@ -86,7 +86,7 @@ public sealed class MediaIngestCommandTests
     [Fact]
     public async Task RunAsync_OpenModePrintsMissingSourceStatus()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Benchmarks.Tests", Guid.NewGuid().ToString("N"), "Sample.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Benchmarks.Tests", Guid.NewGuid().ToString("N"), "Sample.trackdub");
         using var output = new StringWriter();
         using var error = new StringWriter();
         var runner = new FakeMediaIngestCommandRunner();
@@ -129,7 +129,7 @@ public sealed class MediaIngestCommandTests
         {
             LastOptions = options;
             DateTimeOffset now = DateTimeOffset.UtcNow;
-            string sourcePath = Path.GetFullPath(Path.Combine("media", "sample.mp4"));
+            string sourcePath = Path.GetFullPath(Path.Join("media", "sample.mp4"));
             var project = new TrackdubProject(Guid.NewGuid(), "Sample", now, now);
             var mediaAsset = new MediaAsset(Guid.NewGuid(), project.Id, sourcePath, "sample.mp4", "hash-source", 1024, now, "mov,mp4,m4a,3gp,3g2,mj2", 1.25, true, true, now);
             var sourceReference = new SourceMediaReference(

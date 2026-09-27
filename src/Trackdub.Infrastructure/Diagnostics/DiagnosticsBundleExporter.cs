@@ -228,7 +228,7 @@ public sealed class DiagnosticsBundleExporter : IDiagnosticsBundleExporter
 
         try
         {
-            string databasePath = Path.Combine(Path.GetFullPath(projectRootPath), ProjectArtifactPaths.DatabaseFileName);
+            string databasePath = Path.Join(Path.GetFullPath(projectRootPath), ProjectArtifactPaths.DatabaseFileName);
             if (!File.Exists(databasePath))
             {
                 return null;

@@ -53,8 +53,8 @@ internal sealed class TextTokenizer : IDisposable
     /// </summary>
     public TextTokenizer(string modelDir)
     {
-        var vocabPath = Path.Combine(modelDir, "vocab.json");
-        var mergesPath = Path.Combine(modelDir, "merges.txt");
+        var vocabPath = Path.Join(modelDir, "vocab.json");
+        var mergesPath = Path.Join(modelDir, "merges.txt");
 
         if (!File.Exists(vocabPath))
             throw new FileNotFoundException("vocab.json not found in model directory.", vocabPath);

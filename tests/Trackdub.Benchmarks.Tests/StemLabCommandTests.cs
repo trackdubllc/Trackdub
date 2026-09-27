@@ -7,9 +7,9 @@ public sealed class StemLabCommandOptionsTests
     [Fact]
     public void TryParse_ExplicitSeparatorCommandParsesExpectedValues()
     {
-        string mediaPath = Path.Combine("fixtures", "sample.mp4");
-        string outputPath = Path.Combine("artifacts", "stem-lab");
-        string modelPath = Path.Combine("models", "stem-sep", "stem_separator.onnx");
+        string mediaPath = Path.Join("fixtures", "sample.mp4");
+        string outputPath = Path.Join("artifacts", "stem-lab");
+        string modelPath = Path.Join("models", "stem-sep", "stem_separator.onnx");
 
         bool success = StemLabCommandOptions.TryParse(
             [
@@ -154,10 +154,10 @@ public sealed class StemLabCommandTests
             var reconstruction = new StemLabReconstructionMetrics(1.0, -36.0, 0.01);
             StemLabDiagnostics diagnostics = new(source, vocals, instrumental, reconstruction, ["High-frequency energy warning."]);
             StemLabCommandResult result = new(
-                Path.GetFullPath(Path.Combine("stem-lab", "_work", "stem-source.wav")),
-                Path.GetFullPath(Path.Combine("stem-lab", "vocals.wav")),
-                Path.GetFullPath(Path.Combine("stem-lab", "instrumental.wav")),
-                Path.GetFullPath(Path.Combine("stem-lab", "diagnostics.json")),
+                Path.GetFullPath(Path.Join("stem-lab", "_work", "stem-source.wav")),
+                Path.GetFullPath(Path.Join("stem-lab", "vocals.wav")),
+                Path.GetFullPath(Path.Join("stem-lab", "instrumental.wav")),
+                Path.GetFullPath(Path.Join("stem-lab", "diagnostics.json")),
                 diagnostics);
             return Task.FromResult(result);
         }

@@ -9,7 +9,7 @@ namespace Trackdub.Media.Tests;
 public sealed class TtsAudioPostProcessorTests : IDisposable
 {
     private const float SampleTolerance = 0.0001f;
-    private readonly string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+    private readonly string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
 
     public TtsAudioPostProcessorTests()
     {
@@ -42,7 +42,7 @@ public sealed class TtsAudioPostProcessorTests : IDisposable
     {
         const int sampleRate = 16000;
         const int durationSamples = 123;
-        string path = Path.Combine(tempDirectory, "invalid.wav");
+        string path = Path.Join(tempDirectory, "invalid.wav");
         await File.WriteAllTextAsync(path, "not-a-wave", TestContext.Current.CancellationToken);
         var logger = new RecordingApplicationLogger();
 
@@ -214,7 +214,7 @@ public sealed class TtsAudioPostProcessorTests : IDisposable
 
     private async Task<string> WriteWaveAsync(string fileName, float[] samples, int sampleRate)
     {
-        string path = Path.Combine(tempDirectory, fileName);
+        string path = Path.Join(tempDirectory, fileName);
         await WavePcm16.WriteMonoAsync(path, samples, sampleRate, TestContext.Current.CancellationToken);
         return path;
     }

@@ -68,13 +68,13 @@ internal static class RunPipelineHandler
         }
 
         string projectOutputDirectory = request.ProjectOutputDirectory
-            ?? Path.Combine(
+            ?? Path.Join(
                 Path.GetDirectoryName(request.SourceMediaPath) ?? ".",
                 Path.GetFileNameWithoutExtension(request.SourceMediaPath) + ".trackdub");
 
         var manifestWriter = new RunManifestWriter();
         await manifestWriter.WriteAsync(result, projectOutputDirectory, cancellationToken).ConfigureAwait(false);
-        string manifestPath = Path.Combine(projectOutputDirectory, "run-manifest.json");
+        string manifestPath = Path.Join(projectOutputDirectory, "run-manifest.json");
 
         string? exportedFilePath = result.StageOutcomes
             .Where(o => string.Equals(o.StageName, "Export", StringComparison.OrdinalIgnoreCase))

@@ -101,7 +101,7 @@ internal static class CliParseHelpers
     {
         try
         {
-            string settingsPath = Path.Combine(
+            string settingsPath = Path.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Trackdub",
                 "settings.json");

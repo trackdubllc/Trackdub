@@ -365,7 +365,7 @@ public static class CompositionRoot
         services.TryAddScoped<ISpeakerConsentService, SqliteSpeakerConsentService>();
         services.TryAddScoped<IScopedConnectionProvider>(sp =>
             new ScopedSqliteConnectionProvider(
-                Path.Combine(
+                Path.Join(
                     sp.GetRequiredService<TranscriptWorkspaceContext>().ProjectRootPath,
                     ProjectArtifactPaths.DatabaseFileName)));
 
@@ -710,7 +710,7 @@ public static class CompositionRoot
         }
         catch (FileNotFoundException)
         {
-            return System.IO.Path.Combine(
+            return System.IO.Path.Join(
                 sp.GetRequiredService<TrackdubStoragePaths>().ModelCacheDirectory,
                 modelId);
         }

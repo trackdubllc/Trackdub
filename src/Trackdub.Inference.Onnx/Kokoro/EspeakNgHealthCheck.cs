@@ -49,6 +49,6 @@ public sealed class EspeakNgHealthCheck : IEspeakNgHealthCheck
 
         string? executableDirectory = Path.GetDirectoryName(executablePath);
         return !string.IsNullOrWhiteSpace(executableDirectory) &&
-               Directory.Exists(Path.Combine(executableDirectory, EspeakDataDirectoryName));
+               Directory.Exists(Path.Join(executableDirectory, EspeakDataDirectoryName));
     }
 }

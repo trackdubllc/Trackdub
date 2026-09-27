@@ -11,11 +11,11 @@ public sealed class LibVlcRuntimeLocatorTests
         (_, string libraryName, _) = GetPlatformFixture();
 
         string root = CreateTempRoot();
-        string libvlcDir = Path.Combine(root, "libvlc");
+        string libvlcDir = Path.Join(root, "libvlc");
         try
         {
             Directory.CreateDirectory(libvlcDir);
-            File.WriteAllBytes(Path.Combine(libvlcDir, RequireRelativeSegment(libraryName)), [0x4D, 0x5A]);
+            File.WriteAllBytes(Path.Join(libvlcDir, RequireRelativeSegment(libraryName)), [0x4D, 0x5A]);
 
             string? resolved = new LibVlcRuntimeLocator(root).ResolveRuntimePath();
 
@@ -42,14 +42,14 @@ public sealed class LibVlcRuntimeLocatorTests
         {
             foreach (string other in otherRids.Where(candidate => candidate != rid))
             {
-                string dir = Path.Combine(root, "libvlc", RequireRelativeSegment(other));
+                string dir = Path.Join(root, "libvlc", RequireRelativeSegment(other));
                 Directory.CreateDirectory(dir);
-                File.WriteAllBytes(Path.Combine(dir, safeLibraryName), [0x4D, 0x5A]);
+                File.WriteAllBytes(Path.Join(dir, safeLibraryName), [0x4D, 0x5A]);
             }
 
-            string ridDir = Path.Combine(root, "libvlc", safeRid);
+            string ridDir = Path.Join(root, "libvlc", safeRid);
             Directory.CreateDirectory(ridDir);
-            File.WriteAllBytes(Path.Combine(ridDir, safeLibraryName), [0x4D, 0x5A]);
+            File.WriteAllBytes(Path.Join(ridDir, safeLibraryName), [0x4D, 0x5A]);
 
             string? resolved = new LibVlcRuntimeLocator(root).ResolveRuntimePath();
 
@@ -100,7 +100,7 @@ public sealed class LibVlcRuntimeLocatorTests
 
     private static string CreateTempRoot()
     {
-        return Path.Combine(Path.GetTempPath(), "trackdub-vlc-locator-" + Guid.NewGuid().ToString("N"));
+        return Path.Join(Path.GetTempPath(), "trackdub-vlc-locator-" + Guid.NewGuid().ToString("N"));
     }
 
     private static void DeleteTempRoot(string root)

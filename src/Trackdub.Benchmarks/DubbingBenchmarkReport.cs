@@ -27,7 +27,7 @@ public sealed record DubbingBenchmarkReport(
     /// Default save location for the JSON report.
     /// </summary>
     public string ReportPath { get; init; } =
-        Path.Combine(
+        Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "TrackdubBenchmarks",
             $"dubbing-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json");

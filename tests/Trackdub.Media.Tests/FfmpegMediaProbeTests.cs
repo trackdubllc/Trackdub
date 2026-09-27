@@ -7,7 +7,7 @@ public sealed class FfmpegMediaProbeTests
     [RequiresFfmpegAndFfprobeFact]
     public async Task ProbeAsync_reads_fixture_media_metadata()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         string sourcePath = await MediaFixtureFactory.CreateSampleVideoAsync(tempDirectory);
         var probe = new FfmpegMediaProbe();
 

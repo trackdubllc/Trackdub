@@ -145,7 +145,7 @@ public sealed class DubbingBenchmarkRunner
         string pathHash = ComputePathHash(inputPath);
         string baseName = Path.GetFileNameWithoutExtension(inputPath);
 
-        return Path.Combine(
+        return Path.Join(
             baseDir,
             $"{baseName}-{pathHash}-{targetLanguage}.trackdub");
     }

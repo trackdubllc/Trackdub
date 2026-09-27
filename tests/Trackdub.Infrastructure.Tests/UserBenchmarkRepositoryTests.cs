@@ -11,7 +11,7 @@ public sealed class UserBenchmarkRepositoryTests
     [Fact]
     public async Task AddAsync_round_trips_profiler_runs_by_evidence_id()
     {
-        string userRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string userRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         try
         {
             var database = new SqliteUserBenchmarkDatabase(userRoot);
@@ -60,7 +60,7 @@ public sealed class UserBenchmarkRepositoryTests
         }
         finally
         {
-            string dbPath = Path.Combine(userRoot, SqliteUserBenchmarkDatabase.DatabaseFileName);
+            string dbPath = Path.Join(userRoot, SqliteUserBenchmarkDatabase.DatabaseFileName);
             if (File.Exists(dbPath))
             {
                 File.Delete(dbPath);
@@ -86,7 +86,7 @@ public sealed class UserBenchmarkRepositoryTests
     [Fact]
     public async Task ListRecentAsync_maps_unknown_status_to_failed()
     {
-        string userRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string userRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         try
         {
             var database = new SqliteUserBenchmarkDatabase(userRoot);

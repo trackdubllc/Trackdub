@@ -466,7 +466,7 @@ public sealed class SqliteExplainQueryPlanTests
     }
 
     private static string CreateTempProjectRoot(string label) =>
-        Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), $"{label}.trackdub");
+        Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), $"{label}.trackdub");
 
     private static void CleanupProjectRoot(string projectRoot)
     {

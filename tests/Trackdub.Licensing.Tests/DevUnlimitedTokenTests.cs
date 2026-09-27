@@ -16,10 +16,10 @@ public sealed class DevUnlimitedTokenTests
             exp: null,
             devUnlimited: true);
 
-        var tempBase = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        var tokenDir = Path.Combine(tempBase, "Trackdub");
+        var tempBase = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var tokenDir = Path.Join(tempBase, "Trackdub");
         Directory.CreateDirectory(tokenDir);
-        File.WriteAllText(Path.Combine(tokenDir, "license.jwt"), token);
+        File.WriteAllText(Path.Join(tokenDir, "license.jwt"), token);
 
         try
         {

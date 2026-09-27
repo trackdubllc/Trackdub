@@ -123,7 +123,7 @@ public sealed class OpenVinoEpConfigurationTests : IDisposable
     public void IsAvailable_is_false_when_native_library_does_not_exist_at_path()
     {
         // Arrange: Component installed but native DLL not present at path
-        string emptyDir = Path.Combine(Path.GetTempPath(), $"openvino_test_{Guid.NewGuid():N}");
+        string emptyDir = Path.Join(Path.GetTempPath(), $"openvino_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(emptyDir);
         try
         {
@@ -256,7 +256,7 @@ public sealed class OpenVinoEpConfigurationTests : IDisposable
     /// </summary>
     private string CreateTempOpenVinoPath()
     {
-        string dir = Path.Combine(Path.GetTempPath(), $"openvino_test_{Guid.NewGuid():N}");
+        string dir = Path.Join(Path.GetTempPath(), $"openvino_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;

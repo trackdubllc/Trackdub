@@ -35,10 +35,10 @@ public sealed class VoiceClonePipeline : IDisposable
         _modelDir = modelDir;
         _sessionOptionsFactory = sessionOptionsFactory;
 
-        var tokenizerDir = Path.Combine(modelDir, "tokenizer");
-        var embeddingsDir = Path.Combine(modelDir, "embeddings");
-        var configPath = Path.Combine(embeddingsDir, "config.json");
-        var speakerEncoderPath = Path.Combine(modelDir, "speaker_encoder.onnx");
+        var tokenizerDir = Path.Join(modelDir, "tokenizer");
+        var embeddingsDir = Path.Join(modelDir, "embeddings");
+        var configPath = Path.Join(embeddingsDir, "config.json");
+        var speakerEncoderPath = Path.Join(modelDir, "speaker_encoder.onnx");
 
         if (!File.Exists(speakerEncoderPath))
             throw new FileNotFoundException(
@@ -48,7 +48,7 @@ public sealed class VoiceClonePipeline : IDisposable
         _tokenizer = new TextTokenizer(tokenizerDir);
         _embeddings = new EmbeddingStore(embeddingsDir, configPath);
         _languageModel = new LanguageModel(modelDir, _embeddings, sessionOptionsFactory);
-        _vocoder = new Vocoder(Path.Combine(modelDir, "vocoder.onnx"), sessionOptionsFactory);
+        _vocoder = new Vocoder(Path.Join(modelDir, "vocoder.onnx"), sessionOptionsFactory);
         _speakerEncoder = new SpeakerEncoder(speakerEncoderPath, sessionOptionsFactory);
     }
 
@@ -204,7 +204,7 @@ public sealed class VoiceClonePipeline : IDisposable
         if (_speechTokenizer != null)
             return _speechTokenizer;
 
-        var modelPath = Path.Combine(_modelDir, "tokenizer12hz_encode.onnx");
+        var modelPath = Path.Join(_modelDir, "tokenizer12hz_encode.onnx");
         if (!File.Exists(modelPath))
             throw new FileNotFoundException(
                 "Speech tokenizer model not found. Required for ICL (ref_text) mode. " +

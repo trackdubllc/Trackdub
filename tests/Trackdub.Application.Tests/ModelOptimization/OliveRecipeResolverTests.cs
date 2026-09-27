@@ -11,7 +11,7 @@ public sealed class OliveRecipeResolverTests : IDisposable
 
     public OliveRecipeResolverTests()
     {
-        _recipesRoot = Path.Combine(Path.GetTempPath(), "Trackdub.OliveRecipeResolver.Tests", Guid.NewGuid().ToString("N"));
+        _recipesRoot = Path.Join(Path.GetTempPath(), "Trackdub.OliveRecipeResolver.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_recipesRoot);
     }
 
@@ -45,7 +45,7 @@ public sealed class OliveRecipeResolverTests : IDisposable
             OliveExecutionProvider.Dml,
             "int8",
             _recipesRoot,
-            explicitRecipeConfigPath: Path.Combine(_recipesRoot, "missing.json"));
+            explicitRecipeConfigPath: Path.Join(_recipesRoot, "missing.json"));
 
         Assert.False(resolution.UseRecipe);
         Assert.True(resolution.IsHardFailure);
@@ -176,7 +176,7 @@ public sealed class OliveRecipeResolverTests : IDisposable
 
     private string WriteRecipe(string relativePath, string contents)
     {
-        string fullPath = Path.Combine(_recipesRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        string fullPath = Path.Join(_recipesRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllText(fullPath, contents);
         return fullPath;

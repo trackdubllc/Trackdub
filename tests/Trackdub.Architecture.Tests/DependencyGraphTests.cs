@@ -15,8 +15,8 @@ public sealed class DependencyGraphTests
     public void AgentsMdDiagramMatchesEveryCsprojProjectReference()
     {
         var repoRoot = FindRepoRoot();
-        var diagram = ParseAgentsMdDiagram(Path.Combine(repoRoot, "AGENTS.md"));
-        var csprojs = ReadAllSrcCsprojDependencies(Path.Combine(repoRoot, "src"));
+        var diagram = ParseAgentsMdDiagram(Path.Join(repoRoot, "AGENTS.md"));
+        var csprojs = ReadAllSrcCsprojDependencies(Path.Join(repoRoot, "src"));
 
         var diagramProjects = diagram.Keys.ToHashSet();
         var csprojProjects = csprojs.Keys.ToHashSet();
@@ -58,7 +58,7 @@ public sealed class DependencyGraphTests
     public void DomainHasNoProjectReferences()
     {
         var repoRoot = FindRepoRoot();
-        var csprojs = ReadAllSrcCsprojDependencies(Path.Combine(repoRoot, "src"));
+        var csprojs = ReadAllSrcCsprojDependencies(Path.Join(repoRoot, "src"));
         Assert.Empty(csprojs["Trackdub.Domain"]);
     }
 
@@ -70,7 +70,7 @@ public sealed class DependencyGraphTests
     public void ContractsReferencesOnlyDomain()
     {
         var repoRoot = FindRepoRoot();
-        var csprojs = ReadAllSrcCsprojDependencies(Path.Combine(repoRoot, "src"));
+        var csprojs = ReadAllSrcCsprojDependencies(Path.Join(repoRoot, "src"));
         Assert.Equal(["Trackdub.Domain"], csprojs["Trackdub.Contracts"].OrderBy(x => x).ToArray());
     }
 
@@ -78,9 +78,9 @@ public sealed class DependencyGraphTests
     public void WindowsOnnxRuntimePackagesUseWinMlCatalogProvider()
     {
         var repoRoot = FindRepoRoot();
-        string packagesProps = Path.Combine(repoRoot, "Directory.Packages.props");
-        string inferenceProject = Path.Combine(repoRoot, "src", "Trackdub.Inference.Onnx", "Trackdub.Inference.Onnx.csproj");
-        string compositionProject = Path.Combine(repoRoot, "src", "Trackdub.Composition", "Trackdub.Composition.csproj");
+        string packagesProps = Path.Join(repoRoot, "Directory.Packages.props");
+        string inferenceProject = Path.Join(repoRoot, "src", "Trackdub.Inference.Onnx", "Trackdub.Inference.Onnx.csproj");
+        string compositionProject = Path.Join(repoRoot, "src", "Trackdub.Composition", "Trackdub.Composition.csproj");
 
         XDocument packageVersions = XDocument.Load(packagesProps);
         XDocument inference = XDocument.Load(inferenceProject);
@@ -187,15 +187,15 @@ public sealed class DependencyGraphTests
     public void DnnlNativePackageDeclaresInitialRidAssetsAndChecksumProvenance()
     {
         var repoRoot = FindRepoRoot();
-        string packageRoot = Path.Combine(repoRoot, "src", "Trackdub.OnnxRuntime.Dnnl.Native");
-        string packageProject = Path.Combine(packageRoot, "Trackdub.OnnxRuntime.Dnnl.Native.csproj");
+        string packageRoot = Path.Join(repoRoot, "src", "Trackdub.OnnxRuntime.Dnnl.Native");
+        string packageProject = Path.Join(packageRoot, "Trackdub.OnnxRuntime.Dnnl.Native.csproj");
         XDocument package = XDocument.Load(packageProject);
 
         string[] requiredRidNativeDirs =
         [
-            Path.Combine(packageRoot, "runtimes", "win-x64", "native"),
-            Path.Combine(packageRoot, "runtimes", "linux-x64", "native"),
-            Path.Combine(packageRoot, "runtimes", "osx-x64", "native")
+            Path.Join(packageRoot, "runtimes", "win-x64", "native"),
+            Path.Join(packageRoot, "runtimes", "linux-x64", "native"),
+            Path.Join(packageRoot, "runtimes", "osx-x64", "native")
         ];
 
         Assert.All(requiredRidNativeDirs, path => Assert.True(Directory.Exists(path), $"Missing DNNL native RID directory: {path}"));
@@ -208,7 +208,7 @@ public sealed class DependencyGraphTests
             package.Descendants("None"),
             element => string.Equals(element.Attribute("Include")?.Value, @"provenance\**\*.*", StringComparison.Ordinal));
 
-        string provenanceTemplate = Path.Combine(packageRoot, "provenance", "dnnl-native-assets.template.json");
+        string provenanceTemplate = Path.Join(packageRoot, "provenance", "dnnl-native-assets.template.json");
         Assert.True(File.Exists(provenanceTemplate), "DNNL native package must carry a checksum provenance template.");
 
         string provenanceJson = File.ReadAllText(provenanceTemplate);
@@ -220,7 +220,7 @@ public sealed class DependencyGraphTests
     public void CompositionOnlyCopiesDnnlNativeAssetsForDnnlRuntimeFlavor()
     {
         var repoRoot = FindRepoRoot();
-        string compositionProject = Path.Combine(repoRoot, "src", "Trackdub.Composition", "Trackdub.Composition.csproj");
+        string compositionProject = Path.Join(repoRoot, "src", "Trackdub.Composition", "Trackdub.Composition.csproj");
         XDocument composition = XDocument.Load(compositionProject);
 
         Assert.Contains(
@@ -257,11 +257,11 @@ public sealed class DependencyGraphTests
     {
         var repoRoot = FindRepoRoot();
         AssertDnnlRuntimeAssetExclusion(
-            Path.Combine(repoRoot, "src", "Trackdub.Composition", "Trackdub.Composition.csproj"),
+            Path.Join(repoRoot, "src", "Trackdub.Composition", "Trackdub.Composition.csproj"),
             "Microsoft.ML.OnnxRuntime.Gpu");
 
         AssertDnnlRuntimeAssetExclusion(
-            Path.Combine(repoRoot, "src", "Trackdub.Inference.Onnx", "Trackdub.Inference.Onnx.csproj"),
+            Path.Join(repoRoot, "src", "Trackdub.Inference.Onnx", "Trackdub.Inference.Onnx.csproj"),
             "Microsoft.WindowsAppSDK.ML",
             "Microsoft.ML.OnnxRuntimeGenAI",
             "Microsoft.WindowsAppSDK.Runtime",
@@ -274,7 +274,7 @@ public sealed class DependencyGraphTests
     public void DnnlNativePackageScriptRejectsArm64Hosts()
     {
         var repoRoot = FindRepoRoot();
-        string scriptPath = Path.Combine(repoRoot, "tools", "onnxruntime-dnnl", "Build-OnnxRuntimeDnnlNativePackage.ps1");
+        string scriptPath = Path.Join(repoRoot, "tools", "onnxruntime-dnnl", "Build-OnnxRuntimeDnnlNativePackage.ps1");
         string script = File.ReadAllText(scriptPath);
 
         Assert.Contains("OSArchitecture", script, StringComparison.Ordinal);
@@ -286,7 +286,7 @@ public sealed class DependencyGraphTests
     public void InferenceOnnxDoesNotImportApplicationContractsNamespace()
     {
         var repoRoot = FindRepoRoot();
-        string inferenceOnnxRoot = Path.Combine(repoRoot, "src", "Trackdub.Inference.Onnx");
+        string inferenceOnnxRoot = Path.Join(repoRoot, "src", "Trackdub.Inference.Onnx");
 
         string[] offenders = Directory
             .EnumerateFiles(inferenceOnnxRoot, "*.cs", SearchOption.AllDirectories)
@@ -342,7 +342,7 @@ public sealed class DependencyGraphTests
         var missingGraphs = new List<string>();
         foreach (var (relativeLockFile, requiredGraphs) in requiredGraphsByLockFile)
         {
-            string lockFile = Path.Combine(repoRoot, relativeLockFile.Replace('/', Path.DirectorySeparatorChar));
+            string lockFile = Path.Join(repoRoot, relativeLockFile.Replace('/', Path.DirectorySeparatorChar));
             Assert.True(File.Exists(lockFile), $"{relativeLockFile} is required for deterministic portable RID locked restores.");
 
             using JsonDocument document = JsonDocument.Parse(File.ReadAllText(lockFile));
@@ -363,7 +363,7 @@ public sealed class DependencyGraphTests
     public void DependencyGraphIsAcyclic()
     {
         var repoRoot = FindRepoRoot();
-        var csprojs = ReadAllSrcCsprojDependencies(Path.Combine(repoRoot, "src"));
+        var csprojs = ReadAllSrcCsprojDependencies(Path.Join(repoRoot, "src"));
 
         var color = new Dictionary<string, int>();
         foreach (var node in csprojs.Keys)
@@ -421,7 +421,7 @@ public sealed class DependencyGraphTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(dir.FullName, "Trackdub.slnx")))
             {
                 return dir.FullName;
             }

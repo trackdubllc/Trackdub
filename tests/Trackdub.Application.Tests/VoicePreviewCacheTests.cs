@@ -7,7 +7,7 @@ public sealed class VoicePreviewCacheTests
     [Fact]
     public async Task GetOrCreateAsync_writes_preview_once_and_reuses_cached_file()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
         try
         {

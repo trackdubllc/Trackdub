@@ -38,8 +38,8 @@ internal static class WinNativeDepsManifestLoader
     {
         string[] candidates =
         [
-            Path.Combine(AppContext.BaseDirectory, "runtime", "win-native-deps.manifest.json"),
-            Path.Combine(AppContext.BaseDirectory, "win-native-deps.manifest.json"),
+            Path.Join(AppContext.BaseDirectory, "runtime", "win-native-deps.manifest.json"),
+            Path.Join(AppContext.BaseDirectory, "win-native-deps.manifest.json"),
         ];
 
         foreach (string path in candidates)

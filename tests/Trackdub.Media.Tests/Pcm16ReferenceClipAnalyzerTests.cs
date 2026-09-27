@@ -6,7 +6,7 @@ namespace Trackdub.Media.Tests;
 
 public sealed class Pcm16ReferenceClipAnalyzerTests : IDisposable
 {
-    private readonly string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.ReferenceClipAnalyzer", Guid.NewGuid().ToString("N"));
+    private readonly string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.ReferenceClipAnalyzer", Guid.NewGuid().ToString("N"));
 
     public Pcm16ReferenceClipAnalyzerTests()
     {
@@ -16,7 +16,7 @@ public sealed class Pcm16ReferenceClipAnalyzerTests : IDisposable
     [Fact]
     public async Task AnalyzeAsync_counts_active_speech_instead_of_total_duration()
     {
-        string path = Path.Combine(tempDirectory, "mostly-silence.wav");
+        string path = Path.Join(tempDirectory, "mostly-silence.wav");
         WriteWave(path, sampleRate: 16000, totalSeconds: 4.0, activeSeconds: 0.5);
         var analyzer = new Pcm16ReferenceClipAnalyzer();
 
@@ -31,7 +31,7 @@ public sealed class Pcm16ReferenceClipAnalyzerTests : IDisposable
     [Fact]
     public async Task AnalyzeAsync_estimates_male_from_low_pitch_speech()
     {
-        string path = Path.Combine(tempDirectory, "male-speech.wav");
+        string path = Path.Join(tempDirectory, "male-speech.wav");
         WriteWave(path, sampleRate: 16000, totalSeconds: 1.5, activeSeconds: 1.5, frequencyHz: 120d);
         var analyzer = new Pcm16ReferenceClipAnalyzer();
 
@@ -43,7 +43,7 @@ public sealed class Pcm16ReferenceClipAnalyzerTests : IDisposable
     [Fact]
     public async Task AnalyzeAsync_estimates_female_from_high_pitch_speech()
     {
-        string path = Path.Combine(tempDirectory, "female-speech.wav");
+        string path = Path.Join(tempDirectory, "female-speech.wav");
         WriteWave(path, sampleRate: 16000, totalSeconds: 1.5, activeSeconds: 1.5, frequencyHz: 220d);
         var analyzer = new Pcm16ReferenceClipAnalyzer();
 

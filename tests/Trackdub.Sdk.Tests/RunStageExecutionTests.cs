@@ -92,9 +92,9 @@ public sealed class RunStageExecutionTests : IDisposable
     public async Task ExecuteAsync_PreFlightFailure_PersistsExecutionSnapshot()
     {
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         var preFlightChecker = new FakePipelinePreFlightChecker();
@@ -140,12 +140,12 @@ public sealed class RunStageExecutionTests : IDisposable
         // not be gated by the source-media File.Exists check. This test asserts that the
         // engine no longer rejects an existing-project run whose source media has moved.
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "project.trackdub");
+        string projectDir = Path.Join(tempDir, "project.trackdub");
         Directory.CreateDirectory(projectDir);
 
         var options = new DubbingSessionOptions
         {
-            SourceMediaPath = Path.Combine(tempDir, "missing-source-media.mp4"),
+            SourceMediaPath = Path.Join(tempDir, "missing-source-media.mp4"),
             ProjectOutputDirectory = projectDir,
             TargetLanguageCode = "es",
             StageFilter = [StageNames.Export],
@@ -168,9 +168,9 @@ public sealed class RunStageExecutionTests : IDisposable
     public async Task ProjectContextResolver_ReadsStoredSourceMediaPathFromDatabase()
     {
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         using TrackdubSessionFactory factory = CreateFactory();
@@ -194,9 +194,9 @@ public sealed class RunStageExecutionTests : IDisposable
     public async Task ExecuteAsync_StageRequiringSourceMedia_ResolvesStoredPathBeforeMediaValidation()
     {
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         using TrackdubSessionFactory factory = CreateFactory();
@@ -212,7 +212,7 @@ public sealed class RunStageExecutionTests : IDisposable
         var engine = new TrackdubDubbingEngine(factory);
         DubbingRunResult result = await engine.ExecuteAsync(new DubbingSessionOptions
         {
-            SourceMediaPath = Path.Combine(projectDir, "source-media"),
+            SourceMediaPath = Path.Join(projectDir, "source-media"),
             ProjectOutputDirectory = projectDir,
             TargetLanguageCode = "es",
             StageFilter = [StageNames.Vad],
@@ -348,7 +348,7 @@ public sealed class RunStageExecutionTests : IDisposable
 
     private string CreateTempProjectDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;

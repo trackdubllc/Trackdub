@@ -218,7 +218,7 @@ public sealed class Qwen3TtsEngineTests
             plan,
             CancellationToken.None);
 
-        string tempPath = Path.Combine(Path.GetTempPath(), $"qwen3tts_ref_{Guid.NewGuid():N}.wav");
+        string tempPath = Path.Join(Path.GetTempPath(), $"qwen3tts_ref_{Guid.NewGuid():N}.wav");
         await File.WriteAllBytesAsync(tempPath, synthesized.WavBytes);
         return tempPath;
     }

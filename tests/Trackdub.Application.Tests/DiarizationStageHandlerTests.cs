@@ -16,7 +16,7 @@ public sealed class DiarizationStageHandlerTests
 
     private static string CreateTempDirectory()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         return dir;
     }
@@ -40,7 +40,7 @@ public sealed class DiarizationStageHandlerTests
     private static string ExpectedModelFilePath(string modelCacheRoot)
     {
         // modelCacheRoot / cgus / diar_streaming_sortformer_4spk-v2.1-onnx / onnx / model.onnx
-        return Path.Combine(
+        return Path.Join(
             Path.GetFullPath(modelCacheRoot),
             "cgus",
             "diar_streaming_sortformer_4spk-v2.1-onnx",
@@ -55,7 +55,7 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public void GetRequiredModelStatus_WhenModelMissing_ReturnsNotAvailable()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         DiarizationStageHandler handler = BuildHandler(modelCacheRoot);
 
         RequiredDiarizationModelStatus status = handler.GetRequiredModelStatus();
@@ -69,7 +69,7 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public void GetRequiredModelStatus_WhenCorruptFileExistsWithoutVerifiedCacheRecord_ReturnsNotAvailable()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         string modelPath = ExpectedModelFilePath(modelCacheRoot);
         Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
         File.WriteAllBytes(modelPath, [0xDE, 0xAD, 0xBE, 0xEF]);
@@ -82,9 +82,9 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public async Task GetRequiredModelStatus_WhenVerifiedCacheRecordExists_ReturnsAvailable()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         string modelPath = ExpectedModelFilePath(modelCacheRoot);
-        string modelRootPath = Path.GetFullPath(Path.Combine(modelCacheRoot, "cgus", "diar_streaming_sortformer_4spk-v2.1-onnx"));
+        string modelRootPath = Path.GetFullPath(Path.Join(modelCacheRoot, "cgus", "diar_streaming_sortformer_4spk-v2.1-onnx"));
         Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
         await File.WriteAllBytesAsync(modelPath, SortFormerTestFixtures.ModelBytes, TestContext.Current.CancellationToken);
 
@@ -109,7 +109,7 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public async Task DownloadRequiredModelAsync_RejectsDownloadWithInvalidChecksum()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         var downloader = new WritingModelDownloader();
         DiarizationStageHandler handler = BuildHandler(modelCacheRoot, downloader: downloader);
 
@@ -125,7 +125,7 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public async Task DownloadRequiredModelAsync_DoesNotRegisterWhenChecksumInvalid()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         var downloader = new WritingModelDownloader();
         var registrar = new RecordingModelCacheRegistrar();
         DiarizationStageHandler handler = BuildHandler(modelCacheRoot, downloader: downloader, registrar: registrar);
@@ -140,11 +140,11 @@ public sealed class DiarizationStageHandlerTests
     public async Task ImportModelAsync_RejectsModelWithInvalidChecksum()
     {
         string tempDir = CreateTempDirectory();
-        string sourceModelPath = Path.Combine(tempDir, "source.onnx");
+        string sourceModelPath = Path.Join(tempDir, "source.onnx");
         byte[] sourceBytes = [9, 8, 7, 6];
         await File.WriteAllBytesAsync(sourceModelPath, sourceBytes, TestContext.Current.CancellationToken);
 
-        string modelCacheRoot = Path.Combine(tempDir, "model-cache");
+        string modelCacheRoot = Path.Join(tempDir, "model-cache");
         var registrar = new RecordingModelCacheRegistrar();
         DiarizationStageHandler handler = BuildHandler(modelCacheRoot, registrar: registrar);
 
@@ -161,7 +161,7 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public async Task ImportModelAsync_PreservesSourceWhenImportPathIsCachePathAndChecksumInvalid()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         string modelPath = ExpectedModelFilePath(modelCacheRoot);
         byte[] sourceBytes = [9, 8, 7, 6];
         Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
@@ -179,7 +179,7 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public async Task DownloadRequiredModelAsync_AcceptsDownloadWithMatchingChecksum()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         var downloader = new WritingModelDownloader();
         var registrar = new RecordingModelCacheRegistrar();
         DiarizationStageHandler handler = BuildHandler(
@@ -198,7 +198,7 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public async Task DiarizeAsync_ThrowsRequiredModelNotAvailableException_WhenDownloadFails()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         DiarizationStageHandler handler = BuildHandler(modelCacheRoot, downloader: new FailingModelDownloader());
 
         await Assert.ThrowsAsync<RequiredModelNotAvailableException>(() =>
@@ -212,7 +212,7 @@ public sealed class DiarizationStageHandlerTests
     [Fact]
     public async Task IntegrityCheck_DeletesAndRedownloads_WhenModelCorrupt()
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         string modelPath = ExpectedModelFilePath(modelCacheRoot);
 
         Directory.CreateDirectory(Path.GetDirectoryName(modelPath)!);
@@ -284,9 +284,9 @@ public sealed class DiarizationStageHandlerTests
     private static async Task<DiarizationStageHandler> BuildHandlerWithVerifiedModelAsync(
         FakeDiarizationEngine? engine = null)
     {
-        string modelCacheRoot = Path.Combine(CreateTempDirectory(), "model-cache");
+        string modelCacheRoot = Path.Join(CreateTempDirectory(), "model-cache");
         string modelPath = ExpectedModelFilePath(modelCacheRoot);
-        string modelRootPath = Path.GetFullPath(Path.Combine(
+        string modelRootPath = Path.GetFullPath(Path.Join(
             modelCacheRoot,
             "cgus",
             "diar_streaming_sortformer_4spk-v2.1-onnx"));

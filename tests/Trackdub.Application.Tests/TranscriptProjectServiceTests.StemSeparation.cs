@@ -28,7 +28,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_with_stem_separation_keeps_transcript_stages_on_the_full_mix()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var transcriptionEngine = new RecordingAudioTranscriptionEngine();
@@ -76,7 +76,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_with_vocal_stem_does_not_analyze_it_for_transcript_preparation()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var analyzer = new FakeAudioQualityAnalyzer();
@@ -109,7 +109,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_without_stem_separation_uses_full_mix_audio()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var transcriptionEngine = new RecordingAudioTranscriptionEngine();
@@ -135,7 +135,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RunStemSeparationAsync_replaces_existing_vocals_and_ambiance_records()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -173,7 +173,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RunTranscriptStageAsync_passes_requested_source_language_to_asr()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var transcriptionEngine = new RecordingAudioTranscriptionEngine();
@@ -199,7 +199,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RunStemSeparationAsync_never_regenerates_the_transcript()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -221,7 +221,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RunStemSeparationAsync_preserves_existing_diarized_assignments()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var diarizationEngine = new RecordingDiarizationEngine(
@@ -260,7 +260,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RunStemSeparationAsync_when_separation_fails_records_failure_and_keeps_full_mix_route()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var transcriptionEngine = new RecordingAudioTranscriptionEngine();
@@ -296,7 +296,7 @@ public partial class TranscriptProjectServiceTests
     public async Task OpenAsync_with_demucs_v4_stems_warns_as_legacy_and_uses_normalized_audio_routes()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var stemEngine = new FakeStemSeparationEngine

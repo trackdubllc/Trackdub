@@ -11,8 +11,8 @@ public sealed class Wav2Vec2CtcForcedAlignerWiringTests : IDisposable
 
     public Wav2Vec2CtcForcedAlignerWiringTests()
     {
-        _tempRoot = Path.Combine(Path.GetTempPath(), $"w2v2-wiring-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(_tempRoot, "onnx"));
+        _tempRoot = Path.Join(Path.GetTempPath(), $"w2v2-wiring-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Join(_tempRoot, "onnx"));
 
         var vocab = new Dictionary<string, int>
         {
@@ -27,7 +27,7 @@ public sealed class Wav2Vec2CtcForcedAlignerWiringTests : IDisposable
             ["oʊ"] = 8,
         };
 
-        _vocabPath = Path.Combine(_tempRoot, "vocab.json");
+        _vocabPath = Path.Join(_tempRoot, "vocab.json");
         File.WriteAllText(_vocabPath, JsonSerializer.Serialize(vocab));
     }
 
@@ -47,8 +47,8 @@ public sealed class Wav2Vec2CtcForcedAlignerWiringTests : IDisposable
     [Fact]
     public void ResolveOnnxPath_PrefersInt8_WhenBothPresent()
     {
-        string int8 = Path.Combine(_tempRoot, "onnx", "model_int8.onnx");
-        string fp16 = Path.Combine(_tempRoot, "onnx", "model_fp16.onnx");
+        string int8 = Path.Join(_tempRoot, "onnx", "model_int8.onnx");
+        string fp16 = Path.Join(_tempRoot, "onnx", "model_fp16.onnx");
         File.WriteAllText(int8, "int8");
         File.WriteAllText(fp16, "fp16");
 
@@ -59,7 +59,7 @@ public sealed class Wav2Vec2CtcForcedAlignerWiringTests : IDisposable
     [Fact]
     public void ResolveOnnxPath_AcceptsFp16_WhenInt8Missing()
     {
-        string fp16 = Path.Combine(_tempRoot, "onnx", "model_fp16.onnx");
+        string fp16 = Path.Join(_tempRoot, "onnx", "model_fp16.onnx");
         File.WriteAllText(fp16, "fp16");
 
         string resolved = Wav2Vec2CtcForcedAligner.ResolveOnnxPath(_tempRoot);
@@ -82,7 +82,7 @@ public sealed class Wav2Vec2CtcForcedAlignerWiringTests : IDisposable
         using var aligner = new Wav2Vec2CtcForcedAligner(_tempRoot);
         Assert.False(aligner.IsAvailable);
 
-        string fp16 = Path.Combine(_tempRoot, "onnx", "model_fp16.onnx");
+        string fp16 = Path.Join(_tempRoot, "onnx", "model_fp16.onnx");
         File.WriteAllText(fp16, "fp16");
 
         Assert.True(aligner.IsAvailable);

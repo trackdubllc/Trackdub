@@ -1648,7 +1648,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_LoadsBundledManifest()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -1739,7 +1739,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_WhisperAsrEntriesHaveOliveOptimizationProfile()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -1782,7 +1782,7 @@ public sealed class ModelManifestLoaderTests
     [Fact]
     public void LoadCatalog_BindingsSharingProviderAndPrecisionNameDistinctComponents()
     {
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             FindRepoRoot(),
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -1810,7 +1810,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_BundledManifestSeparationModelsUseSupportedEngineFamilies()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -1836,7 +1836,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_KokoroDownloadVoiceFilesMatchKnownAvailableCatalog()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -1864,7 +1864,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_MadladDownloadFilesMatchKnownOnnxExportLayout()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -1896,7 +1896,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_QwenAsrDownloadFilesMatchKnownOnnxExportLayout(string modelId)
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -1934,7 +1934,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_QwenTextRefinementRequiresGenAiBundle()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -1978,7 +1978,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_Phi35MiniDefaultVariantIncludesCpuInt4Package()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -2000,7 +2000,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_ParakeetTdtEntryMatchesPinnedOnnxBundle()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -2037,7 +2037,7 @@ public sealed class ModelManifestLoaderTests
     public void LoadCatalog_NemotronAsrEntryMatchesPinnedOnnxBundle()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src", "Trackdub.Inference", "Runtime", "ModelManifest", "bundled-models.manifest.json");
 
@@ -2329,7 +2329,7 @@ public sealed class ModelManifestLoaderTests
 
     private static string WriteTempManifest(string json)
     {
-        string manifestPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string manifestPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
         File.WriteAllText(manifestPath, json);
         return manifestPath;
     }
@@ -2339,7 +2339,7 @@ public sealed class ModelManifestLoaderTests
         DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(current.FullName, "Trackdub.slnx")))
             {
                 return current.FullName;
             }
@@ -2531,7 +2531,7 @@ public sealed class ModelHashVerifierTests
 
     private static string WriteTempFile(byte[] bytes)
     {
-        string filePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.bin");
+        string filePath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.bin");
         File.WriteAllBytes(filePath, bytes);
         return filePath;
     }
@@ -2542,7 +2542,7 @@ public sealed class LocalModelCacheRecordStoreTests
     [Fact]
     public async Task SaveAndLoad_RoundTripsRecords()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
+        string rootPath = Path.Join(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
         var storagePaths = new TrackdubStoragePaths(rootPath);
         var store = new LocalModelCacheRecordStore(storagePaths);
         LocalModelCacheRecord[] records =
@@ -2573,12 +2573,12 @@ public sealed class LocalModelCacheRecordStoreTests
     [Fact]
     public async Task MutateAsync_concurrent_updates_preserve_both_records()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
+        string rootPath = Path.Join(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
         var storagePaths = new TrackdubStoragePaths(rootPath);
         var store = new LocalModelCacheRecordStore(storagePaths);
         LocalModelCacheRecord modelA = new(
             "example/model-a",
-            Path.Combine(rootPath, "model-a"),
+            Path.Join(rootPath, "model-a"),
             "main",
             "aaa",
             DateTimeOffset.UtcNow);
@@ -2591,7 +2591,7 @@ public sealed class LocalModelCacheRecordStoreTests
                 records => records
                     .Append(new LocalModelCacheRecord(
                         "example/model-b",
-                        Path.Combine(rootPath, "model-b"),
+                        Path.Join(rootPath, "model-b"),
                         "main",
                         "bbb",
                         DateTimeOffset.UtcNow))
@@ -2627,7 +2627,7 @@ public sealed class LocalModelCacheRecordStoreTests
     [Fact]
     public async Task LoadAsync_deserializes_legacy_records_without_variants()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
+        string rootPath = Path.Join(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
         var storagePaths = new TrackdubStoragePaths(rootPath);
 
         try
@@ -2667,7 +2667,7 @@ public sealed class LocalModelCacheRecordStoreTests
     [Fact]
     public async Task SaveAndLoad_RoundTripsVariantRecords()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
+        string rootPath = Path.Join(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
         var storagePaths = new TrackdubStoragePaths(rootPath);
         var store = new LocalModelCacheRecordStore(storagePaths);
         var createdAt = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
@@ -2723,12 +2723,12 @@ public sealed class LocalModelCacheRecordLookupTests
     [Fact]
     public async Task Find_returns_matching_record_and_ignores_integrity_failed()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N"));
+        string rootPath = Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(rootPath);
         var storagePaths = new TrackdubStoragePaths(rootPath);
         var store = new LocalModelCacheRecordStore(storagePaths);
         var lookup = new LocalModelCacheRecordLookup(store);
-        string modelRoot = Path.Combine(rootPath, "models", "example-model");
+        string modelRoot = Path.Join(rootPath, "models", "example-model");
 
         await store.MutateAsync(_ =>
         [

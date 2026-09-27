@@ -38,7 +38,7 @@ public sealed class BenchmarkModelPathResolver(
             return null;
         }
 
-        return Path.Combine(localAppData, "Trackdub", "model-cache");
+        return Path.Join(localAppData, "Trackdub", "model-cache");
     }
 
     public BenchmarkModelResolutionResult Discover(string reference)
@@ -75,7 +75,7 @@ public sealed class BenchmarkModelPathResolver(
 
         foreach (string modelStore in DiscoverModelStores())
         {
-            string scopedCandidate = ExpandToAbsolutePath(Path.Combine(modelStore, trimmedReference));
+            string scopedCandidate = ExpandToAbsolutePath(Path.Join(modelStore, trimmedReference));
             if (File.Exists(scopedCandidate))
             {
                 return CreateSingleCandidateResult(
@@ -412,7 +412,7 @@ public sealed class BenchmarkModelPathResolver(
             return false;
         }
 
-        cachedPath = Path.GetFullPath(Path.Combine(cachedRootDirectory, relativePath));
+        cachedPath = Path.GetFullPath(Path.Join(cachedRootDirectory, relativePath));
         return File.Exists(cachedPath);
     }
 
@@ -496,7 +496,7 @@ public sealed class BenchmarkModelPathResolver(
                 throw new InvalidOperationException($"Model id '{modelId}' contains an unsafe path segment.");
             }
 
-            root = Path.Combine(root, part);
+            root = Path.Join(root, part);
         }
 
         return Path.GetFullPath(root);
@@ -554,7 +554,7 @@ public sealed class BenchmarkModelPathResolver(
         string[] searchRoots =
         [
             directoryPath,
-            Path.Combine(directoryPath, "onnx")
+            Path.Join(directoryPath, "onnx")
         ];
 
         foreach (string root in searchRoots.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -663,7 +663,7 @@ public sealed class BenchmarkModelPathResolver(
     private static string ExpandToAbsolutePath(string path) =>
         Path.IsPathRooted(path)
             ? Path.GetFullPath(path)
-            : Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, path));
+            : Path.GetFullPath(Path.Join(Environment.CurrentDirectory, path));
 
     private static IEnumerable<string> DiscoverModelStores()
     {
@@ -672,7 +672,7 @@ public sealed class BenchmarkModelPathResolver(
         {
             foreach (string ancestor in EnumerateAncestors(seed))
             {
-                string modelStore = Path.Combine(ancestor, "models");
+                string modelStore = Path.Join(ancestor, "models");
                 if (Directory.Exists(modelStore) && seen.Add(modelStore))
                 {
                     yield return modelStore;

@@ -28,7 +28,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_when_diarization_fails_falls_back_to_single_speaker_without_throwing()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory, new ThrowingDiarizationEngine());
@@ -47,7 +47,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_propagates_commercial_safe_mode_to_diarization_engine()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var recordingEngine = new RecordingDiarizationEngine();
@@ -64,7 +64,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_when_diarization_is_enabled_transcribes_diarized_speaker_regions()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var diarizationEngine = new RecordingDiarizationEngine();
@@ -90,7 +90,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_when_diarization_regions_are_padded_keeps_adjacent_speakers_non_overlapping()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var diarizationEngine = new RecordingDiarizationEngine(
@@ -126,7 +126,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RetranscribeSegmentsAsync_replaces_selected_region_only()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var transcriptionEngine = new RecordingAudioTranscriptionEngine();
@@ -160,13 +160,13 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_uses_diarization_stage_handler_to_download_missing_model()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var recordingEngine = new RecordingDiarizationEngine();
         var downloader = new RecordingModelDownloader();
         var registrar = new RecordingModelCacheRegistrar();
-        string modelCacheRoot = Path.Combine(tempDirectory, "model-cache");
+        string modelCacheRoot = Path.Join(tempDirectory, "model-cache");
         var handler = new DiarizationStageHandler(
             recordingEngine,
             downloader,
@@ -188,7 +188,7 @@ public partial class TranscriptProjectServiceTests
         Assert.True(File.Exists(downloader.DestinationPath));
         Assert.NotNull(registrar.Record);
         Assert.Equal("cgus/diar_streaming_sortformer_4spk-v2.1-onnx", registrar.Record.ModelId);
-        Assert.Equal(Path.Combine(modelCacheRoot, "cgus", "diar_streaming_sortformer_4spk-v2.1-onnx"), registrar.Record.RootPath);
+        Assert.Equal(Path.Join(modelCacheRoot, "cgus", "diar_streaming_sortformer_4spk-v2.1-onnx"), registrar.Record.RootPath);
         Assert.Equal(SortFormerTestFixtures.ExpectedSha256, registrar.Record.Sha256);
         Assert.Equal(1, recordingEngine.CallCount);
         Assert.Single(created.Speakers);
@@ -199,7 +199,7 @@ public partial class TranscriptProjectServiceTests
     public void GetRequiredDiarizationModelStatus_reports_missing_downloadable_model()
     {
         string tempDirectory = CreateTempDirectory();
-        string modelCacheRoot = Path.Combine(tempDirectory, "model-cache");
+        string modelCacheRoot = Path.Join(tempDirectory, "model-cache");
         var handler = new DiarizationStageHandler(
             new RecordingDiarizationEngine(),
             new RecordingModelDownloader(),
@@ -219,7 +219,7 @@ public partial class TranscriptProjectServiceTests
         Assert.False(status.RequiresOnnxExport);
         Assert.Equal("https://huggingface.co/tonythethompson/diar-streaming-sortformer-4spk-v2.1-onnx", status.SourceUrl);
         Assert.EndsWith(
-            Path.Combine("cgus", "diar_streaming_sortformer_4spk-v2.1-onnx", "onnx", "model.onnx"),
+            Path.Join("cgus", "diar_streaming_sortformer_4spk-v2.1-onnx", "onnx", "model.onnx"),
             status.ModelPath,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -228,12 +228,12 @@ public partial class TranscriptProjectServiceTests
     public async Task ImportDiarizationModelAsync_copies_model_into_cache_and_registers_record()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourceModelPath = Path.Combine(tempDirectory, "source.onnx");
+        string sourceModelPath = Path.Join(tempDirectory, "source.onnx");
         byte[] sourceBytes = SortFormerTestFixtures.ModelBytes;
         await File.WriteAllBytesAsync(sourceModelPath, sourceBytes, TestContext.Current.CancellationToken);
 
         var registrar = new RecordingModelCacheRegistrar();
-        string modelCacheRoot = Path.Combine(tempDirectory, "model-cache");
+        string modelCacheRoot = Path.Join(tempDirectory, "model-cache");
         var handler = new DiarizationStageHandler(
             new RecordingDiarizationEngine(),
             new RecordingModelDownloader(),
@@ -252,7 +252,7 @@ public partial class TranscriptProjectServiceTests
         Assert.Equal(sourceBytes, await File.ReadAllBytesAsync(status.ModelPath, TestContext.Current.CancellationToken));
         Assert.NotNull(registrar.Record);
         Assert.Equal("cgus/diar_streaming_sortformer_4spk-v2.1-onnx", registrar.Record.ModelId);
-        Assert.Equal(Path.Combine(modelCacheRoot, "cgus", "diar_streaming_sortformer_4spk-v2.1-onnx"), registrar.Record.RootPath);
+        Assert.Equal(Path.Join(modelCacheRoot, "cgus", "diar_streaming_sortformer_4spk-v2.1-onnx"), registrar.Record.RootPath);
         Assert.Equal(Convert.ToHexString(SHA256.HashData(sourceBytes)).ToLowerInvariant(), registrar.Record.Sha256);
     }
 
@@ -260,7 +260,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_defaults_commercial_safe_mode_to_false_when_not_specified()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var recordingEngine = new RecordingDiarizationEngine();
@@ -274,7 +274,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_when_speaker_detection_is_disabled_skips_diarization_and_uses_single_speaker()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory, new ThrowingDiarizationEngine());

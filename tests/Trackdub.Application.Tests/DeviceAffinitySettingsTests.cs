@@ -8,7 +8,7 @@ public sealed class DeviceAffinitySettingsTests
     [Fact]
     public void Load_WhenSettingsFileIsMissing_DefaultsOpenVinoFlagsToFalse()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), "Trackdub.DeviceAffinitySettings.Tests", Guid.NewGuid().ToString("N"));
+        string rootPath = Path.Join(Path.GetTempPath(), "Trackdub.DeviceAffinitySettings.Tests", Guid.NewGuid().ToString("N"));
 
         try
         {
@@ -29,11 +29,11 @@ public sealed class DeviceAffinitySettingsTests
     [Fact]
     public void Load_WhenNewSchemaIsPresent_ReadsOpenVinoFlags()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), "Trackdub.DeviceAffinitySettings.Tests", Guid.NewGuid().ToString("N"));
+        string rootPath = Path.Join(Path.GetTempPath(), "Trackdub.DeviceAffinitySettings.Tests", Guid.NewGuid().ToString("N"));
 
         try
         {
-            string settingsPath = Path.Combine(rootPath, "Trackdub", "device-affinity.json");
+            string settingsPath = Path.Join(rootPath, "Trackdub", "device-affinity.json");
             Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
             File.WriteAllText(settingsPath, """
             {
@@ -67,11 +67,11 @@ public sealed class DeviceAffinitySettingsTests
     [Fact]
     public void Load_WhenLegacySchemaIsPresent_DefaultsOpenVinoFlagsToFalse()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), "Trackdub.DeviceAffinitySettings.Tests", Guid.NewGuid().ToString("N"));
+        string rootPath = Path.Join(Path.GetTempPath(), "Trackdub.DeviceAffinitySettings.Tests", Guid.NewGuid().ToString("N"));
 
         try
         {
-            string settingsPath = Path.Combine(rootPath, "Trackdub", "device-affinity.json");
+            string settingsPath = Path.Join(rootPath, "Trackdub", "device-affinity.json");
             Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
             File.WriteAllText(settingsPath, """
             {

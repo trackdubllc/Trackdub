@@ -411,7 +411,7 @@ public static class ProjectArtifactPaths
         }
 
         string normalizedRoot = Path.GetFullPath(projectRootPath);
-        string combined = Path.GetFullPath(Path.Combine(
+        string combined = Path.GetFullPath(Path.Join(
             normalizedRoot,
             relativePath.Replace('/', Path.DirectorySeparatorChar)));
 

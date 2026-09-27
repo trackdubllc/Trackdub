@@ -272,9 +272,9 @@ public sealed class Qwen3AsrOnnxAudioTranscriptionEngine(
     {
         string modelRoot = Path.GetDirectoryName(encoderModelPath)
             ?? throw new InvalidOperationException("Qwen3-ASR model root path could not be resolved.");
-        string decoderInitPath = Path.Combine(modelRoot, "decoder_init.onnx");
-        string decoderStepPath = Path.Combine(modelRoot, "decoder_step.onnx");
-        string embedTokensPath = Path.Combine(modelRoot, "embed_tokens.bin");
+        string decoderInitPath = Path.Join(modelRoot, "decoder_init.onnx");
+        string decoderStepPath = Path.Join(modelRoot, "decoder_step.onnx");
+        string embedTokensPath = Path.Join(modelRoot, "embed_tokens.bin");
         foreach (string path in new[] { decoderInitPath, decoderStepPath, embedTokensPath })
         {
             if (!File.Exists(path))

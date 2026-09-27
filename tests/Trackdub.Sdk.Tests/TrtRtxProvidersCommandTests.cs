@@ -9,7 +9,7 @@ namespace Trackdub.Sdk.Tests;
 [Collection(nameof(CliStdoutCaptureCollection))]
 public sealed class TrtRtxProvidersCommandTests : IDisposable
 {
-    private readonly string _emptyModelDirectory = Path.Combine(
+    private readonly string _emptyModelDirectory = Path.Join(
         Path.GetTempPath(),
         "TrackdubTests",
         Guid.NewGuid().ToString("N"),

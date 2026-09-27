@@ -6,7 +6,7 @@ namespace Trackdub.Media.Tests;
 
 public sealed class WsolaPhonemeStretchServiceTests : IDisposable
 {
-    private readonly string _tempDir = Path.Combine(
+    private readonly string _tempDir = Path.Join(
         Path.GetTempPath(),
         "Trackdub.WsolaTests",
         Guid.NewGuid().ToString("N"));
@@ -24,7 +24,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
     public async Task StretchAsync_AllOutOfBounds_ReturnsNull()
     {
         string inputPath = await WriteSineWavAsync(TimeSpan.FromSeconds(0.5));
-        string outputPath = Path.Combine(_tempDir, "out_oob.wav");
+        string outputPath = Path.Join(_tempDir, "out_oob.wav");
         var plan = new PhonemeStretchPlan[]
         {
             new("AH", TimeSpan.Zero, TimeSpan.FromSeconds(0.5), 1.5, WithinBounds: false),
@@ -41,7 +41,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
     public async Task StretchAsync_EmptyPlan_ReturnsNull()
     {
         string inputPath = await WriteSineWavAsync(TimeSpan.FromSeconds(0.5));
-        string outputPath = Path.Combine(_tempDir, "out_empty.wav");
+        string outputPath = Path.Join(_tempDir, "out_empty.wav");
 
         PhonemeStretchResult? result = await new WsolaPhonemeStretchService()
             .StretchAsync(inputPath, outputPath, [], TestContext.Current.CancellationToken);
@@ -58,7 +58,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
     {
         const double inputDurationSeconds = 1.0;
         string inputPath = await WriteSineWavAsync(TimeSpan.FromSeconds(inputDurationSeconds));
-        string outputPath = Path.Combine(_tempDir, "out_r1.wav");
+        string outputPath = Path.Join(_tempDir, "out_r1.wav");
         var plan = new PhonemeStretchPlan[]
         {
             new("AH", TimeSpan.Zero, TimeSpan.FromSeconds(inputDurationSeconds),
@@ -77,7 +77,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
     {
         const double inputDurationSeconds = 1.0;
         string inputPath = await WriteSineWavAsync(TimeSpan.FromSeconds(inputDurationSeconds));
-        string outputPath = Path.Combine(_tempDir, "out_r2.wav");
+        string outputPath = Path.Join(_tempDir, "out_r2.wav");
         var plan = new PhonemeStretchPlan[]
         {
             new("AH", TimeSpan.Zero, TimeSpan.FromSeconds(inputDurationSeconds),
@@ -141,7 +141,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
     public async Task StretchAsync_OutputFileCreated_WhenSuccessful()
     {
         string inputPath = await WriteSineWavAsync(TimeSpan.FromSeconds(0.5));
-        string outputPath = Path.Combine(_tempDir, "out_created.wav");
+        string outputPath = Path.Join(_tempDir, "out_created.wav");
         var plan = new PhonemeStretchPlan[]
         {
             new("AH", TimeSpan.Zero, TimeSpan.FromSeconds(0.5),
@@ -160,7 +160,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
         string inputPath = await WriteSineWavAsync(TimeSpan.FromSeconds(0.5));
         byte[] originalBytes = await File.ReadAllBytesAsync(
             inputPath, TestContext.Current.CancellationToken);
-        string outputPath = Path.Combine(_tempDir, "out_skip.wav");
+        string outputPath = Path.Join(_tempDir, "out_skip.wav");
         var plan = new PhonemeStretchPlan[]
         {
             new("AH", TimeSpan.Zero, TimeSpan.FromSeconds(0.5),
@@ -195,7 +195,7 @@ public sealed class WsolaPhonemeStretchServiceTests : IDisposable
         int sampleRate = 16_000,
         double frequency = 440.0)
     {
-        string path = Path.Combine(_tempDir, $"sine_{Guid.NewGuid():N}.wav");
+        string path = Path.Join(_tempDir, $"sine_{Guid.NewGuid():N}.wav");
         int frameCount = (int)(duration.TotalSeconds * sampleRate);
         var samples = new float[frameCount];
         double angleStep = 2.0 * Math.PI * frequency / sampleRate;

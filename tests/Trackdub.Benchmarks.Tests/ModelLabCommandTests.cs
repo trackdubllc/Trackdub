@@ -30,12 +30,12 @@ public sealed class ModelLabCommandOptionsTests
         Assert.Equal("openai/whisper-tiny", options.HuggingFaceModelId);
         Assert.Equal("whisper-tiny-genai", options.ModelRootName);
         Assert.EndsWith("models", options.ModelsRootPath, StringComparison.OrdinalIgnoreCase);
-        Assert.EndsWith(Path.Combine("manifest-fragments", "trackdub-model-lab.manifest.json"), options.ManifestFragmentPath, StringComparison.OrdinalIgnoreCase);
-        Assert.EndsWith(Path.Combine(".venv", "Scripts", "python.exe"), options.PythonPath, StringComparison.OrdinalIgnoreCase);
-        Assert.EndsWith(Path.Combine("onnxruntime-genai", "src", "python", "py", "models", "builder.py"), options.OrtGenAiBuilderPath, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Join("manifest-fragments", "trackdub-model-lab.manifest.json"), options.ManifestFragmentPath, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Join(".venv", "Scripts", "python.exe"), options.PythonPath, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Join("onnxruntime-genai", "src", "python", "py", "models", "builder.py"), options.OrtGenAiBuilderPath, StringComparison.OrdinalIgnoreCase);
         Assert.False(options.UseOrtGenAiBuilderModule);
         Assert.Equal("olive", options.OliveExecutablePath);
-        Assert.EndsWith(Path.Combine("models", ".cache"), options.CacheDirectoryPath, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Join("models", ".cache"), options.CacheDirectoryPath, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, options.BenchmarkRuns);
 
         ModelLabCandidateOptions candidate = Assert.Single(options.Candidates);
@@ -95,10 +95,10 @@ public sealed class ModelLabCommandTests
     [Fact]
     public async Task RunAsync_BuildsOliveBenchmarksAndWritesManifestFragment()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
-        string modelsRoot = Path.Combine(tempRoot, "models");
-        string fragmentPath = Path.Combine(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
-        string cachePath = Path.Combine(tempRoot, "cache");
+        string tempRoot = Path.Join(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
+        string modelsRoot = Path.Join(tempRoot, "models");
+        string fragmentPath = Path.Join(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
+        string cachePath = Path.Join(tempRoot, "cache");
         var processRunner = new FakeModelLabProcessRunner();
         using var output = new StringWriter();
         using var error = new StringWriter();
@@ -112,10 +112,10 @@ public sealed class ModelLabCommandTests
                     "--models-root", modelsRoot,
                     "--manifest-fragment", fragmentPath,
                     "--python", "python.exe",
-                    "--builder", Path.Combine(tempRoot, "builder.py"),
+                    "--builder", Path.Join(tempRoot, "builder.py"),
                     "--olive", "olive.exe",
                     "--cache", cachePath,
-                    "--benchmark-project", Path.Combine(tempRoot, "Trackdub.Benchmarks.csproj"),
+                    "--benchmark-project", Path.Join(tempRoot, "Trackdub.Benchmarks.csproj"),
                     "--benchmark-framework", "net10.0-windows10.0.19041.0",
                     "--benchmark-runs", "1",
                     "--candidate", "directml-fp16:dml:fp16:DmlExecutionProvider:gpu:dml"
@@ -131,20 +131,20 @@ public sealed class ModelLabCommandTests
 
             Assert.Contains(processRunner.Calls, call =>
                 call.Executable.Equals("python.exe", StringComparison.OrdinalIgnoreCase) &&
-                call.Arguments.Contains(Path.Combine(tempRoot, "builder.py"), StringComparer.OrdinalIgnoreCase) &&
+                call.Arguments.Contains(Path.Join(tempRoot, "builder.py"), StringComparer.OrdinalIgnoreCase) &&
                 call.Arguments.Contains("dml", StringComparer.OrdinalIgnoreCase) &&
                 call.Arguments.Contains("hf_token=false", StringComparer.OrdinalIgnoreCase));
             Assert.Contains(processRunner.Calls, call =>
                 call.Executable.Equals("olive.exe", StringComparison.OrdinalIgnoreCase) &&
                 call.Arguments.Contains("optimize", StringComparer.OrdinalIgnoreCase) &&
-                call.Arguments.Contains(Path.Combine(modelsRoot, "whisper-tiny-genai", "directml-fp16", "encoder.onnx"), StringComparer.OrdinalIgnoreCase) &&
-                call.Arguments.Contains(Path.Combine(cachePath, "olive", "directml-fp16", "encoder"), StringComparer.OrdinalIgnoreCase) &&
+                call.Arguments.Contains(Path.Join(modelsRoot, "whisper-tiny-genai", "directml-fp16", "encoder.onnx"), StringComparer.OrdinalIgnoreCase) &&
+                call.Arguments.Contains(Path.Join(cachePath, "olive", "directml-fp16", "encoder"), StringComparer.OrdinalIgnoreCase) &&
                 call.Arguments.Contains("DmlExecutionProvider", StringComparer.OrdinalIgnoreCase) &&
                 call.WorkingDirectory.Equals(cachePath, StringComparison.OrdinalIgnoreCase));
             Assert.Contains(processRunner.Calls, call =>
                 call.Executable.Equals("python.exe", StringComparison.OrdinalIgnoreCase) &&
                 call.Arguments.Any(argument => argument.EndsWith("decompose-whisper-cross-attention.py", StringComparison.OrdinalIgnoreCase)) &&
-                call.Arguments.Contains(Path.Combine(modelsRoot, "whisper-tiny-genai", "directml-fp16", "decoder.onnx"), StringComparer.OrdinalIgnoreCase));
+                call.Arguments.Contains(Path.Join(modelsRoot, "whisper-tiny-genai", "directml-fp16", "decoder.onnx"), StringComparer.OrdinalIgnoreCase));
             Assert.Contains(processRunner.Calls, call =>
                 call.Executable.Equals("dotnet", StringComparison.OrdinalIgnoreCase) &&
                 call.Arguments.Contains("-p:Platform=x64", StringComparer.OrdinalIgnoreCase) &&
@@ -178,9 +178,9 @@ public sealed class ModelLabCommandTests
     [Fact]
     public async Task RunAsync_UsesInstalledOrtGenAiBuilderModuleByDefault()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
-        string modelsRoot = Path.Combine(tempRoot, "models");
-        string fragmentPath = Path.Combine(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
+        string tempRoot = Path.Join(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
+        string modelsRoot = Path.Join(tempRoot, "models");
+        string fragmentPath = Path.Join(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
         var processRunner = new FakeModelLabProcessRunner();
 
         try
@@ -193,8 +193,8 @@ public sealed class ModelLabCommandTests
                     "--manifest-fragment", fragmentPath,
                     "--python", "python.exe",
                     "--olive", "olive.exe",
-                    "--cache", Path.Combine(tempRoot, "cache"),
-                    "--benchmark-project", Path.Combine(tempRoot, "Trackdub.Benchmarks.csproj"),
+                    "--cache", Path.Join(tempRoot, "cache"),
+                    "--benchmark-project", Path.Join(tempRoot, "Trackdub.Benchmarks.csproj"),
                     "--benchmark-runs", "1",
                     "--candidate", "cpu-fp32:cpu:fp32:CPUExecutionProvider:cpu:cpu"
                 ],
@@ -225,9 +225,9 @@ public sealed class ModelLabCommandTests
     [Fact]
     public async Task RunAsync_RejectsCandidateWhenBenchmarkReportFailed()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
-        string modelsRoot = Path.Combine(tempRoot, "models");
-        string fragmentPath = Path.Combine(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
+        string tempRoot = Path.Join(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
+        string modelsRoot = Path.Join(tempRoot, "models");
+        string fragmentPath = Path.Join(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
         var processRunner = new FakeModelLabProcessRunner
         {
             BenchmarkReportJson = """
@@ -252,8 +252,8 @@ public sealed class ModelLabCommandTests
                     "--manifest-fragment", fragmentPath,
                     "--python", "python.exe",
                     "--olive", "olive.exe",
-                    "--cache", Path.Combine(tempRoot, "cache"),
-                    "--benchmark-project", Path.Combine(tempRoot, "Trackdub.Benchmarks.csproj"),
+                    "--cache", Path.Join(tempRoot, "cache"),
+                    "--benchmark-project", Path.Join(tempRoot, "Trackdub.Benchmarks.csproj"),
                     "--benchmark-runs", "1",
                     "--candidate", "directml-fp16:dml:fp16:DmlExecutionProvider:gpu:dml"
                 ],
@@ -278,9 +278,9 @@ public sealed class ModelLabCommandTests
     [Fact]
     public async Task RunAsync_RejectsCandidateWhenBenchmarkSelectedProviderDiffers()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
-        string modelsRoot = Path.Combine(tempRoot, "models");
-        string fragmentPath = Path.Combine(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
+        string tempRoot = Path.Join(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
+        string modelsRoot = Path.Join(tempRoot, "models");
+        string fragmentPath = Path.Join(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
         var processRunner = new FakeModelLabProcessRunner
         {
             BenchmarkReportJson = """
@@ -304,8 +304,8 @@ public sealed class ModelLabCommandTests
                     "--manifest-fragment", fragmentPath,
                     "--python", "python.exe",
                     "--olive", "olive.exe",
-                    "--cache", Path.Combine(tempRoot, "cache"),
-                    "--benchmark-project", Path.Combine(tempRoot, "Trackdub.Benchmarks.csproj"),
+                    "--cache", Path.Join(tempRoot, "cache"),
+                    "--benchmark-project", Path.Join(tempRoot, "Trackdub.Benchmarks.csproj"),
                     "--benchmark-runs", "1",
                     "--candidate", "trt-rtx-fp16:NvTensorRtRtx:fp16:NvTensorRTRTXExecutionProvider:gpu:trt-rtx"
                 ],
@@ -330,10 +330,10 @@ public sealed class ModelLabCommandTests
     [Fact]
     public async Task RunAsync_RejectsCandidateWhenBenchmarkReportRecordsCpuFallback()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
-        string modelsRoot = Path.Combine(tempRoot, "models");
-        string fragmentPath = Path.Combine(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
-        string cachePath = Path.Combine(tempRoot, "cache");
+        string tempRoot = Path.Join(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
+        string modelsRoot = Path.Join(tempRoot, "models");
+        string fragmentPath = Path.Join(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
+        string cachePath = Path.Join(tempRoot, "cache");
         var processRunner = new FakeModelLabProcessRunner
         {
             BenchmarkReportJson =
@@ -357,10 +357,10 @@ public sealed class ModelLabCommandTests
                     "--models-root", modelsRoot,
                     "--manifest-fragment", fragmentPath,
                     "--python", "python.exe",
-                    "--builder", Path.Combine(tempRoot, "builder.py"),
+                    "--builder", Path.Join(tempRoot, "builder.py"),
                     "--olive", "olive.exe",
                     "--cache", cachePath,
-                    "--benchmark-project", Path.Combine(tempRoot, "Trackdub.Benchmarks.csproj"),
+                    "--benchmark-project", Path.Join(tempRoot, "Trackdub.Benchmarks.csproj"),
                     "--benchmark-runs", "1",
                     "--candidate", "trt-rtx-fp16:NvTensorRtRtx:fp16:NvTensorRTRTXExecutionProvider:gpu:trt-rtx"
                 ],
@@ -412,7 +412,7 @@ public sealed class ModelLabCommandTests
             {
                 string outputPath = ReadArgumentValue(startInfo.Arguments, "--output_path");
                 Directory.CreateDirectory(outputPath);
-                await File.WriteAllTextAsync(Path.Combine(outputPath, "model.onnx"), "optimized", cancellationToken);
+                await File.WriteAllTextAsync(Path.Join(outputPath, "model.onnx"), "optimized", cancellationToken);
                 return 0;
             }
 
@@ -426,9 +426,9 @@ public sealed class ModelLabCommandTests
 
                 string outputDirectory = ReadArgumentValue(startInfo.Arguments, "-o");
                 Directory.CreateDirectory(outputDirectory);
-                await File.WriteAllTextAsync(Path.Combine(outputDirectory, "encoder.onnx"), "encoder", cancellationToken);
-                await File.WriteAllTextAsync(Path.Combine(outputDirectory, "decoder.onnx"), "decoder", cancellationToken);
-                await File.WriteAllTextAsync(Path.Combine(outputDirectory, "genai_config.json"), "{}", cancellationToken);
+                await File.WriteAllTextAsync(Path.Join(outputDirectory, "encoder.onnx"), "encoder", cancellationToken);
+                await File.WriteAllTextAsync(Path.Join(outputDirectory, "decoder.onnx"), "decoder", cancellationToken);
+                await File.WriteAllTextAsync(Path.Join(outputDirectory, "genai_config.json"), "{}", cancellationToken);
                 return 0;
             }
 
@@ -471,10 +471,10 @@ public sealed class ModelLabCommandTests
     [Fact]
     public async Task RunAsync_SkipsBenchmarkWhenNoBenchmarkFlagSet()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
-        string modelsRoot = Path.Combine(tempRoot, "models");
-        string fragmentPath = Path.Combine(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
-        string cachePath = Path.Combine(tempRoot, "cache");
+        string tempRoot = Path.Join(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
+        string modelsRoot = Path.Join(tempRoot, "models");
+        string fragmentPath = Path.Join(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
+        string cachePath = Path.Join(tempRoot, "cache");
         var processRunner = new FakeModelLabProcessRunner();
 
         try
@@ -486,10 +486,10 @@ public sealed class ModelLabCommandTests
                     "--models-root", modelsRoot,
                     "--manifest-fragment", fragmentPath,
                     "--python", "python.exe",
-                    "--builder", Path.Combine(tempRoot, "builder.py"),
+                    "--builder", Path.Join(tempRoot, "builder.py"),
                     "--olive", "olive.exe",
                     "--cache", cachePath,
-                    "--benchmark-project", Path.Combine(tempRoot, "Trackdub.Benchmarks.csproj"),
+                    "--benchmark-project", Path.Join(tempRoot, "Trackdub.Benchmarks.csproj"),
                     "--benchmark-runs", "1",
                     "--no-benchmark",
                     "--candidate", "cpu-fp32:cpu:fp32:CPUExecutionProvider:cpu:cpu"
@@ -521,9 +521,9 @@ public sealed class ModelLabCommandTests
     [Fact]
     public async Task RunAsync_WhenNoBenchmarkAndNoVariants_WritesBenchmarkSkippedFailure()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
-        string modelsRoot = Path.Combine(tempRoot, "models");
-        string fragmentPath = Path.Combine(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
+        string tempRoot = Path.Join(Path.GetTempPath(), "trackdub-model-lab-tests", Guid.NewGuid().ToString("N"));
+        string modelsRoot = Path.Join(tempRoot, "models");
+        string fragmentPath = Path.Join(modelsRoot, "manifest-fragments", "trackdub-model-lab.manifest.json");
         var processRunner = new FakeModelLabProcessRunner();
         using var error = new StringWriter();
 
@@ -536,10 +536,10 @@ public sealed class ModelLabCommandTests
                     "--models-root", modelsRoot,
                     "--manifest-fragment", fragmentPath,
                     "--python", "missing-builder.exe",
-                    "--builder", Path.Combine(tempRoot, "builder.py"),
+                    "--builder", Path.Join(tempRoot, "builder.py"),
                     "--olive", "olive.exe",
-                    "--cache", Path.Combine(tempRoot, "cache"),
-                    "--benchmark-project", Path.Combine(tempRoot, "Trackdub.Benchmarks.csproj"),
+                    "--cache", Path.Join(tempRoot, "cache"),
+                    "--benchmark-project", Path.Join(tempRoot, "Trackdub.Benchmarks.csproj"),
                     "--benchmark-runs", "1",
                     "--no-benchmark",
                     "--candidate", "cpu-fp32:cpu:fp32:CPUExecutionProvider:cpu:cpu"

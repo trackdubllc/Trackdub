@@ -500,7 +500,7 @@ public sealed class LipSyncStageHandler(
         ForcedAlignmentResult alignmentResult,
         CancellationToken cancellationToken)
     {
-        string tempSourceSegmentPath = Path.Combine(Path.GetTempPath(), $"trackdub-src-seg-{segmentId:N}.wav");
+        string tempSourceSegmentPath = Path.Join(Path.GetTempPath(), $"trackdub-src-seg-{segmentId:N}.wav");
         try
         {
             await _audioClipExtractor!
@@ -650,7 +650,7 @@ public sealed class LipSyncStageHandler(
         IReadOnlyList<PhonemeStretchPlan> stretchPlan,
         CancellationToken cancellationToken)
     {
-        string stretchedOutputPath = Path.Combine(Path.GetTempPath(), $"trackdub-lip-stretched-{segmentId:N}.wav");
+        string stretchedOutputPath = Path.Join(Path.GetTempPath(), $"trackdub-lip-stretched-{segmentId:N}.wav");
         PhonemeStretchResult? stretchResult;
         try
         {

@@ -122,15 +122,15 @@ public sealed class StemSeparationStageHandlerTests
         string directory = CreateTempDirectory();
         string staleDirectory = StemSeparationTempDirectories.GetRunDirectory(Guid.NewGuid());
         string freshDirectory = StemSeparationTempDirectories.GetRunDirectory(Guid.NewGuid());
-        string unrelatedDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-other-{Guid.NewGuid():N}");
+        string unrelatedDirectory = Path.Join(Path.GetTempPath(), $"trackdub-other-{Guid.NewGuid():N}");
         try
         {
             Directory.CreateDirectory(staleDirectory);
             Directory.CreateDirectory(freshDirectory);
             Directory.CreateDirectory(unrelatedDirectory);
-            File.WriteAllText(Path.Combine(staleDirectory, "leftover.tmp"), "stale");
-            File.WriteAllText(Path.Combine(freshDirectory, "active.tmp"), "fresh");
-            File.WriteAllText(Path.Combine(unrelatedDirectory, "leftover.tmp"), "unrelated");
+            File.WriteAllText(Path.Join(staleDirectory, "leftover.tmp"), "stale");
+            File.WriteAllText(Path.Join(freshDirectory, "active.tmp"), "fresh");
+            File.WriteAllText(Path.Join(unrelatedDirectory, "leftover.tmp"), "unrelated");
             Directory.SetLastWriteTimeUtc(staleDirectory, DateTimeOffset.UtcNow.AddHours(-25).UtcDateTime);
             Directory.SetLastWriteTimeUtc(freshDirectory, DateTimeOffset.UtcNow.AddHours(-1).UtcDateTime);
             Directory.SetLastWriteTimeUtc(unrelatedDirectory, DateTimeOffset.UtcNow.AddHours(-25).UtcDateTime);
@@ -409,7 +409,7 @@ public sealed class StemSeparationStageHandlerTests
         Guid projectId = Guid.NewGuid();
         Guid mediaAssetId = Guid.NewGuid();
         string sourceRelativePath = ProjectArtifactPaths.StemSeparationSourceAudioRelativePath;
-        string sourcePath = Path.Combine(directory, "source.wav");
+        string sourcePath = Path.Join(directory, "source.wav");
         File.WriteAllBytes(sourcePath, FakeWavHelper.MinimalPcm16(durationSeconds: 1d, sampleRate: 44100, channelCount: 2));
         artifactStore.SeedPath(sourceRelativePath, sourcePath, File.ReadAllBytes(sourcePath));
 
@@ -462,7 +462,7 @@ public sealed class StemSeparationStageHandlerTests
 
     private static string CreateTempDirectory()
     {
-        string directory = Path.Combine(Path.GetTempPath(), $"trackdub-stem-stage-{Guid.NewGuid():N}");
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-stem-stage-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         return directory;
     }

@@ -82,7 +82,7 @@ public static class BatchFileDiscovery
         var result = matcher.Execute(directoryInfo);
 
         var files = result.Files
-            .Select(match => Path.GetFullPath(Path.Combine(baseDirectory, match.Path)))
+            .Select(match => Path.GetFullPath(Path.Join(baseDirectory, match.Path)))
             .Where(f => SupportedExtensions.Contains(Path.GetExtension(f)))
             .ToList();
 

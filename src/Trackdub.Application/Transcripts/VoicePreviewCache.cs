@@ -8,7 +8,7 @@ public sealed class VoicePreviewCache
     private readonly string cacheRoot;
 
     public VoicePreviewCache()
-        : this(Path.Combine(Path.GetTempPath(), "Trackdub", "voice-previews"))
+        : this(Path.Join(Path.GetTempPath(), "Trackdub", "voice-previews"))
     {
     }
 
@@ -44,6 +44,6 @@ public sealed class VoicePreviewCache
 
         string cacheKey = string.Join('\n', request.VoiceId, request.LanguageCode, request.SampleText);
         string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(cacheKey))).ToLowerInvariant();
-        return Path.Combine(cacheRoot, $"{hash}.wav");
+        return Path.Join(cacheRoot, $"{hash}.wav");
     }
 }

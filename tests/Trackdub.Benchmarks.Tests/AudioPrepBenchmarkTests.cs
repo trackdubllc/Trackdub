@@ -18,8 +18,8 @@ public sealed class AudioPrepBenchmarkTests
     [Fact]
     public async Task ProgramRunAsync_AudioPrepWritesReportAndAcceptsNonRegressingAuto()
     {
-        string manifestPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
-        string reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string manifestPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
         var manifest = new AudioPrepBenchmarkManifest(
         [
             new AudioPrepBenchmarkFixture(
@@ -98,7 +98,7 @@ public sealed class AudioPrepBenchmarkTests
         var options = new AudioPrepBenchmarkOptions("unused", "unused", ReportFormat.Json, ShowHelp: false);
 
         // Exercise the public runner through a temporary manifest so JSON shape stays covered.
-        string manifestPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string manifestPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
         try
         {
             File.WriteAllText(manifestPath, JsonSerializer.Serialize(new AudioPrepBenchmarkManifest([fixture]), SerializerOptions));

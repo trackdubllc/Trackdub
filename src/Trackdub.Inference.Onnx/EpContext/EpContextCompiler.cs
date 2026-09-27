@@ -117,7 +117,7 @@ public sealed class EpContextCompiler
                 throw new InvalidOperationException("Generated EP-context temp directory name must be a relative, non-empty path segment.");
             }
 
-            tempDir = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(epContextPath))!, tempDirName);
+            tempDir = Path.Join(Path.GetDirectoryName(Path.GetFullPath(epContextPath))!, tempDirName);
             Directory.CreateDirectory(tempDir);
             string outputFileName = Path.GetFileName(epContextPath);
             if (string.IsNullOrEmpty(outputFileName) || Path.IsPathRooted(outputFileName))
@@ -125,7 +125,7 @@ public sealed class EpContextCompiler
                 throw new InvalidOperationException($"EP-context output path '{epContextPath}' does not resolve to a valid relative file name.");
             }
 
-            tempPath = Path.Combine(tempDir, outputFileName);
+            tempPath = Path.Join(tempDir, outputFileName);
             using (var compileOptions = new OrtModelCompilationOptions(sessionOptions))
             {
                 compileOptions.SetInputModelPath(sourceModelPath);

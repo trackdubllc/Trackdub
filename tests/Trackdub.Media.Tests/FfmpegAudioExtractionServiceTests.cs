@@ -8,11 +8,11 @@ public sealed class FfmpegAudioExtractionServiceTests
     [RequiresFfmpegFact]
     public async Task ExtractNormalizedAudioAsync_creates_stereo_wav_output_and_waveform()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         try
         {
             string sourcePath = await MediaFixtureFactory.CreateSampleVideoAsync(tempDirectory);
-            string outputPath = Path.Combine(tempDirectory, "normalized.wav");
+            string outputPath = Path.Join(tempDirectory, "normalized.wav");
             var service = new FfmpegAudioExtractionService();
             var waveformGenerator = new WaveformSummaryGenerator(bucketCount: 16);
 

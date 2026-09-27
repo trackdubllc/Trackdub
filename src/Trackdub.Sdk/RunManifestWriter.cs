@@ -51,14 +51,14 @@ public sealed class RunManifestWriter
             byte[] jsonBytes = JsonSerializer.SerializeToUtf8Bytes(result, SerializerOptions);
 
             // Write latest manifest (overwriting previous).
-            string latestPath = Path.Combine(outputDirectory, "run-manifest.json");
+            string latestPath = Path.Join(outputDirectory, "run-manifest.json");
             await File.WriteAllBytesAsync(latestPath, jsonBytes, cancellationToken).ConfigureAwait(false);
 
             // Write historical manifest.
-            string historyDirectory = Path.Combine(outputDirectory, "run-manifests");
+            string historyDirectory = Path.Join(outputDirectory, "run-manifests");
             Directory.CreateDirectory(historyDirectory);
 
-            string historyPath = Path.Combine(historyDirectory, $"run-{result.RunId}.json");
+            string historyPath = Path.Join(historyDirectory, $"run-{result.RunId}.json");
             await File.WriteAllBytesAsync(historyPath, jsonBytes, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)

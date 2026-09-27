@@ -8,11 +8,11 @@ public sealed class WaveformSummaryGeneratorTests
     [Fact]
     public async Task GenerateAsync_uses_duration_based_bucket_count_by_default()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(tempDirectory);
-            string audioPath = Path.Combine(tempDirectory, "sample.wav");
+            string audioPath = Path.Join(tempDirectory, "sample.wav");
             WritePcm16MonoWave(audioPath, sampleRate: 1000, durationSeconds: 20);
 
             var generator = new WaveformSummaryGenerator();
@@ -34,11 +34,11 @@ public sealed class WaveformSummaryGeneratorTests
     [Fact]
     public async Task GenerateAsync_preserves_explicit_bucket_count()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(tempDirectory);
-            string audioPath = Path.Combine(tempDirectory, "sample.wav");
+            string audioPath = Path.Join(tempDirectory, "sample.wav");
             WritePcm16MonoWave(audioPath, sampleRate: 1000, durationSeconds: 20);
 
             var generator = new WaveformSummaryGenerator(bucketCount: 16);

@@ -9,14 +9,14 @@ public sealed class PcmAudioQualityAnalyzerTests
     [Fact]
     public async Task AnalyzeAsync_detects_low_volume_fixture()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
-        string path = Path.Combine(tempDirectory, "quiet.wav");
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string path = Path.Join(tempDirectory, "quiet.wav");
         Directory.CreateDirectory(tempDirectory);
         try
         {
             await WriteWaveAsync(path, sample => 0.005d * Math.Sin(2d * Math.PI * 220d * sample / 48000d));
             var analyzer = new PcmAudioQualityAnalyzer();
-            string requestedPath = Path.Combine(tempDirectory, ".", "quiet.wav");
+            string requestedPath = Path.Join(tempDirectory, ".", "quiet.wav");
 
             AudioQualityAnalysisResult result = await analyzer.AnalyzeAsync(
                 new AudioQualityAnalysisRequest(
@@ -41,8 +41,8 @@ public sealed class PcmAudioQualityAnalyzerTests
     [Fact]
     public async Task AnalyzeAsync_reports_unavailable_snr_without_quiet_floor()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
-        string path = Path.Combine(tempDirectory, "music-bed.wav");
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string path = Path.Join(tempDirectory, "music-bed.wav");
         Directory.CreateDirectory(tempDirectory);
         try
         {

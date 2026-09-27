@@ -192,7 +192,7 @@ internal static class RunStageHandler
             return storedSourceMediaPath;
         }
 
-        return Path.Combine(projectRootPath, "source-media");
+        return Path.Join(projectRootPath, "source-media");
     }
 
     private sealed class RunStageOutput

@@ -6,7 +6,7 @@ namespace Trackdub.Application.Tests;
 
 public sealed class AudioArtifactValidatorTests : IDisposable
 {
-    private readonly string tempDir = Path.Combine(Path.GetTempPath(), $"AudioArtifactValidatorTests_{Guid.NewGuid():N}");
+    private readonly string tempDir = Path.Join(Path.GetTempPath(), $"AudioArtifactValidatorTests_{Guid.NewGuid():N}");
 
     public AudioArtifactValidatorTests() => Directory.CreateDirectory(tempDir);
 
@@ -31,7 +31,7 @@ public sealed class AudioArtifactValidatorTests : IDisposable
 
     private string WriteWav(byte[] bytes)
     {
-        string path = Path.Combine(tempDir, $"{Guid.NewGuid():N}.wav");
+        string path = Path.Join(tempDir, $"{Guid.NewGuid():N}.wav");
         File.WriteAllBytes(path, bytes);
         return path;
     }

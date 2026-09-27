@@ -70,7 +70,7 @@ public sealed class QwenTextToSpeechClient : ITextToSpeechClient
         var instruct = options?.Instruct;
 
         // Write to temp file, read into memory, then clean up
-        var tempPath = Path.Combine(Path.GetTempPath(), $"qwentts_{Guid.NewGuid():N}.wav");
+        var tempPath = Path.Join(Path.GetTempPath(), $"qwentts_{Guid.NewGuid():N}.wav");
         try
         {
             await _pipeline!.SynthesizeAsync(text, voice, tempPath, language, instruct);

@@ -281,7 +281,7 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         ICollection<string> notes)
     {
         var decoderModelPath = ResolveWhisperDecoderPath(encoderModelPath);
-        var configPath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, "..", "config.json");
+        var configPath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, "..", "config.json");
         var fullConfigPath = Path.GetFullPath(configPath);
 
         notes.Add($"Whisper decoder discovered at '{decoderModelPath}'.");
@@ -334,7 +334,7 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         ICollection<string> notes)
     {
         var decoderModelPath = ResolveOpusDecoderPath(encoderModelPath);
-        var configPath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, "..", "config.json");
+        var configPath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, "..", "config.json");
         var fullConfigPath = Path.GetFullPath(configPath);
 
         notes.Add($"Opus decoder discovered at '{decoderModelPath}'.");
@@ -1000,7 +1000,7 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
         var modelDirectory = Path.GetDirectoryName(encoderModelPath)!;
         foreach (var fileName in new[] { "decoder_model.onnx", "decoder.onnx" })
         {
-            var decoderModelPath = Path.Combine(modelDirectory, fileName);
+            var decoderModelPath = Path.Join(modelDirectory, fileName);
             if (File.Exists(decoderModelPath))
             {
                 return Path.GetFullPath(decoderModelPath);
@@ -1009,7 +1009,7 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
 
         throw new FileNotFoundException(
             "Whisper decoder model was not found next to the encoder model.",
-            Path.Combine(modelDirectory, "decoder_model.onnx"));
+            Path.Join(modelDirectory, "decoder_model.onnx"));
     }
 
     private static int ResolveWhisperDecoderStartTokenId(string configPath)
@@ -1031,13 +1031,13 @@ public sealed class OnnxModelBenchmarkRunner : IModelBenchmarkRunner
 
     private static string ResolveOpusDecoderPath(string encoderModelPath)
     {
-        var decoderModelPath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, "decoder_model.onnx");
+        var decoderModelPath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, "decoder_model.onnx");
         if (File.Exists(decoderModelPath))
         {
             return Path.GetFullPath(decoderModelPath);
         }
 
-        var mergedDecoderModelPath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, "decoder_model_merged.onnx");
+        var mergedDecoderModelPath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, "decoder_model_merged.onnx");
         if (!File.Exists(mergedDecoderModelPath))
         {
             throw new FileNotFoundException("Opus decoder model was not found next to the encoder model.", decoderModelPath);

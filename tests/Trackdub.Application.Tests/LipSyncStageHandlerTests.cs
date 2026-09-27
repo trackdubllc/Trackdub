@@ -15,7 +15,7 @@ public sealed class LipSyncStageHandlerTests
 
     private static string CreateTempDirectory()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"lipsync-tests-{Guid.NewGuid():N}");
+        var path = Path.Join(Path.GetTempPath(), $"lipsync-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
     }
@@ -497,7 +497,7 @@ public sealed class LipSyncStageHandlerTests
             {
                 [translatedSegmentId] = new(1.0, 4.0)
             };
-            string fakeSourcePath = Path.Combine(directory, "source.wav");
+            string fakeSourcePath = Path.Join(directory, "source.wav");
             File.WriteAllBytes(fakeSourcePath, []);
 
             var handler = MakeHandler(artifactStore, stageRunStore, aligner, stretchService, clipExtractor);
@@ -584,7 +584,7 @@ public sealed class LipSyncStageHandlerTests
             {
                 [translatedSegmentId] = new(0.0, 2.5)
             };
-            string fakeSourcePath = Path.Combine(directory, "source.wav");
+            string fakeSourcePath = Path.Join(directory, "source.wav");
             File.WriteAllBytes(fakeSourcePath, []);
 
             var handler = MakeHandler(artifactStore, stageRunStore, aligner, clipExtractor: clipExtractor);
@@ -654,7 +654,7 @@ public sealed class LipSyncStageHandlerTests
             {
                 [translatedSegmentId] = new(0.5, 3.5)
             };
-            string fakeSourcePath = Path.Combine(directory, "source.wav");
+            string fakeSourcePath = Path.Join(directory, "source.wav");
             File.WriteAllBytes(fakeSourcePath, []);
 
             var handler = MakeHandler(artifactStore, stageRunStore, aligner, clipExtractor: clipExtractor);
@@ -737,7 +737,7 @@ public sealed class LipSyncStageHandlerTests
             {
                 [translatedSegmentId] = new(1.0, 4.0)
             };
-            string fakeSourcePath = Path.Combine(directory, "source.wav");
+            string fakeSourcePath = Path.Join(directory, "source.wav");
             File.WriteAllBytes(fakeSourcePath, []);
 
             var handler = MakeHandler(
@@ -826,7 +826,7 @@ public sealed class LipSyncStageHandlerTests
             {
                 [translatedSegmentId] = new(0.5, 3.0)
             };
-            string fakeSourcePath = Path.Combine(directory, "source.wav");
+            string fakeSourcePath = Path.Join(directory, "source.wav");
             File.WriteAllBytes(fakeSourcePath, []);
 
             var handler = MakeHandler(
@@ -900,7 +900,7 @@ public sealed class LipSyncStageHandlerTests
             {
                 [translatedSegmentId] = new(1.0, 4.0)
             };
-            string fakeSourcePath = Path.Combine(directory, "source.wav");
+            string fakeSourcePath = Path.Join(directory, "source.wav");
             File.WriteAllBytes(fakeSourcePath, []);
 
             var handler = MakeHandler(artifactStore, stageRunStore, aligner, clipExtractor: clipExtractor);
@@ -990,7 +990,7 @@ public sealed class LipSyncStageHandlerTests
             {
                 [translatedSegmentId] = new(1.0, 4.0)
             };
-            string fakeSourcePath = Path.Combine(directory, "source.wav");
+            string fakeSourcePath = Path.Join(directory, "source.wav");
             File.WriteAllBytes(fakeSourcePath, []);
 
             var handler = MakeHandler(artifactStore, stageRunStore, aligner, stretchService, clipExtractor);

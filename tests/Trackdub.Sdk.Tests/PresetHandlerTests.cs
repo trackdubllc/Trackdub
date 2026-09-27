@@ -14,7 +14,7 @@ public sealed class PresetHandlerTests : IDisposable
 
     public PresetHandlerTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"trackdub-handler-tests-{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"trackdub-handler-tests-{Guid.NewGuid():N}");
         _store = new PresetStore(_tempDir);
         _stdout = new StringWriter();
         _stderr = new StringWriter();

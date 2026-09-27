@@ -7,7 +7,7 @@ public sealed class NemotronAsrExportConfigTests
     [Fact]
     public void Load_reads_blank_id_vocab_size_and_normalize_from_bundled_shape()
     {
-        string configPath = Path.Combine(Path.GetTempPath(), $"nemotron-config-{Guid.NewGuid():N}.json");
+        string configPath = Path.Join(Path.GetTempPath(), $"nemotron-config-{Guid.NewGuid():N}.json");
         File.WriteAllText(
             configPath,
             """
@@ -35,7 +35,7 @@ public sealed class NemotronAsrExportConfigTests
     [Fact]
     public void Load_missing_blank_id_falls_back_to_vocab_size_not_vocab_minus_one()
     {
-        string configPath = Path.Combine(Path.GetTempPath(), $"nemotron-config-{Guid.NewGuid():N}.json");
+        string configPath = Path.Join(Path.GetTempPath(), $"nemotron-config-{Guid.NewGuid():N}.json");
         File.WriteAllText(configPath, """{ "vocab_size": 13087, "preprocessor": { "normalize": "per_feature" } }""");
         try
         {

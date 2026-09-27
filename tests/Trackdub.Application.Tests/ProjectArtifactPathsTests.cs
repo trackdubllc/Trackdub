@@ -282,11 +282,11 @@ public sealed class ProjectArtifactPathsTests
     [Fact]
     public void ResolveAbsolutePath_combines_project_root_with_normalized_relative_path()
     {
-        string root = Path.Combine(Path.GetTempPath(), "project.trackdub");
+        string root = Path.Join(Path.GetTempPath(), "project.trackdub");
 
         string? path = ProjectArtifactPaths.ResolveAbsolutePath(root, "artifacts/tts/take.wav");
 
-        Assert.Equal(Path.GetFullPath(Path.Combine(root, "artifacts", "tts", "take.wav")), path);
+        Assert.Equal(Path.GetFullPath(Path.Join(root, "artifacts", "tts", "take.wav")), path);
     }
 
     [Theory]

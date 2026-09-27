@@ -9,7 +9,7 @@ namespace Trackdub.Sdk.Tests;
 
 public sealed class TrackdubPipelineReadinessCheckerTests : IDisposable
 {
-    private readonly string _emptyModelDirectory = Path.Combine(
+    private readonly string _emptyModelDirectory = Path.Join(
         Path.GetTempPath(),
         "TrackdubTests",
         Guid.NewGuid().ToString("N"),

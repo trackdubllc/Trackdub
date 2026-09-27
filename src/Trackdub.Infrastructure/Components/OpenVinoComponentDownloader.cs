@@ -77,7 +77,7 @@ public sealed class OpenVinoComponentDownloader
         }
 
         string componentDir = _componentStore.GetComponentDirectory(ComponentId);
-        string tempFilePath = Path.Combine(componentDir, $"{ComponentId}{TempFileSuffix}");
+        string tempFilePath = Path.Join(componentDir, $"{ComponentId}{TempFileSuffix}");
 
         try
         {
@@ -288,7 +288,7 @@ public sealed class OpenVinoComponentDownloader
         CancellationToken cancellationToken)
     {
         string parentDir = Path.GetDirectoryName(componentDir) ?? componentDir;
-        string stagingDir = Path.Combine(parentDir, $"{Path.GetFileName(componentDir)}{StagingDirectorySuffix}");
+        string stagingDir = Path.Join(parentDir, $"{Path.GetFileName(componentDir)}{StagingDirectorySuffix}");
 
         DeleteDirectoryIfExists(stagingDir);
         Directory.CreateDirectory(stagingDir);
@@ -319,7 +319,7 @@ public sealed class OpenVinoComponentDownloader
         DeleteFileIfExists(tempFilePath);
 
         string parentDir = Path.GetDirectoryName(componentDir) ?? componentDir;
-        string stagingDir = Path.Combine(parentDir, $"{Path.GetFileName(componentDir)}{StagingDirectorySuffix}");
+        string stagingDir = Path.Join(parentDir, $"{Path.GetFileName(componentDir)}{StagingDirectorySuffix}");
         DeleteDirectoryIfExists(stagingDir);
 
         // If the component directory only contains partial extraction artifacts

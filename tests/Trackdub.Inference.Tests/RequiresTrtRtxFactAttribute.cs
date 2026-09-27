@@ -37,7 +37,7 @@ public sealed class RequiresTrtRtxFactAttribute : FactAttribute
         }
 
         string[] missingFiles = TensorRtRtxProviderConstants.RequiredPluginFileNames
-            .Where(fileName => !File.Exists(Path.Combine(pluginDirectory, fileName)))
+            .Where(fileName => !File.Exists(Path.Join(pluginDirectory, fileName)))
             .ToArray();
         if (missingFiles.Length > 0)
         {

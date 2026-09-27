@@ -21,7 +21,7 @@ public sealed class TrtRtxEpBundleInstallerLicenseTests
         await settingsService.SaveAsync(
             StudioSettings.Default with { NvidiaTensorRtRtxLicenseAccepted = false },
             CancellationToken.None);
-        string tempRoot = Path.Combine(Path.GetTempPath(), $"trackdub-trt-rtx-license-{Guid.NewGuid():N}");
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-trt-rtx-license-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
         try
         {

@@ -29,7 +29,7 @@ public sealed class OliveRecipesPathProvider : IOliveRecipesPathProvider
         string assemblyDir = string.IsNullOrWhiteSpace(assemblyLocation)
             ? AppContext.BaseDirectory
             : Path.GetDirectoryName(assemblyLocation) ?? AppContext.BaseDirectory;
-        string bundledRecipesPath = Path.Combine(assemblyDir, "resources", "olive-recipes");
+        string bundledRecipesPath = Path.Join(assemblyDir, "resources", "olive-recipes");
 
         return Directory.Exists(bundledRecipesPath) ? bundledRecipesPath : null;
     }

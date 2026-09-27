@@ -6,7 +6,7 @@ namespace Trackdub.Media.Tests;
 
 public sealed class Pcm16WaveClipExtractorTests : IDisposable
 {
-    private readonly string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Pcm16WaveClipExtractor", Guid.NewGuid().ToString("N"));
+    private readonly string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Pcm16WaveClipExtractor", Guid.NewGuid().ToString("N"));
 
     public Pcm16WaveClipExtractorTests()
     {
@@ -16,8 +16,8 @@ public sealed class Pcm16WaveClipExtractorTests : IDisposable
     [Fact]
     public async Task ExtractAsync_single_range_writes_valid_wave_clip()
     {
-        string sourcePath = Path.Combine(tempDirectory, "source-single.wav");
-        string destinationPath = Path.Combine(tempDirectory, "single-clip.wav");
+        string sourcePath = Path.Join(tempDirectory, "source-single.wav");
+        string destinationPath = Path.Join(tempDirectory, "single-clip.wav");
         WriteMonoPcm16Wave(sourcePath, sampleRate: 4, [1000, 2000, 3000, 4000, 5000]);
         var extractor = new Pcm16WaveClipExtractor();
 
@@ -39,8 +39,8 @@ public sealed class Pcm16WaveClipExtractorTests : IDisposable
     [Fact]
     public async Task ExtractAsync_discontiguous_ranges_writes_valid_wave_clip_in_range_order()
     {
-        string sourcePath = Path.Combine(tempDirectory, "source-multi.wav");
-        string destinationPath = Path.Combine(tempDirectory, "multi-clip.wav");
+        string sourcePath = Path.Join(tempDirectory, "source-multi.wav");
+        string destinationPath = Path.Join(tempDirectory, "multi-clip.wav");
         WriteMonoPcm16Wave(sourcePath, sampleRate: 4, [1000, 2000, 3000, 4000, 5000, 6000]);
         var extractor = new Pcm16WaveClipExtractor();
 
@@ -65,8 +65,8 @@ public sealed class Pcm16WaveClipExtractorTests : IDisposable
     [Fact]
     public async Task ExtractAsync_invalid_range_reports_offending_range_property()
     {
-        string sourcePath = Path.Combine(tempDirectory, "source-invalid-range.wav");
-        string destinationPath = Path.Combine(tempDirectory, "invalid-range.wav");
+        string sourcePath = Path.Join(tempDirectory, "source-invalid-range.wav");
+        string destinationPath = Path.Join(tempDirectory, "invalid-range.wav");
         WriteMonoPcm16Wave(sourcePath, sampleRate: 4, [1000, 2000, 3000, 4000]);
         var extractor = new Pcm16WaveClipExtractor();
 

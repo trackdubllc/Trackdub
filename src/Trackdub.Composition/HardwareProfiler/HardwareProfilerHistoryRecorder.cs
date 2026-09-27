@@ -53,7 +53,7 @@ public sealed class HardwareProfilerHistoryRecorder(
                 return;
             }
 
-            string runsRoot = Path.Combine(storagePaths.UserDataRoot, "hardware-profiler", "runs");
+            string runsRoot = Path.Join(storagePaths.UserDataRoot, "hardware-profiler", "runs");
             if (!Directory.Exists(runsRoot))
             {
                 Volatile.Write(ref legacyImportCompleted, 1);
@@ -63,7 +63,7 @@ public sealed class HardwareProfilerHistoryRecorder(
             foreach (string runDirectory in Directory.EnumerateDirectories(runsRoot))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string snapshotPath = Path.Combine(runDirectory, "snapshot.json");
+                string snapshotPath = Path.Join(runDirectory, "snapshot.json");
                 if (!File.Exists(snapshotPath))
                 {
                     continue;
@@ -97,7 +97,7 @@ public sealed class HardwareProfilerHistoryRecorder(
                     continue;
                 }
 
-                string reportsRoot = Path.Combine(
+                string reportsRoot = Path.Join(
                     storagePaths.UserDataRoot,
                     "hardware-profiler",
                     "reports",
@@ -133,7 +133,7 @@ public sealed class HardwareProfilerHistoryRecorder(
     {
         string scenarioName = ResolveScenarioName(scenario.Scenario);
         string reportPath = ResolveReportPath(reportsRoot, scenarioName) ??
-                            Path.Combine(reportsRoot, $"{scenarioName}-missing-report.json");
+                            Path.Join(reportsRoot, $"{scenarioName}-missing-report.json");
         BenchmarkReport? report = TryReadBenchmarkReport(reportPath);
 
         string modelId = BuildProfilerModelId(

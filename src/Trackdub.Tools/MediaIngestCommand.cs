@@ -89,12 +89,12 @@ public static class MediaIngestCommand
         int registeredArtifactCount = new ProjectArtifact[] { result.AudioArtifact, result.WaveformArtifact }.Length;
         writer.WriteLine($"Created project: {result.Project.Name}");
         writer.WriteLine($"Project root: {projectRootPath}");
-        writer.WriteLine($"Database: {Path.Combine(projectRootPath, ProjectArtifactPaths.DatabaseFileName)}");
-        writer.WriteLine($"Manifest: {Path.Combine(projectRootPath, ProjectArtifactPaths.ManifestRelativePath)}");
-        writer.WriteLine($"Source reference: {Path.Combine(projectRootPath, ProjectArtifactPaths.SourceReferenceRelativePath)}");
+        writer.WriteLine($"Database: {Path.Join(projectRootPath, ProjectArtifactPaths.DatabaseFileName)}");
+        writer.WriteLine($"Manifest: {Path.Join(projectRootPath, ProjectArtifactPaths.ManifestRelativePath)}");
+        writer.WriteLine($"Source reference: {Path.Join(projectRootPath, ProjectArtifactPaths.SourceReferenceRelativePath)}");
         writer.WriteLine($"Source media: {result.SourceReference.OriginalPath}");
-        writer.WriteLine($"Normalized audio: {Path.Combine(projectRootPath, result.AudioArtifact.RelativePath)}");
-        writer.WriteLine($"Waveform summary: {Path.Combine(projectRootPath, result.WaveformArtifact.RelativePath)}");
+        writer.WriteLine($"Normalized audio: {Path.Join(projectRootPath, result.AudioArtifact.RelativePath)}");
+        writer.WriteLine($"Waveform summary: {Path.Join(projectRootPath, result.WaveformArtifact.RelativePath)}");
         writer.WriteLine($"Audio duration: {FormatDuration(result.AudioArtifact.DurationSeconds)}");
         writer.WriteLine($"Waveform duration: {FormatDuration(result.WaveformArtifact.DurationSeconds)}");
         writer.WriteLine($"Registered artifacts: {registeredArtifactCount}");
@@ -107,7 +107,7 @@ public static class MediaIngestCommand
     {
         writer.WriteLine($"Project: {result.Project.Name}");
         writer.WriteLine($"Project root: {projectRootPath}");
-        writer.WriteLine($"Database: {Path.Combine(projectRootPath, ProjectArtifactPaths.DatabaseFileName)}");
+        writer.WriteLine($"Database: {Path.Join(projectRootPath, ProjectArtifactPaths.DatabaseFileName)}");
         writer.WriteLine($"Source status: {result.SourceStatus}");
         if (!string.IsNullOrWhiteSpace(result.SourceStatusMessage))
         {
@@ -334,8 +334,8 @@ public sealed class DefaultMediaIngestCommandRunner : IMediaIngestCommandRunner
 {
     public async Task<CreateProjectFromMediaResult> CreateAsync(MediaIngestCommandOptions options, CancellationToken cancellationToken)
     {
-        string databasePath = Path.Combine(options.ProjectRootPath, ProjectArtifactPaths.DatabaseFileName);
-        string manifestPath = Path.Combine(options.ProjectRootPath, ProjectArtifactPaths.ManifestRelativePath);
+        string databasePath = Path.Join(options.ProjectRootPath, ProjectArtifactPaths.DatabaseFileName);
+        string manifestPath = Path.Join(options.ProjectRootPath, ProjectArtifactPaths.ManifestRelativePath);
         if (File.Exists(databasePath) || File.Exists(manifestPath))
         {
             throw new InvalidOperationException(

@@ -9,7 +9,7 @@ public sealed class FfmpegVideoFrameExtractorTests
     public async Task ExtractTurnFramesAsync_writes_rgba_frame_sequence_with_image2_muxer()
     {
         var runner = new RecordingProcessRunner();
-        string outputDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string outputDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         var extractor = new FfmpegVideoFrameExtractor(runner, Environment.ProcessPath, Environment.ProcessPath);
 
         await extractor.ExtractTurnFramesAsync(
@@ -23,19 +23,19 @@ public sealed class FfmpegVideoFrameExtractorTests
         AssertOptionValue(extractionArgs, "-f", "image2");
         AssertOptionValue(extractionArgs, "-c:v", "rawvideo");
         AssertOptionValue(extractionArgs, "-pix_fmt", "rgba");
-        Assert.Equal(Path.Combine(outputDirectory, "frame_%06d.rgba"), extractionArgs[^1]);
+        Assert.Equal(Path.Join(outputDirectory, "frame_%06d.rgba"), extractionArgs[^1]);
     }
 
     [Fact]
     public async Task AssembleFramesAsync_reads_rgba_frame_sequence_with_image2_demuxer()
     {
         var runner = new RecordingProcessRunner();
-        string framesDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string framesDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         var extractor = new FfmpegVideoFrameExtractor(runner, Environment.ProcessPath);
 
         await extractor.AssembleFramesAsync(
             framesDirectory,
-            Path.Combine(framesDirectory, "out.mp4"),
+            Path.Join(framesDirectory, "out.mp4"),
             320,
             180,
             24,
@@ -47,7 +47,7 @@ public sealed class FfmpegVideoFrameExtractorTests
         AssertOptionValue(args, "-video_size", "320x180");
         AssertOptionValue(args, "-pix_fmt", "rgba");
         AssertOptionValue(args, "-c:v", "rawvideo");
-        Assert.Contains(Path.Combine(framesDirectory, "frame_%06d.rgba"), args);
+        Assert.Contains(Path.Join(framesDirectory, "frame_%06d.rgba"), args);
     }
 
     private static void AssertOptionValue(IReadOnlyList<string> args, string option, string expectedValue)
@@ -85,7 +85,7 @@ public sealed class FfmpegVideoFrameExtractorTests
             {
                 string frameDirectory = Path.GetDirectoryName(framePattern)!;
                 Directory.CreateDirectory(frameDirectory);
-                File.WriteAllBytes(Path.Combine(frameDirectory, "frame_000001.rgba"), [0, 0, 0, 255]);
+                File.WriteAllBytes(Path.Join(frameDirectory, "frame_000001.rgba"), [0, 0, 0, 255]);
             }
 
             return Task.FromResult(new ProcessResult(0, string.Empty, string.Empty));

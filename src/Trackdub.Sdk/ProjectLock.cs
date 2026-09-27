@@ -49,7 +49,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
 
         string fullPath = Path.GetFullPath(projectDirectory);
-        string lockFilePath = Path.Combine(fullPath, LockFileName);
+        string lockFilePath = Path.Join(fullPath, LockFileName);
 
         // Ensure the directory exists so we can create the lock file.
         Directory.CreateDirectory(fullPath);

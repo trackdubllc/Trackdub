@@ -333,7 +333,7 @@ public sealed class RuntimePlannerBlackwellVariantTests
     {
         public RuntimePlannerBlackwellTestWorkspace()
         {
-            RootPath = Path.Combine(Path.GetTempPath(), $"trackdub-blackwell-planner-{Guid.NewGuid():N}");
+            RootPath = Path.Join(Path.GetTempPath(), $"trackdub-blackwell-planner-{Guid.NewGuid():N}");
             Directory.CreateDirectory(RootPath);
         }
 
@@ -343,7 +343,7 @@ public sealed class RuntimePlannerBlackwellVariantTests
             bool includeMxfp8Hashes = true,
             string engineFamily = "qwen-instruct")
         {
-            string manifestPath = Path.Combine(RootPath, "bundled-models.manifest.json");
+            string manifestPath = Path.Join(RootPath, "bundled-models.manifest.json");
             string json = $$"""
                 {
                   "models": [
@@ -407,7 +407,7 @@ public sealed class RuntimePlannerBlackwellVariantTests
 
         public BundledModelManifestRegistry WriteTextRefinerManifestWithUnpinnedMxfp8()
         {
-            string manifestPath = Path.Combine(RootPath, "bundled-models-unpinned-mxfp8.manifest.json");
+            string manifestPath = Path.Join(RootPath, "bundled-models-unpinned-mxfp8.manifest.json");
             const string json = """
                 {
                   "models": [
@@ -460,14 +460,14 @@ public sealed class RuntimePlannerBlackwellVariantTests
 
         public string CreateCacheRoot(string name)
         {
-            string cacheRoot = Path.Combine(RootPath, "machine-cache", name);
+            string cacheRoot = Path.Join(RootPath, "machine-cache", name);
             Directory.CreateDirectory(cacheRoot);
             return cacheRoot;
         }
 
         public void WriteCacheFile(string cacheRoot, string relativePath)
         {
-            string filePath = Path.Combine(cacheRoot, relativePath);
+            string filePath = Path.Join(cacheRoot, relativePath);
             string? directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrWhiteSpace(directory))
             {

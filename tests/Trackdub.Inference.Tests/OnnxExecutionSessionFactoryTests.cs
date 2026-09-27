@@ -129,7 +129,7 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             OnnxExecutionSessionFactory.CreateSingleAsync(
-                Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx"),
+                Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx"),
                 ExecutionProviderKind.DirectMl,
                 cancellationSource.Token));
     }
@@ -297,7 +297,7 @@ public sealed class OnnxExecutionSessionFactoryTests
             var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
             Assert.Equal(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Trackdub", "EngineCache"),
+                Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Trackdub", "EngineCache"),
                 options["nv_runtime_cache_path"]);
             // Cuda-graph capture requires stable device buffer addresses across Run() calls; most
             // call sites build fresh input tensors every call, so the flag must default to off.
@@ -329,7 +329,7 @@ public sealed class OnnxExecutionSessionFactoryTests
     {
         string? previousEngineCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT");
         string? previousCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_CACHE_ROOT");
-        string cacheRoot = Path.Combine(
+        string cacheRoot = Path.Join(
             Path.GetTempPath(),
             "Trackdub.Inference.Tests",
             Guid.NewGuid().ToString("N"));
@@ -346,7 +346,7 @@ public sealed class OnnxExecutionSessionFactoryTests
             object? rawResult = method.Invoke(null, [null, false]);
             var options = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(rawResult);
 
-            Assert.Equal(Path.Combine(Path.GetFullPath(cacheRoot), "EngineCache"), options["nv_runtime_cache_path"]);
+            Assert.Equal(Path.Join(Path.GetFullPath(cacheRoot), "EngineCache"), options["nv_runtime_cache_path"]);
         }
         finally
         {
@@ -360,7 +360,7 @@ public sealed class OnnxExecutionSessionFactoryTests
     {
         string? previousEngineCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT");
         string? previousCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_CACHE_ROOT");
-        string engineCacheRoot = Path.Combine(
+        string engineCacheRoot = Path.Join(
             Path.GetTempPath(),
             "Trackdub.Inference.Tests",
             Guid.NewGuid().ToString("N"),
@@ -369,7 +369,7 @@ public sealed class OnnxExecutionSessionFactoryTests
         try
         {
             Environment.SetEnvironmentVariable("TRACKDUB_ENGINE_CACHE_ROOT", engineCacheRoot);
-            Environment.SetEnvironmentVariable("TRACKDUB_CACHE_ROOT", Path.Combine(Path.GetTempPath(), "ignored"));
+            Environment.SetEnvironmentVariable("TRACKDUB_CACHE_ROOT", Path.Join(Path.GetTempPath(), "ignored"));
 
             MethodInfo method = typeof(OnnxExecutionSessionFactory)
                 .GetMethod("BuildTensorRtRtxOptions", BindingFlags.NonPublic | BindingFlags.Static)

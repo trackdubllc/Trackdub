@@ -10,7 +10,7 @@ namespace Trackdub.Infrastructure.Tests;
 
 public sealed class OliveModelOptimizationServiceTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(
+    private readonly string tempRoot = Path.Join(
         Path.GetTempPath(),
         "Trackdub.OliveModelOptimizationService.Tests",
         Guid.NewGuid().ToString("N"));
@@ -18,10 +18,10 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
     [Fact]
     public async Task OptimizeAsync_uses_only_declared_components()
     {
-        string modelRoot = Path.Combine(tempRoot, "model");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        WriteFile(Path.Combine(modelRoot, "top-level.onnx"), "top");
-        WriteFile(Path.Combine(modelRoot, "nested", "declared.onnx"), "nested");
+        string modelRoot = Path.Join(tempRoot, "model");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        WriteFile(Path.Join(modelRoot, "top-level.onnx"), "top");
+        WriteFile(Path.Join(modelRoot, "nested", "declared.onnx"), "nested");
         var runner = new FakeProcessRunner(createModelOutput: true);
         var registrar = new FakeVariantRegistrar();
         var service = CreateService(runner, registrar);
@@ -39,10 +39,10 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
             TestContext.Current.CancellationToken));
 
         Assert.Single(runner.Calls);
-        Assert.Contains(Path.Combine(modelRoot, "nested", "declared.onnx"), runner.Calls[0].Arguments);
-        Assert.DoesNotContain(Path.Combine(modelRoot, "top-level.onnx"), runner.Calls[0].Arguments);
-        Assert.True(File.Exists(Path.Combine(outputRoot, "nested", "declared.onnx")));
-        Assert.False(File.Exists(Path.Combine(outputRoot, "top-level.onnx")));
+        Assert.Contains(Path.Join(modelRoot, "nested", "declared.onnx"), runner.Calls[0].Arguments);
+        Assert.DoesNotContain(Path.Join(modelRoot, "top-level.onnx"), runner.Calls[0].Arguments);
+        Assert.True(File.Exists(Path.Join(outputRoot, "nested", "declared.onnx")));
+        Assert.False(File.Exists(Path.Join(outputRoot, "top-level.onnx")));
         ModelOptimizedVariantRegistration registration = Assert.Single(registrar.Registrations);
         Assert.Equal("olive-cpu-fp32", registration.VariantAlias);
         Assert.Equal("nested/declared.onnx", registration.EntryRelativePath);
@@ -61,10 +61,10 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
         string precision,
         ExecutionProviderKind expectedExecutionProvider)
     {
-        string modelRoot = Path.Combine(tempRoot, $"provider-{oliveProvider}");
+        string modelRoot = Path.Join(tempRoot, $"provider-{oliveProvider}");
         string alias = $"olive-{oliveProvider.ToString().ToLowerInvariant()}-{precision}";
-        string outputRoot = Path.Combine(modelRoot, "optimized", alias);
-        WriteFile(Path.Combine(modelRoot, "model.onnx"), "source");
+        string outputRoot = Path.Join(modelRoot, "optimized", alias);
+        WriteFile(Path.Join(modelRoot, "model.onnx"), "source");
         var runner = new FakeProcessRunner(createModelOutput: true);
         var registrar = new FakeVariantRegistrar();
         var service = CreateService(runner, registrar);
@@ -98,7 +98,7 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
     [InlineData("nested/../model.onnx")]
     public async Task OptimizeAsync_rejects_unsafe_component_paths(string componentPath)
     {
-        string modelRoot = Path.Combine(tempRoot, "unsafe-model");
+        string modelRoot = Path.Join(tempRoot, "unsafe-model");
         Directory.CreateDirectory(modelRoot);
         var service = CreateService(new FakeProcessRunner(createModelOutput: true), new FakeVariantRegistrar());
 
@@ -107,7 +107,7 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
                 new ModelOptimizationRequest(
                     "example/model",
                     modelRoot,
-                    Path.Combine(modelRoot, "optimized", "cpu-fp32"),
+                    Path.Join(modelRoot, "optimized", "cpu-fp32"),
                     OliveExecutionProvider.Cpu,
                     "fp32",
                     [componentPath],
@@ -121,10 +121,10 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
     [Fact]
     public async Task OptimizeAsync_preserves_previous_output_and_cleans_temp_when_run_fails()
     {
-        string modelRoot = Path.Combine(tempRoot, "failing-model");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        WriteFile(Path.Combine(modelRoot, "model.onnx"), "source");
-        WriteFile(Path.Combine(outputRoot, "model.onnx"), "previous");
+        string modelRoot = Path.Join(tempRoot, "failing-model");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        WriteFile(Path.Join(modelRoot, "model.onnx"), "source");
+        WriteFile(Path.Join(outputRoot, "model.onnx"), "previous");
         var runner = new FakeProcessRunner(createModelOutput: false);
         var registrar = new FakeVariantRegistrar();
         var service = CreateService(runner, registrar);
@@ -143,7 +143,7 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Contains("did not produce", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("previous", await File.ReadAllTextAsync(Path.Combine(outputRoot, "model.onnx"), TestContext.Current.CancellationToken));
+        Assert.Equal("previous", await File.ReadAllTextAsync(Path.Join(outputRoot, "model.onnx"), TestContext.Current.CancellationToken));
         Assert.Empty(Directory.EnumerateDirectories(Path.GetDirectoryName(outputRoot)!, "*.tmp-*"));
         Assert.Empty(registrar.Registrations);
     }
@@ -151,10 +151,10 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
     [Fact]
     public async Task OptimizeAsync_restores_previous_output_when_registration_fails()
     {
-        string modelRoot = Path.Combine(tempRoot, "registration-failure-model");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        WriteFile(Path.Combine(modelRoot, "model.onnx"), "source");
-        WriteFile(Path.Combine(outputRoot, "model.onnx"), "previous");
+        string modelRoot = Path.Join(tempRoot, "registration-failure-model");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        WriteFile(Path.Join(modelRoot, "model.onnx"), "source");
+        WriteFile(Path.Join(outputRoot, "model.onnx"), "previous");
         var runner = new FakeProcessRunner(createModelOutput: true);
         var registrar = new FakeVariantRegistrar(new InvalidOperationException("registration failed"));
         var service = CreateService(runner, registrar);
@@ -173,20 +173,20 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
                 TestContext.Current.CancellationToken)));
 
         Assert.Contains("registration failed", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("previous", await File.ReadAllTextAsync(Path.Combine(outputRoot, "model.onnx"), TestContext.Current.CancellationToken));
+        Assert.Equal("previous", await File.ReadAllTextAsync(Path.Join(outputRoot, "model.onnx"), TestContext.Current.CancellationToken));
         Assert.Empty(Directory.EnumerateDirectories(Path.GetDirectoryName(outputRoot)!, "*.tmp-*"));
     }
 
     [Fact]
     public async Task OptimizeAsync_genai_bundle_optimizes_each_top_level_onnx_separately()
     {
-        string modelRoot = Path.Combine(tempRoot, "whisper-genai");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-dml-fp16");
-        WriteFile(Path.Combine(modelRoot, "encoder.onnx"), "encoder");
-        WriteFile(Path.Combine(modelRoot, "decoder.onnx"), "decoder");
-        WriteFile(Path.Combine(modelRoot, "genai_config.json"), "{}");
-        WriteFile(Path.Combine(modelRoot, "audio_processor_config.json"), "{}");
-        WriteFile(Path.Combine(modelRoot, "tokenizer.json"), "{}");
+        string modelRoot = Path.Join(tempRoot, "whisper-genai");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-dml-fp16");
+        WriteFile(Path.Join(modelRoot, "encoder.onnx"), "encoder");
+        WriteFile(Path.Join(modelRoot, "decoder.onnx"), "decoder");
+        WriteFile(Path.Join(modelRoot, "genai_config.json"), "{}");
+        WriteFile(Path.Join(modelRoot, "audio_processor_config.json"), "{}");
+        WriteFile(Path.Join(modelRoot, "tokenizer.json"), "{}");
 
         var runner = new FakeProcessRunner(createModelOutput: true);
         var registrar = new FakeVariantRegistrar();
@@ -207,9 +207,9 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
 
         Assert.Equal(2, runner.Calls.Count);
         Assert.All(runner.Calls, call => Assert.Contains(".onnx", ArgumentAfter(call, "--model_name_or_path"), StringComparison.OrdinalIgnoreCase));
-        Assert.True(File.Exists(Path.Combine(outputRoot, "encoder.onnx")));
-        Assert.True(File.Exists(Path.Combine(outputRoot, "decoder.onnx")));
-        Assert.True(File.Exists(Path.Combine(outputRoot, "genai_config.json")));
+        Assert.True(File.Exists(Path.Join(outputRoot, "encoder.onnx")));
+        Assert.True(File.Exists(Path.Join(outputRoot, "decoder.onnx")));
+        Assert.True(File.Exists(Path.Join(outputRoot, "genai_config.json")));
         ModelOptimizedVariantRegistration registration = Assert.Single(registrar.Registrations);
         Assert.Equal("genai_config.json", registration.EntryRelativePath);
         Assert.Contains("encoder.onnx", registration.ComponentRelativePaths);
@@ -222,12 +222,12 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
         // Regression: the no-recipe ort-genai-builder default sets UseSharedComponentCache=true, which
         // previously routed multi-onnx bundles through whole-folder model-builder auto-opt and crashed
         // ("Found multiple .onnx model files. Please specify one."). Multi-onnx must stay per-component.
-        string modelRoot = Path.Combine(tempRoot, "whisper-genai-shared");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-tensorrtrtx-fp16");
-        WriteFile(Path.Combine(modelRoot, "encoder.onnx"), "encoder");
-        WriteFile(Path.Combine(modelRoot, "decoder.onnx"), "decoder");
-        WriteFile(Path.Combine(modelRoot, "genai_config.json"), "{}");
-        WriteFile(Path.Combine(modelRoot, "tokenizer.json"), "{}");
+        string modelRoot = Path.Join(tempRoot, "whisper-genai-shared");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-tensorrtrtx-fp16");
+        WriteFile(Path.Join(modelRoot, "encoder.onnx"), "encoder");
+        WriteFile(Path.Join(modelRoot, "decoder.onnx"), "decoder");
+        WriteFile(Path.Join(modelRoot, "genai_config.json"), "{}");
+        WriteFile(Path.Join(modelRoot, "tokenizer.json"), "{}");
 
         var runner = new FakeProcessRunner(createModelOutput: true);
         var registrar = new FakeVariantRegistrar();
@@ -251,19 +251,19 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
         Assert.All(runner.Calls, call => Assert.Contains(".onnx", ArgumentAfter(call, "--model_name_or_path"), StringComparison.OrdinalIgnoreCase));
         Assert.All(runner.Calls, call => Assert.Equal("optimize", call.Arguments[0]));
         Assert.All(runner.Calls, call => Assert.DoesNotContain("--exporter", call.Arguments));
-        Assert.True(File.Exists(Path.Combine(outputRoot, "encoder.onnx")));
-        Assert.True(File.Exists(Path.Combine(outputRoot, "decoder.onnx")));
-        Assert.True(File.Exists(Path.Combine(outputRoot, "genai_config.json")));
+        Assert.True(File.Exists(Path.Join(outputRoot, "encoder.onnx")));
+        Assert.True(File.Exists(Path.Join(outputRoot, "decoder.onnx")));
+        Assert.True(File.Exists(Path.Join(outputRoot, "genai_config.json")));
     }
 
     [Fact]
     public async Task OptimizeAsync_genai_bundle_removes_ephemeral_olive_work_directories()
     {
-        string modelRoot = Path.Combine(tempRoot, "whisper-genai-cleanup");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        WriteFile(Path.Combine(modelRoot, "encoder.onnx"), "encoder");
-        WriteFile(Path.Combine(modelRoot, "decoder.onnx"), "decoder");
-        WriteFile(Path.Combine(modelRoot, "genai_config.json"), "{}");
+        string modelRoot = Path.Join(tempRoot, "whisper-genai-cleanup");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        WriteFile(Path.Join(modelRoot, "encoder.onnx"), "encoder");
+        WriteFile(Path.Join(modelRoot, "decoder.onnx"), "decoder");
+        WriteFile(Path.Join(modelRoot, "genai_config.json"), "{}");
 
         var runner = new FakeProcessRunner(createModelOutput: true);
         var registrar = new FakeVariantRegistrar();
@@ -282,7 +282,7 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
                 OliveMode: "ort-genai-builder"),
             TestContext.Current.CancellationToken));
 
-        string cacheRoot = Path.Combine(tempRoot, "tools", "olive-cache", "openai_whisper-tiny");
+        string cacheRoot = Path.Join(tempRoot, "tools", "olive-cache", "openai_whisper-tiny");
         if (Directory.Exists(cacheRoot))
         {
             Assert.Empty(Directory.EnumerateFileSystemEntries(cacheRoot));
@@ -292,12 +292,12 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
     [Fact]
     public async Task OptimizeAsync_genai_nested_bundle_uses_entry_subfolder()
     {
-        string modelRoot = Path.Combine(tempRoot, "phi-genai");
-        string bundleFolder = Path.Combine(modelRoot, "cpu_and_mobile", "cpu-int4-rtn-block-32-acc-level-4");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-dml-fp16");
-        WriteFile(Path.Combine(bundleFolder, "genai_config.json"), "{}");
-        WriteFile(Path.Combine(bundleFolder, "model.onnx"), "model");
-        WriteFile(Path.Combine(bundleFolder, "tokenizer.json"), "{}");
+        string modelRoot = Path.Join(tempRoot, "phi-genai");
+        string bundleFolder = Path.Join(modelRoot, "cpu_and_mobile", "cpu-int4-rtn-block-32-acc-level-4");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-dml-fp16");
+        WriteFile(Path.Join(bundleFolder, "genai_config.json"), "{}");
+        WriteFile(Path.Join(bundleFolder, "model.onnx"), "model");
+        WriteFile(Path.Join(bundleFolder, "tokenizer.json"), "{}");
 
         var runner = new FakeProcessRunner(createModelOutput: true, createGenAiConfigOutput: true);
         var registrar = new FakeVariantRegistrar();
@@ -320,8 +320,8 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
         Assert.Equal("optimize", call.Arguments[0]);
         Assert.Equal(bundleFolder, ArgumentAfter(call, "--model_name_or_path"));
         Assert.Equal("model_builder", ArgumentAfter(call, "--exporter"));
-        Assert.True(File.Exists(Path.Combine(outputRoot, "genai_config.json")));
-        Assert.True(File.Exists(Path.Combine(outputRoot, "model.onnx")));
+        Assert.True(File.Exists(Path.Join(outputRoot, "genai_config.json")));
+        Assert.True(File.Exists(Path.Join(outputRoot, "model.onnx")));
         ModelOptimizedVariantRegistration registration = Assert.Single(registrar.Registrations);
         Assert.Equal("genai_config.json", registration.EntryRelativePath);
     }
@@ -329,11 +329,11 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
     [Fact]
     public async Task OptimizeAsync_uses_recipe_run_config_when_override_set()
     {
-        string modelRoot = Path.Combine(tempRoot, "recipe-model");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-dml-int8");
-        string recipeConfig = Path.Combine(tempRoot, "recipe.json");
+        string modelRoot = Path.Join(tempRoot, "recipe-model");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-dml-int8");
+        string recipeConfig = Path.Join(tempRoot, "recipe.json");
         WriteFile(recipeConfig, "{}");
-        WriteFile(Path.Combine(modelRoot, "encoder.onnx"), "source");
+        WriteFile(Path.Join(modelRoot, "encoder.onnx"), "source");
         var runner = new FakeProcessRunner(createModelOutput: true);
         var registrar = new FakeVariantRegistrar();
         var service = CreateService(runner, registrar);
@@ -368,11 +368,11 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
     [InlineData(false)]
     public async Task OptimizeAsync_recipe_resolves_model_root_and_prunes_input_model(bool pruneWritesOutput)
     {
-        string modelRoot = Path.Combine(tempRoot, "recipe model");
-        string outputRoot = Path.Combine(modelRoot, "optimized", "olive-dml-fp16");
-        string recipeConfig = Path.Combine(tempRoot, "encoder_fp16.json");
+        string modelRoot = Path.Join(tempRoot, "recipe model");
+        string outputRoot = Path.Join(modelRoot, "optimized", "olive-dml-fp16");
+        string recipeConfig = Path.Join(tempRoot, "encoder_fp16.json");
         WriteFile(recipeConfig, """{ "input_model": { "type": "ONNXModel", "model_path": "${MODEL_ROOT}/onnx/encoder_model.onnx" } }""");
-        string sourceModel = Path.Combine(modelRoot, "onnx", "encoder_model.onnx");
+        string sourceModel = Path.Join(modelRoot, "onnx", "encoder_model.onnx");
         WriteFile(sourceModel, "source");
         var runner = new FakeProcessRunner(createModelOutput: true, pruneWritesOutput: pruneWritesOutput);
         var service = CreateService(runner, new FakeVariantRegistrar());
@@ -430,20 +430,20 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
             ? "onnxruntime_providers_nv_tensorrt_rtx.dll"
             : "libonnxruntime_providers_nv_tensorrt_rtx.so";
         string rid = OperatingSystem.IsWindows() ? "win-x64" : "linux-x64";
-        string userDataRoot = Path.Combine(tempRoot, "user-data");
-        string older = Path.Combine(userDataRoot, "Providers", "trt-rtx", "0.2.0", "cu12", rid, fileName);
-        string newer = Path.Combine(userDataRoot, "Providers", "trt-rtx", "0.10.0", "cu12", rid, fileName);
+        string userDataRoot = Path.Join(tempRoot, "user-data");
+        string older = Path.Join(userDataRoot, "Providers", "trt-rtx", "0.2.0", "cu12", rid, fileName);
+        string newer = Path.Join(userDataRoot, "Providers", "trt-rtx", "0.10.0", "cu12", rid, fileName);
         WriteFile(older, "");
         WriteFile(newer, "");
-        string envDir = Path.Combine(tempRoot, "env-ep");
-        WriteFile(Path.Combine(envDir, fileName), "");
+        string envDir = Path.Join(tempRoot, "env-ep");
+        WriteFile(Path.Join(envDir, fileName), "");
 
         Assert.Equal(newer, OliveRecipePreparation.FindTrtRtxProviderLibrary(userDataRoot, _ => null));
         Assert.Equal(
-            Path.Combine(envDir, fileName),
+            Path.Join(envDir, fileName),
             OliveRecipePreparation.FindTrtRtxProviderLibrary(userDataRoot, _ => envDir));
-        Assert.Null(OliveRecipePreparation.FindTrtRtxProviderLibrary(userDataRoot, _ => Path.Combine(tempRoot, "missing")));
-        Assert.Null(OliveRecipePreparation.FindTrtRtxProviderLibrary(Path.Combine(tempRoot, "empty"), _ => null));
+        Assert.Null(OliveRecipePreparation.FindTrtRtxProviderLibrary(userDataRoot, _ => Path.Join(tempRoot, "missing")));
+        Assert.Null(OliveRecipePreparation.FindTrtRtxProviderLibrary(Path.Join(tempRoot, "empty"), _ => null));
     }
 
     public void Dispose()
@@ -521,12 +521,12 @@ public sealed class OliveModelOptimizationServiceTests : IDisposable
 
             if (createModelOutput)
             {
-                WriteFile(Path.Combine(workingDirectory, "model.onnx"), "optimized");
+                WriteFile(Path.Join(workingDirectory, "model.onnx"), "optimized");
             }
 
             if (createGenAiConfigOutput)
             {
-                WriteFile(Path.Combine(workingDirectory, "genai_config.json"), "{}");
+                WriteFile(Path.Join(workingDirectory, "genai_config.json"), "{}");
             }
 
             await Task.CompletedTask;

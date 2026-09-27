@@ -36,7 +36,7 @@ internal static class PresetHandler
             return Program.ExitArgumentError;
         }
 
-        string filePath = Path.Combine(store.PresetsDirectory, $"{name}.json");
+        string filePath = Path.Join(store.PresetsDirectory, $"{name}.json");
         await output.WriteLineAsync($"Saved preset '{name}' to {filePath}").ConfigureAwait(false);
         return Program.ExitSuccess;
     }
@@ -63,7 +63,7 @@ internal static class PresetHandler
         }
         catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or InvalidOperationException)
         {
-            string filePath = Path.Combine(store.PresetsDirectory, $"{name}.json");
+            string filePath = Path.Join(store.PresetsDirectory, $"{name}.json");
             await error.WriteLineAsync($"Failed to read preset '{name}' at {filePath}: {ex.Message}").ConfigureAwait(false);
             return Program.ExitArgumentError;
         }

@@ -102,7 +102,7 @@ public sealed partial class DubbingTabViewModel : ObservableObject, ITabViewMode
             StatusMessage = "Capturing recording fixture...";
 
             var result = await _recording.CaptureAsync(
-                Path.Combine(Path.GetTempPath(), "DubBench", "recordings"),
+                Path.Join(Path.GetTempPath(), "DubBench", "recordings"),
                 TimeSpan.FromSeconds(10));
 
             if (result is not null)
@@ -153,7 +153,7 @@ public sealed partial class DubbingTabViewModel : ObservableObject, ITabViewMode
             {
                 FixturePath = InputPath,
                 OutputDirectory = string.IsNullOrWhiteSpace(OutputDirectory)
-                    ? Path.Combine(Path.GetTempPath(), "Trackdub", "benchmark-runs")
+                    ? Path.Join(Path.GetTempPath(), "Trackdub", "benchmark-runs")
                     : OutputDirectory,
                 TargetLanguage = TargetLanguage,
                 Stage = EmptyToNull(Stage),

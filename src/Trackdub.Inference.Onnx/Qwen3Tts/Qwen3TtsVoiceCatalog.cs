@@ -36,7 +36,7 @@ public sealed class Qwen3TtsVoiceCatalog : IVoiceCatalog
 
     public static Qwen3TtsVoiceCatalog Load(string modelRootDirectory)
     {
-        string speakerIdsPath = Path.Combine(modelRootDirectory, "embeddings", "speaker_ids.json");
+        string speakerIdsPath = Path.Join(modelRootDirectory, "embeddings", "speaker_ids.json");
         if (!File.Exists(speakerIdsPath))
         {
             return KnownAvailable();

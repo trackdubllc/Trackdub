@@ -23,7 +23,7 @@ public sealed class RunManifestWriterTests : IDisposable
         await _writer.WriteAsync(result, outputDir);
 
         // Assert
-        string manifestPath = Path.Combine(outputDir, "run-manifest.json");
+        string manifestPath = Path.Join(outputDir, "run-manifest.json");
         Assert.True(File.Exists(manifestPath));
 
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath));
@@ -67,7 +67,7 @@ public sealed class RunManifestWriterTests : IDisposable
         await _writer.WriteAsync(result, outputDir);
 
         // Assert
-        string manifestPath = Path.Combine(outputDir, "run-manifest.json");
+        string manifestPath = Path.Join(outputDir, "run-manifest.json");
         Assert.True(File.Exists(manifestPath));
 
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath));
@@ -88,7 +88,7 @@ public sealed class RunManifestWriterTests : IDisposable
         await _writer.WriteAsync(result, outputDir);
 
         // Assert
-        string manifestPath = Path.Combine(outputDir, "run-manifest.json");
+        string manifestPath = Path.Join(outputDir, "run-manifest.json");
         Assert.True(File.Exists(manifestPath));
 
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath));
@@ -110,14 +110,14 @@ public sealed class RunManifestWriterTests : IDisposable
         await _writer.WriteAsync(result, outputDir);
 
         // Assert
-        string historyDir = Path.Combine(outputDir, "run-manifests");
+        string historyDir = Path.Join(outputDir, "run-manifests");
         Assert.True(Directory.Exists(historyDir));
 
-        string historyPath = Path.Combine(historyDir, $"run-{runId}.json");
+        string historyPath = Path.Join(historyDir, $"run-{runId}.json");
         Assert.True(File.Exists(historyPath));
 
         // Verify history file content matches latest
-        string latestContent = await File.ReadAllTextAsync(Path.Combine(outputDir, "run-manifest.json"));
+        string latestContent = await File.ReadAllTextAsync(Path.Join(outputDir, "run-manifest.json"));
         string historyContent = await File.ReadAllTextAsync(historyPath);
         Assert.Equal(latestContent, historyContent);
     }
@@ -137,7 +137,7 @@ public sealed class RunManifestWriterTests : IDisposable
         await _writer.WriteAsync(secondResult, outputDir);
 
         // Assert — latest manifest has the second run's data
-        string manifestPath = Path.Combine(outputDir, "run-manifest.json");
+        string manifestPath = Path.Join(outputDir, "run-manifest.json");
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath));
         var root = doc.RootElement;
 
@@ -148,8 +148,8 @@ public sealed class RunManifestWriterTests : IDisposable
         Assert.Equal("partialSuccess", statusProp.GetString());
 
         // Both history files should exist
-        string firstHistoryPath = Path.Combine(outputDir, "run-manifests", $"run-{firstRunId}.json");
-        string secondHistoryPath = Path.Combine(outputDir, "run-manifests", $"run-{secondRunId}.json");
+        string firstHistoryPath = Path.Join(outputDir, "run-manifests", $"run-{firstRunId}.json");
+        string secondHistoryPath = Path.Join(outputDir, "run-manifests", $"run-{secondRunId}.json");
         Assert.True(File.Exists(firstHistoryPath));
         Assert.True(File.Exists(secondHistoryPath));
     }
@@ -202,7 +202,7 @@ public sealed class RunManifestWriterTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;

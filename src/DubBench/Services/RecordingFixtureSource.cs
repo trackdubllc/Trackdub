@@ -78,7 +78,7 @@ public sealed class RecordingFixtureSource : IRecordingFixtureSource
         CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(outputDir);
-        var outputPath = Path.Combine(outputDir, $"recording_{DateTime.UtcNow:yyyyMMdd-HHmmss}.mp4");
+        var outputPath = Path.Join(outputDir, $"recording_{DateTime.UtcNow:yyyyMMdd-HHmmss}.mp4");
 
         var durationSec = (int)maxDuration.TotalSeconds;
 

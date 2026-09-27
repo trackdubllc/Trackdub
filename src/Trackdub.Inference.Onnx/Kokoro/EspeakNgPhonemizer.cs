@@ -126,7 +126,7 @@ public sealed partial class EspeakNgPhonemizer(string? configuredExecutablePath 
     {
         string? executableDirectory = Path.GetDirectoryName(executablePath);
         return !string.IsNullOrWhiteSpace(executableDirectory) &&
-               Directory.Exists(Path.Combine(executableDirectory, "espeak-ng-data"))
+               Directory.Exists(Path.Join(executableDirectory, "espeak-ng-data"))
             ? executableDirectory
             : null;
     }

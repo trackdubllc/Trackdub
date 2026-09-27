@@ -9,7 +9,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Save_and_load_round_trip_all_fields()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         var service = new JsonStudioSettingsService(storagePaths);
         var settings = new StudioSettings(
@@ -82,7 +82,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Load_unknown_asr_model_override_keeps_other_settings()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         var service = new JsonStudioSettingsService(storagePaths);
 
@@ -130,7 +130,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Load_nemotron_asr_model_override_from_key()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         var service = new JsonStudioSettingsService(storagePaths);
 
@@ -172,7 +172,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Load_missing_playback_settings_uses_subtitles_off_default()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         var service = new JsonStudioSettingsService(storagePaths);
 
@@ -214,7 +214,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Save_and_load_normalizes_invalid_subtitle_content_mode()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var service = new JsonStudioSettingsService(new TrackdubStoragePaths(tempRoot));
         var settings = StudioSettings.Default with
         {
@@ -244,7 +244,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Save_and_load_preserves_bilingual_export_subtitle_source()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var service = new JsonStudioSettingsService(new TrackdubStoragePaths(tempRoot));
         var settings = StudioSettings.Default with
         {
@@ -274,7 +274,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task TouchRecentProjectAsync_keeps_only_ten_entries_ordered_newest_first()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var service = new JsonStudioSettingsService(new TrackdubStoragePaths(tempRoot));
 
         try
@@ -305,7 +305,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Load_defaults_rubberband_stretch_off()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var service = new JsonStudioSettingsService(new TrackdubStoragePaths(tempRoot));
 
         try
@@ -328,7 +328,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Save_and_load_normalizes_invalid_transcript_confidence_threshold()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var service = new JsonStudioSettingsService(new TrackdubStoragePaths(tempRoot));
         var settings = StudioSettings.Default with { TranscriptConfidenceThreshold = 1.5d };
 
@@ -351,7 +351,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Load_defaults_windows_ml_device_policy_to_explicit_when_property_absent()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         string settingsPath = storagePaths.SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
@@ -379,7 +379,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Save_and_load_round_trips_windows_ml_device_policy()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var service = new JsonStudioSettingsService(new TrackdubStoragePaths(tempRoot));
         var settings = StudioSettings.Default with
         {
@@ -437,7 +437,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Load_archives_corrupt_json_and_returns_defaults()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         string settingsPath = storagePaths.SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
@@ -464,7 +464,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Load_legacy_json_without_starter_pack_fields_uses_defaults()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         string settingsPath = storagePaths.SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
@@ -495,7 +495,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Save_and_load_round_trips_cloud_model_overrides()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var service = new JsonStudioSettingsService(new TrackdubStoragePaths(tempRoot));
         var settings = StudioSettings.Default with
         {
@@ -543,7 +543,7 @@ public sealed class JsonStudioSettingsServiceTests
     [Fact]
     public async Task Load_parses_string_windows_ml_device_policy()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         string settingsPath = storagePaths.SettingsPath;
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);

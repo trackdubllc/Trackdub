@@ -65,7 +65,7 @@ public sealed class FfmpegMuxCommandBuilderTests
             "dub.wav",
             "output.mp4",
             ExportOutputContainer.Mp4,
-            BurnInSubtitlePath: Path.Combine("folder;bad", "captions[1].ass"),
+            BurnInSubtitlePath: Path.Join("folder;bad", "captions[1].ass"),
             SourceLanguage: null,
             TargetLanguage: null);
 
@@ -123,10 +123,10 @@ public sealed class FfmpegMuxCommandBuilderTests
     [Fact]
     public async Task RenderAsync_rejects_output_path_that_matches_source_before_delete()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-mux-tests-{Guid.NewGuid():N}");
+        string tempDirectory = Path.Join(Path.GetTempPath(), $"trackdub-mux-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
-        string sourcePath = Path.Combine(tempDirectory, "source.mp4");
-        string audioPath = Path.Combine(tempDirectory, "dub.wav");
+        string sourcePath = Path.Join(tempDirectory, "source.mp4");
+        string audioPath = Path.Join(tempDirectory, "dub.wav");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3], TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(audioPath, [4, 5, 6], TestContext.Current.CancellationToken);
         var muxer = new FfmpegMuxer(new RecordingProcessRunner(), ffmpegPath: "ffmpeg");
@@ -159,12 +159,12 @@ public sealed class FfmpegMuxCommandBuilderTests
     {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
-        string tempDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-mux-cancel-{Guid.NewGuid():N}");
+        string tempDirectory = Path.Join(Path.GetTempPath(), $"trackdub-mux-cancel-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
-        string sourcePath = Path.Combine(tempDirectory, "source.mp4");
-        string audioPath = Path.Combine(tempDirectory, "dub.wav");
-        string outputPath = Path.Combine(tempDirectory, "out.mp4");
-        string ffmpegPath = Path.Combine(tempDirectory, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
+        string sourcePath = Path.Join(tempDirectory, "source.mp4");
+        string audioPath = Path.Join(tempDirectory, "dub.wav");
+        string outputPath = Path.Join(tempDirectory, "out.mp4");
+        string ffmpegPath = Path.Join(tempDirectory, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3], CancellationToken.None);
         await File.WriteAllBytesAsync(audioPath, [4, 5, 6], CancellationToken.None);
         await File.WriteAllBytesAsync(ffmpegPath, [], CancellationToken.None);

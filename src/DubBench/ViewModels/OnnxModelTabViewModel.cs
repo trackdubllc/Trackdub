@@ -162,7 +162,7 @@ public sealed partial class OnnxModelTabViewModel : ObservableObject, ITabViewMo
             IsOptimizing = true;
             StatusMessage = "Running Olive optimization...";
 
-            var outputDir = Path.Combine(
+            var outputDir = Path.Join(
                 Path.GetTempPath(), "DubBench", "olive",
                 Path.GetFileNameWithoutExtension(ModelPath));
 
@@ -211,7 +211,7 @@ public sealed partial class OnnxModelTabViewModel : ObservableObject, ITabViewMo
 
             var request = new BenchmarkRequest(
                 ModelPath: actualModelPath,
-                ReportPath: Path.Combine(Path.GetTempPath(), "DubBench", $"onnx-report-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json"),
+                ReportPath: Path.Join(Path.GetTempPath(), "DubBench", $"onnx-report-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json"),
                 ProviderPreference: SelectedProvider,
                 RunCount: RunCount,
                 WindowsMlDevicePolicyKey: WindowsMlExecutionDevicePolicySettings.ToKey(SelectedDevicePolicy));

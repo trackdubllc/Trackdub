@@ -1153,7 +1153,7 @@ public sealed class StageArtifactResumeEvaluatorTests
         // (Windows/macOS); Linux compares Ordinal.
         string mediaDir = OperatingSystem.IsWindows() ? @"D:\media" : "/media";
         var reference = new SourceMediaReference(
-            Path.Combine(mediaDir, "source.mp4"),
+            Path.Join(mediaDir, "source.mp4"),
             "source.mp4",
             new FileFingerprint("hash", 1024, DateTimeOffset.UtcNow),
             Probe: new MediaProbeSnapshot("mp4", "MP4", 30.0, BitRate: null, AudioStreams: [], VideoStreams: [], SubtitleStreams: []),

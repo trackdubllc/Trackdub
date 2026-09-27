@@ -37,7 +37,7 @@ public sealed class StarterPackArchitectureTests
     public void Shell_projects_do_not_embed_starter_pack_json_paths()
     {
         string repoRoot = FindRepositoryRoot();
-        string cliProject = Path.Combine(repoRoot, "src", "Trackdub.Cli", "Trackdub.Cli.csproj");
+        string cliProject = Path.Join(repoRoot, "src", "Trackdub.Cli", "Trackdub.Cli.csproj");
 
         string cliContents = File.ReadAllText(cliProject);
 
@@ -50,7 +50,7 @@ public sealed class StarterPackArchitectureTests
         string? directory = AppContext.BaseDirectory;
         while (!string.IsNullOrEmpty(directory))
         {
-            if (File.Exists(Path.Combine(directory, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(directory, "Trackdub.slnx")))
             {
                 return directory;
             }

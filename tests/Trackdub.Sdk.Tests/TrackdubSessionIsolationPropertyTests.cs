@@ -238,7 +238,7 @@ public sealed class TrackdubSessionIsolationPropertyTests : IDisposable
 
     private string CreateTempProjectDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;
@@ -255,7 +255,7 @@ public sealed class TrackdubSessionIsolationPropertyTests : IDisposable
         }
 
         // Clean up parent directory if empty
-        string parentDir = Path.Combine(Path.GetTempPath(), "TrackdubTests");
+        string parentDir = Path.Join(Path.GetTempPath(), "TrackdubTests");
         try
         {
             if (Directory.Exists(parentDir) && !Directory.EnumerateFileSystemEntries(parentDir).Any())

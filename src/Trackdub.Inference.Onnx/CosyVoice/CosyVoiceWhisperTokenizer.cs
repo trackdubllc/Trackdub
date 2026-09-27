@@ -23,7 +23,7 @@ internal sealed class CosyVoiceWhisperTokenizer
 
     public static CosyVoiceWhisperTokenizer Load(string modelRootPath)
     {
-        string ranksPath = Path.Combine(modelRootPath, "tokenizer", "tiktoken_ranks.bin");
+        string ranksPath = Path.Join(modelRootPath, "tokenizer", "tiktoken_ranks.bin");
         if (!File.Exists(ranksPath))
         {
             throw new FileNotFoundException("CosyVoice requires tokenizer/tiktoken_ranks.bin.", ranksPath);
@@ -73,7 +73,7 @@ internal sealed class CosyVoiceWhisperTokenizer
 
     public void ValidateSmokeTest(string modelRootPath)
     {
-        string smokePath = Path.Combine(modelRootPath, "tokenizer", "encode_smoke.json");
+        string smokePath = Path.Join(modelRootPath, "tokenizer", "encode_smoke.json");
         if (!File.Exists(smokePath))
         {
             return;

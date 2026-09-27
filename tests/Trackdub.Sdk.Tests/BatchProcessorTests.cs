@@ -23,7 +23,7 @@ public sealed class BatchProcessorTests : IDisposable
 
     public BatchProcessorTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"trackdub-batch-proc-{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"trackdub-batch-proc-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
 
         // We need a real engine instance. Use TrackdubBuilder to create a minimal one.
@@ -54,9 +54,9 @@ public sealed class BatchProcessorTests : IDisposable
     {
         var files = new[]
         {
-            Path.Combine(_tempDir, "missing1.mp4"),
-            Path.Combine(_tempDir, "missing2.mp4"),
-            Path.Combine(_tempDir, "missing3.mp4"),
+            Path.Join(_tempDir, "missing1.mp4"),
+            Path.Join(_tempDir, "missing2.mp4"),
+            Path.Join(_tempDir, "missing3.mp4"),
         };
 
         var batchOptions = new BatchOptions { ContinueOnError = false };
@@ -81,7 +81,7 @@ public sealed class BatchProcessorTests : IDisposable
     [Fact]
     public async Task ExecuteAsync_FailFast_SingleFileNotFound_ReportsCorrectly()
     {
-        var files = new[] { Path.Combine(_tempDir, "only-one-missing.mp4") };
+        var files = new[] { Path.Join(_tempDir, "only-one-missing.mp4") };
 
         var batchOptions = new BatchOptions { ContinueOnError = false };
 
@@ -103,9 +103,9 @@ public sealed class BatchProcessorTests : IDisposable
     {
         var files = new[]
         {
-            Path.Combine(_tempDir, "a-missing.mp4"),
-            Path.Combine(_tempDir, "b-missing.mp4"),
-            Path.Combine(_tempDir, "c-missing.mp4"),
+            Path.Join(_tempDir, "a-missing.mp4"),
+            Path.Join(_tempDir, "b-missing.mp4"),
+            Path.Join(_tempDir, "c-missing.mp4"),
         };
 
         var batchOptions = new BatchOptions { ContinueOnError = true };
@@ -134,8 +134,8 @@ public sealed class BatchProcessorTests : IDisposable
     {
         var files = new[]
         {
-            Path.Combine(_tempDir, "x-missing.mp4"),
-            Path.Combine(_tempDir, "y-missing.wav"),
+            Path.Join(_tempDir, "x-missing.mp4"),
+            Path.Join(_tempDir, "y-missing.wav"),
         };
 
         var batchOptions = new BatchOptions { ContinueOnError = true };
@@ -156,11 +156,11 @@ public sealed class BatchProcessorTests : IDisposable
     {
         var files = new[]
         {
-            Path.Combine(_tempDir, "f1.mp4"),
-            Path.Combine(_tempDir, "f2.mp4"),
-            Path.Combine(_tempDir, "f3.mp4"),
-            Path.Combine(_tempDir, "f4.mp4"),
-            Path.Combine(_tempDir, "f5.mp4"),
+            Path.Join(_tempDir, "f1.mp4"),
+            Path.Join(_tempDir, "f2.mp4"),
+            Path.Join(_tempDir, "f3.mp4"),
+            Path.Join(_tempDir, "f4.mp4"),
+            Path.Join(_tempDir, "f5.mp4"),
         };
 
         var batchOptions = new BatchOptions { ContinueOnError = false };
@@ -180,8 +180,8 @@ public sealed class BatchProcessorTests : IDisposable
     {
         var files = new[]
         {
-            Path.Combine(_tempDir, "alpha.mp4"),
-            Path.Combine(_tempDir, "beta.mp4"),
+            Path.Join(_tempDir, "alpha.mp4"),
+            Path.Join(_tempDir, "beta.mp4"),
         };
 
         var batchOptions = new BatchOptions { ContinueOnError = true };
@@ -247,8 +247,8 @@ public sealed class BatchProcessorTests : IDisposable
     {
         var files = new[]
         {
-            Path.Combine(_tempDir, "first-missing.mp4"),
-            Path.Combine(_tempDir, "second-would-skip.mp4"),
+            Path.Join(_tempDir, "first-missing.mp4"),
+            Path.Join(_tempDir, "second-would-skip.mp4"),
         };
 
         var batchOptions = new BatchOptions { ContinueOnError = false };
@@ -273,7 +273,7 @@ public sealed class BatchProcessorTests : IDisposable
         var engine = new ThrowingEngine(new OperationCanceledException(foreignCts.Token));
         var processor = new BatchProcessor(engine);
 
-        string existingFile = Path.Combine(_tempDir, "exists.mp4");
+        string existingFile = Path.Join(_tempDir, "exists.mp4");
         File.WriteAllBytes(existingFile, [0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70]);
 
         // ct is None (not requested), so the OCE with the foreign token matches the
@@ -297,9 +297,9 @@ public sealed class BatchProcessorTests : IDisposable
 
         var files = new[]
         {
-            Path.Combine(_tempDir, "a.mp4"),
-            Path.Combine(_tempDir, "b.mp4"),
-            Path.Combine(_tempDir, "c.mp4"),
+            Path.Join(_tempDir, "a.mp4"),
+            Path.Join(_tempDir, "b.mp4"),
+            Path.Join(_tempDir, "c.mp4"),
         };
         foreach (string f in files)
         {
@@ -325,9 +325,9 @@ public sealed class BatchProcessorTests : IDisposable
 
         var files = new[]
         {
-            Path.Combine(_tempDir, "first.mp4"),
-            Path.Combine(_tempDir, "second.mp4"),
-            Path.Combine(_tempDir, "third.mp4"),
+            Path.Join(_tempDir, "first.mp4"),
+            Path.Join(_tempDir, "second.mp4"),
+            Path.Join(_tempDir, "third.mp4"),
         };
         foreach (string f in files)
         {

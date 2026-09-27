@@ -10,7 +10,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void Flush_waits_for_queued_entries_to_reach_disk()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
+        string logPath = Path.Join(directory, "trackdub.log");
         using var logger = new RollingFileApplicationLogger(
             logPath,
             maxFileBytes: 64 * 1024,
@@ -33,7 +33,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void Flush_returns_immediately_when_already_settled_including_zero_timeout()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
+        string logPath = Path.Join(directory, "trackdub.log");
         using var logger = new RollingFileApplicationLogger(
             logPath,
             maxFileBytes: 64 * 1024,
@@ -57,9 +57,9 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void LogErrorSynchronously_throws_when_write_fails_so_crash_fallback_can_run()
     {
         string directory = CreateTempDirectory();
-        string blockerPath = Path.Combine(directory, "not-a-directory");
+        string blockerPath = Path.Join(directory, "not-a-directory");
         File.WriteAllText(blockerPath, "blocker");
-        string logPath = Path.Combine(blockerPath, "trackdub.log");
+        string logPath = Path.Join(blockerPath, "trackdub.log");
         using var logger = new RollingFileApplicationLogger(
             logPath,
             maxFileBytes: 64 * 1024,
@@ -76,7 +76,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public async Task Flush_includes_entries_admitted_just_before_snapshot()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
+        string logPath = Path.Join(directory, "trackdub.log");
         using var logger = new RollingFileApplicationLogger(
             logPath,
             maxFileBytes: 64 * 1024,
@@ -118,7 +118,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void Writes_verbose_entries_to_configured_log_file()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "Trackdub", "trackdub.log");
+        string logPath = Path.Join(directory, "Trackdub", "trackdub.log");
         using var logger = new RollingFileApplicationLogger(
             logPath,
             maxFileBytes: 4096,
@@ -147,7 +147,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void Rotates_log_file_when_size_cap_is_reached()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
+        string logPath = Path.Join(directory, "trackdub.log");
         using var logger = new RollingFileApplicationLogger(
             logPath,
             maxFileBytes: 512,
@@ -160,9 +160,9 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
         }
         logger.Dispose();
 
-        string firstArchivePath = Path.Combine(directory, "trackdub.1.log");
-        string secondArchivePath = Path.Combine(directory, "trackdub.2.log");
-        string thirdArchivePath = Path.Combine(directory, "trackdub.3.log");
+        string firstArchivePath = Path.Join(directory, "trackdub.1.log");
+        string secondArchivePath = Path.Join(directory, "trackdub.2.log");
+        string thirdArchivePath = Path.Join(directory, "trackdub.3.log");
 
         Assert.True(File.Exists(logPath));
         Assert.True(File.Exists(firstArchivePath));
@@ -175,7 +175,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void Uses_warning_minimum_level_by_default()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
+        string logPath = Path.Join(directory, "trackdub.log");
         using var logger = new RollingFileApplicationLogger(logPath);
 
         logger.LogDebug("debug detail");
@@ -195,7 +195,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void Suppresses_entries_below_configured_minimum_level()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
+        string logPath = Path.Join(directory, "trackdub.log");
         using var logger = new RollingFileApplicationLogger(
             logPath,
             maxFileBytes: 4096,
@@ -219,10 +219,10 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void Prunes_archives_above_configured_archive_limit()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
-        string firstArchivePath = Path.Combine(directory, "trackdub.1.log");
-        string secondArchivePath = Path.Combine(directory, "trackdub.2.log");
-        string staleArchivePath = Path.Combine(directory, "trackdub.3.log");
+        string logPath = Path.Join(directory, "trackdub.log");
+        string firstArchivePath = Path.Join(directory, "trackdub.1.log");
+        string secondArchivePath = Path.Join(directory, "trackdub.2.log");
+        string staleArchivePath = Path.Join(directory, "trackdub.3.log");
         File.WriteAllText(firstArchivePath, "first");
         File.WriteAllText(secondArchivePath, "second");
         File.WriteAllText(staleArchivePath, "stale");
@@ -243,8 +243,8 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void RotateOnStartup_archives_existing_log_as_session_1()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
-        string archivePath = Path.Combine(directory, "trackdub.1.log");
+        string logPath = Path.Join(directory, "trackdub.log");
+        string archivePath = Path.Join(directory, "trackdub.1.log");
 
         File.WriteAllText(logPath, "previous session content");
 
@@ -265,13 +265,13 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void RotateOnStartup_shifts_archives_and_prunes_beyond_limit()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
+        string logPath = Path.Join(directory, "trackdub.log");
 
         // Create 10 existing archive files (the max we keep).
         File.WriteAllText(logPath, "session 0");
         for (int i = 1; i <= 10; i++)
         {
-            File.WriteAllText(Path.Combine(directory, $"trackdub.{i}.log"), $"session {i}");
+            File.WriteAllText(Path.Join(directory, $"trackdub.{i}.log"), $"session {i}");
         }
 
         using (new RollingFileApplicationLogger(
@@ -283,12 +283,12 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
         }
 
         // The old "session 0" log is now archive 1.
-        Assert.Equal("session 0", File.ReadAllText(Path.Combine(directory, "trackdub.1.log")));
+        Assert.Equal("session 0", File.ReadAllText(Path.Join(directory, "trackdub.1.log")));
         for (int i = 2; i <= 10; i++)
         {
-            Assert.Equal($"session {i - 1}", File.ReadAllText(Path.Combine(directory, $"trackdub.{i}.log")));
+            Assert.Equal($"session {i - 1}", File.ReadAllText(Path.Join(directory, $"trackdub.{i}.log")));
         }
-        Assert.False(File.Exists(Path.Combine(directory, "trackdub.11.log")));
+        Assert.False(File.Exists(Path.Join(directory, "trackdub.11.log")));
         Assert.DoesNotContain("session 10", Directory.EnumerateFiles(directory, "trackdub.*.log")
             .Select(File.ReadAllText));
     }
@@ -297,7 +297,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
     public void RotateOnStartup_does_not_fail_when_no_existing_log()
     {
         string directory = CreateTempDirectory();
-        string logPath = Path.Combine(directory, "trackdub.log");
+        string logPath = Path.Join(directory, "trackdub.log");
 
         // No existing log file.
         using var logger = new RollingFileApplicationLogger(
@@ -334,7 +334,7 @@ public sealed class RollingFileApplicationLoggerTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         tempDirectories.Add(path);
         return path;

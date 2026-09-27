@@ -43,7 +43,7 @@ public sealed class ExecutionProviderSmokeTest(Xunit.ITestOutputHelper output)
         }
         ep = ep.ToUpperInvariant();
 
-        string modelPath = Path.Combine(
+        string modelPath = Path.Join(
             LipSynthesisIntegrationSupport.ResolveModelRoot(ScrfdModelId), ScrfdModelFile);
         if (!File.Exists(modelPath))
         {
@@ -55,7 +55,7 @@ public sealed class ExecutionProviderSmokeTest(Xunit.ITestOutputHelper output)
         // Write next to the test binary so the result is deterministically locatable regardless of the
         // test host's temp directory. Override with TRACKDUB_EP_SMOKE_OUT for a custom path.
         string outPath = Environment.GetEnvironmentVariable("TRACKDUB_EP_SMOKE_OUT")
-            ?? Path.Combine(AppContext.BaseDirectory, "ep_smoke.txt");
+            ?? Path.Join(AppContext.BaseDirectory, "ep_smoke.txt");
 
         var sb = new StringBuilder();
         void Log(string m)
@@ -225,8 +225,8 @@ public sealed class ExecutionProviderSmokeTest(Xunit.ITestOutputHelper output)
         // Override the native dir (e.g. point at the raw OnnxRuntime.Gpu NuGet package which the WinML build
         // clobbers in the normal output) to test whether the genuine CUDA-capable onnxruntime.dll registers CUDA.
         string nativeDir = Environment.GetEnvironmentVariable("TRACKDUB_EP_SMOKE_ORT_DIR")
-            ?? Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native");
-        string ortPath = Path.Combine(nativeDir, "onnxruntime.dll");
+            ?? Path.Join(AppContext.BaseDirectory, "runtimes", "win-x64", "native");
+        string ortPath = Path.Join(nativeDir, "onnxruntime.dll");
         log($"GPU resolver: onnxruntime.dll={ortPath} exists={File.Exists(ortPath)}");
         NativeLibrary.SetDllImportResolver(typeof(OrtEnv).Assembly, (string name, Assembly asm, DllImportSearchPath? search) =>
         {
@@ -236,7 +236,7 @@ public sealed class ExecutionProviderSmokeTest(Xunit.ITestOutputHelper output)
             }
             if (name is "onnxruntime_providers_shared" or "onnxruntime_providers_shared.dll")
             {
-                return NativeLibrary.Load(Path.Combine(nativeDir, "onnxruntime_providers_shared.dll"));
+                return NativeLibrary.Load(Path.Join(nativeDir, "onnxruntime_providers_shared.dll"));
             }
             return nint.Zero;
         });

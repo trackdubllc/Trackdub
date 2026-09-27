@@ -51,7 +51,7 @@ public sealed class TransientSectionRedactionTests : IDisposable
         TransientFaultSummary transient = TransientFaultSummary.From(new[] { busFault });
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
 
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(
@@ -124,7 +124,7 @@ public sealed class TransientSectionRedactionTests : IDisposable
         TransientFaultSummary transient = TransientFaultSummary.From(new[] { busFault });
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
 
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(
@@ -168,7 +168,7 @@ public sealed class TransientSectionRedactionTests : IDisposable
         TransientFaultSummary emptyTransient = TransientFaultSummary.From(Array.Empty<PipelineTransientFault>());
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
 
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(
@@ -194,7 +194,7 @@ public sealed class TransientSectionRedactionTests : IDisposable
         Directory.CreateDirectory(storagePaths.RootDirectory);
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
 
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath));
@@ -232,7 +232,7 @@ public sealed class TransientSectionRedactionTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         tempDirectories.Add(path);
         return path;

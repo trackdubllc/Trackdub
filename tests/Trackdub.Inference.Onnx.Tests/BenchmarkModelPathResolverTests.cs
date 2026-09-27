@@ -15,11 +15,11 @@ public sealed class BenchmarkModelPathResolverTests
         string requestedVariant,
         bool shouldResolve)
     {
-        string cacheRoot = Path.Combine(Path.GetTempPath(), $"trackdub-resolver-{Guid.NewGuid():N}");
-        string modelDirectory = Path.Combine(cacheRoot, "onnx-community", "silero-vad", "onnx");
+        string cacheRoot = Path.Join(Path.GetTempPath(), $"trackdub-resolver-{Guid.NewGuid():N}");
+        string modelDirectory = Path.Join(cacheRoot, "onnx-community", "silero-vad", "onnx");
         Directory.CreateDirectory(modelDirectory);
-        File.WriteAllBytes(Path.Combine(modelDirectory, fileName), []);
-        string modelScope = Path.Combine(cacheRoot, "onnx-community", "silero-vad");
+        File.WriteAllBytes(Path.Join(modelDirectory, fileName), []);
+        string modelScope = Path.Join(cacheRoot, "onnx-community", "silero-vad");
 
         try
         {
@@ -46,15 +46,15 @@ public sealed class BenchmarkModelPathResolverTests
     {
         BundledModelManifestRegistry registry = LoadDefaultManifestRegistry();
 
-        string cacheRoot = Path.Combine(Path.GetTempPath(), $"trackdub-phi-cache-{Guid.NewGuid():N}");
-        string variantDirectory = Path.Combine(
+        string cacheRoot = Path.Join(Path.GetTempPath(), $"trackdub-phi-cache-{Guid.NewGuid():N}");
+        string variantDirectory = Path.Join(
             cacheRoot,
             "microsoft",
             "Phi-4-mini-instruct-onnx",
             "gpu",
             "gpu-int4-rtn-block-32");
         Directory.CreateDirectory(variantDirectory);
-        string genAiConfigPath = Path.Combine(variantDirectory, "genai_config.json");
+        string genAiConfigPath = Path.Join(variantDirectory, "genai_config.json");
         File.WriteAllText(genAiConfigPath, "{}");
 
         try
@@ -82,7 +82,7 @@ public sealed class BenchmarkModelPathResolverTests
             entry.ModelId.Equals("onnx-community/Kokoro-82M-v1.0-ONNX", StringComparison.OrdinalIgnoreCase));
 
         string cacheRoot = CreateKokoroCacheRoot(includeVoices: true);
-        string manifestRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-manifest-{Guid.NewGuid():N}");
+        string manifestRoot = Path.Join(Path.GetTempPath(), $"trackdub-kokoro-manifest-{Guid.NewGuid():N}");
         SeedKokoroModelLayout(manifestRoot, includeVoices: false);
 
         try
@@ -109,9 +109,9 @@ public sealed class BenchmarkModelPathResolverTests
         BundledModelManifestEntry kokoroTemplate = LoadDefaultManifestRegistry().Entries.Single(entry =>
             entry.ModelId.Equals("onnx-community/Kokoro-82M-v1.0-ONNX", StringComparison.OrdinalIgnoreCase));
 
-        string cacheRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-empty-cache-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX"));
-        string manifestRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-repo-{Guid.NewGuid():N}");
+        string cacheRoot = Path.Join(Path.GetTempPath(), $"trackdub-kokoro-empty-cache-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Join(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX"));
+        string manifestRoot = Path.Join(Path.GetTempPath(), $"trackdub-kokoro-repo-{Guid.NewGuid():N}");
         SeedKokoroModelLayout(manifestRoot, includeVoices: true);
 
         try
@@ -162,24 +162,24 @@ public sealed class BenchmarkModelPathResolverTests
 
     private static string CreateKokoroCacheRoot(bool includeVoices)
     {
-        string cacheRoot = Path.Combine(Path.GetTempPath(), $"trackdub-kokoro-cache-{Guid.NewGuid():N}");
-        string modelRoot = Path.Combine(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX");
+        string cacheRoot = Path.Join(Path.GetTempPath(), $"trackdub-kokoro-cache-{Guid.NewGuid():N}");
+        string modelRoot = Path.Join(cacheRoot, "onnx-community", "Kokoro-82M-v1.0-ONNX");
         SeedKokoroModelLayout(modelRoot, includeVoices);
         return cacheRoot;
     }
 
     private static void SeedKokoroModelLayout(string modelRoot, bool includeVoices)
     {
-        string onnxDirectory = Path.Combine(modelRoot, "onnx");
+        string onnxDirectory = Path.Join(modelRoot, "onnx");
         Directory.CreateDirectory(onnxDirectory);
-        File.WriteAllBytes(Path.Combine(onnxDirectory, "model.onnx"), []);
+        File.WriteAllBytes(Path.Join(onnxDirectory, "model.onnx"), []);
         if (!includeVoices)
         {
             return;
         }
 
-        Directory.CreateDirectory(Path.Combine(modelRoot, "voices"));
-        File.WriteAllBytes(Path.Combine(modelRoot, "voices", "af_heart.bin"), []);
+        Directory.CreateDirectory(Path.Join(modelRoot, "voices"));
+        File.WriteAllBytes(Path.Join(modelRoot, "voices", "af_heart.bin"), []);
     }
 
     private static BundledModelManifestRegistry CreateRelocatedKokoroRegistry(
@@ -190,7 +190,7 @@ public sealed class BenchmarkModelPathResolverTests
         BundledModelManifestEntry relocated = template with
         {
             RootDirectory = relocatedRoot,
-            DefaultBenchmarkEntryPath = Path.Combine(relocatedRoot, "onnx", "model.onnx"),
+            DefaultBenchmarkEntryPath = Path.Join(relocatedRoot, "onnx", "model.onnx"),
             Variants = [],
         };
 
@@ -201,7 +201,7 @@ public sealed class BenchmarkModelPathResolverTests
     {
         Assert.True(
             candidate.RootDirectory is not null &&
-            Directory.Exists(Path.Combine(candidate.RootDirectory, "voices")),
+            Directory.Exists(Path.Join(candidate.RootDirectory, "voices")),
             $"Expected Kokoro RootDirectory to contain voices/, got '{candidate.RootDirectory}'.");
     }
 

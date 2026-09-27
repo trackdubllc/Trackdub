@@ -289,7 +289,7 @@ public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
         {
             foreach (string fileName in new[] { "decoder_model_merged.onnx", "decoder_model.onnx", "decoder_model_int8.onnx" })
             {
-                string candidatePath = Path.Combine(directory, fileName);
+                string candidatePath = Path.Join(directory, fileName);
                 if (File.Exists(candidatePath))
                 {
                     return Path.GetFullPath(candidatePath);
@@ -307,13 +307,13 @@ public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
             }
         }
 
-        string decoderModelPath = Path.Combine(modelRootPath, "decoder_model.onnx");
+        string decoderModelPath = Path.Join(modelRootPath, "decoder_model.onnx");
         if (File.Exists(decoderModelPath))
         {
             return Path.GetFullPath(decoderModelPath);
         }
 
-        string mergedDecoderModelPath = Path.Combine(modelRootPath, "decoder_model_merged.onnx");
+        string mergedDecoderModelPath = Path.Join(modelRootPath, "decoder_model_merged.onnx");
         if (File.Exists(mergedDecoderModelPath))
         {
             return Path.GetFullPath(mergedDecoderModelPath);
@@ -342,9 +342,9 @@ public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
     }
 
     private static bool HasTokenizerFiles(string directory) =>
-        File.Exists(Path.Combine(directory, "vocab.json")) &&
-        (File.Exists(Path.Combine(directory, "source.spm")) || File.Exists(Path.Combine(directory, "source.model"))) &&
-        (File.Exists(Path.Combine(directory, "target.spm")) || File.Exists(Path.Combine(directory, "target.model")));
+        File.Exists(Path.Join(directory, "vocab.json")) &&
+        (File.Exists(Path.Join(directory, "source.spm")) || File.Exists(Path.Join(directory, "source.model"))) &&
+        (File.Exists(Path.Join(directory, "target.spm")) || File.Exists(Path.Join(directory, "target.model")));
 
     private static StageRuntimeExecutionSummary CreateExecutionSummary(
         StageRuntimePlan plan,

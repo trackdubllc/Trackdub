@@ -89,7 +89,7 @@ public sealed class QwenLocalAssistantEngine(
         }
 
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
-        string configPath = Path.Combine(modelRootPath, GenAiConfigFileName);
+        string configPath = Path.Join(modelRootPath, GenAiConfigFileName);
         if (!File.Exists(configPath))
         {
             return new LocalAssistantReply(

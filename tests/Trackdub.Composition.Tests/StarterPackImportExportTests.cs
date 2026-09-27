@@ -15,7 +15,7 @@ public sealed class StarterPackImportExportTests : IDisposable
 
     public StarterPackImportExportTests()
     {
-        tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.StarterPackImport.Tests", Guid.NewGuid().ToString("N"));
+        tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.StarterPackImport.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
 
         catalog = new StarterPackCatalog(new FakeAppStoragePaths(tempRoot));
@@ -40,14 +40,14 @@ public sealed class StarterPackImportExportTests : IDisposable
     [Fact]
     public async Task ImportAsync_writes_user_pack_and_lists_it()
     {
-        string sourcePath = Path.Combine(tempRoot, "my-fast-pack.json");
+        string sourcePath = Path.Join(tempRoot, "my-fast-pack.json");
         await File.WriteAllTextAsync(sourcePath, ValidUserPackJson("my-fast-pack"));
 
         StarterPackImportResult result = await importExport.ImportAsync(sourcePath);
 
         Assert.True(result.Success);
         Assert.Equal("my-fast-pack", result.PackId);
-        Assert.True(File.Exists(Path.Combine(catalog.UserPacksDirectory, "my-fast-pack.json")));
+        Assert.True(File.Exists(Path.Join(catalog.UserPacksDirectory, "my-fast-pack.json")));
 
         IReadOnlyList<StarterPackDefinition> packs = await catalog.ListDefinitionsAsync();
         StarterPackDefinition imported = packs.First(p => string.Equals(p.Id, "my-fast-pack", StringComparison.Ordinal));
@@ -58,7 +58,7 @@ public sealed class StarterPackImportExportTests : IDisposable
     [Fact]
     public async Task ImportAsync_rejects_invalid_pack_id()
     {
-        string sourcePath = Path.Combine(tempRoot, "bad-id.json");
+        string sourcePath = Path.Join(tempRoot, "bad-id.json");
         await File.WriteAllTextAsync(sourcePath, ValidUserPackJson("Bad_ID"));
 
         StarterPackImportResult result = await importExport.ImportAsync(sourcePath);
@@ -69,7 +69,7 @@ public sealed class StarterPackImportExportTests : IDisposable
     [Fact]
     public async Task ApplyAsync_user_pack_uses_data_driven_apply_block()
     {
-        string sourcePath = Path.Combine(tempRoot, "my-studio-pack.json");
+        string sourcePath = Path.Join(tempRoot, "my-studio-pack.json");
         await File.WriteAllTextAsync(sourcePath, ValidUserPackJson("my-studio-pack"));
         await importExport.ImportAsync(sourcePath);
 
@@ -85,7 +85,7 @@ public sealed class StarterPackImportExportTests : IDisposable
     [Fact]
     public async Task ApplyAsync_hybrid_user_pack_applies_cloud_stage_aliases_from_cloud_stages()
     {
-        string sourcePath = Path.Combine(tempRoot, "hybrid-cloud-pack.json");
+        string sourcePath = Path.Join(tempRoot, "hybrid-cloud-pack.json");
         await File.WriteAllTextAsync(sourcePath, HybridCloudStagesPackJson("hybrid-cloud-pack"));
         StarterPackImportResult importResult = await importExport.ImportAsync(sourcePath);
         Assert.True(importResult.Success, importResult.FailureReason);
@@ -215,15 +215,15 @@ public sealed class StarterPackImportExportTests : IDisposable
         public string UserCacheRoot { get; }
         public string? SharedAssetRoot => null;
         public bool IsPortable => false;
-        public string ModelCacheDirectory => Path.Combine(UserDataRoot, "model-cache");
-        public string ModelCacheIndexPath => Path.Combine(ModelCacheDirectory, "model-cache-records.json");
-        public string LogFilePath => Path.Combine(UserDataRoot, "trackdub.log");
-        public string SettingsPath => Path.Combine(UserDataRoot, "settings.json");
-        public string LayoutPath => Path.Combine(UserDataRoot, "avalonia-layout.json");
-        public string ToolCacheDirectory => Path.Combine(UserDataRoot, "tools");
-        public string FfmpegToolCacheDirectory => Path.Combine(ToolCacheDirectory, "ffmpeg");
-        public string EngineCacheDirectory => Path.Combine(UserDataRoot, "EngineCache");
-        public string ComponentCacheDirectory => Path.Combine(UserDataRoot, "components");
+        public string ModelCacheDirectory => Path.Join(UserDataRoot, "model-cache");
+        public string ModelCacheIndexPath => Path.Join(ModelCacheDirectory, "model-cache-records.json");
+        public string LogFilePath => Path.Join(UserDataRoot, "trackdub.log");
+        public string SettingsPath => Path.Join(UserDataRoot, "settings.json");
+        public string LayoutPath => Path.Join(UserDataRoot, "avalonia-layout.json");
+        public string ToolCacheDirectory => Path.Join(UserDataRoot, "tools");
+        public string FfmpegToolCacheDirectory => Path.Join(ToolCacheDirectory, "ffmpeg");
+        public string EngineCacheDirectory => Path.Join(UserDataRoot, "EngineCache");
+        public string ComponentCacheDirectory => Path.Join(UserDataRoot, "components");
     }
 
     private sealed class PermissiveCompatibilityService : IStarterPackCompatibilityService

@@ -6,7 +6,7 @@ namespace Trackdub.Infrastructure.Tests;
 
 public sealed class FileSystemVoiceCloneAuditLogTests : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(), "Trackdub.AuditTests", Guid.NewGuid().ToString("N"));
+    private readonly string root = Path.Join(Path.GetTempPath(), "Trackdub.AuditTests", Guid.NewGuid().ToString("N"));
 
     public FileSystemVoiceCloneAuditLogTests()
     {
@@ -70,7 +70,7 @@ public sealed class FileSystemVoiceCloneAuditLogTests : IDisposable
         await log.AppendAsync(firstEntry, TestContext.Current.CancellationToken);
         await log.AppendAsync(CreateEntry(), TestContext.Current.CancellationToken);
 
-        string path = Path.Combine(root, ProjectArtifactPaths.VoiceCloneAuditRelativePath);
+        string path = Path.Join(root, ProjectArtifactPaths.VoiceCloneAuditRelativePath);
         string[] lines = await File.ReadAllLinesAsync(path, TestContext.Current.CancellationToken);
         lines[0] = lines[0].Replace(
             firstEntry.ReferenceClipArtifactId.ToString("D"),

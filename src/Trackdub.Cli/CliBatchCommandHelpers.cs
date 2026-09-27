@@ -75,7 +75,7 @@ internal static class CliBatchCommandHelpers
         CancellationToken cancellationToken)
     {
         IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
-        string presetsDirectory = Path.Combine(storagePaths.RootDirectory, "presets");
+        string presetsDirectory = Path.Join(storagePaths.RootDirectory, "presets");
         var store = new PresetStore(presetsDirectory);
 
         PipelinePreset? preset;
@@ -85,7 +85,7 @@ internal static class CliBatchCommandHelpers
         }
         catch (Exception ex) when (ex is JsonException or IOException or InvalidOperationException)
         {
-            string filePath = Path.Combine(presetsDirectory, $"{presetName}.json");
+            string filePath = Path.Join(presetsDirectory, $"{presetName}.json");
             CliErrorReporter.ReportValidationError(
                 ErrorCode.InvalidArgument,
                 $"Failed to read preset '{presetName}' at {filePath}: {ex.Message}",

@@ -11,7 +11,7 @@ public sealed class PresetStoreTests : IDisposable
 
     public PresetStoreTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"trackdub-preset-tests-{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"trackdub-preset-tests-{Guid.NewGuid():N}");
         _store = new PresetStore(_tempDir);
     }
 
@@ -95,7 +95,7 @@ public sealed class PresetStoreTests : IDisposable
     [Fact]
     public async Task List_DirectoryDoesNotExist_ReturnsEmptyList()
     {
-        var nonExistentDir = Path.Combine(Path.GetTempPath(), $"no-such-dir-{Guid.NewGuid():N}");
+        var nonExistentDir = Path.Join(Path.GetTempPath(), $"no-such-dir-{Guid.NewGuid():N}");
         var store = new PresetStore(nonExistentDir);
 
         var names = await store.ListAsync(CancellationToken.None);
@@ -110,7 +110,7 @@ public sealed class PresetStoreTests : IDisposable
         await _store.SaveAsync("valid-one", CreatePreset(), CancellationToken.None);
 
         // Write a malformed JSON file
-        var malformedPath = Path.Combine(_tempDir, "broken.json");
+        var malformedPath = Path.Join(_tempDir, "broken.json");
         await File.WriteAllTextAsync(malformedPath, "{ not valid json at all !!!");
 
         var names = await _store.ListAsync(CancellationToken.None);
@@ -127,7 +127,7 @@ public sealed class PresetStoreTests : IDisposable
         bool result = await _store.DeleteAsync("to-delete", CancellationToken.None);
 
         Assert.True(result);
-        Assert.False(File.Exists(Path.Combine(_tempDir, "to-delete.json")));
+        Assert.False(File.Exists(Path.Join(_tempDir, "to-delete.json")));
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed class PresetStoreTests : IDisposable
     [Fact]
     public async Task Save_CreatesDirectoryIfMissing()
     {
-        var nestedDir = Path.Combine(Path.GetTempPath(), $"trackdub-nested-{Guid.NewGuid():N}", "presets");
+        var nestedDir = Path.Join(Path.GetTempPath(), $"trackdub-nested-{Guid.NewGuid():N}", "presets");
         var store = new PresetStore(nestedDir);
 
         try
@@ -152,7 +152,7 @@ public sealed class PresetStoreTests : IDisposable
             await store.SaveAsync("new-preset", CreatePreset(), CancellationToken.None);
 
             Assert.True(Directory.Exists(nestedDir));
-            Assert.True(File.Exists(Path.Combine(nestedDir, "new-preset.json")));
+            Assert.True(File.Exists(Path.Join(nestedDir, "new-preset.json")));
         }
         finally
         {
@@ -175,7 +175,7 @@ public sealed class PresetStoreTests : IDisposable
 
         await _store.SaveAsync("format-check", preset, CancellationToken.None);
 
-        string filePath = Path.Combine(_tempDir, "format-check.json");
+        string filePath = Path.Join(_tempDir, "format-check.json");
         byte[] rawBytes = await File.ReadAllBytesAsync(filePath);
 
         // UTF-8 no BOM: first bytes should NOT be EF BB BF
@@ -221,7 +221,7 @@ public sealed class PresetStoreTests : IDisposable
               "anotherUnknown": 42
             }
             """;
-        string filePath = Path.Combine(_tempDir, "forward-compat.json");
+        string filePath = Path.Join(_tempDir, "forward-compat.json");
         await File.WriteAllTextAsync(filePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
         var loaded = await _store.LoadAsync("forward-compat", CancellationToken.None);
@@ -244,7 +244,7 @@ public sealed class PresetStoreTests : IDisposable
               "targetLanguage": "ja"
             }
             """;
-        string filePath = Path.Combine(_tempDir, "too-new.json");
+        string filePath = Path.Join(_tempDir, "too-new.json");
         await File.WriteAllTextAsync(filePath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(

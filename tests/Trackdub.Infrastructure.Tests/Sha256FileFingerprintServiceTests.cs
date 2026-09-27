@@ -20,7 +20,7 @@ public sealed class Sha256FileFingerprintServiceTests : IDisposable
 
     private string CreateTempFile(string content)
     {
-        string path = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N") + ".tmp");
+        string path = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N") + ".tmp");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         tempFiles.Add(path);
@@ -29,7 +29,7 @@ public sealed class Sha256FileFingerprintServiceTests : IDisposable
 
     private string CreateTempFile(byte[] content)
     {
-        string path = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N") + ".tmp");
+        string path = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N") + ".tmp");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, content);
         tempFiles.Add(path);

@@ -433,18 +433,18 @@ public sealed class DefaultStemLabCommandRunner : IStemLabCommandRunner
         }
 
         Directory.CreateDirectory(options.OutputDirectory);
-        string workDirectory = Path.Combine(options.OutputDirectory, "_stemlab_work");
-        string separatorInputDirectory = Path.Combine(workDirectory, "separator-input");
-        string separatorOutputDirectory = Path.Combine(workDirectory, "separator-output");
+        string workDirectory = Path.Join(options.OutputDirectory, "_stemlab_work");
+        string separatorInputDirectory = Path.Join(workDirectory, "separator-input");
+        string separatorOutputDirectory = Path.Join(workDirectory, "separator-output");
         RecreateDirectory(workDirectory);
         Directory.CreateDirectory(separatorInputDirectory);
         Directory.CreateDirectory(separatorOutputDirectory);
 
-        string sourceAudioPath = Path.Combine(options.OutputDirectory, "stem-source.wav");
-        string separatorSourceAudioPath = Path.Combine(separatorInputDirectory, "stem-source.wav");
-        string vocalsPath = Path.Combine(options.OutputDirectory, "vocals.wav");
-        string instrumentalPath = Path.Combine(options.OutputDirectory, "instrumental.wav");
-        string diagnosticsPath = Path.Combine(options.OutputDirectory, "diagnostics.json");
+        string sourceAudioPath = Path.Join(options.OutputDirectory, "stem-source.wav");
+        string separatorSourceAudioPath = Path.Join(separatorInputDirectory, "stem-source.wav");
+        string vocalsPath = Path.Join(options.OutputDirectory, "vocals.wav");
+        string instrumentalPath = Path.Join(options.OutputDirectory, "instrumental.wav");
+        string diagnosticsPath = Path.Join(options.OutputDirectory, "diagnostics.json");
 
         var extractionService = new FfmpegAudioExtractionService(options.FfmpegPath);
         await extractionService.ExtractStemSeparationAudioAsync(

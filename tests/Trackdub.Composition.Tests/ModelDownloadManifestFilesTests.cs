@@ -162,11 +162,11 @@ public sealed class ModelDownloadManifestFilesTests
         string sha256 = "abc",
         IReadOnlyDictionary<string, string>? downloadFileHashes = null)
     {
-        string root = Path.Combine(Path.GetTempPath(), "manifest-files-test", Guid.NewGuid().ToString("N"));
+        string root = Path.Join(Path.GetTempPath(), "manifest-files-test", Guid.NewGuid().ToString("N"));
         BundledModelManifestVariant[] resolvedVariants = variants
             .Select(variant => variant with
             {
-                EntryPath = Path.GetFullPath(Path.Combine(root, variant.EntryPath)),
+                EntryPath = Path.GetFullPath(Path.Join(root, variant.EntryPath)),
             })
             .ToArray();
 
@@ -193,7 +193,7 @@ public sealed class ModelDownloadManifestFilesTests
             DownloadFileHashes: downloadFileHashes ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             Aliases: ["example"],
             RootDirectory: root,
-            DefaultBenchmarkEntryPath: Path.GetFullPath(Path.Combine(root, benchmarkEntry)),
+            DefaultBenchmarkEntryPath: Path.GetFullPath(Path.Join(root, benchmarkEntry)),
             Variants: resolvedVariants);
     }
 }

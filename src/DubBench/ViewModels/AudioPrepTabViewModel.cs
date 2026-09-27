@@ -57,7 +57,7 @@ public sealed partial class AudioPrepTabViewModel : ObservableObject, ITabViewMo
             var options = new AudioPrepBenchmarkOptions(
                 ManifestPath: ManifestPath,
                 OutputPath: string.IsNullOrWhiteSpace(OutputPath)
-                    ? Path.Combine(Path.GetTempPath(), "DubBench", $"audioprep-report-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json")
+                    ? Path.Join(Path.GetTempPath(), "DubBench", $"audioprep-report-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json")
                     : OutputPath,
                 ReportFormat: Trackdub.Benchmarks.ReportFormat.Both,
                 ShowHelp: false);

@@ -21,5 +21,5 @@ public sealed class WhisperTokenizerDecoderTests
     }
 
     private static string ResolveModelRootPath(string modelDirectoryName) =>
-        Path.GetFullPath(Path.Combine(TestRepoRootResolver.FindRepoRoot(), "models", modelDirectoryName));
+        Path.GetFullPath(Path.Join(TestRepoRootResolver.FindRepoRoot(), "models", modelDirectoryName));
 }

@@ -16,7 +16,7 @@ public sealed class LipSynthesisStageHandlerTests
 
     private static string CreateTempDirectory()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"lipsynth-tests-{Guid.NewGuid():N}");
+        var path = Path.Join(Path.GetTempPath(), $"lipsynth-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
     }
@@ -57,7 +57,7 @@ public sealed class LipSynthesisStageHandlerTests
 
     private static string EnsureDubbedAudioFile(string directory)
     {
-        string path = Path.Combine(directory, "dubbed-driver.wav");
+        string path = Path.Join(directory, "dubbed-driver.wav");
         if (!File.Exists(path))
             File.WriteAllBytes(path, [0]);
 
@@ -101,7 +101,7 @@ public sealed class LipSynthesisStageHandlerTests
             var mediaRepo = new FakeMediaAssetRepository();
             var engine = new FakeLipSynthesisEngine
             {
-                OutputDirectory = Path.Combine(directory, "engine-out"),
+                OutputDirectory = Path.Join(directory, "engine-out"),
                 Experimental = false
             };
 
@@ -137,7 +137,7 @@ public sealed class LipSynthesisStageHandlerTests
             var stageRunStore = new FakeProjectStageRunStore();
             var engine = new FakeLipSynthesisEngine
             {
-                OutputDirectory = Path.Combine(directory, "engine-out"),
+                OutputDirectory = Path.Join(directory, "engine-out"),
                 Experimental = true
             };
 
@@ -165,7 +165,7 @@ public sealed class LipSynthesisStageHandlerTests
             var mediaRepo = new FakeMediaAssetRepository();
             var engine = new FakeLipSynthesisEngine
             {
-                OutputDirectory = Path.Combine(directory, "engine-out"),
+                OutputDirectory = Path.Join(directory, "engine-out"),
                 Experimental = true
             };
 
@@ -523,7 +523,7 @@ public sealed class LipSynthesisStageHandlerTests
             var artifactStore = new FakeArtifactStore(directory);
             var stageRunStore = new FakeProjectStageRunStore();
             var mediaRepo = new FakeMediaAssetRepository();
-            var engine = new FakeLipSynthesisEngine { OutputDirectory = Path.Combine(directory, "engine-out") };
+            var engine = new FakeLipSynthesisEngine { OutputDirectory = Path.Join(directory, "engine-out") };
 
             // Detector returns no face for the SECOND call only: first turn synthesizes, second skips.
             var faceDetector = new SequencedFaceDetector([true, false]);

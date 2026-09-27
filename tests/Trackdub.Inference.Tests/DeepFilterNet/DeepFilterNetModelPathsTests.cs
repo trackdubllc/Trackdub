@@ -53,9 +53,9 @@ public sealed class DeepFilterNetModelPathsTests
 
     private static BundledModelManifestRegistry CreateRegistry(string rootPath)
     {
-        string manifestDirectory = Path.Combine(rootPath, "manifest");
+        string manifestDirectory = Path.Join(rootPath, "manifest");
         Directory.CreateDirectory(manifestDirectory);
-        string manifestPath = Path.Combine(manifestDirectory, "bundled-models.manifest.json");
+        string manifestPath = Path.Join(manifestDirectory, "bundled-models.manifest.json");
         string relativeRoot = Path.GetRelativePath(manifestDirectory, rootPath).Replace('\\', '/');
         File.WriteAllText(
             manifestPath,
@@ -102,9 +102,9 @@ public sealed class DeepFilterNetModelPathsTests
     private static void WriteOnnxFiles(string rootPath)
     {
         Directory.CreateDirectory(rootPath);
-        File.WriteAllText(Path.Combine(rootPath, "enc.onnx"), "enc");
-        File.WriteAllText(Path.Combine(rootPath, "erb_dec.onnx"), "erb");
-        File.WriteAllText(Path.Combine(rootPath, "df_dec.onnx"), "df");
+        File.WriteAllText(Path.Join(rootPath, "enc.onnx"), "enc");
+        File.WriteAllText(Path.Join(rootPath, "erb_dec.onnx"), "erb");
+        File.WriteAllText(Path.Join(rootPath, "df_dec.onnx"), "df");
     }
 
     private sealed class TempDirectoryFixture : IDisposable
@@ -113,7 +113,7 @@ public sealed class DeepFilterNetModelPathsTests
 
         public TempDirectoryFixture(string label)
         {
-            RootPath = Path.Combine(Path.GetTempPath(), "trackdub-tests", label, Guid.NewGuid().ToString("N"));
+            RootPath = Path.Join(Path.GetTempPath(), "trackdub-tests", label, Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(RootPath);
         }
 

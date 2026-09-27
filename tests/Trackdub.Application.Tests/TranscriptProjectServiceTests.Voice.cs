@@ -28,7 +28,7 @@ public partial class TranscriptProjectServiceTests
     public async Task AssignVoiceToSpeakerAsync_persists_assignment_and_reports_language_mismatch()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -54,7 +54,7 @@ public partial class TranscriptProjectServiceTests
     public async Task GenerateTtsForSpeakerAsync_writes_take_artifact_metadata_and_duration_warning()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var ttsEngine = new FakeTtsEngine { DurationSamples = 168000 };
@@ -89,7 +89,7 @@ public partial class TranscriptProjectServiceTests
     public async Task GenerateTtsForSegmentAsync_writes_take_for_selected_segment_only()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -118,7 +118,7 @@ public partial class TranscriptProjectServiceTests
     public async Task GenerateTtsForSpeakerAsync_auto_stretches_mild_overrun()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 2300 };
@@ -157,7 +157,7 @@ public partial class TranscriptProjectServiceTests
     public async Task GenerateTtsForSpeakerAsync_uses_postprocessed_duration_for_timing_analysis()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 2300 };
@@ -196,7 +196,7 @@ public partial class TranscriptProjectServiceTests
     public async Task GenerateTtsForSpeakerAsync_flags_large_overrun_without_auto_stretch()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 2500 };
@@ -231,7 +231,7 @@ public partial class TranscriptProjectServiceTests
     public async Task StretchTtsTakeAsync_manually_stretches_overrun_take()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 2500 };
@@ -270,7 +270,7 @@ public partial class TranscriptProjectServiceTests
     public async Task StretchTtsTakeAsync_manually_stretches_underrun_take()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1500 };
@@ -307,7 +307,7 @@ public partial class TranscriptProjectServiceTests
     public async Task GenerateTtsForAllSpeakersAsync_uses_fallback_voice_without_user_assignment()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -353,7 +353,7 @@ public partial class TranscriptProjectServiceTests
     public async Task Voice_assignment_change_marks_existing_takes_stale_and_batch_regeneration_creates_fresh_take()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -389,7 +389,7 @@ public partial class TranscriptProjectServiceTests
     public async Task AssignVoiceToSpeakerAsync_preserves_reference_clip_when_stock_voice_unchanged()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -425,7 +425,7 @@ public partial class TranscriptProjectServiceTests
     public async Task GenerateTtsForSpeakerAsync_non_clone_run_substitutes_stock_voice_for_persisted_clone_assignment()
     {
         string tempDirectory = CreateTempDirectory();
-        // Use Path.Join rather than Path.Combine so a second argument is never treated as
+        // Use Path.Join rather than Path.Join so a second argument is never treated as
         // absolute and silently drops the temp directory prefix.
         string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);

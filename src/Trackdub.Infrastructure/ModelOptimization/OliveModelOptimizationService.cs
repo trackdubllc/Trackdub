@@ -111,7 +111,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
                     yield return line;
                 }
 
-                string optimizedModelPath = Path.Combine(oliveOutputDir, "model.onnx");
+                string optimizedModelPath = Path.Join(oliveOutputDir, "model.onnx");
                 if (!File.Exists(optimizedModelPath))
                 {
                     throw new InvalidOperationException(
@@ -122,7 +122,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
                 Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
                 File.Copy(optimizedModelPath, targetPath, overwrite: true);
 
-                string sourceDataPath = Path.Combine(oliveOutputDir, "model.onnx.data");
+                string sourceDataPath = Path.Join(oliveOutputDir, "model.onnx.data");
                 string targetDataPath = targetPath + ".data";
                 if (File.Exists(sourceDataPath))
                 {
@@ -159,13 +159,13 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
     }
 
     private string GetOliveCacheRoot(string modelId) =>
-        Path.Combine(
+        Path.Join(
             _storagePaths.ToolCacheDirectory,
             "olive-cache",
             modelId.Replace('/', '_').Replace('\\', '_'));
 
     private static string CreateUniqueOliveWorkDirectory(string cacheRoot, string prefix) =>
-        Path.Combine(cacheRoot, $"{prefix}-{Guid.NewGuid():N}");
+        Path.Join(cacheRoot, $"{prefix}-{Guid.NewGuid():N}");
 
     private static void CleanupOliveWorkDirectories(
         IReadOnlyList<string> oliveWorkDirectories,
@@ -237,7 +237,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
         }
 
         string fullRoot = Path.GetFullPath(rootPath);
-        string fullPath = Path.GetFullPath(Path.Combine(fullRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+        string fullPath = Path.GetFullPath(Path.Join(fullRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsStrictSubpathOrEqual(fullPath, fullRoot))
         {
             throw new InvalidOperationException($"Optimization component path is invalid: {relativePath}.");
@@ -312,7 +312,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
         }
 
         string fullRoot = Path.GetFullPath(modelRootPath);
-        string fullConfig = Path.GetFullPath(Path.Combine(fullRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
+        string fullConfig = Path.GetFullPath(Path.Join(fullRoot, normalized.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsStrictSubpathOrEqual(fullConfig, fullRoot))
         {
             throw new InvalidOperationException($"GenAI entry path escapes model root: '{entryRelativePath}'.");
@@ -407,7 +407,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
 
         string modelInputPath = ResolveGenAiModelInputPath(
             request.ModelRootPath, request.EntryRelativePath, GenAiConfigFileName);
-        string genAiConfigPath = Path.Combine(modelInputPath, GenAiConfigFileName);
+        string genAiConfigPath = Path.Join(modelInputPath, GenAiConfigFileName);
         if (!File.Exists(genAiConfigPath))
         {
             throw new InvalidOperationException(
@@ -539,7 +539,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
                     yield return line;
                 }
 
-                string optimizedModelPath = Path.Combine(oliveOutputDir, "model.onnx");
+                string optimizedModelPath = Path.Join(oliveOutputDir, "model.onnx");
                 if (!File.Exists(optimizedModelPath))
                 {
                     throw new InvalidOperationException(
@@ -550,7 +550,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
                 Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
                 File.Copy(optimizedModelPath, targetPath, overwrite: true);
 
-                string sourceDataPath = Path.Combine(oliveOutputDir, "model.onnx.data");
+                string sourceDataPath = Path.Join(oliveOutputDir, "model.onnx.data");
                 string targetDataPath = targetPath + ".data";
                 if (File.Exists(sourceDataPath))
                 {
@@ -618,7 +618,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
     {
         string modelInputPath = ResolveGenAiModelInputPath(
             request.ModelRootPath, request.EntryRelativePath, genAiConfigFileName);
-        string sourceConfigPath = Path.Combine(modelInputPath, genAiConfigFileName);
+        string sourceConfigPath = Path.Join(modelInputPath, genAiConfigFileName);
 
         if (!File.Exists(sourceConfigPath))
         {
@@ -659,11 +659,11 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
             }
 
             string outputModelDir = oliveOutputDir;
-            if (!File.Exists(Path.Combine(oliveOutputDir, genAiConfigFileName)))
+            if (!File.Exists(Path.Join(oliveOutputDir, genAiConfigFileName)))
             {
                 string? nested = Directory
                     .EnumerateDirectories(oliveOutputDir)
-                    .FirstOrDefault(d => File.Exists(Path.Combine(d, genAiConfigFileName)));
+                    .FirstOrDefault(d => File.Exists(Path.Join(d, genAiConfigFileName)));
                 if (nested is null)
                 {
                     throw new InvalidOperationException(
@@ -676,7 +676,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
             foreach (string sourceFile in Directory.EnumerateFiles(outputModelDir, "*", SearchOption.AllDirectories))
             {
                 string relative = Path.GetRelativePath(outputModelDir, sourceFile);
-                string destFile = Path.Combine(tempOutputPath, relative);
+                string destFile = Path.Join(tempOutputPath, relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
                 File.Copy(sourceFile, destFile, overwrite: true);
             }
@@ -727,7 +727,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
                     continue;
                 }
 
-                string destOnnx = Path.Combine(tempOutputPath, fileName);
+                string destOnnx = Path.Join(tempOutputPath, fileName);
                 File.Copy(sourceFile, destOnnx, overwrite: true);
 
                 string sourceData = sourceFile + ".data";
@@ -744,7 +744,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
                 continue;
             }
 
-            string destFile = Path.Combine(tempOutputPath, fileName);
+            string destFile = Path.Join(tempOutputPath, fileName);
             if (!File.Exists(destFile))
             {
                 File.Copy(sourceFile, destFile, overwrite: true);
@@ -852,7 +852,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
                 inputModelPath.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase) &&
                 File.Exists(inputModelPath))
             {
-                string prunedModelPath = Path.Combine(recipeInputDir, Path.GetFileName(inputModelPath));
+                string prunedModelPath = Path.Join(recipeInputDir, Path.GetFileName(inputModelPath));
                 string pruneScript = OliveRecipePreparation.ExtractPruneScript(recipeInputDir);
                 await foreach (string line in _runner.RunAsync(
                     _oliveEnvironment.GetManagedPythonPath(request.ExecutionProvider),
@@ -871,7 +871,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
                 }
             }
 
-            string resolvedRecipePath = Path.Combine(recipeInputDir, Path.GetFileName(recipeConfigPath));
+            string resolvedRecipePath = Path.Join(recipeInputDir, Path.GetFileName(recipeConfigPath));
             await File.WriteAllTextAsync(
                 resolvedRecipePath,
                 recipe.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
@@ -939,7 +939,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
         foreach (string sourceFile in Directory.EnumerateFiles(outputModelDir, "*", SearchOption.AllDirectories))
         {
             string relative = Path.GetRelativePath(outputModelDir, sourceFile);
-            string destFile = Path.Combine(tempOutputPath, relative);
+            string destFile = Path.Join(tempOutputPath, relative);
             Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
             File.Copy(sourceFile, destFile, overwrite: true);
         }
@@ -1028,14 +1028,14 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
 
     private static string ResolveGenAiRecipeOutputDirectory(string oliveOutputDir, string genAiConfigFileName)
     {
-        if (File.Exists(Path.Combine(oliveOutputDir, genAiConfigFileName)))
+        if (File.Exists(Path.Join(oliveOutputDir, genAiConfigFileName)))
         {
             return oliveOutputDir;
         }
 
         string? nested = Directory
             .EnumerateDirectories(oliveOutputDir, "*", SearchOption.AllDirectories)
-            .FirstOrDefault(directory => File.Exists(Path.Combine(directory, genAiConfigFileName)));
+            .FirstOrDefault(directory => File.Exists(Path.Join(directory, genAiConfigFileName)));
 
         if (nested is null)
         {
@@ -1057,7 +1057,7 @@ public sealed class OliveModelOptimizationService : IModelOptimizationService
             return direct;
         }
 
-        string modelOnnx = Path.Combine(oliveOutputDir, "model.onnx");
+        string modelOnnx = Path.Join(oliveOutputDir, "model.onnx");
         return File.Exists(modelOnnx) ? modelOnnx : null;
     }
 

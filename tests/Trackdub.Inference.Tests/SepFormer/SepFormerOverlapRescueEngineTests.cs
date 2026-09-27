@@ -8,7 +8,7 @@ namespace Trackdub.Inference.Tests.SepFormer;
 
 public sealed class SepFormerOverlapRescueEngineTests : IDisposable
 {
-    private readonly string tempDir = Path.Combine(Path.GetTempPath(), $"sepformer-overlap-tests-{Guid.NewGuid():N}");
+    private readonly string tempDir = Path.Join(Path.GetTempPath(), $"sepformer-overlap-tests-{Guid.NewGuid():N}");
 
     public SepFormerOverlapRescueEngineTests() => Directory.CreateDirectory(tempDir);
 
@@ -21,9 +21,9 @@ public sealed class SepFormerOverlapRescueEngineTests : IDisposable
     [Fact]
     public async Task RescueAsync_WritesSourceCandidatePaths()
     {
-        string regionPath = Path.Combine(tempDir, "region.wav");
-        string candidate0Path = Path.Combine(tempDir, "candidate-0.wav");
-        string candidate1Path = Path.Combine(tempDir, "candidate-1.wav");
+        string regionPath = Path.Join(tempDir, "region.wav");
+        string candidate0Path = Path.Join(tempDir, "candidate-0.wav");
+        string candidate1Path = Path.Join(tempDir, "candidate-1.wav");
 
         await WriteSilenceWavAsync(regionPath, sampleRate: 16000, durationSamples: 800);
 
@@ -40,7 +40,7 @@ public sealed class SepFormerOverlapRescueEngineTests : IDisposable
             EngineFamily = SepFormerOverlapRescueEngine.EngineFamilyName,
             ModelId = "tonythethompson/sepformer-whamr16k-onnx",
             ModelAlias = "sepformer",
-            ModelEntryPath = Path.Combine(tempDir, "sepformer.onnx"),
+            ModelEntryPath = Path.Join(tempDir, "sepformer.onnx"),
             ExecutionProvider = ExecutionProviderKind.Cpu
         };
 
@@ -66,7 +66,7 @@ public sealed class SepFormerOverlapRescueEngineTests : IDisposable
     [Fact]
     public async Task RescueAsync_ThrowsWhenPlanNotReady()
     {
-        string regionPath = Path.Combine(tempDir, "region-blocked.wav");
+        string regionPath = Path.Join(tempDir, "region-blocked.wav");
         await WriteSilenceWavAsync(regionPath, sampleRate: 16000, durationSamples: 160);
 
         var plan = new StageRuntimePlan
@@ -81,8 +81,8 @@ public sealed class SepFormerOverlapRescueEngineTests : IDisposable
 
         var request = new OverlapRescueRequest(
             regionPath,
-            Path.Combine(tempDir, "c0.wav"),
-            Path.Combine(tempDir, "c1.wav"),
+            Path.Join(tempDir, "c0.wav"),
+            Path.Join(tempDir, "c1.wav"),
             RegionStartSeconds: 0,
             RegionEndSeconds: 0.5);
 

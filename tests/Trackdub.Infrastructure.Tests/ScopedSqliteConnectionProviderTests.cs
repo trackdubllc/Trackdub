@@ -13,7 +13,7 @@ public sealed class ScopedSqliteConnectionProviderTests
     [Fact]
     public async Task Project_repositories_share_scoped_connection_without_disposing_it()
     {
-        string projectRoot = Path.Combine(
+        string projectRoot = Path.Join(
             Path.GetTempPath(),
             "Trackdub.Infrastructure.Tests",
             Guid.NewGuid().ToString("N"),

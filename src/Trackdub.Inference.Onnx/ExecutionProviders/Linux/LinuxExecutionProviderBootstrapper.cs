@@ -50,7 +50,7 @@ public sealed class LinuxExecutionProviderBootstrapper : IExecutionProviderBoots
     /// </summary>
     private static ITensorRtRtxProviderBootstrap CreateDefaultTrtRtxBootstrap()
     {
-        string userDataRoot = Path.Combine(
+        string userDataRoot = Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Trackdub");
         return TensorRtRtxProviderBootstrapFactory.CreateWithDefaultInstallPath(userDataRoot);

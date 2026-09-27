@@ -33,14 +33,14 @@ public sealed class LicenseFileStore : ILicenseTokenStore
     {
         var basePath = _customBasePath
             ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(basePath, AppDirectoryName, TokenFileName);
+        return Path.Join(basePath, AppDirectoryName, TokenFileName);
     }
 
     private string GetKeyPath()
     {
         var basePath = _customBasePath
             ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(basePath, AppDirectoryName, KeyFileName);
+        return Path.Join(basePath, AppDirectoryName, KeyFileName);
     }
 
     /// <summary>

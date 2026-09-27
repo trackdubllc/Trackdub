@@ -4,7 +4,7 @@ namespace Trackdub.Media.Tests;
 
 public sealed class Pcm16ReferenceClipTrimmerTests : IDisposable
 {
-    private readonly string tempDirectory = Path.Combine(
+    private readonly string tempDirectory = Path.Join(
         Path.GetTempPath(),
         "Trackdub.ReferenceClipTrimmer",
         Guid.NewGuid().ToString("N"));
@@ -17,7 +17,7 @@ public sealed class Pcm16ReferenceClipTrimmerTests : IDisposable
     [Fact]
     public async Task TrimAsync_removes_edge_silence_and_insets_into_active_audio()
     {
-        string path = Path.Combine(tempDirectory, "reference.wav");
+        string path = Path.Join(tempDirectory, "reference.wav");
         const int sampleRate = 1000;
         float[] samples =
         [
@@ -42,7 +42,7 @@ public sealed class Pcm16ReferenceClipTrimmerTests : IDisposable
     [Fact]
     public async Task TrimAsync_does_not_trim_fully_active_clip_without_edge_silence()
     {
-        string path = Path.Combine(tempDirectory, "reference_active.wav");
+        string path = Path.Join(tempDirectory, "reference_active.wav");
         const int sampleRate = 1000;
         float[] samples =
         [

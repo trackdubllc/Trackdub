@@ -15,7 +15,7 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
             return;
         }
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), $"trackdub-afx-test-{Guid.NewGuid():N}");
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
         try
         {
@@ -24,7 +24,7 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
             string runtimePath = componentStore.EnsureComponentDirectory(NvidiaAfxRuntimeDownloader.ComponentId);
             componentStore.MarkInstalled(NvidiaAfxRuntimeDownloader.ComponentId);
 
-            string manifestPath = Path.Combine(tempRoot, "manifest.json");
+            string manifestPath = Path.Join(tempRoot, "manifest.json");
             File.WriteAllText(manifestPath, """
             {
               "manifestVersion": "1.0.0",

@@ -86,12 +86,12 @@ internal static class NativeTensorRtLibraryProbe
         }
 
         string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        yield return Path.Combine(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.9", "bin");
-        yield return Path.Combine(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.8", "bin");
-        yield return Path.Combine(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.7", "bin");
-        yield return Path.Combine(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.6", "bin");
-        yield return Path.Combine(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.5", "bin");
-        yield return Path.Combine(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.4", "bin");
-        yield return Path.Combine(programFiles, "NVIDIA Corporation", "TensorRT", "lib");
+        yield return Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.9", "bin");
+        yield return Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.8", "bin");
+        yield return Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.7", "bin");
+        yield return Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.6", "bin");
+        yield return Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.5", "bin");
+        yield return Path.Join(programFiles, "NVIDIA GPU Computing Toolkit", "CUDA", "v12.4", "bin");
+        yield return Path.Join(programFiles, "NVIDIA Corporation", "TensorRT", "lib");
     }
 }

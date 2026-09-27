@@ -84,21 +84,21 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
             yield break;
         }
 
-        yield return Path.Combine(baseDirectory, "libvlc");
+        yield return Path.Join(baseDirectory, "libvlc");
 
         int depth = 0;
         for (string? current = baseDirectory; !string.IsNullOrWhiteSpace(current) && depth < 14; depth++)
         {
-            yield return Path.Combine(current, "native", safeRid, "libvlc");
-            yield return Path.Combine(current, "libvlc", safeRid);
+            yield return Path.Join(current, "native", safeRid, "libvlc");
+            yield return Path.Join(current, "libvlc", safeRid);
             current = Directory.GetParent(current)?.FullName;
         }
 
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!string.IsNullOrWhiteSpace(localAppData))
         {
-            yield return Path.Combine(localAppData, "Trackdub", "native", safeRid, "libvlc");
-            yield return Path.Combine(localAppData, "Trackdub", "libvlc", safeRid);
+            yield return Path.Join(localAppData, "Trackdub", "native", safeRid, "libvlc");
+            yield return Path.Join(localAppData, "Trackdub", "libvlc", safeRid);
         }
     }
 
@@ -113,7 +113,7 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
         // Bundled runtime packages lay out every architecture side by side
         // (libvlc/win-x64, libvlc/win-arm64, ...); the subfolder matching the
         // current process architecture must win over arbitrary enumeration order.
-        string ridFolder = Path.Combine(candidate, safeRid);
+        string ridFolder = Path.Join(candidate, safeRid);
         if (Directory.Exists(ridFolder) && HasPlatformLibrary(ridFolder))
         {
             return ridFolder;
@@ -160,7 +160,7 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
 
     private static bool HasLibVlcSo(string directory)
     {
-        if (File.Exists(Path.Combine(directory, "libvlc.so")))
+        if (File.Exists(Path.Join(directory, "libvlc.so")))
         {
             return true;
         }
@@ -177,9 +177,9 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
 
     private static bool HasPlatformLibrary(string directory)
     {
-        if (File.Exists(Path.Combine(directory, "libvlc.dll"))
-            || File.Exists(Path.Combine(directory, "libvlc.so"))
-            || File.Exists(Path.Combine(directory, "libvlc.dylib")))
+        if (File.Exists(Path.Join(directory, "libvlc.dll"))
+            || File.Exists(Path.Join(directory, "libvlc.so"))
+            || File.Exists(Path.Join(directory, "libvlc.dylib")))
         {
             return true;
         }
@@ -201,7 +201,7 @@ public sealed class LibVlcRuntimeLocator : ILibVlcRuntimeLocator
     }
 
     /// <summary>
-    /// Rejects rooted or multi-segment values so <see cref="Path.Combine"/> cannot
+    /// Rejects rooted or multi-segment values so <see cref="Path.Join"/> cannot
     /// discard earlier path arguments when assembling candidate directories.
     /// </summary>
     private static string? SanitizeRelativePathSegment(string value)

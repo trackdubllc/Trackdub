@@ -14,7 +14,7 @@ namespace Trackdub.Composition.Tests;
 
 public sealed class ModelDownloadOrchestratorTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloadOrchestrator.Tests", Guid.NewGuid().ToString("N"));
+    private readonly string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloadOrchestrator.Tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
     public async Task DownloadAsync_rejects_path_traversal_in_download_file()
@@ -53,7 +53,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             $"Destination should not be under manifest root: {destination}");
 
         LocalModelCacheRecord record = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
-        Assert.Equal(Path.Combine(storagePaths.ModelCacheDirectory, "example", "model"), record.RootPath);
+        Assert.Equal(Path.Join(storagePaths.ModelCacheDirectory, "example", "model"), record.RootPath);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             "tonythethompson/qwen3-asr-0.6b-onnx",
             cancellationToken: TestContext.Current.CancellationToken);
 
-        string modelRoot = Path.Combine(
+        string modelRoot = Path.Join(
             storagePaths.ModelCacheDirectory,
             "tonythethompson",
             "qwen3-asr-0.6b-onnx");
@@ -144,10 +144,10 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         Assert.True(result.Success, result.FailureReason);
         Assert.Equal(2, downloader.Destinations.Count);
         Assert.Contains(
-            Path.Combine(storagePaths.ModelCacheDirectory, "example", "model", "model.onnx.data"),
+            Path.Join(storagePaths.ModelCacheDirectory, "example", "model", "model.onnx.data"),
             downloader.Destinations);
         Assert.Contains(
-            Path.Combine(storagePaths.ModelCacheDirectory, "example", "model", "onnx", "model.onnx"),
+            Path.Join(storagePaths.ModelCacheDirectory, "example", "model", "onnx", "model.onnx"),
             downloader.Destinations);
     }
 
@@ -434,8 +434,8 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var downloader = new CaptureDestinationDownloader();
 
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
-        string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
+        string benchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        string tokenizerPath = Path.Join(cacheRoot, "tokenizer.json");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         await File.WriteAllTextAsync(benchmarkPath, "existing-benchmark", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(tokenizerPath, "existing-tokenizer", TestContext.Current.CancellationToken);
@@ -466,8 +466,8 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var downloader = new CaptureDestinationDownloader();
 
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
-        string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
+        string benchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        string tokenizerPath = Path.Join(cacheRoot, "tokenizer.json");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         await File.WriteAllTextAsync(benchmarkPath, "existing-benchmark", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(tokenizerPath, "existing-tokenizer", TestContext.Current.CancellationToken);
@@ -501,8 +501,8 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var downloader = new CancellingDownloader();
 
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
-        string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
+        string benchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        string tokenizerPath = Path.Join(cacheRoot, "tokenizer.json");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         await File.WriteAllTextAsync(benchmarkPath, "existing-benchmark", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(tokenizerPath, "existing-tokenizer", TestContext.Current.CancellationToken);
@@ -553,7 +553,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var downloader = new CaptureDestinationDownloader();
 
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
+        string benchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         await File.WriteAllTextAsync(benchmarkPath, "existing", TestContext.Current.CancellationToken);
 
@@ -593,7 +593,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var downloader = new HashMatchingDownloader();
 
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
+        string benchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         // File exists but with wrong content (simulating corruption)
         await File.WriteAllTextAsync(benchmarkPath, "wrong-content", TestContext.Current.CancellationToken);
@@ -628,14 +628,14 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var downloader = new CaptureDestinationDownloader();
 
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
-        string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
-        string variantRoot = Path.Combine(cacheRoot, "optimized", "dml");
+        string benchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        string tokenizerPath = Path.Join(cacheRoot, "tokenizer.json");
+        string variantRoot = Path.Join(cacheRoot, "optimized", "dml");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         Directory.CreateDirectory(variantRoot);
         await File.WriteAllTextAsync(benchmarkPath, "existing", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(tokenizerPath, "existing", TestContext.Current.CancellationToken);
-        await File.WriteAllTextAsync(Path.Combine(variantRoot, "model.onnx"), "optimized", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Join(variantRoot, "model.onnx"), "optimized", TestContext.Current.CancellationToken);
 
         var existingVariant = new LocalModelVariantRecord(
             "dml-fp16",
@@ -681,8 +681,8 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var downloader = new CaptureDestinationDownloader();
 
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string benchmarkPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
-        string tokenizerPath = Path.Combine(cacheRoot, "tokenizer.json");
+        string benchmarkPath = Path.Join(cacheRoot, "onnx", "model.onnx");
+        string tokenizerPath = Path.Join(cacheRoot, "tokenizer.json");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         const string existingContent = "should-not-be-deleted";
         await File.WriteAllTextAsync(benchmarkPath, existingContent, TestContext.Current.CancellationToken);
@@ -709,7 +709,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             CreateRegistryWithManifestRootOutsideConfiguredCache();
         var store = new LocalModelCacheRecordStore(storagePaths);
         string cacheRoot = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
-        string cachedModelPath = Path.Combine(cacheRoot, "onnx", "model.onnx");
+        string cachedModelPath = Path.Join(cacheRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(cachedModelPath)!);
         await File.WriteAllTextAsync(cachedModelPath, "cached", TestContext.Current.CancellationToken);
         await store.SaveAsync(
@@ -776,7 +776,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
     {
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths, string manifestRoot) =
             CreateRegistryWithManifestRootOutsideConfiguredCache();
-        string benchmarkPath = Path.Combine(manifestRoot, "onnx", "model.onnx");
+        string benchmarkPath = Path.Join(manifestRoot, "onnx", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(benchmarkPath)!);
         await File.WriteAllTextAsync(benchmarkPath, "bundled-model", TestContext.Current.CancellationToken);
 
@@ -886,7 +886,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
     private (BundledModelManifestRegistry Registry, TrackdubStoragePaths StoragePaths) CreateRegistryWithMaliciousDownloadPath()
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_orch", "manifest.json");
+        string manifestPath = Path.Join(storagePaths.ModelCacheDirectory, "_orch", "manifest.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model"));
         File.WriteAllText(
@@ -942,9 +942,9 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
             string sha256 = "")
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string manifestDirectory = Path.Combine(tempRoot, "manifest-outside-cache");
-        string manifestPath = Path.Combine(manifestDirectory, "manifest.json");
-        string manifestRoot = Path.Combine(tempRoot, "repo-models", "example-model");
+        string manifestDirectory = Path.Join(tempRoot, "manifest-outside-cache");
+        string manifestPath = Path.Join(manifestDirectory, "manifest.json");
+        string manifestRoot = Path.Join(tempRoot, "repo-models", "example-model");
         Directory.CreateDirectory(manifestDirectory);
         Directory.CreateDirectory(manifestRoot);
         File.WriteAllText(
@@ -993,7 +993,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         string downloadFileHashesJson = "")
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_orch", "manifest-sha.json");
+        string manifestPath = Path.Join(storagePaths.ModelCacheDirectory, "_orch", "manifest-sha.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model"));
         File.WriteAllText(
@@ -1046,7 +1046,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         string optionalVariantHash)
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
-        string manifestPath = Path.Combine(storagePaths.ModelCacheDirectory, "_orch", "manifest-optional-hashes.json");
+        string manifestPath = Path.Join(storagePaths.ModelCacheDirectory, "_orch", "manifest-optional-hashes.json");
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         Directory.CreateDirectory(Path.Join(storagePaths.ModelCacheDirectory, "example-model"));
         File.WriteAllText(
@@ -1102,7 +1102,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
     private static BundledModelManifestRegistry LoadBundledRegistry()
     {
         string repoRoot = FindRepoRoot();
-        string manifestPath = Path.Combine(
+        string manifestPath = Path.Join(
             repoRoot,
             "src",
             "Trackdub.Inference",
@@ -1115,14 +1115,14 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
     private BundledModelManifestRegistry LoadBundledRegistryWithFakeDownloadHash(string modelId, string benchmarkEntry)
     {
         string repoRoot = FindRepoRoot();
-        string sourceManifestPath = Path.Combine(
+        string sourceManifestPath = Path.Join(
             repoRoot,
             "src",
             "Trackdub.Inference",
             "Runtime",
             "ModelManifest",
             "bundled-models.manifest.json");
-        string testManifestPath = Path.Combine(tempRoot, "_bundled", "bundled-models.manifest.json");
+        string testManifestPath = Path.Join(tempRoot, "_bundled", "bundled-models.manifest.json");
         Directory.CreateDirectory(Path.GetDirectoryName(testManifestPath)!);
 
         JsonObject root = JsonNode.Parse(File.ReadAllText(sourceManifestPath))!.AsObject();
@@ -1146,7 +1146,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            string candidate = Path.Combine(
+            string candidate = Path.Join(
                 directory.FullName,
                 "src",
                 "Trackdub.Inference",

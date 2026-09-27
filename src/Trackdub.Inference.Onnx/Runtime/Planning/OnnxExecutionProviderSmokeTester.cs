@@ -428,8 +428,8 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     {
         string root = Path.GetDirectoryName(encoderModelPath)
             ?? throw new InvalidOperationException("Qwen3-ASR smoke test could not resolve model root.");
-        string decoderInitPath = Path.Combine(root, "decoder_init.onnx");
-        string decoderStepPath = Path.Combine(root, "decoder_step.onnx");
+        string decoderInitPath = Path.Join(root, "decoder_init.onnx");
+        string decoderStepPath = Path.Join(root, "decoder_step.onnx");
         using OnnxExecutionSessionFactory.Qwen3AsrSessionLease sessionLease = await OnnxExecutionSessionFactory
             .CreatePooledQwen3AsrAsync(
                 "qwen3-asr",
@@ -1148,25 +1148,25 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 ?? throw new InvalidOperationException("Cannot resolve Chatterbox TTS smoke-test root path.");
         string onnxDirectory = string.Equals(Path.GetFileName(rootPath), "onnx", StringComparison.OrdinalIgnoreCase)
             ? rootPath
-            : Path.Combine(rootPath, "onnx");
+            : Path.Join(rootPath, "onnx");
 
         if (!string.IsNullOrWhiteSpace(variant) &&
             !variant.Equals("default", StringComparison.OrdinalIgnoreCase))
         {
-            string variantDecoderPath = Path.Combine(onnxDirectory, $"conditional_decoder_{variant}.onnx");
+            string variantDecoderPath = Path.Join(onnxDirectory, $"conditional_decoder_{variant}.onnx");
             if (File.Exists(variantDecoderPath))
             {
                 return variantDecoderPath;
             }
         }
 
-        string defaultDecoderPath = Path.Combine(onnxDirectory, "conditional_decoder.onnx");
+        string defaultDecoderPath = Path.Join(onnxDirectory, "conditional_decoder.onnx");
         if (File.Exists(defaultDecoderPath))
         {
             return defaultDecoderPath;
         }
 
-        return Path.Combine(onnxDirectory, "conditional_decoder.onnx");
+        return Path.Join(onnxDirectory, "conditional_decoder.onnx");
     }
 
     private static bool IsChatterboxTtsModel(string modelId, string modelAlias) =>
@@ -1381,7 +1381,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             string[] candidates = ["encoder_model.onnx", "encoder_model_quantized.onnx", "encoder_model_fp16.onnx", "encoder_model_int8.onnx"];
             foreach (string candidate in candidates)
             {
-                string candidatePath = Path.Combine(directory, candidate);
+                string candidatePath = Path.Join(directory, candidate);
                 if (File.Exists(candidatePath))
                 {
                     return Path.GetFullPath(candidatePath);
@@ -1395,7 +1395,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 $"Translation encoder model not found in '{directory}'. " +
                 $"Expected one of: {string.Join(", ", candidates)}. " +
                 "Ensure the encoder model file is present alongside the decoder model.",
-                Path.Combine(directory, candidates[0]));
+                Path.Join(directory, candidates[0]));
         }
 
         return entryPath;
@@ -1414,14 +1414,14 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         string directory = Path.GetDirectoryName(encoderModelPath)!;
         foreach (string candidate in candidates)
         {
-            string candidatePath = Path.Combine(directory, candidate);
+            string candidatePath = Path.Join(directory, candidate);
             if (File.Exists(candidatePath))
             {
                 return Path.GetFullPath(candidatePath);
             }
         }
 
-        string fallback = Path.Combine(directory, "decoder_model.onnx");
+        string fallback = Path.Join(directory, "decoder_model.onnx");
         throw new FileNotFoundException("Opus decoder model was not found next to the encoder model.", fallback);
     }
 
@@ -1429,13 +1429,13 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     {
         string fileName = Path.GetFileName(encoderModelPath);
         string decoderFileName = fileName.Replace("encoder_model", "decoder_model", StringComparison.OrdinalIgnoreCase);
-        string candidatePath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, decoderFileName);
+        string candidatePath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, decoderFileName);
         if (File.Exists(candidatePath))
         {
             return Path.GetFullPath(candidatePath);
         }
 
-        candidatePath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, "decoder_model.onnx");
+        candidatePath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, "decoder_model.onnx");
         if (File.Exists(candidatePath))
         {
             return Path.GetFullPath(candidatePath);
@@ -1446,7 +1446,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
     private static string ResolveNemotronDecoderJointPath(string encoderModelPath)
     {
-        string candidatePath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, "decoder_joint.onnx");
+        string candidatePath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, "decoder_joint.onnx");
         if (File.Exists(candidatePath))
         {
             return Path.GetFullPath(candidatePath);

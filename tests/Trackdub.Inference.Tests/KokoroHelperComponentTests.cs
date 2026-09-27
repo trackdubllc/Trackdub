@@ -302,7 +302,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
     public void EspeakNgPathResolver_Resolve_PrefersBundledInstallerPath()
     {
         string dir = CreateTempDir();
-        string bundledPath = Path.Combine(dir, "runtimes", EspeakRuntimeFolder, "native", "espeak-ng", EspeakExecutableName);
+        string bundledPath = Path.Join(dir, "runtimes", EspeakRuntimeFolder, "native", "espeak-ng", EspeakExecutableName);
         Directory.CreateDirectory(Path.GetDirectoryName(bundledPath)!);
         File.WriteAllBytes(bundledPath, []);
 
@@ -331,9 +331,9 @@ public sealed class KokoroHelperComponentTests : IDisposable
     public void EspeakNgPathResolver_Resolve_UsesDeveloperRepoPath()
     {
         string repoRoot = CreateTempDir();
-        string workingDirectory = Path.Combine(repoRoot, "src", "Trackdub.App");
+        string workingDirectory = Path.Join(repoRoot, "src", "Trackdub.App");
         Directory.CreateDirectory(workingDirectory);
-        string executablePath = Path.Combine(repoRoot, "tools", "espeak-ng", EspeakExecutableName);
+        string executablePath = Path.Join(repoRoot, "tools", "espeak-ng", EspeakExecutableName);
         Directory.CreateDirectory(Path.GetDirectoryName(executablePath)!);
         File.WriteAllBytes(executablePath, []);
 
@@ -374,7 +374,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
 
         Assert.Contains("eSpeak-NG is required for Kokoro TTS phonemization", exception.Message, StringComparison.Ordinal);
         Assert.Contains("TRACKDUB_ESPEAK_NG_PATH", exception.Message, StringComparison.Ordinal);
-        Assert.Contains(Path.Combine("tools", "espeak-ng", EspeakExecutableName), exception.Message, StringComparison.Ordinal);
+        Assert.Contains(Path.Join("tools", "espeak-ng", EspeakExecutableName), exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -429,7 +429,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
 
     private string CreateTempDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        string dir = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(dir);
         tempDirs.Add(dir);
         return dir;
@@ -454,11 +454,11 @@ public sealed class KokoroHelperComponentTests : IDisposable
 
     private static void CreateVoicesDir(string modelRoot, params string[] binFileNames)
     {
-        string voicesDir = Path.Combine(modelRoot, "voices");
+        string voicesDir = Path.Join(modelRoot, "voices");
         Directory.CreateDirectory(voicesDir);
         foreach (string name in binFileNames)
         {
-            File.WriteAllBytes(Path.Combine(voicesDir, name), []);
+            File.WriteAllBytes(Path.Join(voicesDir, name), []);
         }
     }
 
@@ -466,7 +466,7 @@ public sealed class KokoroHelperComponentTests : IDisposable
     {
         var obj = new { model = new { vocab } };
         string json = JsonSerializer.Serialize(obj);
-        File.WriteAllText(Path.Combine(dir, "tokenizer.json"), json, Encoding.UTF8);
+        File.WriteAllText(Path.Join(dir, "tokenizer.json"), json, Encoding.UTF8);
     }
 
     private static IDisposable SetEnvironmentVariable(string name, string? value) =>

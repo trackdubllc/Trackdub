@@ -14,7 +14,7 @@ namespace Trackdub.Sdk.Tests;
 /// </remarks>
 public sealed class CliCommandIntegrationTests : IDisposable
 {
-    private readonly string _emptyModelDirectory = Path.Combine(
+    private readonly string _emptyModelDirectory = Path.Join(
         Path.GetTempPath(),
         "TrackdubTests",
         Guid.NewGuid().ToString("N"),
@@ -46,7 +46,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
     public async Task DubCommand_MissingMedia_ReturnsExitCode1()
     {
         // Arrange: invoke dub with a media file that does not exist
-        string nonExistentMedia = Path.Combine(Path.GetTempPath(), $"nonexistent-{Guid.NewGuid():N}.mp4");
+        string nonExistentMedia = Path.Join(Path.GetTempPath(), $"nonexistent-{Guid.NewGuid():N}.mp4");
 
         // Act
         int exitCode = await InvokeCliAsync("dub", "--media", nonExistentMedia, "--target-language", "es");
@@ -69,7 +69,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
     public async Task RunStageCommand_MissingProject_ReturnsExitCode2()
     {
         // Arrange: invoke run-stage with a project directory that does not exist
-        string nonExistentProject = Path.Combine(Path.GetTempPath(), $"nonexistent-project-{Guid.NewGuid():N}");
+        string nonExistentProject = Path.Join(Path.GetTempPath(), $"nonexistent-project-{Guid.NewGuid():N}");
 
         // Act
         int exitCode = await InvokeCliAsync("run-stage", "--project", nonExistentProject, "--stage", "vad");
@@ -89,7 +89,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
     [Fact]
     public async Task CheckCommand_InvalidProject_ReturnsExitCode1()
     {
-        string missingProject = Path.Combine(Path.GetTempPath(), $"missing-project-{Guid.NewGuid():N}");
+        string missingProject = Path.Join(Path.GetTempPath(), $"missing-project-{Guid.NewGuid():N}");
         int exitCode = await InvokeCliAsync("check", "--project", missingProject);
 
         Assert.Equal(Program.ExitArgumentError, exitCode);
@@ -122,7 +122,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
     [Fact]
     public async Task DoctorCommand_CreatesMissingModelDirectoryBeforeRunning()
     {
-        string missingModelDirectory = Path.Combine(
+        string missingModelDirectory = Path.Join(
             Path.GetTempPath(),
             "TrackdubTests",
             Guid.NewGuid().ToString("N"),
@@ -165,7 +165,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
     [Fact]
     public async Task ProjectInfo_InvalidProject_ReturnsExitCode1()
     {
-        string missingProject = Path.Combine(Path.GetTempPath(), $"missing-project-{Guid.NewGuid():N}");
+        string missingProject = Path.Join(Path.GetTempPath(), $"missing-project-{Guid.NewGuid():N}");
         int exitCode = await InvokeCliAsync("project", "info", "--project", missingProject);
 
         Assert.Equal(Program.ExitArgumentError, exitCode);
@@ -174,7 +174,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
     [Fact]
     public async Task RunStageAlias_InvalidProject_ReturnsExitCode2()
     {
-        string nonExistentProject = Path.Combine(Path.GetTempPath(), $"nonexistent-project-{Guid.NewGuid():N}");
+        string nonExistentProject = Path.Join(Path.GetTempPath(), $"nonexistent-project-{Guid.NewGuid():N}");
         int exitCode = await InvokeCliAsync("run", "stage", "--project", nonExistentProject, "--stage", "vad");
 
         Assert.Equal(Program.ExitPipelineFailure, exitCode);
@@ -195,7 +195,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
             "run",
             "pipeline",
             "--media",
-            Path.Combine(Path.GetTempPath(), "missing-media.mp4"),
+            Path.Join(Path.GetTempPath(), "missing-media.mp4"),
             "--target-language",
             "es",
             "--only",
@@ -234,7 +234,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
     [Fact]
     public void TrackdubProjectPaths_MissingDirectory_ReturnsFalse()
     {
-        string missingProject = Path.Combine(Path.GetTempPath(), $"missing-project-{Guid.NewGuid():N}");
+        string missingProject = Path.Join(Path.GetTempPath(), $"missing-project-{Guid.NewGuid():N}");
 
         Assert.False(TrackdubProjectPaths.ContainsDatabase(missingProject));
     }
@@ -243,7 +243,7 @@ public sealed class CliCommandIntegrationTests : IDisposable
     public async Task RunStageCommand_InvalidStageName_ReturnsNonZeroExitCode()
     {
         // Arrange: invoke run-stage with an invalid stage name that won't pass validation
-        string tempProject = Path.Combine(Path.GetTempPath(), $"test-project-{Guid.NewGuid():N}");
+        string tempProject = Path.Join(Path.GetTempPath(), $"test-project-{Guid.NewGuid():N}");
 
         // Act: "invalid-stage" is not in the accepted stage names list
         int exitCode = await InvokeCliAsync("run-stage", "--project", tempProject, "--stage", "invalid-stage");

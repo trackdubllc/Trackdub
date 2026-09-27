@@ -9,7 +9,7 @@ public sealed class SqliteGlossaryRepositoryTests
     [Fact]
     public async Task Repository_round_trips_filters_and_deletes_project_glossary_entries()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Glossary.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Glossary.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);

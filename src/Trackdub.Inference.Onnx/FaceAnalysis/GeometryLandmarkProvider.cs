@@ -56,7 +56,7 @@ public sealed class GeometryLandmarkProvider(
         TimeSpan sampleEnd = (request.End - mid) < TimeSpan.FromSeconds(0.5)
             ? request.End
             : mid + TimeSpan.FromSeconds(0.5);
-        string tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        string tempDir = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -67,7 +67,7 @@ public sealed class GeometryLandmarkProvider(
             if (extracted.FrameCount == 0)
                 return NoLandmarks;
 
-            string framePath = Path.Combine(extracted.FramesDirectory, "frame_000001.rgba");
+            string framePath = Path.Join(extracted.FramesDirectory, "frame_000001.rgba");
             if (!File.Exists(framePath))
                 return NoLandmarks;
 

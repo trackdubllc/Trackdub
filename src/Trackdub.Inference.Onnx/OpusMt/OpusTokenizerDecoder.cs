@@ -51,9 +51,9 @@ internal sealed class OpusTokenizerDecoder
     {
         string sourceTokenizerPath = ResolveExistingPath(modelRootPath, "source.spm", "source.model");
         string targetTokenizerPath = ResolveExistingPath(modelRootPath, "target.spm", "target.model");
-        string vocabPath = Path.Combine(modelRootPath, "vocab.json");
-        string configPath = Path.Combine(modelRootPath, "config.json");
-        string generationConfigPath = Path.Combine(modelRootPath, "generation_config.json");
+        string vocabPath = Path.Join(modelRootPath, "vocab.json");
+        string configPath = Path.Join(modelRootPath, "config.json");
+        string generationConfigPath = Path.Join(modelRootPath, "generation_config.json");
 
         if (!File.Exists(vocabPath))
         {
@@ -242,7 +242,7 @@ internal sealed class OpusTokenizerDecoder
     {
         foreach (string fileName in fileNames)
         {
-            string candidatePath = Path.Combine(modelRootPath, fileName);
+            string candidatePath = Path.Join(modelRootPath, fileName);
             if (File.Exists(candidatePath))
             {
                 return candidatePath;
@@ -251,7 +251,7 @@ internal sealed class OpusTokenizerDecoder
 
         throw new FileNotFoundException(
             $"The Opus tokenizer was not found under '{modelRootPath}'.",
-            Path.Combine(modelRootPath, fileNames[0]));
+            Path.Join(modelRootPath, fileNames[0]));
     }
 
     private sealed record OpusTokenizerConfig(

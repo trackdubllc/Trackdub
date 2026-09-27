@@ -33,7 +33,7 @@ internal static class LipSynthesisIntegrationSupport
             return Path.GetFullPath(configured);
         }
 
-        return Path.Combine(
+        return Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Trackdub",
             "model-cache");
@@ -49,7 +49,7 @@ internal static class LipSynthesisIntegrationSupport
                 throw new InvalidOperationException($"Model id '{modelId}' contains an unsafe path segment.");
             }
 
-            root = Path.Combine(root, part);
+            root = Path.Join(root, part);
         }
 
         return Path.GetFullPath(root);
@@ -57,7 +57,7 @@ internal static class LipSynthesisIntegrationSupport
 
     internal static bool IsModelFilePresent(string modelId, string relativePath)
     {
-        string fullPath = Path.Combine(
+        string fullPath = Path.Join(
             ResolveModelRoot(modelId),
             relativePath.Replace('/', Path.DirectorySeparatorChar));
         return File.Exists(fullPath);
@@ -270,17 +270,17 @@ internal static class LipSynthesisIntegrationSupport
                 EngineFamily = LatentSyncEngineFamily,
                 ExecutionProvider = ep,
                 ModelRootPath = rootDirectory,
-                ModelEntryPath = Path.Combine(rootDirectory, "unet.onnx"),
+                ModelEntryPath = Path.Join(rootDirectory, "unet.onnx"),
             });
         }
     }
 
     private static bool AreLatentSyncFilesPresent(string modelRoot) =>
         Directory.Exists(modelRoot) &&
-        File.Exists(Path.Combine(modelRoot, "unet.onnx")) &&
-        File.Exists(Path.Combine(modelRoot, "vae_encoder.onnx")) &&
-        File.Exists(Path.Combine(modelRoot, "vae_decoder.onnx")) &&
-        File.Exists(Path.Combine(modelRoot, "whisper_encoder.onnx"));
+        File.Exists(Path.Join(modelRoot, "unet.onnx")) &&
+        File.Exists(Path.Join(modelRoot, "vae_encoder.onnx")) &&
+        File.Exists(Path.Join(modelRoot, "vae_decoder.onnx")) &&
+        File.Exists(Path.Join(modelRoot, "whisper_encoder.onnx"));
 }
 
 /// <summary>

@@ -608,7 +608,7 @@ public sealed class MixPlanBuilderTests
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             renderer.RenderAsync(
-                new PreviewRangeRenderRequest(plan, StartSeconds: 3d, EndSeconds: 2d, Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.wav")),
+                new PreviewRangeRenderRequest(plan, StartSeconds: 3d, EndSeconds: 2d, Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.wav")),
                 TestContext.Current.CancellationToken));
     }
 
@@ -632,7 +632,7 @@ public sealed class MixPlanBuilderTests
             DuckingRegions: [],
             Warnings: [],
             OutputChannelCount: 1);
-        string outputPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.wav");
+        string outputPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.wav");
 
         try
         {
@@ -780,7 +780,7 @@ public sealed class MixPlanBuilderTests
     public void Build_prefers_lipsync_artifact_over_tts_take_when_file_exists_on_disk()
     {
         // Arrange
-        string directory = Path.Combine(Path.GetTempPath(), $"mix-lipsync-test-{Guid.NewGuid():N}");
+        string directory = Path.Join(Path.GetTempPath(), $"mix-lipsync-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
         {
@@ -835,7 +835,7 @@ public sealed class MixPlanBuilderTests
     public void Build_falls_back_to_tts_take_when_lipsync_file_missing_on_disk()
     {
         // Arrange
-        string directory = Path.Combine(Path.GetTempPath(), $"mix-lipsync-test-{Guid.NewGuid():N}");
+        string directory = Path.Join(Path.GetTempPath(), $"mix-lipsync-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
         {

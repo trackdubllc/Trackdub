@@ -9,7 +9,7 @@ public sealed class SqliteTtsRepositoryTests
     [Fact]
     public async Task Repositories_round_trip_voice_assignment_and_tts_take_stale_markers()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Tts.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Tts.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -77,7 +77,7 @@ public sealed class SqliteTtsRepositoryTests
     [Fact]
     public async Task Fallback_voice_assignments_stay_hidden_but_can_back_tts_takes()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "FallbackTts.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "FallbackTts.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -124,7 +124,7 @@ public sealed class SqliteTtsRepositoryTests
     [Fact]
     public async Task Tts_take_repository_round_trips_candidate_metadata()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "CandidateTts.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "CandidateTts.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);

@@ -29,7 +29,7 @@ internal static class LinuxPciDeviceScanner
 
         foreach (string deviceDir in sysfs.EnumerateDirectories(pciBase))
         {
-            string classPath = Path.Combine(deviceDir, "class");
+            string classPath = Path.Join(deviceDir, "class");
             string? classText = sysfs.ReadAllText(classPath)?.Trim();
             if (classText is null || !TryParseHex(classText, out uint classCode))
                 continue;
@@ -68,7 +68,7 @@ internal static class LinuxPciDeviceScanner
 
     private static GpuVendor ReadVendor(ISysfsReader sysfs, string deviceDir)
     {
-        string? vendorText = sysfs.ReadAllText(Path.Combine(deviceDir, "vendor"))?.Trim();
+        string? vendorText = sysfs.ReadAllText(Path.Join(deviceDir, "vendor"))?.Trim();
         if (vendorText is null || !TryParseHex(vendorText, out uint vendorId))
             return GpuVendor.Unknown;
         return vendorId switch
@@ -118,7 +118,7 @@ internal static class LinuxPciDeviceScanner
         if (symlink is null) return 0;
 
         string? bytesText = sysfs.ReadAllText(
-            Path.Combine(deviceDir, "mem_info_vram_total"));
+            Path.Join(deviceDir, "mem_info_vram_total"));
         if (bytesText is null) return 0;
 
         return long.TryParse(bytesText.Trim(), out long bytes) ? bytes / 1024 / 1024 : 0;

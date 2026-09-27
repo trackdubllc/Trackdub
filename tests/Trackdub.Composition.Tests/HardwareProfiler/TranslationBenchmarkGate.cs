@@ -38,12 +38,12 @@ internal static class TranslationBenchmarkGate
         string? repoRoot = TestRepoRootResolver.TryFindRepoRoot();
         if (repoRoot is not null)
         {
-            string bundledOpusRoot = Path.Combine(
+            string bundledOpusRoot = Path.Join(
                 repoRoot,
                 "models",
                 "opus",
                 "Helsinki-NLP-opus-mt-en-es");
-            string bundledOpusEncoder = Path.Combine(bundledOpusRoot, "encoder_model.onnx");
+            string bundledOpusEncoder = Path.Join(bundledOpusRoot, "encoder_model.onnx");
 
             if (File.Exists(bundledOpusEncoder) && HasOpusDecoderAdjacent(bundledOpusEncoder))
             {
@@ -73,8 +73,8 @@ internal static class TranslationBenchmarkGate
     private static bool HasOpusDecoderAdjacent(string encoderModelPath)
     {
         string modelDirectory = Path.GetDirectoryName(encoderModelPath)!;
-        return File.Exists(Path.Combine(modelDirectory, "decoder_model.onnx")) ||
-               File.Exists(Path.Combine(modelDirectory, "decoder_model_merged.onnx"));
+        return File.Exists(Path.Join(modelDirectory, "decoder_model.onnx")) ||
+               File.Exists(Path.Join(modelDirectory, "decoder_model_merged.onnx"));
     }
 }
 

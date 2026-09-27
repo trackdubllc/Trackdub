@@ -101,7 +101,7 @@ public sealed class CancellationPropagationTests : IDisposable
     public bool PreCancelledToken_WithMissingMedia_ReturnsFailedResult(NonEmptyString targetLang)
     {
         // Arrange: use a non-existent media path
-        string nonExistentPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".mp4");
+        string nonExistentPath = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".mp4");
 
         var options = new DubbingSessionOptions
         {
@@ -292,7 +292,7 @@ public sealed class CancellationPropagationTests : IDisposable
 
     private string CreateTempProjectDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;
@@ -300,9 +300,9 @@ public sealed class CancellationPropagationTests : IDisposable
 
     private string CreateTempMediaFile()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests");
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests");
         Directory.CreateDirectory(dir);
-        string filePath = Path.Combine(dir, Guid.NewGuid().ToString("N") + ".mp4");
+        string filePath = Path.Join(dir, Guid.NewGuid().ToString("N") + ".mp4");
         // Create a minimal file so File.Exists returns true
         File.WriteAllBytes(filePath, [0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70]);
         _tempFiles.Add(filePath);

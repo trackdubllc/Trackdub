@@ -22,7 +22,7 @@ public sealed class NvidiaAfxRuntimeDownloader(
         ArgumentNullException.ThrowIfNull(package);
 
         string componentDirectory = componentStore.GetComponentDirectory(ComponentId);
-        string archivePath = Path.Combine(componentDirectory, $"{package.Architecture}{TempSuffix}");
+        string archivePath = Path.Join(componentDirectory, $"{package.Architecture}{TempSuffix}");
         Directory.CreateDirectory(componentDirectory);
 
         await DownloadArchiveAsync(package.DownloadUrl, archivePath, package.SizeBytes, progress, cancellationToken).ConfigureAwait(false);
@@ -90,7 +90,7 @@ public sealed class NvidiaAfxRuntimeDownloader(
         CancellationToken cancellationToken)
     {
         string parent = Path.GetDirectoryName(componentDirectory) ?? componentDirectory;
-        string staging = Path.Combine(parent, $"{Path.GetFileName(componentDirectory)}{StagingSuffix}");
+        string staging = Path.Join(parent, $"{Path.GetFileName(componentDirectory)}{StagingSuffix}");
         if (Directory.Exists(staging))
         {
             Directory.Delete(staging, recursive: true);

@@ -79,9 +79,9 @@ internal static class WindowsMlOnnxRuntimeNativeResolver
 
         string[] candidates =
         [
-            Path.Combine(assemblyDir, fileName),
-            Path.Combine(assemblyDir, "runtimes", "win-x64", "native", fileName),
-            Path.Combine(assemblyDir, "runtimes", "win-arm64", "native", fileName)
+            Path.Join(assemblyDir, fileName),
+            Path.Join(assemblyDir, "runtimes", "win-x64", "native", fileName),
+            Path.Join(assemblyDir, "runtimes", "win-arm64", "native", fileName)
         ];
 
         foreach (string candidate in candidates)
@@ -112,7 +112,7 @@ internal static class WindowsMlOnnxRuntimeNativeResolver
 
     private static bool TryLoadFromBaseDirectory(string fileName, out nint handle)
     {
-        string candidate = Path.Combine(AppContext.BaseDirectory, fileName);
+        string candidate = Path.Join(AppContext.BaseDirectory, fileName);
         if (!File.Exists(candidate))
         {
             handle = nint.Zero;

@@ -24,7 +24,7 @@ public sealed class Wav2Vec2CtcForcedAlignerIntegrationTests
             "Model files exist on disk but IsAvailable returned false. " +
             "Expected onnx/model_int8.onnx or onnx/model_fp16.onnx plus vocab.json.");
 
-        string wavPath = Path.Combine(
+        string wavPath = Path.Join(
             Path.GetTempPath(), $"trackdub-w2v2-int-{Guid.NewGuid():N}.wav");
         WriteSineWav(wavPath, durationSeconds: 1.0, sampleRate: 16_000, frequencyHz: 220.0);
 
@@ -103,7 +103,7 @@ public sealed class RequiresModelCacheFactAttribute : FactAttribute
         string root = ResolveModelRoot(modelId);
         foreach (string relativePath in requiredRelativePaths)
         {
-            string fullPath = Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            string fullPath = Path.Join(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(fullPath))
             {
                 Skip = $"Model file '{relativePath}' for '{modelId}' not present in model cache ({root}). " +
@@ -118,10 +118,10 @@ public sealed class RequiresModelCacheFactAttribute : FactAttribute
         string? configured = Environment.GetEnvironmentVariable("TRACKDUB_MODEL_CACHE");
         string cacheRoot = !string.IsNullOrWhiteSpace(configured)
             ? configured
-            : Path.Combine(
+            : Path.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Trackdub", "model-cache");
-        return Path.Combine(cacheRoot, modelId);
+        return Path.Join(cacheRoot, modelId);
     }
 }
 
@@ -136,9 +136,9 @@ public sealed class Wav2Vec2ModelCacheFactAttribute : FactAttribute
         const string modelId = "wav2vec2-lv60-espeak-cv-ft-onnx";
         string root = RequiresModelCacheFactAttribute.ResolveModelRoot(modelId);
         bool hasOnnx =
-            File.Exists(Path.Combine(root, "onnx", "model_int8.onnx")) ||
-            File.Exists(Path.Combine(root, "onnx", "model_fp16.onnx"));
-        if (!hasOnnx || !File.Exists(Path.Combine(root, "vocab.json")))
+            File.Exists(Path.Join(root, "onnx", "model_int8.onnx")) ||
+            File.Exists(Path.Join(root, "onnx", "model_fp16.onnx"));
+        if (!hasOnnx || !File.Exists(Path.Join(root, "vocab.json")))
         {
             Skip = $"Model files for '{modelId}' not present in model cache ({root}). " +
                    "Need vocab.json plus onnx/model_int8.onnx or onnx/model_fp16.onnx.";

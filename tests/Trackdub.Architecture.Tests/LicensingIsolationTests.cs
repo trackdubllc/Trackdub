@@ -92,7 +92,7 @@ public sealed class LicensingIsolationTests
     private static XDocument LoadLicensingCsproj()
     {
         var repoRoot = FindRepoRoot();
-        var csprojPath = Path.Combine(repoRoot, "src", "Trackdub.Licensing", "Trackdub.Licensing.csproj");
+        var csprojPath = Path.Join(repoRoot, "src", "Trackdub.Licensing", "Trackdub.Licensing.csproj");
         Assert.True(File.Exists(csprojPath), $"Trackdub.Licensing.csproj not found at: {csprojPath}");
         return XDocument.Load(csprojPath);
     }
@@ -102,7 +102,7 @@ public sealed class LicensingIsolationTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(dir.FullName, "Trackdub.slnx")))
             {
                 return dir.FullName;
             }
@@ -113,7 +113,7 @@ public sealed class LicensingIsolationTests
 
     private static string? ResolveDirectoryBuildPropsTargetFramework(string repoRoot)
     {
-        var propsPath = Path.Combine(repoRoot, "Directory.Build.props");
+        var propsPath = Path.Join(repoRoot, "Directory.Build.props");
         if (!File.Exists(propsPath))
         {
             return null;

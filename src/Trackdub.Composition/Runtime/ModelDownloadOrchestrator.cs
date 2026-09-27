@@ -774,7 +774,7 @@ internal static class ModelDownloadPathGuard
                 throw new InvalidOperationException($"Model id '{modelId}' contains an unsafe path segment.");
             }
 
-            root = Path.Combine(root, part);
+            root = Path.Join(root, part);
         }
 
         return Path.GetFullPath(root);
@@ -879,7 +879,7 @@ internal static class ModelDownloadPathGuard
         }
 
         string rootFull = Path.GetFullPath(modelRootDirectory);
-        destinationPath = Path.GetFullPath(Path.Combine(rootFull, downloadFile.Replace('/', Path.DirectorySeparatorChar)));
+        destinationPath = Path.GetFullPath(Path.Join(rootFull, downloadFile.Replace('/', Path.DirectorySeparatorChar)));
 
         string rootPrefix = AppendDirectorySeparator(rootFull);
         if (!destinationPath.Equals(rootFull, StringComparison.OrdinalIgnoreCase)

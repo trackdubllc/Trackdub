@@ -80,8 +80,8 @@ public sealed class QwenForcedAligner : IForcedAlignerAdapter, IDisposable
     /// </summary>
     public bool IsAvailable =>
         modelRootPath.Length > 0 &&
-        File.Exists(Path.Combine(modelRootPath, OnnxRelativePath)) &&
-        File.Exists(Path.Combine(modelRootPath, "config.json"));
+        File.Exists(Path.Join(modelRootPath, OnnxRelativePath)) &&
+        File.Exists(Path.Join(modelRootPath, "config.json"));
 
     // ── IForcedAligner ─────────────────────────────────────────────────────────
 
@@ -248,7 +248,7 @@ public sealed class QwenForcedAligner : IForcedAlignerAdapter, IDisposable
         {
             if (session is null)
             {
-                string onnxPath = Path.Combine(modelRootPath, OnnxRelativePath);
+                string onnxPath = Path.Join(modelRootPath, OnnxRelativePath);
                 using var options = new SessionOptions();
                 session = new InferenceSession(onnxPath, options);
                 logger?.LogInformation("Qwen3-ForcedAligner ONNX session loaded from {Path}.", onnxPath);
@@ -270,7 +270,7 @@ public sealed class QwenForcedAligner : IForcedAlignerAdapter, IDisposable
         LoadTokenizerAsync(string modelRootPath, CancellationToken cancellationToken)
     {
         // vocab.json: { "token_string": token_id, ... }
-        string vocabPath = Path.Combine(modelRootPath, "vocab.json");
+        string vocabPath = Path.Join(modelRootPath, "vocab.json");
         string vocabJson = await File.ReadAllTextAsync(vocabPath, cancellationToken).ConfigureAwait(false);
 
         var rawVocab = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -283,7 +283,7 @@ public sealed class QwenForcedAligner : IForcedAlignerAdapter, IDisposable
         }
 
         // merges.txt: first line may be "#version: 0.2"; subsequent lines are "first second"
-        string mergesPath = Path.Combine(modelRootPath, "merges.txt");
+        string mergesPath = Path.Join(modelRootPath, "merges.txt");
         string[] mergeLines = await File.ReadAllLinesAsync(mergesPath, cancellationToken).ConfigureAwait(false);
 
         var mergeList = new List<(string, string)>(mergeLines.Length);

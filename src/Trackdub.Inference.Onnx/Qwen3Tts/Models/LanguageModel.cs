@@ -62,7 +62,7 @@ internal sealed class LanguageModel : IDisposable
     private InferenceSession GetPrefillSession()
     {
         // SEC-3: File size pre-check to prevent out-of-memory attacks
-        var modelPath = Path.Combine(_modelDir, "talker_prefill.onnx");
+        var modelPath = Path.Join(_modelDir, "talker_prefill.onnx");
         var fileInfo = new FileInfo(modelPath);
         const long maxOnnxSize = 8_000_000_000; // 8 GB (1.7B models are ~5.4 GB)
         if (fileInfo.Length > maxOnnxSize)
@@ -74,7 +74,7 @@ internal sealed class LanguageModel : IDisposable
     private InferenceSession GetDecodeSession()
     {
         // SEC-3: File size pre-check to prevent out-of-memory attacks
-        var modelPath = Path.Combine(_modelDir, "talker_decode.onnx");
+        var modelPath = Path.Join(_modelDir, "talker_decode.onnx");
         var fileInfo = new FileInfo(modelPath);
         const long maxOnnxSize = 8_000_000_000; // 8 GB (1.7B models are ~5.4 GB)
         if (fileInfo.Length > maxOnnxSize)
@@ -86,7 +86,7 @@ internal sealed class LanguageModel : IDisposable
     private InferenceSession GetCpSession()
     {
         // SEC-3: File size pre-check to prevent out-of-memory attacks
-        var modelPath = Path.Combine(_modelDir, "code_predictor.onnx");
+        var modelPath = Path.Join(_modelDir, "code_predictor.onnx");
         var fileInfo = new FileInfo(modelPath);
         const long maxOnnxSize = 8_000_000_000; // 8 GB (1.7B models are ~5.4 GB)
         if (fileInfo.Length > maxOnnxSize)

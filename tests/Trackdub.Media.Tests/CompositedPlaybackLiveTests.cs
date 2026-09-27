@@ -148,7 +148,7 @@ public sealed class CompositedPlaybackLiveTests
             return fromEnv;
         }
 
-        string temp = Path.Combine(Path.GetTempPath(), "trackdub-playback-test.mp4");
+        string temp = Path.Join(Path.GetTempPath(), "trackdub-playback-test.mp4");
         return File.Exists(temp) ? temp : null;
     }
 
@@ -208,8 +208,8 @@ public sealed class CompositedPlaybackLiveTests
             string? current = AppContext.BaseDirectory;
             for (int depth = 0; depth < 12 && !string.IsNullOrWhiteSpace(current); depth++)
             {
-                string candidate = Path.Combine(current, "src", "Trackdub.App.Avalonia", "bin", "Debug", "net10.0-windows10.0.19041.0");
-                if (Directory.Exists(Path.Combine(candidate, "libvlc")))
+                string candidate = Path.Join(current, "src", "Trackdub.App.Avalonia", "bin", "Debug", "net10.0-windows10.0.19041.0");
+                if (Directory.Exists(Path.Join(candidate, "libvlc")))
                 {
                     return candidate;
                 }

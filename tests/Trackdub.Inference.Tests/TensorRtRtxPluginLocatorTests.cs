@@ -19,7 +19,7 @@ public sealed class TensorRtRtxPluginLocatorTests
         Assert.True(resolution.Succeeded);
         Assert.Equal(TensorRtRtxPluginDirectorySource.ExplicitStudioSetting, resolution.Source);
         Assert.Equal(
-            Path.Combine(NormalizeDirectory(pluginDirectory), TensorRtRtxProviderConstants.PluginLibraryFileName),
+            Path.Join(NormalizeDirectory(pluginDirectory), TensorRtRtxProviderConstants.PluginLibraryFileName),
             resolution.ProviderLibraryPath);
         Assert.Empty(resolution.MissingFiles);
     }
@@ -172,14 +172,14 @@ public sealed class TensorRtRtxPluginLocatorTests
 
         Assert.True(resolution.Succeeded);
         Assert.Equal(
-            Path.Combine(NormalizeDirectory(pluginDirectory), TensorRtRtxProviderConstants.PluginLibraryFileName),
+            Path.Join(NormalizeDirectory(pluginDirectory), TensorRtRtxProviderConstants.PluginLibraryFileName),
             resolution.ProviderLibraryPath);
     }
 
     private static string SamplePluginDirectory(string leaf) =>
         OperatingSystem.IsLinux()
-            ? Path.Combine(Path.GetTempPath(), "trackdub", leaf)
-            : Path.Combine(Path.GetPathRoot(Path.GetTempPath()) ?? "C:\\", leaf);
+            ? Path.Join(Path.GetTempPath(), "trackdub", leaf)
+            : Path.Join(Path.GetPathRoot(Path.GetTempPath()) ?? "C:\\", leaf);
 
     private static string NormalizeDirectory(string directory) =>
         Path.GetFullPath(Environment.ExpandEnvironmentVariables(directory));

@@ -355,7 +355,7 @@ public sealed class SqliteProjectDatabaseMigrationTests
 
     private static string CreateProjectRoot(string projectName)
     {
-        return Path.Combine(
+        return Path.Join(
             Path.GetTempPath(),
             "Trackdub.Infrastructure.Tests",
             Guid.NewGuid().ToString("N"),

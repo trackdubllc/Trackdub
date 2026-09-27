@@ -142,7 +142,7 @@ internal static class ProjectHandler
         }
         else
         {
-            resolvedOutputDirectory = Path.Combine(
+            resolvedOutputDirectory = Path.Join(
                 Path.GetDirectoryName(resolvedMediaPath) ?? ".",
                 Path.GetFileNameWithoutExtension(resolvedMediaPath) + ".trackdub");
         }
@@ -245,7 +245,7 @@ internal static class ProjectHandler
             {
                 Kind = "normalized-audio",
                 RelativePath = state.AsrAudioRelativePath,
-                Exists = File.Exists(Path.Combine(projectPath, state.AsrAudioRelativePath)),
+                Exists = File.Exists(Path.Join(projectPath, state.AsrAudioRelativePath)),
             });
         }
 

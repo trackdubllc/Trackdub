@@ -58,7 +58,7 @@ public sealed class SpeakerDiarizationStageTests
             new DiarizationStageHandler(
                 diarizationEngine,
                 new WritingModelDownloader(),
-                modelCacheRoot: Path.Combine(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
+                modelCacheRoot: Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
                 expectedSha256: SortFormerTestFixtures.ExpectedSha256));
 
     private TranscriptArtifactWriter BuildArtifactWriter() =>

@@ -45,10 +45,10 @@ public sealed class StemSeparationStageHandler(
 
         string tempDirectory = StemSeparationTempDirectories.GetRunDirectory(stageRun.Id);
         Directory.CreateDirectory(tempDirectory);
-        string tempVocalsPath = Path.Combine(tempDirectory, "vocals.wav");
-        string tempAmbiancePath = Path.Combine(tempDirectory, "ambiance.wav");
-        string tempMusicPath = Path.Combine(tempDirectory, "music.wav");
-        string tempSoundEffectsPath = Path.Combine(tempDirectory, "sfx.wav");
+        string tempVocalsPath = Path.Join(tempDirectory, "vocals.wav");
+        string tempAmbiancePath = Path.Join(tempDirectory, "ambiance.wav");
+        string tempMusicPath = Path.Join(tempDirectory, "music.wav");
+        string tempSoundEffectsPath = Path.Join(tempDirectory, "sfx.wav");
         IReadOnlyDictionary<string, string> rawStemTempPaths = BuildRawStemTempPaths(tempDirectory);
 
         try
@@ -235,7 +235,7 @@ public sealed class StemSeparationStageHandler(
         var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (string stemName in RawStemNames)
         {
-            paths[stemName] = Path.Combine(tempDirectory, $"{stemName}.raw.wav");
+            paths[stemName] = Path.Join(tempDirectory, $"{stemName}.raw.wav");
         }
 
         return paths;

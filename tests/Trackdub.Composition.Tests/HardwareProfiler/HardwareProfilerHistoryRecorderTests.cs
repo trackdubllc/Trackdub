@@ -28,7 +28,7 @@ public sealed class HardwareProfilerHistoryRecorderTests
                 ["ok"],
                 "balanced"));
 
-        string reportsRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string reportsRoot = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         try
         {
             BenchmarkRunRecord record = HardwareProfilerHistoryRecorder.MapScenarioToRecord(

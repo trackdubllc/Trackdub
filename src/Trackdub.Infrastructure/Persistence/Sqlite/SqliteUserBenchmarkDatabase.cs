@@ -11,7 +11,7 @@ public sealed class SqliteUserBenchmarkDatabase
     public SqliteUserBenchmarkDatabase(string userDataRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userDataRoot);
-        databasePath = Path.Combine(Path.GetFullPath(userDataRoot), DatabaseFileName);
+        databasePath = Path.Join(Path.GetFullPath(userDataRoot), DatabaseFileName);
     }
 
     public string DatabasePath => databasePath;

@@ -28,7 +28,7 @@ public partial class TranscriptProjectServiceTests
     public async Task OpenAsync_when_manifest_has_no_transcript_language_returns_unknown_language_state()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -47,7 +47,7 @@ public partial class TranscriptProjectServiceTests
     public async Task OpenAsync_rechecks_export_tool_availability()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
         var exportTools = new MutableExportToolAvailabilityService(
             ExportToolAvailability.Unavailable("ffmpeg missing"));
@@ -71,7 +71,7 @@ public partial class TranscriptProjectServiceTests
     public async Task ProjectWorkflow_SaveUiSettingsAsync_persists_mix_export_settings_and_restores_on_reopen()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
         var expected = new ProjectUiSettings(
             Mix: new ProjectMixSettings(

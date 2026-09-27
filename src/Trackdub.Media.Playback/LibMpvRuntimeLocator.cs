@@ -133,7 +133,7 @@ public sealed class LibMpvRuntimeLocator(string? baseDirectory = null) : ILibMpv
         }
 
         string? appSupport = OperatingSystem.IsMacOS()
-            ? Path.Combine(
+            ? Path.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Library",
                 "Application Support",
@@ -147,7 +147,7 @@ public sealed class LibMpvRuntimeLocator(string? baseDirectory = null) : ILibMpv
         {
             foreach (string libraryName in libraryNames)
             {
-                yield return Path.Combine(localAppData, "Trackdub", "native", safeRid, libraryName);
+                yield return Path.Join(localAppData, "Trackdub", "native", safeRid, libraryName);
             }
         }
 
@@ -155,7 +155,7 @@ public sealed class LibMpvRuntimeLocator(string? baseDirectory = null) : ILibMpv
         {
             foreach (string libraryName in libraryNames)
             {
-                yield return Path.Combine(appSupport, libraryName);
+                yield return Path.Join(appSupport, libraryName);
             }
         }
     }
@@ -167,8 +167,8 @@ public sealed class LibMpvRuntimeLocator(string? baseDirectory = null) : ILibMpv
         {
             foreach (string libraryName in libraryNames)
             {
-                yield return Path.Combine(current, "native", safeRid, libraryName);
-                yield return Path.Combine(current, libraryName);
+                yield return Path.Join(current, "native", safeRid, libraryName);
+                yield return Path.Join(current, libraryName);
             }
 
             current = Directory.GetParent(current)?.FullName;

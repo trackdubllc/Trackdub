@@ -923,7 +923,7 @@ public sealed class RuntimePlannerTests
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
         Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
         Assert.Equal("default", plan.Variant);
-        Assert.Equal(Path.Combine(olderCompleteRoot, "onnx", "encoder_model.onnx"), plan.ModelEntryPath);
+        Assert.Equal(Path.Join(olderCompleteRoot, "onnx", "encoder_model.onnx"), plan.ModelEntryPath);
     }
 
     [Fact]
@@ -2090,7 +2090,7 @@ public sealed class RuntimePlannerTests
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(CreateKokoroSpec());
         string baseRoot = workspace.CreateCacheRoot("kokoro-base");
-        string variantRoot = Path.Combine(baseRoot, "optimized", "olive-cpu-fp32");
+        string variantRoot = Path.Join(baseRoot, "optimized", "olive-cpu-fp32");
         workspace.WriteCacheFile(variantRoot, "model.onnx");
         var localVariant = new LocalModelVariantRecord(
             "olive-cpu-fp32",
@@ -2126,7 +2126,7 @@ public sealed class RuntimePlannerTests
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(CreateKokoroSpec());
         string baseRoot = workspace.CreateCacheRoot("kokoro-base");
-        string variantRoot = Path.Combine(baseRoot, "optimized", "olive-cpu-fp32");
+        string variantRoot = Path.Join(baseRoot, "optimized", "olive-cpu-fp32");
         workspace.WriteCacheFile(variantRoot, "model.onnx");
         var localVariant = new LocalModelVariantRecord(
             "olive-cpu-fp32",
@@ -2156,7 +2156,7 @@ public sealed class RuntimePlannerTests
         Assert.Equal("olive-cpu-fp32", plan.Variant);
         Assert.True(plan.IsLocalOptimizedVariant);
         Assert.Equal("model.onnx", plan.ModelEntryRelativePath);
-        Assert.Equal(Path.Combine(variantRoot, "model.onnx"), plan.ModelEntryPath);
+        Assert.Equal(Path.Join(variantRoot, "model.onnx"), plan.ModelEntryPath);
     }
 
     [Fact]
@@ -2166,7 +2166,7 @@ public sealed class RuntimePlannerTests
         BundledModelManifestRegistry registry = workspace.WriteManifest(CreateKokoroSpec());
         string baseRoot = workspace.CreateCacheRoot("kokoro-base");
         workspace.WriteCacheFile(baseRoot, "model.onnx");
-        string variantRoot = Path.Combine(baseRoot, "optimized", "olive-dml-fp16");
+        string variantRoot = Path.Join(baseRoot, "optimized", "olive-dml-fp16");
         workspace.WriteCacheFile(variantRoot, "model.onnx");
         var localVariant = new LocalModelVariantRecord(
             "olive-dml-fp16",
@@ -2234,7 +2234,7 @@ public sealed class RuntimePlannerTests
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
 
         string marker = $"machine-marker-{Guid.NewGuid():N}";
-        string cacheRoot = workspace.CreateCacheRoot(Path.Combine(marker, "onnx-community-silero-vad"));
+        string cacheRoot = workspace.CreateCacheRoot(Path.Join(marker, "onnx-community-silero-vad"));
         workspace.WriteCacheFile(cacheRoot, "onnx/model_int8.onnx");
 
         RuntimePlanner planner = CreatePlanner(
@@ -2247,7 +2247,7 @@ public sealed class RuntimePlannerTests
         string json = JsonSerializer.Serialize(plan);
         StageRuntimePlan? roundTripped = JsonSerializer.Deserialize<StageRuntimePlan>(json);
 
-        Assert.Equal(Path.Combine(cacheRoot, "onnx", "model_int8.onnx"), plan.ModelEntryPath);
+        Assert.Equal(Path.Join(cacheRoot, "onnx", "model_int8.onnx"), plan.ModelEntryPath);
         Assert.NotNull(roundTripped);
         Assert.Equal(plan.Stage, roundTripped!.Stage);
         Assert.Equal(plan.Status, roundTripped.Status);
@@ -2264,13 +2264,13 @@ public sealed class RuntimePlannerTests
     [Trait("Category", "Integration")]
     public async Task LocalModelCacheInventory_ReadsMachineLocalCacheIndex()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
+        string rootPath = Path.Join(Path.GetTempPath(), $"trackdub-cache-{Guid.NewGuid():N}");
         var storagePaths = new TrackdubStoragePaths(rootPath);
         var store = new LocalModelCacheRecordStore(storagePaths);
         var inventory = new LocalModelCacheInventory(store);
         LocalModelCacheRecord[] records =
         [
-            new("example/model", Path.Combine(rootPath, "machine-cache", "example"), "main", "abc123", DateTimeOffset.UtcNow)
+            new("example/model", Path.Join(rootPath, "machine-cache", "example"), "main", "abc123", DateTimeOffset.UtcNow)
         ];
 
         try
@@ -2369,7 +2369,7 @@ public sealed class RuntimePlannerTests
         try
         {
             string repoRoot = FindRepoRoot();
-            string manifestPath = Path.Combine(
+            string manifestPath = Path.Join(
                 repoRoot,
                 "src",
                 "Trackdub.Inference",
@@ -2387,7 +2387,7 @@ public sealed class RuntimePlannerTests
             // Fall through to try assembly-relative path resolution.
         }
 
-        string assemblyRelativePath = Path.GetFullPath(Path.Combine(
+        string assemblyRelativePath = Path.GetFullPath(Path.Join(
             AppContext.BaseDirectory,
             "..",
             "..",
@@ -2442,7 +2442,7 @@ public sealed class RuntimePlannerTests
         DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(current.FullName, "Trackdub.slnx")))
             {
                 return current.FullName;
             }
@@ -3024,7 +3024,7 @@ public sealed class RuntimePlannerTests
 
         public RuntimePlannerTestWorkspace()
         {
-            RootPath = Path.Combine(Path.GetTempPath(), $"trackdub-runtime-planner-{Guid.NewGuid():N}");
+            RootPath = Path.Join(Path.GetTempPath(), $"trackdub-runtime-planner-{Guid.NewGuid():N}");
             Directory.CreateDirectory(RootPath);
         }
 
@@ -3032,7 +3032,7 @@ public sealed class RuntimePlannerTests
 
         public BundledModelManifestRegistry WriteManifest(params ManifestSpec[] models)
         {
-            string manifestPath = Path.Combine(RootPath, "bundled-models.manifest.json");
+            string manifestPath = Path.Join(RootPath, "bundled-models.manifest.json");
             string json = JsonSerializer.Serialize(
                 new
                 {
@@ -3083,14 +3083,14 @@ public sealed class RuntimePlannerTests
 
         public string CreateCacheRoot(string name)
         {
-            string cacheRoot = Path.Combine(RootPath, "machine-cache", name);
+            string cacheRoot = Path.Join(RootPath, "machine-cache", name);
             Directory.CreateDirectory(cacheRoot);
             return cacheRoot;
         }
 
         public void WriteCacheFile(string cacheRoot, string relativePath)
         {
-            string filePath = Path.Combine(cacheRoot, relativePath);
+            string filePath = Path.Join(cacheRoot, relativePath);
             string? directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrWhiteSpace(directory))
             {

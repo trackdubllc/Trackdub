@@ -62,7 +62,7 @@ public sealed class KokoroVoiceCatalog : IVoiceCatalog
 
     public static async Task<KokoroVoiceCatalog> LoadAsync(string modelRootPath)
     {
-        string voicesDirectory = Path.Combine(modelRootPath, "voices");
+        string voicesDirectory = Path.Join(modelRootPath, "voices");
         if (!Directory.Exists(voicesDirectory))
         {
             return new KokoroVoiceCatalog(modelRootPath, []);
@@ -99,13 +99,13 @@ public sealed class KokoroVoiceCatalog : IVoiceCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(modelRootPath);
 
         string current = Path.GetFullPath(modelRootPath);
-        if (Directory.Exists(Path.Combine(current, "voices")))
+        if (Directory.Exists(Path.Join(current, "voices")))
         {
             return current;
         }
 
         string? parent = Path.GetDirectoryName(current);
-        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(Path.Combine(parent, "voices")))
+        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(Path.Join(parent, "voices")))
         {
             return parent;
         }
@@ -131,7 +131,7 @@ public sealed class KokoroVoiceCatalog : IVoiceCatalog
 
     internal string? GetBinPath(string voiceId)
     {
-        string path = Path.Combine(modelRootPath, "voices", $"{voiceId}.bin");
+        string path = Path.Join(modelRootPath, "voices", $"{voiceId}.bin");
         return File.Exists(path) ? path : null;
     }
 

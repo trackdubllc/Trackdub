@@ -11,7 +11,7 @@ public sealed class KokoroTokenizerTests : IDisposable
     [Fact]
     public async Task Load_MissingTokenizerJson_ThrowsFileNotFoundException()
     {
-        string dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
 
         try
@@ -43,7 +43,7 @@ public sealed class KokoroTokenizerTests : IDisposable
     [Fact]
     public async Task Load_IgnoresNonIntegerVocabValues()
     {
-        string dir = Path.Combine(
+        string dir = Path.Join(
             Path.GetTempPath(),
             "Trackdub.KokoroTokenizerTests",
             Guid.NewGuid().ToString("N"));
@@ -61,7 +61,7 @@ public sealed class KokoroTokenizerTests : IDisposable
             }
             """;
 
-        File.WriteAllText(Path.Combine(dir, "tokenizer.json"), json);
+        File.WriteAllText(Path.Join(dir, "tokenizer.json"), json);
 
         KokoroTokenizer tokenizer = await KokoroTokenizer.LoadAsync(dir);
         long[] tokens = tokenizer.Encode("ab");
@@ -201,7 +201,7 @@ public sealed class KokoroTokenizerTests : IDisposable
 
     private string WriteTokenizerJson(Dictionary<string, int> vocab)
     {
-        string dir = Path.Combine(
+        string dir = Path.Join(
             Path.GetTempPath(),
             "Trackdub.KokoroTokenizerTests",
             Guid.NewGuid().ToString("N"));
@@ -221,7 +221,7 @@ public sealed class KokoroTokenizerTests : IDisposable
             }
             """;
 
-        File.WriteAllText(Path.Combine(dir, "tokenizer.json"), json);
+        File.WriteAllText(Path.Join(dir, "tokenizer.json"), json);
         return dir;
     }
 

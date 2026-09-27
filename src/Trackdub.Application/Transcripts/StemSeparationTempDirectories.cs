@@ -12,7 +12,7 @@ public static class StemSeparationTempDirectories
             throw new ArgumentException("Stage run id is required.", nameof(stageRunId));
         }
 
-        return Path.Combine(Path.GetTempPath(), $"{DirectoryPrefix}{stageRunId:N}");
+        return Path.Join(Path.GetTempPath(), $"{DirectoryPrefix}{stageRunId:N}");
     }
 
     public static void CleanupStale(DateTimeOffset utcNow)

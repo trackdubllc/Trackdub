@@ -17,7 +17,7 @@ public class MediaService(ILogger<MediaService> logger) : IMediaService
     {
         logger.LogInformation("Extracting audio from {InputPath} to {OutputFormat}", inputPath, outputFormat);
 
-        var outputPath = Path.Combine(
+        var outputPath = Path.Join(
             Path.GetDirectoryName(inputPath) ?? ".",
             $"{Path.GetFileNameWithoutExtension(inputPath)}_audio.{outputFormat}");
 
@@ -32,7 +32,7 @@ public class MediaService(ILogger<MediaService> logger) : IMediaService
     {
         logger.LogInformation("Extracting video from {InputPath}", inputPath);
 
-        var outputPath = Path.Combine(
+        var outputPath = Path.Join(
             Path.GetDirectoryName(inputPath) ?? ".",
             $"{Path.GetFileNameWithoutExtension(inputPath)}_video.mp4");
 

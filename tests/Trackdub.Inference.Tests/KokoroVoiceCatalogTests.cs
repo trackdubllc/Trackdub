@@ -34,7 +34,7 @@ public sealed class KokoroVoiceCatalogTests : IDisposable
     public async Task Load_EmptyVoicesDirectory_ReturnsEmptyCatalog()
     {
         string root = CreateTempModelRoot();
-        Directory.CreateDirectory(Path.Combine(root, "voices"));
+        Directory.CreateDirectory(Path.Join(root, "voices"));
 
         KokoroVoiceCatalog catalog = await KokoroVoiceCatalog.LoadAsync(root);
 
@@ -72,10 +72,10 @@ public sealed class KokoroVoiceCatalogTests : IDisposable
     public async Task Load_NonBinFilesAreIgnored()
     {
         string root = CreateTempModelRoot();
-        string voicesDir = Path.Combine(root, "voices");
+        string voicesDir = Path.Join(root, "voices");
         Directory.CreateDirectory(voicesDir);
-        File.WriteAllBytes(Path.Combine(voicesDir, "af_heart.json"), []);
-        File.WriteAllBytes(Path.Combine(voicesDir, "am_adam.txt"), []);
+        File.WriteAllBytes(Path.Join(voicesDir, "af_heart.json"), []);
+        File.WriteAllBytes(Path.Join(voicesDir, "am_adam.txt"), []);
         CreateFakeVoicepackBin(root, "bf_alice");
 
         KokoroVoiceCatalog catalog = await KokoroVoiceCatalog.LoadAsync(root);
@@ -313,7 +313,7 @@ public sealed class KokoroVoiceCatalogTests : IDisposable
     {
         string root = CreateTempModelRoot();
         CreateFakeVoicepackBin(root, "af_heart");
-        string onnxDirectory = Path.Combine(root, "onnx");
+        string onnxDirectory = Path.Join(root, "onnx");
         Directory.CreateDirectory(onnxDirectory);
 
         string resolved = KokoroVoiceCatalog.ResolveRootContainingVoices(onnxDirectory);
@@ -339,7 +339,7 @@ public sealed class KokoroVoiceCatalogTests : IDisposable
 
     private string CreateTempModelRoot()
     {
-        string dir = Path.Combine(
+        string dir = Path.Join(
             Path.GetTempPath(),
             "Trackdub.KokoroVoiceCatalogTests",
             Guid.NewGuid().ToString("N"));
@@ -350,8 +350,8 @@ public sealed class KokoroVoiceCatalogTests : IDisposable
 
     private static void CreateFakeVoicepackBin(string modelRoot, string voiceId)
     {
-        string voicesDir = Path.Combine(modelRoot, "voices");
+        string voicesDir = Path.Join(modelRoot, "voices");
         Directory.CreateDirectory(voicesDir);
-        File.WriteAllBytes(Path.Combine(voicesDir, $"{voiceId}.bin"), []);
+        File.WriteAllBytes(Path.Join(voicesDir, $"{voiceId}.bin"), []);
     }
 }

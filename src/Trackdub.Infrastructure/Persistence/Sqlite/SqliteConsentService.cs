@@ -34,7 +34,7 @@ public sealed class SqliteConsentService : IConsentService, IDisposable
     public SqliteConsentService(TrackdubStoragePaths storagePaths, IApplicationLogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(storagePaths);
-        databasePath = Path.Combine(storagePaths.RootDirectory, "consent.db");
+        databasePath = Path.Join(storagePaths.RootDirectory, "consent.db");
         this.logger = logger ?? new DebugApplicationLogger();
     }
 

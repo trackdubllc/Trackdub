@@ -15,7 +15,7 @@ internal sealed class Qwen3AsrTokenizer
     public static async Task<Qwen3AsrTokenizer> LoadAsync(string modelRootPath, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelRootPath);
-        string tokenizerPath = Path.Combine(modelRootPath, "tokenizer.json");
+        string tokenizerPath = Path.Join(modelRootPath, "tokenizer.json");
         string tokenizerText = await File.ReadAllTextAsync(tokenizerPath, cancellationToken).ConfigureAwait(false);
         using JsonDocument document = JsonDocument.Parse(tokenizerText);
         JsonElement root = document.RootElement;
@@ -47,7 +47,7 @@ internal sealed class Qwen3AsrTokenizer
         }
 
         Dictionary<string, int> specialTokens = ReadSpecialTokens(root);
-        string addedTokensPath = Path.Combine(modelRootPath, "added_tokens.json");
+        string addedTokensPath = Path.Join(modelRootPath, "added_tokens.json");
         if (File.Exists(addedTokensPath))
         {
             using JsonDocument addedDocument = JsonDocument.Parse(

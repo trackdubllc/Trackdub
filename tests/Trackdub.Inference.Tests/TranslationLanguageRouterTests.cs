@@ -68,7 +68,7 @@ public sealed class TranslationLanguageRouterTests
 
         Assert.True(route.IsAvailable);
         Assert.Equal(TranslationRoutingKind.Direct, route.RoutingKind);
-        Assert.Equal(Path.Combine(olderCompleteRoot, "onnx", "encoder_model.onnx"), route.ResolvedModelEntryPath);
+        Assert.Equal(Path.Join(olderCompleteRoot, "onnx", "encoder_model.onnx"), route.ResolvedModelEntryPath);
     }
 
     [Fact]
@@ -579,7 +579,7 @@ public sealed class TranslationLanguageRouterTests
     {
         public TranslationRouterTestWorkspace()
         {
-            RootPath = Path.Combine(Path.GetTempPath(), $"trackdub-translation-router-{Guid.NewGuid():N}");
+            RootPath = Path.Join(Path.GetTempPath(), $"trackdub-translation-router-{Guid.NewGuid():N}");
             Directory.CreateDirectory(RootPath);
         }
 
@@ -587,7 +587,7 @@ public sealed class TranslationLanguageRouterTests
 
         public BundledModelManifestRegistry WriteManifest(params ManifestSpec[] models)
         {
-            string manifestPath = Path.Combine(RootPath, "bundled-models.manifest.json");
+            string manifestPath = Path.Join(RootPath, "bundled-models.manifest.json");
             string json = JsonSerializer.Serialize(
                 new
                 {
@@ -639,7 +639,7 @@ public sealed class TranslationLanguageRouterTests
 
         public string CreateCacheRoot(string name)
         {
-            string cacheRoot = Path.Combine(RootPath, "machine-cache", name.Replace('/', Path.DirectorySeparatorChar));
+            string cacheRoot = Path.Join(RootPath, "machine-cache", name.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(cacheRoot);
             return cacheRoot;
         }
@@ -672,7 +672,7 @@ public sealed class TranslationLanguageRouterTests
 
         public void WriteCacheFile(string cacheRoot, string relativePath, string contents = "placeholder")
         {
-            string filePath = Path.Combine(cacheRoot, relativePath);
+            string filePath = Path.Join(cacheRoot, relativePath);
             string? directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrWhiteSpace(directory))
             {

@@ -112,12 +112,12 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     [Fact]
     public void ResolveTtsProbeModelPath_uses_chatterbox_conditional_decoder_for_planned_provider_probe()
     {
-        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "onnx"));
+        string root = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Join(root, "onnx"));
         try
         {
-            string languageModelPath = Path.Combine(root, "onnx", "language_model_q4f16.onnx");
-            string conditionalDecoderPath = Path.Combine(root, "onnx", "conditional_decoder_q4f16.onnx");
+            string languageModelPath = Path.Join(root, "onnx", "language_model_q4f16.onnx");
+            string conditionalDecoderPath = Path.Join(root, "onnx", "conditional_decoder_q4f16.onnx");
             File.WriteAllText(languageModelPath, string.Empty);
             File.WriteAllText(conditionalDecoderPath, string.Empty);
             MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
@@ -149,12 +149,12 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     [Fact]
     public void ResolveTtsProbeModelPath_falls_back_to_default_chatterbox_conditional_decoder()
     {
-        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "onnx"));
+        string root = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Join(root, "onnx"));
         try
         {
-            string languageModelPath = Path.Combine(root, "onnx", "language_model_fp16.onnx");
-            string conditionalDecoderPath = Path.Combine(root, "onnx", "conditional_decoder.onnx");
+            string languageModelPath = Path.Join(root, "onnx", "language_model_fp16.onnx");
+            string conditionalDecoderPath = Path.Join(root, "onnx", "conditional_decoder.onnx");
             File.WriteAllText(languageModelPath, string.Empty);
             File.WriteAllText(conditionalDecoderPath, string.Empty);
             MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
@@ -186,13 +186,13 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     [Fact]
     public void ResolveTtsProbeModelPath_uses_entry_path_directory_when_model_root_is_blank()
     {
-        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        string onnxRoot = Path.Combine(root, "onnx");
+        string root = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string onnxRoot = Path.Join(root, "onnx");
         Directory.CreateDirectory(onnxRoot);
         try
         {
-            string languageModelPath = Path.Combine(onnxRoot, "language_model_q4f16.onnx");
-            string conditionalDecoderPath = Path.Combine(onnxRoot, "conditional_decoder_q4f16.onnx");
+            string languageModelPath = Path.Join(onnxRoot, "language_model_q4f16.onnx");
+            string conditionalDecoderPath = Path.Join(onnxRoot, "conditional_decoder_q4f16.onnx");
             File.WriteAllText(languageModelPath, string.Empty);
             File.WriteAllText(conditionalDecoderPath, string.Empty);
             MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
@@ -227,7 +227,7 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
         MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
             .GetMethod("ResolveTtsProbeModelPath", BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("Could not locate TTS smoke probe resolver.");
-        string entryPath = Path.Combine(Path.GetTempPath(), "kokoro.onnx");
+        string entryPath = Path.Join(Path.GetTempPath(), "kokoro.onnx");
 
         object? rawResult = method.Invoke(
             null,
@@ -246,12 +246,12 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     [Fact]
     public void ResolveNemotronDecoderJointPath_uses_decoder_joint_next_to_encoder()
     {
-        string root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        string root = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
-            string encoderPath = Path.Combine(root, "encoder.onnx");
-            string decoderJointPath = Path.Combine(root, "decoder_joint.onnx");
+            string encoderPath = Path.Join(root, "encoder.onnx");
+            string decoderJointPath = Path.Join(root, "decoder_joint.onnx");
             File.WriteAllText(encoderPath, string.Empty);
             File.WriteAllText(decoderJointPath, string.Empty);
             MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)

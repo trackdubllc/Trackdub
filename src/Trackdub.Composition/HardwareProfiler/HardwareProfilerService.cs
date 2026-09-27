@@ -66,7 +66,7 @@ public sealed class HardwareProfilerService(
         StudioSettings settings = await studioSettingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
 
         HardwareFingerprint fingerprint = await CreateFingerprintAsync(cancellationToken).ConfigureAwait(false);
-        string reportsRoot = Path.Combine(storagePaths.UserDataRoot, "hardware-profiler", "reports", fingerprint.Hash[..12]);
+        string reportsRoot = Path.Join(storagePaths.UserDataRoot, "hardware-profiler", "reports", fingerprint.Hash[..12]);
         Directory.CreateDirectory(reportsRoot);
 
         string? policyKey = WindowsMlExecutionDevicePolicySettings.ToKey(settings.WindowsMlExecutionDevicePolicy);
@@ -188,7 +188,7 @@ public sealed class HardwareProfilerService(
             }
 
             string modelPath = candidate.ModelPath;
-            string reportPath = Path.Combine(reportsRoot, definition.ScenarioName + "-" + Path.GetFileNameWithoutExtension(modelPath) + ".json");
+            string reportPath = Path.Join(reportsRoot, definition.ScenarioName + "-" + Path.GetFileNameWithoutExtension(modelPath) + ".json");
             Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
 
             try

@@ -20,7 +20,7 @@ public sealed class TranslationBenchmarkSmokeTests
     [TranslationOpusSmokeFact]
     public async Task RunBenchmarkSuiteAsync_RecordsCompletedTranslationScenario()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Composition.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Composition.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
 
         try
@@ -147,18 +147,18 @@ public sealed class TranslationBenchmarkSmokeTests
     {
         public string RootDirectory { get; } = userDataRoot;
         public string UserDataRoot { get; } = userDataRoot;
-        public string UserCacheRoot { get; } = Path.Combine(userDataRoot, "cache");
+        public string UserCacheRoot { get; } = Path.Join(userDataRoot, "cache");
         public string? SharedAssetRoot { get; } = null;
         public bool IsPortable { get; } = false;
-        public string ModelCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "models");
-        public string ModelCacheIndexPath { get; } = Path.Combine(userDataRoot, "cache", "models", "index.json");
-        public string LogFilePath { get; } = Path.Combine(userDataRoot, "trackdub.log");
-        public string SettingsPath { get; } = Path.Combine(userDataRoot, "settings.json");
-        public string LayoutPath { get; } = Path.Combine(userDataRoot, "layout.json");
-        public string ToolCacheDirectory { get; } = Path.Combine(userDataRoot, "tools");
-        public string FfmpegToolCacheDirectory { get; } = Path.Combine(userDataRoot, "tools", "ffmpeg");
-        public string EngineCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "engines");
-        public string ComponentCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "components");
+        public string ModelCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "models");
+        public string ModelCacheIndexPath { get; } = Path.Join(userDataRoot, "cache", "models", "index.json");
+        public string LogFilePath { get; } = Path.Join(userDataRoot, "trackdub.log");
+        public string SettingsPath { get; } = Path.Join(userDataRoot, "settings.json");
+        public string LayoutPath { get; } = Path.Join(userDataRoot, "layout.json");
+        public string ToolCacheDirectory { get; } = Path.Join(userDataRoot, "tools");
+        public string FfmpegToolCacheDirectory { get; } = Path.Join(userDataRoot, "tools", "ffmpeg");
+        public string EngineCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "engines");
+        public string ComponentCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "components");
     }
 }
 #endif

@@ -28,7 +28,7 @@ public partial class TranscriptProjectServiceTests
     public async Task SpeechAudioEnhancement_wired_enhancement_handler_runs_and_produces_artifact()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory, enableSpeechEnhancement: true);
@@ -44,7 +44,7 @@ public partial class TranscriptProjectServiceTests
     public async Task SpeechAudioEnhancement_failure_is_nonfatal_and_transcript_is_still_generated()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var enhancementService = new FakeSpeechAudioEnhancementService { ThrowOnEnhance = true };
@@ -65,7 +65,7 @@ public partial class TranscriptProjectServiceTests
     public async Task SpeechAudioEnhancement_disabled_handler_not_called_and_no_enhanced_artifact()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory, enableSpeechEnhancement: false);
@@ -81,7 +81,7 @@ public partial class TranscriptProjectServiceTests
     public async Task SpeechAudioEnhancement_prep_analyzes_enhanced_audio_when_enhancement_succeeds()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory, enableSpeechEnhancement: true);

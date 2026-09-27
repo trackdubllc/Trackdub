@@ -87,13 +87,13 @@ internal static class BundledModelSkipResolver
 
         foreach (var relative in relativePaths)
         {
-            var full = Path.GetFullPath(Path.Combine(repoRoot, "models", relative));
+            var full = Path.GetFullPath(Path.Join(repoRoot, "models", relative));
             if (Directory.Exists(full) || File.Exists(full))
             {
                 continue;
             }
 
-            return $"Required bundled model not present at {Path.Combine("models", relative)}. Download the model bundle (gitignored under models/) to run this test.";
+            return $"Required bundled model not present at {Path.Join("models", relative)}. Download the model bundle (gitignored under models/) to run this test.";
         }
 
         return null;
@@ -111,7 +111,7 @@ public static class TestRepoRootResolver
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(dir.FullName, "Trackdub.slnx")))
             {
                 return dir.FullName;
             }

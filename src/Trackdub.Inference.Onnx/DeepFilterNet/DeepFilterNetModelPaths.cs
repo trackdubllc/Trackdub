@@ -69,9 +69,9 @@ public sealed record DeepFilterNetModelPaths(
 
         return new DeepFilterNetModelPaths(
             root,
-            Path.Combine(root, "enc.onnx"),
-            Path.Combine(root, "erb_dec.onnx"),
-            Path.Combine(root, "df_dec.onnx"),
+            Path.Join(root, "enc.onnx"),
+            Path.Join(root, "erb_dec.onnx"),
+            Path.Join(root, "df_dec.onnx"),
             entry.CommercialAllowed,
             entry.CommercialUseVerified);
     }
@@ -112,7 +112,7 @@ public sealed record DeepFilterNetModelPaths(
     }
 
     private static bool AllOnnxFilesExist(string rootDirectory) =>
-        File.Exists(Path.Combine(rootDirectory, "enc.onnx")) &&
-        File.Exists(Path.Combine(rootDirectory, "erb_dec.onnx")) &&
-        File.Exists(Path.Combine(rootDirectory, "df_dec.onnx"));
+        File.Exists(Path.Join(rootDirectory, "enc.onnx")) &&
+        File.Exists(Path.Join(rootDirectory, "erb_dec.onnx")) &&
+        File.Exists(Path.Join(rootDirectory, "df_dec.onnx"));
 }

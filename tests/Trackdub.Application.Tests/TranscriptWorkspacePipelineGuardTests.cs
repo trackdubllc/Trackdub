@@ -496,7 +496,7 @@ public sealed class TranscriptWorkspacePipelineGuardTests
                 state,
                 new ExportStageRequest(
                     state.ProjectState.Project.Id,
-                    Path.Combine(Path.GetTempPath(), "guard-export.mp4"),
+                    Path.Join(Path.GetTempPath(), "guard-export.mp4"),
                     []),
                 selectedTranslationTargetLanguageCode: null,
                 TestContext.Current.CancellationToken));
@@ -676,7 +676,7 @@ public sealed class TranscriptWorkspacePipelineGuardTests
         var diarizationStageHandler = new DiarizationStageHandler(
             new FakeDiarizationEngine(),
             new WritingModelDownloader(),
-            modelCacheRoot: Path.Combine(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
+            modelCacheRoot: Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
             expectedSha256: SortFormerTestFixtures.ExpectedSha256);
         var referenceClipService = new SpeakerReferenceClipService(
             artifactStore,

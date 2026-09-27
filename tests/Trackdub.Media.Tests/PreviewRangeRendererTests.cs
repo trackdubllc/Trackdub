@@ -15,13 +15,13 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_outputs_requested_duration_and_places_take_at_segment_offset()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 4.0d, amplitude: 0.5f);
             WriteConstantWave(takePath, sampleRate: 1000, durationSeconds: 0.5d, amplitude: 0.25f);
 
@@ -78,13 +78,13 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_resamples_long_lower_rate_takes_without_collapsing_to_one_sample()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteConstantWave(sourcePath, sampleRate: 44100, durationSeconds: 4.0d, amplitude: 0.05f);
             WriteConstantWave(takePath, sampleRate: 24000, durationSeconds: 3.0d, amplitude: 0.20f);
 
@@ -144,13 +144,13 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_preserves_stereo_source_and_centers_mono_take_when_pan_restore_is_off()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteStereoConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0.20f, rightAmplitude: -0.10f);
             WriteConstantWave(takePath, sampleRate: 1000, durationSeconds: 0.5d, amplitude: 0.40f);
 
@@ -208,14 +208,14 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_restores_original_segment_pan_for_mono_take_when_enabled()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "ambiance.wav");
-            string originalPath = Path.Combine(tempRoot, "normalized.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "ambiance.wav");
+            string originalPath = Path.Join(tempRoot, "normalized.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteStereoConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0f, rightAmplitude: 0f);
             WriteStereoConstantWave(originalPath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0.05f, rightAmplitude: 0.45f);
             WriteConstantWave(takePath, sampleRate: 1000, durationSeconds: 0.5d, amplitude: 0.40f);
@@ -266,14 +266,14 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_uses_take_duration_for_original_pan_analysis_window()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "ambiance.wav");
-            string originalPath = Path.Combine(tempRoot, "normalized.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "ambiance.wav");
+            string originalPath = Path.Join(tempRoot, "normalized.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteStereoConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0f, rightAmplitude: 0f);
             var originalSamples = new float[2000 * 2];
             for (int frame = 500; frame < 700; frame++)
@@ -339,14 +339,14 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_restores_pan_from_multichannel_original_mix_downmix()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "ambiance.wav");
-            string originalPath = Path.Combine(tempRoot, "normalized-5-1.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "ambiance.wav");
+            string originalPath = Path.Join(tempRoot, "normalized-5-1.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteStereoConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0f, rightAmplitude: 0f);
 
             var originalSamples = new float[2000 * 6];
@@ -408,14 +408,14 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_centers_mono_take_when_original_mix_reference_is_mono()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "ambiance.wav");
-            string originalPath = Path.Combine(tempRoot, "normalized-mono.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "ambiance.wav");
+            string originalPath = Path.Join(tempRoot, "normalized-mono.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteStereoConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0f, rightAmplitude: 0f);
             WriteConstantWave(originalPath, sampleRate: 1000, durationSeconds: 2.0d, amplitude: 0.40f);
             WriteConstantWave(takePath, sampleRate: 1000, durationSeconds: 0.5d, amplitude: 0.40f);
@@ -451,14 +451,14 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_centers_mono_take_when_original_mix_reference_is_silent()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "ambiance.wav");
-            string originalPath = Path.Combine(tempRoot, "normalized-silent.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "ambiance.wav");
+            string originalPath = Path.Join(tempRoot, "normalized-silent.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteStereoConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0f, rightAmplitude: 0f);
             WriteStereoConstantWave(originalPath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0f, rightAmplitude: 0f);
             WriteConstantWave(takePath, sampleRate: 1000, durationSeconds: 0.5d, amplitude: 0.40f);
@@ -494,14 +494,14 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_centers_mono_take_when_pan_reference_is_unusable()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
-            string missingOriginalPath = Path.Combine(tempRoot, "missing-normalized.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
+            string missingOriginalPath = Path.Join(tempRoot, "missing-normalized.wav");
             WriteStereoConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, leftAmplitude: 0f, rightAmplitude: 0f);
             WriteConstantWave(takePath, sampleRate: 1000, durationSeconds: 0.5d, amplitude: 0.40f);
 
@@ -549,12 +549,12 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_upmixes_mono_source_lane_when_original_mix_requests_stereo_output()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 1.0d, amplitude: 0.25f);
 
             var store = new FakeArtifactStore();
@@ -606,12 +606,12 @@ public sealed class PreviewRangeRendererTests
         float minRight,
         float maxRight)
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, $"source-{channelCount}.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, $"source-{channelCount}.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             var samples = new float[1000 * channelCount];
             for (int frame = 0; frame < 1000; frame++)
             {
@@ -666,12 +666,12 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_downmixes_wave_extensible_five_one_source_lane_without_lfe_to_stereo_output()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source-5-1.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source-5-1.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             var samples = new float[1000 * 6];
             for (int frame = 0; frame < 1000; frame++)
             {
@@ -723,12 +723,12 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_downmixes_unmasked_six_channel_source_lane_as_safe_five_one_layout()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source-5-1.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source-5-1.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             var samples = new float[1000 * 6];
             for (int frame = 0; frame < 1000; frame++)
             {
@@ -778,12 +778,12 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_downmixes_six_one_source_lane_with_back_center_and_side_channels_to_stereo_output()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source-6-1.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source-6-1.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             var samples = new float[1000 * 7];
             for (int frame = 0; frame < 1000; frame++)
             {
@@ -833,12 +833,12 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_caps_range_to_source_audio_duration_before_allocating_output()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 1.0d, amplitude: 0.2f);
             var store = new FakeArtifactStore();
             store.SeedPath(ProjectArtifactPaths.NormalizedAudioRelativePath, sourcePath);
@@ -878,12 +878,12 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_keeps_missing_take_gap_silent_in_dub_lane()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, amplitude: 0.2f);
             var store = new FakeArtifactStore();
             store.SeedPath(ProjectArtifactPaths.NormalizedAudioRelativePath, sourcePath);
@@ -927,13 +927,13 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_fails_when_planned_audible_take_file_is_missing()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string missingTakePath = Path.Combine(tempRoot, "missing-take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string missingTakePath = Path.Join(tempRoot, "missing-take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, amplitude: 0.2f);
             var store = new FakeArtifactStore();
             store.SeedPath(ProjectArtifactPaths.NormalizedAudioRelativePath, sourcePath);
@@ -1012,13 +1012,13 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_applies_room_tone_reverb_when_preroll_is_available()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 4.0d, amplitude: 0.3f);
             WriteConstantWave(takePath, sampleRate: 1000, durationSeconds: 0.5d, amplitude: 0.5f);
 
@@ -1172,13 +1172,13 @@ public sealed class PreviewRangeRendererTests
     [Fact]
     public async Task RenderAsync_falls_back_to_dry_take_when_no_preroll_is_available()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
         try
         {
-            string sourcePath = Path.Combine(tempRoot, "source.wav");
-            string takePath = Path.Combine(tempRoot, "take.wav");
-            string outputPath = Path.Combine(tempRoot, "preview.wav");
+            string sourcePath = Path.Join(tempRoot, "source.wav");
+            string takePath = Path.Join(tempRoot, "take.wav");
+            string outputPath = Path.Join(tempRoot, "preview.wav");
             WriteConstantWave(sourcePath, sampleRate: 1000, durationSeconds: 2.0d, amplitude: 0.1f);
             WriteConstantWave(takePath, sampleRate: 1000, durationSeconds: 0.5d, amplitude: 0.4f);
 

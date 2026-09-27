@@ -272,7 +272,7 @@ public sealed class DubbingPipelineEngine(
     private static string EnsureProjectDirectory(DubbingSessionOptions options)
     {
         string projectOutputDirectory = options.ProjectOutputDirectory
-            ?? Path.Combine(
+            ?? Path.Join(
                 Path.GetDirectoryName(options.SourceMediaPath) ?? ".",
                 Path.GetFileNameWithoutExtension(options.SourceMediaPath) + ".trackdub");
 
@@ -2403,7 +2403,7 @@ public sealed class DubbingPipelineEngine(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRootPath);
         string extension = container == ExportOutputContainer.Mkv ? ".mkv" : ".mp4";
-        return Path.Combine(projectRootPath, "exports", "dubbed" + extension);
+        return Path.Join(projectRootPath, "exports", "dubbed" + extension);
     }
 
     private static IReadOnlyList<ExportSubtitleFormat> ResolveSubtitleFormats(

@@ -63,7 +63,7 @@ public sealed class SqliteProjectSpineTests
         await using var database = new TemporarySqliteDatabase();
         await database.Migrator.MigrateAsync();
 
-        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Combine(Path.GetTempPath(), "trackdub-demo"), DateTimeOffset.UtcNow);
+        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Join(Path.GetTempPath(), "trackdub-demo"), DateTimeOffset.UtcNow);
         var repository = new ProjectRecordRepository();
 
         await using (DbConnection connection = await database.ConnectionFactory.CreateOpenConnectionAsync())
@@ -85,7 +85,7 @@ public sealed class SqliteProjectSpineTests
         await using var database = new TemporarySqliteDatabase();
         await database.Migrator.MigrateAsync();
 
-        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Combine(Path.GetTempPath(), "trackdub-stage"), DateTimeOffset.UtcNow);
+        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Join(Path.GetTempPath(), "trackdub-stage"), DateTimeOffset.UtcNow);
         StageRunRecord stageRun = StageRunRecord.Start(project.Id, "asr", DateTimeOffset.UtcNow)
             .WithRuntimeInfo("auto", "cpu", "onnx-community/whisper-tiny", "whisper-tiny-onnx", "int8", "bootstrap skipped");
         StageRunRecord completed = stageRun.Complete(DateTimeOffset.UtcNow.AddMinutes(1));
@@ -117,7 +117,7 @@ public sealed class SqliteProjectSpineTests
         await using var database = new TemporarySqliteDatabase();
         await database.Migrator.MigrateAsync();
 
-        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Combine(Path.GetTempPath(), "trackdub-stage"), DateTimeOffset.UtcNow);
+        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Join(Path.GetTempPath(), "trackdub-stage"), DateTimeOffset.UtcNow);
         StageRunRecord stageRun = StageRunRecord.Start(project.Id, "asr", DateTimeOffset.UtcNow);
         StageRunRecord terminal = status switch
         {
@@ -149,13 +149,13 @@ public sealed class SqliteProjectSpineTests
         await using var database = new TemporarySqliteDatabase();
         await database.Migrator.MigrateAsync();
 
-        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Combine(Path.GetTempPath(), "trackdub-artifact"), DateTimeOffset.UtcNow);
+        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Join(Path.GetTempPath(), "trackdub-artifact"), DateTimeOffset.UtcNow);
         StageRunRecord stageRun = StageRunRecord.Start(project.Id, "translation", DateTimeOffset.UtcNow);
         ArtifactRecord artifact = ArtifactRecord.Register(
             project.Id,
             stageRun.Id,
             "transcript",
-            Path.Combine("artifacts", "transcript.json"),
+            Path.Join("artifacts", "transcript.json"),
             "abc123",
             "translation-stage",
             DateTimeOffset.UtcNow);
@@ -174,7 +174,7 @@ public sealed class SqliteProjectSpineTests
         ArtifactRecord stored = Assert.Single(artifacts);
         Assert.Equal("abc123", stored.ContentHash);
         Assert.Equal("translation-stage", stored.Provenance);
-        Assert.Equal(Path.Combine("artifacts", "transcript.json"), stored.RelativePath);
+        Assert.Equal(Path.Join("artifacts", "transcript.json"), stored.RelativePath);
     }
 
     [Fact]
@@ -183,12 +183,12 @@ public sealed class SqliteProjectSpineTests
         await using var database = new TemporarySqliteDatabase();
         await database.Migrator.MigrateAsync();
 
-        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Combine(Path.GetTempPath(), "trackdub-rollback"), DateTimeOffset.UtcNow);
+        ProjectRecord project = ProjectRecord.CreateNew("Demo", Path.Join(Path.GetTempPath(), "trackdub-rollback"), DateTimeOffset.UtcNow);
         ArtifactRecord artifact = ArtifactRecord.Register(
             project.Id,
             null,
             "artifact",
-            Path.Combine("artifacts", "rollback.json"),
+            Path.Join("artifacts", "rollback.json"),
             "deadbeef",
             "rollback-test",
             DateTimeOffset.UtcNow);
@@ -257,7 +257,7 @@ public sealed class SqliteProjectSpineTests
     {
         public TemporarySqliteDatabase()
         {
-            DatabasePath = Path.Combine(Path.GetTempPath(), $"trackdub-{Guid.NewGuid():N}.db");
+            DatabasePath = Path.Join(Path.GetTempPath(), $"trackdub-{Guid.NewGuid():N}.db");
             ConnectionFactory = new SqliteConnectionFactory(DatabasePath);
             Migrator = new SqliteDatabaseMigrator(ConnectionFactory);
         }

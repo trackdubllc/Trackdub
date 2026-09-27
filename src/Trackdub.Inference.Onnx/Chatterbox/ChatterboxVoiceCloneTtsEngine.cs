@@ -1225,7 +1225,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             string speechEncoderPath = ResolveGraphPath(rootDirectory, "speech_encoder", variant);
             string embedTokensPath = ResolveGraphPath(rootDirectory, "embed_tokens", variant);
             string conditionalDecoderPath = ResolveGraphPath(rootDirectory, "conditional_decoder", variant);
-            string tokenizerPath = Path.Combine(rootDirectory, "tokenizer.json");
+            string tokenizerPath = Path.Join(rootDirectory, "tokenizer.json");
             foreach (string path in new[] { languageModelPath, speechEncoderPath, embedTokensPath, conditionalDecoderPath, tokenizerPath })
             {
                 if (!File.Exists(path))
@@ -1248,18 +1248,18 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
 
         private static string ResolveGraphPath(string modelRootPath, string graphName, string? variant)
         {
-            string onnxDirectory = Path.Combine(modelRootPath, "onnx");
+            string onnxDirectory = Path.Join(modelRootPath, "onnx");
             if (!string.IsNullOrWhiteSpace(variant) &&
                 !variant.Equals("default", StringComparison.OrdinalIgnoreCase))
             {
-                string variantPath = Path.Combine(onnxDirectory, $"{graphName}_{variant}.onnx");
+                string variantPath = Path.Join(onnxDirectory, $"{graphName}_{variant}.onnx");
                 if (File.Exists(variantPath))
                 {
                     return variantPath;
                 }
             }
 
-            return Path.Combine(onnxDirectory, $"{graphName}.onnx");
+            return Path.Join(onnxDirectory, $"{graphName}.onnx");
         }
     }
 
@@ -1274,7 +1274,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
 
         public static async Task<ChatterboxTokenizer> LoadAsync(string modelRootPath)
         {
-            string tokenizerPath = Path.Combine(modelRootPath, "tokenizer.json");
+            string tokenizerPath = Path.Join(modelRootPath, "tokenizer.json");
             string tokenizerText = await File.ReadAllTextAsync(tokenizerPath).ConfigureAwait(false);
             using JsonDocument document = JsonDocument.Parse(tokenizerText);
             JsonElement root = document.RootElement;

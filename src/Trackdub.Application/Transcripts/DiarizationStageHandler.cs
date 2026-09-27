@@ -39,7 +39,7 @@ public sealed class DiarizationStageHandler(
         : expectedSha256;
 
     private readonly string modelCacheRoot = string.IsNullOrWhiteSpace(modelCacheRoot)
-        ? Path.Combine(
+        ? Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Trackdub",
             "model-cache")
@@ -326,7 +326,7 @@ public sealed class DiarizationStageHandler(
         string path = Path.GetFullPath(modelCacheRoot);
         foreach (string part in SortFormerModelId.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries))
         {
-            path = Path.Combine(path, part);
+            path = Path.Join(path, part);
         }
 
         return path;
@@ -337,7 +337,7 @@ public sealed class DiarizationStageHandler(
         string path = modelRootPath;
         foreach (string part in SortFormerModelFileName.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries))
         {
-            path = Path.Combine(path, part);
+            path = Path.Join(path, part);
         }
 
         return path;

@@ -206,7 +206,7 @@ public sealed class TranscriptGenerationServiceResumeTests
 
     private static ServiceHarness CreateHarness()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N"));
+        string projectRoot = Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N"));
         var artifactStore = new FakeArtifactStore(projectRoot);
         var mediaRepository = new FakeMediaAssetRepository();
         var stageRunStore = new FakeProjectStageRunStore();
@@ -218,7 +218,7 @@ public sealed class TranscriptGenerationServiceResumeTests
         var preFlightChecker = new FakePipelinePreFlightChecker();
         var asrHandler = new AsrStageHandler(asrEngine, stageRunStore);
         var speakerRepository = new FakeSpeakerRepository();
-        string modelCacheRoot = Path.Combine(projectRoot, "model-cache");
+        string modelCacheRoot = Path.Join(projectRoot, "model-cache");
 
         SpeakerAssignmentService BuildSpeakerAssignmentService() =>
             new(

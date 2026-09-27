@@ -39,10 +39,10 @@ public sealed class StarterPackCatalog : IStarterPackCatalog
         StarterPackValidator? validator,
         BundledModelManifestRegistry? manifestRegistry)
     {
-        bundledDirectory = Path.Combine(AppContext.BaseDirectory, "StarterPacks");
+        bundledDirectory = Path.Join(AppContext.BaseDirectory, "StarterPacks");
         userPacksDirectory = storagePaths is null
-            ? Path.Combine(Path.GetTempPath(), "Trackdub", "StarterPacks", "user")
-            : Path.Combine(storagePaths.UserDataRoot, "StarterPacks");
+            ? Path.Join(Path.GetTempPath(), "Trackdub", "StarterPacks", "user")
+            : Path.Join(storagePaths.UserDataRoot, "StarterPacks");
         UserPacksDirectory = userPacksDirectory;
         this.validator = validator;
         this.manifestRegistry = manifestRegistry;

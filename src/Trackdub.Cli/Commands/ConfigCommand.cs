@@ -250,7 +250,7 @@ internal static class ConfigCommand
             using (factory)
             {
                 IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
-                string presetsDirectory = Path.Combine(storagePaths.RootDirectory, "presets");
+                string presetsDirectory = Path.Join(storagePaths.RootDirectory, "presets");
                 var store = new PresetStore(presetsDirectory);
 
                 return await PresetHandler.SaveAsync(name, preset, store, Console.Out, cancellationToken)
@@ -291,7 +291,7 @@ internal static class ConfigCommand
             using (factory)
             {
                 IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
-                string presetsDirectory = Path.Combine(storagePaths.RootDirectory, "presets");
+                string presetsDirectory = Path.Join(storagePaths.RootDirectory, "presets");
                 var store = new PresetStore(presetsDirectory);
 
                 return await PresetHandler.LoadAsync(name, store, Console.Out, Console.Error, cancellationToken)
@@ -322,7 +322,7 @@ internal static class ConfigCommand
             using (factory)
             {
                 IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
-                string presetsDirectory = Path.Combine(storagePaths.RootDirectory, "presets");
+                string presetsDirectory = Path.Join(storagePaths.RootDirectory, "presets");
                 var store = new PresetStore(presetsDirectory);
 
                 return await PresetHandler.ListAsync(store, Console.Out, cancellationToken)
@@ -363,7 +363,7 @@ internal static class ConfigCommand
             using (factory)
             {
                 IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
-                string presetsDirectory = Path.Combine(storagePaths.RootDirectory, "presets");
+                string presetsDirectory = Path.Join(storagePaths.RootDirectory, "presets");
                 var store = new PresetStore(presetsDirectory);
 
                 return await PresetHandler.DeleteAsync(name, store, Console.Out, Console.Error, cancellationToken)

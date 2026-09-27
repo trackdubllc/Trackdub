@@ -116,8 +116,8 @@ public sealed class OpenVinoBootstrapper : IOpenVinoAvailabilityProvider, IDispo
     private (bool Available, nint Handle) TryLoadNativeLibrary(string installPath)
     {
         // Try primary library first, then fallback
-        string primaryPath = Path.Combine(installPath, NativeLibraryName);
-        string fallbackPath = Path.Combine(installPath, FallbackNativeLibraryName);
+        string primaryPath = Path.Join(installPath, NativeLibraryName);
+        string fallbackPath = Path.Join(installPath, FallbackNativeLibraryName);
 
         if (TryLoadFromPath(primaryPath, out nint handle))
         {

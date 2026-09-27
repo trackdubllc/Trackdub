@@ -8,7 +8,7 @@ public sealed class BatchFileDiscoveryTests : IDisposable
 
     public BatchFileDiscoveryTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"trackdub-batch-discovery-{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"trackdub-batch-discovery-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 
@@ -22,7 +22,7 @@ public sealed class BatchFileDiscoveryTests : IDisposable
 
     private void CreateFile(string relativePath)
     {
-        string fullPath = Path.Combine(_tempDir, relativePath);
+        string fullPath = Path.Join(_tempDir, relativePath);
         string? dir = Path.GetDirectoryName(fullPath);
         if (dir is not null && !Directory.Exists(dir))
         {
@@ -120,7 +120,7 @@ public sealed class BatchFileDiscoveryTests : IDisposable
     [Fact]
     public void FromDirectory_ThrowsDirectoryNotFoundException_WhenPathMissing()
     {
-        string nonExistent = Path.Combine(_tempDir, "does-not-exist");
+        string nonExistent = Path.Join(_tempDir, "does-not-exist");
 
         Assert.Throws<DirectoryNotFoundException>(() =>
             BatchFileDiscovery.FromDirectory(nonExistent, recursive: false));
@@ -233,7 +233,7 @@ public sealed class BatchFileDiscoveryTests : IDisposable
     [Fact]
     public void FromGlob_ThrowsDirectoryNotFoundException_WhenBaseDirectoryMissing()
     {
-        string nonExistent = Path.Combine(_tempDir, "no-such-dir");
+        string nonExistent = Path.Join(_tempDir, "no-such-dir");
 
         Assert.Throws<DirectoryNotFoundException>(() =>
             BatchFileDiscovery.FromGlob("**/*.mp4", nonExistent));

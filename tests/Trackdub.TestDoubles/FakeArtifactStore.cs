@@ -124,7 +124,7 @@ public sealed class FakeArtifactStore(string? rootDirectory = null) : IArtifactS
             ? path
             : rootDirectory is null
                 ? relativePath
-                : Path.GetFullPath(Path.Combine(rootDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+                : Path.GetFullPath(Path.Join(rootDirectory, relativePath.Replace('/', Path.DirectorySeparatorChar)));
 
     public bool Exists(string relativePath) => blobs.ContainsKey(relativePath);
 }

@@ -26,7 +26,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task RecordConsentAsync_persists_and_round_trips()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -77,7 +77,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task IsConsentGrantedAsync_returns_true_for_active_consent()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -106,7 +106,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task IsConsentGrantedAsync_returns_false_when_no_consent()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -132,7 +132,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task IsConsentGrantedAsync_returns_false_when_database_not_exists()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -153,7 +153,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task GetConsentAsync_returns_null_when_no_consent()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -179,7 +179,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task GetConsentAsync_returns_null_when_database_not_exists()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -200,7 +200,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task RevokeConsentAsync_sets_revoked_at()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -234,7 +234,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task RevokeConsentAsync_twice_does_not_throw()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -264,7 +264,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task RevokeConsentAsync_non_existent_speaker_does_not_throw()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -289,7 +289,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task RecordConsentAsync_replaces_previous_consent_for_same_speaker()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -325,7 +325,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task GetConsentAsync_returns_most_recent_consent_by_granted_at()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -366,7 +366,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task RecordConsentAsync_respects_expiry()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);
@@ -425,7 +425,7 @@ public sealed class SqliteSpeakerConsentServiceTests
     [Fact]
     public async Task RecordConsentAsync_persists_independent_consents_per_project()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Consent.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);

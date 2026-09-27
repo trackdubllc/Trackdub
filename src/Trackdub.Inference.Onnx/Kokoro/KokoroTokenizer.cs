@@ -16,7 +16,7 @@ internal sealed class KokoroTokenizer
 
     public static async Task<KokoroTokenizer> LoadAsync(string modelRootPath)
     {
-        string tokenizerPath = Path.Combine(modelRootPath, "tokenizer.json");
+        string tokenizerPath = Path.Join(modelRootPath, "tokenizer.json");
         if (!File.Exists(tokenizerPath))
         {
             throw new FileNotFoundException("Kokoro tokenizer.json not found.", tokenizerPath);

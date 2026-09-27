@@ -12,7 +12,7 @@ public sealed class MemoryMappedWaveAudioReaderTests
         string directory = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(directory, "buffered-mono.wav");
+            string path = Path.Join(directory, "buffered-mono.wav");
             const short channelCount = 3;
             const int sampleRate = 16000;
             const int frameCount = 20000;
@@ -53,7 +53,7 @@ public sealed class MemoryMappedWaveAudioReaderTests
         string directory = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(directory, "channel.wav");
+            string path = Path.Join(directory, "channel.wav");
             const short channelCount = 2;
             const int sampleRate = 44100;
             short[] interleaved = new short[]
@@ -92,7 +92,7 @@ public sealed class MemoryMappedWaveAudioReaderTests
         string directory = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(directory, "truncated.wav");
+            string path = Path.Join(directory, "truncated.wav");
             const short channelCount = 2;
             const int sampleRate = 16000;
             short[] interleaved = new short[]
@@ -152,7 +152,7 @@ public sealed class MemoryMappedWaveAudioReaderTests
         string directory = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(directory, "partial-frame.pcm");
+            string path = Path.Join(directory, "partial-frame.pcm");
             byte[] payload = new byte[3 * sizeof(short)];
             BinaryPrimitives.WriteInt16LittleEndian(payload.AsSpan(0, 2), 1200);
             BinaryPrimitives.WriteInt16LittleEndian(payload.AsSpan(2, 2), -1200);
@@ -206,7 +206,7 @@ public sealed class MemoryMappedWaveAudioReaderTests
         string directory = CreateTempDirectory();
         try
         {
-            string path = Path.Combine(directory, "invalid-block-align.wav");
+            string path = Path.Join(directory, "invalid-block-align.wav");
             const short channelCount = 2;
             const int sampleRate = 16000;
             short[] interleaved = new short[]
@@ -231,7 +231,7 @@ public sealed class MemoryMappedWaveAudioReaderTests
 
     private static string CreateTempDirectory()
     {
-        string directory = Path.Combine(Path.GetTempPath(), $"trackdub-memorymapped-wave-{Guid.NewGuid():N}");
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-memorymapped-wave-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         return directory;
     }

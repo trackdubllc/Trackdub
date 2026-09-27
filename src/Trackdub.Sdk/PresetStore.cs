@@ -55,7 +55,7 @@ public sealed class PresetStore
         Directory.CreateDirectory(_presetsDirectory);
 
         string targetPath = GetPresetPath(name);
-        string tempPath = Path.Combine(_presetsDirectory, $"{name}.{Guid.NewGuid():N}.tmp");
+        string tempPath = Path.Join(_presetsDirectory, $"{name}.{Guid.NewGuid():N}.tmp");
 
         try
         {
@@ -215,6 +215,6 @@ public sealed class PresetStore
                 nameof(name));
         }
 
-        return Path.Combine(_presetsDirectory, $"{name}.json");
+        return Path.Join(_presetsDirectory, $"{name}.json");
     }
 }

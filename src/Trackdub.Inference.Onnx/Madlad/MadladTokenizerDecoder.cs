@@ -36,8 +36,8 @@ internal sealed class MadladTokenizerDecoder
             "spiece.model",
             "tokenizer.model",
             "sentencepiece.model");
-        string configPath = Path.Combine(modelRootPath, "config.json");
-        string generationConfigPath = Path.Combine(modelRootPath, "generation_config.json");
+        string configPath = Path.Join(modelRootPath, "config.json");
+        string generationConfigPath = Path.Join(modelRootPath, "generation_config.json");
 
         MadladTokenizerConfig config = await LoadConfigAsync(configPath, generationConfigPath).ConfigureAwait(false);
         using FileStream tokenizerStream = File.OpenRead(tokenizerPath);
@@ -124,7 +124,7 @@ internal sealed class MadladTokenizerDecoder
     {
         foreach (string fileName in fileNames)
         {
-            string candidatePath = Path.Combine(modelRootPath, fileName);
+            string candidatePath = Path.Join(modelRootPath, fileName);
             if (File.Exists(candidatePath))
             {
                 return candidatePath;
@@ -133,7 +133,7 @@ internal sealed class MadladTokenizerDecoder
 
         throw new FileNotFoundException(
             $"The MADLAD tokenizer was not found under '{modelRootPath}'.",
-            Path.Combine(modelRootPath, fileNames[0]));
+            Path.Join(modelRootPath, fileNames[0]));
     }
 
     private sealed record MadladTokenizerConfig(

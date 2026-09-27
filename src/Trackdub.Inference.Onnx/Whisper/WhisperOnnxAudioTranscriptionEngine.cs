@@ -755,13 +755,13 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
     {
         string fileName = Path.GetFileName(encoderModelPath);
         string decoderFileName = fileName.Replace("encoder_model", "decoder_model", StringComparison.OrdinalIgnoreCase);
-        string decoderModelPath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, decoderFileName);
+        string decoderModelPath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, decoderFileName);
         if (File.Exists(decoderModelPath))
         {
             return Path.GetFullPath(decoderModelPath);
         }
 
-        decoderModelPath = Path.Combine(Path.GetDirectoryName(encoderModelPath)!, "decoder_model.onnx");
+        decoderModelPath = Path.Join(Path.GetDirectoryName(encoderModelPath)!, "decoder_model.onnx");
         if (File.Exists(decoderModelPath))
         {
             return Path.GetFullPath(decoderModelPath);
@@ -781,7 +781,7 @@ public sealed class WhisperOnnxAudioTranscriptionEngine(IRuntimePlanner runtimeP
     // large-v3 uses 128 mel bins; earlier sizes use 80.
     internal static int ReadMelBins(string modelRootPath)
     {
-        string configPath = Path.Combine(modelRootPath, "preprocessor_config.json");
+        string configPath = Path.Join(modelRootPath, "preprocessor_config.json");
         if (!File.Exists(configPath))
         {
             return DefaultMelBins;

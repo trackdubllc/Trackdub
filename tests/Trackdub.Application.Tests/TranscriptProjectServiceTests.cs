@@ -51,7 +51,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
         FakeTtsEngine? ttsEngine = null)
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory, ttsEngine: ttsEngine);
@@ -133,7 +133,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
     {
         var mediaRepository = new FakeMediaAssetRepository();
         var speakerRepository = new FakeSpeakerRepository();
-        var artifactStore = new FakeArtifactStore(Path.Combine(tempDirectory, "project"));
+        var artifactStore = new FakeArtifactStore(Path.Join(tempDirectory, "project"));
         var transcriptRepository = new FakeTranscriptRepository(speakerRepository);
         var translationRepository = new FakeTranslationRepository();
         var voiceAssignmentRepository = new FakeVoiceAssignmentRepository();
@@ -146,7 +146,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
         diarizationStageHandler ??= new DiarizationStageHandler(
             diarizationEngine,
             new RecordingModelDownloader(),
-            modelCacheRoot: Path.Combine(tempDirectory, "model-cache"),
+            modelCacheRoot: Path.Join(tempDirectory, "model-cache"),
             expectedSha256: SortFormerTestFixtures.ExpectedSha256);
         transcriptionEngine ??= new FakeAudioTranscriptionEngine();
         ttsEngine ??= new FakeTtsEngine();
@@ -393,7 +393,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
         tempDirectories.Add(tempDirectory);
         return tempDirectory;
@@ -614,7 +614,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
         public ArtifactWriteHandle CreateWriteHandle(string relativePath)
         {
             string finalPath = GetPath(relativePath);
-            string tempPath = Path.Combine(GetPath("temp"), $"{Guid.NewGuid():N}-{Path.GetFileName(relativePath)}");
+            string tempPath = Path.Join(GetPath("temp"), $"{Guid.NewGuid():N}-{Path.GetFileName(relativePath)}");
             Directory.CreateDirectory(Path.GetDirectoryName(tempPath)!);
             return new ArtifactWriteHandle(relativePath, finalPath, tempPath);
         }
@@ -654,7 +654,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
             }
         }
 
-        public string GetPath(string relativePath) => Path.GetFullPath(Path.Combine(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        public string GetPath(string relativePath) => Path.GetFullPath(Path.Join(rootPath, relativePath.Replace('/', Path.DirectorySeparatorChar)));
 
         public bool Exists(string relativePath) => File.Exists(GetPath(relativePath));
     }

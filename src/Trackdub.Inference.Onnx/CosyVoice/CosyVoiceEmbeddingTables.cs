@@ -42,16 +42,16 @@ internal sealed class CosyVoiceEmbeddingTables
 
     public static CosyVoiceEmbeddingTables Load(string modelRootPath)
     {
-        string embeddingsDir = Path.Combine(modelRootPath, "embeddings");
+        string embeddingsDir = Path.Join(modelRootPath, "embeddings");
         return new CosyVoiceEmbeddingTables(
-            NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "llm_speech_embedding.npy")),
-            NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "llm_llm_embedding.npy")),
-            NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "llm_spk_embed_affine_weight.npy")),
-            NpyReader.ReadFloat1D(Path.Combine(embeddingsDir, "llm_spk_embed_affine_bias.npy")),
-            NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "flow_input_embedding.npy")),
-            NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "flow_spk_embed_affine_weight.npy")),
-            NpyReader.ReadFloat1D(Path.Combine(embeddingsDir, "flow_spk_embed_affine_bias.npy")),
-            CosyVoiceLengthRegulator.Load(Path.Combine(embeddingsDir, "flow_length_regulator.npz")));
+            NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "llm_speech_embedding.npy")),
+            NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "llm_llm_embedding.npy")),
+            NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "llm_spk_embed_affine_weight.npy")),
+            NpyReader.ReadFloat1D(Path.Join(embeddingsDir, "llm_spk_embed_affine_bias.npy")),
+            NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "flow_input_embedding.npy")),
+            NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "flow_spk_embed_affine_weight.npy")),
+            NpyReader.ReadFloat1D(Path.Join(embeddingsDir, "flow_spk_embed_affine_bias.npy")),
+            CosyVoiceLengthRegulator.Load(Path.Join(embeddingsDir, "flow_length_regulator.npz")));
     }
 
     public float[] ProjectLlmSpeaker(float[] campplusEmbedding)

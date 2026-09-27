@@ -441,7 +441,7 @@ internal static class DubCommand
 
             string resolvedOutputDirectory = outputDirectory is not null
                 ? Path.GetFullPath(outputDirectory)
-                : Path.Combine(
+                : Path.Join(
                     Path.GetDirectoryName(resolvedMediaPath) ?? ".",
                     Path.GetFileNameWithoutExtension(resolvedMediaPath) + ".trackdub");
 

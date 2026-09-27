@@ -15,7 +15,7 @@ public sealed class FfmpegAutoDownloaderTests
         string installRoot = FfmpegAutoDownloader.Shared.GetInstallRoot();
 
         Assert.EndsWith(
-            Path.Combine("Trackdub", "tools", "ffmpeg", FfmpegAutoDownloader.DefaultPackage.VersionTag),
+            Path.Join("Trackdub", "tools", "ffmpeg", FfmpegAutoDownloader.DefaultPackage.VersionTag),
             installRoot,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -55,7 +55,7 @@ public sealed class FfmpegAutoDownloaderTests
         // Mirrors the real arm64/Linux packages: Sha256 is null because the source is a
         // mutable "latest" tag. First install has no prior baseline to compare against,
         // so it must succeed and record one — not silently skip verification forever.
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
 
         try
@@ -75,7 +75,7 @@ public sealed class FfmpegAutoDownloaderTests
             Assert.NotNull(ffmpegPath);
             Assert.True(File.Exists(ffmpegPath));
 
-            string hashPath = Path.Combine(downloader.GetInstallRoot(), "archive.sha256");
+            string hashPath = Path.Join(downloader.GetInstallRoot(), "archive.sha256");
             Assert.True(File.Exists(hashPath));
             string expectedHash = Convert.ToHexString(SHA256.HashData(archiveBytes)).ToLowerInvariant();
             Assert.Equal(expectedHash, File.ReadAllText(hashPath).Trim(), ignoreCase: true);
@@ -92,7 +92,7 @@ public sealed class FfmpegAutoDownloaderTests
         // Simulates a second install attempt (e.g. after the extracted payload was
         // deleted but the TOFU baseline survived) where the "latest" tag has since been
         // republished with different bytes — must fail loudly, not silently re-trust.
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
 
         try
@@ -110,7 +110,7 @@ public sealed class FfmpegAutoDownloaderTests
             }
 
             string installRoot = new FfmpegAutoDownloader(tempRoot, package: package).GetInstallRoot();
-            Directory.Delete(Path.Combine(installRoot, "payload"), recursive: true);
+            Directory.Delete(Path.Join(installRoot, "payload"), recursive: true);
 
             byte[] differentArchiveBytes = CreateArchiveBytes("ffmpeg-v2", "ffprobe-v2");
             using var secondClient = new HttpClient(new StaticArchiveHandler(differentArchiveBytes));
@@ -131,7 +131,7 @@ public sealed class FfmpegAutoDownloaderTests
         _ = FfmpegAutoDownloader.Shared; // ensure type initializer runs before env vars are mutated
         string? previousToolCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_TOOL_CACHE_ROOT");
         string? previousCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_CACHE_ROOT");
-        string toolCacheRoot = Path.Combine(
+        string toolCacheRoot = Path.Join(
             Path.GetTempPath(),
             "Trackdub.Media.Tests",
             Guid.NewGuid().ToString("N"),
@@ -150,7 +150,7 @@ public sealed class FfmpegAutoDownloaderTests
             var downloader = new FfmpegAutoDownloader(package: package);
 
             Assert.Equal(
-                Path.Combine(Path.GetFullPath(toolCacheRoot), "ffmpeg", "test-build"),
+                Path.Join(Path.GetFullPath(toolCacheRoot), "ffmpeg", "test-build"),
                 downloader.GetInstallRoot());
         }
         finally
@@ -166,7 +166,7 @@ public sealed class FfmpegAutoDownloaderTests
         _ = FfmpegAutoDownloader.Shared; // ensure type initializer runs before env vars are mutated
         string? previousToolCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_TOOL_CACHE_ROOT");
         string? previousCacheRoot = Environment.GetEnvironmentVariable("TRACKDUB_CACHE_ROOT");
-        string cacheRoot = Path.Combine(
+        string cacheRoot = Path.Join(
             Path.GetTempPath(),
             "Trackdub.Media.Tests",
             Guid.NewGuid().ToString("N"),
@@ -185,7 +185,7 @@ public sealed class FfmpegAutoDownloaderTests
             var downloader = new FfmpegAutoDownloader(package: package);
 
             Assert.Equal(
-                Path.Combine(Path.GetFullPath(cacheRoot), "tools", "ffmpeg", "test-build"),
+                Path.Join(Path.GetFullPath(cacheRoot), "tools", "ffmpeg", "test-build"),
                 downloader.GetInstallRoot());
         }
         finally
@@ -198,7 +198,7 @@ public sealed class FfmpegAutoDownloaderTests
     [Fact]
     public void TryEnsureExecutable_downloads_and_extracts_pinned_ffmpeg_package()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Media.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
 
         try
@@ -218,8 +218,8 @@ public sealed class FfmpegAutoDownloaderTests
 
             Assert.NotNull(ffmpegPath);
             Assert.True(File.Exists(ffmpegPath));
-            Assert.Contains(Path.Combine("Trackdub", "tools", "ffmpeg", "test-build"), ffmpegPath, StringComparison.OrdinalIgnoreCase);
-            Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(ffmpegPath)!, "ffprobe.exe")));
+            Assert.Contains(Path.Join("Trackdub", "tools", "ffmpeg", "test-build"), ffmpegPath, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Join(Path.GetDirectoryName(ffmpegPath)!, "ffprobe.exe")));
         }
         finally
         {

@@ -42,8 +42,8 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
 
         ExecutionProviderKind provider = request.Plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
         bool allowTrtInitFallback = !request.Plan.RequirePreferredExecutionProvider;
-        string sepPath = Path.Combine(request.ModelRootPath, SepModelFileName);
-        string osdPath = Path.Combine(request.ModelRootPath, OsdModelFileName);
+        string sepPath = Path.Join(request.ModelRootPath, SepModelFileName);
+        string osdPath = Path.Join(request.ModelRootPath, OsdModelFileName);
 
         float[] samples = request.Samples;
 
@@ -79,7 +79,7 @@ internal sealed class SepFormerOnnxSeparator : ISepFormerSeparator
 
         ExecutionProviderKind provider = request.Plan.ExecutionProvider ?? ExecutionProviderKind.Cpu;
         bool allowTrtInitFallback = !request.Plan.RequirePreferredExecutionProvider;
-        string sepPath = Path.Combine(request.ModelRootPath, SepModelFileName);
+        string sepPath = Path.Join(request.ModelRootPath, SepModelFileName);
         float[] samples = request.Samples;
         var overlapRegions = new List<(int Start, int End)> { (0, samples.Length) };
 

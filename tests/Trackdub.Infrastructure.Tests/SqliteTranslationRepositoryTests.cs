@@ -11,7 +11,7 @@ public sealed class SqliteTranslationRepositoryTests
     [Fact]
     public async Task Repository_round_trips_current_translation_revision_segments_and_revision_numbers_per_language()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Translation.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Translation.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);

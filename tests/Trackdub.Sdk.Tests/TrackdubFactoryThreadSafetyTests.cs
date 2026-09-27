@@ -173,7 +173,7 @@ public sealed class TrackdubFactoryThreadSafetyTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;

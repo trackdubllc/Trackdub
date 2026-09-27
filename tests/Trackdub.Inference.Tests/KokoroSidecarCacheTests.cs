@@ -87,11 +87,11 @@ public sealed class KokoroSidecarCacheTests : IDisposable
 
     private string CreateMinimalTokenizerDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "KokoroSidecarTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "KokoroSidecarTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         tempDirs.Add(dir);
 
-        File.WriteAllText(Path.Combine(dir, "tokenizer.json"), """
+        File.WriteAllText(Path.Join(dir, "tokenizer.json"), """
             {
               "model": {
                 "vocab": {
@@ -107,11 +107,11 @@ public sealed class KokoroSidecarCacheTests : IDisposable
 
     private string CreateMinimalVoiceCatalogDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "KokoroSidecarTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "KokoroSidecarTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         tempDirs.Add(dir);
         // A minimal voices directory (no .bin files) is sufficient; Load() handles empty dirs.
-        Directory.CreateDirectory(Path.Combine(dir, "voices"));
+        Directory.CreateDirectory(Path.Join(dir, "voices"));
         return dir;
     }
 

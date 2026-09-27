@@ -63,7 +63,7 @@ public sealed class DeviceAffinitySettings
             ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
             : localAppDataRoot;
 
-        string settingsPath = Path.Combine(root, "Trackdub", "device-affinity.json");
+        string settingsPath = Path.Join(root, "Trackdub", "device-affinity.json");
         LoadedDeviceAffinitySettings loaded = LoadFromDisk(settingsPath);
         return new DeviceAffinitySettings(
             settingsPath,

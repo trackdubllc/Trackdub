@@ -29,12 +29,12 @@ public sealed class ProjectSessionServiceTests
     [Fact]
     public void CreatePendingSessionForMedia_allocates_available_project_root_and_uses_settings()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
         try
         {
-            Directory.CreateDirectory(Path.Combine(tempDirectory, "clip.trackdub"));
-            string mediaPath = Path.Combine(tempDirectory, "clip.mp4");
+            Directory.CreateDirectory(Path.Join(tempDirectory, "clip.trackdub"));
+            string mediaPath = Path.Join(tempDirectory, "clip.mp4");
             var settings = StudioSettings.Default;
             var factory = new FakeWorkspaceSessionFactory();
             var service = new ProjectSessionService(factory);
@@ -60,10 +60,10 @@ public sealed class ProjectSessionServiceTests
             return;
         }
 
-        string userDataRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
-        string mediaRoot = Path.Combine(userDataRoot, "OneDrive", "Videos");
+        string userDataRoot = Path.Join(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string mediaRoot = Path.Join(userDataRoot, "OneDrive", "Videos");
         Directory.CreateDirectory(mediaRoot);
-        string mediaPath = Path.Combine(mediaRoot, "clip.mp4");
+        string mediaPath = Path.Join(mediaRoot, "clip.mp4");
         File.WriteAllText(mediaPath, "x");
         var settings = StudioSettings.Default;
         var factory = new FakeWorkspaceSessionFactory();
@@ -74,7 +74,7 @@ public sealed class ProjectSessionServiceTests
             PendingProjectSession pending = service.CreatePendingSessionForMedia(mediaPath, "clip", settings);
 
             Assert.Equal("clip", pending.ProjectRoot.ProjectName);
-            Assert.Equal(Path.Combine(mediaRoot, "clip.trackdub"), pending.ProjectRoot.ProjectRootPath);
+            Assert.Equal(Path.Join(mediaRoot, "clip.trackdub"), pending.ProjectRoot.ProjectRootPath);
             Assert.Equal(pending.ProjectRoot.ProjectRootPath, pending.Session.ProjectRootPath);
         }
         finally
@@ -156,32 +156,32 @@ public sealed class ProjectSessionServiceTests
 
     private static string CreateCloudSyncedMediaPath(string fileName)
     {
-        string mediaDirectory = Path.Combine(
+        string mediaDirectory = Path.Join(
             Path.GetTempPath(),
             "Trackdub.Application.Tests",
             Guid.NewGuid().ToString("N"),
             "OneDrive",
             "Videos");
         Directory.CreateDirectory(mediaDirectory);
-        return Path.Combine(mediaDirectory, fileName);
+        return Path.Join(mediaDirectory, fileName);
     }
 
     private sealed class FakeStoragePaths(string userDataRoot) : IAppStoragePaths
     {
         public string RootDirectory { get; } = userDataRoot;
         public string UserDataRoot { get; } = userDataRoot;
-        public string UserCacheRoot { get; } = Path.Combine(userDataRoot, "cache");
+        public string UserCacheRoot { get; } = Path.Join(userDataRoot, "cache");
         public string? SharedAssetRoot { get; } = null;
         public bool IsPortable { get; } = false;
-        public string ModelCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "models");
-        public string ModelCacheIndexPath { get; } = Path.Combine(userDataRoot, "cache", "models", "index.json");
-        public string LogFilePath { get; } = Path.Combine(userDataRoot, "trackdub.log");
-        public string SettingsPath { get; } = Path.Combine(userDataRoot, "settings.json");
-        public string LayoutPath { get; } = Path.Combine(userDataRoot, "layout.json");
-        public string ToolCacheDirectory { get; } = Path.Combine(userDataRoot, "tools");
-        public string FfmpegToolCacheDirectory { get; } = Path.Combine(userDataRoot, "tools", "ffmpeg");
-        public string EngineCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "engines");
-        public string ComponentCacheDirectory { get; } = Path.Combine(userDataRoot, "cache", "components");
+        public string ModelCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "models");
+        public string ModelCacheIndexPath { get; } = Path.Join(userDataRoot, "cache", "models", "index.json");
+        public string LogFilePath { get; } = Path.Join(userDataRoot, "trackdub.log");
+        public string SettingsPath { get; } = Path.Join(userDataRoot, "settings.json");
+        public string LayoutPath { get; } = Path.Join(userDataRoot, "layout.json");
+        public string ToolCacheDirectory { get; } = Path.Join(userDataRoot, "tools");
+        public string FfmpegToolCacheDirectory { get; } = Path.Join(userDataRoot, "tools", "ffmpeg");
+        public string EngineCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "engines");
+        public string ComponentCacheDirectory { get; } = Path.Join(userDataRoot, "cache", "components");
     }
 
     private sealed class FakeWorkspaceSession(string projectRootPath) : ITranscriptWorkspaceSession

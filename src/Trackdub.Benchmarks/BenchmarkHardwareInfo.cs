@@ -195,13 +195,13 @@ internal static class BenchmarkHardwareInfo
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 string systemDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
-                string wbemCandidate = Path.Combine(systemDirectory, "wbem", safeName + ".exe");
+                string wbemCandidate = Path.Join(systemDirectory, "wbem", safeName + ".exe");
                 if (File.Exists(wbemCandidate))
                 {
                     return wbemCandidate;
                 }
 
-                string systemCandidate = Path.Combine(systemDirectory, safeName + ".exe");
+                string systemCandidate = Path.Join(systemDirectory, safeName + ".exe");
                 if (File.Exists(systemCandidate))
                 {
                     return systemCandidate;
@@ -228,7 +228,7 @@ internal static class BenchmarkHardwareInfo
                         continue;
                     }
 
-                    string candidate = Path.Combine(directory, candidateName);
+                    string candidate = Path.Join(directory, candidateName);
                     if (File.Exists(candidate))
                     {
                         return candidate;

@@ -27,7 +27,7 @@ public static class TrtRtxEpBundlePathResolver
         ArgumentException.ThrowIfNullOrWhiteSpace(cudaVariant);
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeIdentifier);
 
-        return Path.Combine(
+        return Path.Join(
             Path.GetFullPath(Environment.ExpandEnvironmentVariables(userDataRoot)),
             ProvidersRootSegment,
             ProviderFamilySegment,

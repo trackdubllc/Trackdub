@@ -375,18 +375,18 @@ public sealed class StarterPackCompatibilityServiceTests
         int minVramMb,
         bool supportsPartialOffload)
     {
-        string sourceManifestPath = Path.Combine(
+        string sourceManifestPath = Path.Join(
             FindRepoRoot(),
             "src",
             "Trackdub.Inference",
             "Runtime",
             "ModelManifest",
             "bundled-models.manifest.json");
-        string manifestRoot = Path.Combine(
+        string manifestRoot = Path.Join(
             Path.GetTempPath(),
             "Trackdub.StarterPackCompatibilityServiceTests",
             Guid.NewGuid().ToString("N"));
-        string manifestPath = Path.Combine(manifestRoot, "bundled-models.manifest.json");
+        string manifestPath = Path.Join(manifestRoot, "bundled-models.manifest.json");
         Directory.CreateDirectory(manifestRoot);
 
         JsonObject root = JsonNode.Parse(File.ReadAllText(sourceManifestPath))!.AsObject();
@@ -408,7 +408,7 @@ public sealed class StarterPackCompatibilityServiceTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            string candidate = Path.Combine(
+            string candidate = Path.Join(
                 directory.FullName,
                 "src",
                 "Trackdub.Inference",
@@ -428,13 +428,13 @@ public sealed class StarterPackCompatibilityServiceTests
 
     private static StarterPackCatalog CreateCatalogWithUserPack(string json)
     {
-        string root = Path.Combine(
+        string root = Path.Join(
             Path.GetTempPath(),
             "Trackdub.StarterPackCompatibilityServiceTests",
             Guid.NewGuid().ToString("N"));
-        string packsDirectory = Path.Combine(root, "StarterPacks");
+        string packsDirectory = Path.Join(root, "StarterPacks");
         Directory.CreateDirectory(packsDirectory);
-        File.WriteAllText(Path.Combine(packsDirectory, "auto-provider-pack.json"), json);
+        File.WriteAllText(Path.Join(packsDirectory, "auto-provider-pack.json"), json);
         return new StarterPackCatalog(new FakeAppStoragePaths(root));
     }
 
@@ -467,17 +467,17 @@ public sealed class StarterPackCompatibilityServiceTests
     {
         public string RootDirectory => root;
         public string UserDataRoot => root;
-        public string UserCacheRoot => Path.Combine(root, "cache");
+        public string UserCacheRoot => Path.Join(root, "cache");
         public string? SharedAssetRoot => null;
         public bool IsPortable => true;
-        public string ModelCacheDirectory => Path.Combine(root, "model-cache");
-        public string ModelCacheIndexPath => Path.Combine(ModelCacheDirectory, "index.json");
-        public string LogFilePath => Path.Combine(root, "trackdub.log");
-        public string SettingsPath => Path.Combine(root, "settings.json");
-        public string LayoutPath => Path.Combine(root, "layout.json");
-        public string ToolCacheDirectory => Path.Combine(root, "tools");
-        public string FfmpegToolCacheDirectory => Path.Combine(ToolCacheDirectory, "ffmpeg");
-        public string EngineCacheDirectory => Path.Combine(root, "engines");
-        public string ComponentCacheDirectory => Path.Combine(root, "components");
+        public string ModelCacheDirectory => Path.Join(root, "model-cache");
+        public string ModelCacheIndexPath => Path.Join(ModelCacheDirectory, "index.json");
+        public string LogFilePath => Path.Join(root, "trackdub.log");
+        public string SettingsPath => Path.Join(root, "settings.json");
+        public string LayoutPath => Path.Join(root, "layout.json");
+        public string ToolCacheDirectory => Path.Join(root, "tools");
+        public string FfmpegToolCacheDirectory => Path.Join(ToolCacheDirectory, "ffmpeg");
+        public string EngineCacheDirectory => Path.Join(root, "engines");
+        public string ComponentCacheDirectory => Path.Join(root, "components");
     }
 }

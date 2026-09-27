@@ -28,7 +28,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RenameSpeakerAsync_updates_display_name_without_changing_id()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -49,7 +49,7 @@ public partial class TranscriptProjectServiceTests
     public async Task MergeSpeakersAsync_reassigns_turns_and_deletes_source_speaker()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -73,7 +73,7 @@ public partial class TranscriptProjectServiceTests
     public async Task AssignSpeakerToSegmentAsync_creates_new_revision_with_override()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -97,7 +97,7 @@ public partial class TranscriptProjectServiceTests
     public async Task AssignSpeakerToSegmentsAsync_creates_single_revision_for_multiple_overrides()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -121,7 +121,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateSpeakerFromSegmentsAsync_does_not_mark_translation_as_stale()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -150,7 +150,7 @@ public partial class TranscriptProjectServiceTests
     public async Task SplitSpeakerTurnAsync_creates_two_turns()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -172,7 +172,7 @@ public partial class TranscriptProjectServiceTests
     public async Task ExtractReferenceClipAsync_writes_artifact_and_registers_reference_clip()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -194,7 +194,7 @@ public partial class TranscriptProjectServiceTests
     public async Task ExtractReferenceClipAsync_prefers_current_vocal_route_over_normalized_mix()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var clipExtractor = new FakeAudioClipExtractor();
@@ -220,8 +220,8 @@ public partial class TranscriptProjectServiceTests
     public async Task ImportReferenceClipAsync_deletes_committed_file_when_post_commit_metadata_fails()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
-        string referencePath = Path.Combine(tempDirectory, "reference.wav");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
+        string referencePath = Path.Join(tempDirectory, "reference.wav");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(referencePath, [5, 6, 7, 8], TestContext.Current.CancellationToken);
 
@@ -247,8 +247,8 @@ public partial class TranscriptProjectServiceTests
     public async Task ImportReferenceClipAsync_removes_saved_artifact_metadata_when_voice_assignment_fails()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
-        string referencePath = Path.Combine(tempDirectory, "reference.wav");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
+        string referencePath = Path.Join(tempDirectory, "reference.wav");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(referencePath, [5, 6, 7, 8], TestContext.Current.CancellationToken);
 
@@ -274,8 +274,8 @@ public partial class TranscriptProjectServiceTests
     public async Task ImportReferenceClipAsync_preserves_original_error_when_cleanup_delete_fails()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
-        string referencePath = Path.Combine(tempDirectory, "reference.wav");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
+        string referencePath = Path.Join(tempDirectory, "reference.wav");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(referencePath, [5, 6, 7, 8], TestContext.Current.CancellationToken);
 

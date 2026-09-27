@@ -91,7 +91,7 @@ public sealed class FileSystemVoiceCloneAuditLog(ITranscriptWorkspaceContext wor
     }
 
     private string GetAuditPath() =>
-        Path.Combine(workspaceContext.ProjectRootPath, ProjectArtifactPaths.VoiceCloneAuditRelativePath);
+        Path.Join(workspaceContext.ProjectRootPath, ProjectArtifactPaths.VoiceCloneAuditRelativePath);
 
     private static async Task<string> ReadLastEntryHashAsync(string path, CancellationToken cancellationToken)
     {

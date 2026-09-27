@@ -373,7 +373,7 @@ public sealed class ExportStageHandler(
             .TryBuildResolvedPlan(currentState, artifactStore, sourceVideoPath);
         if (recompositionPlan is not null)
         {
-            recomposedVideoPath = Path.Combine(
+            recomposedVideoPath = Path.Join(
                 Path.GetTempPath(),
                 $"trackdub-lipsynth-export-{stageRun.Id:N}.mp4");
             try
@@ -573,7 +573,7 @@ public sealed class ExportStageHandler(
         string normalizedOutputPath,
         CancellationToken cancellationToken)
     {
-        string rawPath = Path.Combine(
+        string rawPath = Path.Join(
             Path.GetDirectoryName(Path.GetFullPath(normalizedOutputPath))!,
             $"raw-{Guid.NewGuid():N}.wav");
         try
@@ -1052,14 +1052,14 @@ public sealed class ExportStageHandler(
     {
         string directory = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
         string fileName = Path.GetFileNameWithoutExtension(outputPath);
-        return Path.Combine(directory, $"{fileName}.export-manifest.json");
+        return Path.Join(directory, $"{fileName}.export-manifest.json");
     }
 
     private static string GetSidecarFailureReportPath(string outputPath)
     {
         string directory = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
         string fileName = Path.GetFileNameWithoutExtension(outputPath);
-        return Path.Combine(directory, $"{fileName}.export-failure.json");
+        return Path.Join(directory, $"{fileName}.export-failure.json");
     }
 
     private static string GetDeliveryRelativePath(string outputPath, string sidecarPath) =>
@@ -1276,7 +1276,7 @@ public sealed class ExportStageHandler(
         string directory = Path.GetDirectoryName(fullPath)!;
         string fileName = Path.GetFileName(fullPath);
         Directory.CreateDirectory(directory);
-        return Path.Combine(directory, $".{fileName}.{Guid.NewGuid():N}{suffix}");
+        return Path.Join(directory, $".{fileName}.{Guid.NewGuid():N}{suffix}");
     }
 
     private async Task CleanupRegisteredExportArtifactsAsync(

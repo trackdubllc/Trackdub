@@ -26,15 +26,15 @@ public sealed class TrackdubStoragePaths : IAppStoragePaths
 
         ModelCacheDirectory = !string.IsNullOrWhiteSpace(options.ExplicitModelCacheDirectory)
             ? NormalizeRequiredPath(options.ExplicitModelCacheDirectory, nameof(options.ExplicitModelCacheDirectory))
-            : Path.Combine(UserCacheRoot, "model-cache");
-        ModelCacheIndexPath = Path.Combine(ModelCacheDirectory, "model-cache-records.json");
-        LogFilePath = Path.Combine(UserDataRoot, "trackdub.log");
-        SettingsPath = Path.Combine(UserDataRoot, "settings.json");
-        LayoutPath = Path.Combine(UserDataRoot, "avalonia-layout.json");
-        ToolCacheDirectory = Path.Combine(UserCacheRoot, "tools");
-        FfmpegToolCacheDirectory = Path.Combine(ToolCacheDirectory, "ffmpeg");
-        EngineCacheDirectory = Path.Combine(UserCacheRoot, "EngineCache");
-        ComponentCacheDirectory = Path.Combine(UserCacheRoot, "components");
+            : Path.Join(UserCacheRoot, "model-cache");
+        ModelCacheIndexPath = Path.Join(ModelCacheDirectory, "model-cache-records.json");
+        LogFilePath = Path.Join(UserDataRoot, "trackdub.log");
+        SettingsPath = Path.Join(UserDataRoot, "settings.json");
+        LayoutPath = Path.Join(UserDataRoot, "avalonia-layout.json");
+        ToolCacheDirectory = Path.Join(UserCacheRoot, "tools");
+        FfmpegToolCacheDirectory = Path.Join(ToolCacheDirectory, "ffmpeg");
+        EngineCacheDirectory = Path.Join(UserCacheRoot, "EngineCache");
+        ComponentCacheDirectory = Path.Join(UserCacheRoot, "components");
     }
 
     public string RootDirectory { get; }
@@ -72,7 +72,7 @@ public sealed class TrackdubStoragePaths : IAppStoragePaths
             return TrackdubStoragePathResolver.Resolve();
         }
 
-        string root = Path.Combine(NormalizeRequiredPath(localAppDataRoot, nameof(localAppDataRoot)), "Trackdub");
+        string root = Path.Join(NormalizeRequiredPath(localAppDataRoot, nameof(localAppDataRoot)), "Trackdub");
         return new TrackdubStorageOptions(root, root, SharedAssetRoot: null, IsPortable: false);
     }
 

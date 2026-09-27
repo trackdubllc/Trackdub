@@ -79,7 +79,7 @@ internal sealed class HuggingFaceCliDownloader
             return false;
         }
 
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.HfCli", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.HfCli", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
 
         var stderrLines = new List<string>();
@@ -111,7 +111,7 @@ internal sealed class HuggingFaceCliDownloader
                 return false;
             }
 
-            string downloadedPath = Path.Combine(tempDirectory, fileName);
+            string downloadedPath = Path.Join(tempDirectory, fileName);
             if (!File.Exists(downloadedPath))
             {
                 downloadedPath = Directory
@@ -348,7 +348,7 @@ internal sealed class HuggingFaceCliDownloader
         TimeSpan ttl,
         string? rootDirectory = null)
     {
-        string root = rootDirectory ?? Path.Combine(Path.GetTempPath(), "Trackdub.HfCli");
+        string root = rootDirectory ?? Path.Join(Path.GetTempPath(), "Trackdub.HfCli");
         if (!Directory.Exists(root))
         {
             return;
@@ -410,11 +410,11 @@ internal static class HuggingFaceCliLocator
 
         foreach (string directory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
-            yield return Path.Combine(directory, OperatingSystem.IsWindows() ? "hf.exe" : "hf");
+            yield return Path.Join(directory, OperatingSystem.IsWindows() ? "hf.exe" : "hf");
             if (OperatingSystem.IsWindows())
             {
-                yield return Path.Combine(directory, "hf.cmd");
-                yield return Path.Combine(directory, "hf");
+                yield return Path.Join(directory, "hf.cmd");
+                yield return Path.Join(directory, "hf");
             }
         }
     }

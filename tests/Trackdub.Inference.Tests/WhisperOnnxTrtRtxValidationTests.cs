@@ -28,8 +28,8 @@ public sealed class RequiresTrtRtxStagingFactAttribute : FactAttribute
         }
 
         // TrimStart keeps rooted segments from silently dropping the repo root
-        // (Path.Combine argument-drop guard); segments here are literals or enum-derived.
-        string stagingDirectory = Path.Combine(
+        // (Path.Join argument-drop guard); segments here are literals or enum-derived.
+        string stagingDirectory = Path.Join(
             repoRoot,
             NormalizeRelativeSegment("build"),
             NormalizeRelativeSegment($"whisper-{modelSize}-onnx-trtrtx-validated"));
@@ -98,7 +98,7 @@ public sealed class WhisperOnnxTrtRtxValidationTests
 
     private static async Task RunTrtRtxSilenceSmokeAsync(string modelSize, string modelId)
     {
-        string stagingDir = Path.Combine(FindRepoRoot(), "build", $"whisper-{modelSize}-onnx-trtrtx-validated");
+        string stagingDir = Path.Join(FindRepoRoot(), "build", $"whisper-{modelSize}-onnx-trtrtx-validated");
 
         string wavePath = CreateSilenceWaveFile(durationSeconds: 1.0);
         try
@@ -146,7 +146,7 @@ public sealed class WhisperOnnxTrtRtxValidationTests
         DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(current.FullName, "Trackdub.slnx")))
                 return current.FullName;
             current = current.Parent;
         }
@@ -161,7 +161,7 @@ public sealed class WhisperOnnxTrtRtxValidationTests
         int numSamples = (int)(sampleRate * durationSeconds);
         int dataSize = numSamples * channels * (bitsPerSample / 8);
 
-        string path = Path.Combine(Path.GetTempPath(), $"silence_{Guid.NewGuid():N}.wav");
+        string path = Path.Join(Path.GetTempPath(), $"silence_{Guid.NewGuid():N}.wav");
         using var stream = new FileStream(path, FileMode.Create, FileAccess.Write);
         using var writer = new BinaryWriter(stream);
 

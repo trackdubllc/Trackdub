@@ -96,7 +96,7 @@ public static class LibMpvLinuxBootstrap
         {
             foreach (string name in libNames)
             {
-                yield return Path.Combine(dir, name);
+                yield return Path.Join(dir, name);
             }
         }
 
@@ -106,8 +106,8 @@ public static class LibMpvLinuxBootstrap
         {
             foreach (string name in libNames)
             {
-                yield return Path.Combine(home, ".local", "lib", name);
-                yield return Path.Combine(home, ".local", "lib64", name);
+                yield return Path.Join(home, ".local", "lib", name);
+                yield return Path.Join(home, ".local", "lib64", name);
             }
         }
     }

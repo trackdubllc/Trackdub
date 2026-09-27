@@ -15,19 +15,19 @@ internal static class LatentSyncModelPaths
     public const string LandmarkModelAlias = "InsightFace/2d106det";
 
     public static string UNetPath(string modelRoot) =>
-        Path.Combine(modelRoot, "unet.onnx");
+        Path.Join(modelRoot, "unet.onnx");
 
     public static string VaeEncoderPath(string modelRoot) =>
-        Path.Combine(modelRoot, "vae_encoder.onnx");
+        Path.Join(modelRoot, "vae_encoder.onnx");
 
     public static string VaeDecoderPath(string modelRoot) =>
-        Path.Combine(modelRoot, "vae_decoder.onnx");
+        Path.Join(modelRoot, "vae_decoder.onnx");
 
     public static string WhisperEncoderPath(string modelRoot) =>
-        Path.Combine(modelRoot, "whisper_encoder.onnx");
+        Path.Join(modelRoot, "whisper_encoder.onnx");
 
     public static string ScfrdModelPath(string modelRoot) =>
-        Path.Combine(modelRoot, "scrfd_500m.onnx");
+        Path.Join(modelRoot, "scrfd_500m.onnx");
 
     public static bool AreLatentSyncFilesPresent(string modelRoot) =>
         Directory.Exists(modelRoot) &&
@@ -37,7 +37,7 @@ internal static class LatentSyncModelPaths
         File.Exists(WhisperEncoderPath(modelRoot));
 
     public static string Landmark2D106ModelPath(string modelRoot) =>
-        Path.Combine(modelRoot, "2d106det.onnx");
+        Path.Join(modelRoot, "2d106det.onnx");
 
     public static bool AreScfrdFilesPresent(string modelRoot) =>
         Directory.Exists(modelRoot) &&

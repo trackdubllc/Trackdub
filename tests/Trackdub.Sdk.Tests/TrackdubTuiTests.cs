@@ -26,7 +26,7 @@ namespace Trackdub.Sdk.Tests;
 
 public sealed class TrackdubTuiTests : IDisposable
 {
-    private readonly string _emptyModelDirectory = Path.Combine(
+    private readonly string _emptyModelDirectory = Path.Join(
         Path.GetTempPath(),
         "TrackdubTests",
         Guid.NewGuid().ToString("N"),
@@ -92,7 +92,7 @@ public sealed class TrackdubTuiTests : IDisposable
 
     private string CreateTempProjectDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;
@@ -251,7 +251,7 @@ public sealed class TrackdubTuiTests : IDisposable
         {
             PipelineHandler.PipelineSnapshot? snapshot = await PipelineHandler.TryLoadSnapshotAsync(
                 factory,
-                Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+                Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
                 CancellationToken.None);
 
             Assert.Null(snapshot);
@@ -262,9 +262,9 @@ public sealed class TrackdubTuiTests : IDisposable
     public async Task PipelineHandler_TryLoadSnapshot_ReturnsStageRowsFromProjectDatabase()
     {
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         using TrackdubSessionFactory factory = CreateFactory();
@@ -292,7 +292,7 @@ public sealed class TrackdubTuiTests : IDisposable
     public void TuiLogTail_ReadLastLines_ReturnsFinalLinesOnly()
     {
         string tempDir = CreateTempProjectDir();
-        string logPath = Path.Combine(tempDir, "trackdub.log");
+        string logPath = Path.Join(tempDir, "trackdub.log");
         File.WriteAllLines(logPath, Enumerable.Range(1, 50).Select(index => $"line-{index}"));
 
         IReadOnlyList<string> tail = TuiLogTail.ReadLastLines(logPath, lineCount: 5);
@@ -306,9 +306,9 @@ public sealed class TrackdubTuiTests : IDisposable
     public async Task ProjectHandler_TryLoadDetail_ReturnsArtifactRowsForProject()
     {
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         using TrackdubSessionFactory factory = CreateFactory();

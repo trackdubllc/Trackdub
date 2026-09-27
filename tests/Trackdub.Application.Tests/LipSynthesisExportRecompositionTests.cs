@@ -16,7 +16,7 @@ public sealed class LipSynthesisExportRecompositionTests
     [Fact]
     public void TryBuildResolvedPlan_maps_latest_stage_run_takes_to_speaker_turns()
     {
-        var artifactStore = new FakeArtifactStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var artifactStore = new FakeArtifactStore(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
         Guid projectId = Guid.NewGuid();
         Guid mediaAssetId = Guid.NewGuid();
         Guid turnId = Guid.NewGuid();
@@ -79,7 +79,7 @@ public sealed class LipSynthesisExportRecompositionTests
     [Fact]
     public void BuildExportCompositingWarning_returns_null_when_plan_is_composable()
     {
-        var artifactStore = new FakeArtifactStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var artifactStore = new FakeArtifactStore(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
         Guid projectId = Guid.NewGuid();
         Guid mediaAssetId = Guid.NewGuid();
         Guid turnId = Guid.NewGuid();

@@ -126,7 +126,7 @@ public sealed class LocalModelVariantRegistrar(LocalModelCacheRecordStore record
         }
 
         string root = Path.GetFullPath(rootPath);
-        string candidate = Path.GetFullPath(Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
+        string candidate = Path.GetFullPath(Path.Join(root, normalized.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsStrictSubpathOrEqual(candidate, root))
         {
             throw new InvalidOperationException($"Optimized variant {label} path is invalid: {relativePath}.");

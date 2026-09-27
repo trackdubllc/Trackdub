@@ -12,7 +12,7 @@ public sealed class GracefulDegradationTests : IDisposable
 
     public GracefulDegradationTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"trackdub-degradation-{Guid.NewGuid()}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"trackdub-degradation-{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempDir);
     }
 

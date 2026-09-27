@@ -10,7 +10,7 @@ public sealed class SqliteTranscriptRepositoryTests
     [Fact]
     public async Task Repository_round_trips_current_revision_segments_and_stage_runs()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Transcript.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Transcript.trackdub");
         try
         {
             var database = new SqliteProjectDatabase(projectRoot);

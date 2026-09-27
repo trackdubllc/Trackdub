@@ -49,9 +49,9 @@ internal sealed class WhisperTokenizerDecoder
 
     public static async Task<WhisperTokenizerDecoder> LoadAsync(string modelRootPath)
     {
-        string tokenizerConfigPath = Path.Combine(modelRootPath, "tokenizer_config.json");
-        string vocabPath = Path.Combine(modelRootPath, "vocab.json");
-        string configPath = Path.Combine(modelRootPath, "config.json");
+        string tokenizerConfigPath = Path.Join(modelRootPath, "tokenizer_config.json");
+        string vocabPath = Path.Join(modelRootPath, "vocab.json");
+        string configPath = Path.Join(modelRootPath, "config.json");
 
         if (!File.Exists(vocabPath))
         {

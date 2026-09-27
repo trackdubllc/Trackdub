@@ -13,7 +13,7 @@ public sealed class ProjectMediaIngestServiceTests
     public async Task CreateAsync_registers_media_and_artifacts()
     {
         var fileSystemProbe = new FakeFileSystemProbe();
-        string sourcePath = Path.Combine("virtual-media", "sample.mp4");
+        string sourcePath = Path.Join("virtual-media", "sample.mp4");
         fileSystemProbe.SeedExistingFile(sourcePath);
 
         var projectRepository = new FakeProjectRepository();
@@ -48,7 +48,7 @@ public sealed class ProjectMediaIngestServiceTests
     public async Task CreateAsync_accepts_seeded_source_path_without_real_file()
     {
         var fileSystemProbe = new FakeFileSystemProbe();
-        string sourcePath = Path.Combine("virtual-media", "sample.mp4");
+        string sourcePath = Path.Join("virtual-media", "sample.mp4");
         fileSystemProbe.SeedExistingFile(sourcePath);
 
         var service = new ProjectMediaIngestService(
@@ -72,7 +72,7 @@ public sealed class ProjectMediaIngestServiceTests
     public async Task CreateMediaSpineAsync_registers_source_media_without_heavy_ingest()
     {
         var fileSystemProbe = new FakeFileSystemProbe();
-        string sourcePath = Path.Combine("virtual-media", "sample.mp4");
+        string sourcePath = Path.Join("virtual-media", "sample.mp4");
         string fullSourcePath = fileSystemProbe.GetFullPath(sourcePath);
         fileSystemProbe.SeedExistingFile(sourcePath);
 
@@ -111,7 +111,7 @@ public sealed class ProjectMediaIngestServiceTests
     public async Task OpenAsync_reopens_media_spine_project_with_source_reference_intact()
     {
         var fileSystemProbe = new FakeFileSystemProbe();
-        string sourcePath = Path.Combine("virtual-media", "sample.mp4");
+        string sourcePath = Path.Join("virtual-media", "sample.mp4");
         string fullSourcePath = fileSystemProbe.GetFullPath(sourcePath);
         fileSystemProbe.SeedExistingFile(sourcePath);
 
@@ -181,7 +181,7 @@ public sealed class ProjectMediaIngestServiceTests
     public async Task RelocateSourceAsync_updates_source_reference_and_media_asset_path()
     {
         var fileSystemProbe = new FakeFileSystemProbe();
-        string relocatedSourcePath = Path.Combine("virtual-media", "relocated.mp4");
+        string relocatedSourcePath = Path.Join("virtual-media", "relocated.mp4");
         string fullRelocatedSourcePath = fileSystemProbe.GetFullPath(relocatedSourcePath);
         fileSystemProbe.SeedExistingFile(relocatedSourcePath);
 
@@ -257,7 +257,7 @@ public sealed class ProjectMediaIngestServiceTests
     public async Task EnsureNormalizedAudioAsync_extracts_when_media_spine_has_no_normalized_artifact()
     {
         var fileSystemProbe = new FakeFileSystemProbe();
-        string sourcePath = Path.Combine("virtual-media", "sample.mp4");
+        string sourcePath = Path.Join("virtual-media", "sample.mp4");
         string fullSourcePath = fileSystemProbe.GetFullPath(sourcePath);
         fileSystemProbe.SeedExistingFile(sourcePath);
 
@@ -308,7 +308,7 @@ public sealed class ProjectMediaIngestServiceTests
     public async Task EnsureNormalizedAudioAsync_returns_existing_without_re_extracting()
     {
         var fileSystemProbe = new FakeFileSystemProbe();
-        string sourcePath = Path.Combine("virtual-media", "sample.mp4");
+        string sourcePath = Path.Join("virtual-media", "sample.mp4");
         fileSystemProbe.SeedExistingFile(sourcePath);
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -362,7 +362,7 @@ public sealed class ProjectMediaIngestServiceTests
     public async Task EnsureStereoNormalizedAudioAsync_refreshes_mono_artifact_when_source_matches()
     {
         var fileSystemProbe = new FakeFileSystemProbe();
-        string sourcePath = Path.Combine("virtual-media", "sample.mp4");
+        string sourcePath = Path.Join("virtual-media", "sample.mp4");
         string fullSourcePath = fileSystemProbe.GetFullPath(sourcePath);
         fileSystemProbe.SeedExistingFile(sourcePath);
 
@@ -511,7 +511,7 @@ public sealed class ProjectMediaIngestServiceTests
         public Task EnsureLayoutAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public ArtifactWriteHandle CreateWriteHandle(string relativePath) =>
-            new(relativePath, Path.Combine("project", relativePath), Path.Combine("project", "temp", Path.GetFileName(relativePath)));
+            new(relativePath, Path.Join("project", relativePath), Path.Join("project", "temp", Path.GetFileName(relativePath)));
 
         public Task CommitAsync(ArtifactWriteHandle handle, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -532,7 +532,7 @@ public sealed class ProjectMediaIngestServiceTests
             return Task.FromResult<T?>(default);
         }
 
-        public string GetPath(string relativePath) => Path.Combine("project", relativePath);
+        public string GetPath(string relativePath) => Path.Join("project", relativePath);
 
         public bool Exists(string relativePath) => reads.ContainsKey(relativePath);
 

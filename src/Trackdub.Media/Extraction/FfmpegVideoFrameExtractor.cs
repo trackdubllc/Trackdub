@@ -39,7 +39,7 @@ public sealed class FfmpegVideoFrameExtractor : IVideoFrameExtractor, IVideoFram
         double frameRate = await ProbeFrameRateAsync(ffmpegPath, videoPath, cancellationToken)
             .ConfigureAwait(false);
 
-        string framePattern = Path.Combine(outputDirectory, "frame_%06d.rgba");
+        string framePattern = Path.Join(outputDirectory, "frame_%06d.rgba");
 
         // Extract raw RGBA frames using image2 muxer + rawvideo codec.
         // image2 writes one file per frame; rawvideo emits raw pixel data with no container.
@@ -102,7 +102,7 @@ public sealed class FfmpegVideoFrameExtractor : IVideoFrameExtractor, IVideoFram
         }
 
         string ffmpegPath = _toolResolver.ResolveFfmpegPath();
-        string framePattern = Path.Combine(framesDirectory, "frame_%06d.rgba");
+        string framePattern = Path.Join(framesDirectory, "frame_%06d.rgba");
 
         // image2 demuxer reads the numbered file sequence; rawvideo decoder reads raw RGBA pixel data.
         // Dimension and pixel format are required for rawvideo to interpret each file correctly.

@@ -14,7 +14,7 @@ public sealed class TtsDubPreviewCoordinatorTests : IDisposable
 
     public TtsDubPreviewCoordinatorTests()
     {
-        tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        tempDir = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
         transport = new FakeAudioPreviewTransport();
         store = new FakeArtifactStore(tempDir);

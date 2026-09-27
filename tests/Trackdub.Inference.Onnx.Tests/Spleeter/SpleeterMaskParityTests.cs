@@ -96,7 +96,7 @@ public sealed class SpleeterMaskParityTests
     public void ResolveModelPath_joins_relative_known_file_names_under_model_root()
     {
         // Independent oracle: literal file names + directory separator.
-        string root = Path.Combine("models", "spleeter");
+        string root = Path.Join("models", "spleeter");
         string sep = Path.DirectorySeparatorChar.ToString();
         string vocals = SpleeterModelConstants.ResolveModelPath(root, "vocals.onnx");
         string acc = SpleeterModelConstants.ResolveModelPath(root, "accompaniment.onnx");

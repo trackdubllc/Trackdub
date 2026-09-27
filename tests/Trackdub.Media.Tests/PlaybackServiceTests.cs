@@ -11,7 +11,7 @@ public sealed class PlaybackCapabilityProbeTests
     {
         var probe = new PlaybackCapabilityProbe();
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mp4"),
+            Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mov,mp4,m4a,3gp,3g2,mj2",
                 "QuickTime / MOV",
@@ -33,7 +33,7 @@ public sealed class PlaybackCapabilityProbeTests
     {
         var probe = new PlaybackCapabilityProbe();
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mkv"),
+            Path.Join("virtual-media", "sample.mkv"),
             new MediaProbeSnapshot(
                 "matroska,webm",
                 "Matroska / WebM",
@@ -63,7 +63,7 @@ public sealed class PlaybackServiceTests
             new PlaybackCapabilityProbe(),
             new FakePlaybackBackendFactory().Add(PlaybackBackendKind.MediaFoundation, backend));
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mp4"),
+            Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mp4",
                 "MP4",
@@ -92,7 +92,7 @@ public sealed class PlaybackServiceTests
             new PlaybackCapabilityProbe(),
             new FakePlaybackBackendFactory().Add(PlaybackBackendKind.MediaFoundation, backend));
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mp4"),
+            Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mp4",
                 "MP4",
@@ -117,7 +117,7 @@ public sealed class PlaybackServiceTests
     {
         var service = new PlaybackService(new PlaybackCapabilityProbe(), new FakePlaybackBackendFactory());
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mkv"),
+            Path.Join("virtual-media", "sample.mkv"),
             new MediaProbeSnapshot(
                 "matroska,webm",
                 "Matroska / WebM",
@@ -145,7 +145,7 @@ public sealed class PlaybackServiceTests
             new PlaybackCapabilityProbe(),
             new FakePlaybackBackendFactory().Add(PlaybackBackendKind.MediaFoundation, backend));
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mp4"),
+            Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mp4",
                 "MP4",
@@ -250,7 +250,7 @@ public sealed class PlaybackServiceTests
             new PlaybackCapabilityProbe(),
             new FakePlaybackBackendFactory().Add(PlaybackBackendKind.MediaFoundation, backend));
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mp4"),
+            Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mp4",
                 "MP4",
@@ -275,7 +275,7 @@ public sealed class PlaybackServiceTests
             new PlaybackCapabilityProbe(),
             new FakePlaybackBackendFactory().Add(PlaybackBackendKind.MediaFoundation, backend));
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mp4"),
+            Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mp4",
                 "MP4",
@@ -430,7 +430,7 @@ public sealed class PlaybackServiceTests
             new PlaybackCapabilityProbe(),
             new FakePlaybackBackendFactory().Add(PlaybackBackendKind.MediaFoundation, backend));
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mp4"),
+            Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mp4",
                 "MP4",
@@ -467,7 +467,7 @@ public sealed class PlaybackServiceTests
             new PlaybackCapabilityProbe(),
             new FakePlaybackBackendFactory().Add(PlaybackBackendKind.MediaFoundation, backend));
         var source = new MediaSourceDescriptor(
-            Path.Combine("virtual-media", "sample.mp4"),
+            Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mp4",
                 "MP4",

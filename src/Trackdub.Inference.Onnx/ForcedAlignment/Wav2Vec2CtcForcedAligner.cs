@@ -68,7 +68,7 @@ public sealed class Wav2Vec2CtcForcedAligner : IForcedAlignerAdapter, IDisposabl
     {
         ArgumentNullException.ThrowIfNull(modelRootPath);
         _modelRootPath = modelRootPath;
-        _vocabPath = modelRootPath.Length > 0 ? Path.Combine(modelRootPath, VocabRelPath) : string.Empty;
+        _vocabPath = modelRootPath.Length > 0 ? Path.Join(modelRootPath, VocabRelPath) : string.Empty;
         _phonemizer = phonemizer;
     }
 
@@ -99,11 +99,11 @@ public sealed class Wav2Vec2CtcForcedAligner : IForcedAlignerAdapter, IDisposabl
         if (string.IsNullOrEmpty(modelRootPath))
             return string.Empty;
 
-        string int8 = Path.Combine(modelRootPath, OnnxSubdir, Int8OnnxFileName);
+        string int8 = Path.Join(modelRootPath, OnnxSubdir, Int8OnnxFileName);
         if (File.Exists(int8))
             return int8;
 
-        string fp16 = Path.Combine(modelRootPath, OnnxSubdir, Fp16OnnxFileName);
+        string fp16 = Path.Join(modelRootPath, OnnxSubdir, Fp16OnnxFileName);
         if (File.Exists(fp16))
             return fp16;
 

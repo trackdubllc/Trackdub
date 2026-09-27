@@ -637,7 +637,7 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
 
     private string CreateTempProjectDir()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;
@@ -646,9 +646,9 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
     private async Task<string> CreateOpenProjectAsync(TrackdubSessionFactory factory)
     {
         string tempDir = CreateTempProjectDir();
-        string projectDir = Path.Combine(tempDir, "sample.trackdub");
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
         Directory.CreateDirectory(projectDir);
-        string mediaPath = Path.Combine(tempDir, "video.mp4");
+        string mediaPath = Path.Join(tempDir, "video.mp4");
         await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
 
         await using TrackdubSession session = factory.CreateSession(projectDir);

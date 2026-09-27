@@ -85,7 +85,7 @@ public static class TensorRtRtxProviderConstants
         + "No CUDA Toolkit is required: the CUDA runtime is statically linked into the TensorRT-RTX 1.6 bundle.";
 
     public static string GetDefaultInstallDirectory(string userDataRoot, string runtimeIdentifier) =>
-        Path.Combine(
+        Path.Join(
             Path.GetFullPath(Environment.ExpandEnvironmentVariables(userDataRoot)),
             "Providers",
             "trt-rtx",

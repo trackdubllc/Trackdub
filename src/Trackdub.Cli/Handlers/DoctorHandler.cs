@@ -163,7 +163,7 @@ internal static class DoctorHandler
         try
         {
             Directory.CreateDirectory(cacheDirectory);
-            string probePath = Path.Combine(cacheDirectory, $".trackdub-write-probe-{Guid.NewGuid():N}");
+            string probePath = Path.Join(cacheDirectory, $".trackdub-write-probe-{Guid.NewGuid():N}");
             File.WriteAllText(probePath, "ok");
             File.Delete(probePath);
 
@@ -325,7 +325,7 @@ internal static class DoctorHandler
     {
         string baseDirectory = AppContext.BaseDirectory;
         string runtimeIdentifier = ResolveNativeRuntimeIdentifier();
-        string nativeDirectory = Path.Combine(baseDirectory, "native", runtimeIdentifier);
+        string nativeDirectory = Path.Join(baseDirectory, "native", runtimeIdentifier);
 
         string[] expectedNames = OperatingSystem.IsWindows()
             ? ["libmpv-2.dll", "libmpv-1.dll", "mpv-2.dll", "mpv-1.dll"]
@@ -333,7 +333,7 @@ internal static class DoctorHandler
                 ? ["libmpv.2.dylib", "libmpv.1.dylib", "libmpv.dylib"]
                 : ["libmpv.so.2", "libmpv.so.1", "libmpv.so"];
 
-        bool found = expectedNames.Any(name => File.Exists(Path.Combine(nativeDirectory, name)));
+        bool found = expectedNames.Any(name => File.Exists(Path.Join(nativeDirectory, name)));
         if (found)
         {
             return new DoctorCheckRow

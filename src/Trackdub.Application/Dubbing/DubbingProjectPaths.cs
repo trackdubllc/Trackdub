@@ -21,6 +21,6 @@ public static class DubbingProjectPaths
             return false;
         }
 
-        return File.Exists(Path.Combine(projectRootPath, ProjectArtifactPaths.DatabaseFileName));
+        return File.Exists(Path.Join(projectRootPath, ProjectArtifactPaths.DatabaseFileName));
     }
 }

@@ -8,7 +8,7 @@ namespace Trackdub.Infrastructure.Tests;
 
 public sealed class DiagnosticsCollectorTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+    private readonly string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
 
     [Fact]
     public async Task CollectAsync_marks_missing_model_cache_roots_as_missing()
@@ -17,7 +17,7 @@ public sealed class DiagnosticsCollectorTests : IDisposable
         var store = new LocalModelCacheRecordStore(storagePaths);
         await store.SaveAsync(
             [
-                new LocalModelCacheRecord("missing-model", Path.Combine(tempRoot, "missing-model"), "main", "sha", DateTimeOffset.UtcNow)
+                new LocalModelCacheRecord("missing-model", Path.Join(tempRoot, "missing-model"), "main", "sha", DateTimeOffset.UtcNow)
             ],
             TestContext.Current.CancellationToken);
 
@@ -32,7 +32,7 @@ public sealed class DiagnosticsCollectorTests : IDisposable
     public async Task CollectAsync_marks_empty_model_cache_directories_as_corrupt()
     {
         var storagePaths = new TrackdubStoragePaths(tempRoot);
-        string modelRoot = Path.Combine(tempRoot, "empty-model");
+        string modelRoot = Path.Join(tempRoot, "empty-model");
         Directory.CreateDirectory(modelRoot);
         var store = new LocalModelCacheRecordStore(storagePaths);
         await store.SaveAsync(
@@ -55,9 +55,9 @@ public sealed class DiagnosticsCollectorTests : IDisposable
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         Directory.CreateDirectory(Path.GetDirectoryName(storagePaths.LogFilePath)!);
         File.WriteAllText(storagePaths.LogFilePath, "active");
-        File.WriteAllText(Path.Combine(Path.GetDirectoryName(storagePaths.LogFilePath)!, "trackdub.10.log"), "archive 10");
-        File.WriteAllText(Path.Combine(Path.GetDirectoryName(storagePaths.LogFilePath)!, "trackdub.2.log"), "archive 2");
-        File.WriteAllText(Path.Combine(Path.GetDirectoryName(storagePaths.LogFilePath)!, "trackdub.1.log"), "archive 1");
+        File.WriteAllText(Path.Join(Path.GetDirectoryName(storagePaths.LogFilePath)!, "trackdub.10.log"), "archive 10");
+        File.WriteAllText(Path.Join(Path.GetDirectoryName(storagePaths.LogFilePath)!, "trackdub.2.log"), "archive 2");
+        File.WriteAllText(Path.Join(Path.GetDirectoryName(storagePaths.LogFilePath)!, "trackdub.1.log"), "archive 1");
         var store = new LocalModelCacheRecordStore(storagePaths);
 
         DiagnosticsSnapshot snapshot = await new DiagnosticsCollector(storagePaths, store).CollectAsync(TestContext.Current.CancellationToken);

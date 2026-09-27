@@ -347,9 +347,9 @@ public sealed class ParakeetTdtOnnxAudioTranscriptionEngine(
             ?? throw new InvalidOperationException("Parakeet-TDT model root path could not be resolved.");
         var paths = new ParakeetTdtModelPaths(
             encoderModelPath,
-            Path.Combine(root, "decoder_joint-model.onnx"),
-            Path.Combine(root, "nemo128.onnx"),
-            Path.Combine(root, "vocab.txt"));
+            Path.Join(root, "decoder_joint-model.onnx"),
+            Path.Join(root, "nemo128.onnx"),
+            Path.Join(root, "vocab.txt"));
         foreach (string path in new[] { paths.DecoderJointPath, paths.PreprocessorPath, paths.VocabPath })
         {
             if (!File.Exists(path))

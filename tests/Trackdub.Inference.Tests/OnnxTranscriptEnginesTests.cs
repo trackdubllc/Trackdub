@@ -272,7 +272,7 @@ public sealed class OnnxTranscriptEnginesTests
     [RequiresBundledModelFact("whisper-tiny-genai/tokenizer.json")]
     public async Task WhisperGenAiAudioTranscriptionEngine_LoadsLanguageTokenIdsFromBundledTokenizer()
     {
-        string modelRoot = Path.Combine(TestRepoRootResolver.FindRepoRoot(), "models", "whisper-tiny-genai");
+        string modelRoot = Path.Join(TestRepoRootResolver.FindRepoRoot(), "models", "whisper-tiny-genai");
 
         IReadOnlyDictionary<int, string> languageTokensById =
             await WhisperGenAiAudioTranscriptionEngine.LoadLanguageTokenIdsAsync(modelRoot);
@@ -413,7 +413,7 @@ public sealed class OnnxTranscriptEnginesTests
     [Fact]
     public async Task NemotronAsrLanguagePrompts_LoadsBundlePromptDictionary()
     {
-        string configPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        string configPath = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
         try
         {
             await File.WriteAllTextAsync(
@@ -451,7 +451,7 @@ public sealed class OnnxTranscriptEnginesTests
     [Fact]
     public async Task NemotronAsrLanguagePrompts_LoadsAutoPromptIndexFromDictionary()
     {
-        string configPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+        string configPath = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
         try
         {
             await File.WriteAllTextAsync(
@@ -898,9 +898,9 @@ public sealed class OnnxTranscriptEnginesTests
         string tempRoot = Directory.CreateTempSubdirectory("trackdub-madlad-plan-entry-").FullName;
         try
         {
-            string defaultEncoderPath = Path.Combine(tempRoot, "encoder_model.onnx");
-            string selectedRoot = Path.Combine(tempRoot, "optimized", "olive-cpu-fp32");
-            string selectedEncoderPath = Path.Combine(selectedRoot, "encoder_model_int8.onnx");
+            string defaultEncoderPath = Path.Join(tempRoot, "encoder_model.onnx");
+            string selectedRoot = Path.Join(tempRoot, "optimized", "olive-cpu-fp32");
+            string selectedEncoderPath = Path.Join(selectedRoot, "encoder_model_int8.onnx");
             Directory.CreateDirectory(selectedRoot);
             File.WriteAllBytes(defaultEncoderPath, [1]);
             File.WriteAllBytes(selectedEncoderPath, [2]);
@@ -950,7 +950,7 @@ public sealed class OnnxTranscriptEnginesTests
         int sampleCount = Math.Max(1, (int)Math.Round(durationSeconds * sampleRate));
         int blockAlign = channelCount * (bitsPerSample / 8);
         int dataLength = sampleCount * blockAlign;
-        string path = Path.Combine(Path.GetTempPath(), $"trackdub-onnx-silence-{Guid.NewGuid():N}.wav");
+        string path = Path.Join(Path.GetTempPath(), $"trackdub-onnx-silence-{Guid.NewGuid():N}.wav");
 
         byte[] buffer = new byte[44 + dataLength];
         WriteAscii(buffer, 0, "RIFF");
@@ -992,7 +992,7 @@ public sealed class OnnxTranscriptEnginesTests
 
     private static string RequireFixtureFile(string fixtureRoot, string relativePath)
     {
-        string fullPath = Path.Combine(fixtureRoot, relativePath);
+        string fullPath = Path.Join(fixtureRoot, relativePath);
         if (!File.Exists(fullPath))
         {
             throw new FileNotFoundException($"Fixture file '{relativePath}' was not found under '{fixtureRoot}'.", fullPath);
@@ -1013,7 +1013,7 @@ public sealed class OnnxTranscriptEnginesTests
                 return;
             }
 
-            string requiredPath = Path.Combine(fixtureRoot, requiredRelativePath);
+            string requiredPath = Path.Join(fixtureRoot, requiredRelativePath);
             if (!File.Exists(requiredPath))
             {
                 Skip = $"Fixture file '{requiredRelativePath}' was not found under '{fixtureRoot}'.";

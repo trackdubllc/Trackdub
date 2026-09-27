@@ -19,9 +19,9 @@ namespace Trackdub.LocalizationEval;
 internal static class Program
 {
     private static readonly string RepoRoot = ResolveRepoRoot();
-    private static readonly string MasterResxPath = Path.Combine(RepoRoot, "src", "Trackdub.App.Avalonia", "Resources", "App.resx");
-    private static readonly string GlossaryPath = Path.Combine(RepoRoot, "tools", "localization", "glossary.md");
-    private static readonly string OutputDir = Path.Combine(RepoRoot, "tools", "localization", "mt-eval", "output");
+    private static readonly string MasterResxPath = Path.Join(RepoRoot, "src", "Trackdub.App.Avalonia", "Resources", "App.resx");
+    private static readonly string GlossaryPath = Path.Join(RepoRoot, "tools", "localization", "glossary.md");
+    private static readonly string OutputDir = Path.Join(RepoRoot, "tools", "localization", "mt-eval", "output");
 
     // Pilot locales agreed with Tony: es (Latin/easy), ja + zh (CJK), ar (RTL).
     private static readonly string[] PilotLanguages = ["es", "ja", "zh", "ar"];
@@ -190,7 +190,7 @@ internal static class Program
             "zh" => "zh-hans",
             _ => lang
         };
-        string path = Path.Combine(RepoRoot, "src", "Trackdub.App.Avalonia", "Resources", $"App.{suffix}.resx");
+        string path = Path.Join(RepoRoot, "src", "Trackdub.App.Avalonia", "Resources", $"App.{suffix}.resx");
         if (!File.Exists(path))
         {
             return new Dictionary<string, string>(StringComparer.Ordinal);
@@ -260,7 +260,7 @@ internal static class Program
                 new XElement("value", values[i])));
         }
 
-        string outPath = Path.Combine(OutputDir, $"App.{lang}.{variant}.resx");
+        string outPath = Path.Join(OutputDir, $"App.{lang}.{variant}.resx");
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), root);
         using var writer = new StreamWriter(outPath, false, new UTF8Encoding(false));
         doc.Save(writer);
@@ -268,7 +268,7 @@ internal static class Program
 
     private static void WriteCompareJson(string lang, List<CompareRow> rows)
     {
-        string outPath = Path.Combine(OutputDir, $"compare.{lang}.json");
+        string outPath = Path.Join(OutputDir, $"compare.{lang}.json");
         string json = JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(outPath, json, new UTF8Encoding(false));
         Console.WriteLine($"[{lang}] wrote {outPath}");
@@ -278,7 +278,7 @@ internal static class Program
     {
         string dir = AppContext.BaseDirectory;
         var current = new DirectoryInfo(dir);
-        while (current is not null && !File.Exists(Path.Combine(current.FullName, "Trackdub.sln")))
+        while (current is not null && !File.Exists(Path.Join(current.FullName, "Trackdub.sln")))
         {
             current = current.Parent;
         }

@@ -72,7 +72,7 @@ public static class ProjectRootNameResolver
             string candidateName = copyNumber == 1
                 ? baseName
                 : $"{baseName} #{copyNumber}";
-            string candidatePath = Path.Combine(directory, $"{candidateName}.trackdub");
+            string candidatePath = Path.Join(directory, $"{candidateName}.trackdub");
             if (!ProjectPathIsTaken(candidatePath))
             {
                 return new ProjectRootNameCandidate(candidateName, candidatePath);

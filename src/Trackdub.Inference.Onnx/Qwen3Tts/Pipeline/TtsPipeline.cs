@@ -31,15 +31,15 @@ public sealed class TtsPipeline : ITtsPipeline
     /// <param name="variant">Model size variant. Used to determine feature support (e.g., instruction control).</param>
     public TtsPipeline(string modelDir, Func<SessionOptions>? sessionOptionsFactory = null, Func<SessionOptions>? vocoderSessionOptionsFactory = null, QwenModelVariant variant = QwenModelVariant.Qwen06B)
     {
-        var tokenizerDir = Path.Combine(modelDir, "tokenizer");
-        var embeddingsDir = Path.Combine(modelDir, "embeddings");
-        var configPath = Path.Combine(embeddingsDir, "config.json");
+        var tokenizerDir = Path.Join(modelDir, "tokenizer");
+        var embeddingsDir = Path.Join(modelDir, "embeddings");
+        var configPath = Path.Join(embeddingsDir, "config.json");
 
         _variant = variant;
         _tokenizer = new TextTokenizer(tokenizerDir);
         _embeddings = new EmbeddingStore(embeddingsDir, configPath);
         _languageModel = new LanguageModel(modelDir, _embeddings, sessionOptionsFactory);
-        _vocoder = new Vocoder(Path.Combine(modelDir, "vocoder.onnx"), vocoderSessionOptionsFactory ?? sessionOptionsFactory);
+        _vocoder = new Vocoder(Path.Join(modelDir, "vocoder.onnx"), vocoderSessionOptionsFactory ?? sessionOptionsFactory);
     }
 
     /// <summary>Available speaker names from the model.</summary>

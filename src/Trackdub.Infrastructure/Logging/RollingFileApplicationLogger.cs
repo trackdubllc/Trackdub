@@ -458,6 +458,6 @@ public sealed class RollingFileApplicationLogger : IApplicationLogger, IDisposab
         string archiveFileName = string.Concat(fileNameWithoutExtension, ".", archiveIndex.ToString(CultureInfo.InvariantCulture), extension);
         return string.IsNullOrWhiteSpace(directory)
             ? archiveFileName
-            : Path.Combine(directory, archiveFileName);
+            : Path.Join(directory, archiveFileName);
     }
 }

@@ -53,7 +53,7 @@ public sealed class FileSystemArtifactStore : IArtifactStore
         string finalPath = GetPath(normalizedRelativePath);
         string extension = Path.GetExtension(finalPath);
         string tempFileName = $"{Path.GetFileNameWithoutExtension(finalPath)}.{Guid.NewGuid():N}.tmp{extension}";
-        string tempPath = Path.Combine(GetPath("temp"), tempFileName);
+        string tempPath = Path.Join(GetPath("temp"), tempFileName);
         Directory.CreateDirectory(Path.GetDirectoryName(tempPath)!);
 
         logger.LogDebug($"Created write handle: relative='{relativePath}' temp='{tempFileName}'");
@@ -153,7 +153,7 @@ public sealed class FileSystemArtifactStore : IArtifactStore
     public string GetPath(string relativePath)
     {
         string normalizedRelativePath = NormalizeRelativePath(relativePath);
-        return Path.GetFullPath(Path.Combine(projectRootPath, normalizedRelativePath));
+        return Path.GetFullPath(Path.Join(projectRootPath, normalizedRelativePath));
     }
 
     public bool Exists(string relativePath) => File.Exists(GetPath(relativePath));
@@ -202,7 +202,7 @@ public sealed class FileSystemArtifactStore : IArtifactStore
             }
         }
 
-        return Path.Combine(segments);
+        return Path.Join(segments);
     }
 
     private static bool IsWindowsReservedDeviceSegment(string segment)

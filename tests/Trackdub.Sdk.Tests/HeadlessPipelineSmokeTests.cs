@@ -46,7 +46,7 @@ public sealed class HeadlessPipelineSmokeTests : IAsyncLifetime, IDisposable
 
     public Task InitializeAsync()
     {
-        _tempProjectDir = Path.Combine(
+        _tempProjectDir = Path.Join(
             Path.GetTempPath(),
             $"trackdub-smoke-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempProjectDir);
@@ -252,7 +252,7 @@ public sealed class HeadlessPipelineSmokeTests : IAsyncLifetime, IDisposable
 
         // Verify exported file exists with non-zero size
         Assert.NotEmpty(exportOutcome.ArtifactPaths);
-        string exportedFilePath = Path.Combine(session.ProjectRootPath, exportOutcome.ArtifactPaths[0]);
+        string exportedFilePath = Path.Join(session.ProjectRootPath, exportOutcome.ArtifactPaths[0]);
         Assert.True(File.Exists(exportedFilePath),
             $"Exported dub file not found at: {exportedFilePath}");
         var exportFileInfo = new FileInfo(exportedFilePath);
@@ -282,7 +282,7 @@ public sealed class HeadlessPipelineSmokeTests : IAsyncLifetime, IDisposable
                 .OrderBy(s => s.SegmentIndex)
                 .Select(s => s.Text));
 
-        string verifyTempDir = Path.Combine(
+        string verifyTempDir = Path.Join(
             Path.GetTempPath(),
             $"trackdub-smoke-verify-{Guid.NewGuid():N}");
         Directory.CreateDirectory(verifyTempDir);
@@ -514,7 +514,7 @@ public sealed class HeadlessPipelineSmokeTests : IAsyncLifetime, IDisposable
         Assert.Equal(StageStatus.Succeeded, exportOutcome.Status);
 
         Assert.NotEmpty(exportOutcome.ArtifactPaths);
-        string exportedFilePath = Path.Combine(session.ProjectRootPath, exportOutcome.ArtifactPaths[0]);
+        string exportedFilePath = Path.Join(session.ProjectRootPath, exportOutcome.ArtifactPaths[0]);
         Assert.True(File.Exists(exportedFilePath),
             $"Exported dub file not found at: {exportedFilePath}");
         var exportFileInfo = new FileInfo(exportedFilePath);
@@ -537,14 +537,14 @@ public sealed class HeadlessPipelineSmokeTests : IAsyncLifetime, IDisposable
     private static string RetainSuccessfulExport(string sourceMediaPath, string exportedFilePath)
     {
         string outputRoot = Environment.GetEnvironmentVariable(OutputDirectoryEnvironmentVariable)
-            ?? Path.Combine(FindRepositoryRoot(), "TestResults", "HeadlessPipelineSmoke");
+            ?? Path.Join(FindRepositoryRoot(), "TestResults", "HeadlessPipelineSmoke");
         string sourceName = Path.GetFileNameWithoutExtension(sourceMediaPath);
-        string runDirectory = Path.Combine(
+        string runDirectory = Path.Join(
             outputRoot,
             $"{sourceName}-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(runDirectory);
 
-        string retainedExportPath = Path.Combine(runDirectory, Path.GetFileName(exportedFilePath));
+        string retainedExportPath = Path.Join(runDirectory, Path.GetFileName(exportedFilePath));
         File.Copy(exportedFilePath, retainedExportPath, overwrite: false);
 
         return retainedExportPath;
@@ -556,7 +556,7 @@ public sealed class HeadlessPipelineSmokeTests : IAsyncLifetime, IDisposable
              directory is not null;
              directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "Trackdub.slnx")))
             {
                 return directory.FullName;
             }

@@ -113,9 +113,9 @@ public sealed class OverlapRescueStageHandler(
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 OverlapRegion region = request.Regions[regionIndex];
-                string regionTempPath = Path.Combine(tempDirectory, $"region-{regionIndex}.wav");
-                string candidate0TempPath = Path.Combine(tempDirectory, $"region-{regionIndex}-candidate-0.wav");
-                string candidate1TempPath = Path.Combine(tempDirectory, $"region-{regionIndex}-candidate-1.wav");
+                string regionTempPath = Path.Join(tempDirectory, $"region-{regionIndex}.wav");
+                string candidate0TempPath = Path.Join(tempDirectory, $"region-{regionIndex}-candidate-0.wav");
+                string candidate1TempPath = Path.Join(tempDirectory, $"region-{regionIndex}-candidate-1.wav");
 
                 await audioClipExtractor
                     .ExtractAsync(sourceAudioPath, region.StartSeconds, region.EndSeconds, regionTempPath, cancellationToken)
@@ -371,7 +371,7 @@ internal static class OverlapRescueTempDirectories
     private const string Prefix = "trackdub-overlap-rescue-";
 
     public static string GetRunDirectory(Guid stageRunId) =>
-        Path.Combine(Path.GetTempPath(), $"{Prefix}{stageRunId:N}");
+        Path.Join(Path.GetTempPath(), $"{Prefix}{stageRunId:N}");
 
     public static void DeleteIfExists(string directory)
     {

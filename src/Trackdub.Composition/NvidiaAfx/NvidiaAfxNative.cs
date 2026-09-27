@@ -91,7 +91,7 @@ internal static class NvidiaAfxNativeLoader
                 return;
             }
 
-            string libraryPath = Path.Combine(runtimeRoot, "NvAudioEffects.dll");
+            string libraryPath = Path.Join(runtimeRoot, "NvAudioEffects.dll");
             if (!File.Exists(libraryPath))
             {
                 throw new FileNotFoundException("NVIDIA AFX native library not found in runtime package.", libraryPath);

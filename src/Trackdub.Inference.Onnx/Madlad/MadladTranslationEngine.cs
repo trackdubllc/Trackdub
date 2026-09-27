@@ -291,7 +291,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
         string modelRootPath = ResolveModelRootPath(encoderModelPath);
         foreach (string fileName in new[] { "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx", "decoder_model_merged.onnx" })
         {
-            string candidatePath = Path.Combine(modelRootPath, fileName);
+            string candidatePath = Path.Join(modelRootPath, fileName);
             if (File.Exists(candidatePath))
             {
                 return Path.GetFullPath(candidatePath);
@@ -310,7 +310,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
 
         foreach (string fileName in new[] { "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx", "decoder_model_merged.onnx" })
         {
-            string candidatePath = Path.Combine(modelRootPath, fileName);
+            string candidatePath = Path.Join(modelRootPath, fileName);
             if (File.Exists(candidatePath))
             {
                 return Path.GetFullPath(candidatePath);

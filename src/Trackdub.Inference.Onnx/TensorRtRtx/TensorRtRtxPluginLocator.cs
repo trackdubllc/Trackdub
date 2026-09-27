@@ -170,7 +170,7 @@ internal static class TensorRtRtxPluginLocator
             return new TensorRtRtxPluginResolution(
                 Succeeded: false,
                 DirectoryPath: normalizedDirectory,
-                ProviderLibraryPath: Path.Combine(normalizedDirectory, TensorRtRtxProviderConstants.PluginLibraryFileName),
+                ProviderLibraryPath: Path.Join(normalizedDirectory, TensorRtRtxProviderConstants.PluginLibraryFileName),
                 Source: source,
                 MissingFiles: missingFiles,
                 Blocker: blocker,
@@ -180,7 +180,7 @@ internal static class TensorRtRtxPluginLocator
         return new TensorRtRtxPluginResolution(
             Succeeded: true,
             DirectoryPath: normalizedDirectory,
-            ProviderLibraryPath: Path.Combine(normalizedDirectory, TensorRtRtxProviderConstants.PluginLibraryFileName),
+            ProviderLibraryPath: Path.Join(normalizedDirectory, TensorRtRtxProviderConstants.PluginLibraryFileName),
             Source: source,
             MissingFiles: [],
             Blocker: TensorRtRtxReadinessBlocker.None,

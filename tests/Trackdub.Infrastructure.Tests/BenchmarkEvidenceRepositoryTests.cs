@@ -65,7 +65,7 @@ public sealed class BenchmarkEvidenceRepositoryTests
         string root = NewRoot();
         try
         {
-            var database = new SqliteProjectDatabase(Path.Combine(root, "project.trackdub"));
+            var database = new SqliteProjectDatabase(Path.Join(root, "project.trackdub"));
             var projectStore = new SqliteProjectRepository(database);
             DateTimeOffset now = DateTimeOffset.UtcNow;
             var project = new TrackdubProject(Guid.NewGuid(), "Evidence failure", now, now);
@@ -87,12 +87,12 @@ public sealed class BenchmarkEvidenceRepositoryTests
         string root = NewRoot();
         try
         {
-            var database = new SqliteProjectDatabase(Path.Combine(root, "project.trackdub"));
+            var database = new SqliteProjectDatabase(Path.Join(root, "project.trackdub"));
             var projectStore = new SqliteProjectRepository(database);
             DateTimeOffset now = DateTimeOffset.UtcNow;
             var project = new TrackdubProject(Guid.NewGuid(), "Observation", now, now);
             await projectStore.InitializeAsync(project, TestContext.Current.CancellationToken);
-            var evidence = new BenchmarkEvidenceRepository(new SqliteUserBenchmarkDatabase(Path.Combine(root, "user")));
+            var evidence = new BenchmarkEvidenceRepository(new SqliteUserBenchmarkDatabase(Path.Join(root, "user")));
             var store = new ObservedProjectStageRunStore(
                 new SqliteProjectStageRunStore(database), evidence, new DebugApplicationLogger());
             StageRunRecord started = StageRunRecord.Start(project.Id, "tts", now);
@@ -109,7 +109,7 @@ public sealed class BenchmarkEvidenceRepositoryTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
-    private static string NewRoot() => Path.Combine(Path.GetTempPath(), "Trackdub.Evidence.Tests", Guid.NewGuid().ToString("N"));
+    private static string NewRoot() => Path.Join(Path.GetTempPath(), "Trackdub.Evidence.Tests", Guid.NewGuid().ToString("N"));
 
     private static BenchmarkEvidenceReport Observation(Guid id, DateTimeOffset completedAt) => new()
     {

@@ -50,11 +50,11 @@ public sealed class TrtRtxEpBundleDownloader(
             ?? throw new InvalidOperationException("Install directory path has no parent.");
         Directory.CreateDirectory(parentDirectory);
 
-        string tempArchivePath = Path.Combine(
+        string tempArchivePath = Path.Join(
             parentDirectory,
             $"trt-rtx-ep-{Guid.NewGuid():N}{GetArchiveExtension(package.ArchiveKind)}");
-        string tempExtractDirectory = Path.Combine(parentDirectory, $"trt-rtx-ep-extract-{Guid.NewGuid():N}");
-        string tempInstallDirectory = Path.Combine(parentDirectory, $"trt-rtx-ep-staging-{Guid.NewGuid():N}");
+        string tempExtractDirectory = Path.Join(parentDirectory, $"trt-rtx-ep-extract-{Guid.NewGuid():N}");
+        string tempInstallDirectory = Path.Join(parentDirectory, $"trt-rtx-ep-staging-{Guid.NewGuid():N}");
 
         try
         {
@@ -103,7 +103,7 @@ public sealed class TrtRtxEpBundleDownloader(
             return false;
         }
 
-        return requiredFileNames.All(fileName => File.Exists(Path.Combine(installDirectory, fileName)));
+        return requiredFileNames.All(fileName => File.Exists(Path.Join(installDirectory, fileName)));
     }
 
     private async Task DownloadArchiveAsync(
@@ -194,7 +194,7 @@ public sealed class TrtRtxEpBundleDownloader(
                     continue;
                 }
 
-                string destinationPath = Path.Combine(destinationRoot, Path.GetFileName(sourcePath));
+                string destinationPath = Path.Join(destinationRoot, Path.GetFileName(sourcePath));
                 string? linkTarget = OperatingSystem.IsWindows() ? null : new FileInfo(sourcePath).LinkTarget;
                 if (linkTarget is not null && IsFlatFileName(linkTarget))
                 {
@@ -236,7 +236,7 @@ public sealed class TrtRtxEpBundleDownloader(
                         $"TensorRT RTX EP archive entry '{entry.FullName}' must be a relative path.");
                 }
 
-                string destinationPath = Path.GetFullPath(Path.Combine(root, entry.FullName));
+                string destinationPath = Path.GetFullPath(Path.Join(root, entry.FullName));
                 if (!destinationPath.StartsWith(rootPrefix, pathComparison))
                 {
                     throw new InvalidOperationException(
@@ -282,7 +282,7 @@ public sealed class TrtRtxEpBundleDownloader(
                     $"TensorRT RTX EP archive symlink '{linkPath}' has rooted target '{target}'.");
             }
 
-            string resolved = Path.Combine(Path.GetDirectoryName(linkPath)!, target);
+            string resolved = Path.Join(Path.GetDirectoryName(linkPath)!, target);
             for (int depth = 0; links.TryGetValue(resolved, out string? next); depth++)
             {
                 if (depth >= MaxSymlinkDepth)
@@ -297,7 +297,7 @@ public sealed class TrtRtxEpBundleDownloader(
                         $"TensorRT RTX EP archive symlink chain at '{linkPath}' has rooted target '{next}'.");
                 }
 
-                resolved = Path.Combine(Path.GetDirectoryName(resolved)!, next);
+                resolved = Path.Join(Path.GetDirectoryName(resolved)!, next);
             }
 
             if (!File.Exists(resolved))
@@ -318,7 +318,7 @@ public sealed class TrtRtxEpBundleDownloader(
     private static void ValidateRequiredFiles(string installDirectory, IReadOnlyList<string> requiredFileNames)
     {
         List<string> missing = requiredFileNames
-            .Where(fileName => !File.Exists(Path.Combine(installDirectory, fileName)))
+            .Where(fileName => !File.Exists(Path.Join(installDirectory, fileName)))
             .ToList();
 
         if (missing.Count > 0)

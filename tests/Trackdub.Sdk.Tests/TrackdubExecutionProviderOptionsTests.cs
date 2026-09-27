@@ -252,7 +252,7 @@ public sealed class TrackdubExecutionProviderOptionsTests
     public async Task Build_DefaultOptions_InheritsHostHardwarePrefs_WhenPresent()
     {
         using TrackdubSessionFactory factory = new TrackdubBuilder()
-            .WithLogDirectory(Path.Combine(Path.GetTempPath(), "trackdub-empty-host-" + Guid.NewGuid()))
+            .WithLogDirectory(Path.Join(Path.GetTempPath(), "trackdub-empty-host-" + Guid.NewGuid()))
             .Build();
 
         IStudioSettingsService settingsService = factory.GetRequiredService<IStudioSettingsService>();
@@ -273,7 +273,7 @@ public sealed class TrackdubExecutionProviderOptionsTests
 
         // Headless overlay may carry host settings.json hardware pins (e.g. Asr → DirectML).
         // Builder options (null EP / Explicit policy) must not wipe those when present.
-        string settingsPath = Path.Combine(
+        string settingsPath = Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Trackdub",
             "settings.json");
@@ -480,7 +480,7 @@ public sealed class TrackdubExecutionProviderOptionsTests
 
         Assert.Null(ep);
         // Device policy falls back to studio settings.json when present; otherwise null/explicit at factory.
-        string settingsPath = Path.Combine(
+        string settingsPath = Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Trackdub",
             "settings.json");

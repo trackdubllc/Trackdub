@@ -78,7 +78,7 @@ public sealed class Pcm16ReferenceClipTrimmer : IReferenceClipTrimmer
             outputSampleCount);
 
         string? directoryPath = Path.GetDirectoryName(fullPath);
-        string trimPath = Path.Combine(
+        string trimPath = Path.Join(
             directoryPath ?? string.Empty,
             Path.GetFileName(fullPath) + "." + Guid.NewGuid().ToString("N") + ".trimmed");
         try

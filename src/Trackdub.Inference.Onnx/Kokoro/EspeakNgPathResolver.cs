@@ -71,10 +71,10 @@ public static class EspeakNgPathResolver
         string runtimeFolder = GetRuntimeFolder();
         return
         [
-            Path.Combine(root, "tools", "espeak-ng", ExecutableName),
-            Path.Combine(root, "runtimes", runtimeFolder, "native", "espeak-ng", ExecutableName),
-            Path.Combine(root, "runtimes", runtimeFolder, "native", ExecutableName),
-            Path.Combine(root, "espeak-ng", ExecutableName)
+            Path.Join(root, "tools", "espeak-ng", ExecutableName),
+            Path.Join(root, "runtimes", runtimeFolder, "native", "espeak-ng", ExecutableName),
+            Path.Join(root, "runtimes", runtimeFolder, "native", ExecutableName),
+            Path.Join(root, "espeak-ng", ExecutableName)
         ];
     }
 
@@ -179,7 +179,7 @@ public static class EspeakNgPathResolver
 
         foreach (string pathSegment in pathEnvironment.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            string candidate = Path.Combine(pathSegment.Trim(), executableName);
+            string candidate = Path.Join(pathSegment.Trim(), executableName);
             if (File.Exists(candidate))
             {
                 return Path.GetFullPath(candidate);

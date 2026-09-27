@@ -26,17 +26,17 @@ public sealed record CosyVoiceModelFiles(
         return new CosyVoiceModelFiles(
             root,
             resolvedVariant,
-            Path.Combine(root, "campplus.onnx"),
-            Path.Combine(root, "speech_tokenizer_v1.onnx"),
+            Path.Join(root, "campplus.onnx"),
+            Path.Join(root, "speech_tokenizer_v1.onnx"),
             ResolveVariantPath(root, resolvedVariant, ["llm", "text_encoder.onnx"], ["onnx_quantized_modelopt", "llm", "text_encoder.{0}.onnx"]),
             ResolveVariantPath(root, resolvedVariant, ["llm", "token_generator.onnx"], ["onnx_quantized_modelopt", "llm", "token_generator.{0}.onnx"]),
             ResolveVariantPath(root, resolvedVariant, ["flow", "encoder.onnx"], ["onnx_quantized_modelopt", "flow", "encoder.{0}.onnx"]),
-            Path.Combine(root, "flow.decoder.estimator.fp32.onnx"),
+            Path.Join(root, "flow.decoder.estimator.fp32.onnx"),
             ResolveVariantPath(root, resolvedVariant, ["hift", "f0_predictor.onnx"], ["onnx_quantized_modelopt", "hift", "f0_predictor.{0}.onnx"]),
             ResolveVariantPath(root, resolvedVariant, ["hift", "source.onnx"], ["onnx_quantized_modelopt", "hift", "source.{0}.onnx"]),
-            Path.Combine(root, "hift", "vocoder.onnx"),
-            Path.Combine(root, "embeddings"),
-            Path.Combine(root, "tokenizer"));
+            Path.Join(root, "hift", "vocoder.onnx"),
+            Path.Join(root, "embeddings"),
+            Path.Join(root, "tokenizer"));
     }
 
     public IReadOnlyList<string> FindMissingFiles()
@@ -52,20 +52,20 @@ public sealed record CosyVoiceModelFiles(
             HiftF0PredictorPath,
             HiftSourcePath,
             HiftVocoderPath,
-            Path.Combine(HiftVocoderPath + ".data"),
-            Path.Combine(EmbeddingsDirectory, "llm_speech_embedding.npy"),
-            Path.Combine(EmbeddingsDirectory, "llm_llm_embedding.npy"),
-            Path.Combine(EmbeddingsDirectory, "llm_spk_embed_affine_weight.npy"),
-            Path.Combine(EmbeddingsDirectory, "llm_spk_embed_affine_bias.npy"),
-            Path.Combine(EmbeddingsDirectory, "flow_input_embedding.npy"),
-            Path.Combine(EmbeddingsDirectory, "flow_spk_embed_affine_weight.npy"),
-            Path.Combine(EmbeddingsDirectory, "flow_spk_embed_affine_bias.npy"),
-            Path.Combine(EmbeddingsDirectory, "flow_length_regulator.npz"),
-            Path.Combine(TokenizerDirectory, "tiktoken_ranks.bin"),
-            Path.Combine(TokenizerDirectory, "encode_smoke.json"),
-            Path.Combine(ModelRootPath, "cosyvoice.yaml"),
-            Path.Combine(ModelRootPath, "config.json"),
-            Path.Combine(ModelRootPath, "configuration.json"),
+            Path.Join(HiftVocoderPath + ".data"),
+            Path.Join(EmbeddingsDirectory, "llm_speech_embedding.npy"),
+            Path.Join(EmbeddingsDirectory, "llm_llm_embedding.npy"),
+            Path.Join(EmbeddingsDirectory, "llm_spk_embed_affine_weight.npy"),
+            Path.Join(EmbeddingsDirectory, "llm_spk_embed_affine_bias.npy"),
+            Path.Join(EmbeddingsDirectory, "flow_input_embedding.npy"),
+            Path.Join(EmbeddingsDirectory, "flow_spk_embed_affine_weight.npy"),
+            Path.Join(EmbeddingsDirectory, "flow_spk_embed_affine_bias.npy"),
+            Path.Join(EmbeddingsDirectory, "flow_length_regulator.npz"),
+            Path.Join(TokenizerDirectory, "tiktoken_ranks.bin"),
+            Path.Join(TokenizerDirectory, "encode_smoke.json"),
+            Path.Join(ModelRootPath, "cosyvoice.yaml"),
+            Path.Join(ModelRootPath, "config.json"),
+            Path.Join(ModelRootPath, "configuration.json"),
         ];
 
         return required
@@ -80,7 +80,7 @@ public sealed record CosyVoiceModelFiles(
         string[] defaultRelativeParts,
         string[] variantRelativeParts)
     {
-        string defaultPath = Path.Combine([root, .. defaultRelativeParts]);
+        string defaultPath = Path.Join([root, .. defaultRelativeParts]);
         if (variant.Equals("default", StringComparison.OrdinalIgnoreCase))
         {
             return defaultPath;
@@ -89,7 +89,7 @@ public sealed record CosyVoiceModelFiles(
         string[] variantParts = variantRelativeParts
             .Select(part => part.Contains("{0}", StringComparison.Ordinal) ? string.Format(part, variant) : part)
             .ToArray();
-        string variantPath = Path.Combine([root, .. variantParts]);
+        string variantPath = Path.Join([root, .. variantParts]);
         return File.Exists(variantPath) ? variantPath : defaultPath;
     }
 }

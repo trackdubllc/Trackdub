@@ -22,20 +22,20 @@ public sealed class OliveEnvironmentService : IOliveEnvironmentService
     {
         string venvPath = GetVenvPath(provider);
         return OperatingSystem.IsWindows()
-            ? Path.Combine(venvPath, "Scripts", "python.exe")
-            : Path.Combine(venvPath, "bin", "python");
+            ? Path.Join(venvPath, "Scripts", "python.exe")
+            : Path.Join(venvPath, "bin", "python");
     }
 
     private string GetManagedPipPath(OliveExecutionProvider provider)
     {
         string venvPath = GetVenvPath(provider);
         return OperatingSystem.IsWindows()
-            ? Path.Combine(venvPath, "Scripts", "pip.exe")
-            : Path.Combine(venvPath, "bin", "pip");
+            ? Path.Join(venvPath, "Scripts", "pip.exe")
+            : Path.Join(venvPath, "bin", "pip");
     }
 
     private string GetVenvPath(OliveExecutionProvider provider) =>
-        Path.Combine(_venvRoot, $"olive-env-{provider.ToString().ToLowerInvariant()}");
+        Path.Join(_venvRoot, $"olive-env-{provider.ToString().ToLowerInvariant()}");
 
     public string GetOliveExecutablePath(OliveExecutionProvider provider)
     {
@@ -45,8 +45,8 @@ public sealed class OliveEnvironmentService : IOliveEnvironmentService
 
         string scriptsDir = Path.GetDirectoryName(GetManagedPythonPath(provider))!;
         return OperatingSystem.IsWindows()
-            ? Path.Combine(scriptsDir, "olive.exe")
-            : Path.Combine(scriptsDir, "olive");
+            ? Path.Join(scriptsDir, "olive.exe")
+            : Path.Join(scriptsDir, "olive");
     }
 
     public async Task<OliveEnvironmentStatus> GetStatusAsync(
@@ -335,7 +335,7 @@ public sealed class OliveEnvironmentService : IOliveEnvironmentService
         string pathVar = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         foreach (string dir in pathVar.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            string candidate = Path.Combine(dir.Trim(), executable);
+            string candidate = Path.Join(dir.Trim(), executable);
             if (File.Exists(candidate))
                 return candidate;
         }

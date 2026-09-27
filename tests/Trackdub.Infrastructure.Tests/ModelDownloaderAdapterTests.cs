@@ -10,13 +10,13 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_writes_successful_runtime_support_file()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         byte[] payload = [1, 2, 3, 4];
         var logger = new RecordingApplicationLogger();
         using var handler = new StaticResponseHandler(HttpStatusCode.OK, payload);
         using var httpClient = new HttpClient(handler, disposeHandler: true);
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "deployment", "lib", "weya_nc.dll");
+        string destinationPath = Path.Join(tempRoot, "deployment", "lib", "weya_nc.dll");
 
         try
         {
@@ -40,11 +40,11 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_logs_http_failure_for_runtime_support_file()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         var logger = new RecordingApplicationLogger();
         using var httpClient = new HttpClient(new StaticResponseHandler(HttpStatusCode.NotFound));
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "deployment", "lib", "weya_nc.dll");
+        string destinationPath = Path.Join(tempRoot, "deployment", "lib", "weya_nc.dll");
 
         try
         {
@@ -68,12 +68,12 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_resumes_after_transient_stream_failure()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         byte[] payload = [1, 2, 3, 4];
         var logger = new RecordingApplicationLogger();
         using var httpClient = new HttpClient(new ResumableFailureHandler(payload, failAfterBytes: 2));
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "models", "decoder_model_quantized.onnx");
+        string destinationPath = Path.Join(tempRoot, "models", "decoder_model_quantized.onnx");
 
         try
         {
@@ -97,13 +97,13 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_restarts_from_zero_when_partial_range_is_not_satisfiable()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         byte[] stalePartial = [9, 9, 9, 9];
         byte[] payload = [1, 2, 3, 4, 5];
         var logger = new RecordingApplicationLogger();
         using var httpClient = new HttpClient(new StalePartialThenSuccessHandler(stalePartial.Length, payload));
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "models", "decoder_model_quantized.onnx");
+        string destinationPath = Path.Join(tempRoot, "models", "decoder_model_quantized.onnx");
         string partialPath = $"{destinationPath}.partial";
 
         try
@@ -139,12 +139,12 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_removes_partial_file_after_terminal_exception_failure()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         byte[] payload = [1, 2, 3, 4];
         var logger = new RecordingApplicationLogger();
         using var httpClient = new HttpClient(new PartialThenTerminalFailureHandler(payload, failAfterBytes: 2));
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "runtime", "support", "weya_nc.dll");
+        string destinationPath = Path.Join(tempRoot, "runtime", "support", "weya_nc.dll");
         string partialPath = $"{destinationPath}.partial";
 
         try
@@ -170,7 +170,7 @@ public sealed class ModelDownloaderAdapterTests
     public async Task DownloadUriAsync_downloads_large_runtime_support_file_across_multiple_buffers()
     {
         const int payloadLength = 196_608;
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         byte[] payload = new byte[payloadLength];
         for (int i = 0; i < payload.Length; i++)
         {
@@ -180,7 +180,7 @@ public sealed class ModelDownloaderAdapterTests
         var logger = new RecordingApplicationLogger();
         using var httpClient = new HttpClient(new StaticResponseHandler(HttpStatusCode.OK, payload));
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "deployment", "lib", "large_support.bin");
+        string destinationPath = Path.Join(tempRoot, "deployment", "lib", "large_support.bin");
 
         try
         {
@@ -209,13 +209,13 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_retries_after_http_request_timeout_status()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         byte[] payload = [10, 20, 30, 40];
         var logger = new RecordingApplicationLogger();
         var handler = new TimeoutThenSuccessHandler(payload);
         using var httpClient = new HttpClient(handler);
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "deployment", "lib", "weya_nc.dll");
+        string destinationPath = Path.Join(tempRoot, "deployment", "lib", "weya_nc.dll");
 
         try
         {
@@ -240,13 +240,13 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_retries_after_http_request_exception_on_send()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         byte[] payload = [5, 6, 7, 8];
         var logger = new RecordingApplicationLogger();
         var handler = new HttpRequestExceptionThenSuccessHandler(payload);
         using var httpClient = new HttpClient(handler);
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "deployment", "lib", "weya_nc.dll");
+        string destinationPath = Path.Join(tempRoot, "deployment", "lib", "weya_nc.dll");
 
         try
         {
@@ -271,13 +271,13 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_retries_after_client_timeout_without_user_cancellation()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         byte[] payload = [11, 22, 33, 44];
         var logger = new RecordingApplicationLogger();
         var handler = new ClientTimeoutThenSuccessHandler(payload);
         using var httpClient = new HttpClient(handler);
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "deployment", "lib", "weya_nc.dll");
+        string destinationPath = Path.Join(tempRoot, "deployment", "lib", "weya_nc.dll");
 
         try
         {
@@ -302,12 +302,12 @@ public sealed class ModelDownloaderAdapterTests
     [Fact]
     public async Task DownloadUriAsync_does_not_retry_when_user_cancels()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.ModelDownloaderAdapter.Tests", Guid.NewGuid().ToString("N"));
         var logger = new RecordingApplicationLogger();
         var handler = new CancellationAwareSlowHandler(TimeSpan.FromSeconds(30));
         using var httpClient = new HttpClient(handler);
         var adapter = new ModelDownloaderAdapter(new FakeModelDownloader(), httpClient, logger);
-        string destinationPath = Path.Combine(tempRoot, "deployment", "lib", "weya_nc.dll");
+        string destinationPath = Path.Join(tempRoot, "deployment", "lib", "weya_nc.dll");
         using var cts = new CancellationTokenSource();
 
         try
@@ -389,7 +389,7 @@ public sealed class ModelDownloaderAdapterTests
         ObjectDisposedException exception = await Assert.ThrowsAsync<ObjectDisposedException>(() =>
             adapter.DownloadUriAsync(
                 new Uri("https://example.test/runtime-support"),
-                Path.Combine(Path.GetTempPath(), "runtime-support.dll")));
+                Path.Join(Path.GetTempPath(), "runtime-support.dll")));
         Assert.Equal(typeof(ModelDownloaderAdapter).FullName, exception.ObjectName);
     }
 

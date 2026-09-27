@@ -232,7 +232,7 @@ public sealed class UpdateServiceTests
         using var handler = new StaticHttpMessageHandler(HttpStatusCode.OK, payload);
         using var httpClient = new HttpClient(handler);
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new FakeAppStoragePaths(tempRoot);
         var service = new UpdateService(httpClient, new RecordingApplicationLogger(), storagePaths);
 
@@ -271,7 +271,7 @@ public sealed class UpdateServiceTests
         using var handler = new StaticHttpMessageHandler(HttpStatusCode.OK, payload);
         using var httpClient = new HttpClient(handler);
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new FakeAppStoragePaths(tempRoot);
         var service = new UpdateService(httpClient, new RecordingApplicationLogger(), storagePaths);
 
@@ -307,7 +307,7 @@ public sealed class UpdateServiceTests
         using var handler = new StaticHttpMessageHandler(HttpStatusCode.NotFound, Array.Empty<byte>());
         using var httpClient = new HttpClient(handler);
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new FakeAppStoragePaths(tempRoot);
         var service = new UpdateService(httpClient, new RecordingApplicationLogger(), storagePaths);
 
@@ -341,14 +341,14 @@ public sealed class UpdateServiceTests
             ReleaseNotesUrl: null,
             PublishedAt: DateTimeOffset.UtcNow);
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new FakeAppStoragePaths(tempRoot);
 
         try
         {
             string updatesDir = GetUpdatesDirectory(tempRoot);
             Directory.CreateDirectory(updatesDir);
-            string cachedPath = Path.Combine(updatesDir, ResolveInstallerFileNameForPlatform("2.0.0"));
+            string cachedPath = Path.Join(updatesDir, ResolveInstallerFileNameForPlatform("2.0.0"));
             await File.WriteAllBytesAsync(cachedPath, payload);
 
             using var handler = new StaticHttpMessageHandler(HttpStatusCode.OK, payload);
@@ -383,14 +383,14 @@ public sealed class UpdateServiceTests
             ReleaseNotesUrl: null,
             PublishedAt: DateTimeOffset.UtcNow);
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new FakeAppStoragePaths(tempRoot);
 
         try
         {
             string updatesDir = GetUpdatesDirectory(tempRoot);
             Directory.CreateDirectory(updatesDir);
-            string cachedPath = Path.Combine(updatesDir, ResolveInstallerFileNameForPlatform("2.0.0"));
+            string cachedPath = Path.Join(updatesDir, ResolveInstallerFileNameForPlatform("2.0.0"));
             await File.WriteAllBytesAsync(cachedPath, oldPayload);
 
             using var handler = new StaticHttpMessageHandler(HttpStatusCode.OK, newPayload);
@@ -425,7 +425,7 @@ public sealed class UpdateServiceTests
 
     private static UpdateService CreateService(HttpClient httpClient)
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.UpdateService.Tests", Guid.NewGuid().ToString("N"));
         var storagePaths = new FakeAppStoragePaths(tempRoot);
         return new UpdateService(httpClient, new RecordingApplicationLogger(), storagePaths);
     }
@@ -495,7 +495,7 @@ public sealed class UpdateServiceTests
     }
 
     private static string GetUpdatesDirectory(string cacheRoot) =>
-        Path.Combine(cacheRoot, "Trackdub", "updates");
+        Path.Join(cacheRoot, "Trackdub", "updates");
 
     private static string ResolveInstallerFileNameForPlatform(string version)
     {
@@ -533,15 +533,15 @@ public sealed class UpdateServiceTests
         public string UserCacheRoot { get; }
         public string? SharedAssetRoot => null;
         public bool IsPortable => false;
-        public string ModelCacheDirectory => Path.Combine(UserDataRoot, "model-cache");
-        public string ModelCacheIndexPath => Path.Combine(ModelCacheDirectory, "model-cache-records.json");
-        public string LogFilePath => Path.Combine(UserDataRoot, "trackdub.log");
-        public string SettingsPath => Path.Combine(UserDataRoot, "settings.json");
-        public string LayoutPath => Path.Combine(UserDataRoot, "avalonia-layout.json");
-        public string ToolCacheDirectory => Path.Combine(UserCacheRoot, "tools");
-        public string FfmpegToolCacheDirectory => Path.Combine(ToolCacheDirectory, "ffmpeg");
-        public string EngineCacheDirectory => Path.Combine(UserCacheRoot, "EngineCache");
-        public string ComponentCacheDirectory => Path.Combine(UserCacheRoot, "components");
+        public string ModelCacheDirectory => Path.Join(UserDataRoot, "model-cache");
+        public string ModelCacheIndexPath => Path.Join(ModelCacheDirectory, "model-cache-records.json");
+        public string LogFilePath => Path.Join(UserDataRoot, "trackdub.log");
+        public string SettingsPath => Path.Join(UserDataRoot, "settings.json");
+        public string LayoutPath => Path.Join(UserDataRoot, "avalonia-layout.json");
+        public string ToolCacheDirectory => Path.Join(UserCacheRoot, "tools");
+        public string FfmpegToolCacheDirectory => Path.Join(ToolCacheDirectory, "ffmpeg");
+        public string EngineCacheDirectory => Path.Join(UserCacheRoot, "EngineCache");
+        public string ComponentCacheDirectory => Path.Join(UserCacheRoot, "components");
     }
 }
 

@@ -25,11 +25,11 @@ public sealed class DubbingExportFormatTests
     [Fact]
     public void ResolveExportOutputPath_UsesContainerExtension()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), $"trackdub-{Guid.NewGuid():N}");
+        string projectRoot = Path.Join(Path.GetTempPath(), $"trackdub-{Guid.NewGuid():N}");
 
         string outputPath = TrackdubDubbingEngine.ResolveExportOutputPath(projectRoot, ExportOutputContainer.Mkv);
 
-        Assert.Equal(Path.Combine(projectRoot, "exports", "dubbed.mkv"), outputPath);
+        Assert.Equal(Path.Join(projectRoot, "exports", "dubbed.mkv"), outputPath);
     }
 
     [Theory]

@@ -88,7 +88,7 @@ public sealed class Qwen3TtsEngine(
                 plan.ExecutionProvider!.Value,
                 cancellationToken).ConfigureAwait(false);
 
-            string tempPath = Path.Combine(Path.GetTempPath(), $"qwen3tts_{Guid.NewGuid():N}.wav");
+            string tempPath = Path.Join(Path.GetTempPath(), $"qwen3tts_{Guid.NewGuid():N}.wav");
             try
             {
                 if (modelFiles.IsBaseModel)
@@ -210,7 +210,7 @@ public sealed class Qwen3TtsEngine(
             normalized = normalized["qwen3:".Length..];
         }
 
-        string speakerIdsPath = Path.Combine(modelRootDirectory, "embeddings", "speaker_ids.json");
+        string speakerIdsPath = Path.Join(modelRootDirectory, "embeddings", "speaker_ids.json");
         if (File.Exists(speakerIdsPath))
         {
             using JsonDocument document = JsonDocument.Parse(File.ReadAllText(speakerIdsPath));

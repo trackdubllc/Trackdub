@@ -22,7 +22,7 @@ public sealed class LipSynthesisRealEngineIntegrationTests
         string audioPath = Environment.GetEnvironmentVariable(LipSynthesisIntegrationSupport.AudioFixtureEnvVar)!;
         LipSynthesisIntegrationSupport.RealLipSynthesisStack stack = LipSynthesisIntegrationSupport.CreateRealStack();
 
-        string directory = Path.Combine(Path.GetTempPath(), $"lipsynth-stage-real-{Guid.NewGuid():N}");
+        string directory = Path.Join(Path.GetTempPath(), $"lipsynth-stage-real-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
         {

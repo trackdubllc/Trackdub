@@ -73,7 +73,7 @@ public sealed partial class StarterPackImportExportService(
 
         var warnings = new List<string>();
         Directory.CreateDirectory(catalog.UserPacksDirectory);
-        string destinationPath = Path.Combine(catalog.UserPacksDirectory, $"{pack.Id}.json");
+        string destinationPath = Path.Join(catalog.UserPacksDirectory, $"{pack.Id}.json");
         await File.WriteAllTextAsync(destinationPath, json, cancellationToken).ConfigureAwait(false);
         catalog.InvalidateCache();
 
@@ -115,7 +115,7 @@ public sealed partial class StarterPackImportExportService(
         StarterPackDefinition pack = await catalog.GetAsync(packId, cancellationToken).ConfigureAwait(false);
         if (pack.PackOrigin != StarterPackOrigin.User)
         {
-            string userPath = Path.Combine(catalog.UserPacksDirectory, $"{packId}.json");
+            string userPath = Path.Join(catalog.UserPacksDirectory, $"{packId}.json");
             if (!File.Exists(userPath))
             {
                 throw new InvalidOperationException($"Pack '{packId}' is bundled-only and cannot be exported.");
@@ -126,7 +126,7 @@ public sealed partial class StarterPackImportExportService(
             return;
         }
 
-        string sourcePath = Path.Combine(catalog.UserPacksDirectory, $"{packId}.json");
+        string sourcePath = Path.Join(catalog.UserPacksDirectory, $"{packId}.json");
         if (!File.Exists(sourcePath))
         {
             throw new InvalidOperationException($"User pack '{packId}' was not found.");
@@ -208,7 +208,7 @@ public sealed partial class StarterPackImportExportService(
             throw new InvalidOperationException("Pack id must match ^[a-z][a-z0-9-]{1,48}$.");
         }
 
-        string userPath = Path.Combine(catalog.UserPacksDirectory, $"{packId}.json");
+        string userPath = Path.Join(catalog.UserPacksDirectory, $"{packId}.json");
         if (!File.Exists(userPath))
         {
             throw new InvalidOperationException($"User pack '{packId}' was not found.");

@@ -797,7 +797,7 @@ public sealed class RuntimeModelBootstrapService(
         string path = Path.GetFullPath(storagePaths.ModelCacheDirectory);
         foreach (string part in entry.ModelId.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries))
         {
-            path = Path.Combine(path, part);
+            path = Path.Join(path, part);
         }
 
         return path;
@@ -1066,9 +1066,9 @@ public sealed class RuntimeModelBootstrapService(
         string relativePath)
     {
         string normalizedRelativePath = NormalizeRelativePath(relativePath);
-        string destinationPath = Path.GetFullPath(Path.Combine(
+        string destinationPath = Path.GetFullPath(Path.Join(
             modelRootPath,
-            Path.Combine(normalizedRelativePath.Split('/'))));
+            Path.Join(normalizedRelativePath.Split('/'))));
         string rootWithSeparator = Path.GetFullPath(modelRootPath)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
             Path.DirectorySeparatorChar;

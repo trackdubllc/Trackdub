@@ -14,7 +14,7 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
     [Fact]
     public void DiscoverSearchDirectories_IncludesConfiguredDirectory()
     {
-        string directory = Path.Combine(Path.GetTempPath(), $"trackdub-cuda-{Guid.NewGuid():N}");
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-cuda-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         string? previous = Environment.GetEnvironmentVariable("TRACKDUB_CUDA_BIN_DIR");
 
@@ -75,7 +75,7 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
     [Fact]
     public void TryEnsureLoadedResult_without_cuda13_in_search_path_reports_missing_runtime()
     {
-        string emptyDir = Path.Combine(Path.GetTempPath(), $"trackdub-cuda-empty-{Guid.NewGuid():N}");
+        string emptyDir = Path.Join(Path.GetTempPath(), $"trackdub-cuda-empty-{Guid.NewGuid():N}");
         Directory.CreateDirectory(emptyDir);
 
         try
@@ -110,8 +110,8 @@ public sealed class TensorRtRtxCudaRuntimeBootstrapTests
     [Fact]
     public void EnumerateChildDirectoriesSafe_SurvivesUnreadableRoot()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"trackdub-cuda-blocked-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(root, "child"));
+        string root = Path.Join(Path.GetTempPath(), $"trackdub-cuda-blocked-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Join(root, "child"));
 
         try
         {

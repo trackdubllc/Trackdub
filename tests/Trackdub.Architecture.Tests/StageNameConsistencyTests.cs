@@ -50,7 +50,7 @@ public sealed class StageNameConsistencyTests
     public void StageRunRecord_Start_never_receives_inline_string_literal()
     {
         string repoRoot = FindRepoRoot();
-        string srcRoot = Path.Combine(repoRoot, "src");
+        string srcRoot = Path.Join(repoRoot, "src");
         var knownValues = new HashSet<string>(KnownStageNameValues, StringComparer.Ordinal);
 
         var offenders = new List<string>();
@@ -271,7 +271,7 @@ public sealed class StageNameConsistencyTests
     public void KnownStageNameValues_covers_all_StageNames_constants()
     {
         string repoRoot = FindRepoRoot();
-        string stageNamesPath = Path.Combine(
+        string stageNamesPath = Path.Join(
             repoRoot, "src", "Trackdub.Domain", "StageRuns", "StageNames.cs");
 
         Assert.True(
@@ -308,7 +308,7 @@ public sealed class StageNameConsistencyTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(dir.FullName, "Trackdub.slnx")))
             {
                 return dir.FullName;
             }

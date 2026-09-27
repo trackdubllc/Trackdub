@@ -19,21 +19,21 @@ public sealed class CosyVoiceTtsEngineTests
     [Fact]
     public void CosyVoiceModelFiles_ResolvesDefaultVariantPaths()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"cosyvoice-default-{Guid.NewGuid():N}");
+        string root = Path.Join(Path.GetTempPath(), $"cosyvoice-default-{Guid.NewGuid():N}");
         var files = CosyVoiceModelFiles.Resolve(root, "default");
 
         Assert.Equal("default", files.Variant);
-        Assert.Equal(Path.Combine(root, "llm", "text_encoder.onnx"), files.TextEncoderPath);
-        Assert.Equal(Path.Combine(root, "flow.decoder.estimator.fp32.onnx"), files.FlowDecoderEstimatorPath);
-        Assert.Equal(Path.Combine(root, "hift", "vocoder.onnx"), files.HiftVocoderPath);
+        Assert.Equal(Path.Join(root, "llm", "text_encoder.onnx"), files.TextEncoderPath);
+        Assert.Equal(Path.Join(root, "flow.decoder.estimator.fp32.onnx"), files.FlowDecoderEstimatorPath);
+        Assert.Equal(Path.Join(root, "hift", "vocoder.onnx"), files.HiftVocoderPath);
     }
 
     [Fact]
     public void CosyVoiceModelFiles_ResolvesInt8VariantPaths()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"cosyvoice-variant-{Guid.NewGuid():N}");
-        string int8Relative = Path.Combine("onnx_quantized_modelopt", "llm", "text_encoder.int8.onnx");
-        string int8Path = Path.Combine(root, int8Relative);
+        string root = Path.Join(Path.GetTempPath(), $"cosyvoice-variant-{Guid.NewGuid():N}");
+        string int8Relative = Path.Join("onnx_quantized_modelopt", "llm", "text_encoder.int8.onnx");
+        string int8Path = Path.Join(root, int8Relative);
         Directory.CreateDirectory(Path.GetDirectoryName(int8Path)!);
         File.WriteAllBytes(int8Path, []);
 
@@ -43,7 +43,7 @@ public sealed class CosyVoiceTtsEngineTests
 
             Assert.Equal("int8", files.Variant);
             Assert.Equal(int8Path, files.TextEncoderPath);
-            Assert.Equal(Path.Combine(root, "flow.decoder.estimator.fp32.onnx"), files.FlowDecoderEstimatorPath);
+            Assert.Equal(Path.Join(root, "flow.decoder.estimator.fp32.onnx"), files.FlowDecoderEstimatorPath);
         }
         finally
         {
@@ -212,7 +212,7 @@ public sealed class CosyVoiceTtsEngineTests
                 new VoiceCatalogEntry("af_heart", "en-us", "female", "Heart")),
             CancellationToken.None);
 
-        string tempPath = Path.Combine(Path.GetTempPath(), $"cosyvoice_ref_{Guid.NewGuid():N}.wav");
+        string tempPath = Path.Join(Path.GetTempPath(), $"cosyvoice_ref_{Guid.NewGuid():N}.wav");
         await File.WriteAllBytesAsync(tempPath, synthesized.WavBytes);
         return tempPath;
     }

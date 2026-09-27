@@ -185,7 +185,7 @@ public sealed class KokoroVoicepackLoaderTests : IDisposable
 
     private string WriteTempBinWithBytes(byte[] bytes)
     {
-        string path = Path.Combine(
+        string path = Path.Join(
             Path.GetTempPath(),
             $"Trackdub.VoicepackLoader.{Guid.NewGuid():N}.bin");
         File.WriteAllBytes(path, bytes);

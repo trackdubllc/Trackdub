@@ -32,7 +32,7 @@ public sealed class SpleeterSeparationContractTests
     public void Production_model_paths_use_shared_relative_file_names()
     {
         // Independent oracle: literal ONNX file names + platform separator.
-        string root = Path.Combine("cache", "csukuangfj", "sherpa-onnx-spleeter-2stems");
+        string root = Path.Join("cache", "csukuangfj", "sherpa-onnx-spleeter-2stems");
         string sep = Path.DirectorySeparatorChar.ToString();
         string vocals = SpleeterModelConstants.ResolveModelPath(root, "vocals.onnx");
         string acc = SpleeterModelConstants.ResolveModelPath(root, "accompaniment.onnx");

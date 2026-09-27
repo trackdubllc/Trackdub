@@ -44,7 +44,7 @@ public sealed class BenchmarkOptionsTests
         Assert.Equal(BenchmarkProviderPreference.Auto, options.ProviderPreference);
         Assert.Equal(7, options.RunCount);
         Assert.Equal(ReportFormat.Json, options.ReportFormat);
-        Assert.EndsWith(Path.Combine("out", "report.json"), options.OutputPath, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Join("out", "report.json"), options.OutputPath, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public sealed class BenchmarkOptionsTests
         DirectoryInfo? current = new(AppContext.BaseDirectory);
         while (current is not null)
         {
-            string candidate = Path.Combine(current.FullName, relativePath);
+            string candidate = Path.Join(current.FullName, relativePath);
             if (File.Exists(candidate))
             {
                 return candidate;
@@ -330,7 +330,7 @@ public sealed class BenchmarkOptionsTests
     [RequiresBundledModelFact("silero-vad/onnx/model_q4.onnx")]
     public async Task ProgramRunAsync_HonorsEmbeddedVariantReference()
     {
-        string reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -349,7 +349,7 @@ public sealed class BenchmarkOptionsTests
             await using FileStream reportStream = File.OpenRead(reportPath);
             BenchmarkReport? report = await JsonSerializer.DeserializeAsync<BenchmarkReport>(reportStream, SerializerOptions);
             Assert.NotNull(report);
-            Assert.EndsWith(Path.Combine("models", "silero-vad", "onnx", "model_q4.onnx"), report!.ModelPath, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(Path.Join("models", "silero-vad", "onnx", "model_q4.onnx"), report!.ModelPath, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -360,12 +360,12 @@ public sealed class BenchmarkOptionsTests
     [RequiresBundledModelFact("silero-vad/onnx/model.onnx")]
     public async Task ProgramRunAsync_PromptsForAmbiguousDirectoryAndStoresChoice()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-bench-{Guid.NewGuid():N}");
-        string onnxDirectory = Path.Combine(tempDirectory, "onnx");
-        string variantAPath = Path.Combine(onnxDirectory, "variant_a.onnx");
-        string variantBPath = Path.Combine(onnxDirectory, "variant_b.onnx");
-        string reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
-        string defaultsPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string tempDirectory = Path.Join(Path.GetTempPath(), $"trackdub-bench-{Guid.NewGuid():N}");
+        string onnxDirectory = Path.Join(tempDirectory, "onnx");
+        string variantAPath = Path.Join(onnxDirectory, "variant_a.onnx");
+        string variantBPath = Path.Join(onnxDirectory, "variant_b.onnx");
+        string reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string defaultsPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
         string? previousDefaultsPath = Environment.GetEnvironmentVariable("TRACKDUB_BENCHMARK_DEFAULTS_PATH");
 
         Directory.CreateDirectory(onnxDirectory);
@@ -439,7 +439,7 @@ public sealed class BenchmarkOptionsTests
         "chatterbox-turbo-onnx/onnx/language_model.onnx")]
     public async Task ProgramRunAsync_TrtRtxSmokeScope_WritesBatchReportPathInJsonMode()
     {
-        string reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
         string reportDirectory = Path.GetDirectoryName(reportPath)!;
         string reportNameWithoutExtension = Path.GetFileNameWithoutExtension(reportPath);
         string reportExtension = Path.GetExtension(reportPath);
@@ -447,7 +447,7 @@ public sealed class BenchmarkOptionsTests
         // Per-variant report paths written by DeriveVariantReportPath for each smoke
         // target that actually runs: "{output}-{label}{ext}" in the same directory.
         string[] variantReportPaths = TrtRtxSmokeCatalog.StarterPackTurboGpu
-            .Select(target => Path.Combine(
+            .Select(target => Path.Join(
                 reportDirectory,
                 $"{reportNameWithoutExtension}-{target.Label}{reportExtension}"))
             .ToArray();
@@ -492,11 +492,11 @@ public sealed class BenchmarkOptionsTests
     [RequiresBundledModelFact("silero-vad/onnx/model.onnx")]
     public async Task ProgramRunAsync_AllVariantsWritesAggregateAndPerVariantReports()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-bench-{Guid.NewGuid():N}");
-        string onnxDirectory = Path.Combine(tempDirectory, "onnx");
-        string variantAPath = Path.Combine(onnxDirectory, "variant_a.onnx");
-        string variantBPath = Path.Combine(onnxDirectory, "variant_b.onnx");
-        string aggregateReportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string tempDirectory = Path.Join(Path.GetTempPath(), $"trackdub-bench-{Guid.NewGuid():N}");
+        string onnxDirectory = Path.Join(tempDirectory, "onnx");
+        string variantAPath = Path.Join(onnxDirectory, "variant_a.onnx");
+        string variantBPath = Path.Join(onnxDirectory, "variant_b.onnx");
+        string aggregateReportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         Directory.CreateDirectory(onnxDirectory);
         File.Copy(OnnxModelBenchmarkRunnerTests.SampleModelPath, variantAPath);
@@ -516,14 +516,14 @@ public sealed class BenchmarkOptionsTests
 
             Assert.Equal(0, exitCode);
             Assert.True(File.Exists(aggregateReportPath));
-            Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(aggregateReportPath)!, $"{Path.GetFileNameWithoutExtension(aggregateReportPath)}-variant_a{Path.GetExtension(aggregateReportPath)}")));
-            Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(aggregateReportPath)!, $"{Path.GetFileNameWithoutExtension(aggregateReportPath)}-variant_b{Path.GetExtension(aggregateReportPath)}")));
+            Assert.True(File.Exists(Path.Join(Path.GetDirectoryName(aggregateReportPath)!, $"{Path.GetFileNameWithoutExtension(aggregateReportPath)}-variant_a{Path.GetExtension(aggregateReportPath)}")));
+            Assert.True(File.Exists(Path.Join(Path.GetDirectoryName(aggregateReportPath)!, $"{Path.GetFileNameWithoutExtension(aggregateReportPath)}-variant_b{Path.GetExtension(aggregateReportPath)}")));
         }
         finally
         {
             File.Delete(aggregateReportPath);
-            File.Delete(Path.Combine(Path.GetDirectoryName(aggregateReportPath)!, $"{Path.GetFileNameWithoutExtension(aggregateReportPath)}-variant_a{Path.GetExtension(aggregateReportPath)}"));
-            File.Delete(Path.Combine(Path.GetDirectoryName(aggregateReportPath)!, $"{Path.GetFileNameWithoutExtension(aggregateReportPath)}-variant_b{Path.GetExtension(aggregateReportPath)}"));
+            File.Delete(Path.Join(Path.GetDirectoryName(aggregateReportPath)!, $"{Path.GetFileNameWithoutExtension(aggregateReportPath)}-variant_a{Path.GetExtension(aggregateReportPath)}"));
+            File.Delete(Path.Join(Path.GetDirectoryName(aggregateReportPath)!, $"{Path.GetFileNameWithoutExtension(aggregateReportPath)}-variant_b{Path.GetExtension(aggregateReportPath)}"));
             if (Directory.Exists(tempDirectory))
             {
                 Directory.Delete(tempDirectory, recursive: true);
@@ -537,19 +537,19 @@ public sealed class BenchmarkOptionsTests
 public sealed class OnnxModelBenchmarkRunnerTests
 {
     internal static string SampleModelPath =>
-        Path.GetFullPath(Path.Combine(
+        Path.GetFullPath(Path.Join(
             AppContext.BaseDirectory,
             "..", "..", "..", "..", "..",
             "models", "silero-vad", "onnx", "model.onnx"));
 
     private static string WhisperEncoderModelPath =>
-        Path.GetFullPath(Path.Combine(
+        Path.GetFullPath(Path.Join(
             AppContext.BaseDirectory,
             "..", "..", "..", "..", "..",
             "models", "whisper-tiny-onnx", "onnx", "encoder_model.onnx"));
 
     private static string OpusEncoderModelPath =>
-        Path.GetFullPath(Path.Combine(
+        Path.GetFullPath(Path.Join(
             AppContext.BaseDirectory,
             "..", "..", "..", "..", "..",
             "models", "opus", "Helsinki-NLP-opus-mt-en-es", "encoder_model.onnx"));
@@ -558,7 +558,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
     public async Task RunAsync_BuildsPlannedReportForExistingModel()
     {
         var modelPath = SampleModelPath;
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -591,7 +591,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
     [RequiresBundledModelFact("silero-vad/onnx/model.onnx")]
     public async Task RunAsync_BuildsCompletedReportForManifestScopedSileroModel()
     {
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -603,7 +603,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
             Assert.Equal(BenchmarkStatus.Completed, report.Status);
             Assert.True(report.SupportsExecution);
             Assert.Equal("cpu", report.SelectedProvider);
-            Assert.EndsWith(Path.Combine("models", "silero-vad", "onnx", "model.onnx"), report.ModelPath, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(Path.Join("models", "silero-vad", "onnx", "model.onnx"), report.ModelPath, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(report.Notes, note => note.Contains("using manifest", StringComparison.Ordinal));
         }
         finally
@@ -615,7 +615,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
     [RequiresBundledModelFact("whisper-tiny-onnx/onnx/encoder_model.onnx")]
     public async Task RunAsync_BuildsCompletedReportForWhisperEncoderModel()
     {
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -643,7 +643,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
     [RequiresBundledModelFact("opus/Helsinki-NLP-opus-mt-en-es/encoder_model.onnx")]
     public async Task RunAsync_BuildsCompletedReportForOpusEncoderModel()
     {
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -669,7 +669,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
     [RequiresBundledModelFact("opus/Helsinki-NLP-opus-mt-en-es/encoder_model.onnx")]
     public async Task RunAsync_BuildsCompletedReportForManifestScopedOpusModel()
     {
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -683,7 +683,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
             Assert.True(report.SupportsExecution);
             Assert.Equal("cpu", report.SelectedProvider);
             Assert.EndsWith(
-                Path.Combine("models", "opus", "Helsinki-NLP-opus-mt-en-es", "encoder_model.onnx"),
+                Path.Join("models", "opus", "Helsinki-NLP-opus-mt-en-es", "encoder_model.onnx"),
                 report.ModelPath,
                 StringComparison.OrdinalIgnoreCase);
             Assert.Contains(report.Notes, note => note.Contains("using manifest", StringComparison.Ordinal));
@@ -698,10 +698,10 @@ public sealed class OnnxModelBenchmarkRunnerTests
     [RequiresBundledModelFact("silero-vad/onnx/model.onnx")]
     public async Task RunAsync_ResolvesSingleOnnxFileFromOnnxSubdirectory()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-bench-{Guid.NewGuid():N}");
-        string onnxDirectory = Path.Combine(tempDirectory, "onnx");
-        string copiedModelPath = Path.Combine(onnxDirectory, "variant_fp16.onnx");
-        string reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string tempDirectory = Path.Join(Path.GetTempPath(), $"trackdub-bench-{Guid.NewGuid():N}");
+        string onnxDirectory = Path.Join(tempDirectory, "onnx");
+        string copiedModelPath = Path.Join(onnxDirectory, "variant_fp16.onnx");
+        string reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         Directory.CreateDirectory(onnxDirectory);
         File.Copy(SampleModelPath, copiedModelPath);
@@ -739,7 +739,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
         string expectedSelectedProvider)
     {
         var modelPath = SampleModelPath;
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -779,7 +779,7 @@ public sealed class OnnxModelBenchmarkRunnerTests
     [RequiresBundledModelFact("silero-vad/onnx/model.onnx")]
     public async Task RunAsync_RecordsWindowsMlBootstrapOutcomeForNonCpuProviders()
     {
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -813,7 +813,7 @@ public sealed class BenchmarkReportWriterTests
     [Fact]
     public async Task WriteAsync_WritesJsonReport()
     {
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
         var report = new BenchmarkReport(
             Scenario: "onnx-model",
             ModelPath: "model.onnx",
@@ -887,8 +887,8 @@ public sealed class BenchmarkFailureTests
     [Fact]
     public async Task RunAsync_ReturnsFailedReportForMissingModel()
     {
-        var modelPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
-        var reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        var modelPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        var reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         try
         {
@@ -912,13 +912,13 @@ public sealed class BenchmarkFailureTests
     [Fact]
     public async Task RunAsync_ReturnsFailedReportForAmbiguousVariantDirectory()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-bench-{Guid.NewGuid():N}");
-        string onnxDirectory = Path.Combine(tempDirectory, "onnx");
-        string reportPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        string tempDirectory = Path.Join(Path.GetTempPath(), $"trackdub-bench-{Guid.NewGuid():N}");
+        string onnxDirectory = Path.Join(tempDirectory, "onnx");
+        string reportPath = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
 
         Directory.CreateDirectory(onnxDirectory);
-        File.WriteAllBytes(Path.Combine(onnxDirectory, "variant_a.onnx"), []);
-        File.WriteAllBytes(Path.Combine(onnxDirectory, "variant_b.onnx"), []);
+        File.WriteAllBytes(Path.Join(onnxDirectory, "variant_a.onnx"), []);
+        File.WriteAllBytes(Path.Join(onnxDirectory, "variant_b.onnx"), []);
 
         try
         {
@@ -983,7 +983,7 @@ public sealed class BundledModelManifestRegistryTests
         Assert.True(registry!.TryResolve("silero-vad", out var resolution));
         Assert.NotNull(resolution);
         Assert.Equal("silero-vad", resolution!.Alias);
-        Assert.EndsWith(Path.Combine("models", "silero-vad", "onnx", "model.onnx"), resolution.EntryPath, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Join("models", "silero-vad", "onnx", "model.onnx"), resolution.EntryPath, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("MIT", resolution.Entry.License);
     }
 
@@ -997,7 +997,7 @@ public sealed class BundledModelManifestRegistryTests
         Assert.True(registry!.TryResolve("silero-vad@q4", out var resolution));
         Assert.NotNull(resolution);
         Assert.Equal("q4", resolution!.VariantAlias);
-        Assert.EndsWith(Path.Combine("models", "silero-vad", "onnx", "model_q4.onnx"), resolution.EntryPath, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Join("models", "silero-vad", "onnx", "model_q4.onnx"), resolution.EntryPath, StringComparison.OrdinalIgnoreCase);
     }
 
 #if WINDOWS

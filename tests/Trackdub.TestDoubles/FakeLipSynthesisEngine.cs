@@ -62,7 +62,7 @@ public sealed class FakeLipSynthesisEngine : ILipSynthesisEngine
         if (OutputDirectory is not null)
         {
             Directory.CreateDirectory(OutputDirectory);
-            patchedClipPath = Path.Combine(OutputDirectory, $"patched-{request.SegmentId:N}.mp4");
+            patchedClipPath = Path.Join(OutputDirectory, $"patched-{request.SegmentId:N}.mp4");
             // Placeholder bytes only — the fake never copies or touches the source video.
             File.WriteAllBytes(patchedClipPath, [0x00]);
         }

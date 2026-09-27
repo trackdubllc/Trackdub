@@ -83,25 +83,25 @@ internal sealed class EmbeddingStore : IDisposable
             ?? throw new InvalidDataException("Failed to parse config.json");
 
         // Load text embedding and projection
-        _textEmbedding = NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "text_embedding.npy"));
-        _fc1Weight = NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "text_projection_fc1_weight.npy"));
-        _fc1Bias = NpyReader.ReadFloat1D(Path.Combine(embeddingsDir, "text_projection_fc1_bias.npy"));
-        _fc2Weight = NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "text_projection_fc2_weight.npy"));
-        _fc2Bias = NpyReader.ReadFloat1D(Path.Combine(embeddingsDir, "text_projection_fc2_bias.npy"));
+        _textEmbedding = NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "text_embedding.npy"));
+        _fc1Weight = NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "text_projection_fc1_weight.npy"));
+        _fc1Bias = NpyReader.ReadFloat1D(Path.Join(embeddingsDir, "text_projection_fc1_bias.npy"));
+        _fc2Weight = NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "text_projection_fc2_weight.npy"));
+        _fc2Bias = NpyReader.ReadFloat1D(Path.Join(embeddingsDir, "text_projection_fc2_bias.npy"));
 
         // Load talker codec embedding
-        _talkerCodecEmbedding = NpyReader.ReadFloat2D(Path.Combine(embeddingsDir, "talker_codec_embedding.npy"));
+        _talkerCodecEmbedding = NpyReader.ReadFloat2D(Path.Join(embeddingsDir, "talker_codec_embedding.npy"));
 
         // Load CP codec embeddings (15 groups)
         _cpCodecEmbeddings = new float[15][,];
         for (int i = 0; i < 15; i++)
         {
-            var path = Path.Combine(embeddingsDir, $"cp_codec_embedding_{i}.npy");
+            var path = Path.Join(embeddingsDir, $"cp_codec_embedding_{i}.npy");
             _cpCodecEmbeddings[i] = NpyReader.ReadFloat2D(path);
         }
 
         // Load speaker IDs
-        var speakerIdsPath = Path.Combine(embeddingsDir, "speaker_ids.json");
+        var speakerIdsPath = Path.Join(embeddingsDir, "speaker_ids.json");
         var speakerJson = File.ReadAllText(speakerIdsPath);
         _speakerIds = JsonSerializer.Deserialize<Dictionary<string, int>>(speakerJson)
             ?? throw new InvalidDataException("Failed to parse speaker_ids.json");
@@ -118,8 +118,8 @@ internal sealed class EmbeddingStore : IDisposable
             : _cpHiddenSize;
 
         // Optional: load CP projection weights (only present for 1.7B with re-exported code_predictor)
-        var projWeightPath = Path.Combine(embeddingsDir, "cp_projection_weight.npy");
-        var projBiasPath = Path.Combine(embeddingsDir, "cp_projection_bias.npy");
+        var projWeightPath = Path.Join(embeddingsDir, "cp_projection_weight.npy");
+        var projBiasPath = Path.Join(embeddingsDir, "cp_projection_bias.npy");
         if (File.Exists(projWeightPath) && File.Exists(projBiasPath))
         {
             _cpProjectionWeight = NpyReader.ReadFloat2D(projWeightPath);

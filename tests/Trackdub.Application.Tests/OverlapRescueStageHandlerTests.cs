@@ -196,7 +196,7 @@ public sealed class OverlapRescueStageHandlerTests
         Guid projectId = Guid.NewGuid();
         Guid mediaAssetId = Guid.NewGuid();
         string sourceRelativePath = ProjectArtifactPaths.NormalizedAudioRelativePath;
-        string sourcePath = Path.Combine(directory, "source.wav");
+        string sourcePath = Path.Join(directory, "source.wav");
         File.WriteAllBytes(sourcePath, FakeWavHelper.MinimalPcm16(durationSeconds: 1d, sampleRate: 16000, channelCount: 1));
         artifactStore.SeedPath(sourceRelativePath, sourcePath, File.ReadAllBytes(sourcePath));
 
@@ -230,7 +230,7 @@ public sealed class OverlapRescueStageHandlerTests
 
     private static string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), $"overlap-rescue-tests-{Guid.NewGuid():N}");
+        string path = Path.Join(Path.GetTempPath(), $"overlap-rescue-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
     }

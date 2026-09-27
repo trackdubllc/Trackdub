@@ -10,18 +10,18 @@ public sealed class ComponentStoreAndOpenVinoComponentDownloaderTests
     [Fact]
     public void IsInstalled_WhenMarkerIsMissingAndFilesExist_WritesMarkerAndReturnsTrue()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), "Trackdub.ComponentStore.Tests", Guid.NewGuid().ToString("N"));
+        string rootPath = Path.Join(Path.GetTempPath(), "Trackdub.ComponentStore.Tests", Guid.NewGuid().ToString("N"));
         var logger = new RecordingApplicationLogger();
         var store = new ComponentStore(rootPath, logger);
         string componentPath = store.EnsureComponentDirectory("openvino");
 
         try
         {
-            string tempMarkerPath = Path.Combine(componentPath, $".component-installed.{Guid.NewGuid():N}.tmp");
+            string tempMarkerPath = Path.Join(componentPath, $".component-installed.{Guid.NewGuid():N}.tmp");
             File.WriteAllText(tempMarkerPath, "partial");
 
             Assert.True(store.IsInstalled("openvino"));
-            Assert.True(File.Exists(Path.Combine(componentPath, ".component-installed")));
+            Assert.True(File.Exists(Path.Join(componentPath, ".component-installed")));
         }
         finally
         {
@@ -35,7 +35,7 @@ public sealed class ComponentStoreAndOpenVinoComponentDownloaderTests
     [Fact]
     public async Task DownloadAndInstallAsync_ThrowsWhenIntegrityMetadataIsMissingAndInsecureDownloadsAreDisabled()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), "Trackdub.OpenVinoDownloader.Tests", Guid.NewGuid().ToString("N"));
+        string rootPath = Path.Join(Path.GetTempPath(), "Trackdub.OpenVinoDownloader.Tests", Guid.NewGuid().ToString("N"));
         var logger = new RecordingApplicationLogger();
         var store = new ComponentStore(rootPath, logger);
         var handler = new ThrowingHttpMessageHandler();
@@ -70,7 +70,7 @@ public sealed class ComponentStoreAndOpenVinoComponentDownloaderTests
     [Fact]
     public async Task DownloadAndInstallAsync_ThrowsWhenIntegrityMetadataIsMissingEvenWhenInsecureOverrideEnabled()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), "Trackdub.OpenVinoDownloader.Tests", Guid.NewGuid().ToString("N"));
+        string rootPath = Path.Join(Path.GetTempPath(), "Trackdub.OpenVinoDownloader.Tests", Guid.NewGuid().ToString("N"));
         var logger = new RecordingApplicationLogger();
         var store = new ComponentStore(rootPath, logger);
         var handler = new ThrowingHttpMessageHandler();
@@ -105,7 +105,7 @@ public sealed class ComponentStoreAndOpenVinoComponentDownloaderTests
     [Fact]
     public async Task DownloadAndInstallAsync_WithSingleIntegritySignal_LogsWarningAndMarksInstalled()
     {
-        string rootPath = Path.Combine(Path.GetTempPath(), "Trackdub.OpenVinoDownloader.Tests", Guid.NewGuid().ToString("N"));
+        string rootPath = Path.Join(Path.GetTempPath(), "Trackdub.OpenVinoDownloader.Tests", Guid.NewGuid().ToString("N"));
         var logger = new RecordingApplicationLogger();
         var store = new ComponentStore(rootPath, logger);
         byte[] archiveBytes = CreateComponentArchiveBytes();
@@ -129,7 +129,7 @@ public sealed class ComponentStoreAndOpenVinoComponentDownloaderTests
 
             Assert.True(Directory.Exists(installPath));
             Assert.True(store.IsInstalled(OpenVinoComponentDownloader.ComponentId));
-            Assert.True(File.Exists(Path.Combine(installPath, ".component-installed")));
+            Assert.True(File.Exists(Path.Join(installPath, ".component-installed")));
             Assert.Contains(
                 logger.Warnings,
                 warning => warning.Contains("single metadata source", StringComparison.OrdinalIgnoreCase));

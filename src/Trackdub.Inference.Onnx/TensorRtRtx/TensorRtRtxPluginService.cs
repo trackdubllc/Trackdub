@@ -239,7 +239,7 @@ internal sealed class TensorRtRtxPluginService : ITensorRtRtxProviderBootstrap
 
         try
         {
-            string destination = Path.Combine(pluginDirectory, runtimeFileName);
+            string destination = Path.Join(pluginDirectory, runtimeFileName);
             if (File.Exists(destination))
             {
                 return;

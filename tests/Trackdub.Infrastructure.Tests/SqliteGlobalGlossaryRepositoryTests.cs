@@ -55,7 +55,7 @@ public sealed class SqliteGlobalGlossaryRepositoryTests
 
     private static string CreateTempRoot()
     {
-        string root = Path.Combine(Path.GetTempPath(), "trackdub-glossary-tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Join(Path.GetTempPath(), "trackdub-glossary-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
     }

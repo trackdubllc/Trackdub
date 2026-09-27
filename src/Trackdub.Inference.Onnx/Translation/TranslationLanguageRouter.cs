@@ -437,7 +437,7 @@ public sealed class TranslationLanguageRouter(
     }
 
     private static bool HasGenAiSupportingFiles(string modelRootPath) =>
-        File.Exists(Path.Combine(modelRootPath, "genai_config.json"));
+        File.Exists(Path.Join(modelRootPath, "genai_config.json"));
 
     private static IReadOnlyList<BundledModelManifestEntry> GetDirectEntriesForPair(
         TranslationRoutingContext context,
@@ -465,7 +465,7 @@ public sealed class TranslationLanguageRouter(
         string relativeEntryPath = Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath);
         foreach (LocalModelCacheRecord record in records)
         {
-            string resolvedPath = Path.GetFullPath(Path.Combine(record.RootPath, relativeEntryPath));
+            string resolvedPath = Path.GetFullPath(Path.Join(record.RootPath, relativeEntryPath));
             if (File.Exists(resolvedPath))
             {
                 yield return resolvedPath;
@@ -487,7 +487,7 @@ public sealed class TranslationLanguageRouter(
             foreach (string candidatePath in EnumerateMadladEncoderEntryPaths(entry))
             {
                 string relativeEntryPath = Path.GetRelativePath(entry.RootDirectory, candidatePath);
-                string resolvedPath = Path.GetFullPath(Path.Combine(record.RootPath, relativeEntryPath));
+                string resolvedPath = Path.GetFullPath(Path.Join(record.RootPath, relativeEntryPath));
                 if (File.Exists(resolvedPath))
                 {
                     yield return resolvedPath;
@@ -512,14 +512,14 @@ public sealed class TranslationLanguageRouter(
 
     private static bool HasOpusSupportingFiles(string modelRootPath)
     {
-        string onnxDirectory = Path.Combine(modelRootPath, "onnx");
-        return (File.Exists(Path.Combine(modelRootPath, "decoder_model.onnx")) ||
-                File.Exists(Path.Combine(modelRootPath, "decoder_model_merged.onnx")) ||
-                File.Exists(Path.Combine(onnxDirectory, "decoder_model.onnx")) ||
-                File.Exists(Path.Combine(onnxDirectory, "decoder_model_merged.onnx"))) &&
-               File.Exists(Path.Combine(modelRootPath, "vocab.json")) &&
-               (File.Exists(Path.Combine(modelRootPath, "source.spm")) || File.Exists(Path.Combine(modelRootPath, "source.model"))) &&
-               (File.Exists(Path.Combine(modelRootPath, "target.spm")) || File.Exists(Path.Combine(modelRootPath, "target.model")));
+        string onnxDirectory = Path.Join(modelRootPath, "onnx");
+        return (File.Exists(Path.Join(modelRootPath, "decoder_model.onnx")) ||
+                File.Exists(Path.Join(modelRootPath, "decoder_model_merged.onnx")) ||
+                File.Exists(Path.Join(onnxDirectory, "decoder_model.onnx")) ||
+                File.Exists(Path.Join(onnxDirectory, "decoder_model_merged.onnx"))) &&
+               File.Exists(Path.Join(modelRootPath, "vocab.json")) &&
+               (File.Exists(Path.Join(modelRootPath, "source.spm")) || File.Exists(Path.Join(modelRootPath, "source.model"))) &&
+               (File.Exists(Path.Join(modelRootPath, "target.spm")) || File.Exists(Path.Join(modelRootPath, "target.model")));
     }
 
     private static string ResolveOpusModelRootPath(string entryPath)
@@ -538,19 +538,19 @@ public sealed class TranslationLanguageRouter(
     }
 
     private static bool HasOpusTokenizerFiles(string modelRootPath) =>
-        File.Exists(Path.Combine(modelRootPath, "vocab.json")) &&
-        (File.Exists(Path.Combine(modelRootPath, "source.spm")) || File.Exists(Path.Combine(modelRootPath, "source.model"))) &&
-        (File.Exists(Path.Combine(modelRootPath, "target.spm")) || File.Exists(Path.Combine(modelRootPath, "target.model")));
+        File.Exists(Path.Join(modelRootPath, "vocab.json")) &&
+        (File.Exists(Path.Join(modelRootPath, "source.spm")) || File.Exists(Path.Join(modelRootPath, "source.model"))) &&
+        (File.Exists(Path.Join(modelRootPath, "target.spm")) || File.Exists(Path.Join(modelRootPath, "target.model")));
 
     private static bool HasMadladSupportingFiles(string modelRootPath)
     {
-        return (File.Exists(Path.Combine(modelRootPath, "decoder_model.onnx")) ||
-                File.Exists(Path.Combine(modelRootPath, "decoder_model_merged.onnx")) ||
-                File.Exists(Path.Combine(modelRootPath, "decoder_model_quantized.onnx")) ||
-                File.Exists(Path.Combine(modelRootPath, "decoder_model_int8.onnx"))) &&
-               (File.Exists(Path.Combine(modelRootPath, "spiece.model")) ||
-                File.Exists(Path.Combine(modelRootPath, "tokenizer.model")) ||
-                File.Exists(Path.Combine(modelRootPath, "sentencepiece.model")));
+        return (File.Exists(Path.Join(modelRootPath, "decoder_model.onnx")) ||
+                File.Exists(Path.Join(modelRootPath, "decoder_model_merged.onnx")) ||
+                File.Exists(Path.Join(modelRootPath, "decoder_model_quantized.onnx")) ||
+                File.Exists(Path.Join(modelRootPath, "decoder_model_int8.onnx"))) &&
+               (File.Exists(Path.Join(modelRootPath, "spiece.model")) ||
+                File.Exists(Path.Join(modelRootPath, "tokenizer.model")) ||
+                File.Exists(Path.Join(modelRootPath, "sentencepiece.model")));
     }
 
     private static (string SourceLanguage, string TargetLanguage)? NormalizePair(ModelLanguagePair pair)

@@ -367,7 +367,7 @@ public sealed class JsonStudioSettingsService(
             string directory = Path.GetDirectoryName(settingsPath) ?? storagePaths.RootDirectory;
             Directory.CreateDirectory(directory);
             string timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss");
-            string backupPath = Path.Combine(directory, $"settings.json.{timestamp}.corrupt");
+            string backupPath = Path.Join(directory, $"settings.json.{timestamp}.corrupt");
             File.Move(settingsPath, backupPath, overwrite: false);
             logger?.LogWarning(
                 $"Studio settings at '{settingsPath}' could not be parsed; starting with defaults. Corrupt file archived to '{backupPath}'.",

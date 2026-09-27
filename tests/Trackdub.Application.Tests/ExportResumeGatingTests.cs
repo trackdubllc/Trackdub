@@ -380,7 +380,7 @@ public sealed class ExportResumeGatingTests
             Guid transcriptRevisionId = Guid.NewGuid();
             var project = new TrackdubProject(projectId, "Export", now, now);
 
-            string sourcePath = Path.Combine(projectRootPath, "source.mp4");
+            string sourcePath = Path.Join(projectRootPath, "source.mp4");
             Directory.CreateDirectory(projectRootPath);
             await File.WriteAllBytesAsync(sourcePath, [0, 0, 0, 24]);
 
@@ -508,7 +508,7 @@ public sealed class ExportResumeGatingTests
     {
         public TempDir()
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"trackdub-export-resume-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Join(System.IO.Path.GetTempPath(), $"trackdub-export-resume-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
 

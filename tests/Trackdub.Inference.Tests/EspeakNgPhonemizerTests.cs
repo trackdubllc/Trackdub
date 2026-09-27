@@ -19,10 +19,10 @@ public sealed class EspeakNgPhonemizerTests : IDisposable
     [Fact]
     public void TryGetBundledEspeakDataDirectory_DataFolderNextToExecutable_ReturnsExecutableDirectory()
     {
-        string dir = Path.Combine(Path.GetTempPath(), $"espeak-test-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(dir, "espeak-ng-data"));
+        string dir = Path.Join(Path.GetTempPath(), $"espeak-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Join(dir, "espeak-ng-data"));
         tempDirs.Add(dir);
-        string executablePath = Path.Combine(dir, "espeak-ng.exe");
+        string executablePath = Path.Join(dir, "espeak-ng.exe");
 
         // The standalone Windows build crashes without ESPEAK_DATA_PATH; the bundled
         // data folder next to the executable must be detected so Phonemize can set it.
@@ -32,10 +32,10 @@ public sealed class EspeakNgPhonemizerTests : IDisposable
     [Fact]
     public void TryGetBundledEspeakDataDirectory_NoDataFolder_ReturnsNull()
     {
-        string dir = Path.Combine(Path.GetTempPath(), $"espeak-test-{Guid.NewGuid():N}");
+        string dir = Path.Join(Path.GetTempPath(), $"espeak-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         tempDirs.Add(dir);
-        string executablePath = Path.Combine(dir, "espeak-ng.exe");
+        string executablePath = Path.Join(dir, "espeak-ng.exe");
 
         Assert.Null(EspeakNgPhonemizer.TryGetBundledEspeakDataDirectory(executablePath));
     }
@@ -196,10 +196,10 @@ public sealed class EspeakNgPhonemizerTests : IDisposable
 
     private string CreateFakeExecutable()
     {
-        string dir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        string dir = Path.Join(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(dir);
         tempDirs.Add(dir);
-        string executablePath = Path.Combine(dir, "espeak-ng.exe");
+        string executablePath = Path.Join(dir, "espeak-ng.exe");
         File.WriteAllBytes(executablePath, []);
         return executablePath;
     }

@@ -10,7 +10,7 @@ public sealed class SqliteProjectDatabase
     public SqliteProjectDatabase(string projectRootPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRootPath);
-        databasePath = Path.Combine(Path.GetFullPath(projectRootPath), ProjectArtifactPaths.DatabaseFileName);
+        databasePath = Path.Join(Path.GetFullPath(projectRootPath), ProjectArtifactPaths.DatabaseFileName);
     }
 
     public string DatabasePath => databasePath;

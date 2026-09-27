@@ -11,7 +11,7 @@ public sealed class TokenFileCacheRoundTripTests : IDisposable
 
     public TokenFileCacheRoundTripTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"trackdub-test-{Guid.NewGuid()}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"trackdub-test-{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempDir);
     }
 

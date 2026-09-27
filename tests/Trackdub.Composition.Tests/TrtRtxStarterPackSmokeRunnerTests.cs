@@ -14,7 +14,7 @@ public sealed class TrtRtxStarterPackSmokeRunnerTests
             (_, _) => throw new InvalidOperationException("Smoke should not run for skipped targets."));
 
         TrtRtxStarterPackSmokeReport report = await TrtRtxStarterPackSmokeRunner.RunAsync(
-            modelCacheDirectory: Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+            modelCacheDirectory: Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             smokeTester,
             CancellationToken.None);
 
@@ -57,7 +57,7 @@ public sealed class TrtRtxStarterPackSmokeRunnerTests
     [Fact]
     public async Task VerifyEntryPathAsync_PassesRequestedEntryPathAndProviderToSmokeTester()
     {
-        string entryFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        string entryFile = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
         File.WriteAllBytes(entryFile, [0x00]);
         try
         {
@@ -92,7 +92,7 @@ public sealed class TrtRtxStarterPackSmokeRunnerTests
     [Fact]
     public async Task VerifyEntryPathAsync_ReportsSmokeTesterFailureDetail()
     {
-        string entryFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        string entryFile = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
         File.WriteAllBytes(entryFile, [0x00]);
         try
         {
@@ -118,7 +118,7 @@ public sealed class TrtRtxStarterPackSmokeRunnerTests
     [Fact]
     public async Task VerifyEntryPathAsync_ThrowsWhenEntryPathMissing()
     {
-        string missingEntryFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        string missingEntryFile = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
         var smokeTester = new FakeExecutionProviderSmokeTester(
             (_, _) => throw new InvalidOperationException("Smoke should not run when the entry file is missing."));
 
@@ -133,7 +133,7 @@ public sealed class TrtRtxStarterPackSmokeRunnerTests
     [Fact]
     public async Task VerifyEntryPathAsync_ThrowsWhenModelIdNotInManifest()
     {
-        string entryFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
+        string entryFile = Path.Join(Path.GetTempPath(), $"{Guid.NewGuid():N}.onnx");
         File.WriteAllBytes(entryFile, [0x00]);
         try
         {

@@ -20,7 +20,7 @@ public sealed class BatchHandlerTests : IDisposable
 
     public BatchHandlerTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"trackdub-batch-handler-{Guid.NewGuid():N}");
+        _tempDir = Path.Join(Path.GetTempPath(), $"trackdub-batch-handler-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 
@@ -34,7 +34,7 @@ public sealed class BatchHandlerTests : IDisposable
 
     private void CreateFile(string relativePath)
     {
-        string fullPath = Path.Combine(_tempDir, relativePath);
+        string fullPath = Path.Join(_tempDir, relativePath);
         string? dir = Path.GetDirectoryName(fullPath);
         if (dir is not null && !Directory.Exists(dir))
         {
@@ -146,7 +146,7 @@ public sealed class BatchHandlerTests : IDisposable
     public async Task PresetResolutionOrder_ExplicitOverridesPreset()
     {
         // Save a preset with target=es, source=en, export=mp4
-        string presetsDir = Path.Combine(_tempDir, "presets");
+        string presetsDir = Path.Join(_tempDir, "presets");
         var store = new PresetStore(presetsDir);
 
         var preset = new PipelinePreset
@@ -186,7 +186,7 @@ public sealed class BatchHandlerTests : IDisposable
     [Fact]
     public async Task PresetResolutionOrder_PresetOverridesDefault()
     {
-        string presetsDir = Path.Combine(_tempDir, "presets-default");
+        string presetsDir = Path.Join(_tempDir, "presets-default");
         var store = new PresetStore(presetsDir);
 
         var preset = new PipelinePreset
@@ -222,7 +222,7 @@ public sealed class BatchHandlerTests : IDisposable
     [Fact]
     public async Task PresetResolutionOrder_ModelOverrides_ExplicitWins()
     {
-        string presetsDir = Path.Combine(_tempDir, "presets-models");
+        string presetsDir = Path.Join(_tempDir, "presets-models");
         var store = new PresetStore(presetsDir);
 
         var preset = new PipelinePreset
@@ -252,7 +252,7 @@ public sealed class BatchHandlerTests : IDisposable
     [Fact]
     public async Task PresetResolutionOrder_ModelOverrides_PresetUsedWhenNoExplicit()
     {
-        string presetsDir = Path.Combine(_tempDir, "presets-models2");
+        string presetsDir = Path.Join(_tempDir, "presets-models2");
         var store = new PresetStore(presetsDir);
 
         var preset = new PipelinePreset
@@ -281,17 +281,17 @@ public sealed class BatchHandlerTests : IDisposable
     [Fact]
     public async Task TryLoadPresetAsync_MalformedPreset_ReturnsArgumentErrorAndValidationMessage()
     {
-        string modelRoot = Path.Combine(_tempDir, "sdk-storage");
+        string modelRoot = Path.Join(_tempDir, "sdk-storage");
         Directory.CreateDirectory(modelRoot);
 
         using TrackdubSessionFactory factory = new TrackdubBuilder()
             .WithModelDirectory(modelRoot)
             .Build();
         IAppStoragePaths storagePaths = factory.GetRequiredService<IAppStoragePaths>();
-        string presetsDirectory = Path.Combine(storagePaths.RootDirectory, "presets");
+        string presetsDirectory = Path.Join(storagePaths.RootDirectory, "presets");
         Directory.CreateDirectory(presetsDirectory);
         await File.WriteAllTextAsync(
-            Path.Combine(presetsDirectory, "corrupt.json"),
+            Path.Join(presetsDirectory, "corrupt.json"),
             "{ not valid json !!!");
 
         TextWriter originalError = Console.Error;
@@ -321,7 +321,7 @@ public sealed class BatchHandlerTests : IDisposable
     [Fact]
     public void BatchFileDiscovery_MissingDirectory_ThrowsDirectoryNotFoundException()
     {
-        string nonExistent = Path.Combine(_tempDir, "no-such-directory");
+        string nonExistent = Path.Join(_tempDir, "no-such-directory");
 
         var ex = Assert.Throws<DirectoryNotFoundException>(() =>
             BatchFileDiscovery.FromDirectory(nonExistent, recursive: false));
@@ -332,7 +332,7 @@ public sealed class BatchHandlerTests : IDisposable
     [Fact]
     public void BatchFileDiscovery_EmptyDirectory_ReturnsEmptyList()
     {
-        string emptyDir = Path.Combine(_tempDir, "empty");
+        string emptyDir = Path.Join(_tempDir, "empty");
         Directory.CreateDirectory(emptyDir);
 
         var result = BatchFileDiscovery.FromDirectory(emptyDir, recursive: false);
@@ -343,10 +343,10 @@ public sealed class BatchHandlerTests : IDisposable
     [Fact]
     public void BatchFileDiscovery_DirectoryWithNoSupportedFiles_ReturnsEmptyList()
     {
-        string dir = Path.Combine(_tempDir, "no-media");
+        string dir = Path.Join(_tempDir, "no-media");
         Directory.CreateDirectory(dir);
-        File.WriteAllBytes(Path.Combine(dir, "readme.txt"), []);
-        File.WriteAllBytes(Path.Combine(dir, "data.json"), []);
+        File.WriteAllBytes(Path.Join(dir, "readme.txt"), []);
+        File.WriteAllBytes(Path.Join(dir, "data.json"), []);
 
         var result = BatchFileDiscovery.FromDirectory(dir, recursive: false);
 
@@ -356,7 +356,7 @@ public sealed class BatchHandlerTests : IDisposable
     [Fact]
     public void BatchFileDiscovery_FromGlob_MissingBaseDirectory_ThrowsDirectoryNotFoundException()
     {
-        string nonExistent = Path.Combine(_tempDir, "glob-missing");
+        string nonExistent = Path.Join(_tempDir, "glob-missing");
 
         var ex = Assert.Throws<DirectoryNotFoundException>(() =>
             BatchFileDiscovery.FromGlob("**/*.mp4", nonExistent));
@@ -463,7 +463,7 @@ public sealed class BatchHandlerTests : IDisposable
     public async Task PresetBatchIntegration_PresetLoadsBeforeBatchDiscovery()
     {
         // Requirement 8.1: preset resolves before batch discovery begins
-        string presetsDir = Path.Combine(_tempDir, "presets-integration");
+        string presetsDir = Path.Join(_tempDir, "presets-integration");
         var store = new PresetStore(presetsDir);
 
         var preset = new PipelinePreset
@@ -482,7 +482,7 @@ public sealed class BatchHandlerTests : IDisposable
         Assert.Equal("fr", loaded.TargetLanguage);
 
         // Step 2: After preset is resolved, discover batch files
-        string mediaDir = Path.Combine(_tempDir, "media-integration");
+        string mediaDir = Path.Join(_tempDir, "media-integration");
         Directory.CreateDirectory(mediaDir);
         CreateFile("media-integration/clip1.mp4");
         CreateFile("media-integration/clip2.mkv");
@@ -508,7 +508,7 @@ public sealed class BatchHandlerTests : IDisposable
     public async Task PresetBatchIntegration_InvalidPresetName_FailsBeforeBatchDiscovery()
     {
         // Requirement 8.4: if preset doesn't exist, exit with code 1 without processing
-        string presetsDir = Path.Combine(_tempDir, "presets-invalid");
+        string presetsDir = Path.Join(_tempDir, "presets-invalid");
         var store = new PresetStore(presetsDir);
 
         // Ensure presets directory exists but preset doesn't

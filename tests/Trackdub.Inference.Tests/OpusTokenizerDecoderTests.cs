@@ -22,5 +22,5 @@ public sealed class OpusTokenizerDecoderTests
     }
 
     private static string ResolveModelRootPath(string modelDirectoryName) =>
-        Path.GetFullPath(Path.Combine(TestRepoRootResolver.FindRepoRoot(), "models", "opus", modelDirectoryName));
+        Path.GetFullPath(Path.Join(TestRepoRootResolver.FindRepoRoot(), "models", "opus", modelDirectoryName));
 }

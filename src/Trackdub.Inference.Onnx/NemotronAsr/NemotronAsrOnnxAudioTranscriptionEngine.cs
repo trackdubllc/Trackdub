@@ -225,9 +225,9 @@ public sealed class NemotronAsrOnnxAudioTranscriptionEngine(
     {
         string modelRoot = Path.GetDirectoryName(encoderModelPath)
             ?? throw new InvalidOperationException("Nemotron ASR model root path could not be resolved.");
-        string configPath = Path.Combine(modelRoot, "config.json");
-        string decoderJointPath = Path.Combine(modelRoot, "decoder_joint.onnx");
-        string tokenizerPath = Path.Combine(modelRoot, "tokenizer.model");
+        string configPath = Path.Join(modelRoot, "config.json");
+        string decoderJointPath = Path.Join(modelRoot, "decoder_joint.onnx");
+        string tokenizerPath = Path.Join(modelRoot, "tokenizer.model");
         foreach (string path in new[] { configPath, decoderJointPath, tokenizerPath })
         {
             if (!File.Exists(path))

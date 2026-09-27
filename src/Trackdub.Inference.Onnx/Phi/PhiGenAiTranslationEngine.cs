@@ -181,7 +181,7 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
 
     private static void EnsureGenAiModelRoot(string modelRootPath)
     {
-        string configPath = Path.Combine(modelRootPath, GenAiConfigFileName);
+        string configPath = Path.Join(modelRootPath, GenAiConfigFileName);
         if (!File.Exists(configPath))
         {
             throw new FileNotFoundException(

@@ -87,9 +87,9 @@ public static class ModelLabCommand
         TextWriter error,
         CancellationToken cancellationToken)
     {
-        string variantDirectory = Path.Combine(options.ModelsRootPath, options.ModelRootName, candidate.Alias);
-        string entryPath = Path.Combine(variantDirectory, "encoder.onnx");
-        string benchmarkReportPath = Path.Combine(variantDirectory, "benchmark-report.json");
+        string variantDirectory = Path.Join(options.ModelsRootPath, options.ModelRootName, candidate.Alias);
+        string entryPath = Path.Join(variantDirectory, "encoder.onnx");
+        string benchmarkReportPath = Path.Join(variantDirectory, "benchmark-report.json");
 
         Directory.CreateDirectory(variantDirectory);
         Directory.CreateDirectory(options.CacheDirectoryPath);
@@ -367,13 +367,13 @@ public static class ModelLabCommand
             return null;
         }
 
-        string decoderPath = Path.Combine(variantDirectory, "decoder.onnx");
+        string decoderPath = Path.Join(variantDirectory, "decoder.onnx");
         if (!File.Exists(decoderPath))
         {
             return null;
         }
 
-        string scriptPath = Path.Combine(
+        string scriptPath = Path.Join(
             options.RepositoryRootPath,
             "tools",
             "model-lab",
@@ -470,7 +470,7 @@ public static class ModelLabCommand
                 return new ModelLabCandidateResult(null, $"Olive recipe override not found: '{recipeConfigPath}'");
             }
 
-            string oliveOutputDirectory = Path.Combine(options.CacheDirectoryPath, "olive", candidate.Alias, "recipe");
+            string oliveOutputDirectory = Path.Join(options.CacheDirectoryPath, "olive", candidate.Alias, "recipe");
             ResetDirectoryWithin(oliveOutputDirectory, options.CacheDirectoryPath);
 
             int oliveExitCode = await processRunner.RunAsync(
@@ -498,7 +498,7 @@ public static class ModelLabCommand
         foreach (string componentPath in componentPaths)
         {
             string componentName = Path.GetFileNameWithoutExtension(componentPath);
-            string oliveOutputDirectory = Path.Combine(options.CacheDirectoryPath, "olive", candidate.Alias, componentName);
+            string oliveOutputDirectory = Path.Join(options.CacheDirectoryPath, "olive", candidate.Alias, componentName);
             ResetDirectoryWithin(oliveOutputDirectory, options.CacheDirectoryPath);
 
             int oliveExitCode = await processRunner.RunAsync(
@@ -529,7 +529,7 @@ public static class ModelLabCommand
                 return new ModelLabCandidateResult(null, $"Olive optimize exited with code {oliveExitCode} for {Path.GetFileName(componentPath)}");
             }
 
-            string optimizedModelPath = Path.Combine(oliveOutputDirectory, "model.onnx");
+            string optimizedModelPath = Path.Join(oliveOutputDirectory, "model.onnx");
             if (!File.Exists(optimizedModelPath))
             {
                 return new ModelLabCandidateResult(null, $"Olive did not produce '{optimizedModelPath}' for {Path.GetFileName(componentPath)}");
@@ -624,7 +624,7 @@ public static class ModelLabCommand
 
     private static void ReplaceExternalDataFileIfPresent(string oliveOutputDirectory, string componentPath)
     {
-        string sourceDataPath = Path.Combine(oliveOutputDirectory, "model.onnx.data");
+        string sourceDataPath = Path.Join(oliveOutputDirectory, "model.onnx.data");
         string targetDataPath = componentPath + ".data";
         if (File.Exists(sourceDataPath))
         {
@@ -638,7 +638,7 @@ public static class ModelLabCommand
 
     private static string ToManifestRelativePath(string modelsRootPath, string modelRootName, string path)
     {
-        string modelRootPath = Path.Combine(modelsRootPath, modelRootName);
+        string modelRootPath = Path.Join(modelsRootPath, modelRootName);
         return Path.GetRelativePath(modelRootPath, path).Replace('\\', '/');
     }
 }
@@ -679,14 +679,14 @@ public sealed record ModelLabCommandOptions(
         string repositoryRootPath = FindRepositoryRoot(Environment.CurrentDirectory);
         string huggingFaceModelId = "openai/whisper-tiny";
         string modelRootName = "whisper-tiny-genai";
-        string modelsRootPath = Path.Combine(repositoryRootPath, "models");
-        string manifestFragmentPath = Path.Combine(modelsRootPath, "manifest-fragments", "trackdub-model-lab.manifest.json");
+        string modelsRootPath = Path.Join(repositoryRootPath, "models");
+        string manifestFragmentPath = Path.Join(modelsRootPath, "manifest-fragments", "trackdub-model-lab.manifest.json");
         string pythonPath = "python";
         string ortGenAiBuilderPath = DefaultOrtGenAiBuilderModule;
         bool useOrtGenAiBuilderModule = true;
         string oliveExecutablePath = "olive";
-        string cacheDirectoryPath = Path.Combine(modelsRootPath, ".model-lab-cache");
-        string benchmarkProjectPath = Path.Combine(repositoryRootPath, "src", "Trackdub.Benchmarks", "Trackdub.Benchmarks.csproj");
+        string cacheDirectoryPath = Path.Join(modelsRootPath, ".model-lab-cache");
+        string benchmarkProjectPath = Path.Join(repositoryRootPath, "src", "Trackdub.Benchmarks", "Trackdub.Benchmarks.csproj");
         string benchmarkFramework = "net10.0-windows10.0.19041.0";
         int benchmarkRuns = 3;
         var candidates = new List<ModelLabCandidateOptions>();
@@ -928,13 +928,13 @@ public sealed record ModelLabCommandOptions(
             string.Empty,
             string.Empty,
             Environment.CurrentDirectory,
-            Path.Combine(Environment.CurrentDirectory, "trackdub-model-lab.manifest.json"),
+            Path.Join(Environment.CurrentDirectory, "trackdub-model-lab.manifest.json"),
             "python",
             DefaultOrtGenAiBuilderModule,
             true,
             "olive",
-            Path.Combine(Environment.CurrentDirectory, ".model-lab-cache"),
-            Path.Combine(Environment.CurrentDirectory, "Trackdub.Benchmarks.csproj"),
+            Path.Join(Environment.CurrentDirectory, ".model-lab-cache"),
+            Path.Join(Environment.CurrentDirectory, "Trackdub.Benchmarks.csproj"),
             "net10.0-windows10.0.19041.0",
             3,
             [],
@@ -965,8 +965,8 @@ public sealed record ModelLabCommandOptions(
         DirectoryInfo? current = new(Path.GetFullPath(seed));
         while (current is not null)
         {
-            if (Directory.Exists(Path.Combine(current.FullName, ".git")) ||
-                File.Exists(Path.Combine(current.FullName, "Trackdub.slnx")))
+            if (Directory.Exists(Path.Join(current.FullName, ".git")) ||
+                File.Exists(Path.Join(current.FullName, "Trackdub.slnx")))
             {
                 return current.FullName;
             }

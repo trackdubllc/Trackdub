@@ -32,7 +32,7 @@ public sealed class LipSyncRealAlignerIntegrationTests
         string fixtureWavPath = Environment.GetEnvironmentVariable(FixtureEnvVar)!;
         string modelRoot = LipSyncRealModelFactAttribute.ResolveModelRoot(ModelId);
 
-        string directory = Path.Combine(Path.GetTempPath(), $"lipsync-real-{Guid.NewGuid():N}");
+        string directory = Path.Join(Path.GetTempPath(), $"lipsync-real-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
         {
@@ -201,9 +201,9 @@ public sealed class LipSyncRealModelFactAttribute : FactAttribute
     {
         string root = ResolveModelRoot("wav2vec2-lv60-espeak-cv-ft-onnx");
         bool hasOnnx =
-            File.Exists(Path.Combine(root, "onnx", "model_int8.onnx")) ||
-            File.Exists(Path.Combine(root, "onnx", "model_fp16.onnx"));
-        if (!hasOnnx || !File.Exists(Path.Combine(root, "vocab.json")))
+            File.Exists(Path.Join(root, "onnx", "model_int8.onnx")) ||
+            File.Exists(Path.Join(root, "onnx", "model_fp16.onnx"));
+        if (!hasOnnx || !File.Exists(Path.Join(root, "vocab.json")))
         {
             Skip = $"wav2vec2 aligner model not present in model cache ({root}). " +
                    "Need vocab.json plus onnx/model_int8.onnx or onnx/model_fp16.onnx.";
@@ -223,9 +223,9 @@ public sealed class LipSyncRealModelFactAttribute : FactAttribute
         string? configured = Environment.GetEnvironmentVariable("TRACKDUB_MODEL_CACHE");
         string cacheRoot = !string.IsNullOrWhiteSpace(configured)
             ? configured
-            : Path.Combine(
+            : Path.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Trackdub", "model-cache");
-        return Path.Combine(cacheRoot, modelId);
+        return Path.Join(cacheRoot, modelId);
     }
 }

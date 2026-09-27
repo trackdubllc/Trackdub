@@ -75,7 +75,7 @@ public sealed class TrtRtxEpBundleInstaller(
 
     private static TrtRtxEpBundleManifest LoadManifest()
     {
-        string manifestPath = Path.Combine(AppContext.BaseDirectory, "trt-rtx-ep.manifest.json");
+        string manifestPath = Path.Join(AppContext.BaseDirectory, "trt-rtx-ep.manifest.json");
         return TrtRtxEpBundleManifestLoader.Load(manifestPath);
     }
 }

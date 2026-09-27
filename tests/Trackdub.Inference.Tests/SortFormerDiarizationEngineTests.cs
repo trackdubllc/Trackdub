@@ -40,9 +40,9 @@ public sealed class SortFormerDiarizationEngineTests
     {
         BundledModelManifestRegistry registry = LoadRegistry();
         string modelPath = GetLocalCacheModelPath();
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
-        string wavePath = Path.Combine(tempDirectory, "sortformer-local-cache.wav");
+        string wavePath = Path.Join(tempDirectory, "sortformer-local-cache.wav");
 
         try
         {
@@ -84,9 +84,9 @@ public sealed class SortFormerDiarizationEngineTests
         _ = ResolveFixtureModelPath(registry)
             ?? throw new InvalidOperationException("SortFormer ONNX fixture resolution unexpectedly failed after attribute validation.");
 
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
-        string wavePath = Path.Combine(tempDirectory, "sortformer-fixture.wav");
+        string wavePath = Path.Join(tempDirectory, "sortformer-fixture.wav");
 
         try
         {
@@ -148,17 +148,17 @@ public sealed class SortFormerDiarizationEngineTests
     [Fact(Skip = "Pending TRT-RTX validation — run tools/olive/Validate-SortFormerTrtRtx.ps1, then remove this Skip")]
     public async Task DiarizeAsync_with_trtrtx_staged_model_selects_tensorrt_rtx_provider()
     {
-        string stagingDir = Path.Combine(FindRepoRoot(), "build", "sortformer-4spk-onnx-trtrtx-validated-fp16", "onnx");
-        string stagedModelPath = Path.Combine(stagingDir, "model.onnx");
+        string stagingDir = Path.Join(FindRepoRoot(), "build", "sortformer-4spk-onnx-trtrtx-validated-fp16", "onnx");
+        string stagedModelPath = Path.Join(stagingDir, "model.onnx");
 
         Assert.True(
             File.Exists(stagedModelPath),
             $"Staged model not found: {stagedModelPath}\n" +
             "Run: .\\tools\\olive\\Validate-SortFormerTrtRtx.ps1");
 
-        string tempDirectory = Path.Combine(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
+        string tempDirectory = Path.Join(Path.GetTempPath(), "Trackdub.Inference.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
-        string wavePath = Path.Combine(tempDirectory, "sortformer-trtrtx.wav");
+        string wavePath = Path.Join(tempDirectory, "sortformer-trtrtx.wav");
 
         try
         {
@@ -209,7 +209,7 @@ public sealed class SortFormerDiarizationEngineTests
         DirectoryInfo? current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "Trackdub.slnx")))
+            if (File.Exists(Path.Join(current.FullName, "Trackdub.slnx")))
             {
                 return current.FullName;
             }
@@ -234,7 +234,7 @@ public sealed class SortFormerDiarizationEngineTests
     }
 
     private static string GetLocalCacheModelPath() =>
-        Path.Combine(
+        Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Trackdub",
             "model-cache",

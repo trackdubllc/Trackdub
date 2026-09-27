@@ -42,7 +42,7 @@ public sealed class LinuxNativeGpuRuntimeProbe : ILinuxNativeGpuRuntimeProbe
 
             foreach (string cardPath in Directory.EnumerateDirectories(drmRoot, "card*"))
             {
-                string vendorPath = Path.Combine(cardPath, "device", "vendor");
+                string vendorPath = Path.Join(cardPath, "device", "vendor");
                 if (!File.Exists(vendorPath))
                 {
                     continue;

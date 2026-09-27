@@ -10,12 +10,12 @@ public sealed class ProjectRootNameResolverTests
         string tempDirectory = CreateTempDirectory();
         try
         {
-            string mediaPath = Path.Combine(tempDirectory, "clip.mp4");
+            string mediaPath = Path.Join(tempDirectory, "clip.mp4");
 
             ProjectRootNameCandidate candidate = ProjectRootNameResolver.CreateAvailableProjectRoot(mediaPath, "clip");
 
             Assert.Equal("clip", candidate.ProjectName);
-            Assert.Equal(Path.Combine(tempDirectory, "clip.trackdub"), candidate.ProjectRootPath);
+            Assert.Equal(Path.Join(tempDirectory, "clip.trackdub"), candidate.ProjectRootPath);
         }
         finally
         {
@@ -29,14 +29,14 @@ public sealed class ProjectRootNameResolverTests
         string tempDirectory = CreateTempDirectory();
         try
         {
-            Directory.CreateDirectory(Path.Combine(tempDirectory, "clip.trackdub"));
-            Directory.CreateDirectory(Path.Combine(tempDirectory, "clip #2.trackdub"));
-            string mediaPath = Path.Combine(tempDirectory, "clip.mp4");
+            Directory.CreateDirectory(Path.Join(tempDirectory, "clip.trackdub"));
+            Directory.CreateDirectory(Path.Join(tempDirectory, "clip #2.trackdub"));
+            string mediaPath = Path.Join(tempDirectory, "clip.mp4");
 
             ProjectRootNameCandidate candidate = ProjectRootNameResolver.CreateAvailableProjectRoot(mediaPath, "clip");
 
             Assert.Equal("clip #3", candidate.ProjectName);
-            Assert.Equal(Path.Combine(tempDirectory, "clip #3.trackdub"), candidate.ProjectRootPath);
+            Assert.Equal(Path.Join(tempDirectory, "clip #3.trackdub"), candidate.ProjectRootPath);
         }
         finally
         {
@@ -50,13 +50,13 @@ public sealed class ProjectRootNameResolverTests
         string tempDirectory = CreateTempDirectory();
         try
         {
-            File.WriteAllText(Path.Combine(tempDirectory, "clip.trackdub"), "not a project folder");
-            string mediaPath = Path.Combine(tempDirectory, "clip.mp4");
+            File.WriteAllText(Path.Join(tempDirectory, "clip.trackdub"), "not a project folder");
+            string mediaPath = Path.Join(tempDirectory, "clip.mp4");
 
             ProjectRootNameCandidate candidate = ProjectRootNameResolver.CreateAvailableProjectRoot(mediaPath, "clip");
 
             Assert.Equal("clip #2", candidate.ProjectName);
-            Assert.Equal(Path.Combine(tempDirectory, "clip #2.trackdub"), candidate.ProjectRootPath);
+            Assert.Equal(Path.Join(tempDirectory, "clip #2.trackdub"), candidate.ProjectRootPath);
         }
         finally
         {
@@ -70,13 +70,13 @@ public sealed class ProjectRootNameResolverTests
         string tempDirectory = CreateTempDirectory();
         try
         {
-            Directory.CreateDirectory(Path.Combine(tempDirectory, "CON_.trackdub"));
-            string mediaPath = Path.Combine(tempDirectory, "CON.mp4");
+            Directory.CreateDirectory(Path.Join(tempDirectory, "CON_.trackdub"));
+            string mediaPath = Path.Join(tempDirectory, "CON.mp4");
 
             ProjectRootNameCandidate candidate = ProjectRootNameResolver.CreateAvailableProjectRoot(mediaPath, "CON");
 
             Assert.Equal("CON_ #2", candidate.ProjectName);
-            Assert.Equal(Path.Combine(tempDirectory, "CON_ #2.trackdub"), candidate.ProjectRootPath);
+            Assert.Equal(Path.Join(tempDirectory, "CON_ #2.trackdub"), candidate.ProjectRootPath);
         }
         finally
         {
@@ -96,12 +96,12 @@ public sealed class ProjectRootNameResolverTests
         string tempDirectory = CreateTempDirectory();
         try
         {
-            string mediaPath = Path.Combine(tempDirectory, "clip.mp4");
+            string mediaPath = Path.Join(tempDirectory, "clip.mp4");
 
             ProjectRootNameCandidate candidate = ProjectRootNameResolver.CreateAvailableProjectRoot(mediaPath, projectName);
 
             Assert.Equal(expectedProjectName, candidate.ProjectName);
-            Assert.Equal(Path.Combine(tempDirectory, $"{expectedProjectName}.trackdub"), candidate.ProjectRootPath);
+            Assert.Equal(Path.Join(tempDirectory, $"{expectedProjectName}.trackdub"), candidate.ProjectRootPath);
         }
         finally
         {
@@ -139,10 +139,10 @@ public sealed class ProjectRootNameResolverTests
             return;
         }
 
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
-        string mediaDirectory = Path.Combine(tempRoot, "OneDrive", "Videos", "Movies");
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string mediaDirectory = Path.Join(tempRoot, "OneDrive", "Videos", "Movies");
         Directory.CreateDirectory(mediaDirectory);
-        string mediaPath = Path.Combine(mediaDirectory, "clip.mp4");
+        string mediaPath = Path.Join(mediaDirectory, "clip.mp4");
 
         try
         {
@@ -153,7 +153,7 @@ public sealed class ProjectRootNameResolverTests
                 projectParent);
 
             Assert.Equal("clip", candidate.ProjectName);
-            Assert.Equal(Path.Combine(mediaDirectory, "clip.trackdub"), candidate.ProjectRootPath);
+            Assert.Equal(Path.Join(mediaDirectory, "clip.trackdub"), candidate.ProjectRootPath);
         }
         finally
         {
@@ -167,10 +167,10 @@ public sealed class ProjectRootNameResolverTests
     [Fact]
     public void CreateAvailableProjectRoot_allows_explicit_cloud_synced_project_parent()
     {
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
-        string mediaDirectory = Path.Combine(tempRoot, "OneDrive", "Videos", "Movies");
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string mediaDirectory = Path.Join(tempRoot, "OneDrive", "Videos", "Movies");
         Directory.CreateDirectory(mediaDirectory);
-        string mediaPath = Path.Combine(mediaDirectory, "clip.mp4");
+        string mediaPath = Path.Join(mediaDirectory, "clip.mp4");
 
         try
         {
@@ -179,7 +179,7 @@ public sealed class ProjectRootNameResolverTests
                 "clip",
                 mediaDirectory);
 
-            Assert.Equal(Path.Combine(mediaDirectory, "clip.trackdub"), candidate.ProjectRootPath);
+            Assert.Equal(Path.Join(mediaDirectory, "clip.trackdub"), candidate.ProjectRootPath);
         }
         finally
         {
@@ -192,14 +192,14 @@ public sealed class ProjectRootNameResolverTests
 
     private static string CreateTempDirectory()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
+        string directory = Path.Join(Path.GetTempPath(), "Trackdub.Application.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         return directory;
     }
 
     private static string CreateCloudSyncedMediaPath(string relativeFolder, string fileName)
     {
-        string mediaDirectory = Path.Combine(
+        string mediaDirectory = Path.Join(
             Path.GetTempPath(),
             "Trackdub.Application.Tests",
             Guid.NewGuid().ToString("N"),
@@ -207,6 +207,6 @@ public sealed class ProjectRootNameResolverTests
             "Videos",
             relativeFolder);
         Directory.CreateDirectory(mediaDirectory);
-        return Path.Combine(mediaDirectory, fileName);
+        return Path.Join(mediaDirectory, fileName);
     }
 }

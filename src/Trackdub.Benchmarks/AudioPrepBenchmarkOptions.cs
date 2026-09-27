@@ -12,7 +12,7 @@ public sealed record AudioPrepBenchmarkOptions(
         out AudioPrepBenchmarkOptions options)
     {
         string? manifestPath = null;
-        string outputPath = Path.Combine(Environment.CurrentDirectory, "audio-prep-benchmark-report.json");
+        string outputPath = Path.Join(Environment.CurrentDirectory, "audio-prep-benchmark-report.json");
         var reportFormat = ReportFormat.Both;
         bool showHelp = false;
 
@@ -87,7 +87,7 @@ public sealed record AudioPrepBenchmarkOptions(
     }
 
     private static AudioPrepBenchmarkOptions DefaultWithHelp() =>
-        new(string.Empty, Path.Combine(Environment.CurrentDirectory, "audio-prep-benchmark-report.json"), ReportFormat.Both, ShowHelp: true);
+        new(string.Empty, Path.Join(Environment.CurrentDirectory, "audio-prep-benchmark-report.json"), ReportFormat.Both, ShowHelp: true);
 
     private static bool TryReadValue(
         IReadOnlyList<string> args,

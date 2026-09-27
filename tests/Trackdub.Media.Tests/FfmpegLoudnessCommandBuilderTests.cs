@@ -137,9 +137,9 @@ public sealed class FfmpegLoudnessCommandBuilderTests
     [Fact]
     public async Task NormalizeAsync_rejects_output_path_that_matches_input_before_delete()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-loudness-tests-{Guid.NewGuid():N}");
+        string tempDirectory = Path.Join(Path.GetTempPath(), $"trackdub-loudness-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
-        string inputPath = Path.Combine(tempDirectory, "dub.wav");
+        string inputPath = Path.Join(tempDirectory, "dub.wav");
         await File.WriteAllBytesAsync(inputPath, [1, 2, 3], TestContext.Current.CancellationToken);
         var normalizer = new FfmpegLoudnessNormalizer(new RecordingProcessRunner(), ffmpegPath: "ffmpeg");
 
@@ -162,11 +162,11 @@ public sealed class FfmpegLoudnessCommandBuilderTests
     [Fact]
     public async Task AnalyzeAsync_runs_first_pass_and_returns_integrated_loudness_without_output_file()
     {
-        string tempDirectory = Path.Combine(Path.GetTempPath(), $"trackdub-loudness-tests-{Guid.NewGuid():N}");
+        string tempDirectory = Path.Join(Path.GetTempPath(), $"trackdub-loudness-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
-        string inputPath = Path.Combine(tempDirectory, "source.wav");
-        string unexpectedOutputPath = Path.Combine(tempDirectory, "analysis-output.wav");
-        string ffmpegPath = Path.Combine(tempDirectory, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
+        string inputPath = Path.Join(tempDirectory, "source.wav");
+        string unexpectedOutputPath = Path.Join(tempDirectory, "analysis-output.wav");
+        string ffmpegPath = Path.Join(tempDirectory, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
         await File.WriteAllBytesAsync(inputPath, [1, 2, 3], TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(ffmpegPath, [], TestContext.Current.CancellationToken);
         var processRunner = new RecordingProcessRunner(

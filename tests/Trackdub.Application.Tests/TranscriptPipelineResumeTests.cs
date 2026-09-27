@@ -21,7 +21,7 @@ public sealed class TranscriptPipelineResumeTests
     [Fact]
     public async Task ExecuteAsync_skips_resumable_vad_stage_and_hydrates_speech_regions()
     {
-        var artifactStore = new FakeArtifactStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var artifactStore = new FakeArtifactStore(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
         var mediaRepository = new FakeMediaAssetRepository();
         var stageRunStore = new FakeProjectStageRunStore();
         var transcriptRepository = new FakeTranscriptRepository();

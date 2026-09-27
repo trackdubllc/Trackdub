@@ -19,7 +19,7 @@ public sealed class PlaybackServiceSinkOrderingTests
 {
     private static MediaSourceDescriptor MakeSource() =>
         new(
-            System.IO.Path.Combine("virtual-media", "sample.mp4"),
+            System.IO.Path.Join("virtual-media", "sample.mp4"),
             new MediaProbeSnapshot(
                 "mp4",
                 "MP4",

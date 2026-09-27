@@ -10,7 +10,7 @@ public sealed class SqliteMediaAssetRepositoryTests
     [Fact]
     public async Task Repository_round_trips_media_asset_and_artifacts_for_reopen()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Reopen.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Reopen.trackdub");
         var database = new SqliteProjectDatabase(projectRoot);
         var projectRepository = new SqliteProjectRepository(database);
         var mediaRepository = new SqliteMediaAssetRepository(database);
@@ -56,7 +56,7 @@ public sealed class SqliteMediaAssetRepositoryTests
     [Fact]
     public async Task UpdateSourcePathAsync_persists_relocated_path()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Relocate.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Relocate.trackdub");
         var database = new SqliteProjectDatabase(projectRoot);
         var projectRepository = new SqliteProjectRepository(database);
         var mediaRepository = new SqliteMediaAssetRepository(database);

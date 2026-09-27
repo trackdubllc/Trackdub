@@ -28,7 +28,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_generates_transcript_revision_and_stage_runs()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -64,7 +64,7 @@ public partial class TranscriptProjectServiceTests
     public async Task CreateAsync_passes_requested_source_language_to_asr()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var transcriptionEngine = new RecordingAudioTranscriptionEngine();
@@ -81,7 +81,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RunInitialTranscriptionAsync_after_media_spine_persists_detected_transcript_language()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -106,7 +106,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RunInitialTranscriptionAsync_persists_requested_source_when_engine_omits_detected_language()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(
@@ -135,7 +135,7 @@ public partial class TranscriptProjectServiceTests
     public async Task RunInitialTranscriptionAsync_does_not_separate_stems()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -159,7 +159,7 @@ public partial class TranscriptProjectServiceTests
     public async Task SetTranscriptLanguageAsync_on_media_spine_primes_initial_transcription_source()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         var transcriptionEngine = new RecordingAudioTranscriptionEngine();

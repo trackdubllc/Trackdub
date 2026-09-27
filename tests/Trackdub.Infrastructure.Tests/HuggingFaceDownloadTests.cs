@@ -141,12 +141,12 @@ public sealed class HuggingFaceDownloadTests
     [Fact]
     public void CleanupStaleTempDirectories_removes_old_orphans()
     {
-        string root = Path.Combine(
+        string root = Path.Join(
             Path.GetTempPath(),
             "Trackdub.HfCli.Tests",
             Guid.NewGuid().ToString("N"));
-        string stale = Path.Combine(root, "stale");
-        string fresh = Path.Combine(root, "fresh");
+        string stale = Path.Join(root, "stale");
+        string fresh = Path.Join(root, "fresh");
         Directory.CreateDirectory(stale);
         Directory.CreateDirectory(fresh);
         Directory.SetLastWriteTimeUtc(stale, DateTime.UtcNow - TimeSpan.FromDays(2));
@@ -180,8 +180,8 @@ public sealed class HuggingFaceDownloadTests
         using var handler = new RangeAwareHttpMessageHandler(payload);
         using var httpClient = new HttpClient(handler);
         var logger = new DebugApplicationLogger();
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.HuggingFaceDownload.Tests", Guid.NewGuid().ToString("N"));
-        string tempPath = Path.Combine(tempRoot, "model.onnx.partial");
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.HuggingFaceDownload.Tests", Guid.NewGuid().ToString("N"));
+        string tempPath = Path.Join(tempRoot, "model.onnx.partial");
         Directory.CreateDirectory(tempRoot);
 
         try
@@ -223,8 +223,8 @@ public sealed class HuggingFaceDownloadTests
         using var handler = new RangeAwareHttpMessageHandler(payload);
         using var httpClient = new HttpClient(handler);
         var logger = new DebugApplicationLogger();
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.HuggingFaceDownload.Tests", Guid.NewGuid().ToString("N"));
-        string cacheRoot = Path.Combine(tempRoot, "cache");
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.HuggingFaceDownload.Tests", Guid.NewGuid().ToString("N"));
+        string cacheRoot = Path.Join(tempRoot, "cache");
         Directory.CreateDirectory(cacheRoot);
 
         string? originalPath = Environment.GetEnvironmentVariable("PATH");
@@ -243,7 +243,7 @@ public sealed class HuggingFaceDownloadTests
             };
 
             var downloader = new HuggingFaceModelDownloader(cacheRoot, logger, httpClient, options);
-            string destinationPath = Path.Combine(cacheRoot, "example", "model.onnx");
+            string destinationPath = Path.Join(cacheRoot, "example", "model.onnx");
 
             bool downloaded = await downloader.DownloadAsync(
                 "example/model",
@@ -271,11 +271,11 @@ public sealed class HuggingFaceDownloadTests
         using var handler = new RangeAwareHttpMessageHandler(payload);
         using var httpClient = new HttpClient(handler);
         var logger = new DebugApplicationLogger();
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.HuggingFaceDownload.Tests", Guid.NewGuid().ToString("N"));
-        string cacheRoot = Path.Combine(tempRoot, "cache");
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.HuggingFaceDownload.Tests", Guid.NewGuid().ToString("N"));
+        string cacheRoot = Path.Join(tempRoot, "cache");
         Directory.CreateDirectory(cacheRoot);
 
-        string destinationPath = Path.Combine(cacheRoot, "example", "model.onnx");
+        string destinationPath = Path.Join(cacheRoot, "example", "model.onnx");
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
         string partialPath = $"{destinationPath}.partial";
         await File.WriteAllBytesAsync(partialPath, payload.AsSpan(0, 32).ToArray());
@@ -324,8 +324,8 @@ public sealed class HuggingFaceDownloadTests
         using var handler = new RangeAwareHttpMessageHandler(payload);
         using var httpClient = new HttpClient(handler);
         var logger = new DebugApplicationLogger();
-        string tempRoot = Path.Combine(Path.GetTempPath(), "Trackdub.HuggingFaceDownload.Tests", Guid.NewGuid().ToString("N"));
-        string cacheRoot = Path.Combine(tempRoot, "cache");
+        string tempRoot = Path.Join(Path.GetTempPath(), "Trackdub.HuggingFaceDownload.Tests", Guid.NewGuid().ToString("N"));
+        string cacheRoot = Path.Join(tempRoot, "cache");
         Directory.CreateDirectory(cacheRoot);
 
         var options = new HuggingFaceDownloadOptions
@@ -339,7 +339,7 @@ public sealed class HuggingFaceDownloadTests
         };
 
         var downloader = new HuggingFaceModelDownloader(cacheRoot, logger, httpClient, options);
-        string destinationPath = Path.Combine(cacheRoot, "example", "model.onnx");
+        string destinationPath = Path.Join(cacheRoot, "example", "model.onnx");
 
         try
         {

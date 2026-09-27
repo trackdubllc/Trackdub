@@ -53,11 +53,11 @@ internal static partial class OliveRecipePreparation
         string? environmentDirectory = getEnvironmentVariable(TrtRtxEpDirectoryEnvironmentVariable);
         if (!string.IsNullOrWhiteSpace(environmentDirectory))
         {
-            string candidate = Path.Combine(environmentDirectory, fileName);
+            string candidate = Path.Join(environmentDirectory, fileName);
             return File.Exists(candidate) ? Path.GetFullPath(candidate) : null;
         }
 
-        string providersRoot = Path.Combine(userDataRoot, "Providers", "trt-rtx");
+        string providersRoot = Path.Join(userDataRoot, "Providers", "trt-rtx");
         if (!Directory.Exists(providersRoot))
         {
             return null;
@@ -67,7 +67,7 @@ internal static partial class OliveRecipePreparation
         return Directory.EnumerateDirectories(providersRoot)
             .OrderByDescending(directory => Version.TryParse(Path.GetFileName(directory), out Version? version) ? version : new Version(0, 0))
             .SelectMany(Directory.EnumerateDirectories)
-            .Select(cudaDirectory => Path.Combine(cudaDirectory, runtimeIdentifier, fileName))
+            .Select(cudaDirectory => Path.Join(cudaDirectory, runtimeIdentifier, fileName))
             .FirstOrDefault(File.Exists);
     }
 
@@ -81,7 +81,7 @@ internal static partial class OliveRecipePreparation
     {
         using Stream stream = typeof(OliveRecipePreparation).Assembly.GetManifestResourceStream(PruneScriptResourceName)
             ?? throw new InvalidOperationException($"Embedded resource '{PruneScriptResourceName}' is missing.");
-        string scriptPath = Path.Combine(directory, "prune_attention_outputs.py");
+        string scriptPath = Path.Join(directory, "prune_attention_outputs.py");
         using FileStream file = File.Create(scriptPath);
         stream.CopyTo(file);
         return scriptPath;

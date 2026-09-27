@@ -10,7 +10,7 @@ public sealed class FileSystemArtifactStoreTests
     [Fact]
     public async Task CommitAsync_moves_temp_file_atomically_into_place()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "AtomicWrite.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "AtomicWrite.trackdub");
         var store = new FileSystemArtifactStore(projectRoot);
         await store.EnsureLayoutAsync(TestContext.Current.CancellationToken);
         var handle = store.CreateWriteHandle(ProjectArtifactPaths.WaveformSummaryRelativePath);
@@ -27,7 +27,7 @@ public sealed class FileSystemArtifactStoreTests
     [Fact]
     public async Task CommitAsync_overwrites_existing_artifact()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Overwrite.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "Overwrite.trackdub");
         var store = new FileSystemArtifactStore(projectRoot);
         await store.EnsureLayoutAsync(TestContext.Current.CancellationToken);
         var first = store.CreateWriteHandle(ProjectArtifactPaths.WaveformSummaryRelativePath);
@@ -56,7 +56,7 @@ public sealed class FileSystemArtifactStoreTests
     [Fact]
     public async Task WriteJsonAsync_and_fingerprint_service_produce_expected_hash()
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "HashCheck.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "HashCheck.trackdub");
         var store = new FileSystemArtifactStore(projectRoot);
         var fingerprintService = new Sha256FileFingerprintService();
         await store.EnsureLayoutAsync(TestContext.Current.CancellationToken);
@@ -82,7 +82,7 @@ public sealed class FileSystemArtifactStoreTests
     [Fact]
     public async Task FingerprintService_bounds_cache_entries()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "FingerprintCache");
+        string root = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "FingerprintCache");
         try
         {
             Directory.CreateDirectory(root);
@@ -90,7 +90,7 @@ public sealed class FileSystemArtifactStoreTests
 
             for (int i = 0; i < Sha256FileFingerprintService.MaxCachedFingerprints + 5; i++)
             {
-                string path = Path.Combine(root, $"{i}.txt");
+                string path = Path.Join(root, $"{i}.txt");
                 await File.WriteAllTextAsync(path, i.ToString());
                 await fingerprintService.ComputeAsync(path, TestContext.Current.CancellationToken);
             }
@@ -106,27 +106,27 @@ public sealed class FileSystemArtifactStoreTests
     [Fact]
     public async Task FingerprintService_keeps_recently_used_entries_when_cache_is_full()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "FingerprintCacheLru");
+        string root = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "FingerprintCacheLru");
         try
         {
             Directory.CreateDirectory(root);
             var fingerprintService = new Sha256FileFingerprintService();
-            string sentinelPath = Path.Combine(root, "sentinel.txt");
-            string firstFillerPath = Path.Combine(root, "filler-0.txt");
+            string sentinelPath = Path.Join(root, "sentinel.txt");
+            string firstFillerPath = Path.Join(root, "filler-0.txt");
 
             await File.WriteAllTextAsync(sentinelPath, "sentinel", TestContext.Current.CancellationToken);
             await fingerprintService.ComputeAsync(sentinelPath, TestContext.Current.CancellationToken);
 
             for (int i = 0; i < Sha256FileFingerprintService.MaxCachedFingerprints - 1; i++)
             {
-                string path = Path.Combine(root, $"filler-{i}.txt");
+                string path = Path.Join(root, $"filler-{i}.txt");
                 await File.WriteAllTextAsync(path, i.ToString());
                 await fingerprintService.ComputeAsync(path, TestContext.Current.CancellationToken);
             }
 
             await fingerprintService.ComputeAsync(sentinelPath, TestContext.Current.CancellationToken);
 
-            string overflowPath = Path.Combine(root, "overflow.txt");
+            string overflowPath = Path.Join(root, "overflow.txt");
             await File.WriteAllTextAsync(overflowPath, "overflow", TestContext.Current.CancellationToken);
             await fingerprintService.ComputeAsync(overflowPath, TestContext.Current.CancellationToken);
 
@@ -145,7 +145,7 @@ public sealed class FileSystemArtifactStoreTests
     [InlineData(@"\\server\share\artifact.json")]
     public void CreateWriteHandle_RejectsAbsolutePath(string path)
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "AbsolutePath.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "AbsolutePath.trackdub");
         var store = new FileSystemArtifactStore(projectRoot);
 
         Assert.Throws<InvalidOperationException>(() => store.CreateWriteHandle(path));
@@ -158,7 +158,7 @@ public sealed class FileSystemArtifactStoreTests
     [InlineData("artifacts/folder/LPT9. ")]
     public void CreateWriteHandle_RejectsWindowsReservedDeviceNamesWithSuffixes(string path)
     {
-        string projectRoot = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "ReservedPath.trackdub");
+        string projectRoot = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"), "ReservedPath.trackdub");
         var store = new FileSystemArtifactStore(projectRoot);
 
         Assert.Throws<InvalidOperationException>(() => store.CreateWriteHandle(path));

@@ -57,7 +57,7 @@ public sealed class NvidiaAfxRuntimeReadinessService(
 
         NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
         bool hasRequiredModels = definition.RequiredModelRelativePaths.All(model =>
-            File.Exists(Path.Combine(runtimeRoot, model)));
+            File.Exists(Path.Join(runtimeRoot, model)));
         if (!hasRequiredModels)
         {
             return new NvidiaAfxRuntimeReadiness(

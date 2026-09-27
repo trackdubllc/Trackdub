@@ -53,7 +53,7 @@ public sealed class RunStageCommandTests
     [Fact]
     public void GlobalModelDirectoryOption_IsReadableFromSubcommandParseResult()
     {
-        string modelDirectory = Path.Combine(Path.GetTempPath(), "trackdub-cli-global-model-dir-test");
+        string modelDirectory = Path.Join(Path.GetTempPath(), "trackdub-cli-global-model-dir-test");
         ParseResult parseResult = _rootCommand.Parse(
             ["--model-directory", modelDirectory, "check"]);
         string? parsedModelDirectory = CliParseHelpers.GetGlobalOptionValue<string?>(parseResult, "model-directory");

@@ -9,9 +9,9 @@ public sealed class PlannedRuntimeModelResolverTests
     public void ResolveModelRootPath_WhenEntryPathIsNestedGenAiConfig_UsesPackageDirectory()
     {
         using TempDirectoryFixture fixture = new();
-        string packageRoot = Path.Combine(fixture.RootPath, "cpu_and_mobile", "cpu-int4");
+        string packageRoot = Path.Join(fixture.RootPath, "cpu_and_mobile", "cpu-int4");
         Directory.CreateDirectory(packageRoot);
-        string genAiConfigPath = Path.Combine(packageRoot, "genai_config.json");
+        string genAiConfigPath = Path.Join(packageRoot, "genai_config.json");
         File.WriteAllText(genAiConfigPath, "{}");
 
         var plan = new StageRuntimePlan
@@ -32,7 +32,7 @@ public sealed class PlannedRuntimeModelResolverTests
     public void ResolveModelRootPath_WhenEntryPathIsRootGenAiConfig_UsesCacheRoot()
     {
         using TempDirectoryFixture fixture = new();
-        string genAiConfigPath = Path.Combine(fixture.RootPath, "genai_config.json");
+        string genAiConfigPath = Path.Join(fixture.RootPath, "genai_config.json");
         File.WriteAllText(genAiConfigPath, "{}");
 
         var plan = new StageRuntimePlan
@@ -53,8 +53,8 @@ public sealed class PlannedRuntimeModelResolverTests
     public void ResolveGenAiModelRoot_WhenEntryPathIsNestedGenAiConfig_UsesPackageDirectory()
     {
         using TempDirectoryFixture fixture = new();
-        string packageRoot = Path.Combine(fixture.RootPath, "cpu_and_mobile", "cpu-int4");
-        string genAiConfigPath = Path.Combine(packageRoot, "genai_config.json");
+        string packageRoot = Path.Join(fixture.RootPath, "cpu_and_mobile", "cpu-int4");
+        string genAiConfigPath = Path.Join(packageRoot, "genai_config.json");
 
         string resolvedRoot = PlannedRuntimeModelResolver.ResolveGenAiModelRoot(
             fixture.RootPath,
@@ -67,7 +67,7 @@ public sealed class PlannedRuntimeModelResolverTests
     public void ResolveGenAiModelRoot_WhenEntryPathIsRootGenAiConfig_UsesCacheRoot()
     {
         using TempDirectoryFixture fixture = new();
-        string genAiConfigPath = Path.Combine(fixture.RootPath, "genai_config.json");
+        string genAiConfigPath = Path.Join(fixture.RootPath, "genai_config.json");
 
         string resolvedRoot = PlannedRuntimeModelResolver.ResolveGenAiModelRoot(
             fixture.RootPath,
@@ -78,7 +78,7 @@ public sealed class PlannedRuntimeModelResolverTests
 
     private sealed class TempDirectoryFixture : IDisposable
     {
-        public string RootPath { get; } = Path.Combine(
+        public string RootPath { get; } = Path.Join(
             Path.GetTempPath(),
             "trackdub-tests",
             Guid.NewGuid().ToString("N"));

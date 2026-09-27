@@ -19,7 +19,7 @@ public sealed class ProjectLockTests : IDisposable
         using var lockHandle = ProjectLock.Acquire(dir);
 
         // Assert — lock file exists (DeleteOnClose means it exists while stream is open)
-        string lockPath = Path.Combine(dir, ".trackdub.lock");
+        string lockPath = Path.Join(dir, ".trackdub.lock");
         Assert.True(File.Exists(lockPath));
     }
 
@@ -112,7 +112,7 @@ public sealed class ProjectLockTests : IDisposable
     {
         // Arrange
         string parentDir = CreateTempDirectory();
-        string subDir = Path.Combine(parentDir, "nested", "project");
+        string subDir = Path.Join(parentDir, "nested", "project");
         Assert.False(Directory.Exists(subDir));
 
         // Act
@@ -127,7 +127,7 @@ public sealed class ProjectLockTests : IDisposable
     {
         // Arrange — simulate a stale lock by writing a lock file with a non-existent PID.
         string dir = CreateTempDirectory();
-        string lockPath = Path.Combine(dir, ".trackdub.lock");
+        string lockPath = Path.Join(dir, ".trackdub.lock");
 
         // Use a PID that almost certainly doesn't exist (max int).
         string staleLockContent = """{"pid":2147483647,"timestamp":"2024-01-01T00:00:00Z","machineName":"STALE"}""";
@@ -195,7 +195,7 @@ public sealed class ProjectLockTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        string dir = Path.Combine(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
+        string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         _tempDirs.Add(dir);
         return dir;

@@ -81,7 +81,7 @@ public sealed class ComponentStore
     public string GetComponentDirectory(string componentId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(componentId);
-        return Path.Combine(_componentsRoot, componentId);
+        return Path.Join(_componentsRoot, componentId);
     }
 
     /// <summary>
@@ -122,8 +122,8 @@ public sealed class ComponentStore
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(componentId);
         string componentPath = EnsureComponentDirectory(componentId);
-        string markerPath = Path.Combine(componentPath, InstallMarkerFileName);
-        string tempMarkerPath = Path.Combine(componentPath, $"{InstallMarkerFileName}.{Guid.NewGuid():N}.tmp");
+        string markerPath = Path.Join(componentPath, InstallMarkerFileName);
+        string tempMarkerPath = Path.Join(componentPath, $"{InstallMarkerFileName}.{Guid.NewGuid():N}.tmp");
 
         try
         {
@@ -150,6 +150,6 @@ public sealed class ComponentStore
 
     private string GetInstallMarkerPath(string componentId)
     {
-        return Path.Combine(GetComponentDirectory(componentId), InstallMarkerFileName);
+        return Path.Join(GetComponentDirectory(componentId), InstallMarkerFileName);
     }
 }

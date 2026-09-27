@@ -97,7 +97,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
         }
         else if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(CacheRootEnvironmentVariable)))
         {
-            installRootBase = Path.Combine(
+            installRootBase = Path.Join(
                 NormalizePath(Environment.GetEnvironmentVariable(CacheRootEnvironmentVariable)!),
                 ToolsDirectoryName);
             installRootBaseIsToolCacheRoot = true;
@@ -124,7 +124,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
         }
 
         string installRoot = GetInstallRoot();
-        string payloadRoot = Path.Combine(installRoot, ExtractedPayloadDirectoryName);
+        string payloadRoot = Path.Join(installRoot, ExtractedPayloadDirectoryName);
 
         lock (SyncRoot)
         {
@@ -136,8 +136,8 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
 
             Directory.CreateDirectory(installRoot);
 
-            string tempArchivePath = Path.Combine(installRoot, $"{package.AssetFileName}.{Guid.NewGuid():N}.tmp");
-            string tempExtractDirectory = Path.Combine(installRoot, $"extract-{Guid.NewGuid():N}");
+            string tempArchivePath = Path.Join(installRoot, $"{package.AssetFileName}.{Guid.NewGuid():N}.tmp");
+            string tempExtractDirectory = Path.Join(installRoot, $"extract-{Guid.NewGuid():N}");
 
             try
             {
@@ -191,7 +191,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
         }
 
         string installRoot = GetInstallRoot();
-        string payloadRoot = Path.Combine(installRoot, ExtractedPayloadDirectoryName);
+        string payloadRoot = Path.Join(installRoot, ExtractedPayloadDirectoryName);
 
         if (FindExecutable(payloadRoot, GetPlatformExecutableNames("ffmpeg")) is not null &&
             FindExecutable(payloadRoot, GetPlatformExecutableNames("ffprobe")) is not null)
@@ -220,8 +220,8 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             ? ExplicitLinuxArm64Package
             : ExplicitLinuxX64Package;
 
-        string tempArchivePath = Path.Combine(installRoot, $"{linuxPackage.AssetFileName}.{Guid.NewGuid():N}.tmp");
-        string tempExtractDirectory = Path.Combine(installRoot, $"extract-{Guid.NewGuid():N}");
+        string tempArchivePath = Path.Join(installRoot, $"{linuxPackage.AssetFileName}.{Guid.NewGuid():N}.tmp");
+        string tempExtractDirectory = Path.Join(installRoot, $"extract-{Guid.NewGuid():N}");
 
         try
         {
@@ -308,9 +308,9 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
 
     private async Task<bool> InstallExplicitOnMacOSAsync(string installRoot, string payloadRoot, CancellationToken ct)
     {
-        string tempDir = Path.Combine(installRoot, $"extract-{Guid.NewGuid():N}");
-        string ffmpegZipPath = Path.Combine(installRoot, $"ffmpeg-zip.{Guid.NewGuid():N}.tmp");
-        string ffprobeZipPath = Path.Combine(installRoot, $"ffprobe-zip.{Guid.NewGuid():N}.tmp");
+        string tempDir = Path.Join(installRoot, $"extract-{Guid.NewGuid():N}");
+        string ffmpegZipPath = Path.Join(installRoot, $"ffmpeg-zip.{Guid.NewGuid():N}.tmp");
+        string ffprobeZipPath = Path.Join(installRoot, $"ffprobe-zip.{Guid.NewGuid():N}.tmp");
 
         try
         {
@@ -365,14 +365,14 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
 
     string? IFfmpegAutoDownloader.TryResolveInstallRoot()
     {
-        string payloadRoot = Path.Combine(GetInstallRoot(), ExtractedPayloadDirectoryName);
+        string payloadRoot = Path.Join(GetInstallRoot(), ExtractedPayloadDirectoryName);
         return Directory.Exists(payloadRoot) ? payloadRoot : null;
     }
 
     internal string GetInstallRoot() =>
         installRootBaseIsToolCacheRoot
-            ? Path.Combine(installRootBase, FfmpegDirectoryName, package.VersionTag)
-            : Path.Combine(installRootBase, "Trackdub", ToolsDirectoryName, FfmpegDirectoryName, package.VersionTag);
+            ? Path.Join(installRootBase, FfmpegDirectoryName, package.VersionTag)
+            : Path.Join(installRootBase, "Trackdub", ToolsDirectoryName, FfmpegDirectoryName, package.VersionTag);
 
     private void DownloadArchive(string destinationPath)
     {
@@ -420,7 +420,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             return null;
         }
 
-        string hashPath = Path.Combine(installRoot, "archive.sha256");
+        string hashPath = Path.Join(installRoot, "archive.sha256");
         if (File.Exists(hashPath))
         {
             string trustedHash = File.ReadAllText(hashPath).Trim();
@@ -451,7 +451,7 @@ internal sealed class FfmpegAutoDownloader : IFfmpegAutoDownloader
             return;
         }
 
-        string hashPath = Path.Combine(installRoot, "archive.sha256");
+        string hashPath = Path.Join(installRoot, "archive.sha256");
         string temporaryHashPath = $"{hashPath}.{Guid.NewGuid():N}.tmp";
         File.WriteAllText(temporaryHashPath, hashToPersist + Environment.NewLine);
         try

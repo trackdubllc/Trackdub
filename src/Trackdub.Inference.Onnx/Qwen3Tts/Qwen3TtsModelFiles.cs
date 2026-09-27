@@ -20,13 +20,13 @@ internal sealed class Qwen3TtsModelFiles
 
     public string? ModelAlias { get; }
 
-    public string TokenizerDirectory => Path.Combine(RootDirectory, "tokenizer");
+    public string TokenizerDirectory => Path.Join(RootDirectory, "tokenizer");
 
-    public string EmbeddingsDirectory => Path.Combine(RootDirectory, "embeddings");
+    public string EmbeddingsDirectory => Path.Join(RootDirectory, "embeddings");
 
-    public string SpeakerEncoderPath => Path.Combine(RootDirectory, "speaker_encoder.onnx");
+    public string SpeakerEncoderPath => Path.Join(RootDirectory, "speaker_encoder.onnx");
 
-    public string VocoderPath => Path.Combine(RootDirectory, "vocoder.onnx");
+    public string VocoderPath => Path.Join(RootDirectory, "vocoder.onnx");
 
     public static Qwen3TtsModelFiles Resolve(
         BenchmarkModelCandidate candidate,
@@ -39,14 +39,14 @@ internal sealed class Qwen3TtsModelFiles
                 ?? throw new InvalidOperationException("Cannot resolve Qwen3-TTS model root path.");
 
         string? alias = plan.ModelAlias;
-        bool isBaseModel = IsBaseAlias(alias) || File.Exists(Path.Combine(rootDirectory, "speaker_encoder.onnx"));
+        bool isBaseModel = IsBaseAlias(alias) || File.Exists(Path.Join(rootDirectory, "speaker_encoder.onnx"));
         bool isLargeModel = IsLargeAlias(alias);
 
         if (File.Exists(SpeakerEncoderPathFor(rootDirectory)) == false && isBaseModel)
         {
             throw new FileNotFoundException(
                 "Qwen3-TTS Base voice cloning requires speaker_encoder.onnx in the model root.",
-                Path.Combine(rootDirectory, "speaker_encoder.onnx"));
+                Path.Join(rootDirectory, "speaker_encoder.onnx"));
         }
 
         foreach (string requiredPath in RequiredSharedPaths(rootDirectory))
@@ -61,18 +61,18 @@ internal sealed class Qwen3TtsModelFiles
     }
 
     private static string SpeakerEncoderPathFor(string rootDirectory) =>
-        Path.Combine(rootDirectory, "speaker_encoder.onnx");
+        Path.Join(rootDirectory, "speaker_encoder.onnx");
 
     private static IEnumerable<string> RequiredSharedPaths(string rootDirectory)
     {
-        yield return Path.Combine(rootDirectory, "talker_prefill.onnx");
-        yield return Path.Combine(rootDirectory, "talker_decode.onnx");
-        yield return Path.Combine(rootDirectory, "code_predictor.onnx");
-        yield return Path.Combine(rootDirectory, "vocoder.onnx");
-        yield return Path.Combine(rootDirectory, "tokenizer", "vocab.json");
-        yield return Path.Combine(rootDirectory, "tokenizer", "merges.txt");
-        yield return Path.Combine(rootDirectory, "embeddings", "config.json");
-        yield return Path.Combine(rootDirectory, "embeddings", "speaker_ids.json");
+        yield return Path.Join(rootDirectory, "talker_prefill.onnx");
+        yield return Path.Join(rootDirectory, "talker_decode.onnx");
+        yield return Path.Join(rootDirectory, "code_predictor.onnx");
+        yield return Path.Join(rootDirectory, "vocoder.onnx");
+        yield return Path.Join(rootDirectory, "tokenizer", "vocab.json");
+        yield return Path.Join(rootDirectory, "tokenizer", "merges.txt");
+        yield return Path.Join(rootDirectory, "embeddings", "config.json");
+        yield return Path.Join(rootDirectory, "embeddings", "speaker_ids.json");
     }
 
     private static bool IsBaseAlias(string? alias) =>

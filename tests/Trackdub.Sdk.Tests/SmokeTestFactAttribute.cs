@@ -17,7 +17,7 @@ public sealed class SmokeTestFactAttribute : FactAttribute
         if (!File.Exists(smokeMediaPath))
         {
             Skip = $"Smoke media not found. Place '{SmokeMediaFileName}' at: " +
-                   Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, FixturesDirectory));
+                   Path.GetFullPath(Path.Join(AppContext.BaseDirectory, FixturesDirectory));
         }
     }
 }

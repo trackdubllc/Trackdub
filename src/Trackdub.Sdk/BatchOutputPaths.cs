@@ -14,7 +14,7 @@ internal static class BatchOutputPaths
 
         string fullPath = Path.GetFullPath(mediaFilePath);
         string folderName = BuildUniqueProjectFolderName(fullPath);
-        return Path.Combine(Path.GetFullPath(outputRoot), folderName);
+        return Path.Join(Path.GetFullPath(outputRoot), folderName);
     }
 
     internal static string BuildUniqueProjectFolderName(string fullMediaPath)

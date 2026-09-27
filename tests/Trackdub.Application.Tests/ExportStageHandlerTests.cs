@@ -52,7 +52,7 @@ public sealed class ExportStageHandlerTests
 
         ExportStageResult result = await handler.ExportAsync(
             context.State,
-            new ExportStageRequest(context.Project.Id, Path.Combine(temp.Path, "out.mp4"), []),
+            new ExportStageRequest(context.Project.Id, Path.Join(temp.Path, "out.mp4"), []),
             TestContext.Current.CancellationToken);
 
         Assert.True(result.IsBlocked);
@@ -80,7 +80,7 @@ public sealed class ExportStageHandlerTests
             context.State,
             new ExportStageRequest(
                 context.Project.Id,
-                Path.Combine(temp.Path, "delivery", "lesson-dub.mp4"),
+                Path.Join(temp.Path, "delivery", "lesson-dub.mp4"),
                 [],
                 Container: ExportOutputContainer.Mp4),
             TestContext.Current.CancellationToken);
@@ -112,7 +112,7 @@ public sealed class ExportStageHandlerTests
             mediaProbe,
             mediaAssetRepository,
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         await File.WriteAllTextAsync(GetFailureReportPath(outputPath), "stale failure", TestContext.Current.CancellationToken);
 
@@ -233,7 +233,7 @@ public sealed class ExportStageHandlerTests
             mediaAssetRepository,
             new FakeProjectStageRunStore(),
             videoRecomposer: videoRecomposer);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
         await handler.ExportAsync(
@@ -310,7 +310,7 @@ public sealed class ExportStageHandlerTests
             mediaAssetRepository,
             new FakeProjectStageRunStore(),
             videoRecomposer: videoRecomposer);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
         ExportStageResult result = await handler.ExportAsync(
@@ -348,7 +348,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             context.State,
@@ -392,7 +392,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             context.State,
@@ -433,7 +433,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             context.State,
@@ -473,7 +473,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             context.State,
@@ -511,7 +511,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             state,
@@ -544,7 +544,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             mediaAssetRepository,
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         await handler.ExportAsync(
             context.State,
@@ -575,7 +575,7 @@ public sealed class ExportStageHandlerTests
             mediaAssetRepository,
             new FakeProjectStageRunStore(),
             fingerprintService);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             context.State,
@@ -616,7 +616,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             state,
@@ -691,7 +691,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             state,
@@ -720,7 +720,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             new FakeProjectStageRunStore());
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageResult result = await handler.ExportAsync(
             context.State,
@@ -754,7 +754,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             mediaAssetRepository,
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -792,7 +792,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -823,7 +823,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -854,7 +854,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds + 1d) },
             mediaAssetRepository,
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -896,7 +896,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         byte[] originalOutput = [9, 8, 7, 6];
         await File.WriteAllBytesAsync(outputPath, originalOutput, TestContext.Current.CancellationToken);
@@ -935,7 +935,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds, hasVideo: false) },
             new FakeMediaAssetRepository(),
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -967,7 +967,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -1003,7 +1003,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds) },
             new FakeMediaAssetRepository(),
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -1034,7 +1034,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(double.NaN) },
             new FakeMediaAssetRepository(),
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -1064,7 +1064,7 @@ public sealed class ExportStageHandlerTests
             new FakeMediaProbe { Snapshot = CreateProbeSnapshot(context.MediaAsset.DurationSeconds, hasVideo: false) },
             new FakeMediaAssetRepository(),
             stageRunStore);
-        string outputPath = Path.Combine(temp.Path, "delivery", "lesson-dub.mp4");
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
 
         ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
             handler.ExportAsync(
@@ -1100,7 +1100,7 @@ public sealed class ExportStageHandlerTests
                 context.State,
                 new ExportStageRequest(
                     context.Project.Id,
-                    Path.Combine(temp.Path, "delivery", "lesson-dub.mp4"),
+                    Path.Join(temp.Path, "delivery", "lesson-dub.mp4"),
                     [],
                     Container: ExportOutputContainer.Mkv),
                 TestContext.Current.CancellationToken));
@@ -1157,7 +1157,7 @@ public sealed class ExportStageHandlerTests
                 context.State,
                 new ExportStageRequest(
                     context.Project.Id,
-                    Path.Combine(temp.Path, "delivery", "lesson-dub.mp4"),
+                    Path.Join(temp.Path, "delivery", "lesson-dub.mp4"),
                     [],
                     Container: (ExportOutputContainer)99),
                 TestContext.Current.CancellationToken));
@@ -1186,7 +1186,7 @@ public sealed class ExportStageHandlerTests
                 context.State,
                 new ExportStageRequest(
                     context.Project.Id,
-                    Path.Combine(temp.Path, "delivery", "lesson-dub.mp4"),
+                    Path.Join(temp.Path, "delivery", "lesson-dub.mp4"),
                     [],
                     SubtitleSource: (ExportSubtitleSource)99),
                 TestContext.Current.CancellationToken));
@@ -1215,7 +1215,7 @@ public sealed class ExportStageHandlerTests
                 context.State,
                 new ExportStageRequest(
                     context.Project.Id,
-                    Path.Combine(temp.Path, "delivery", "lesson-dub.mp4"),
+                    Path.Join(temp.Path, "delivery", "lesson-dub.mp4"),
                     null!),
                 TestContext.Current.CancellationToken));
 
@@ -1263,7 +1263,7 @@ public sealed class ExportStageHandlerTests
         Guid speakerId = Guid.NewGuid();
         Guid voiceAssignmentId = Guid.NewGuid();
         var project = new TrackdubProject(projectId, "Export", now, now);
-        string sourcePath = Path.Combine(rootPath, "source.mp4");
+        string sourcePath = Path.Join(rootPath, "source.mp4");
         Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
         File.WriteAllBytes(sourcePath, [0, 0, 0, 24, 102, 116, 121, 112]);
         var mediaAsset = new MediaAsset(
@@ -1436,7 +1436,7 @@ public sealed class ExportStageHandlerTests
     {
         string directory = Path.GetDirectoryName(Path.GetFullPath(outputPath))!;
         string fileName = Path.GetFileNameWithoutExtension(outputPath);
-        return Path.Combine(directory, $"{fileName}.export-failure.json");
+        return Path.Join(directory, $"{fileName}.export-failure.json");
     }
 
     private sealed record TestExportContext(
@@ -1504,7 +1504,7 @@ public sealed class ExportStageHandlerTests
     {
         public TempDirectory()
         {
-            Path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"trackdub-export-tests-{Guid.NewGuid():N}");
+            Path = System.IO.Path.Join(System.IO.Path.GetTempPath(), $"trackdub-export-tests-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
         }
 

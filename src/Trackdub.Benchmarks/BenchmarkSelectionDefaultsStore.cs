@@ -23,7 +23,7 @@ public sealed class BenchmarkSelectionDefaultsStore
         string overridePath = Environment.GetEnvironmentVariable("TRACKDUB_BENCHMARK_DEFAULTS_PATH") ?? string.Empty;
         string defaultsPath = !string.IsNullOrWhiteSpace(overridePath)
             ? Path.GetFullPath(overridePath)
-            : Path.Combine(
+            : Path.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Trackdub",
                 "benchmark-defaults.json");

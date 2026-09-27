@@ -93,7 +93,7 @@ public static class LibMpvWindowsBootstrap
     private static async Task TryEnsureCoreAsync(CancellationToken cancellationToken)
     {
         string rid = ResolveWindowsRid();
-        string destinationDll = Path.Combine(
+        string destinationDll = Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Trackdub",
             "native",
@@ -119,13 +119,13 @@ public static class LibMpvWindowsBootstrap
             ? "libmpv-2.dll"
             : entry.LibmpvExtractMember.Trim();
 
-        string scratch = Path.Combine(Path.GetTempPath(), "trackdub-libmpv-" + Guid.NewGuid().ToString("n"));
+        string scratch = Path.Join(Path.GetTempPath(), "trackdub-libmpv-" + Guid.NewGuid().ToString("n"));
         Directory.CreateDirectory(scratch);
 
         try
         {
-            string sevenZip = Path.Combine(scratch, "7zr.exe");
-            string archivePath = Path.Combine(scratch, "mpv-dev.7z");
+            string sevenZip = Path.Join(scratch, "7zr.exe");
+            string archivePath = Path.Join(scratch, "mpv-dev.7z");
             await DownloadToFileAsync(manifest.SevenZipPortableExeUrl, sevenZip, cancellationToken).ConfigureAwait(false);
             await DownloadToFileAsync(entry.LibmpvDevArchiveUrl, archivePath, cancellationToken).ConfigureAwait(false);
 
@@ -149,7 +149,7 @@ public static class LibMpvWindowsBootstrap
                 return;
             }
 
-            string extracted = Path.Combine(scratch, Path.GetFileName(member));
+            string extracted = Path.Join(scratch, Path.GetFileName(member));
             if (!File.Exists(extracted))
             {
                 return;

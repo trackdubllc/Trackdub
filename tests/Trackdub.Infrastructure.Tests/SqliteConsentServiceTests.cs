@@ -7,7 +7,7 @@ public sealed class SqliteConsentServiceTests
 {
     private static TrackdubStoragePaths CreateStoragePaths()
     {
-        string root = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string root = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         return new TrackdubStoragePaths(root);
     }
 

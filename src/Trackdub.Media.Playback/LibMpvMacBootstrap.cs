@@ -60,7 +60,7 @@ public static class LibMpvMacBootstrap
             return false;
         }
 
-        string destinationDylib = Path.Combine(
+        string destinationDylib = Path.Join(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "Library",
             "Application Support",
@@ -92,7 +92,7 @@ public static class LibMpvMacBootstrap
 
         try
         {
-            string archivePath = Path.Combine(scratch, "libmpv.tar.gz");
+            string archivePath = Path.Join(scratch, "libmpv.tar.gz");
             DownloadToFile(entry.LibmpvDevArchiveUrl, archivePath);
 
             if (!string.IsNullOrWhiteSpace(entry.LibmpvDevArchiveSha256))
@@ -106,11 +106,11 @@ public static class LibMpvMacBootstrap
                 }
             }
 
-            string extractRoot = Path.Combine(scratch, "extract");
+            string extractRoot = Path.Join(scratch, "extract");
             Directory.CreateDirectory(extractRoot);
             ExtractTarGzWithSystemTar(archivePath, extractRoot);
 
-            string extracted = Path.Combine(extractRoot, member.Replace('/', Path.DirectorySeparatorChar));
+            string extracted = Path.Join(extractRoot, member.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(extracted))
             {
                 extracted = FindLibMpvDylib(extractRoot) ?? string.Empty;

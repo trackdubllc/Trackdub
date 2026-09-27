@@ -78,7 +78,7 @@ public static class TrackdubStoragePathResolver
         string? sharedAssetRoot = GetValue(environment, SharedAssetRootEnvironmentVariable);
         if (HasValue(dataRoot) || HasValue(cacheRoot) || HasValue(sharedAssetRoot))
         {
-            string normalizedDataRoot = NormalizeOptionalPath(dataRoot) ?? Path.Combine(localAppDataRoot, ProductDirectoryName);
+            string normalizedDataRoot = NormalizeOptionalPath(dataRoot) ?? Path.Join(localAppDataRoot, ProductDirectoryName);
             string normalizedCacheRoot = NormalizeOptionalPath(cacheRoot) ?? normalizedDataRoot;
             return new TrackdubStorageOptions(
                 normalizedDataRoot,
@@ -88,12 +88,12 @@ public static class TrackdubStoragePathResolver
         }
 
         bool portableRequested = IsTruthy(GetValue(environment, PortableEnvironmentVariable))
-            || File.Exists(Path.Combine(appBaseDirectory, PortableMarkerFileName))
-            || Directory.Exists(Path.Combine(appBaseDirectory, PortableDataDirectoryName));
+            || File.Exists(Path.Join(appBaseDirectory, PortableMarkerFileName))
+            || Directory.Exists(Path.Join(appBaseDirectory, PortableDataDirectoryName));
         if (portableRequested)
         {
             string portableDataRoot = NormalizeOptionalPath(GetValue(environment, PortableDataRootEnvironmentVariable))
-                ?? Path.Combine(appBaseDirectory, PortableDataDirectoryName);
+                ?? Path.Join(appBaseDirectory, PortableDataDirectoryName);
             return new TrackdubStorageOptions(portableDataRoot, portableDataRoot, SharedAssetRoot: null, IsPortable: true);
         }
 
@@ -101,7 +101,7 @@ public static class TrackdubStoragePathResolver
         if (config != null)
         {
             string configuredDataRoot = NormalizeOptionalPath(config.UserDataRoot)
-                ?? Path.Combine(localAppDataRoot, ProductDirectoryName);
+                ?? Path.Join(localAppDataRoot, ProductDirectoryName);
             string configuredCacheRoot = NormalizeOptionalPath(config.UserCacheRoot)
                 ?? configuredDataRoot;
             return new TrackdubStorageOptions(
@@ -111,7 +111,7 @@ public static class TrackdubStoragePathResolver
                 config.IsPortable ?? config.Portable ?? false);
         }
 
-        string defaultRoot = Path.Combine(localAppDataRoot, ProductDirectoryName);
+        string defaultRoot = Path.Join(localAppDataRoot, ProductDirectoryName);
         return new TrackdubStorageOptions(defaultRoot, defaultRoot, SharedAssetRoot: null, IsPortable: false);
     }
 
@@ -243,8 +243,8 @@ public static class TrackdubStoragePathResolver
     {
         foreach (string candidatePath in new[]
                  {
-                     Path.Combine(localAppDataRoot, ProductDirectoryName, InstallerConfigFileName),
-                     Path.Combine(commonAppDataRoot, ProductDirectoryName, InstallerConfigFileName)
+                     Path.Join(localAppDataRoot, ProductDirectoryName, InstallerConfigFileName),
+                     Path.Join(commonAppDataRoot, ProductDirectoryName, InstallerConfigFileName)
                  })
         {
             if (!File.Exists(candidatePath))

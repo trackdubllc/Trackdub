@@ -38,7 +38,7 @@ public partial class TranscriptProjectServiceTests
     public async Task ProjectWorkflow_RelocateSourceAsync_preserves_selected_translation_target()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -66,7 +66,7 @@ public partial class TranscriptProjectServiceTests
     public async Task ProjectWorkflow_RenameProjectAsync_persists_project_name_and_manifest()
     {
         string tempDirectory = CreateTempDirectory();
-        string sourcePath = Path.Combine(tempDirectory, "sample.mp4");
+        string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
         FakeServiceScope scope = CreateScope(tempDirectory);
@@ -252,7 +252,7 @@ public partial class TranscriptProjectServiceTests
     public void DiarizationModelWorkflow_reports_required_model_status()
     {
         string tempDirectory = CreateTempDirectory();
-        string modelCacheRoot = Path.Combine(tempDirectory, "model-cache");
+        string modelCacheRoot = Path.Join(tempDirectory, "model-cache");
         var handler = new DiarizationStageHandler(
             new RecordingDiarizationEngine(),
             new RecordingModelDownloader(),

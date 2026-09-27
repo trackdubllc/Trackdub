@@ -33,14 +33,14 @@ public sealed class TrtRtxEpBundleManifestLoaderTests
     [Fact]
     public void Load_missing_file_throws_file_not_found()
     {
-        string missingPath = Path.Combine(Path.GetTempPath(), $"missing-trt-rtx-manifest-{Guid.NewGuid():N}.json");
+        string missingPath = Path.Join(Path.GetTempPath(), $"missing-trt-rtx-manifest-{Guid.NewGuid():N}.json");
         Assert.Throws<FileNotFoundException>(() => TrtRtxEpBundleManifestLoader.Load(missingPath));
     }
 
     [Fact]
     public void Load_invalid_schema_throws()
     {
-        string tempPath = Path.Combine(Path.GetTempPath(), $"trt-rtx-manifest-{Guid.NewGuid():N}.json");
+        string tempPath = Path.Join(Path.GetTempPath(), $"trt-rtx-manifest-{Guid.NewGuid():N}.json");
         try
         {
             File.WriteAllText(
@@ -79,7 +79,7 @@ public sealed class TrtRtxEpBundleManifestLoaderTests
         string? dir = AppContext.BaseDirectory;
         for (int i = 0; i < 8 && dir is not null; i++)
         {
-            string candidate = Path.Combine(dir, "runtime", "trt-rtx-ep.manifest.json");
+            string candidate = Path.Join(dir, "runtime", "trt-rtx-ep.manifest.json");
             if (File.Exists(candidate))
             {
                 return candidate;

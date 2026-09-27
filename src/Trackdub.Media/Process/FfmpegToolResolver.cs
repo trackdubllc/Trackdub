@@ -50,10 +50,10 @@ internal sealed class FfmpegToolResolver(
         string ffmpegDirectory = Path.GetDirectoryName(ffmpegPath)!;
         foreach (string candidate in new[]
                  {
-                     Path.Combine(ffmpegDirectory, "ffprobe.exe"),
-                     Path.Combine(ffmpegDirectory, "ffprobe"),
-                     Path.Combine(Directory.GetParent(ffmpegDirectory)?.FullName ?? ffmpegDirectory, "ffprobe.exe"),
-                     Path.Combine(Directory.GetParent(ffmpegDirectory)?.FullName ?? ffmpegDirectory, "ffprobe")
+                     Path.Join(ffmpegDirectory, "ffprobe.exe"),
+                     Path.Join(ffmpegDirectory, "ffprobe"),
+                     Path.Join(Directory.GetParent(ffmpegDirectory)?.FullName ?? ffmpegDirectory, "ffprobe.exe"),
+                     Path.Join(Directory.GetParent(ffmpegDirectory)?.FullName ?? ffmpegDirectory, "ffprobe")
                  })
         {
             if (File.Exists(candidate))
@@ -241,17 +241,17 @@ internal sealed class FfmpegToolResolver(
         foreach (string fallback in fallbacks)
         {
             string runtimeIdentifier = ResolveRuntimeIdentifier();
-            yield return Path.Combine(root, fallback);
-            yield return Path.Combine(root, "bin", fallback);
-            yield return Path.Combine(root, "ffmpeg", fallback);
-            yield return Path.Combine(root, "ffmpeg", "bin", fallback);
-            yield return Path.Combine(root, "tools", "ffmpeg", fallback);
-            yield return Path.Combine(root, "tools", "ffmpeg", "bin", fallback);
-            yield return Path.Combine(root, "tools", runtimeIdentifier, fallback);
-            yield return Path.Combine(root, "tools", runtimeIdentifier, "ffmpeg", fallback);
-            yield return Path.Combine(root, "native", runtimeIdentifier, fallback);
-            yield return Path.Combine(root, "native", runtimeIdentifier, "ffmpeg", fallback);
-            yield return Path.Combine(root, "native", runtimeIdentifier, "ffmpeg", "bin", fallback);
+            yield return Path.Join(root, fallback);
+            yield return Path.Join(root, "bin", fallback);
+            yield return Path.Join(root, "ffmpeg", fallback);
+            yield return Path.Join(root, "ffmpeg", "bin", fallback);
+            yield return Path.Join(root, "tools", "ffmpeg", fallback);
+            yield return Path.Join(root, "tools", "ffmpeg", "bin", fallback);
+            yield return Path.Join(root, "tools", runtimeIdentifier, fallback);
+            yield return Path.Join(root, "tools", runtimeIdentifier, "ffmpeg", fallback);
+            yield return Path.Join(root, "native", runtimeIdentifier, fallback);
+            yield return Path.Join(root, "native", runtimeIdentifier, "ffmpeg", fallback);
+            yield return Path.Join(root, "native", runtimeIdentifier, "ffmpeg", "bin", fallback);
         }
     }
 
@@ -293,11 +293,11 @@ internal sealed class FfmpegToolResolver(
     {
         foreach (string candidate in new[]
                  {
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WinGet", "Links"),
+                     Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "WinGet", "Links"),
                      @"C:\ffmpeg",
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ffmpeg"),
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "ffmpeg"),
-                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "chocolatey", "bin")
+                     Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "ffmpeg"),
+                     Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "ffmpeg"),
+                     Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "chocolatey", "bin")
                  })
         {
             if (!string.IsNullOrWhiteSpace(candidate))
@@ -317,7 +317,7 @@ internal sealed class FfmpegToolResolver(
 
         foreach (string pathSegment in pathEnvironment.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            string candidate = Path.Combine(pathSegment.Trim(), executableName);
+            string candidate = Path.Join(pathSegment.Trim(), executableName);
             if (File.Exists(candidate))
             {
                 return candidate;

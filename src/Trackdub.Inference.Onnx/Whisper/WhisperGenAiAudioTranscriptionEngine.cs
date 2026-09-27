@@ -34,7 +34,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
     private readonly IRuntimePlanningPreferences? runtimePlanningPreferences;
     private readonly BenchmarkModelPathResolver modelPathResolver;
     private readonly WhisperOnnxAudioTranscriptionEngine legacyEngine;
-    private readonly string tempDirectory = Path.Combine(
+    private readonly string tempDirectory = Path.Join(
         Path.GetTempPath(),
         "Trackdub",
         "whisper-genai",
@@ -160,7 +160,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
 
         // Each request gets an isolated subdirectory so concurrent calls on the same engine
         // instance don't overwrite each other's chunk files or delete a live directory.
-        string requestTempDirectory = Path.Combine(tempDirectory, Guid.NewGuid().ToString("N"));
+        string requestTempDirectory = Path.Join(tempDirectory, Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(requestTempDirectory);
@@ -323,13 +323,13 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
 
     private static void EnsureGenAiModelRoot(string modelRootPath)
     {
-        string configPath = Path.Combine(modelRootPath, GenAiConfigFileName);
+        string configPath = Path.Join(modelRootPath, GenAiConfigFileName);
         if (!File.Exists(configPath))
         {
             throw new FileNotFoundException("Whisper GenAI model root does not contain genai_config.json.", configPath);
         }
 
-        string audioProcessorConfigPath = Path.Combine(modelRootPath, AudioProcessorConfigFileName);
+        string audioProcessorConfigPath = Path.Join(modelRootPath, AudioProcessorConfigFileName);
         if (!File.Exists(audioProcessorConfigPath))
         {
             throw new FileNotFoundException("Whisper GenAI model root does not contain audio_processor_config.json.", audioProcessorConfigPath);
@@ -384,7 +384,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
                 continue;
             }
 
-            string clipPath = Path.Combine(tempDirectory, $"region-{region.Index:D4}-chunk-{chunkIndex:D4}.wav");
+            string clipPath = Path.Join(tempDirectory, $"region-{region.Index:D4}-chunk-{chunkIndex:D4}.wav");
             await WriteClipAsync(targetAudio, chunkStartSeconds, chunkEndSeconds, clipPath, cancellationToken).ConfigureAwait(false);
 
             string? detectedLanguage = NormalizeLanguageCode(sourceLanguage)
@@ -530,7 +530,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
     internal static async Task<IReadOnlyDictionary<int, string>> LoadLanguageTokenIdsAsync(string modelRootPath)
     {
         var languageTokensById = new Dictionary<int, string>();
-        string tokenizerPath = Path.Combine(modelRootPath, "tokenizer.json");
+        string tokenizerPath = Path.Join(modelRootPath, "tokenizer.json");
         if (!File.Exists(tokenizerPath))
         {
             return languageTokensById;

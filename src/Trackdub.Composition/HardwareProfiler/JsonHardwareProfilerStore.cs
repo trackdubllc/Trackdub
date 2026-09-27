@@ -14,9 +14,9 @@ public sealed class JsonHardwareProfilerStore(IAppStoragePaths storagePaths)
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
-    private string ProfilerDirectory => Path.Combine(storagePaths.UserDataRoot, "hardware-profiler");
+    private string ProfilerDirectory => Path.Join(storagePaths.UserDataRoot, "hardware-profiler");
 
-    private string LatestSnapshotPath => Path.Combine(ProfilerDirectory, "latest.json");
+    private string LatestSnapshotPath => Path.Join(ProfilerDirectory, "latest.json");
 
     public async Task<HardwareProfilerSnapshot?> LoadLatestAsync(CancellationToken cancellationToken)
     {
@@ -67,7 +67,7 @@ public sealed class JsonHardwareProfilerStore(IAppStoragePaths storagePaths)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         Directory.CreateDirectory(ProfilerDirectory);
-        string runDirectory = Path.Combine(ProfilerDirectory, "runs", snapshot.EvidenceId.ToString("N"));
+        string runDirectory = Path.Join(ProfilerDirectory, "runs", snapshot.EvidenceId.ToString("N"));
         Directory.CreateDirectory(runDirectory);
 
         StoredHardwareProfilerSnapshot stored = StoredHardwareProfilerSnapshot.FromDomain(snapshot);
@@ -79,7 +79,7 @@ public sealed class JsonHardwareProfilerStore(IAppStoragePaths storagePaths)
 
         File.Move(tempPath, LatestSnapshotPath, overwrite: true);
 
-        string runCopyPath = Path.Combine(runDirectory, "snapshot.json");
+        string runCopyPath = Path.Join(runDirectory, "snapshot.json");
         await using FileStream runStream = File.Create(runCopyPath);
         await JsonSerializer.SerializeAsync(runStream, stored, JsonOptions, cancellationToken).ConfigureAwait(false);
     }

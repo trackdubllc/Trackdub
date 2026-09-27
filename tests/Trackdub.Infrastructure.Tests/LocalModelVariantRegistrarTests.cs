@@ -7,7 +7,7 @@ namespace Trackdub.Infrastructure.Tests;
 
 public sealed class LocalModelVariantRegistrarTests : IDisposable
 {
-    private readonly string tempRoot = Path.Combine(
+    private readonly string tempRoot = Path.Join(
         Path.GetTempPath(),
         "Trackdub.LocalModelVariantRegistrar.Tests",
         Guid.NewGuid().ToString("N"));
@@ -16,8 +16,8 @@ public sealed class LocalModelVariantRegistrarTests : IDisposable
     public async Task RegisterAsync_adds_variant_to_existing_model_record()
     {
         (LocalModelCacheRecordStore store, string modelRoot) = await CreateInstalledModelAsync("nested/model.onnx");
-        string variantRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        WriteFile(Path.Combine(variantRoot, "nested", "model.onnx"), "optimized");
+        string variantRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        WriteFile(Path.Join(variantRoot, "nested", "model.onnx"), "optimized");
         var registrar = new LocalModelVariantRegistrar(store);
 
         await registrar.RegisterAsync(
@@ -40,10 +40,10 @@ public sealed class LocalModelVariantRegistrarTests : IDisposable
     public async Task RegisterAsync_replaces_existing_variant_with_same_alias()
     {
         (LocalModelCacheRecordStore store, string modelRoot) = await CreateInstalledModelAsync("nested/model.onnx");
-        string firstRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        string secondRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32-rerun");
-        WriteFile(Path.Combine(firstRoot, "nested", "model.onnx"), "first");
-        WriteFile(Path.Combine(secondRoot, "nested", "model.onnx"), "second");
+        string firstRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        string secondRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32-rerun");
+        WriteFile(Path.Join(firstRoot, "nested", "model.onnx"), "first");
+        WriteFile(Path.Join(secondRoot, "nested", "model.onnx"), "second");
         var registrar = new LocalModelVariantRegistrar(store);
         await registrar.RegisterAsync(CreateRegistration(modelRoot, firstRoot), TestContext.Current.CancellationToken);
         DateTimeOffset secondCreatedAt = new(2026, 2, 3, 4, 5, 6, TimeSpan.Zero);
@@ -61,9 +61,9 @@ public sealed class LocalModelVariantRegistrarTests : IDisposable
     public async Task RegisterAsync_accepts_genai_config_entry_and_component_paths()
     {
         (LocalModelCacheRecordStore store, string modelRoot) = await CreateInstalledModelAsync("genai_config.json");
-        string variantRoot = Path.Combine(modelRoot, "optimized", "olive-directml-fp16");
-        WriteFile(Path.Combine(variantRoot, "directml-fp16", "genai_config.json"), "{}");
-        WriteFile(Path.Combine(variantRoot, "directml-fp16", "encoder.onnx"), "encoder");
+        string variantRoot = Path.Join(modelRoot, "optimized", "olive-directml-fp16");
+        WriteFile(Path.Join(variantRoot, "directml-fp16", "genai_config.json"), "{}");
+        WriteFile(Path.Join(variantRoot, "directml-fp16", "encoder.onnx"), "encoder");
         var registrar = new LocalModelVariantRegistrar(store);
 
         await registrar.RegisterAsync(
@@ -93,9 +93,9 @@ public sealed class LocalModelVariantRegistrarTests : IDisposable
     {
         var storagePaths = new TrackdubStoragePaths(tempRoot);
         var store = new LocalModelCacheRecordStore(storagePaths);
-        string modelRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example-model");
-        string variantRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        WriteFile(Path.Combine(variantRoot, "nested", "model.onnx"), "optimized");
+        string modelRoot = Path.Join(storagePaths.ModelCacheDirectory, "example-model");
+        string variantRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        WriteFile(Path.Join(variantRoot, "nested", "model.onnx"), "optimized");
         var registrar = new LocalModelVariantRegistrar(store);
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -110,8 +110,8 @@ public sealed class LocalModelVariantRegistrarTests : IDisposable
     public async Task RegisterAsync_rejects_variant_root_outside_base_model_root()
     {
         (LocalModelCacheRecordStore store, string modelRoot) = await CreateInstalledModelAsync("nested/model.onnx");
-        string variantRoot = Path.Combine(tempRoot, "outside-variant");
-        WriteFile(Path.Combine(variantRoot, "nested", "model.onnx"), "optimized");
+        string variantRoot = Path.Join(tempRoot, "outside-variant");
+        WriteFile(Path.Join(variantRoot, "nested", "model.onnx"), "optimized");
         var registrar = new LocalModelVariantRegistrar(store);
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -130,8 +130,8 @@ public sealed class LocalModelVariantRegistrarTests : IDisposable
         string componentRelativePath)
     {
         (LocalModelCacheRecordStore store, string modelRoot) = await CreateInstalledModelAsync("nested/model.onnx");
-        string variantRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        WriteFile(Path.Combine(variantRoot, "nested", "model.onnx"), "optimized");
+        string variantRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        WriteFile(Path.Join(variantRoot, "nested", "model.onnx"), "optimized");
         var registrar = new LocalModelVariantRegistrar(store);
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -150,8 +150,8 @@ public sealed class LocalModelVariantRegistrarTests : IDisposable
     public async Task RegisterAsync_rejects_missing_optimized_component_file()
     {
         (LocalModelCacheRecordStore store, string modelRoot) = await CreateInstalledModelAsync("nested/model.onnx");
-        string variantRoot = Path.Combine(modelRoot, "optimized", "olive-cpu-fp32");
-        Directory.CreateDirectory(Path.Combine(variantRoot, "nested"));
+        string variantRoot = Path.Join(modelRoot, "optimized", "olive-cpu-fp32");
+        Directory.CreateDirectory(Path.Join(variantRoot, "nested"));
         var registrar = new LocalModelVariantRegistrar(store);
 
         InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -181,10 +181,10 @@ public sealed class LocalModelVariantRegistrarTests : IDisposable
         params string[] relativeFiles)
     {
         var storagePaths = new TrackdubStoragePaths(tempRoot);
-        string modelRoot = Path.Combine(storagePaths.ModelCacheDirectory, "example-model");
+        string modelRoot = Path.Join(storagePaths.ModelCacheDirectory, "example-model");
         foreach (string relativeFile in relativeFiles)
         {
-            WriteFile(Path.Combine(modelRoot, relativeFile.Replace('/', Path.DirectorySeparatorChar)), "source");
+            WriteFile(Path.Join(modelRoot, relativeFile.Replace('/', Path.DirectorySeparatorChar)), "source");
         }
 
         var store = new LocalModelCacheRecordStore(storagePaths);

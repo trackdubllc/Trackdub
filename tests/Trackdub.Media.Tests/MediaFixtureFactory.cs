@@ -21,7 +21,7 @@ internal static class MediaFixtureFactory
         CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(directoryPath);
-        string outputPath = Path.Combine(directoryPath, "sample-input.mp4");
+        string outputPath = Path.Join(directoryPath, "sample-input.mp4");
         if (File.Exists(outputPath))
         {
             return outputPath;

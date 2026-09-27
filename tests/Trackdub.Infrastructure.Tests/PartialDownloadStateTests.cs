@@ -13,7 +13,7 @@ public sealed class PartialDownloadStateTests
     {
         string tempRoot = CreateTempRoot();
         Directory.CreateDirectory(tempRoot);
-        string partialPath = Path.Combine(tempRoot, "model.onnx.partial");
+        string partialPath = Path.Join(tempRoot, "model.onnx.partial");
         await File.WriteAllBytesAsync(partialPath, new byte[1024]);
 
         using var handler = new ResumeProbeHandler(totalBytes: 2048);
@@ -45,7 +45,7 @@ public sealed class PartialDownloadStateTests
     {
         string tempRoot = CreateTempRoot();
         Directory.CreateDirectory(tempRoot);
-        string partialPath = Path.Combine(tempRoot, "model.onnx.partial");
+        string partialPath = Path.Join(tempRoot, "model.onnx.partial");
         await File.WriteAllBytesAsync(partialPath, new byte[2048]);
         var sourceUri = new Uri("https://huggingface.co/example/model/resolve/main/model.onnx");
         PartialDownloadState.RecordCommittedBytes(partialPath, 512, 2048, sourceUri);
@@ -77,7 +77,7 @@ public sealed class PartialDownloadStateTests
     {
         string tempRoot = CreateTempRoot();
         Directory.CreateDirectory(tempRoot);
-        string partialPath = Path.Combine(tempRoot, "model.onnx.partial");
+        string partialPath = Path.Join(tempRoot, "model.onnx.partial");
         byte[] committed = Enumerable.Range(0, 512).Select(i => (byte)i).ToArray();
         await File.WriteAllBytesAsync(partialPath, committed);
         var sourceUri = new Uri("https://huggingface.co/example/model/resolve/main/model.onnx");
@@ -114,7 +114,7 @@ public sealed class PartialDownloadStateTests
         using var httpClient = new HttpClient(handler);
         var logger = new DebugApplicationLogger();
         string tempRoot = CreateTempRoot();
-        string cacheRoot = Path.Combine(tempRoot, "cache");
+        string cacheRoot = Path.Join(tempRoot, "cache");
         Directory.CreateDirectory(cacheRoot);
 
         var options = new HuggingFaceDownloadOptions
@@ -128,7 +128,7 @@ public sealed class PartialDownloadStateTests
         };
 
         var downloader = new HuggingFaceModelDownloader(cacheRoot, logger, httpClient, options);
-        string destinationPath = Path.Combine(cacheRoot, "example", "model.onnx");
+        string destinationPath = Path.Join(cacheRoot, "example", "model.onnx");
         string stalePartialPath = $"{destinationPath}.partial";
 
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
@@ -152,7 +152,7 @@ public sealed class PartialDownloadStateTests
     }
 
     private static string CreateTempRoot() =>
-        Path.Combine(Path.GetTempPath(), "Trackdub.PartialDownloadState.Tests", Guid.NewGuid().ToString("N"));
+        Path.Join(Path.GetTempPath(), "Trackdub.PartialDownloadState.Tests", Guid.NewGuid().ToString("N"));
 
     private static void DeleteTempRoot(string tempRoot)
     {

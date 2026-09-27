@@ -21,7 +21,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
     {
         string testRoot = CreateTempDirectory();
         var storagePaths = new TrackdubStoragePaths(testRoot);
-        string projectRoot = Path.Combine(testRoot, "project");
+        string projectRoot = Path.Join(testRoot, "project");
         Directory.CreateDirectory(projectRoot);
         Directory.CreateDirectory(storagePaths.RootDirectory);
         await File.WriteAllTextAsync(
@@ -29,10 +29,10 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
             $@"Log path C:\Users\{Environment.UserName}\AppData\Local\Trackdub\trackdub.log",
             TestContext.Current.CancellationToken);
 
-        string existingModelRoot = Path.Combine(storagePaths.ModelCacheDirectory, "demo-model");
+        string existingModelRoot = Path.Join(storagePaths.ModelCacheDirectory, "demo-model");
         Directory.CreateDirectory(existingModelRoot);
         await File.WriteAllTextAsync(
-            Path.Combine(existingModelRoot, "weights.onnx"),
+            Path.Join(existingModelRoot, "weights.onnx"),
             "x",
             TestContext.Current.CancellationToken);
 
@@ -40,12 +40,12 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
         await recordStore.SaveAsync(
         [
             new LocalModelCacheRecord("demo-installed", existingModelRoot, "r1", "sha", DateTimeOffset.UtcNow),
-            new LocalModelCacheRecord("demo-missing", Path.Combine(storagePaths.ModelCacheDirectory, "missing-model"), "r2", "sha", DateTimeOffset.UtcNow)
+            new LocalModelCacheRecord("demo-missing", Path.Join(storagePaths.ModelCacheDirectory, "missing-model"), "r2", "sha", DateTimeOffset.UtcNow)
         ]);
 
         await CreateProjectSchemaVersionAsync(projectRoot, version: 20);
 
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(
             outputPath,
@@ -99,7 +99,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
         await File.WriteAllTextAsync(storagePaths.LogFilePath, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", TestContext.Current.CancellationToken);
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore, maxSessionLogBytes: 8);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath));
 
@@ -113,11 +113,11 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
     {
         string testRoot = CreateTempDirectory();
         var storagePaths = new TrackdubStoragePaths(testRoot);
-        string projectRoot = Path.Combine(testRoot, "project");
+        string projectRoot = Path.Join(testRoot, "project");
         Directory.CreateDirectory(projectRoot);
         await using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = Path.Combine(projectRoot, ProjectArtifactPaths.DatabaseFileName),
+            DataSource = Path.Join(projectRoot, ProjectArtifactPaths.DatabaseFileName),
             ForeignKeys = true,
             Pooling = false
         }.ConnectionString))
@@ -126,7 +126,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
         }
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath, ProjectRootPath: projectRoot));
 
@@ -141,7 +141,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
         string testRoot = CreateTempDirectory();
         var storagePaths = new TrackdubStoragePaths(testRoot);
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
 
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(
@@ -162,7 +162,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
         await File.WriteAllTextAsync(storagePaths.ModelCacheIndexPath, "{ not valid json", TestContext.Current.CancellationToken);
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath));
 
@@ -177,7 +177,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
     {
         string testRoot = CreateTempDirectory();
         var storagePaths = new TrackdubStoragePaths(testRoot);
-        string modelFilePath = Path.Combine(testRoot, "model.onnx");
+        string modelFilePath = Path.Join(testRoot, "model.onnx");
         await File.WriteAllTextAsync(modelFilePath, "weights", TestContext.Current.CancellationToken);
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
@@ -186,7 +186,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
             new LocalModelCacheRecord("file-model", modelFilePath, "main", "sha", DateTimeOffset.UtcNow)
         ]);
 
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath));
 
@@ -212,7 +212,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
             FileShare.None);
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath));
 
@@ -230,20 +230,20 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
         Directory.CreateDirectory(logDirectory);
         await File.WriteAllTextAsync(storagePaths.LogFilePath, "active", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(
-            Path.Combine(logDirectory, "trackdub.10.log"),
+            Path.Join(logDirectory, "trackdub.10.log"),
             "archive 10",
             TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(
-            Path.Combine(logDirectory, "trackdub.2.log"),
+            Path.Join(logDirectory, "trackdub.2.log"),
             "archive 2",
             TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(
-            Path.Combine(logDirectory, "trackdub.1.log"),
+            Path.Join(logDirectory, "trackdub.1.log"),
             "archive 1",
             TestContext.Current.CancellationToken);
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath));
 
@@ -267,7 +267,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
         string testRoot = CreateTempDirectory();
         var storagePaths = new TrackdubStoragePaths(testRoot);
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath));
 
@@ -281,7 +281,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
         string testRoot = CreateTempDirectory();
         var storagePaths = new TrackdubStoragePaths(testRoot);
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(
             storagePaths,
             recordStore,
@@ -304,7 +304,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
             TestContext.Current.CancellationToken);
 
         var recordStore = new LocalModelCacheRecordStore(storagePaths);
-        string outputPath = Path.Combine(testRoot, "diagnostics.zip");
+        string outputPath = Path.Join(testRoot, "diagnostics.zip");
         var exporter = new DiagnosticsBundleExporter(storagePaths, recordStore);
         await exporter.ExportBundleAsync(new DiagnosticsBundleExportRequest(outputPath));
 
@@ -335,7 +335,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
 
     private static async Task CreateProjectSchemaVersionAsync(string projectRootPath, int version)
     {
-        string databasePath = Path.Combine(projectRootPath, ProjectArtifactPaths.DatabaseFileName);
+        string databasePath = Path.Join(projectRootPath, ProjectArtifactPaths.DatabaseFileName);
         await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = databasePath,
@@ -373,7 +373,7 @@ public sealed class DiagnosticsBundleExporterTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        string path = Path.Combine(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
+        string path = Path.Join(Path.GetTempPath(), "Trackdub.Infrastructure.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         tempDirectories.Add(path);
         return path;

@@ -47,7 +47,7 @@ internal sealed class NvidiaAfxSession : IDisposable
             if (profile.RequiredModelRelativePaths.Length > 0)
             {
                 string[] modelPaths = profile.RequiredModelRelativePaths
-                    .Select(relative => Path.Combine(runtimeRoot, relative))
+                    .Select(relative => Path.Join(runtimeRoot, relative))
                     .ToArray();
                 if (modelPaths.Length == 1)
                 {

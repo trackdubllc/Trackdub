@@ -17,8 +17,8 @@ public sealed class LibMpvRuntimeLocatorTests
             ? "win-arm64"
             : "win-x64";
 
-        string root = Path.Combine(Path.GetTempPath(), "trackdub-mpv-locator-" + Guid.NewGuid().ToString("N"));
-        string bundledPath = Path.Combine(root, "native", rid, "libmpv-2.dll");
+        string root = Path.Join(Path.GetTempPath(), "trackdub-mpv-locator-" + Guid.NewGuid().ToString("N"));
+        string bundledPath = Path.Join(root, "native", rid, "libmpv-2.dll");
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(bundledPath)!);
@@ -53,11 +53,11 @@ public sealed class LibMpvRuntimeLocatorTests
             ? "win-arm64"
             : "win-x64";
 
-        string sandbox = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        string appDataPath = Path.Combine(sandbox, "appdata", "Trackdub", "native", rid, "libmpv-2.dll");
+        string sandbox = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString());
+        string appDataPath = Path.Join(sandbox, "appdata", "Trackdub", "native", rid, "libmpv-2.dll");
 
-        string root = Path.Combine(sandbox, "bundled");
-        string bundledPath = Path.Combine(root, "native", rid, "libmpv-2.dll");
+        string root = Path.Join(sandbox, "bundled");
+        string bundledPath = Path.Join(root, "native", rid, "libmpv-2.dll");
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(appDataPath)!);

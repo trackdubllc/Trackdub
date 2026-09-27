@@ -261,7 +261,7 @@ public sealed class SqliteLipSynthesisSegmentRepositoryTests
             CreatedAtUtc: now);
 
     private static string CreateProjectRoot(string projectName) =>
-        Path.Combine(
+        Path.Join(
             Path.GetTempPath(),
             "Trackdub.Infrastructure.Tests",
             Guid.NewGuid().ToString("N"),

@@ -1904,7 +1904,7 @@ public sealed class OrchestrationServiceTests
     {
         public TemporaryTestWorkspace()
         {
-            Root = Path.Combine(Path.GetTempPath(), "Trackdub.Tests", Guid.NewGuid().ToString("N"));
+            Root = Path.Join(Path.GetTempPath(), "Trackdub.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Root);
         }
 
