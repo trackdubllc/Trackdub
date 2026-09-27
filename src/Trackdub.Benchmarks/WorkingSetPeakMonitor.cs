@@ -103,7 +103,25 @@ internal sealed class WorkingSetPeakMonitor
             }
             while (Interlocked.CompareExchange(ref peakBytes, sample, observed) != observed);
         }
-        catch (Exception exception)
+        catch (InvalidOperationException exception)
+        {
+            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
+            Volatile.Write(ref unavailableReason,
+                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
+        }
+        catch (ObjectDisposedException exception)
+        {
+            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
+            Volatile.Write(ref unavailableReason,
+                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
+        }
+        catch (NotSupportedException exception)
+        {
+            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
+            Volatile.Write(ref unavailableReason,
+                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
+        }
+        catch (System.ComponentModel.Win32Exception exception)
         {
             // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
             Volatile.Write(ref unavailableReason,
