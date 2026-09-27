@@ -139,6 +139,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
     private static Model CreateGenAiSmokeModel(string modelRootPath, ExecutionProviderKind provider)
     {
+        GenAiNativeCompatibility.EnsureCompatible();
         if (provider is ExecutionProviderKind.Cpu)
         {
             return new Model(modelRootPath);
