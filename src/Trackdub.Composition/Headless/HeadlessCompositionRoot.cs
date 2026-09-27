@@ -145,6 +145,7 @@ public static class HeadlessCompositionRoot
         // No DXGI on this platform: telemetry records an explicit unavailable reading.
         services.TryAddSingleton<IAvailableVramReader, UnavailableAvailableVramReader>();
 #endif
+        services.TryAddSingleton<IWorkingSetSampler, ProcessWorkingSetSampler>();
         services.TryAddSingleton<IResourceTelemetryCollector, ProcessResourceTelemetryCollector>();
         services.TryAddSingleton<IResourceTelemetryValidator, ResourceTelemetryValidator>();
 

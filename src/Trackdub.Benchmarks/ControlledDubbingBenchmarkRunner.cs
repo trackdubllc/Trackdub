@@ -15,6 +15,7 @@ using Trackdub.Domain.Tts;
 using Trackdub.Inference.Runtime.ModelManifest;
 using Trackdub.Infrastructure.Persistence.Repositories;
 using Trackdub.Infrastructure.Persistence.Sqlite;
+using Trackdub.Infrastructure.Diagnostics;
 using Trackdub.Infrastructure.Settings;
 using Trackdub.Benchmarks.Scenarios;
 using Microsoft.Extensions.DependencyInjection;
@@ -70,6 +71,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         };
         var resourceTelemetry = new List<BenchmarkStageResourceTelemetry>();
         ResourceTelemetrySnapshot? processTelemetryStart = ResourceTelemetry.TryCaptureProcess();
+        WorkingSetPeakMonitor? processWorkingSetPeak = new(
+            new ProcessWorkingSetSampler(), processTelemetryStart?.WorkingSetBytes);
         var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
         {
             ["processWorkingSetStart"] = processTelemetryStart?.WorkingSetBytes,
@@ -384,7 +387,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 {
                     var sortedAlloc = mSamples.Select(s => (double)s.ManagedAllocatedBytes).OrderBy(x => x).ToArray();
                     long allocated = (long)Math.Round(PercentileCalculator.CalculatePercentile(sortedAlloc, 0.5));
-                    long peakWs = mSamples.Max(s => s.PeakWorkingSetBytes);
+                    long? peakWs = GetMeasuredWorkingSetPeak(stageName);
                     int gen0 = (int)Math.Round(PercentileCalculator.CalculatePercentile(mSamples.Select(s => (double)s.Gen0Collections).OrderBy(x => x).ToArray(), 0.5));
                     int gen1 = (int)Math.Round(PercentileCalculator.CalculatePercentile(mSamples.Select(s => (double)s.Gen1Collections).OrderBy(x => x).ToArray(), 0.5));
                     int gen2 = (int)Math.Round(PercentileCalculator.CalculatePercentile(mSamples.Select(s => (double)s.Gen2Collections).OrderBy(x => x).ToArray(), 0.5));
@@ -408,7 +411,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 else if (lastClock?.GetMemoryDelta(stageName) is ResourceTelemetryDelta delta)
                 {
                     memory[$"stage:{stageName}:allocatedBytes"] = delta.ManagedAllocatedBytes;
-                    memory[$"stage:{stageName}:peakWorkingSet"] = delta.PeakWorkingSetBytes;
+                    memory[$"stage:{stageName}:peakWorkingSet"] = GetMeasuredWorkingSetPeak(stageName);
                     memory[$"stage:{stageName}:gen0"] = delta.Gen0Collections;
                     memory[$"stage:{stageName}:gen1"] = delta.Gen1Collections;
                     memory[$"stage:{stageName}:gen2"] = delta.Gen2Collections;
@@ -417,7 +420,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     if (!canonical.Equals(stageName, StringComparison.OrdinalIgnoreCase))
                     {
                         memory[$"stage:{canonical}:allocatedBytes"] = delta.ManagedAllocatedBytes;
-                        memory[$"stage:{canonical}:peakWorkingSet"] = delta.PeakWorkingSetBytes;
+                        memory[$"stage:{canonical}:peakWorkingSet"] = GetMeasuredWorkingSetPeak(stageName);
                         memory[$"stage:{canonical}:gen0"] = delta.Gen0Collections;
                         memory[$"stage:{canonical}:gen1"] = delta.Gen1Collections;
                         memory[$"stage:{canonical}:gen2"] = delta.Gen2Collections;
@@ -432,7 +435,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                     if (!memory.ContainsKey($"stage:{stageKey}:allocatedBytes"))
                     {
                         memory[$"stage:{stageKey}:allocatedBytes"] = delta.ManagedAllocatedBytes;
-                        memory[$"stage:{stageKey}:peakWorkingSet"] = delta.PeakWorkingSetBytes;
+                        memory[$"stage:{stageKey}:peakWorkingSet"] = GetMeasuredWorkingSetPeak(stageKey);
                         memory[$"stage:{stageKey}:gen0"] = delta.Gen0Collections;
                         memory[$"stage:{stageKey}:gen1"] = delta.Gen1Collections;
                         memory[$"stage:{stageKey}:gen2"] = delta.Gen2Collections;
@@ -551,8 +554,9 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 ? ResourceTelemetry.CalculateDelta(processTelemetryStart, processTelemetryEnd) : null;
 
             memory["processWorkingSetEnd"] = processTelemetryEnd?.WorkingSetBytes;
-            memory["processPeakWorkingSet"] = processDelta?.PeakWorkingSetBytes;
-            memory["peakWorkingSetBytes"] = processDelta?.PeakWorkingSetBytes;
+            long? sampledProcessPeak = processWorkingSetPeak?.Stop();
+            memory["processPeakWorkingSet"] = sampledProcessPeak;
+            memory["peakWorkingSetBytes"] = sampledProcessPeak;
             memory["managedAllocatedBytes"] = processDelta?.ManagedAllocatedBytes;
             memory["gen0Collections"] = processDelta?.Gen0Collections;
             memory["gen1Collections"] = processDelta?.Gen1Collections;
@@ -610,7 +614,9 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 ["hardware"] = BenchmarkHardwareInfo.Capture(),
                 ["resourceScope"] = "Process-wide; includes concurrent work; excludes child processes.",
                 ["cpuNormalization"] = "100 * delta CPU milliseconds / (monotonic elapsed milliseconds * processor count)",
-                ["memorySampling"] = "Maximum of stage endpoint working sets; transient peaks are not captured.",
+                ["memorySampling"] = "Process working set sampled every 25 ms across each stage and the benchmark run; excursions shorter than the cadence may be missed. A sampler failure is reported as unavailable.",
+                ["workingSetPeakSampling"] = processWorkingSetPeak?.UnavailableReason
+                    ?? "Sampled at a 25 ms cadence; excursions shorter than the cadence may be missed.",
                 ["vramScope"] = "Adapter-wide free VRAM (budget minus current usage), not this process's allocation; moves with other processes on the same GPU.",
             };
             foreach (BenchmarkEvidenceStage measuredStage in stages)
@@ -668,6 +674,24 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             return report;
         }
 
+        long? GetMeasuredWorkingSetPeak(string stageName)
+        {
+            string canonicalStage = MockDubbingPipelineServices.CanonicalBenchmarkStage(stageName);
+            BenchmarkStageResourceTelemetry[] matchingSamples = resourceTelemetry
+                .Where(sample => sample.Phase == "measured" &&
+                    MockDubbingPipelineServices.CanonicalBenchmarkStage(sample.Stage).Equals(
+                        canonicalStage, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matchingSamples.Length == 0) return null;
+
+            double[] peaks = matchingSamples
+                .Select(sample => sample.Validation.Checks.FirstOrDefault(check => check.Metric == "workingSetBytes")?.ObservedValue)
+                .Where(value => value.HasValue && double.IsFinite(value.Value) && value.Value >= 0)
+                .Select(value => value!.Value)
+                .ToArray();
+            return peaks.Length == 0 ? null : (long?)Math.Ceiling(peaks.Max());
+        }
+
         async Task<DubbingRunResult> ExecuteWithTelemetryAsync(
             string project, IReadOnlyList<string>? filter, bool forceRerun,
             string phase, int iteration, StageTimingCollector? stageClock = null)
@@ -675,7 +699,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             var capture = new StageResourceTelemetryCapture(
                 host!.Services.GetRequiredService<IResourceTelemetryCollector>(),
                 host.Services.GetRequiredService<IResourceTelemetryValidator>(),
-                options.ResourceTelemetryBounds, phase, iteration, stageClock);
+                options.ResourceTelemetryBounds, phase, iteration, stageClock,
+                host.Services.GetRequiredService<IWorkingSetSampler>());
             try
             {
                 DubbingRunResult result = await ExecuteAsync(host, fixtureCopy, project, options,

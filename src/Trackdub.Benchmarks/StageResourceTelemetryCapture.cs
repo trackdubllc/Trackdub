@@ -12,7 +12,9 @@ public sealed class StageResourceTelemetryCapture(
     ResourceTelemetryBounds bounds,
     string phase,
     int iteration,
-    IProgress<PipelineProgressEvent>? timing = null) : IProgress<PipelineProgressEvent>
+    IProgress<PipelineProgressEvent>? timing = null,
+    IWorkingSetSampler? workingSetSampler = null,
+    TimeSpan? workingSetSamplingInterval = null) : IProgress<PipelineProgressEvent>
 {
     private readonly object gate = new();
     private readonly Dictionary<string, PendingStage> pending = new(StringComparer.OrdinalIgnoreCase);
@@ -35,7 +37,11 @@ public sealed class StageResourceTelemetryCapture(
                 }
                 int attempt = attempts.GetValueOrDefault(value.StageKey) + 1;
                 attempts[value.StageKey] = attempt;
-                pending[value.StageKey] = new(value.StageName, attempt, Capture());
+                ResourceUsageSnapshot snapshot = Capture();
+                WorkingSetPeakMonitor? peakMonitor = workingSetSampler is null
+                    ? null
+                    : new WorkingSetPeakMonitor(workingSetSampler, snapshot.WorkingSetBytes, workingSetSamplingInterval);
+                pending[value.StageKey] = new(value.StageName, attempt, snapshot, peakMonitor);
                 completed.Remove(value.StageKey);
             }
             else if (value.EventKind is PipelineProgressEventKind.Completed or PipelineProgressEventKind.Failed or PipelineProgressEventKind.Skipped)
@@ -138,7 +144,17 @@ public sealed class StageResourceTelemetryCapture(
 
     private void Record(string stage, PendingStage? start, BenchmarkEvidenceStatus status, string? reason)
     {
-        ResourceTelemetryValidation validation = validator.Validate(start?.Snapshot, start is null ? null : Capture(), bounds);
+        ResourceUsageSnapshot? end = start is null ? null : Capture();
+        if (start?.PeakMonitor is not null && end is not null)
+        {
+            long? peak = start.PeakMonitor.Stop();
+            end = end with
+            {
+                PeakWorkingSetBytes = peak,
+                PeakWorkingSetUnavailableReason = start.PeakMonitor.UnavailableReason,
+            };
+        }
+        ResourceTelemetryValidation validation = validator.Validate(start?.Snapshot, end, bounds);
         if (start is null)
         {
             string missingReason = reason ?? (status == BenchmarkEvidenceStatus.Skipped
@@ -179,10 +195,16 @@ public sealed class StageResourceTelemetryCapture(
             {
                 CpuUnavailableReason = reason,
                 MemoryUnavailableReason = reason,
+                PeakWorkingSetUnavailableReason = reason,
                 VramUnavailableReason = reason,
             };
         }
     }
 
-    private sealed record PendingStage(string Name, int Attempt, ResourceUsageSnapshot Snapshot, int Depth = 1);
+    private sealed record PendingStage(
+        string Name,
+        int Attempt,
+        ResourceUsageSnapshot Snapshot,
+        WorkingSetPeakMonitor? PeakMonitor = null,
+        int Depth = 1);
 }

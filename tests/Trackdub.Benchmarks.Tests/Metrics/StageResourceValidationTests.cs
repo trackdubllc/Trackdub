@@ -46,6 +46,39 @@ public sealed class StageResourceValidationTests
     }
 
     [Fact]
+    public async Task Working_set_budget_uses_a_sampled_transient_peak_between_stage_boundariesAsync()
+    {
+        var sampler = new TransientPeakSampler();
+        var capture = Create(new FixedWorkingSetCollector(100), new() { MaxWorkingSetBytes = 400 }, sampler);
+        capture.Report(new("asr", PipelineProgressEventKind.Started));
+        await sampler.PeakObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        capture.Report(new("asr", PipelineProgressEventKind.Completed));
+
+        BenchmarkStageResourceTelemetry sample = Assert.Single(capture.Snapshot());
+        Assert.Equal(BenchmarkEvidenceStatus.Completed, sample.ExecutionStatus);
+        Assert.Equal(ResourceTelemetryStatus.Failed, sample.Validation.Status);
+        ResourceTelemetryCheck check = Assert.Single(sample.Validation.Checks, item => item.Metric == "workingSetBytes");
+        Assert.Equal(500d, check.ObservedValue);
+        Assert.Equal(400d, check.Threshold);
+        Assert.Equal("Configured upper bound exceeded.", check.Reason);
+    }
+
+    [Fact]
+    public void Working_set_sampler_failure_is_explicitly_unavailable_without_interrupting_stage()
+    {
+        var capture = Create(new FixedWorkingSetCollector(100), workingSetSampler: new ThrowingWorkingSetSampler());
+        capture.Report(new("asr", PipelineProgressEventKind.Started));
+        capture.Report(new("asr", PipelineProgressEventKind.Completed));
+
+        BenchmarkStageResourceTelemetry sample = Assert.Single(capture.Snapshot());
+        Assert.Equal(BenchmarkEvidenceStatus.Completed, sample.ExecutionStatus);
+        Assert.Equal(ResourceTelemetryStatus.Unavailable, sample.Validation.Status);
+        ResourceTelemetryCheck check = Assert.Single(sample.Validation.Checks, item => item.Metric == "workingSetBytes");
+        Assert.Null(check.ObservedValue);
+        Assert.Contains("InvalidOperationException", check.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Missing_samples_degrade_without_losing_completed_execution()
     {
         var capture = Create(new MissingCollector());
@@ -206,8 +239,50 @@ public sealed class StageResourceValidationTests
             ? throw new InvalidOperationException("Cannot read C:/private/metric") : collector.Capture();
     }
 
-    private static StageResourceTelemetryCapture Create(IResourceTelemetryCollector? collector = null, ResourceTelemetryBounds? bounds = null) =>
-        new(collector ?? new SequenceCollector(), new ResourceTelemetryValidator(), bounds ?? new(), "measured", 1);
+    private static StageResourceTelemetryCapture Create(
+        IResourceTelemetryCollector? collector = null,
+        ResourceTelemetryBounds? bounds = null,
+        IWorkingSetSampler? workingSetSampler = null) =>
+        new(collector ?? new SequenceCollector(), new ResourceTelemetryValidator(), bounds ?? new(), "measured", 1,
+            workingSetSampler: workingSetSampler);
+
+    private sealed class FixedWorkingSetCollector(long workingSetBytes) : IResourceTelemetryCollector
+    {
+        private int index;
+        public ResourceUsageSnapshot Capture() => new()
+        {
+            CpuTimeMilliseconds = Interlocked.Increment(ref index) * 200d,
+            MonotonicMilliseconds = index * 100d,
+            ProcessorCount = 4,
+            WorkingSetBytes = workingSetBytes,
+            ManagedAllocatedBytes = index * 10L,
+            AvailableVramMb = 500,
+        };
+    }
+
+    private sealed class ThrowingWorkingSetSampler : IWorkingSetSampler
+    {
+        public long CaptureWorkingSetBytes() => throw new InvalidOperationException("Working-set probe failed.");
+    }
+
+    private sealed class TransientPeakSampler : IWorkingSetSampler
+    {
+        private int calls;
+        public TaskCompletionSource PeakObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public long CaptureWorkingSetBytes()
+        {
+            int call = Interlocked.Increment(ref calls);
+            if (call == 1) return 100; // monitor's immediate boundary sample
+            if (call == 2)
+            {
+                PeakObserved.TrySetResult();
+                return 500; // short-lived spike, absent from both resource boundary snapshots
+            }
+            return 100;
+        }
+
+    }
 
     private sealed class MissingCollector : IResourceTelemetryCollector
     {

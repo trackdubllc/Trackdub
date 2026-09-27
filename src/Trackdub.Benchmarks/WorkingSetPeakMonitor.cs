@@ -12,6 +12,7 @@ internal sealed class WorkingSetPeakMonitor
     private readonly TimeSpan interval;
     private readonly CancellationTokenSource cancellation = new();
     private readonly Task samplingTask;
+    private readonly object stopGate = new();
     private long peakBytes;
     private int hasSample;
     private int stopped;
@@ -40,25 +41,29 @@ internal sealed class WorkingSetPeakMonitor
 
     public long? Stop()
     {
-        if (Interlocked.Exchange(ref stopped, 1) == 0)
+        lock (stopGate)
         {
-            cancellation.Cancel();
-            try
+            if (stopped == 0)
             {
-                samplingTask.GetAwaiter().GetResult();
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when the stage reaches its terminal boundary.
+                Volatile.Write(ref stopped, 1);
+                cancellation.Cancel();
+                try
+                {
+                    samplingTask.GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected when the stage reaches its terminal boundary.
+                }
+
+                Capture(allowStopped: true);
+                cancellation.Dispose();
             }
 
-            Capture();
-            cancellation.Dispose();
+            return Volatile.Read(ref unavailableReason) is null && Volatile.Read(ref hasSample) == 1
+                ? Volatile.Read(ref peakBytes)
+                : null;
         }
-
-        return Volatile.Read(ref unavailableReason) is null && Volatile.Read(ref hasSample) == 1
-            ? Volatile.Read(ref peakBytes)
-            : null;
     }
 
     private async Task SampleUntilStoppedAsync()
@@ -77,10 +82,11 @@ internal sealed class WorkingSetPeakMonitor
         }
     }
 
-    private void Capture()
+    private void Capture(bool allowStopped = false)
     {
         try
         {
+            if (!allowStopped && Volatile.Read(ref stopped) != 0) return;
             long sample = sampler.CaptureWorkingSetBytes();
             if (sample < 0)
             {
@@ -97,9 +103,9 @@ internal sealed class WorkingSetPeakMonitor
             }
             while (Interlocked.CompareExchange(ref peakBytes, sample, observed) != observed);
         }
-        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or
-            NotSupportedException or UnauthorizedAccessException or InvalidOperationException or IOException)
+        catch (Exception exception)
         {
+            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
             Volatile.Write(ref unavailableReason,
                 $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
         }

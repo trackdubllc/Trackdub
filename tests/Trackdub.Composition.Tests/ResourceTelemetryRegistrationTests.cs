@@ -17,10 +17,13 @@ public sealed class ResourceTelemetryRegistrationTests
         using var provider = services.BuildServiceProvider();
         var collector = provider.GetRequiredService<IResourceTelemetryCollector>();
         var validator = provider.GetRequiredService<IResourceTelemetryValidator>();
+        var workingSetSampler = provider.GetRequiredService<IWorkingSetSampler>();
         Assert.IsType<ProcessResourceTelemetryCollector>(collector);
         Assert.IsType<ResourceTelemetryValidator>(validator);
+        Assert.IsType<ProcessWorkingSetSampler>(workingSetSampler);
         Assert.Same(collector, provider.GetRequiredService<IResourceTelemetryCollector>());
         Assert.Same(validator, provider.GetRequiredService<IResourceTelemetryValidator>());
+        Assert.Same(workingSetSampler, provider.GetRequiredService<IWorkingSetSampler>());
     }
 
     [Fact]
@@ -31,10 +34,13 @@ public sealed class ResourceTelemetryRegistrationTests
         var services = new ServiceCollection();
         services.AddSingleton<IResourceTelemetryCollector>(collector);
         services.AddSingleton<IResourceTelemetryValidator>(validator);
+        var workingSetSampler = new ProcessWorkingSetSampler();
+        services.AddSingleton<IWorkingSetSampler>(workingSetSampler);
         services.AddHeadlessTrackdub();
         using var provider = services.BuildServiceProvider();
         Assert.Same(collector, provider.GetRequiredService<IResourceTelemetryCollector>());
         Assert.Same(validator, provider.GetRequiredService<IResourceTelemetryValidator>());
+        Assert.Same(workingSetSampler, provider.GetRequiredService<IWorkingSetSampler>());
     }
 
     [Fact]
@@ -49,6 +55,7 @@ public sealed class ResourceTelemetryRegistrationTests
             {
                 Assert.Contains(configured, item => item.ServiceType == typeof(IResourceTelemetryCollector));
                 Assert.Contains(configured, item => item.ServiceType == typeof(IResourceTelemetryValidator));
+                Assert.Contains(configured, item => item.ServiceType == typeof(IWorkingSetSampler));
                 configured.Replace(ServiceDescriptor.Singleton<IResourceTelemetryCollector>(collector));
                 configured.Replace(ServiceDescriptor.Singleton<IResourceTelemetryValidator>(validator));
             }

@@ -104,9 +104,28 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task Sampled_working_set_peak_is_written_to_typed_telemetry_and_legacy_memory_mapAsync()
+    {
+        using var runner = CreateMockRunner(
+            new CounterCollector(), workingSetSampler: new FixedWorkingSetSampler(2000));
+
+        BenchmarkEvidenceReport report = await runner.RunAsync(Options() with
+        {
+            ResourceTelemetryBounds = new ResourceTelemetryBounds(),
+        });
+
+        BenchmarkStageResourceTelemetry sample = Assert.Single(report.ResourceTelemetry);
+        ResourceTelemetryCheck workingSet = Assert.Single(sample.Validation.Checks,
+            check => check.Metric == "workingSetBytes");
+        Assert.Equal(2000d, workingSet.ObservedValue);
+        Assert.Equal(2000L, report.MemoryBytes["stage:audio-prep:peakWorkingSet"]);
+    }
+
+    [Fact]
     public async Task Missing_counters_remain_unavailable_without_failing_successful_executionAsync()
     {
-        using var runner = CreateMockRunner(new MissingCollector());
+        using var runner = CreateMockRunner(
+            new MissingCollector(), workingSetSampler: new ThrowingWorkingSetSampler());
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options());
 
@@ -533,7 +552,8 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     private ControlledDubbingBenchmarkRunner CreateMockRunner(
         IResourceTelemetryCollector collector,
         Action<MockPipelineOptions>? configure = null,
-        IBenchmarkEvidenceRepository? repository = null) => new(repository ?? history, services =>
+        IBenchmarkEvidenceRepository? repository = null,
+        IWorkingSetSampler? workingSetSampler = null) => new(repository ?? history, services =>
     {
         MockDubbingPipelineServices.ConfigureMockPipeline(services, options =>
         {
@@ -544,6 +564,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             configure?.Invoke(options);
         });
         services.AddSingleton<IResourceTelemetryCollector>(collector);
+        services.AddSingleton<IWorkingSetSampler>(workingSetSampler ?? new FixedWorkingSetSampler(1000));
     });
 
     private ControlledDubbingBenchmarkRunner CreateScriptedRunner(
@@ -551,6 +572,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         Func<DubbingSessionOptions, IProgress<PipelineProgressEvent>?, DubbingRunResult> execute) => new(history, services =>
     {
         services.AddSingleton<IResourceTelemetryCollector>(collector);
+        services.AddSingleton<IWorkingSetSampler>(new FixedWorkingSetSampler(1000));
         services.AddSingleton<IDubbingPipelineService>(new ScriptedPipeline(execute));
     });
 
@@ -632,6 +654,16 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         try { Directory.Delete(root, recursive: true); }
         catch (IOException) { /* A pooled SQLite handle may briefly retain a test-local file on Windows. */ }
         catch (UnauthorizedAccessException) { /* Best-effort cleanup of this test's private directory. */ }
+    }
+
+    private sealed class ThrowingWorkingSetSampler : IWorkingSetSampler
+    {
+        public long CaptureWorkingSetBytes() => throw new InvalidOperationException("Working-set telemetry unavailable.");
+    }
+
+    private sealed class FixedWorkingSetSampler(long workingSetBytes) : IWorkingSetSampler
+    {
+        public long CaptureWorkingSetBytes() => workingSetBytes;
     }
 
     private sealed class MissingCollector : IResourceTelemetryCollector

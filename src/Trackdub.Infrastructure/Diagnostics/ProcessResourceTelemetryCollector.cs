@@ -7,7 +7,7 @@ namespace Trackdub.Infrastructure.Diagnostics;
 
 /// <summary>
 /// Captures the current process only, including concurrent work and excluding child processes.
-/// Working set is a point-in-time sample, not a continuous peak measurement.
+/// Working set is a point-in-time sample; interval peaks are measured by <see cref="IWorkingSetSampler"/>.
 /// </summary>
 public sealed class ProcessResourceTelemetryCollector(IAvailableVramReader? vramReader = null)
     : IResourceTelemetryCollector
