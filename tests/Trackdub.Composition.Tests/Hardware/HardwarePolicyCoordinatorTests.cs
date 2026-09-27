@@ -63,6 +63,9 @@ public sealed class HardwarePolicyCoordinatorTests
             EvictCount++;
             return ExceptionToThrow is null ? Task.CompletedTask : Task.FromException(ExceptionToThrow);
         }
+
+        public Task<int> TrimToVramBudgetAsync(long targetVramMb, CancellationToken cancellationToken = default)
+            => ExceptionToThrow is null ? Task.FromResult(0) : Task.FromException<int>(ExceptionToThrow);
     }
 
     private sealed class TestApplicationLogger : IApplicationLogger
