@@ -510,8 +510,10 @@ internal sealed class RuntimePlanFactory
             // list instead of blocking; callers attach PreferredExecutionProviderNotAllowedForEngine.
         }
 
-        var availableProviders = Milestone5PlanningPolicy.SupportedProvidersThisMilestone
-            .Where(provider => allowedProviders.Contains(provider));
+        // Family overrides may intentionally change priority (for example, DirectML
+        // before an expensive TensorRT RTX compile for Qwen ASR).
+        var availableProviders = allowedProviders
+            .Where(provider => Milestone5PlanningPolicy.SupportedProvidersThisMilestone.Contains(provider));
 
         IReadOnlyList<ExecutionProviderKind> ordered = availableProviders.ToArray();
 

@@ -174,6 +174,7 @@ public sealed class QwenLocalAssistantEngine(
 
     private static Model CreateModel(string modelRootPath, ExecutionProviderKind executionProvider)
     {
+        GenAiNativeCompatibility.EnsureCompatible();
         if (executionProvider is ExecutionProviderKind.Cpu)
         {
             return new Model(modelRootPath);

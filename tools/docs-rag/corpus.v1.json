@@ -198,6 +198,37 @@
       ]
     },
     {
+      "id": "avalonia",
+      "prefix": "vendor/avalonia",
+      "sources": [
+        ["avalonia-landing", "https://docs.avaloniaui.net/"],
+        ["avalonia-welcome", "https://docs.avaloniaui.net/docs/welcome"],
+        ["avalonia-get-started", "https://docs.avaloniaui.net/docs/get-started"],
+        ["avalonia-basics", "https://docs.avaloniaui.net/docs/basics"],
+        ["avalonia-mvvm-pattern", "https://docs.avaloniaui.net/docs/concepts/the-mvvm-pattern"],
+        ["avalonia-reactiveui", "https://docs.avaloniaui.net/docs/concepts/reactiveui"],
+        ["avalonia-data-binding", "https://docs.avaloniaui.net/docs/guides/data-binding"],
+        ["avalonia-cross-platform", "https://docs.avaloniaui.net/docs/guides/building-cross-platform-applications"],
+        ["avalonia-controls", "https://docs.avaloniaui.net/docs/reference/controls"],
+        ["avalonia-github", "https://github.com/AvaloniaUI/Avalonia"]
+      ]
+    },
+    {
+      "id": "reactiveui",
+      "prefix": "vendor/reactiveui",
+      "sources": [
+        ["reactiveui-landing", "https://www.reactiveui.net/documentation/"],
+        ["reactiveui-getting-started", "https://www.reactiveui.net/documentation/getting-started/"],
+        ["reactiveui-reactiveui-getting-started", "https://www.reactiveui.net/documentation/reactiveui/getting-started/"],
+        ["reactiveui-binding", "https://www.reactiveui.net/documentation/binding/"],
+        ["reactiveui-primitives", "https://www.reactiveui.net/documentation/primitives/"],
+        ["reactiveui-validation", "https://www.reactiveui.net/documentation/validation/"],
+        ["reactiveui-splat", "https://www.reactiveui.net/documentation/splat/"],
+        ["reactiveui-akavache", "https://www.reactiveui.net/documentation/akavache/"],
+        ["reactiveui-github", "https://github.com/reactiveui/ReactiveUI"]
+      ]
+    },
+    {
       "id": "olive",
       "prefix": "vendor/olive",
       "sources": [

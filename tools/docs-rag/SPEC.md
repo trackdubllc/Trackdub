@@ -85,6 +85,9 @@ the tokenizer or metadata schema requires full reindexing.
 | `vendor/qwen/` | Qwen2.5-1.5B and Qwen3-Embedding model cards |
 | `vendor/whisper/` | OpenAI Whisper + faster-whisper |
 | `vendor/speech-models/` | Kokoro-82M, Opus-MT, MADLAD400, Spleeter |
+| `vendor/lip-sync-alignment/` | Wav2Vec2-LV60-eSpeak (CTC forced alignment), Qwen3-ForcedAligner, LatentSync 1.6, InsightFace (SCRFD-500M + 2D106det) |
+| `vendor/avalonia/` | Avalonia 12 UI docs (welcome, get started, basics, MVVM, ReactiveUI, data binding, controls, cross-platform) |
+| `vendor/reactiveui/` | ReactiveUI 20.x docs (getting started, binding, primitives, validation, Splat, Akavache) |
 
 ### Model-family coverage check (v1.2)
 

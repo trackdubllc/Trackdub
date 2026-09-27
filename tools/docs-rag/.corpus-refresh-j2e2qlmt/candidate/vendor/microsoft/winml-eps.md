@@ -1,0 +1,98 @@
+Source: https://learn.microsoft.com/windows/ai/new-windows-ml/supported-execution-providers
+
+Read in English [Edit](<https://github.com/MicrosoftDocs/windows-ai-docs/blob/docs/docs/new-windows-ml/supported-execution-providers.md>)
+Note
+Access to this page requires authorization. You can try signing in or changing directories .
+Access to this page requires authorization. You can try changing directories .
+Windows ML execution providers
+Windows ML provides execution providers for accelerating inference on NPU, GPU, and CPU. To learn more about accelerating inference, see [Accelerate AI models](<https://learn.microsoft.com/windows/ai/new-windows-ml/accelerate-ai-models>) .
+Included execution providers
+The following execution providers are included with the ONNX Runtime that ships with Windows ML:
+CPU
+[DirectML](<https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html>) (legacy)
+Available execution providers
+Unlike the CPU and DirectML providers, which ship in-box (see Included execution providers ), the execution providers below are not included with the runtime — they're downloaded on demand.
+The execution providers listed below are available on Windows 11 PCs running version 24H2 (build 26100) or greater (depending on device and driver compatibility) for dynamic download via the Windows ML ExecutionProviderCatalog APIs. To use these providers, see [Install Windows ML EPs](<https://learn.microsoft.com/windows/ai/new-windows-ml/initialize-execution-providers>) and [Register Windows ML EPs](<https://learn.microsoft.com/windows/ai/new-windows-ml/register-execution-providers>) . To see what version of each EP is currently available and info about upcoming releases, see [Windows ML Execution Provider Releases](<https://github.com/microsoft/WindowsML/wiki/Windows-ML-Execution-Provider-Releases>) .
+Windows ML 2.x
+Windows ML 1.8.x
+The following execution providers are available to developers using [Microsoft.WindowsAppSDK.ML](<https://www.nuget.org/packages/Microsoft.WindowsAppSDK.ML>) or [Microsoft.Windows.AI.MachineLearning](<https://www.nuget.org/packages/Microsoft.Windows.AI.MachineLearning>) version 2.x :
+Execution provider EpName Vendor
+MIGraphX MIGraphXExecutionProvider AMD
+NvTensorRtRtx NvTensorRtRtxExecutionProvider NVIDIA
+OpenVINO OpenVINOExecutionProvider Intel
+QNN QNNExecutionProvider Qualcomm
+VitisAI VitisAIExecutionProvider AMD
+WebGPU (Experimental) WebGpuExecutionProvider Microsoft
+The following execution providers are available to developers using [Microsoft.WindowsAppSDK.ML](<https://www.nuget.org/packages/Microsoft.WindowsAppSDK.ML>) version 1.8.x :
+Execution provider EpName Vendor
+MIGraphX MIGraphXExecutionProvider AMD
+NvTensorRtRtx NvTensorRtRtxExecutionProvider NVIDIA
+OpenVINO OpenVINOExecutionProvider Intel
+QNN QNNExecutionProvider Qualcomm
+VitisAI VitisAIExecutionProvider AMD
+Before your app uses an execution provider, please be sure to read the licenses corresponding to the execution provider.
+MIGraphX (AMD)
+EpName : "MIGraphXExecutionProvider"
+Requirements : AMD RDNA 3 or later GPU
+AMD GPU driver version 25.10.13.09 or later
+This execution provider is not supported for GenAI scenarios today.
+Documentation : [Documentation](<https://onnxruntime.ai/docs/execution-providers/MIGraphX-ExecutionProvider.html>)
+Support : [Support](<https://github.com/ROCm/AMDMIGraphX/issues>)
+License terms : [Ryzen AI Licensing Information](<https://ryzenai.docs.amd.com/en/latest/licenses.html>)
+Version and release history : [Windows ML Execution Provider Releases](<https://github.com/microsoft/WindowsML/wiki/Windows-ML-Execution-Provider-Releases>)
+NvTensorRtRtx (NVIDIA)
+EpName : "NvTensorRtRtxExecutionProvider"
+Requirements : NVIDIA GeForce RTX 30XX and above with minimum recommended driver version 32.0.15.5585 + Cuda version 12.5
+Documentation : [Documentation](<https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html>)
+Support : [Support](<https://github.com/NVIDIA/TensorRT-RTX/issues>)
+License terms : [NVIDIA SOFTWARE LICENSE AGREEMENT](<https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/reference/sla.html>) and [License Agreement for NVIDIA Software Development Kits — EULA](<https://docs.nvidia.com/cuda/eula/index.html>)
+Version and release history : [Windows ML Execution Provider Releases](<https://github.com/microsoft/WindowsML/wiki/Windows-ML-Execution-Provider-Releases>)
+OpenVINO (Intel)
+EpName : "OpenVINOExecutionProvider"
+Requirements and driver guidance : [Intel Windows ML support](<https://www.intel.com/content/www/us/en/developer/articles/guide/windows-ml-support.html>)
+Documentation : [Documentation](<https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html>)
+Support : [Support](<https://github.com/openvinotoolkit/openvino/issues>)
+License terms : [Intel OBL Distribution Commercial Use License Agreement v2025.02.12](<https://cdrdv2.intel.com/v1/dl/getContent/849090?explicitVersion=true>)
+Version and release history : [Windows ML Execution Provider Releases](<https://github.com/microsoft/WindowsML/wiki/Windows-ML-Execution-Provider-Releases>)
+QNN (Qualcomm)
+EpName : "QNNExecutionProvider"
+Requirements : Snapdragon(R) X Elite - X1Exxxxx Qualcomm(R) Hexagon(TM) NPU with minimum driver version 30.0.140.0 and above
+Snapdragon(R) X Plus - X1Pxxxxx Qualcomm(R) Hexagon(TM) NPU with minimum driver version 30.0.140.0 and above
+Documentation : [Documentation](<https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html>)
+Support : [Support](<https://www.qualcomm.com/support>)
+License terms : To view the QNN License, [download the Qualcomm® Neural Processing SDK](<https://www.qualcomm.com/developer/software/neural-processing-sdk-for-ai>) , extract the ZIP, and open the LICENSE.pdf file.
+Version and release history : [Windows ML Execution Provider Releases](<https://github.com/microsoft/WindowsML/wiki/Windows-ML-Execution-Provider-Releases>)
+VitisAI (AMD)
+EpName : "VitisAIExecutionProvider"
+Requirements : Min : Adrenalin Edition 25.6.3 with NPU driver 32.00.0203.280
+Max : Adrenalin Edition 25.9.1 with NPU driver 32.00.0203.297
+Documentation : [Documentation](<https://onnxruntime.ai/docs/execution-providers/Vitis-AI-ExecutionProvider.html>)
+Support : [Support](<https://www.amd.com/en/developer/resources/ryzen-ai-software.html>)
+License terms : [Ryzen AI Licensing Information](<https://ryzenai.docs.amd.com/en/latest/licenses.html>)
+Version and release history : [Windows ML Execution Provider Releases](<https://github.com/microsoft/WindowsML/wiki/Windows-ML-Execution-Provider-Releases>)
+WebGPU (experimental)
+Important
+WebGPU EP is experimental and requires installing experimental NuGet packages. It is not available in Windows ML 1.8.x. For full usage details, see [WebGPU EP](<https://learn.microsoft.com/windows/ai/new-windows-ml/webgpu-ep>) .
+EpName : "WebGpuExecutionProvider"
+Package family name : Microsoft.WinML.ONNX.WebGPU.EP.2
+Minimum required [Microsoft.Windows.AI.MachineLearning](<https://www.nuget.org/packages/Microsoft.Windows.AI.MachineLearning>) version : [2.4.66-preview](<https://www.nuget.org/packages/Microsoft.Windows.AI.MachineLearning/2.4.66-preview>)
+Requirements : Any DirectX 12–capable GPU with up-to-date drivers (roughly 11th-gen Intel integrated graphics or NVIDIA Turing-class and newer recommended)
+Documentation : [WebGPU EP](<https://learn.microsoft.com/windows/ai/new-windows-ml/webgpu-ep>)
+Support : [Support](<https://github.com/microsoft/WindowsML/issues>)
+License terms : [WebGPU EP for Windows App SDK License](<https://learn.microsoft.com/windows/ai/new-windows-ml/webgpu-ep-license>) and [ONNX Runtime License](<https://github.com/microsoft/onnxruntime/blob/main/LICENSE>)
+Version and release history : [Windows ML Execution Provider Releases](<https://github.com/microsoft/WindowsML/wiki/Windows-ML-Execution-Provider-Releases>)
+Past releases MSIX version WebGPU EP release notes
+0.2.1.0 [0.2.1](<https://github.com/microsoft/onnxruntime/releases/tag/plugin-ep-webgpu%2Fv0.2.1>)
+0.1.0.0 [0.1.0](<https://github.com/microsoft/onnxruntime/releases/tag/plugin-ep-webgpu%2Fv0.1.0>)
+See also
+[Windows ML Execution Provider Releases](<https://github.com/microsoft/WindowsML/wiki/Windows-ML-Execution-Provider-Releases>) (current, upcoming, and past versions)
+[Install Windows ML EPs](<https://learn.microsoft.com/windows/ai/new-windows-ml/initialize-execution-providers>)
+[Register Windows ML EPs](<https://learn.microsoft.com/windows/ai/new-windows-ml/register-execution-providers>)
+[Select execution providers](<https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers>)
+[Install and deploy Windows ML](<https://learn.microsoft.com/windows/ai/new-windows-ml/distributing-your-app>)
+Feedback
+Was this page helpful?
+No Need help with this topic?
+Want to try using Ask Learn to clarify or guide you through this topic?
+Additional resources
+Last updated on 2026-09-21

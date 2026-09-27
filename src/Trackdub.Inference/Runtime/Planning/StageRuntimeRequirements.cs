@@ -43,6 +43,10 @@ internal static class StageRuntimeRequirementsCatalog
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx and not ExecutionProviderKind.TensorRt)];
 
+    private static IReadOnlyList<ExecutionProviderKind> PreferDirectMl(
+        IReadOnlyList<ExecutionProviderKind> providers) =>
+        [ExecutionProviderKind.DirectMl, .. providers.Where(static p => p != ExecutionProviderKind.DirectMl)];
+
     public static IReadOnlyDictionary<RuntimeStage, StageRuntimeRequirements> All { get; } =
         new Dictionary<RuntimeStage, StageRuntimeRequirements>
         {
@@ -79,6 +83,10 @@ internal static class StageRuntimeRequirementsCatalog
                 // terminate the process (native stack overflow) during model init/generation.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
+                    // Qwen's TensorRT RTX smoke compiled for minutes on the live Windows path
+                    // before ASR proceeded on DirectML. Try DirectML first, retaining
+                    // TensorRT RTX as a fallback or explicit provider choice.
+                    ["qwen3-asr"] = PreferDirectMl(DefaultOnnxStageAllowedProviders),
                     ["whisper-onnx"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["whisper-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 },

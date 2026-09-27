@@ -765,7 +765,7 @@ public sealed class RuntimePlannerTests
             SkipProviderSmokeTest: true));
 
         Assert.Equal(StageRuntimePlanStatus.Ready, plan.Status);
-        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
         Assert.Equal("qwen3-asr", plan.EngineFamily);
         Assert.Empty(smokeRequests);
     }
@@ -806,8 +806,8 @@ public sealed class RuntimePlannerTests
 
         Assert.Equal(StageRuntimePlanStatus.Ready, listingPlan.Status);
         Assert.Equal(StageRuntimePlanStatus.Verified, runtimePlan.Status);
-        Assert.Equal(ExecutionProviderKind.TensorRTRtx, runtimePlan.ExecutionProvider);
-        Assert.Contains(smokeRequests, request => request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx);
+        Assert.Equal(ExecutionProviderKind.DirectMl, runtimePlan.ExecutionProvider);
+        Assert.Contains(smokeRequests, request => request.ExecutionProvider is ExecutionProviderKind.DirectMl);
     }
 
     [Fact]
@@ -831,7 +831,8 @@ public sealed class RuntimePlannerTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
             RuntimeStage.Asr,
             PreferredModelAlias: "qwen3-asr-0.6b",
-            RequirePreferredModelAlias: true));
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
         Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
@@ -868,7 +869,8 @@ public sealed class RuntimePlannerTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
             RuntimeStage.Asr,
             PreferredModelAlias: "qwen3-asr-0.6b",
-            RequirePreferredModelAlias: true));
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
         Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
@@ -2901,9 +2903,41 @@ public sealed class RuntimePlannerTests
 
         Assert.Equal(StageRuntimePlanStatus.Verified, firstPlan.Status);
         Assert.Equal(StageRuntimePlanStatus.Verified, secondPlan.Status);
-        Assert.Equal(ExecutionProviderKind.TensorRTRtx, secondPlan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.DirectMl, firstPlan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.DirectMl, secondPlan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.DirectMl, smokeRequests[0].ExecutionProvider);
         Assert.Single(smokeRequests);
         Assert.Single(verdictStore.RecordedKeys);
+    }
+
+    [Fact]
+    public async Task PlanAsync_ExplicitTensorRtRtxForQwenAsr_StillUsesRequestedProvider()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateQwenAsrSpec());
+        string cacheRoot = workspace.CreateCacheRoot("tonythethompson/qwen3-asr-0.6b-onnx");
+        workspace.WriteCacheFile(cacheRoot, "encoder.onnx");
+
+        var smokeRequests = new List<ExecutionProviderKind>();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("tonythethompson/qwen3-asr-0.6b-onnx", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [new(ExecutionProviderKind.DirectMl, true), new(ExecutionProviderKind.TensorRTRtx, true)],
+            request =>
+            {
+                smokeRequests.Add(request.ExecutionProvider);
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
+            RuntimeStage.Asr,
+            PreferredModelAlias: "qwen3-asr-0.6b",
+            RequirePreferredModelAlias: true,
+            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
+            RequirePreferredExecutionProvider: true));
+
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
+        Assert.Equal([ExecutionProviderKind.TensorRTRtx], smokeRequests);
     }
 
     [Fact]
