@@ -25,8 +25,9 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
     : ILipSynthesisEngine, IStageRuntimeExecutionReporter
 {
     private const string EngineFamilyName = LatentSyncModelPaths.EngineFamily;
-    private const int AudioSampleRateHz = 16_000;
-    private const double AudioConditioningWindowSeconds = 2.0;
+    private const int WhisperFeatureRateHz = 50;
+    private const int AudioContextFramesBefore = 2;
+    private const int AudioContextFramesAfter = 2;
 
     public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
 
@@ -117,13 +118,13 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
             cancellationToken)
             .ConfigureAwait(false);
 
-        string tempDir = Path.Combine(Path.GetTempPath(), $"lipsync_{request.SegmentId:N}");
+        string tempDir = Path.Join(Path.GetTempPath(), $"lipsync_{request.SegmentId:N}");
         Directory.CreateDirectory(tempDir);
-        string framesDir = Path.Combine(tempDir, "frames");
+        string framesDir = Path.Join(tempDir, "frames");
         // Clear stale frames from any previous interrupted run at this deterministic path.
         if (Directory.Exists(framesDir))
             Directory.Delete(framesDir, recursive: true);
-        string patchedPath = Path.Combine(tempDir, "patched.mp4");
+        string patchedPath = Path.Join(tempDir, "patched.mp4");
         string? standalonePatched = null;
 
         try
@@ -141,7 +142,7 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
                 return Skipped(request, "No frames extracted for the turn.");
 
             // Extract the dubbed audio segment and compute mel spectrogram → Whisper embeddings.
-            string segmentWav = Path.Combine(tempDir, "segment.wav");
+            string segmentWav = Path.Join(tempDir, "segment.wav");
             await audioExtractor.ExtractSegmentAsync(
                 request.DubbedAudioPath,
                 request.TurnStart,
@@ -150,9 +151,16 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
                 cancellationToken)
                 .ConfigureAwait(false);
 
-            float[] segmentPcm = LoadPcmFromWav(segmentWav);
+            byte[] waveBytes = await File.ReadAllBytesAsync(segmentWav, cancellationToken)
+                .ConfigureAwait(false);
+            float[] segmentPcm = LatentSyncWavAudioReader.ReadMono16Khz(waveBytes);
 
             var scheduler = new DdimScheduler();
+
+            // Whisper features are computed once for the turn. The U-Net conditions each
+            // output frame on a centered 10-step window from the 50 Hz feature timeline.
+            (float[] turnWhisperEmbeds, int whisperSeqLen, int whisperHiddenDim) = RunWhisperEncoder(
+                lease.WhisperEncoderSession, segmentPcm, cancellationToken);
 
             // Process each frame through the diffusion pipeline.
             string[] frameFiles = Directory.GetFiles(framesDir, "*.rgba")
@@ -164,13 +172,14 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
                 cancellationToken.ThrowIfCancellationRequested();
 
                 string framePath = frameFiles[frameIndex];
-                float[] framePcm = SliceFrameAudioWindow(
-                    segmentPcm,
+                float[] frameWhisperEmbeds = SliceWhisperContext(
+                    turnWhisperEmbeds,
+                    whisperSeqLen,
+                    whisperHiddenDim,
                     frameIndex,
                     frames.FrameRate,
-                    AudioConditioningWindowSeconds);
-                (float[] whisperEmbeds, int whisperSeqLen, int whisperHiddenDim) = RunWhisperEncoder(
-                    lease.WhisperEncoderSession, framePcm, cancellationToken);
+                    AudioContextFramesBefore,
+                    AudioContextFramesAfter);
 
                 byte[] rgbaBytes = await File.ReadAllBytesAsync(framePath, cancellationToken)
                     .ConfigureAwait(false);
@@ -194,8 +203,8 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
                         lease.UNetSession,
                         noisyLatent,
                         t,
-                        whisperEmbeds,
-                        whisperSeqLen,
+                        frameWhisperEmbeds,
+                        AudioContextFramesBefore + AudioContextFramesAfter + 1,
                         whisperHiddenDim,
                         cancellationToken);
                     noisyLatent = scheduler.Step(noise, t, noisyLatent);
@@ -225,7 +234,7 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
                 .ConfigureAwait(false);
 
             // Move patched clip out of tempDir so the whole working dir can be deleted below.
-            standalonePatched = Path.Combine(Path.GetTempPath(), $"lipsync_patched_{request.SegmentId:N}.mp4");
+            standalonePatched = Path.Join(Path.GetTempPath(), $"lipsync_patched_{request.SegmentId:N}.mp4");
             File.Move(patchedPath, standalonePatched, overwrite: true);
 
             LastExecutionSummary = LastExecutionSummary with
@@ -260,44 +269,105 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         float[] pcm16000Hz,
         CancellationToken cancellationToken)
     {
-        float[] mel = LatentSyncTensorPreprocessor.ComputeWhisperMelSpectrogram(pcm16000Hz);
+        if (pcm16000Hz.Length == 0)
+            throw new InvalidDataException("LatentSync audio turn is empty.");
+
         (int melBins, int melFrames) = LatentSyncTensorPreprocessor.MelShape;
+        int totalFeatureFrames = LatentSyncTensorPreprocessor.GetWhisperFeatureFrameCount(pcm16000Hz.Length);
+        float[]? embeddings = null;
+        int hiddenDimension = 0;
+        int destinationFeatureFrame = 0;
 
-        var melTensor = new DenseTensor<float>(mel, [1, melBins, melFrames]);
-        var inputs = new[] { NamedOnnxValue.CreateFromTensor("input_features", melTensor) };
+        for (int sampleOffset = 0; sampleOffset < pcm16000Hz.Length; sampleOffset += LatentSyncTensorPreprocessor.WhisperWindowSamples)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int windowSampleCount = Math.Min(
+                LatentSyncTensorPreprocessor.WhisperWindowSamples,
+                pcm16000Hz.Length - sampleOffset);
+            float[] windowPcm = pcm16000Hz.AsSpan(sampleOffset, windowSampleCount).ToArray();
+            float[] mel = LatentSyncTensorPreprocessor.ComputeWhisperMelSpectrogram(windowPcm);
 
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(
-            inputs,
-            cancellationToken: cancellationToken);
-        var hidden = outputs.Single(o => o.Name == "last_hidden_state").AsTensor<float>();
-        return (hidden.ToArray(), hidden.Dimensions[1], hidden.Dimensions[2]);
+            var melTensor = new DenseTensor<float>(mel, [1, melBins, melFrames]);
+            var inputs = new[] { NamedOnnxValue.CreateFromTensor("input_features", melTensor) };
+
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(
+                inputs,
+                cancellationToken: cancellationToken);
+            var hidden = outputs.Single(o => o.Name == "last_hidden_state").AsTensor<float>();
+            int sequenceLength = hidden.Dimensions[1];
+            int currentHiddenDimension = hidden.Dimensions[2];
+            int validFeatureFrames = LatentSyncTensorPreprocessor.GetWhisperFeatureFrameCount(windowSampleCount);
+            if (hidden.Dimensions[0] != 1 || sequenceLength < validFeatureFrames || currentHiddenDimension <= 0)
+            {
+                throw new InvalidDataException(
+                    $"LatentSync Whisper encoder returned an invalid feature shape [{string.Join(',', hidden.Dimensions.ToArray())}].");
+            }
+
+            embeddings ??= new float[checked(totalFeatureFrames * currentHiddenDimension)];
+            if (currentHiddenDimension != hiddenDimension && hiddenDimension != 0)
+                throw new InvalidDataException("LatentSync Whisper encoder changed hidden size between audio windows.");
+            hiddenDimension = currentHiddenDimension;
+
+            float[] windowEmbeddings = hidden.ToArray();
+            int valuesToCopy = checked(validFeatureFrames * hiddenDimension);
+            Array.Copy(
+                windowEmbeddings,
+                sourceIndex: 0,
+                embeddings,
+                destinationFeatureFrame * hiddenDimension,
+                valuesToCopy);
+            destinationFeatureFrame += validFeatureFrames;
+        }
+
+        if (embeddings is null || destinationFeatureFrame != totalFeatureFrames)
+            throw new InvalidDataException("LatentSync Whisper features do not cover the complete audio turn.");
+
+        return (embeddings, totalFeatureFrames, hiddenDimension);
     }
 
-    internal static float[] SliceFrameAudioWindowForTest(
-        float[] pcm16000Hz,
+    internal static float[] SliceWhisperContextForTest(
+        float[] embeddings,
+        int sequenceLength,
+        int hiddenDimension,
         int frameIndex,
         double frameRate,
-        double windowSeconds) =>
-        SliceFrameAudioWindow(pcm16000Hz, frameIndex, frameRate, windowSeconds);
+        int framesBefore,
+        int framesAfter) =>
+        SliceWhisperContext(embeddings, sequenceLength, hiddenDimension, frameIndex, frameRate, framesBefore, framesAfter);
 
-    private static float[] SliceFrameAudioWindow(
-        float[] pcm16000Hz,
+    private static float[] SliceWhisperContext(
+        float[] embeddings,
+        int sequenceLength,
+        int hiddenDimension,
         int frameIndex,
         double frameRate,
-        double windowSeconds)
+        int framesBefore,
+        int framesAfter)
     {
-        if (pcm16000Hz.Length == 0)
-            return [];
+        if (sequenceLength <= 0 || hiddenDimension <= 0 || frameIndex < 0 ||
+            !double.IsFinite(frameRate) || frameRate <= 0d || framesBefore < 0 || framesAfter < 0 ||
+            embeddings.Length != checked(sequenceLength * hiddenDimension))
+        {
+            throw new ArgumentOutOfRangeException(nameof(frameIndex), "Whisper context dimensions or frame timing are invalid.");
+        }
 
-        double safeFrameRate = frameRate > 0d ? frameRate : 25d;
-        int windowSamples = Math.Max(1, (int)Math.Round(windowSeconds * AudioSampleRateHz));
-        int startSample = (int)Math.Round(frameIndex / safeFrameRate * AudioSampleRateHz);
-        startSample = Math.Clamp(startSample, 0, Math.Max(0, pcm16000Hz.Length - 1));
+        int center = checked((int)(frameIndex * (WhisperFeatureRateHz / frameRate)));
+        int before = checked(framesBefore * 2);
+        int afterExclusive = checked((framesAfter + 1) * 2);
+        int contextLength = before + afterExclusive;
+        var context = new float[checked(contextLength * hiddenDimension)];
+        for (int contextFrame = 0; contextFrame < contextLength; contextFrame++)
+        {
+            int featureIndex = Math.Clamp(center - before + contextFrame, 0, sequenceLength - 1);
+            Array.Copy(
+                embeddings,
+                featureIndex * hiddenDimension,
+                context,
+                contextFrame * hiddenDimension,
+                hiddenDimension);
+        }
 
-        var window = new float[windowSamples];
-        int copyLength = Math.Min(windowSamples, pcm16000Hz.Length - startSample);
-        Array.Copy(pcm16000Hz, startSample, window, 0, copyLength);
-        return window;
+        return context;
     }
 
     private static float[] RunVaeEncoder(
@@ -367,23 +437,6 @@ public sealed class LatentSyncOnnxLipSynthesisEngine(
         return outputs.Single(o => o.Name == "out_sample")
             .AsTensor<float>()
             .ToArray();
-    }
-
-    private static float[] LoadPcmFromWav(string wavPath)
-    {
-        // Minimal WAV reader: skip 44-byte header, read 16-bit LE samples, normalise to [-1, 1].
-        byte[] wavBytes = File.ReadAllBytes(wavPath);
-        const int HeaderBytes = 44;
-        if (wavBytes.Length <= HeaderBytes)
-            return [];
-        int sampleCount = (wavBytes.Length - HeaderBytes) / 2;
-        float[] samples = new float[sampleCount];
-        for (int i = 0; i < sampleCount; i++)
-        {
-            short s = (short)(wavBytes[HeaderBytes + (i * 2)] | (wavBytes[HeaderBytes + (i * 2) + 1] << 8));
-            samples[i] = s / 32768f;
-        }
-        return samples;
     }
 
     private static float[] CreateGaussianNoise(int length)

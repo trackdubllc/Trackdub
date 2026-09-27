@@ -1,0 +1,194 @@
+{
+  "bundle_files": [
+    "unet.onnx",
+    "vae_encoder.onnx",
+    "vae_decoder.onnx",
+    "whisper_encoder.onnx",
+    "mask.png",
+    "model-config.json",
+    "all external-data files referenced by unet.onnx"
+  ],
+  "bundle_status": "local_probe_not_audited_or_publishable",
+  "components": {
+    "vae_decoder.onnx": {
+      "external_data": {},
+      "inputs": [
+        {
+          "name": "latent_sample",
+          "shape": [
+            1,
+            4,
+            32,
+            32
+          ]
+        }
+      ],
+      "operators": [
+        "ai.onnx::Add",
+        "ai.onnx::Cast",
+        "ai.onnx::Concat",
+        "ai.onnx::Constant",
+        "ai.onnx::Conv",
+        "ai.onnx::Div",
+        "ai.onnx::InstanceNormalization",
+        "ai.onnx::MatMul",
+        "ai.onnx::Mul",
+        "ai.onnx::Reshape",
+        "ai.onnx::Resize",
+        "ai.onnx::Shape",
+        "ai.onnx::Sigmoid",
+        "ai.onnx::Slice",
+        "ai.onnx::Softmax",
+        "ai.onnx::Sqrt",
+        "ai.onnx::Transpose",
+        "ai.onnx::Unsqueeze"
+      ],
+      "outputs": [
+        {
+          "name": "sample",
+          "shape": [
+            1,
+            3,
+            256,
+            256
+          ]
+        }
+      ],
+      "sha256": "70391e2762d52ebd2673d8993324fbd8912a2df0cb496ac410a82aceaf35e8ec"
+    },
+    "vae_encoder.onnx": {
+      "external_data": {},
+      "inputs": [
+        {
+          "name": "sample",
+          "shape": [
+            1,
+            3,
+            256,
+            256
+          ]
+        }
+      ],
+      "operators": [
+        "ai.onnx::Add",
+        "ai.onnx::Cast",
+        "ai.onnx::Clip",
+        "ai.onnx::Concat",
+        "ai.onnx::Constant",
+        "ai.onnx::ConstantOfShape",
+        "ai.onnx::Conv",
+        "ai.onnx::Div",
+        "ai.onnx::Gather",
+        "ai.onnx::InstanceNormalization",
+        "ai.onnx::MatMul",
+        "ai.onnx::Mul",
+        "ai.onnx::Pad",
+        "ai.onnx::Reshape",
+        "ai.onnx::Shape",
+        "ai.onnx::Sigmoid",
+        "ai.onnx::Slice",
+        "ai.onnx::Softmax",
+        "ai.onnx::Sqrt",
+        "ai.onnx::Sub",
+        "ai.onnx::Transpose",
+        "ai.onnx::Unsqueeze"
+      ],
+      "outputs": [
+        {
+          "name": "latent_mean",
+          "shape": [
+            "Slicelatent_mean_dim_0",
+            "Slicelatent_mean_dim_1",
+            "Slicelatent_mean_dim_2",
+            "Slicelatent_mean_dim_3"
+          ]
+        },
+        {
+          "name": "latent_logvar",
+          "shape": [
+            "Slicelatent_mean_dim_0",
+            "Cliplatent_logvar_dim_1",
+            "Slicelatent_mean_dim_2",
+            "Slicelatent_mean_dim_3"
+          ]
+        }
+      ],
+      "sha256": "2da31995e79d9b1bfc82d1fad5472ecff745911ae905a003ce4ea71cc4caaeb5"
+    },
+    "whisper_encoder.onnx": {
+      "external_data": {},
+      "inputs": [
+        {
+          "name": "input_features",
+          "shape": [
+            1,
+            80,
+            3000
+          ]
+        }
+      ],
+      "operators": [
+        "ai.onnx::Add",
+        "ai.onnx::Cast",
+        "ai.onnx::Concat",
+        "ai.onnx::Constant",
+        "ai.onnx::Conv",
+        "ai.onnx::Div",
+        "ai.onnx::Erf",
+        "ai.onnx::LayerNormalization",
+        "ai.onnx::MatMul",
+        "ai.onnx::Mul",
+        "ai.onnx::Pow",
+        "ai.onnx::Reshape",
+        "ai.onnx::Shape",
+        "ai.onnx::Slice",
+        "ai.onnx::Softmax",
+        "ai.onnx::Transpose",
+        "ai.onnx::Unsqueeze"
+      ],
+      "outputs": [
+        {
+          "name": "last_hidden_state",
+          "shape": [
+            1,
+            1500,
+            384
+          ]
+        }
+      ],
+      "sha256": "62dd2db475ecf1986a0244ae6e1d7bc4c369bac8235ebbabac42e4611b5eb63f"
+    }
+  },
+  "export_environment": {
+    "diffusers": "0.35.2",
+    "onnx": "1.22.0",
+    "onnxruntime": "1.24.4",
+    "python": "3.13.14",
+    "torch": "2.13.0"
+  },
+  "mask_sha256": "aa233251b9ff5691a1565a4108f0910ab1e5e7ad79a7bb2b741ab4d92c81053c",
+  "model_config_sha256": "5b5365d1cfd4aeb56769900569859b5af77aa15ced544047cebba9309f1e4a52",
+  "sources": {
+    "files": {
+      "upstream/configs/scheduler_config.json": "14561e18160bf30bbcf7c93259af07ae82bbf611defeb93e995883fce1461315",
+      "upstream/configs/unet/stage2_efficient.yaml": "2e6e6d5be0fdb568cd02316febf8627a9302b1697cd42416a6cbbac6e163d10e",
+      "upstream/latentsync/utils/mask.png": "aa233251b9ff5691a1565a4108f0910ab1e5e7ad79a7bb2b741ab4d92c81053c",
+      "vae/config.json": "92d3dfb746fca211a2c9e019e285f8597412211728dce3c5bcf4eda0f2d62e7e",
+      "vae/diffusion_pytorch_model.safetensors": "a1d993488569e928462932c8c38a0760b874d166399b14414135bd9c42df5815",
+      "whisper/model.py": "93c0671d35aace5c97278232258345176ddac95b293de456d50babbb97120d0b",
+      "whisper/tiny.pt": "65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9"
+    },
+    "latentsync_code": {
+      "repository": "https://github.com/bytedance/LatentSync",
+      "revision": "a229c3948406bc2cf6eaf4873e662e70c6a04746"
+    },
+    "latentsync_weights": {
+      "repository": "https://huggingface.co/ByteDance/LatentSync-1.5",
+      "revision": "32a20d29aead0498e3e885e90dbbe8027da1b61b"
+    },
+    "vae_weights": {
+      "repository": "https://huggingface.co/stabilityai/sd-vae-ft-mse",
+      "revision": "31f26fdeee1355a5c34592e401dd41e45d25a493"
+    }
+  }
+}

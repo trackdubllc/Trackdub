@@ -21,7 +21,9 @@ internal static class LatentSyncTensorPreprocessor
     private const int WinLength = 400;  // Whisper n_fft
     private const int HopLength = 160;
     private const int FreqBins = (WinLength / 2) + 1; // 201
-    private const int NSamples = 16000 * 30;        // 480 000
+    internal const int WhisperSampleRateHz = 16_000;
+    internal const int WhisperWindowSamples = WhisperSampleRateHz * 30;
+    internal const int WhisperFeatureHopSamples = 320;
 
     private static readonly float[] HannWin = BuildHannWindow(WinLength);
     private static readonly float[,] MelFilters = BuildWhisperMelFilterbank();
@@ -105,16 +107,30 @@ internal static class LatentSyncTensorPreprocessor
     /// </summary>
     public static float[] ComputeWhisperMelSpectrogram(float[] pcm16000Hz)
     {
-        // Pad/trim to NSamples, then pad right by WinLength so frame loop never reads past end.
-        // With NSamples+WinLength total samples, frame t accesses t*HopLength .. t*HopLength+WinLength-1.
+        ArgumentNullException.ThrowIfNull(pcm16000Hz);
+        if (pcm16000Hz.Length > WhisperWindowSamples)
+        {
+            throw new ArgumentException(
+                "Whisper mel input must be split into windows of at most 30 seconds.",
+                nameof(pcm16000Hz));
+        }
+
+        // Pad to WhisperWindowSamples, then pad right by WinLength so frame loop never reads past end.
+        // With WhisperWindowSamples+WinLength total samples, frame t accesses t*HopLength .. t*HopLength+WinLength-1.
         // At t=MelFrames-1=2999: 2999*160+399 = 479839 < 480400. Safe.
-        float[] padded = new float[NSamples + WinLength];
-        Array.Copy(pcm16000Hz, padded, Math.Min(pcm16000Hz.Length, NSamples));
+        float[] padded = new float[WhisperWindowSamples + WinLength];
+        Array.Copy(pcm16000Hz, padded, pcm16000Hz.Length);
 
         float[,] power = ComputePowerSpectrum(padded);
         float[] mel = ApplyMelFilterbank(power);
         WhisperNormalize(mel);
         return mel;
+    }
+
+    internal static int GetWhisperFeatureFrameCount(int sampleCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(sampleCount);
+        return checked((int)(((long)sampleCount + WhisperFeatureHopSamples - 1) / WhisperFeatureHopSamples));
     }
 
     public static (int MelBins, int MelFrames) MelShape => (MelBins, MelFrames);

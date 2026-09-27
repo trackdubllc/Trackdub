@@ -1,0 +1,99 @@
+{
+  "bundle_status": "local_probe_not_audited_or_publishable",
+  "export_parameters": {
+    "batch_size": 2,
+    "frames": 16,
+    "guidance_branches": 2
+  },
+  "graph": {
+    "inputs": [
+      {
+        "name": "sample",
+        "shape": [
+          2,
+          13,
+          16,
+          32,
+          32
+        ]
+      },
+      {
+        "name": "timestep",
+        "shape": [
+          2
+        ]
+      },
+      {
+        "name": "encoder_hidden_states",
+        "shape": [
+          32,
+          10,
+          384
+        ]
+      }
+    ],
+    "operators": [
+      "ai.onnx::Add",
+      "ai.onnx::Cast",
+      "ai.onnx::Concat",
+      "ai.onnx::Constant",
+      "ai.onnx::ConstantOfShape",
+      "ai.onnx::Conv",
+      "ai.onnx::Cos",
+      "ai.onnx::Div",
+      "ai.onnx::Equal",
+      "ai.onnx::Erf",
+      "ai.onnx::Expand",
+      "ai.onnx::Gather",
+      "ai.onnx::Gemm",
+      "ai.onnx::Identity",
+      "ai.onnx::InstanceNormalization",
+      "ai.onnx::LayerNormalization",
+      "ai.onnx::MatMul",
+      "ai.onnx::Mul",
+      "ai.onnx::Reshape",
+      "ai.onnx::Resize",
+      "ai.onnx::Shape",
+      "ai.onnx::Sigmoid",
+      "ai.onnx::Sin",
+      "ai.onnx::Slice",
+      "ai.onnx::Softmax",
+      "ai.onnx::Sqrt",
+      "ai.onnx::Transpose",
+      "ai.onnx::Unsqueeze",
+      "ai.onnx::Where"
+    ],
+    "opset_imports": [
+      {
+        "domain": "ai.onnx",
+        "version": 17
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out_sample",
+        "shape": [
+          2,
+          4,
+          16,
+          32,
+          32
+        ]
+      }
+    ],
+    "sha256": "dade8d76bbfa66aca87192fc2aeed5dc1077590f270a56effbdcb89373552b3e",
+    "external_data_file_count": 711,
+    "external_data_manifest": "latentsync-1-5-unet16-external-data.sha256.json"
+  },
+  "sources": {
+    "latentsync_code": {
+      "repository": "https://github.com/bytedance/LatentSync",
+      "revision": "a229c3948406bc2cf6eaf4873e662e70c6a04746"
+    },
+    "latentsync_weights": {
+      "checkpoint_sha256": "6440b49a7ccceff56cdc001f5f17605216337f5bbd66fa360139768926e23f51",
+      "repository": "https://huggingface.co/ByteDance/LatentSync-1.5",
+      "revision": "32a20d29aead0498e3e885e90dbbe8027da1b61b"
+    }
+  }
+}

@@ -75,29 +75,43 @@ public sealed class LatentSyncOnnxLipSynthesisEngineTests
             DownloadFileHashes: new Dictionary<string, string>(),
             Aliases: [LatentSyncModelPaths.ManifestAlias],
             RootDirectory: Path.GetTempPath(),
-            DefaultBenchmarkEntryPath: Path.Combine(Path.GetTempPath(), "unet.onnx"),
+            DefaultBenchmarkEntryPath: Path.Join(Path.GetTempPath(), "unet.onnx"),
             Variants: []);
 
     [Fact]
-    public void SliceFrameAudioWindow_uses_frame_index_to_select_time_aligned_audio()
+    public void SliceWhisperContext_centers_ten_feature_steps_on_frame_time()
     {
-        float[] pcm = Enumerable.Range(0, 16000).Select(sample => (float)sample).ToArray();
+        const int hiddenDimension = 1;
+        float[] embeddings = Enumerable.Range(0, 1500).Select(index => (float)index).ToArray();
 
-        float[] firstFrame = LatentSyncOnnxLipSynthesisEngine.SliceFrameAudioWindowForTest(
-            pcm,
-            frameIndex: 0,
-            frameRate: 10,
-            windowSeconds: 0.1);
-        float[] laterFrame = LatentSyncOnnxLipSynthesisEngine.SliceFrameAudioWindowForTest(
-            pcm,
-            frameIndex: 5,
-            frameRate: 10,
-            windowSeconds: 0.1);
+        float[] context = LatentSyncOnnxLipSynthesisEngine.SliceWhisperContextForTest(
+            embeddings, sequenceLength: 1500, hiddenDimension: hiddenDimension, frameIndex: 10, frameRate: 25,
+            framesBefore: 2, framesAfter: 2);
 
-        Assert.Equal(1600, firstFrame.Length);
-        Assert.Equal(1600, laterFrame.Length);
-        Assert.Equal(0f, firstFrame[0]);
-        Assert.Equal(8000f, laterFrame[0]);
-        Assert.NotEqual(firstFrame[0], laterFrame[0]);
+        Assert.Equal(10, context.Length);
+        Assert.Equal(Enumerable.Range(16, 10).Select(index => (float)index), context);
+    }
+
+    [Fact]
+    public void SliceWhisperContext_repeats_edge_features_to_keep_a_full_context()
+    {
+        float[] context = LatentSyncOnnxLipSynthesisEngine.SliceWhisperContextForTest(
+            [10f, 20f, 30f], sequenceLength: 3, hiddenDimension: 1, frameIndex: 0, frameRate: 25,
+            framesBefore: 2, framesAfter: 2);
+
+        Assert.Equal(new[] { 10f, 10f, 10f, 10f, 10f, 20f, 30f, 30f, 30f, 30f }, context);
+    }
+
+    [Fact]
+    public void SliceWhisperContext_rejects_invalid_feature_shapes_and_frame_rates()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            LatentSyncOnnxLipSynthesisEngine.SliceWhisperContextForTest(
+                [1f], sequenceLength: 2, hiddenDimension: 1, frameIndex: 0, frameRate: 25,
+                framesBefore: 2, framesAfter: 2));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            LatentSyncOnnxLipSynthesisEngine.SliceWhisperContextForTest(
+                [1f], sequenceLength: 1, hiddenDimension: 1, frameIndex: 0, frameRate: 0,
+                framesBefore: 2, framesAfter: 2));
     }
 }
