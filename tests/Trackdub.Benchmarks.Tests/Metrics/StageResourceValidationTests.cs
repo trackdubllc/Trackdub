@@ -281,7 +281,6 @@ public sealed class StageResourceValidationTests
             }
             return 100;
         }
-
     }
 
     private sealed class MissingCollector : IResourceTelemetryCollector
