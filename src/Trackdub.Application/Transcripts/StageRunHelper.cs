@@ -38,7 +38,6 @@ internal static class StageRunHelper
             StageNames.SpeechEnhancement => StageRunRecord.Start(projectId, StageNames.SpeechEnhancement, startedAt),
             StageNames.AudioPreparation => StageRunRecord.Start(projectId, StageNames.AudioPreparation, startedAt),
             StageNames.PreviewMix => StageRunRecord.Start(projectId, StageNames.PreviewMix, startedAt),
-            StageNames.VoiceCloning => StageRunRecord.Start(projectId, StageNames.VoiceCloning, startedAt),
             StageNames.Export => StageRunRecord.Start(projectId, StageNames.Export, startedAt),
             StageNames.LipSync => StageRunRecord.Start(projectId, StageNames.LipSync, startedAt),
             StageNames.LipSynthesis => StageRunRecord.Start(projectId, StageNames.LipSynthesis, startedAt),

@@ -21,16 +21,6 @@ public sealed record PreviewMixStageResult(
     double DurationSeconds,
     IReadOnlyList<MixPlanWarning> Warnings);
 
-public sealed record VoiceCloningStageRequest(
-    Guid ProjectId,
-    Guid SpeakerId,
-    Guid ReferenceClipArtifactId,
-    IReadOnlySet<int> SegmentIndices);
-
-public sealed record VoiceCloningStageResult(
-    StageRunRecord StageRun,
-    IReadOnlyList<Guid> TtsTakeIds);
-
 public enum ExportSubtitleFormat
 {
     Srt = 0,

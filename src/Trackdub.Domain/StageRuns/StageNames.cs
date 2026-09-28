@@ -19,7 +19,6 @@ public static class StageNames
     public const string SpeechEnhancement = "speech-enhancement";
     public const string AudioPreparation = "audio-preparation";
     public const string PreviewMix = "preview-mix";
-    public const string VoiceCloning = "voice-cloning";
     public const string Export = "export";
     public const string LipSync = "lip-sync";
     public const string LipSynthesis = "lip-synthesis";

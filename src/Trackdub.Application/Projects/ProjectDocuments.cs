@@ -90,13 +90,30 @@ public sealed record SegmentStageRunMap(
     }
 }
 
+file static class VoiceCloneByIdNormalizer
+{
+    internal static IReadOnlyDictionary<Guid, bool>? NormalizeVoiceCloneBySpeakerId(IReadOnlyDictionary<Guid, bool>? map)
+    {
+        if (map is null || map.Count == 0)
+        {
+            return null;
+        }
+
+        Dictionary<Guid, bool> normalized = map
+            .Where(static pair => pair.Key != Guid.Empty)
+            .ToDictionary(static pair => pair.Key, static pair => pair.Value);
+        return normalized.Count == 0 ? null : normalized;
+    }
+}
+
 public sealed record ProjectUiSettings(
     ProjectMixSettings? Mix = null,
     ProjectExportSettings? Export = null,
     IReadOnlyList<ProjectTimelineMediaPlacement>? TimelinePlacements = null,
     string? SelectedTranslationTargetLanguage = null,
     ProjectPipelineSettings? Pipeline = null,
-    SegmentStageRunMap? SegmentStageRuns = null)
+    SegmentStageRunMap? SegmentStageRuns = null,
+    IReadOnlyDictionary<Guid, bool>? VoiceCloneBySpeakerId = null)
 {
     public ProjectUiSettings Normalize() =>
         this with
@@ -109,6 +126,7 @@ public sealed record ProjectUiSettings(
             SelectedTranslationTargetLanguage = ProjectDocumentLanguageCodes.NormalizeLanguageCode(SelectedTranslationTargetLanguage),
             Pipeline = Pipeline?.Normalize(),
             SegmentStageRuns = SegmentStageRuns?.Normalize(),
+            VoiceCloneBySpeakerId = VoiceCloneByIdNormalizer.NormalizeVoiceCloneBySpeakerId(VoiceCloneBySpeakerId),
         };
 }
 
