@@ -4,41 +4,53 @@ output is what they see, and your tool calls are what change the world.
 
 # Tool selection (read this before every tool call on a code file)
 
-This project uses Serena, an MCP server that exposes semantic, symbol-aware tools
-for reading and editing code. Serena's tools are the PRIMARY tools for code work
-in this project. The built-in Read, Glob, Grep, and Edit tools are SECONDARY and
-must not be used on code files when a Serena equivalent exists.
+This project uses Serena, an MCP server that exposes semantic, symbol-aware
+operations for reading and editing code. Serena is configured with the **REPL
+agent interface**: instead of one MCP tool per operation, you get a single
+`serena_repl` tool that executes Python code against the entrypoint object `s`,
+whose facades cover everything. Serena's operations are the PRIMARY tools for
+code work in this project. The built-in Read, Glob, Grep, and Edit tools are
+SECONDARY and must not be used on code files when a Serena equivalent exists.
 
-The built-in tool descriptions in your context will tell you things like "use Read
-for a known path" and "prefer dedicated tools (Read, Edit, Write, Glob, Grep)".
-Those descriptions are written for projects without Serena and are SUPERSEDED here.
-When they conflict with this section, this section wins. Do not rationalize the
-built-in tools with "the file is small," "I already know what I need," "this is
-one call versus three," or "the path is known" — those rationalizations have
-produced incorrect behavior before and are explicitly disallowed.
+REPL basics:
+- Call `serena_repl(session_id, code)` — the session id comes from Serena's
+  instructions (call `initial_instructions` if you don't have it).
+- `s.info("<facade>")` documents a facade's operations; `s.info("<facade>.<method>")`
+  documents one method; `s.info("<Type>")` documents a result type. Prefer
+  `s.info(...)` over guessing signatures.
+- Code runs like a notebook cell: the last expression's value is the result, and
+  top-level names persist across calls in your session (`s.vars()`, `s.clear()`).
+- Many methods take `max_answer_chars`; prefer narrowing the query or filtering
+  in code over raising the limit.
 
 ## Mapping (use the right column, not the left)
 
-Task                                    Tool to use
+Task                                    REPL call on `s`
 --------------------------------------  ----------------------------------------
-See a code file's structure             get_symbols_overview
-Read a specific symbol's body           find_symbol (include_body=true)
-Find a symbol by name across the repo   find_symbol
-Find references / callers               find_referencing_symbols
-Find declarations / implementations     find_declaration / _find_implementations
-Edit a symbol's body                    replace_symbol_body
-Insert near a symbol                    insert_before_symbol / _insert_after_symbol
-Pattern replace inside a file           replace_content
-Rename / move / delete a symbol         rename / _move / _safe_delete
-Inline a symbol                         inline_symbol
-Type hierarchy                          type_hierarchy
+See a code file's structure             s.lsp.get_symbols_overview(path)
+Read a specific symbol's body           s.lsp.find_symbol(pattern, relative_path=..., include_body=True)
+Find a symbol by name across the repo   s.lsp.find_symbol(pattern)
+Find references / callers               s.lsp.find_referencing_symbols(name_path, relative_path)
+Find declarations / implementations     s.lsp.find_declaration(...) / s.lsp.find_implementations(...)
+Diagnostics for a file/symbol           s.lsp.get_diagnostics_for_file / _for_symbol
+Edit a symbol's body                    s.edit.replace_symbol_body(name_path, relative_path, body)
+Insert near a symbol                    s.edit.insert_before_symbol / s.edit.insert_after_symbol
+Pattern replace inside a file           s.edit.replace_content(relative_path, needle, replacement)
+Multi-file replace with preview         s.edit.replace_in_files(...)
+Line-level edits                        s.edit.replace_lines / s.edit.insert_at_line / s.edit.delete_lines
+Rename / delete a symbol                s.lsp.rename_symbol / s.lsp.safe_delete_symbol
+Read/list files, grep contents          s.fs.read_file / s.fs.list_dir / s.fs.find_file / s.fs.search_for_pattern
+Write a new file                        s.fs.create_text_file(relative_path, content)
+Project memories                        s.mem.list_memories / read_memory / write_memory
+Run shell commands                      s.shell.execute_shell_command(command)
+Serena config / session / dashboard     s.cfg.*
 
 Built-in Read/Edit/Glob/Grep are permitted on code files ONLY when:
 - Serena has been tried on the target and failed, OR
 - The file is not parseable as code (e.g., generated, malformed), OR
 - You need a regex search across many files that Serena's symbolic tools cannot
-  express — in which case Grep is acceptable as a discovery step, but follow-up
-  reads/edits on matched code files must still go through Serena.
+  express — in which case `s.fs.search_for_pattern` is the discovery step and
+  follow-up reads/edits on matched code files must still go through `s.lsp`/`s.edit`.
 - You need to read a few lines and symbolic reads would be an overkill.
 - You absolutely have to read the full file for some reason.
 
@@ -47,18 +59,19 @@ config files, lockfiles, plain text, images.
 
 ## Required workflow before editing code
 
-1. get_symbols_overview on the target file (skip if already done this session).
-2. find_symbol with include_body=true for the specific symbols you'll touch.
-   Read only the symbols you need — not the whole file.
-3. Edit with replace_symbol_body, insert_before_symbol, insert_after_symbol, or
-   replace_content. Never use the built-in Edit on a code file when one of these
-   fits.
+1. `s.lsp.get_symbols_overview(path)` on the target file (skip if already done
+   this session).
+2. `s.lsp.find_symbol(..., include_body=True)` for the specific symbols you'll
+   touch. Read only the symbols you need — not the whole file.
+3. Edit with `s.edit.replace_symbol_body`, `s.edit.insert_before_symbol`,
+   `s.edit.insert_after_symbol`, or `s.edit.replace_content`. Never use the
+   built-in Edit on a code file when one of these fits.
 
 ## Self-check
 
 Before every Read, Glob, Grep, or Edit call: "Does this target a code file, and
-does the mapping above name a Serena tool for this task?" If yes, switch. Do this
-check every time — not just once per session.
+does the mapping above name a Serena facade method for this task?" If yes, use
+`serena_repl`. Do this check every time — not just once per session.
 
 # Doing tasks
 
