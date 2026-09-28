@@ -342,4 +342,127 @@ public sealed class SessionPoolKeyTests
 
         Assert.All(keys, k => Assert.Equal("chatterbox", k.EngineFamily));
     }
+
+    // ── Content identity ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ModelContentHash_UnchangedFile_IsCachedAndKeysAreEqual()
+    {
+        string path = Path.Join(Path.GetTempPath(), $"spk-{Guid.NewGuid():N}.onnx");
+        try
+        {
+            File.WriteAllBytes(path, [0x01, 0x02, 0x03, 0x04]);
+
+            string? first = SessionPoolKey.HashModelContent(path);
+            string? second = SessionPoolKey.HashModelContent(path);
+
+            Assert.NotNull(first);
+            Assert.Equal(first, second);
+
+            var key1 = SessionPoolKey.ForSingle("eng", path, ExecutionProviderKind.Cpu);
+            var key2 = SessionPoolKey.ForSingle("eng", path, ExecutionProviderKind.Cpu);
+            Assert.Equal(first, key1.ModelContentHash);
+            Assert.Equal(key1, key2);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ModelContentHash_SamePathReplacement_ChangesHashAndKey()
+    {
+        string path = Path.Join(Path.GetTempPath(), $"spk-{Guid.NewGuid():N}.onnx");
+        try
+        {
+            File.WriteAllBytes(path, [0x01, 0x02, 0x03, 0x04]);
+            var before = SessionPoolKey.ForSingle("eng", path, ExecutionProviderKind.Cpu);
+
+            // Same path, different content and length → the helper-built key must change.
+            File.WriteAllBytes(path, [0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F]);
+            var after = SessionPoolKey.ForSingle("eng", path, ExecutionProviderKind.Cpu);
+
+            Assert.NotNull(after.ModelContentHash);
+            Assert.NotEqual(before.ModelContentHash, after.ModelContentHash);
+            Assert.Equal(before.PathHash, after.PathHash);
+            Assert.NotEqual(before, after);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ModelContentHash_SameBytesDifferentPaths_SameDigestDifferentKeys()
+    {
+        string pathA = Path.Join(Path.GetTempPath(), $"spk-{Guid.NewGuid():N}a.onnx");
+        string pathB = Path.Join(Path.GetTempPath(), $"spk-{Guid.NewGuid():N}b.onnx");
+        try
+        {
+            byte[] bytes = [0x10, 0x20, 0x30];
+            File.WriteAllBytes(pathA, bytes);
+            File.WriteAllBytes(pathB, bytes);
+
+            var keyA = SessionPoolKey.ForSingle("eng", pathA, ExecutionProviderKind.Cpu);
+            var keyB = SessionPoolKey.ForSingle("eng", pathB, ExecutionProviderKind.Cpu);
+
+            Assert.Equal(keyA.ModelContentHash, keyB.ModelContentHash);
+            Assert.NotEqual(keyA.PathHash, keyB.PathHash);
+            Assert.NotEqual(keyA, keyB);
+        }
+        finally
+        {
+            File.Delete(pathA);
+            File.Delete(pathB);
+        }
+    }
+
+    [Fact]
+    public void ModelContentHash_MissingFile_NullHashKeepsPathIdentity()
+    {
+        string path = Path.Join(Path.GetTempPath(), $"spk-missing-{Guid.NewGuid():N}.onnx");
+
+        var key1 = SessionPoolKey.ForSingle("eng", path, ExecutionProviderKind.Cpu);
+        var key2 = SessionPoolKey.ForSingle("eng", path, ExecutionProviderKind.Cpu);
+
+        Assert.Null(key1.ModelContentHash);
+        Assert.Null(key2.ModelContentHash);
+        Assert.Equal(key1, key2); // deterministic path identity still applies
+    }
+
+    [Fact]
+    public void RecordEquality_ModelContentHash_Discriminates()
+    {
+        var baseline = new SessionPoolKey(
+            "eng", "m", null, ExecutionProviderKind.Cpu, "h", 0, "default");
+        var withHash = new SessionPoolKey(
+            "eng", "m", null, ExecutionProviderKind.Cpu, "h", 0, "default",
+            modelContentHash: "abc123");
+        var withSameHash = new SessionPoolKey(
+            "eng", "m", null, ExecutionProviderKind.Cpu, "h", 0, "default",
+            modelContentHash: "ABC123"); // normalised to lowercase
+        var withOtherHash = new SessionPoolKey(
+            "eng", "m", null, ExecutionProviderKind.Cpu, "h", 0, "default",
+            modelContentHash: "def456");
+
+        Assert.NotEqual(baseline, withHash);
+        Assert.Equal(withHash, withSameHash);
+        Assert.NotEqual(withHash, withOtherHash);
+    }
+
+    [Fact]
+    public void StableComparer_DistinguishesContentHash()
+    {
+        var x = new SessionPoolKey(
+            "eng", "m", null, ExecutionProviderKind.Cpu, "h", 0, "default",
+            modelContentHash: "aaa");
+        var y = new SessionPoolKey(
+            "eng", "m", null, ExecutionProviderKind.Cpu, "h", 0, "default",
+            modelContentHash: "bbb");
+
+        Assert.NotEqual(0, SessionPoolKey.StableComparer.Compare(x, y));
+        Assert.Equal(0, SessionPoolKey.StableComparer.Compare(x, x));
+    }
 }

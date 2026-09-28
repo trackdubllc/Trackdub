@@ -305,7 +305,8 @@ public sealed class InferenceSessionPoolTests
     [Fact]
     public async Task LruEviction_EjectsOldestIdleEntry_WhenCapacityExceeded()
     {
-        using var pool = new InferenceSessionPool(maxSessions: 2);
+        // Count-mode overflow behaviour only exists with admission explicitly disabled.
+        using var pool = new InferenceSessionPool(maxSessions: 2, enableMemoryAdmission: false);
 
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "hash1", 0, "default");
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "hash2", 0, "default");
@@ -393,7 +394,8 @@ public sealed class InferenceSessionPoolTests
     [Fact]
     public async Task LruEviction_DoesNotEvictLeasedEntry_FallsBackToEphemeral()
     {
-        using var pool = new InferenceSessionPool(maxSessions: 1);
+        // Count-mode ephemeral overflow exists only with admission explicitly disabled.
+        using var pool = new InferenceSessionPool(maxSessions: 1, enableMemoryAdmission: false);
 
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "hash1", 0, "default");
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "hash2", 0, "default");
@@ -422,7 +424,8 @@ public sealed class InferenceSessionPoolTests
     [Fact]
     public async Task LruEviction_SkipsLeasedEntry_AndEvictsIdleCandidate()
     {
-        using var pool = new InferenceSessionPool(maxSessions: 2);
+        // Count-mode eviction, so admission is explicitly disabled.
+        using var pool = new InferenceSessionPool(maxSessions: 2, enableMemoryAdmission: false);
 
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "hash1", 0, "default");
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "hash2", 0, "default");
@@ -447,7 +450,7 @@ public sealed class InferenceSessionPoolTests
     [Fact]
     public async Task EphemeralLease_SessionIsValid_AndReleasesWithoutThrowing()
     {
-        using var pool = new InferenceSessionPool(maxSessions: 1);
+        using var pool = new InferenceSessionPool(maxSessions: 1, enableMemoryAdmission: false);
 
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "hash1", 0, "default");
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "hash2", 0, "default");
@@ -535,12 +538,13 @@ public sealed class InferenceSessionPoolTests
         Assert.Equal(1, factoryCalls);
     }
 
-    // ── Memory admission (opt-in) ─────────────────────────────────────────────
+    // ── Memory admission (default-on hard admission) ─────────────────────────────────────────────
 
     [Fact]
-    public async Task MemoryAdmission_DisabledByDefault_StillAllowsEphemeral()
+    public async Task MemoryAdmission_DisabledExplicitly_StillAllowsEphemeral()
     {
-        using var pool = new InferenceSessionPool(maxSessions: 1);
+        // Explicit opt-out preserves the historical count-mode ephemeral overflow.
+        using var pool = new InferenceSessionPool(maxSessions: 1, enableMemoryAdmission: false);
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h1", 0, "default") { EstimatedVramMb = 64 };
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h2", 0, "default") { EstimatedVramMb = 64 };
 
@@ -555,7 +559,8 @@ public sealed class InferenceSessionPoolTests
         using var pool = new InferenceSessionPool(
             maxSessions: 4,
             enableMemoryAdmission: true,
-            memoryBudgetMb: 100);
+            memoryBudgetMb: 100,
+            hostMemoryBudgetMb: 100);
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h1", 0, "default") { EstimatedVramMb = 80 };
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h2", 0, "default") { EstimatedVramMb = 80 };
 
@@ -581,7 +586,8 @@ public sealed class InferenceSessionPoolTests
         using var pool = new InferenceSessionPool(
             maxSessions: 8,
             enableMemoryAdmission: true,
-            memoryBudgetMb: 120);
+            memoryBudgetMb: 120,
+            hostMemoryBudgetMb: 120);
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h1", 0, "default") { EstimatedVramMb = 80 };
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "h2", 0, "default") { EstimatedVramMb = 80 };
 
@@ -629,7 +635,8 @@ public sealed class InferenceSessionPoolTests
         using var pool = new InferenceSessionPool(
             maxSessions: 4,
             enableMemoryAdmission: true,
-            memoryBudgetMb: 100);
+            memoryBudgetMb: 100,
+            hostMemoryBudgetMb: 100);
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "pc1", 0, "default") { EstimatedVramMb = 80 };
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "pc2", 0, "default") { EstimatedVramMb = 80 };
 
@@ -692,7 +699,8 @@ public sealed class InferenceSessionPoolTests
         using var pool = new InferenceSessionPool(
             maxSessions: 4,
             enableMemoryAdmission: true,
-            memoryBudgetMb: 100);
+            memoryBudgetMb: 100,
+            hostMemoryBudgetMb: 100);
         var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "p1", 0, "default") { EstimatedVramMb = 80 };
         var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "p2", 0, "default") { EstimatedVramMb = 80 };
 
@@ -916,24 +924,44 @@ public sealed class InferenceSessionPoolTests
     [InlineData(" 1 ", true)]
     [InlineData("0", false)]
     [InlineData("false", false)]
+    [InlineData("FALSE", false)]
     [InlineData("off", false)]
-    [InlineData("", false)]
-    [InlineData("yes", false)]
-    [InlineData("2", false)]
-    public void SharedPoolOptions_AdmissionFlag_OnlyAcceptsExplicitOptIn(string raw, bool expected)
+    [InlineData("disabled", false)]
+    [InlineData("", true)]
+    [InlineData("yes", true)]
+    [InlineData("2", true)]
+    [InlineData("typpo", true)]
+    public void SharedPoolOptions_AdmissionFlag_OnlyExplicitNegativeDisables(string raw, bool expected)
     {
-        // Admission stays off unless explicitly enabled: a typo must not silently turn a
-        // blocking wait into production behaviour.
+        // Admission is the safe default: unset, unknown, and typo values keep it enabled;
+        // only an explicit negative token turns it off.
         Assert.Equal(expected, SharedPoolOptions.ParseAdmissionFlag(raw));
     }
 
     [Fact]
-    public void SharedPoolOptions_AdmissionFlag_UnsetIsOff()
+    public void SharedPoolOptions_AdmissionFlag_UnsetStaysOn()
     {
         using var env = new ScopedEnvironment();
         env.Clear(SharedPoolOptions.AdmissionVariable);
 
-        Assert.False(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
+        Assert.True(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData("4", 4)]
+    [InlineData(" 20 ", 20)]
+    [InlineData("0", null)]
+    [InlineData("-1", null)]
+    [InlineData("abc", null)]
+    [InlineData("12.5", null)]
+    [InlineData("3000000000", null)]            // exceeds int.MaxValue — falls back
+    [InlineData("9223372036854775807", null)]   // long.MaxValue — falls back, never throws
+    public void SharedPoolOptions_PositiveInt32_RejectsUnsetInvalidAndOverflow(string? raw, int? expected)
+    {
+        Assert.Equal(expected, SharedPoolOptions.ParsePositiveInt32(raw));
     }
 
     [Theory]
@@ -956,29 +984,34 @@ public sealed class InferenceSessionPoolTests
     {
         using var env = new ScopedEnvironment();
         env.Set(SharedPoolOptions.BudgetMbVariable, "8192");
+        env.Set(SharedPoolOptions.HostBudgetMbVariable, "2048");
         env.Set(SharedPoolOptions.MaxSessionsVariable, "20");
-        env.Set(SharedPoolOptions.AdmissionVariable, "enabled");
+        env.Set(SharedPoolOptions.AdmissionVariable, "0");
 
-        Assert.True(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
+        Assert.False(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
         Assert.Equal(8192L, SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.BudgetMbVariable));
-        Assert.Equal(20L, SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.MaxSessionsVariable));
+        Assert.Equal(2048L, SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.HostBudgetMbVariable));
+        Assert.Equal(20, SharedPoolOptions.ReadPositiveInt32(SharedPoolOptions.MaxSessionsVariable));
     }
 
     [Fact]
-    public void SharedPoolOptions_Defaults_MatchPoolDefaults()
+    public void SharedPoolOptions_Defaults_AreSafeOnAndMatchPoolDefaults()
     {
-        // With no environment set, the shared pool must behave exactly as it did before
-        // this seam existed: admission off, pool default capacity, default budget.
+        // With no environment set, admission is hard-on with the pool's documented
+        // budgets and capacity.
         using var env = new ScopedEnvironment();
         env.Clear(SharedPoolOptions.AdmissionVariable);
         env.Clear(SharedPoolOptions.BudgetMbVariable);
+        env.Clear(SharedPoolOptions.HostBudgetMbVariable);
         env.Clear(SharedPoolOptions.MaxSessionsVariable);
 
-        Assert.False(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
+        Assert.True(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.AdmissionVariable));
         Assert.Null(SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.BudgetMbVariable));
-        Assert.Null(SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.MaxSessionsVariable));
+        Assert.Null(SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.HostBudgetMbVariable));
+        Assert.Null(SharedPoolOptions.ReadPositiveInt32(SharedPoolOptions.MaxSessionsVariable));
         Assert.Equal(12, InferenceSessionPool.DefaultMaxSessions);
         Assert.Equal(4096L, InferenceSessionPool.DefaultMemoryBudgetMb);
+        Assert.Equal(4096L, InferenceSessionPool.DefaultHostMemoryBudgetMb);
     }
 
     [Fact]
@@ -1017,6 +1050,158 @@ public sealed class InferenceSessionPoolTests
 
             Environment.SetEnvironmentVariable(variable, value);
         }
+    }
+
+    // ── Hard admission defaults & host/accelerator buckets ──────────────────
+
+    private static SessionPoolKey AcceleratorKey(string hash, long mb, int deviceId = 0, ExecutionProviderKind provider = ExecutionProviderKind.DirectMl) =>
+        new("eng", null, null, provider, hash, deviceId, "default") { EstimatedVramMb = mb };
+
+    private static SessionPoolKey HostKey(string hash, long mb, ExecutionProviderKind provider = ExecutionProviderKind.Cpu) =>
+        new("eng", null, null, provider, hash, null, "default") { EstimatedVramMb = mb };
+
+    [Fact]
+    public async Task DefaultConstructor_HardAdmission_BlocksAcceleratorBeyondDefaultBudget()
+    {
+        // Defaults: admission on, 4096 MB accelerator budget per device. A second DML
+        // graph that cannot fit must wait — never fall back to an ephemeral session.
+        using var pool = new InferenceSessionPool();
+        var key1 = AcceleratorKey("ha1", 3000);
+        var key2 = AcceleratorKey("ha2", 2000);
+        int key2FactoryCalls = 0;
+
+        using SessionLease lease1 = await pool.GetLeaseAsync(
+            key1, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+            key2,
+            _ => { key2FactoryCalls++; return Task.FromResult(CreateMinimalSession()); },
+            cts.Token));
+
+        Assert.Equal(0, key2FactoryCalls);
+    }
+
+    [Fact]
+    public async Task AdmissionBuckets_HostRamAndAcceleratorDevice0_AreSeparate()
+    {
+        // CPU sessions no longer collide with accelerator device 0: each has its own budget.
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8, memoryBudgetMb: 4096, hostMemoryBudgetMb: 4096);
+        var cpuKey = HostKey("hs1", 3000);
+        var dmlKey = AcceleratorKey("hs2", 3000);
+
+        // Host RAM held does not block accelerator admission.
+        using (SessionLease cpuLease = await pool.GetLeaseAsync(
+                   cpuKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None))
+        using (SessionLease dmlLease = await pool.GetLeaseAsync(
+                   dmlKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None))
+        {
+            Assert.NotNull(dmlLease.Session);
+        }
+
+        // Accelerator device 0 held does not block host admission either.
+        using SessionLease heldDml = await pool.GetLeaseAsync(
+            AcceleratorKey("hs3", 3000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        using SessionLease cpu2 = await pool.GetLeaseAsync(
+            HostKey("hs4", 3000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        Assert.NotNull(cpu2.Session);
+    }
+
+    [Fact]
+    public async Task AdmissionBuckets_CpuAndDnnl_ShareHostRamBudget()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8, hostMemoryBudgetMb: 100);
+        var cpuKey = HostKey("hc1", 80, ExecutionProviderKind.Cpu);
+        var dnnlKey = HostKey("hc2", 80, ExecutionProviderKind.Dnnl);
+
+        using SessionLease lease1 = await pool.GetLeaseAsync(
+            cpuKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        // CPU and DNNL draw from the same host RAM budget: 80 + 80 > 100 waits.
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => pool.GetLeaseAsync(dnnlKey, _ => Task.FromResult(CreateMinimalSession()), cts.Token));
+
+        // After release the DNNL session fits in the freed host budget.
+        lease1.Dispose();
+        using SessionLease lease2 = await pool.GetLeaseAsync(
+            dnnlKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        Assert.NotNull(lease2.Session);
+    }
+
+    // ── Bundle hard admission ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetLeaseBundleAsync_AggregateOversize_FailsBeforeAnyFactory()
+    {
+        using var pool = new InferenceSessionPool();
+        var big1 = AcceleratorKey("bo1", 3000);
+        var big2 = AcceleratorKey("bo2", 2000);
+        int factoryCalls = 0;
+
+        Task<InferenceSession> Factory(CancellationToken _)
+        {
+            factoryCalls++;
+            return Task.FromResult(CreateMinimalSession());
+        }
+
+        // 3000 + 2000 exceeds the default 4096 MB device-0 accelerator budget.
+        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => pool.GetLeaseBundleAsync(
+                [new SessionLeaseRequest(big1, Factory), new SessionLeaseRequest(big2, Factory)],
+                CancellationToken.None));
+
+        Assert.Equal(0, factoryCalls);
+        Assert.Contains("accelerator device 0", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetLeaseBundleAsync_PreparationFailure_ReleasesPins()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8, hostMemoryBudgetMb: 100);
+        // Sorted order puts "aaaa" first: its residency pin is held when the second
+        // member's factory fails. Cleanup must release the pin so idle eviction can
+        // reclaim the host budget it held.
+        var pinned = HostKey("aaaa", 80);
+        var failing = HostKey("bbbb", 10);
+        var probe = HostKey("cccc", 80);
+        int probeCalls = 0;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => pool.GetLeaseBundleAsync(
+                [new SessionLeaseRequest(pinned, _ => Task.FromResult(CreateMinimalSession())),
+                 new SessionLeaseRequest(failing,
+                     _ => Task.FromException<InferenceSession>(new InvalidOperationException("synthetic create failure")))],
+                CancellationToken.None));
+
+        // The probe fits the 100MB host budget only if the failed preparation released
+        // the pinned 80MB entry, letting idle eviction make room for it.
+        using SessionLease lease = await pool.GetLeaseAsync(
+            probe,
+            _ => { probeCalls++; return Task.FromResult(CreateMinimalSession()); },
+            CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, probeCalls);
+        Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task GetLeaseBundleAsync_CountMode_CancellationDuringPreparation_DoesNotHang()
+    {
+        // Count mode never publishes an ephemeral warm, so residency-style preparation
+        // would spin forever; the bundle must stay on the bounded warm path and honour
+        // the caller's cancellation token.
+        using var pool = new InferenceSessionPool(
+            maxSessions: 1, enableMemoryAdmission: false);
+        SessionLeaseRequest a = new(AcceleratorKey("cm1", 64), _ => Task.FromResult(CreateMinimalSession()));
+        SessionLeaseRequest b = new(AcceleratorKey("cm2", 64), _ => Task.FromResult(CreateMinimalSession()));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => pool.GetLeaseBundleAsync([a, b], cts.Token));
     }
 
     // ── RecommendedMaxSessions ────────────────────────────────────────────────
