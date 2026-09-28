@@ -253,8 +253,46 @@ public sealed class StemSeparationStageHandler(
 
         await using ArtifactWriteHandle handle = artifactStore.CreateWriteHandle(relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(handle.TemporaryPath)!);
-        File.Copy(sourcePath, handle.TemporaryPath, overwrite: true);
+        cancellationToken.ThrowIfCancellationRequested();
+        await TransferFileAsync(sourcePath, handle.TemporaryPath, cancellationToken).ConfigureAwait(false);
         await artifactStore.CommitAsync(handle, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Same-volume move is metadata-only; cross-volume/unsupported moves fall back to a
+    // bounded async copy. A canceled/failed transfer leaves the source for the caller's
+    // temp-dir cleanup and any partial destination for the write handle's disposal.
+    internal static async Task TransferFileAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            File.Move(sourcePath, destinationPath, overwrite: true);
+            return;
+        }
+        catch (IOException)
+        {
+        }
+
+        await CopyFileAsync(sourcePath, destinationPath, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task CopyFileAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        const int bufferSize = 128 * 1024;
+        await using FileStream source = new(
+            sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using FileStream destination = new(
+            destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await source.CopyToAsync(destination, bufferSize, cancellationToken).ConfigureAwait(false);
+        await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static Task DeleteOmittedOptionalStemArtifactsAsync(
