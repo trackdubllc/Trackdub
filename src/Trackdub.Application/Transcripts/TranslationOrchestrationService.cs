@@ -1,3 +1,4 @@
+using Trackdub.Application.Pipeline;
 using Trackdub.Application.Projects;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Contracts;
@@ -254,17 +255,33 @@ public sealed class TranslationOrchestrationService(
                 StageNames.Translation,
                 "Translating",
                 $"{translationInputSegments.Length} segment(s) queued.");
-            translatedTextSegments = await translationEngine.TranslateAsync(
-                new TranslationRequest(
-                    sourceLanguage,
+            var translationRequest = new TranslationRequest(
+                sourceLanguage,
+                targetLanguage,
+                translationInputSegments,
+                PreferredModelAlias: request.PreferredModelAlias,
+                GlossaryHints: glossaryHints,
+                PreferredExecutionProvider: request.PreferredExecutionProvider?.ToString(),
+                RequirePreferredExecutionProvider: request.RequirePreferredExecutionProvider,
+                PreferredModelVariantAlias: request.PreferredModelVariantAlias);
+            if (request.EnableSegmentStreaming && translationEngine is IStreamingTranslationEngine streamingEngine)
+            {
+                translatedTextSegments = await CollectTranslationStreamAsync(
+                    streamingEngine,
+                    translationRequest,
+                    translationStageRun.Id,
+                    currentTranscriptRevision.Id,
                     targetLanguage,
-                    translationInputSegments,
-                    PreferredModelAlias: request.PreferredModelAlias,
-                    GlossaryHints: glossaryHints,
-                    PreferredExecutionProvider: request.PreferredExecutionProvider?.ToString(),
-                    RequirePreferredExecutionProvider: request.RequirePreferredExecutionProvider,
-                    PreferredModelVariantAlias: request.PreferredModelVariantAlias),
-                cancellationToken).ConfigureAwait(false);
+                    translationInputSegments.Length,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                translatedTextSegments = await translationEngine.TranslateAsync(
+                    translationRequest,
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             int nextRevisionNumber = await translationRepository.GetNextRevisionNumberAsync(
                 currentState.ProjectState.Project.Id,
@@ -864,6 +881,77 @@ public sealed class TranslationOrchestrationService(
             ProjectArtifactPaths.ManifestRelativePath,
             cancellationToken).ConfigureAwait(false);
         return manifest ?? ProjectManifest.FromProject(project, transcriptLanguage);
+    }
+
+    /// <summary>
+    /// Opt-in (<see cref="GenerateTranslationRequest.EnableSegmentStreaming"/>): drives a
+    /// streaming translation engine through the bounded channel and validates every item's
+    /// identity before accumulation. Persistence still happens once, after the stream
+    /// completes — nothing here commits a partial revision.
+    /// </summary>
+    private static async Task<IReadOnlyList<TranslatedTextSegment>> CollectTranslationStreamAsync(
+        IStreamingTranslationEngine streamingEngine,
+        TranslationRequest translationRequest,
+        Guid runId,
+        Guid sourceRevisionId,
+        string targetLanguage,
+        int inputSegmentCount,
+        IProgress<PipelineProgressEvent>? progress,
+        CancellationToken cancellationToken)
+    {
+        string snapshotId = $"{sourceRevisionId:N}:{targetLanguage}";
+        List<TranslatedTextSegment> collected = [];
+
+        await BoundedPipelineRunner.RunAsync<TranslatedTextSegment>(
+            new BoundedPipelineChannelOptions(itemCapacity: 8, byteCapacity: 4 * 1024 * 1024),
+            async (channel, ct) =>
+            {
+                await foreach (PipelineStreamItem<TranslatedTextSegment> streamItem in streamingEngine
+                    .TranslateStreamAsync(translationRequest, runId, snapshotId, sourceRevisionId, ct)
+                    .ConfigureAwait(false))
+                {
+                    await channel.WriteAsync(streamItem, ct).ConfigureAwait(false);
+                }
+            },
+            async (items, ct) =>
+            {
+                long expectedSequence = 0;
+                int lastSegmentIndex = -1;
+                await foreach (PipelineStreamItem<TranslatedTextSegment> streamItem in items
+                    .WithCancellation(ct)
+                    .ConfigureAwait(false))
+                {
+                    PipelineStreamIdentity identity = streamItem.Identity;
+                    TranslatedTextSegment segment = streamItem.Payload;
+                    if (identity.RunId != runId
+                        || !string.Equals(identity.SnapshotId, snapshotId, StringComparison.Ordinal)
+                        || identity.Stage != RuntimeStage.Translation
+                        || identity.RevisionId != sourceRevisionId
+                        || identity.Sequence != expectedSequence
+                        || identity.SegmentIndex != segment.Index
+                        || segment.Index <= lastSegmentIndex)
+                    {
+                        throw new InvalidDataException(
+                            $"Translation stream item failed identity validation "
+                                + $"(expected seq {expectedSequence}, got "
+                                + $"{identity.Sequence}; segment {identity.SegmentIndex} vs "
+                                + $"payload {segment.Index}; run {identity.RunId}; "
+                                + $"revision {identity.RevisionId}).");
+                    }
+
+                    expectedSequence++;
+                    lastSegmentIndex = segment.Index;
+                    collected.Add(segment);
+                    PipelineProgressReporter.Phase(
+                        progress,
+                        StageNames.Translation,
+                        "Translating",
+                        $"{collected.Count}/{inputSegmentCount} segment(s) translated.");
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return collected;
     }
 
     private static TranslationExecutionMetadata? GetTranslationExecutionMetadata(object stageEngine) =>

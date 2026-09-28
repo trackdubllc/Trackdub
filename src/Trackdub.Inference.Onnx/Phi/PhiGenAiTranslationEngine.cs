@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.ML.OnnxRuntimeGenAI;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
@@ -13,7 +14,7 @@ namespace Trackdub.Inference.Onnx.Phi;
 public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
     BenchmarkModelPathResolver modelPathResolver,
     IRuntimePlanningPreferences? runtimePlanningPreferences = null)
-    : ITranslationEngineAdapter, IStageRuntimeExecutionReporter
+    : IStreamingTranslationEngineAdapter, IStageRuntimeExecutionReporter
 {
     public const string EngineFamilyName = "phi-genai";
 
@@ -87,6 +88,74 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
 
         LastExecutionSummary = CreateExecutionSummary(plan, "ONNX Runtime GenAI Phi text generation.");
         return translatedSegments;
+    }
+
+    /// <summary>
+    /// Emits each finalized translated segment, releasing the exclusive GenAI model lease
+    /// and tokenizer before every yield so backpressure never pins native resources.
+    /// </summary>
+    public async IAsyncEnumerable<PipelineStreamItem<TranslatedTextSegment>> TranslateStreamAsync(
+        TranslationRequest request,
+        Guid runId,
+        string snapshotId,
+        Guid sourceRevisionId,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Segments);
+        PipelineStreamItemFactory.ValidateTranslationStreamContext(runId, snapshotId, sourceRevisionId);
+
+        StageRuntimePlan plan = await runtimePlanner.PlanAsync(
+            await StageRuntimePlanningRequestFactory.ApplyPreferredModelTierAsync(new StageRuntimePlanningRequest(
+                RuntimeStage.Translation,
+                PreferredModelAlias: request.PreferredModelAlias,
+                SourceLanguage: request.SourceLanguage,
+                TargetLanguage: request.TargetLanguage,
+                PreferredExecutionProvider: ExecutionProviderRequest.ParsePreferredExecutionProvider(
+                    request.PreferredExecutionProvider,
+                    request.RequirePreferredExecutionProvider),
+                RequirePreferredExecutionProvider: request.RequirePreferredExecutionProvider,
+                PreferredModelVariantAlias: request.PreferredModelVariantAlias),
+            runtimePlanningPreferences,
+            cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+        EnsurePlanReady(plan);
+
+        if (request.Segments.Count == 0)
+        {
+            LastExecutionSummary = CreateExecutionSummary(plan, "Translation skipped: no segments.");
+            yield break;
+        }
+
+        string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
+        EnsureGenAiModelRoot(modelRootPath);
+
+        GenAiModelKey modelKey = GenAiModelKey.Create(
+            modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
+            plan.ModelRevisionHash);
+        string targetLanguageName = ResolveTargetLanguageName(request.TargetLanguage);
+        long sequence = 0;
+
+        foreach (TranslationInputSegment segment in request.Segments.OrderBy(static s => s.Index))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            TranslatedTextSegment translated;
+            using (GenAiModelLease modelLease = await GenAiModelPool.Shared
+                .GetLeaseAsync(modelKey, cancellationToken).ConfigureAwait(false))
+            {
+                Model model = modelLease.Model;
+                using Tokenizer tokenizer = new(model);
+                string translatedText = TranslateSegment(
+                    model, tokenizer, segment.Text, targetLanguageName, cancellationToken);
+                translated = new TranslatedTextSegment(
+                    segment.Index, segment.StartSeconds, segment.EndSeconds, translatedText);
+            }
+
+            LastExecutionSummary = CreateExecutionSummary(plan, "ONNX Runtime GenAI Phi text generation.");
+            yield return PipelineStreamItemFactory.CreateTranslation(
+                translated, runId, snapshotId, sourceRevisionId, sequence++);
+        }
     }
 
     private static string TranslateSegment(

@@ -1624,7 +1624,8 @@ public sealed class DubbingPipelineEngine(
                 RequirePreferredExecutionProvider: translationExecutionProvider.RequirePreferredExecutionProvider,
                 PreferredModelVariantAlias: RuntimeModelSetupCoordinator.ResolvePreferredModelVariantAlias(
                     runtimeSelections,
-                    RuntimeStage.Translation)),
+                    RuntimeStage.Translation),
+                EnableSegmentStreaming: options.EnableTranslationSegmentStreaming),
             cancellationToken,
             progress).ConfigureAwait(false);
         return BuildStageWorkflowResultFromStageRun(translatedState, StageNames.Translation, stageWorkStartedUtc);
