@@ -1,8 +1,8 @@
 # Trackdub performance profiling report
 
-> **Status:** DRAFT — scaffold (M20 PR4). Numbers marked *pending local run* are placeholders until measured on a reference machine.
-> **Last updated:** 2026-06-13
-> **Branch evidence:** `agent/cursor/m20-profiling-report`
+> **Status:** MIXED — controlled dubbing-pipeline samples are recorded below; startup, UI, export, and broader model/provider matrix rows marked *pending local run* remain unmeasured.
+> **Last updated:** 2026-09-28
+> **Branch evidence:** core performance-audit stack beginning at `17c4a66`
 
 ## Measurement methodology (fill before claiming budgets)
 
@@ -18,6 +18,30 @@ Use the same procedure on every run so rows in this report stay comparable.
 | Inference / export bench | `dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- --help` then targeted scenario | log path, model manifest IDs, EP policy |
 
 **Rules:** never collapse provider registered, model downloaded, stage ran, and stage succeeded. Label every number as *measured on reference machine* or *pending local run*. Do not copy example rows below into release notes as real data.
+
+## Controlled dubbing-pipeline evidence
+
+The path-free source record, fixture hashes, commands, run semantics, and retained-report locations are documented in [Local benchmark evidence](../development/benchmark-evidence.md). The rows below are measured initial samples from 2026-09-23, not comparison medians or release budgets.
+
+| Host field | Measured value |
+|---|---|
+| OS | Windows 10.0.26200 x64 |
+| CPU | AMD Ryzen 7 5700X3D |
+| Physical RAM | 68,613,902,336 bytes; benchmark host reported 63 GB available |
+| GPU | NVIDIA GeForce RTX 5070 |
+| Runtime | .NET 10.0.12; ONNX Runtime 1.30.0.0 |
+| GPU memory | Unavailable; no reliable probe was active |
+
+| Fixture / run id | Mode / measured stage | Outcome | Timed pipeline |
+|---|---|---|---:|
+| Short `40aaa1e374c2465f8bcde775ba08e323` | Fresh process, compatible cache / ASR | Completed; requested and actual CPU; `qwen3-asr-0.6b` | 15,510 ms |
+| Silence `93114ca2f2ab4ec8866f45e1f4ab96f8` | Fresh process, isolated engine cache / audio preparation | Completed | 18,088 ms |
+| Multi-speaker `e14ecc07377e43a7a7ce5fc4c0f29dec` | Fresh process, isolated engine cache / audio preparation | Completed | 15,564 ms |
+| Long-form `06600a21eac14be787fb459a9ecc4e64` | Fresh process, isolated engine cache / audio preparation | Completed | 164,224 ms |
+| Short `033e3082f4544fc7911feac78de9851c` | Warm host / audio preparation | Completed | 3,165 ms |
+| Short `36b343baec5d4f86a1bce26c7c354520` | Artifact resume / audio preparation | Skipped: `EXISTING_ARTIFACTS_VALID`; excluded from throughput comparisons | 482 ms |
+
+The focused ASR sample also spent 329,650 ms preparing prerequisites; that duration is separate from its 15,510 ms ASR span. Full-pipeline run `91b3193af93a49c9ae0310ebc700fa66` is excluded because translation failed, TTS/export were skipped, and its provider labels were invalidated. The samples do not claim cleared OS/driver caches, GPU-memory measurement, thirty-run warm tails, or a complete model/provider matrix.
 
 ## Reference machine (fill before claiming budgets)
 
