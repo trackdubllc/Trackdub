@@ -22,9 +22,7 @@ public static class ProjectUiSettingsMapper
             SelectedTranslationTargetLanguage: selectedTranslationTargetLanguage,
             Pipeline: pipeline?.Normalize(),
             SegmentStageRuns: segmentStageRuns?.Normalize(),
-            VoiceCloneBySpeakerId: voiceCloneBySpeakerId?
-                .Where(static pair => pair.Key != Guid.Empty)
-                .ToDictionary(static pair => pair.Key, static pair => pair.Value));
+            VoiceCloneBySpeakerId: VoiceCloneByIdNormalizer.NormalizeVoiceCloneBySpeakerId(voiceCloneBySpeakerId));
 
     public static ProjectPipelineSettings ReadPipelineSettings(ProjectUiSettings? settings) =>
         settings?.Pipeline?.Normalize() ?? new ProjectPipelineSettings();
