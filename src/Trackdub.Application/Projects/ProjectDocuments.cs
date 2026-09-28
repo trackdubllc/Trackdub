@@ -90,7 +90,7 @@ public sealed record SegmentStageRunMap(
     }
 }
 
-file static class VoiceCloneByIdNormalizer
+internal static class VoiceCloneByIdNormalizer
 {
     internal static IReadOnlyDictionary<Guid, bool>? NormalizeVoiceCloneBySpeakerId(IReadOnlyDictionary<Guid, bool>? map)
     {
