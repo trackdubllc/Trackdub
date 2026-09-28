@@ -97,13 +97,15 @@ internal static class OnnxExecutionSessionFactory
         SessionOptionsSelection Decoder);
 
     private sealed record DualSessionMetadata(
-        string SelectedProviderLabel,
+        ExecutionProviderKind SelectedProvider,
+        ExecutionProviderKind EncoderProvider,
+        ExecutionProviderKind DecoderProvider,
         string? BootstrapDetail);
 
     private sealed record DualPooledLeasePair(
         SessionLeaseBundle Bundle,
         string RequestedProviderLabel,
-        string SelectedProviderLabel,
+        ExecutionProviderKind SelectedProvider,
         string? BootstrapDetail)
     {
         /// <summary>Caller-order index 0 (encoder). See <c>AcquireDualPooledSessionsAsync</c>.</summary>
@@ -165,29 +167,24 @@ internal static class OnnxExecutionSessionFactory
         InferenceSession encoderSession,
         InferenceSession decoderSession)
     {
-        ExecutionProviderKind resolvedSelectedProvider = ResolveEffectiveDualSessionProvider(
-            requestedProvider,
+        ExecutionProviderKind encoderEffective = ResolveEffectiveProviderKindFromSession(
             encoderSession,
-            decoderSession,
             selections.Encoder.SelectedProvider,
+            ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Encoder.SelectedProvider));
+        ExecutionProviderKind decoderEffective = ResolveEffectiveProviderKindFromSession(
+            decoderSession,
             selections.Decoder.SelectedProvider,
-            bootstrap.DevicePolicy);
+            ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Decoder.SelectedProvider));
+        ExecutionProviderKind resolvedSelectedProvider = ResolveSharedSelectedProvider(
+            requestedProvider, encoderEffective, decoderEffective);
         string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
-            requestedProvider,
-            ResolveEffectiveProviderKindFromSession(
-                encoderSession,
-                selections.Encoder.SelectedProvider,
-                ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Encoder.SelectedProvider)),
-            selections.Encoder);
+            requestedProvider, encoderEffective, selections.Encoder);
         string? decoderFallbackReason = BuildSessionOptionsFallbackReason(
-            requestedProvider,
-            ResolveEffectiveProviderKindFromSession(
-                decoderSession,
-                selections.Decoder.SelectedProvider,
-                ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Decoder.SelectedProvider)),
-            selections.Decoder);
+            requestedProvider, decoderEffective, selections.Decoder);
         return new DualSessionMetadata(
-            FormatProviderLabel(resolvedSelectedProvider),
+            resolvedSelectedProvider,
+            encoderEffective,
+            decoderEffective,
             FormatBootstrapDetail(
                 bootstrap.Bootstrap.Detail,
                 MergeFallbackReasons(encoderFallbackReason, decoderFallbackReason)));
@@ -251,10 +248,12 @@ internal static class OnnxExecutionSessionFactory
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 requestedProvider, bootstrap, selections,
                 bundle.LeaseAt(0).Session, bundle.LeaseAt(1).Session);
+            CpuExecutionAdmission.Shared.RegisterSession(bundle.LeaseAt(0).Session, metadata.EncoderProvider);
+            CpuExecutionAdmission.Shared.RegisterSession(bundle.LeaseAt(1).Session, metadata.DecoderProvider);
             return new DualPooledLeasePair(
                 bundle,
                 bootstrap.RequestedProviderLabel,
-                metadata.SelectedProviderLabel,
+                metadata.SelectedProvider,
                 metadata.BootstrapDetail);
         }
         catch
@@ -300,6 +299,7 @@ internal static class OnnxExecutionSessionFactory
             string? bootstrapDetail = FormatBootstrapDetail(
                 bootstrapResult.Detail,
                 BuildSessionOptionsFallbackReason(provider, effectiveProvider, sessionOptionsSelection));
+            CpuExecutionAdmission.Shared.RegisterSession(session, effectiveProvider);
             return new SingleSessionLease(
                 session,
                 requestedProvider,
@@ -564,12 +564,14 @@ internal static class OnnxExecutionSessionFactory
             decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 provider, bootstrap, selections, encoderSession, decoderSession);
+            CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
+            CpuExecutionAdmission.Shared.RegisterSession(decoderSession, metadata.DecoderProvider);
 
             return new WhisperSessionLease(
                 encoderSession,
                 decoderSession,
                 bootstrap.RequestedProviderLabel,
-                metadata.SelectedProviderLabel,
+                FormatProviderLabel(metadata.SelectedProvider),
                 metadata.BootstrapDetail);
         }
         catch
@@ -603,12 +605,14 @@ internal static class OnnxExecutionSessionFactory
             decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 provider, bootstrap, selections, encoderSession, decoderSession);
+            CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
+            CpuExecutionAdmission.Shared.RegisterSession(decoderSession, metadata.DecoderProvider);
 
             return new OpusSessionLease(
                 encoderSession,
                 decoderSession,
                 bootstrap.RequestedProviderLabel,
-                metadata.SelectedProviderLabel,
+                FormatProviderLabel(metadata.SelectedProvider),
                 metadata.BootstrapDetail);
         }
         catch
@@ -745,6 +749,7 @@ internal static class OnnxExecutionSessionFactory
             string selectedProvider = FormatProviderLabel(effectiveProvider);
             string? epFallbackReason = BuildSessionOptionsFallbackReason(provider, effectiveProvider, leaseSelection);
             string? bootstrapDetail = FormatBootstrapDetail(bootstrapResult.Detail, epFallbackReason);
+            CpuExecutionAdmission.Shared.RegisterSession(poolLease.Session, effectiveProvider);
 
             return new SingleSessionLease(poolLease.Session, requestedProvider, selectedProvider, bootstrapDetail)
             {
@@ -891,7 +896,7 @@ internal static class OnnxExecutionSessionFactory
 
         return new WhisperSessionLease(
             pair.EncoderLease.Session, pair.DecoderLease.Session,
-            requestedProvider, pair.SelectedProviderLabel,
+            requestedProvider, FormatProviderLabel(pair.SelectedProvider),
             MergeFallbackReasons(graphFallbackReason, pair.BootstrapDetail))
         {
             EncoderPoolLease = pair.EncoderLease,
@@ -992,35 +997,34 @@ internal static class OnnxExecutionSessionFactory
             SessionLease decoderInitPoolLease = bundle.LeaseAt(1);
             SessionLease decoderStepPoolLease = bundle.LeaseAt(2);
 
-            ExecutionProviderKind effectiveProvider = ResolveEffectiveTripleSessionProvider(
-                provider,
+            ExecutionProviderKind encoderEffective = ResolveEffectiveProviderKindFromSession(
                 encoderPoolLease.Session,
-                decoderInitPoolLease.Session,
-                decoderStepPoolLease.Session,
                 encoderOptionsSelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider));
+            ExecutionProviderKind decoderInitEffective = ResolveEffectiveProviderKindFromSession(
+                decoderInitPoolLease.Session,
                 decoderOptionsSelectedProvider,
-                devicePolicy);
+                ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
+            ExecutionProviderKind decoderStepEffective = ResolveEffectiveProviderKindFromSession(
+                decoderStepPoolLease.Session,
+                decoderOptionsSelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
+            ExecutionProviderKind effectiveProvider =
+                encoderEffective == decoderInitEffective && encoderEffective == decoderStepEffective
+                    ? encoderEffective
+                    : ExecutionProviderKind.Cpu;
             string selectedProvider = FormatProviderLabel(effectiveProvider);
             string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
                 provider,
-                ResolveEffectiveProviderKindFromSession(
-                    encoderPoolLease.Session,
-                    encoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider)),
+                encoderEffective,
                 encoderOptionsSelection);
             string? decoderInitFallbackReason = BuildSessionOptionsFallbackReason(
                 provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderInitPoolLease.Session,
-                    decoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider)),
+                decoderInitEffective,
                 decoderOptionsSelection);
             string? decoderStepFallbackReason = BuildSessionOptionsFallbackReason(
                 provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderStepPoolLease.Session,
-                    decoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider)),
+                decoderStepEffective,
                 decoderOptionsSelection);
             string? bootstrapDetail = FormatBootstrapDetail(
                 bootstrapResult.Detail,
@@ -1030,6 +1034,9 @@ internal static class OnnxExecutionSessionFactory
                         encoderFallbackReason,
                         MergeFallbackReasons(decoderInitFallbackReason, decoderStepFallbackReason))));
 
+            CpuExecutionAdmission.Shared.RegisterSession(encoderPoolLease.Session, encoderEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(decoderInitPoolLease.Session, decoderInitEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(decoderStepPoolLease.Session, decoderStepEffective);
             return new Qwen3AsrSessionLease(
                 encoderPoolLease.Session,
                 decoderInitPoolLease.Session,
@@ -1125,47 +1132,47 @@ internal static class OnnxExecutionSessionFactory
             SessionLease vaeDecPoolLease = bundle.LeaseAt(2);
             SessionLease whisperPoolLease = bundle.LeaseAt(3);
 
-            ExecutionProviderKind effective = ResolveEffectiveQuadSessionProvider(
-                provider,
-                unetPoolLease.Session, vaeEncPoolLease.Session,
-                vaeDecPoolLease.Session, whisperPoolLease.Session,
-                unetSelectedProvider, whisperSelectedProvider,
-                devicePolicy);
+            ExecutionProviderKind unetEffective = ResolveEffectiveProviderKindFromSession(
+                unetPoolLease.Session,
+                unetOptionsSelection.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, unetOptionsSelection.SelectedProvider));
+            ExecutionProviderKind vaeEncEffective = ResolveEffectiveProviderKindFromSession(
+                vaeEncPoolLease.Session,
+                vaeEncOptionsSelection.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, vaeEncOptionsSelection.SelectedProvider));
+            ExecutionProviderKind vaeDecEffective = ResolveEffectiveProviderKindFromSession(
+                vaeDecPoolLease.Session,
+                vaeDecOptionsSelection.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, vaeDecOptionsSelection.SelectedProvider));
+            ExecutionProviderKind whisperEffective = ResolveEffectiveProviderKindFromSession(
+                whisperPoolLease.Session,
+                whisperOptionsSelection.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, whisperOptionsSelection.SelectedProvider));
+            ExecutionProviderKind effective =
+                unetEffective == vaeEncEffective
+                    && unetEffective == vaeDecEffective
+                    && unetEffective == whisperEffective
+                    ? unetEffective
+                    : ExecutionProviderKind.Cpu;
             string selectedProvider = FormatProviderLabel(effective);
             string? unetFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    unetPoolLease.Session,
-                    unetOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, unetOptionsSelection.SelectedProvider)),
-                unetOptionsSelection);
+                provider, unetEffective, unetOptionsSelection);
             string? vaeEncFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    vaeEncPoolLease.Session,
-                    vaeEncOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, vaeEncOptionsSelection.SelectedProvider)),
-                vaeEncOptionsSelection);
+                provider, vaeEncEffective, vaeEncOptionsSelection);
             string? vaeDecFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    vaeDecPoolLease.Session,
-                    vaeDecOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, vaeDecOptionsSelection.SelectedProvider)),
-                vaeDecOptionsSelection);
+                provider, vaeDecEffective, vaeDecOptionsSelection);
             string? whisperFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    whisperPoolLease.Session,
-                    whisperOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, whisperOptionsSelection.SelectedProvider)),
-                whisperOptionsSelection);
+                provider, whisperEffective, whisperOptionsSelection);
             string? bootstrapDetail = FormatBootstrapDetail(
                 bootstrapResult.Detail,
                 MergeFallbackReasons(
                     MergeFallbackReasons(unetFallbackReason, vaeEncFallbackReason),
                     MergeFallbackReasons(vaeDecFallbackReason, whisperFallbackReason)));
 
+            CpuExecutionAdmission.Shared.RegisterSession(unetPoolLease.Session, unetEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(vaeEncPoolLease.Session, vaeEncEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(vaeDecPoolLease.Session, vaeDecEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(whisperPoolLease.Session, whisperEffective);
             return new LatentSyncSessionLease(
                 unetPoolLease.Session,
                 vaeEncPoolLease.Session,
@@ -1239,69 +1246,12 @@ internal static class OnnxExecutionSessionFactory
             pair.EncoderLease.Session,
             pair.DecoderLease.Session,
             pair.RequestedProviderLabel,
-            pair.SelectedProviderLabel,
+            FormatProviderLabel(pair.SelectedProvider),
             pair.BootstrapDetail)
         {
             EncoderPoolLease = pair.EncoderLease,
             DecoderJointPoolLease = pair.DecoderLease,
         };
-    }
-
-    private static ExecutionProviderKind ResolveEffectiveTripleSessionProvider(
-        ExecutionProviderKind requestedProvider,
-        InferenceSession encoderSession,
-        InferenceSession decoderInitSession,
-        InferenceSession decoderStepSession,
-        ExecutionProviderKind encoderOptionsSelectedProvider,
-        ExecutionProviderKind decoderOptionsSelectedProvider,
-        WindowsMlExecutionDevicePolicy devicePolicy)
-    {
-        ExecutionProviderKind encoderEffective = ResolveEffectiveProviderKindFromSession(
-            encoderSession,
-            encoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider));
-        ExecutionProviderKind decoderInitEffective = ResolveEffectiveProviderKindFromSession(
-            decoderInitSession,
-            decoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
-        ExecutionProviderKind decoderStepEffective = ResolveEffectiveProviderKindFromSession(
-            decoderStepSession,
-            decoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
-
-        if (encoderEffective != decoderInitEffective || encoderEffective != decoderStepEffective)
-        {
-            return ExecutionProviderKind.Cpu;
-        }
-
-        return encoderEffective;
-    }
-
-    private static ExecutionProviderKind ResolveEffectiveQuadSessionProvider(
-        ExecutionProviderKind requestedProvider,
-        InferenceSession sessionA,
-        InferenceSession sessionB,
-        InferenceSession sessionC,
-        InferenceSession sessionD,
-        ExecutionProviderKind abOptionsSelectedProvider,
-        ExecutionProviderKind cdOptionsSelectedProvider,
-        WindowsMlExecutionDevicePolicy devicePolicy)
-    {
-        ExecutionProviderKind aEffective = ResolveEffectiveProviderKindFromSession(
-            sessionA, abOptionsSelectedProvider, ShouldUseCatalogDevicePolicy(devicePolicy, abOptionsSelectedProvider));
-        ExecutionProviderKind bEffective = ResolveEffectiveProviderKindFromSession(
-            sessionB, abOptionsSelectedProvider, ShouldUseCatalogDevicePolicy(devicePolicy, abOptionsSelectedProvider));
-        ExecutionProviderKind cEffective = ResolveEffectiveProviderKindFromSession(
-            sessionC, cdOptionsSelectedProvider, ShouldUseCatalogDevicePolicy(devicePolicy, cdOptionsSelectedProvider));
-        ExecutionProviderKind dEffective = ResolveEffectiveProviderKindFromSession(
-            sessionD, cdOptionsSelectedProvider, ShouldUseCatalogDevicePolicy(devicePolicy, cdOptionsSelectedProvider));
-
-        if (aEffective != bEffective || aEffective != cEffective || aEffective != dEffective)
-        {
-            return ExecutionProviderKind.Cpu;
-        }
-
-        return aEffective;
     }
 
     public static async Task<OpusSessionLease> CreatePooledOpusAsync(
@@ -1345,7 +1295,7 @@ internal static class OnnxExecutionSessionFactory
 
         return new OpusSessionLease(
             pair.EncoderLease.Session, pair.DecoderLease.Session,
-            pair.RequestedProviderLabel, pair.SelectedProviderLabel, pair.BootstrapDetail)
+            pair.RequestedProviderLabel, FormatProviderLabel(pair.SelectedProvider), pair.BootstrapDetail)
         {
             EncoderPoolLease = pair.EncoderLease,
             DecoderPoolLease = pair.DecoderLease
@@ -1611,24 +1561,6 @@ internal static class OnnxExecutionSessionFactory
             : requestedProvider;
     }
 
-    private static ExecutionProviderKind ResolveEffectiveDualSessionProvider(
-        ExecutionProviderKind requestedProvider,
-        InferenceSession encoderSession,
-        InferenceSession decoderSession,
-        ExecutionProviderKind encoderOptionsSelectedProvider,
-        ExecutionProviderKind decoderOptionsSelectedProvider,
-        WindowsMlExecutionDevicePolicy devicePolicy)
-    {
-        ExecutionProviderKind encoderEffective = ResolveEffectiveProviderKindFromSession(
-            encoderSession,
-            encoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider));
-        ExecutionProviderKind decoderEffective = ResolveEffectiveProviderKindFromSession(
-            decoderSession,
-            decoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
-        return ResolveSharedSelectedProvider(requestedProvider, encoderEffective, decoderEffective);
-    }
 
     internal static ExecutionProviderKind ResolveEffectiveProviderKindFromSession(
         InferenceSession session,

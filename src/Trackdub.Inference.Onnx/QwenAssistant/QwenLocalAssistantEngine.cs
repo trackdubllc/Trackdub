@@ -106,6 +106,8 @@ public sealed class QwenLocalAssistantEngine(
             plan.ModelRevisionHash, cancellationToken).ConfigureAwait(false);
         using GenAiModelLease modelLease = await GenAiModelPool.Shared
             .GetLeaseAsync(modelKey, cancellationToken).ConfigureAwait(false);
+        using IDisposable? executionAdmission = CpuExecutionAdmission.Shared.Acquire(
+            modelKey.Provider, cancellationToken);
         Model model = modelLease.Model;
         using Tokenizer tokenizer = new(model);
 

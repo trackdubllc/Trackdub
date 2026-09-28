@@ -9,7 +9,9 @@ using System.Text.Json;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Trackdub.Contracts.Pipeline;
+using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Audio;
+using Trackdub.Inference.Onnx.Pool;
 
 namespace Trackdub.Inference.Onnx.ForcedAlignment;
 
@@ -183,7 +185,7 @@ public sealed class Wav2Vec2CtcForcedAligner : IForcedAlignerAdapter, IDisposabl
         cancellationToken.ThrowIfCancellationRequested();
 
         // Run ONNX forward pass: input_values [1, numSamples] → logits [1, numFrames, vocabSize]
-        float[] logSoftmaxFlat = RunOnnxForwardPass(session, pcm, vocab.Count);
+        float[] logSoftmaxFlat = RunOnnxForwardPass(session, pcm, vocab.Count, cancellationToken);
 
         int numFrames = logSoftmaxFlat.Length / vocab.Count;
         if (numFrames == 0)
@@ -263,7 +265,8 @@ public sealed class Wav2Vec2CtcForcedAligner : IForcedAlignerAdapter, IDisposabl
     }
 
     // ONNX Run() is not cancellation-aware; callers must throw on the token before and after inference.
-    private static float[] RunOnnxForwardPass(InferenceSession session, float[] pcm, int vocabSize)
+    private static float[] RunOnnxForwardPass(
+        InferenceSession session, float[] pcm, int vocabSize, CancellationToken cancellationToken)
     {
         var inputTensor = new DenseTensor<float>(pcm, [1, pcm.Length]);
         using var inputs = new InputSet(
@@ -272,7 +275,11 @@ public sealed class Wav2Vec2CtcForcedAligner : IForcedAlignerAdapter, IDisposabl
         ]);
 
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
-            session.Run(inputs.Values);
+            session.RunWithRetry(
+                inputs.Values,
+                maxAttempts: 1,
+                cancellationToken: cancellationToken,
+                provider: ExecutionProviderKind.Cpu);
 
         DisposableNamedOnnxValue logitsValue = outputs.First(static o => o.Name == "logits");
         Tensor<float> logits = logitsValue.AsTensor<float>();

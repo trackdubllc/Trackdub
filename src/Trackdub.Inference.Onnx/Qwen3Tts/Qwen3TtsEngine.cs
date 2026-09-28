@@ -3,6 +3,7 @@ using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Audio;
+using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.Qwen3Tts.Pipeline;
 using Trackdub.Inference.Onnx.Runtime.Routing;
 using Trackdub.Inference.Runtime.Planning;
@@ -87,6 +88,9 @@ public sealed class Qwen3TtsEngine(
                 modelFiles,
                 plan.ExecutionProvider!.Value,
                 cancellationToken).ConfigureAwait(false);
+            using IDisposable? executionAdmission = await CpuExecutionAdmission.Shared
+                .AcquireAsync(pipeline.SelectedProvider, cancellationToken)
+                .ConfigureAwait(false);
 
             string tempPath = Path.Join(Path.GetTempPath(), $"qwen3tts_{Guid.NewGuid():N}.wav");
             try
