@@ -110,7 +110,7 @@ public sealed class DubbingBenchmarkOptionsTests : IDisposable
     }
 
     [Fact]
-    public void TryParse_rejects_model_pin_for_speech_enhancement_but_allows_provider()
+    public void TryParse_rejects_model_and_provider_pins_for_unmapped_speech_enhancement()
     {
         // speech-enhancement has no model-alias mapping in BuildModelPreferences — a
         // --model pin for it would be silently ignored downstream, so it is rejected.
@@ -122,12 +122,11 @@ public sealed class DubbingBenchmarkOptionsTests : IDisposable
         Assert.Contains("does not accept a pin", modelError.ToString(), StringComparison.Ordinal);
 
         using var providerError = new StringWriter();
-        Assert.True(DubbingBenchmarkOptions.TryParse(
+        Assert.False(DubbingBenchmarkOptions.TryParse(
             [_inputPath, "--provider", "speech-enhancement=cpu"],
             providerError,
-            out DubbingBenchmarkOptions? options),
-            providerError.ToString());
-        Assert.Equal("cpu", options!.ProviderPins![StageNames.SpeechEnhancement]);
+            out _));
+        Assert.Contains("does not accept a pin", providerError.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

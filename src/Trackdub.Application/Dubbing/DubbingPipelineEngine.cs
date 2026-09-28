@@ -1488,11 +1488,20 @@ public sealed class DubbingPipelineEngine(
 
         string sourceLanguage = options.SourceLanguageCode ?? "auto";
         DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
+        RuntimeExecutionProviderSelection translationExecutionProvider =
+            RuntimeModelSetupCoordinator.CreateExecutionProviderSelection(
+                runtimeSelections,
+                RuntimeStage.Translation);
         TranscriptProjectState translatedState = await workspace.GenerateTranslationAsync(
             new GenerateTranslationRequest(
                 SourceLanguage: sourceLanguage,
                 TargetLanguage: options.TargetLanguageCode,
-                PreferredModelAlias: runtimeSelections.TranslationModelAlias),
+                PreferredModelAlias: runtimeSelections.TranslationModelAlias,
+                PreferredExecutionProvider: translationExecutionProvider.PreferredExecutionProvider,
+                RequirePreferredExecutionProvider: translationExecutionProvider.RequirePreferredExecutionProvider,
+                PreferredModelVariantAlias: RuntimeModelSetupCoordinator.ResolvePreferredModelVariantAlias(
+                    runtimeSelections,
+                    RuntimeStage.Translation)),
             cancellationToken,
             progress).ConfigureAwait(false);
         return BuildStageWorkflowResultFromStageRun(translatedState, StageNames.Translation, stageWorkStartedUtc);

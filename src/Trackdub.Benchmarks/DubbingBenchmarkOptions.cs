@@ -164,10 +164,7 @@ public sealed record DubbingBenchmarkOptions(
             [StageNames.OverlapRescue] = StageNames.OverlapRescue,
             [StageNames.Translation] = StageNames.Translation,
             [StageNames.Tts] = StageNames.Tts,
-            [StageNames.SpeechEnhancement] = StageNames.SpeechEnhancement,
             [StageNames.TextRefinementAsr] = StageNames.TextRefinementAsr,
-            [StageNames.LipSync] = StageNames.LipSync,
-            [StageNames.LipSynthesis] = StageNames.LipSynthesis,
         };
 
     /// <summary>
