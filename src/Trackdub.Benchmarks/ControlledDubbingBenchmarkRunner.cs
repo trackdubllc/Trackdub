@@ -62,6 +62,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         WorkingSetPeakMonitor? processWorkingSetPeak = new(
             new ProcessWorkingSetSampler(), processTelemetryStart?.WorkingSetBytes);
         Dictionary<string, long?> memory = CreateMemory(processTelemetryStart);
+        var counterTotals = new Dictionary<string, long>(StringComparer.Ordinal);
+        var observedMaxima = new Dictionary<string, long>(StringComparer.Ordinal);
         string? fixtureHash = null;
         string? reason = null;
         BenchmarkEvidenceStatus status = BenchmarkEvidenceStatus.Failed;
@@ -214,6 +216,11 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                         AddSample(phaseSamples, name, phaseMs);
                 }
 
+                foreach ((string counter, long count) in phases.SnapshotCounters())
+                    counterTotals[counter] = counterTotals.GetValueOrDefault(counter) + count;
+                foreach ((string gauge, long value) in phases.SnapshotMaxima())
+                    observedMaxima[gauge] = Math.Max(observedMaxima.GetValueOrDefault(gauge), value);
+
                 foreach (var outcome in iterResult.StageOutcomes)
                 {
                     if (stageClock.GetMilliseconds(outcome.StageName) is double stageMs)
@@ -260,10 +267,20 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             runId = lastResult.RunId;
             stages = MapStages(lastResult, artifacts.StageRuns, options.Model, stageSamples, lastClock);
 
+            // TTFT comes only from structured output events — stage completion is not a
+            // substitute for the first usable artifact. Artifact presence gates whether a
+            // recorded event is accepted into the report; it never creates a timing alone.
             if (artifacts.HasUsableTranscript)
-                timings["firstUsableTranscript"] = lastClock?.GetCompletionMilliseconds("Asr");
+            {
+                timings["firstUsableTranscript"] =
+                    lastClock?.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentAvailable);
+                timings["firstPersistedTranscript"] =
+                    lastClock?.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentPersisted);
+            }
+
             if (artifacts.HasPlayableTake)
-                timings["firstPlayableAudio"] = lastClock?.GetCompletionMilliseconds("Tts");
+                timings["firstPlayableAudio"] =
+                    lastClock?.GetFirstOutputMilliseconds(PipelineOutputKind.PlayableAudioPersisted);
 
             BenchmarkEvidenceStage? requestedStage = FindRequestedStage(stages, stage);
             actualModel = requestedStage?.ActualModel;
@@ -318,6 +335,17 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             ResourceTelemetryStatus resourceStatus = ResolveResourceStatus(resourceTelemetry, resourceFailures.Length > 0);
 
             timings["total"] = clock.Elapsed.TotalMilliseconds;
+            var counters = new Dictionary<string, long?>(StringComparer.Ordinal);
+            foreach ((string name, long value) in counterTotals)
+                counters[name] = value;
+            foreach ((string name, long value) in observedMaxima)
+            {
+                // A counter/max key collision is not expected by instrumentation
+                // convention; if one occurs keep the larger value rather than
+                // silently lowering an existing counter.
+                if (!counters.TryGetValue(name, out long? existing) || value > existing)
+                    counters[name] = value;
+            }
             var report = new BenchmarkEvidenceReport
             {
                 RunId = runId,
@@ -337,6 +365,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 RuntimeVersions = CaptureRuntimeVersions(),
                 TimingsMilliseconds = timings,
                 MemoryBytes = memory,
+                Counters = counters,
                 Stages = stages,
                 ResourceTelemetryBounds = options.ResourceTelemetryBounds,
                 ResourceValidationStatus = resourceStatus,
@@ -396,6 +425,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         ["export"] = null,
         ["disposal"] = null,
         ["firstUsableTranscript"] = null,
+        ["firstPersistedTranscript"] = null,
         ["firstPlayableAudio"] = null,
     };
 
@@ -734,23 +764,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         return configuration;
     }
 
-    private static Dictionary<string, string> CaptureRuntimeVersions()
-    {
-        var runtimeVersions = new Dictionary<string, string>
-        {
-            ["dotnet"] = Environment.Version.ToString(),
-            ["os"] = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
-            ["processArchitecture"] = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
-        };
-        foreach (System.Reflection.Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            string? name = assembly.GetName().Name;
-            if (name is "Microsoft.ML.OnnxRuntime" or "Microsoft.ML.OnnxRuntimeGenAI" or
-                "Microsoft.ML.OnnxRuntimeGenAI.Managed")
-                runtimeVersions[name] = assembly.GetName().Version?.ToString() ?? "unknown";
-        }
-        return runtimeVersions;
-    }
+    private static Dictionary<string, string> CaptureRuntimeVersions() =>
+        BenchmarkRuntimeVersions.Capture();
 
     // An unknown alias is not an error to the pipeline, which silently plans its default model,
     // so a typo (or an engine family such as "whisper-onnx") would measure the wrong model.

@@ -118,6 +118,84 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
         }
     }
 
+    [Fact]
+    public async Task Mock_run_reports_ttft_from_structured_output_events_not_stage_completion()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"ttft-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string fixture = Path.Join(directory, "fixture.wav");
+        await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
+        try
+        {
+            using var runner = new ControlledDubbingBenchmarkRunner(new NoHistory());
+            var report = await runner.RunAsync(new ControlledDubbingBenchmarkOptions
+            {
+                FixturePath = fixture,
+                OutputDirectory = Path.Join(directory, "output"),
+                Mock = true,
+            });
+
+            Assert.Equal(BenchmarkEvidenceStatus.Completed, report.Status);
+
+            double available = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstUsableTranscript"]);
+            double persisted = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstPersistedTranscript"]);
+            double playable = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstPlayableAudio"]);
+
+            // The mock emits TranscriptSegmentAvailable at the start of the transcription stage
+            // and TranscriptSegmentPersisted only after its ~30 ms simulated work completes.
+            // A completion-derived TTFT would collapse this gap to ~0.
+            Assert.True(
+                persisted - available >= 10,
+                $"firstPersistedTranscript ({persisted}) should lag firstUsableTranscript ({available}) by the stage work interval.");
+
+            // PlayableAudioPersisted is emitted after the dubbing stage's simulated work
+            // succeeds, inside the pipeline total.
+            double pipeline = Assert.IsType<double>(report.TimingsMilliseconds["pipeline"]);
+            Assert.True(playable >= 0 && playable <= pipeline,
+                $"firstPlayableAudio ({playable}) should lie within the pipeline total ({pipeline}).");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Mock_run_with_failed_transcription_reports_no_output_timings()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"ttft-fail-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string fixture = Path.Join(directory, "fixture.wav");
+        await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
+        try
+        {
+            using var runner = new ControlledDubbingBenchmarkRunner(
+                new NoHistory(),
+                services => Trackdub.Benchmarks.Scenarios.MockDubbingPipelineServices.ConfigureMockPipeline(
+                    services, mock => mock.FailStage = "transcription"));
+            var report = await runner.RunAsync(new ControlledDubbingBenchmarkOptions
+            {
+                FixturePath = fixture,
+                OutputDirectory = Path.Join(directory, "output"),
+                Mock = true,
+            });
+
+            Assert.Equal(BenchmarkEvidenceStatus.Failed, report.Status);
+            // A configured failure emits no structured output: the timings stay null even
+            // though the mock artifact probe reports usable transcript/playable take.
+            Assert.Null(report.TimingsMilliseconds["firstUsableTranscript"]);
+            Assert.Null(report.TimingsMilliseconds["firstPersistedTranscript"]);
+            Assert.Null(report.TimingsMilliseconds["firstPlayableAudio"]);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private sealed class NoHistory : IBenchmarkEvidenceRepository
     {
         public Task SaveAsync(BenchmarkEvidenceReport report, CancellationToken cancellationToken = default) =>

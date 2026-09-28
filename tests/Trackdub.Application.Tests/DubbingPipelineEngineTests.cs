@@ -140,6 +140,90 @@ public sealed class DubbingPipelineEngineTests
         Assert.NotEqual(result.RunId, result.CorrelationId);
     }
 
+    [Fact]
+    public void BuildModelPreferences_maps_provider_pins_to_runtime_stages()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ExecutionProviderPreferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ASR"] = "cpu",
+                [StageNames.Tts] = "directml",
+            },
+            RequireExecutionProviderPreferences = true,
+        };
+
+        InferenceModelPreferences? preferences = DubbingPipelineEngine.BuildModelPreferences(options);
+
+        Assert.NotNull(preferences);
+        Assert.Equal(ExecutionProviderKind.Cpu, preferences!.GetPreferredExecutionProvider(RuntimeStage.Asr));
+        Assert.Equal(ExecutionProviderKind.DirectMl, preferences.GetPreferredExecutionProvider(RuntimeStage.Tts));
+        Assert.True(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Asr));
+        Assert.True(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Tts));
+        Assert.False(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Vad));
+        Assert.NotNull(preferences.RequiredExecutionProviderStages);
+        Assert.True(preferences.RequiredExecutionProviderStages!.SetEquals(
+            [RuntimeStage.Asr, RuntimeStage.Tts]));
+    }
+
+    [Fact]
+    public void BuildModelPreferences_provider_pins_are_preferences_only_without_require_flag()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ExecutionProviderPreferences = new Dictionary<string, string>
+            {
+                [StageNames.Asr] = "cpu",
+            },
+        };
+
+        InferenceModelPreferences? preferences = DubbingPipelineEngine.BuildModelPreferences(options);
+
+        Assert.NotNull(preferences);
+        Assert.Equal(ExecutionProviderKind.Cpu, preferences!.GetPreferredExecutionProvider(RuntimeStage.Asr));
+        Assert.Null(preferences.RequiredExecutionProviderStages);
+        Assert.False(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Asr));
+    }
+
+    [Theory]
+    [InlineData(StageNames.Export)]
+    [InlineData(StageNames.SpeakerAssignment)]
+    [InlineData("not-a-stage")]
+    public void BuildModelPreferences_rejects_non_runtime_stage_provider_pin(string stage)
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ExecutionProviderPreferences = new Dictionary<string, string>
+            {
+                [stage] = "cpu",
+            },
+        };
+
+        Assert.Throws<ArgumentException>(() => DubbingPipelineEngine.BuildModelPreferences(options));
+    }
+
+    [Fact]
+    public void BuildModelPreferences_rejects_invalid_provider_label()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ExecutionProviderPreferences = new Dictionary<string, string>
+            {
+                [StageNames.Asr] = "definitely-not-a-provider",
+            },
+        };
+
+        Assert.Throws<ArgumentException>(() => DubbingPipelineEngine.BuildModelPreferences(options));
+    }
+
     private static int IndexOf(IReadOnlyList<string> order, string stageName)
     {
         for (int i = 0; i < order.Count; i++)

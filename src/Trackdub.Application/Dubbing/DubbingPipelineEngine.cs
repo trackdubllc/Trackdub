@@ -64,6 +64,9 @@ public sealed class DubbingPipelineEngine(
         ArgumentNullException.ThrowIfNull(options);
 
         Guid runId = Guid.NewGuid();
+        // All preflight/nested/stage events of this run carry the same RunId and a
+        // strictly increasing SequenceNumber; downstream callers see only the wrapper.
+        var scopedProgress = new RunScopedProgressReporter(runId, progress);
         DateTimeOffset runStart = DateTimeOffset.UtcNow;
         Guid projectId = Guid.Empty;
         var stageOutcomes = new List<StageOutcome>();
@@ -142,7 +145,7 @@ public sealed class DubbingPipelineEngine(
                     runStart,
                     stageOutcomes,
                     executionSnapshot,
-                    progress,
+                    scopedProgress,
                     cancellationToken,
                     initialProjectState).ConfigureAwait(false);
             }
@@ -170,7 +173,7 @@ public sealed class DubbingPipelineEngine(
                 stagesToRun,
                 executionSnapshot,
                 runtimeSelections,
-                progress,
+                scopedProgress,
                 projectId,
                 runId,
                 stageOutcomes,
@@ -183,7 +186,7 @@ public sealed class DubbingPipelineEngine(
                 stagesToRun,
                 executionSnapshot,
                 runtimeSelections,
-                progress,
+                scopedProgress,
                 projectId,
                 runId,
                 stageOutcomes,
@@ -947,8 +950,8 @@ public sealed class DubbingPipelineEngine(
         }
     }
 
-    private static RuntimeStage? MapStageNameToRuntimeStage(string stageName) =>
-        stageName switch
+    internal static RuntimeStage? MapStageNameToRuntimeStage(string stageName) =>
+        stageName.ToLowerInvariant() switch
         {
             StageNames.Vad => RuntimeStage.Vad,
             StageNames.Asr => RuntimeStage.Asr,
@@ -957,6 +960,7 @@ public sealed class DubbingPipelineEngine(
             StageNames.Tts => RuntimeStage.Tts,
             StageNames.Separation => RuntimeStage.Separation,
             StageNames.AudioPreparation => RuntimeStage.SpeechEnhancement,
+            StageNames.SpeechEnhancement => RuntimeStage.SpeechEnhancement,
             StageNames.OverlapRescue => RuntimeStage.OverlapRescue,
             StageNames.TextRefinementAsr => RuntimeStage.TextRefinement,
             StageNames.LipSync => RuntimeStage.LipSync,
@@ -2037,6 +2041,9 @@ public sealed class DubbingPipelineEngine(
         CancellationToken cancellationToken,
         TranscriptProjectState? state = null)
     {
+        InferenceModelPreferences? preferences = BuildModelPreferences(options);
+        RuntimeModelSelections selections;
+
         if (TryResolveService<IPipelineRuntimeSelectionsProvider>(session) is { } selectionsProvider)
         {
             RuntimeModelSelections? provided = await selectionsProvider
@@ -2049,7 +2056,8 @@ public sealed class DubbingPipelineEngine(
                 // clone runs) and take precedence over the host's UI-side selections,
                 // matching the precedence the settings path applies via
                 // CreateSelectionsFromSettings.
-                return ApplyModelPreferenceAliases(provided, BuildModelPreferences(options));
+                selections = ApplyModelPreferenceAliases(provided, preferences);
+                return ApplyExecutionProviderPins(selections, options, preferences);
             }
         }
 
@@ -2060,9 +2068,46 @@ public sealed class DubbingPipelineEngine(
             settings = await settingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return RuntimeModelRequestFactory.CreateSelectionsFromSettings(
+        selections = RuntimeModelRequestFactory.CreateSelectionsFromSettings(
             settings,
-            BuildModelPreferences(options));
+            preferences);
+        return ApplyExecutionProviderPins(selections, options, preferences);
+    }
+
+    /// <summary>
+    /// Overlays per-stage execution-provider pins from <paramref name="preferences"/> onto the
+    /// resolved <paramref name="selections"/> hardware overrides. Pinned stages become required
+    /// providers only when <see cref="DubbingSessionOptions.RequireExecutionProviderPreferences"/>
+    /// is set; otherwise they act as preferences and existing host/settings overrides still apply.
+    /// </summary>
+    private static RuntimeModelSelections ApplyExecutionProviderPins(
+        RuntimeModelSelections selections,
+        DubbingSessionOptions options,
+        InferenceModelPreferences? preferences)
+    {
+        if (preferences?.PreferredExecutionProviders is not { Count: > 0 })
+        {
+            return selections;
+        }
+
+        // CreateSelectionsFromPreferences maps the stage-keyed provider pins onto the
+        // HardwareOverrides key vocabulary (including the ASR engine disambiguation).
+        IReadOnlyDictionary<string, ExecutionProviderKind> pinOverrides =
+            RuntimeModelRequestFactory.CreateSelectionsFromPreferences(preferences).HardwareOverrides;
+        var overrides = new Dictionary<string, ExecutionProviderKind>(
+            selections.HardwareOverrides,
+            StringComparer.OrdinalIgnoreCase);
+        foreach ((string key, ExecutionProviderKind provider) in pinOverrides)
+        {
+            overrides[key] = provider;
+        }
+
+        return selections with
+        {
+            HardwareOverrides = overrides,
+            RequirePreferredExecutionProviders = selections.RequirePreferredExecutionProviders
+                || options.RequireExecutionProviderPreferences,
+        };
     }
 
     /// <summary>
@@ -2095,17 +2140,24 @@ public sealed class DubbingPipelineEngine(
 
     /// <summary>
     /// Builds <see cref="InferenceModelPreferences"/> from the dubbing session options.
+    /// Per-stage provider pins in <see cref="DubbingSessionOptions.ExecutionProviderPreferences"/>
+    /// are mapped from canonical <see cref="StageNames"/> keys onto runtime stages and marked
+    /// required; a stage name with no runtime mapping or an unparseable provider label is an
+    /// argument error, never silently ignored.
     /// </summary>
     internal static InferenceModelPreferences? BuildModelPreferences(DubbingSessionOptions options)
     {
         bool hasModelOverrides = options.ModelPreferences is { Count: > 0 };
-        if (!hasModelOverrides && !options.EnableAsrTextRefinement)
+        bool hasProviderPins = options.ExecutionProviderPreferences is { Count: > 0 };
+        if (!hasModelOverrides && !hasProviderPins && !options.EnableAsrTextRefinement)
         {
             return null;
         }
 
         IReadOnlyDictionary<string, string> modelPreferences = options.ModelPreferences
             ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        IReadOnlyDictionary<RuntimeStage, ExecutionProviderKind>? providerPins =
+            ParseExecutionProviderPreferences(options);
 
         return new InferenceModelPreferences(
             VadModelAlias: modelPreferences.GetValueOrDefault(StageNames.Vad),
@@ -2118,7 +2170,48 @@ public sealed class DubbingPipelineEngine(
             TextRefinementModelAlias: modelPreferences.GetValueOrDefault(StageNames.TextRefinementAsr),
             LipSyncModelAlias: modelPreferences.GetValueOrDefault(StageNames.LipSync),
             LipSynthesisModelAlias: modelPreferences.GetValueOrDefault(StageNames.LipSynthesis),
-            EnableAsrTextRefinement: options.EnableAsrTextRefinement);
+            EnableAsrTextRefinement: options.EnableAsrTextRefinement,
+            PreferredExecutionProviders: providerPins,
+            RequiredExecutionProviderStages:
+                providerPins is { Count: > 0 } && options.RequireExecutionProviderPreferences
+                    ? new HashSet<RuntimeStage>(providerPins.Keys)
+                    : null);
+    }
+
+    /// <summary>
+    /// Parses <see cref="DubbingSessionOptions.ExecutionProviderPreferences"/> into a
+    /// runtime-stage keyed map. Returns null when no pins were supplied.
+    /// </summary>
+    private static IReadOnlyDictionary<RuntimeStage, ExecutionProviderKind>? ParseExecutionProviderPreferences(
+        DubbingSessionOptions options)
+    {
+        if (options.ExecutionProviderPreferences is not { Count: > 0 } pins)
+        {
+            return null;
+        }
+
+        var providers = new Dictionary<RuntimeStage, ExecutionProviderKind>();
+        foreach ((string stageName, string label) in pins)
+        {
+            if (MapStageNameToRuntimeStage(stageName) is not { } stage)
+            {
+                throw new ArgumentException(
+                    $"Execution provider pin names unknown or non-runtime stage '{stageName}'.",
+                    nameof(options));
+            }
+
+            if (!ExecutionProviderTokens.TryParse(label, out ExecutionProviderKind provider))
+            {
+                throw new ArgumentException(
+                    $"Execution provider pin for stage '{stageName}' has invalid provider label '{label}'. " +
+                    $"Expected one of: {ExecutionProviderTokens.FormatSupportedCliTags()}.",
+                    nameof(options));
+            }
+
+            providers[stage] = ExecutionProviderTokens.ResolvePlatformPin(provider);
+        }
+
+        return providers;
     }
 
     /// <summary>

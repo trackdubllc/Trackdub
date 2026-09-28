@@ -153,6 +153,8 @@ public static class BenchmarkConsole
         writer.WriteLine("  --source-language <code>  Source language code (default: auto-detect)");
         writer.WriteLine("  --output <dir>            Root directory for reports and project subfolders (optional)");
         writer.WriteLine("  --force-rerun             Re-execute all stages even if valid artifacts exist");
+        writer.WriteLine("  --model <stage>=<alias>   Pin a model alias for a stage (repeatable, e.g. --model asr=whisper-small)");
+        writer.WriteLine("  --provider <stage>=<kind> Pin an execution provider for a stage (repeatable, e.g. --provider tts=directml)");
         writer.WriteLine();
         writer.WriteLine("Batch Arguments:");
         writer.WriteLine("  --batch <dir>             Directory containing media files (required)");

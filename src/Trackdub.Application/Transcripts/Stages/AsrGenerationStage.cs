@@ -202,6 +202,19 @@ public sealed class AsrGenerationStage(
             "Recognition complete",
             recognitionMessage);
 
+        RecognizedTranscriptSegment? firstUsableSegment = asrResult.Segments
+            .OrderBy(segment => segment.Index)
+            .FirstOrDefault(segment => !string.IsNullOrWhiteSpace(segment.Text));
+        if (firstUsableSegment is not null)
+        {
+            PipelineProgressReporter.Output(
+                progress,
+                StageName,
+                PipelineOutputKind.TranscriptSegmentAvailable,
+                firstUsableSegment.Index,
+                message: $"First transcript segment recognized (index {firstUsableSegment.Index}).");
+        }
+
         if (asrResult.DeviceDegradation is DeviceDegradationReport degradation && degradationWriter is not null)
         {
             try

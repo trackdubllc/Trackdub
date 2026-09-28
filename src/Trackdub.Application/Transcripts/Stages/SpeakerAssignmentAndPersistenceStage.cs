@@ -131,6 +131,18 @@ public sealed class SpeakerAssignmentAndPersistenceStage(
             activeProvenance,
             cancellationToken).ConfigureAwait(false);
 
+        if (segments.Length > 0)
+        {
+            PipelineProgressReporter.Output(
+                progress,
+                StageName,
+                PipelineOutputKind.TranscriptSegmentPersisted,
+                segments[0].SegmentIndex,
+                revisionId: revision.Id,
+                segmentId: segments[0].Id,
+                message: $"Persisted transcript revision {revisionNumber} ({segments.Length} segment(s)).");
+        }
+
         IReadOnlyList<TranscriptSegmentTextProvenance> provenance = TextRefinementSegmentResolution.BuildProvenance(
             asrResult,
             context.TextRefinementResult);

@@ -50,6 +50,32 @@ internal static class PipelineProgressReporter
             currentItemLabel);
     }
 
+    /// <summary>
+    /// Reports that a pipeline output truthfully exists now (recognized segment, persisted
+    /// segment, or committed playable audio). Emitted as <see cref="PipelineProgressEventKind.Progress"/>
+    /// with phase "Output available"; callers distinguish it via <paramref name="outputKind"/>.
+    /// </summary>
+    public static void Output(
+        IProgress<PipelineProgressEvent>? progress,
+        string stageKey,
+        PipelineOutputKind outputKind,
+        int itemIndex,
+        Guid? revisionId = null,
+        Guid? segmentId = null,
+        Guid? artifactId = null,
+        string? message = null) =>
+        progress?.Report(new PipelineProgressEvent(
+            StageName: ResolveStageName(stageKey),
+            EventKind: PipelineProgressEventKind.Progress,
+            Message: message,
+            StageKey: stageKey,
+            Phase: "Output available",
+            OutputKind: outputKind,
+            ItemIndex: itemIndex,
+            RevisionId: revisionId,
+            SegmentId: segmentId,
+            ArtifactId: artifactId));
+
     public static void Completed(
         IProgress<PipelineProgressEvent>? progress,
         string stageKey,

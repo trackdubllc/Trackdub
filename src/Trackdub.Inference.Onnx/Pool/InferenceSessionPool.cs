@@ -345,6 +345,7 @@ internal sealed class InferenceSessionPool : IDisposable
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(factory);
 
+        bool cacheMissRecorded = false;
         while (true)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
@@ -362,6 +363,12 @@ internal sealed class InferenceSessionPool : IDisposable
                         ObjectDisposedException.ThrowIf(disposed, this);
                     }
 
+                    // One counter per acquire request: a request that already recorded
+                    // a miss is not reclassified as a hit if it lands on an entry later.
+                    if (!cacheMissRecorded)
+                    {
+                        BenchmarkPhaseCapture.Increment("poolHit");
+                    }
                     return BuildLease(existing);
                 }
                 catch (ObjectDisposedException)
@@ -371,6 +378,12 @@ internal sealed class InferenceSessionPool : IDisposable
                     // state (including full-pool disposal) before deciding whether to create.
                     continue;
                 }
+            }
+
+            if (!cacheMissRecorded)
+            {
+                BenchmarkPhaseCapture.Increment("poolMiss");
+                cacheMissRecorded = true;
             }
 
             // Single-flight create: one factory invocation per key. Cancelling this waiter
@@ -476,6 +489,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 InferenceSession session;
                 try
                 {
+                    BenchmarkPhaseCapture.Increment("sessionCreate");
                     using (BenchmarkPhaseCapture.Start("session-create"))
                         session = await factory(cancellationToken).ConfigureAwait(false);
                 }
@@ -832,8 +846,13 @@ internal sealed class InferenceSessionPool : IDisposable
         return pooled + pending;
     }
 
-    private void AddPendingReservation(int device, long mb) =>
+    private void AddPendingReservation(int device, long mb)
+    {
         pendingCreateMbByDevice.AddOrUpdate(device, mb, (_, existing) => existing + mb);
+        BenchmarkPhaseCapture.ObserveMaximum(
+            "pendingReservationMb",
+            pendingCreateMbByDevice.Values.Sum());
+    }
 
     private void ReleaseReservation(int device, long mb) =>
         pendingCreateMbByDevice.AddOrUpdate(device, 0, (_, existing) => Math.Max(0, existing - mb));
@@ -845,7 +864,7 @@ internal sealed class InferenceSessionPool : IDisposable
     /// </summary>
     private async Task WaitForAdmissionBudgetAsync(long needMb, int device, CancellationToken cancellationToken)
     {
-        Interlocked.Increment(ref admissionWaiters);
+        BenchmarkPhaseCapture.ObserveMaximum("admissionWaiters", Interlocked.Increment(ref admissionWaiters));
         try
         {
             while (true)
