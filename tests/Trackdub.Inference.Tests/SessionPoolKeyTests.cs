@@ -395,6 +395,49 @@ public sealed class SessionPoolKeyTests
     }
 
     [Fact]
+    public async Task ModelContentHash_ReplacementWithPreservedMetadata_RehashesAfterInvalidation()
+    {
+        string path = Path.Join(Path.GetTempPath(), $"spk-{Guid.NewGuid():N}.onnx");
+        DateTime timestamp = DateTime.UtcNow.AddMinutes(-5);
+        try
+        {
+            File.WriteAllBytes(path, [0x01, 0x02, 0x03, 0x04]);
+            File.SetLastWriteTimeUtc(path, timestamp);
+            SessionPoolKey before = await SessionPoolKey.CreateAsync(
+                "eng", null, null, ExecutionProviderKind.Cpu, path, null, "default", null, CancellationToken.None);
+
+            File.WriteAllBytes(path, [0x05, 0x06, 0x07, 0x08]);
+            File.SetLastWriteTimeUtc(path, timestamp);
+            SessionPoolKey staleUntilInvalidated = await SessionPoolKey.CreateAsync(
+                "eng", null, null, ExecutionProviderKind.Cpu, path, null, "default", null, CancellationToken.None);
+            Assert.Equal(before.ModelContentHash, staleUntilInvalidated.ModelContentHash);
+
+            new SessionPoolModelContentHashCacheInvalidator().Invalidate(path);
+            SessionPoolKey after = await SessionPoolKey.CreateAsync(
+                "eng", null, null, ExecutionProviderKind.Cpu, path, null, "default", null, CancellationToken.None);
+
+            Assert.NotEqual(before.ModelContentHash, after.ModelContentHash);
+            Assert.NotEqual(before, after);
+        }
+        finally
+        {
+            File.Delete(path);
+            new SessionPoolModelContentHashCacheInvalidator().Invalidate(path);
+        }
+    }
+
+    [Fact]
+    public async Task CreateAsync_ModelContentHash_RespectsCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SessionPoolKey.CreateAsync(
+            "eng", null, null, ExecutionProviderKind.Cpu, "large-model.onnx", null, "default", null,
+            cancellation.Token));
+    }
+
+    [Fact]
     public void ModelContentHash_SameBytesDifferentPaths_SameDigestDifferentKeys()
     {
         string pathA = Path.Join(Path.GetTempPath(), $"spk-{Guid.NewGuid():N}a.onnx");

@@ -16,7 +16,7 @@ namespace Trackdub.Inference.Onnx.Pool;
 /// <list type="bullet">
 ///   <item><description><c>TRACKDUB_SESSION_ADMISSION</c> — <c>0</c>/<c>false</c>/<c>off</c>/<c>disabled</c> to disable; anything else (including unset) keeps admission enabled.</description></item>
 ///   <item><description><c>TRACKDUB_SESSION_VRAM_BUDGET_MB</c> — positive integer accelerator budget in MB, applied per device. Invalid values fall back to <see cref="InferenceSessionPool.DefaultMemoryBudgetMb"/>.</description></item>
-///   <item><description><c>TRACKDUB_SESSION_RAM_BUDGET_MB</c> — positive integer host RAM budget in MB, shared by CPU/DNNL/OpenVINO sessions. Invalid values fall back to <see cref="InferenceSessionPool.DefaultHostMemoryBudgetMb"/>.</description></item>
+///   <item><description><c>TRACKDUB_SESSION_RAM_BUDGET_MB</c> — positive integer host RAM budget in MB, shared by CPU/DNNL and OpenVINO CPU-proxy sessions. Invalid values fall back to <see cref="InferenceSessionPool.DefaultHostMemoryBudgetMb"/>.</description></item>
 ///   <item><description><c>TRACKDUB_SESSION_MAX_SESSIONS</c> — positive integer capacity (count mode). Invalid or overflowing values fall back to the pool default.</description></item>
 /// </list>
 /// <para>
@@ -45,7 +45,7 @@ public static class SharedPoolOptions
     public static long MemoryBudgetMb { get; } =
         ReadPositiveInt64(BudgetMbVariable) ?? InferenceSessionPool.DefaultMemoryBudgetMb;
 
-    /// <summary>Host RAM admission budget in MB, shared by CPU/DNNL/OpenVINO sessions.</summary>
+    /// <summary>Host RAM admission budget in MB, shared by CPU/DNNL and OpenVINO CPU-proxy sessions.</summary>
     public static long HostMemoryBudgetMb { get; } =
         ReadPositiveInt64(HostBudgetMbVariable) ?? InferenceSessionPool.DefaultHostMemoryBudgetMb;
 

@@ -141,6 +141,9 @@ internal sealed record SessionPoolKey
 
     public int? DeviceId { get; init; }
 
+    /// <summary>True when standalone OpenVINO is configured to execute on the CPU proxy.</summary>
+    public bool UseOpenVinoCpuProxy { get; init; }
+
     /// <summary>Estimated VRAM footprint of this session in MB. Used for VRAM-budget eviction.</summary>
     public long EstimatedVramMb { get; init; } = 0;
 
@@ -189,6 +192,7 @@ internal sealed record SessionPoolKey
     /// </summary>
     private static readonly ConcurrentDictionary<string, (long Length, long WriteTicks, string Hash)> ModelContentHashCache =
         new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, long> ModelContentHashGenerations = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Streams a SHA-256 over the model file's content and returns lowercase hex, or
@@ -291,6 +295,153 @@ internal sealed record SessionPoolKey
 
         // The file was still mutating after the second hash — conservative fallback: do
         // not pin pool identity to an inconsistent snapshot; path identity still applies.
+        return null;
+    }
+
+    internal static void InvalidateModelContentHash(string modelPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
+        string cacheKey = Path.GetFullPath(modelPath);
+        if (OperatingSystem.IsWindows() && !PreserveWindowsPathCase())
+        {
+            cacheKey = cacheKey.ToUpperInvariant();
+        }
+
+        ModelContentHashCache.TryRemove(cacheKey, out _);
+        ModelContentHashGenerations.AddOrUpdate(cacheKey, 1, static (_, generation) => generation + 1);
+    }
+
+    internal static async Task<SessionPoolKey> CreateAsync(
+        string engineFamily,
+        string? modelId,
+        string? variant,
+        ExecutionProviderKind provider,
+        string modelPath,
+        int? deviceId,
+        string graphRole,
+        string? optionsFingerprint,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        string? contentHash = await HashModelContentAsync(modelPath, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return new SessionPoolKey(
+            engineFamily,
+            modelId,
+            variant,
+            provider,
+            HashPath(modelPath),
+            deviceId,
+            graphRole,
+            optionsFingerprint)
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = contentHash,
+        };
+    }
+
+    internal static async Task<string?> HashModelContentAsync(
+        string? modelPath,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(modelPath))
+        {
+            return null;
+        }
+
+        string cacheKey;
+        try
+        {
+            cacheKey = Path.GetFullPath(modelPath);
+            if (OperatingSystem.IsWindows() && !PreserveWindowsPathCase())
+            {
+                cacheKey = cacheKey.ToUpperInvariant();
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            long generation = ModelContentHashGenerations.GetOrAdd(cacheKey, 0);
+            FileInfo info;
+            long length;
+            long writeTicks;
+            try
+            {
+                info = new FileInfo(modelPath);
+                if (!info.Exists)
+                {
+                    return null;
+                }
+
+                length = info.Length;
+                writeTicks = info.LastWriteTimeUtc.Ticks;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return null;
+            }
+
+            if (attempt == 0 && ModelContentHashCache.TryGetValue(cacheKey, out var cached) &&
+                cached.Length == length && cached.WriteTicks == writeTicks &&
+                ModelContentHashGenerations.GetOrAdd(cacheKey, 0) == generation)
+            {
+                return cached.Hash;
+            }
+
+            string hash;
+            try
+            {
+                await using var stream = new FileStream(
+                    modelPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 1024 * 1024,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                byte[] digest = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
+                hash = Convert.ToHexString(digest).ToLowerInvariant();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return null;
+            }
+
+            bool unchanged;
+            try
+            {
+                info.Refresh();
+                unchanged = info.Exists && info.Length == length && info.LastWriteTimeUtc.Ticks == writeTicks;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return null;
+            }
+
+            if (unchanged)
+            {
+                if (ModelContentHashGenerations.GetOrAdd(cacheKey, 0) == generation)
+                {
+                    ModelContentHashCache[cacheKey] = (length, writeTicks, hash);
+                    if (ModelContentHashGenerations.GetOrAdd(cacheKey, 0) == generation)
+                    {
+                        return hash;
+                    }
+
+                    ModelContentHashCache.TryRemove(cacheKey, out _);
+                }
+            }
+        }
+
         return null;
     }
 

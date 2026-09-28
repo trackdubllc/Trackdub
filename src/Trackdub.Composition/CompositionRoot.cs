@@ -328,12 +328,14 @@ public static class CompositionRoot
                 sp.GetRequiredService<IApplicationLogger>(),
                 httpClient: sp.GetRequiredService<ModelDownloadHttpClient>().Client,
                 downloadOptions: sp.GetRequiredService<HuggingFaceDownloadOptions>()));
+        services.TryAddSingleton<IModelContentHashCacheInvalidator, SessionPoolModelContentHashCacheInvalidator>();
         services.TryAddSingleton<IModelDownloaderContract>(sp =>
             new ModelDownloaderAdapter(
                 sp.GetRequiredService<IModelDownloader>(),
                 httpClient: sp.GetRequiredService<ModelDownloadHttpClient>().Client,
                 logger: sp.GetService<IApplicationLogger>(),
-                downloadOptions: sp.GetRequiredService<HuggingFaceDownloadOptions>()));
+                downloadOptions: sp.GetRequiredService<HuggingFaceDownloadOptions>(),
+                contentHashCacheInvalidator: sp.GetRequiredService<IModelContentHashCacheInvalidator>()));
 
         services.TryAddSingleton<PlaybackCapabilityProbe>();
         services.TryAddSingleton<IPlaybackBackendFactory, DefaultPlaybackBackendFactory>();
@@ -818,7 +820,8 @@ public static class CompositionRoot
 #endif
             OnnxExecutionProviderBootstrapperRegistry.Initialize(
                 bootstrapper,
-                sp.GetRequiredService<IWindowsMlEpDevicePolicyProvider>());
+                sp.GetRequiredService<IWindowsMlEpDevicePolicyProvider>(),
+                openVinoAvailabilityProvider: sp.GetRequiredService<IOpenVinoAvailabilityProvider>());
             return bootstrapper;
         });
 

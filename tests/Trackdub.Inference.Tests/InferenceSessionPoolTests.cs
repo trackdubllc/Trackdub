@@ -1131,6 +1131,47 @@ public sealed class InferenceSessionPoolTests
         Assert.NotNull(lease2.Session);
     }
 
+    [Fact]
+    public async Task AdmissionBuckets_OpenVinoNpuDoesNotCollideWithGpuDeviceZero()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8, memoryBudgetMb: 100, hostMemoryBudgetMb: 100);
+        var npuKey = new SessionPoolKey("eng", null, null, ExecutionProviderKind.OpenVino, "npu", null, "default")
+        {
+            EstimatedVramMb = 80,
+        };
+        var gpuKey = AcceleratorKey("gpu", 80, deviceId: 0);
+
+        using SessionLease npuLease = await pool.GetLeaseAsync(
+            npuKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        using SessionLease gpuLease = await pool.GetLeaseAsync(
+            gpuKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        Assert.NotNull(gpuLease.Session);
+    }
+
+    [Fact]
+    public async Task AdmissionBuckets_OpenVinoCpuProxySharesHostBudget()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8, memoryBudgetMb: 100, hostMemoryBudgetMb: 100);
+        var cpuKey = HostKey("proxy-cpu", 80);
+        var openVinoProxyKey = new SessionPoolKey(
+            "eng", null, null, ExecutionProviderKind.OpenVino, "proxy-openvino", null, "default")
+        {
+            EstimatedVramMb = 80,
+            UseOpenVinoCpuProxy = true,
+        };
+
+        using SessionLease cpuLease = await pool.GetLeaseAsync(
+            cpuKey, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+            openVinoProxyKey,
+            _ => Task.FromResult(CreateMinimalSession()),
+            cts.Token));
+    }
+
     // ── Bundle hard admission ───────────────────────────────────────────────
 
     [Fact]

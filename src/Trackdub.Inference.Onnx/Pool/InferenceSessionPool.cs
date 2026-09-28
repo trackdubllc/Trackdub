@@ -22,8 +22,8 @@ namespace Trackdub.Inference.Onnx.Pool;
 /// disabled. Memory admission (on by default) adds a resident-memory budget per bucket:
 /// before construct, reserve <see cref="SessionPoolKey.EstimatedVramMb"/>, evict idle
 /// sessions to fit, and wait — never allocate an unbudgeted ephemeral session. CPU, DNNL,
-/// and OpenVINO sessions are accounted against the host RAM budget; every other provider
-/// is accounted against the per-device accelerator (VRAM) budget, so CPU work no longer
+/// and OpenVINO CPU-proxy sessions are accounted against the host RAM budget; OpenVINO NPU
+/// sessions and other accelerators are accounted per device, so CPU work no longer
 /// collides with GPU 0. When admission is explicitly
 /// disabled and the count limit is reached with every entry leased, the new session is
 /// created outside the pool (ephemeral) and disposed when its lease is released.</para>
@@ -42,7 +42,8 @@ namespace Trackdub.Inference.Onnx.Pool;
 /// Each ONNX session can consume hundreds of MB of accelerator or host memory depending on
 /// model size. Admission enforces realistic budgets; call <see cref="EvictModelAsync"/> to
 /// free memory for a model that is no longer needed, or <see cref="Dispose"/> to release
-/// the entire pool.</para>
+/// the entire pool. The default host limit can reject large graphs and graph bundles; see
+/// <c>docs/reference/session-pool-memory-admission.md</c> for sizing and the explicit override.</para>
 ///
 /// <para><strong>Thread safety:</strong>
 /// All public APIs are thread-safe.  Sessions are single-threaded: only one caller may hold
@@ -81,7 +82,7 @@ internal sealed class InferenceSessionPool : IDisposable
     /// <summary>Default accelerator (VRAM) admission budget per device when <c>enableMemoryAdmission</c> is on.</summary>
     public const long DefaultMemoryBudgetMb = 4096;
 
-    /// <summary>Default host RAM admission budget shared by CPU/DNNL/OpenVINO sessions.</summary>
+    /// <summary>Default host RAM admission budget shared by CPU/DNNL and OpenVINO CPU-proxy sessions.</summary>
     public const long DefaultHostMemoryBudgetMb = 4096;
 
     /// <summary>
@@ -215,22 +216,30 @@ internal sealed class InferenceSessionPool : IDisposable
     private int disposeOnce; // 0 = not yet, 1 = disposed; Interlocked guard for single-winner teardown
 
     /// <summary>
-    /// Admission accounting bucket: host-backed providers (CPU/DNNL/OpenVINO) share the
-    /// single host RAM budget; every other provider is budgeted per accelerator device.
+    /// Admission accounting bucket: CPU/DNNL and OpenVINO CPU-proxy sessions share host RAM;
+    /// standalone OpenVINO accelerator sessions use an NPU-specific bucket, separate from GPU 0.
     /// </summary>
-    private readonly record struct AdmissionBucket(bool IsHost, int DeviceId);
+    private readonly record struct AdmissionBucket(bool IsHost, ExecutionProviderKind? AcceleratorProvider, int DeviceId);
 
     private static bool IsHostProvider(ExecutionProviderKind provider) =>
-        provider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl or ExecutionProviderKind.OpenVino;
+        provider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl;
 
     private static AdmissionBucket BucketOf(SessionPoolKey key) =>
-        IsHostProvider(key.Provider) ? new(true, 0) : new(false, key.DeviceId ?? 0);
+        IsHostProvider(key.Provider) || (key.Provider is ExecutionProviderKind.OpenVino && key.UseOpenVinoCpuProxy)
+            ? new(true, null, 0)
+            : key.Provider is ExecutionProviderKind.OpenVino
+                ? new(false, ExecutionProviderKind.OpenVino, key.DeviceId ?? 0)
+                : new(false, null, key.DeviceId ?? 0);
 
     private long BudgetFor(AdmissionBucket bucket) =>
         bucket.IsHost ? hostMemoryBudgetMb : memoryBudgetMb;
 
     private static string DescribeBucket(AdmissionBucket bucket) =>
-        bucket.IsHost ? "host RAM" : $"accelerator device {bucket.DeviceId}";
+        bucket.IsHost
+            ? "host RAM"
+            : bucket.AcceleratorProvider is ExecutionProviderKind.OpenVino
+                ? $"OpenVINO NPU device {bucket.DeviceId}"
+                : $"accelerator device {bucket.DeviceId}";
 
     public InferenceSessionPool(
         int maxSessions = DefaultMaxSessions,
@@ -959,7 +968,7 @@ internal sealed class InferenceSessionPool : IDisposable
     /// <summary>
     /// Waits until <paramref name="needMb"/> fits in <paramref name="bucket"/>'s budget
     /// (evicting idle sessions in that bucket as needed), then takes the reservation.
-    /// Never holds a reservation while waiting. Host providers share the host RAM budget;
+    /// Never holds a reservation while waiting. Host-backed providers share the host RAM budget;
     /// accelerator providers share their device's VRAM budget.
     /// </summary>
     private async Task WaitForAdmissionBudgetAsync(long needMb, AdmissionBucket bucket, CancellationToken cancellationToken)
