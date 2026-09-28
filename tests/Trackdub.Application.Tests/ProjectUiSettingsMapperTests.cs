@@ -7,6 +7,27 @@ namespace Trackdub.Application.Tests;
 public sealed class ProjectUiSettingsMapperTests
 {
     [Fact]
+    public void Voice_mode_choices_survive_normalization_and_json_round_trip()
+    {
+        Guid speakerId = Guid.NewGuid();
+        ProjectUiSettings settings = ProjectUiSettingsMapper.CreateProjectUiSettings(
+            new MixGainSettings(),
+            export: null,
+            voiceCloneBySpeakerId: new Dictionary<Guid, bool>
+            {
+                [speakerId] = true,
+                [Guid.Empty] = false,
+            });
+
+        string json = System.Text.Json.JsonSerializer.Serialize(settings.Normalize());
+        ProjectUiSettings? reopened = System.Text.Json.JsonSerializer.Deserialize<ProjectUiSettings>(json);
+
+        Assert.NotNull(reopened);
+        Assert.Single(reopened.VoiceCloneBySpeakerId!);
+        Assert.True(reopened.VoiceCloneBySpeakerId![speakerId]);
+    }
+
+    [Fact]
     public void CreateProjectUiSettings_round_trips_mix_and_export()
     {
         var mix = new MixGainSettings(

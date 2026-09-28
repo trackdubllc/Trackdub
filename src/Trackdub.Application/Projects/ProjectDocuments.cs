@@ -96,7 +96,8 @@ public sealed record ProjectUiSettings(
     IReadOnlyList<ProjectTimelineMediaPlacement>? TimelinePlacements = null,
     string? SelectedTranslationTargetLanguage = null,
     ProjectPipelineSettings? Pipeline = null,
-    SegmentStageRunMap? SegmentStageRuns = null)
+    SegmentStageRunMap? SegmentStageRuns = null,
+    IReadOnlyDictionary<Guid, bool>? VoiceCloneBySpeakerId = null)
 {
     public ProjectUiSettings Normalize() =>
         this with
@@ -109,6 +110,9 @@ public sealed record ProjectUiSettings(
             SelectedTranslationTargetLanguage = ProjectDocumentLanguageCodes.NormalizeLanguageCode(SelectedTranslationTargetLanguage),
             Pipeline = Pipeline?.Normalize(),
             SegmentStageRuns = SegmentStageRuns?.Normalize(),
+            VoiceCloneBySpeakerId = VoiceCloneBySpeakerId?
+                .Where(static pair => pair.Key != Guid.Empty)
+                .ToDictionary(static pair => pair.Key, static pair => pair.Value),
         };
 }
 

@@ -11,7 +11,8 @@ public static class ProjectUiSettingsMapper
         IReadOnlyList<ProjectTimelineMediaPlacement>? timelinePlacements = null,
         string? selectedTranslationTargetLanguage = null,
         ProjectPipelineSettings? pipeline = null,
-        SegmentStageRunMap? segmentStageRuns = null) =>
+        SegmentStageRunMap? segmentStageRuns = null,
+        IReadOnlyDictionary<Guid, bool>? voiceCloneBySpeakerId = null) =>
         new(
             Mix: mix.ToProjectMixSettings(),
             Export: export?.Normalize(),
@@ -20,7 +21,10 @@ public static class ProjectUiSettingsMapper
                 .ToArray(),
             SelectedTranslationTargetLanguage: selectedTranslationTargetLanguage,
             Pipeline: pipeline?.Normalize(),
-            SegmentStageRuns: segmentStageRuns?.Normalize());
+            SegmentStageRuns: segmentStageRuns?.Normalize(),
+            VoiceCloneBySpeakerId: voiceCloneBySpeakerId?
+                .Where(static pair => pair.Key != Guid.Empty)
+                .ToDictionary(static pair => pair.Key, static pair => pair.Value));
 
     public static ProjectPipelineSettings ReadPipelineSettings(ProjectUiSettings? settings) =>
         settings?.Pipeline?.Normalize() ?? new ProjectPipelineSettings();

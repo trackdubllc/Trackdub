@@ -20,13 +20,11 @@ public sealed class StageContractsTests
     public void Future_stage_contracts_use_canonical_stage_names()
     {
         Assert.Equal("preview-mix", StageNames.PreviewMix);
-        Assert.Equal("voice-cloning", StageNames.VoiceCloning);
         Assert.Equal("export", StageNames.Export);
         Assert.Equal("speech-enhancement", StageNames.SpeechEnhancement);
         Assert.Equal("audio-preparation", StageNames.AudioPreparation);
 
         var previewRequest = new PreviewMixStageRequest(Guid.NewGuid(), 1.0d, 2.0d);
-        var voiceCloningRequest = new VoiceCloningStageRequest(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new HashSet<int> { 1 });
         var exportRequest = new ExportStageRequest(
             Guid.NewGuid(),
             "output.mp4",
@@ -35,7 +33,6 @@ public sealed class StageContractsTests
 
         Assert.Equal(1.0d, previewRequest.StartSeconds);
         Assert.False(previewRequest.RestoreOriginalPan);
-        Assert.Single(voiceCloningRequest.SegmentIndices);
         Assert.Equal(ExportSubtitleFormat.Srt, Assert.Single(exportRequest.SubtitleFormats));
         Assert.False(exportRequest.RestoreOriginalPan);
     }
@@ -45,7 +42,6 @@ public sealed class StageContractsTests
     {
         Guid projectId = Guid.NewGuid();
         StageRunRecord previewRun = StageRunRecord.Start(projectId, StageNames.PreviewMix, DateTimeOffset.UtcNow);
-        StageRunRecord voiceRun = StageRunRecord.Start(projectId, StageNames.VoiceCloning, DateTimeOffset.UtcNow);
         StageRunRecord exportRun = StageRunRecord.Start(projectId, StageNames.Export, DateTimeOffset.UtcNow);
 
         var mixPlan = new MixPlan(
@@ -63,7 +59,6 @@ public sealed class StageContractsTests
             DuckingRegions: [],
             Warnings: [new MixPlanWarning(0, Guid.NewGuid(), "missing take")]);
         var previewResult = new PreviewMixStageResult(previewRun, "artifacts/preview.wav", mixPlan, 1.0d, mixPlan.Warnings);
-        var voiceResult = new VoiceCloningStageResult(voiceRun, [Guid.NewGuid()]);
         var exportResult = new ExportStageResult(
             exportRun,
             "output.mp4",
@@ -75,7 +70,6 @@ public sealed class StageContractsTests
 
         Assert.Equal(StageNames.PreviewMix, previewResult.StageRun.StageName);
         Assert.Single(previewResult.Warnings);
-        Assert.Equal(StageNames.VoiceCloning, voiceResult.StageRun.StageName);
         Assert.Equal(StageNames.Export, exportResult.StageRun.StageName);
         Assert.Equal("output.manifest.json", exportResult.ManifestPath);
     }

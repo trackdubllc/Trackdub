@@ -34,7 +34,6 @@ public sealed class StageNameConsistencyTests
         "speech-enhancement",
         "audio-preparation",
         "preview-mix",
-        "voice-cloning",
         "export",
         "lip-sync",
         "lip-synthesis",
