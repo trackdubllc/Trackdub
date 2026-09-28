@@ -212,7 +212,10 @@ MagicPaths/
 .claude/settings.local.json
 .openclaude/
 .agents/.serena/
-/.serena
+# Serena: ignore local state but track project.yml (language servers, ignored_paths)
+/.serena/*
+!/.serena/project.yml
+!/.serena/.gitignore
 .sisyphus/
 .artifacts/
 .hf-staging/
