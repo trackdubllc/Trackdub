@@ -135,13 +135,6 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
         // CreateResampledStream returns the source as-is when sample rates match;
         // otherwise it wraps and takes ownership of it. Dispose only the outer reader.
         using IAudioSamples targetAudio = AudioResampler.CreateResampledStream(audio, TargetSampleRate);
-        if (targetAudio.SampleFrameCount > int.MaxValue)
-        {
-            throw new InvalidOperationException(
-                $"Audio is too long for SortFormer diarization ({targetAudio.SampleFrameCount} frames at {TargetSampleRate} Hz).");
-        }
-        float[] samples = new float[(int)targetAudio.SampleFrameCount];
-        targetAudio.ReadMonoSamples(0, samples);
         // Do not hard-mask diarization with VAD regions; VAD misses would permanently erase speech before speaker detection.
 
         IReadOnlyList<DiarizedSpeakerTurn> turns;
@@ -149,12 +142,20 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
         {
             Tensor<float> probabilityTensor = RunStreamingFeatureModel(
                 sessionLease.Session,
-                samples,
+                targetAudio,
                 cancellationToken);
             turns = DecodeTurns(probabilityTensor, request.DurationSeconds, plan.ModelAlias);
         }
         else
         {
+            if (targetAudio.SampleFrameCount > int.MaxValue)
+            {
+                throw new InvalidOperationException(
+                    $"Audio is too long for SortFormer diarization ({targetAudio.SampleFrameCount} frames at {TargetSampleRate} Hz).");
+            }
+            float[] samples = new float[(int)targetAudio.SampleFrameCount];
+            targetAudio.ReadMonoSamples(0, samples);
+
             using var inputSet = CreateInputSet(sessionLease.Session, samples);
             cancellationToken.ThrowIfCancellationRequested();
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sessionLease.Session.RunWithRetry(inputSet.Values, cancellationToken: cancellationToken);
@@ -177,19 +178,20 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
 
     private static DenseTensor<float> RunStreamingFeatureModel(
         InferenceSession session,
-        float[] samples,
+        IAudioSamples audio,
         CancellationToken cancellationToken)
     {
-        using SortFormerFeatureInputSet features = FeatureExtractor.Extract(samples);
-        if (features.FrameCount <= 0)
+        if (audio.SampleFrameCount <= 0)
         {
             return new DenseTensor<float>(Array.Empty<float>(), [0, MaxSupportedSpeakers]);
         }
 
+        int totalFeatureFrames = SortFormerFeatureExtractor.GetFrameCount(audio.SampleFrameCount);
+
         var state = new SortFormerStreamingState();
         var predictionData = new List<float>();
         int speakerCount = MaxSupportedSpeakers;
-        int chunkCount = CeilingDivide(features.FrameCount, StreamingChunkStrideFeatureFrames);
+        int chunkCount = CeilingDivide(totalFeatureFrames, StreamingChunkStrideFeatureFrames);
 
         for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
         {
@@ -198,12 +200,17 @@ public sealed class SortFormerDiarizationEngine(IRuntimePlanner runtimePlanner,
             int startFrame = chunkIndex * StreamingChunkStrideFeatureFrames;
             int currentFeatureFrameCount = Math.Min(
                 StreamingFeedFeatureFrames,
-                features.FrameCount - startFrame);
+                totalFeatureFrames - startFrame);
 
+            using SortFormerFeatureInputSet features = FeatureExtractor.Extract(
+                audio,
+                startFrame,
+                currentFeatureFrameCount,
+                cancellationToken);
             using var inputSet = CreateStreamingFeatureInputSet(
                 session.InputMetadata,
                 features,
-                startFrame,
+                0,
                 currentFeatureFrameCount,
                 state);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = session.RunWithRetry(inputSet.Values, cancellationToken: cancellationToken);

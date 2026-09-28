@@ -3,6 +3,7 @@ using System.Reflection;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx;
+using Trackdub.Inference.Onnx.Audio;
 using Trackdub.Inference.Onnx.Madlad;
 using Trackdub.Inference.Onnx.OpusMt;
 using Trackdub.Inference.Onnx.SileroVad;
@@ -17,6 +18,79 @@ namespace Trackdub.Inference.Tests;
 
 public sealed class OnnxTranscriptEnginesTests
 {
+    [Fact]
+    public void WhisperGenAi_EncodeClip_ProducesInMemoryWavOfExactRange()
+    {
+        // 0.5 s of a ramp at 16 kHz; encode only the middle quarter.
+        const int sampleRate = 16000;
+        var samples = new float[8000];
+        for (int i = 0; i < samples.Length; i++)
+        {
+            samples[i] = Math.Clamp((i / (float)samples.Length) - 0.5f, -1f, 1f);
+        }
+
+        using var audio = new MemoryAudioSamples(samples);
+        byte[] wav = WhisperGenAiAudioTranscriptionEngine.EncodeClip(audio, 0.125, 0.375, CancellationToken.None);
+
+        int expectedSamples = 4000; // [0.125, 0.375) s at 16 kHz
+        Assert.Equal(44 + (expectedSamples * 2), wav.Length);
+        Assert.Equal("RIFF", System.Text.Encoding.ASCII.GetString(wav.AsSpan(0, 4)));
+        Assert.Equal("WAVE", System.Text.Encoding.ASCII.GetString(wav.AsSpan(8, 4)));
+        Assert.Equal(36 + (expectedSamples * 2), BinaryPrimitives.ReadInt32LittleEndian(wav.AsSpan(4, 4)));
+        Assert.Equal(sampleRate, BinaryPrimitives.ReadInt32LittleEndian(wav.AsSpan(24, 4)));
+        Assert.Equal(expectedSamples * 2, BinaryPrimitives.ReadInt32LittleEndian(wav.AsSpan(40, 4)));
+
+        // First encoded sample must be source[2000] = 0.125*16000 = index 2000.
+        short first = BinaryPrimitives.ReadInt16LittleEndian(wav.AsSpan(44, 2));
+        short expectedFirst = (short)Math.Clamp(samples[2000] * 32767f, short.MinValue, short.MaxValue);
+        Assert.Equal(expectedFirst, first);
+        // Reads must be limited to the encoded window, not the whole buffer.
+        Assert.Equal(2000, audio.MinRead);
+        Assert.True(audio.MaxRead <= 6000);
+    }
+
+    [Fact]
+    public void WhisperGenAi_EncodeClip_PreCanceledToken_ThrowsEvenForEmptyRange()
+    {
+        using var audio = new MemoryAudioSamples(new float[1600]);
+        var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            WhisperGenAiAudioTranscriptionEngine.EncodeClip(audio, 2.0, 1.0, canceled.Token));
+    }
+
+    [Fact]
+    public void WhisperGenAi_EncodeClip_EmptyRange_ProducesValidEmptyWav()
+    {
+        using var audio = new MemoryAudioSamples(new float[1600]);
+        byte[] wav = WhisperGenAiAudioTranscriptionEngine.EncodeClip(audio, 2.0, 1.0, CancellationToken.None);
+        Assert.Equal(44, wav.Length);
+        Assert.Equal(0, BinaryPrimitives.ReadInt32LittleEndian(wav.AsSpan(40, 4)));
+    }
+
+    private sealed class MemoryAudioSamples(float[] data) : IAudioSamples
+    {
+        public int SampleRate => 16000;
+
+        public long SampleFrameCount => data.Length;
+
+        public long MinRead { get; private set; } = long.MaxValue;
+
+        public long MaxRead { get; private set; }
+
+        public void ReadMonoSamples(long startFrame, Span<float> destination)
+        {
+            MinRead = Math.Min(MinRead, startFrame);
+            MaxRead = Math.Max(MaxRead, startFrame + destination.Length);
+            data.AsSpan((int)startFrame, destination.Length).CopyTo(destination);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
     [Fact]
     public void WhisperOnnxAudioTranscriptionEngine_BuildTranscriptionRegions_MergesShortNearbyVadRegions()
     {

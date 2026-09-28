@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Numerics;
+using Trackdub.Inference.Onnx.Audio;
 using MathNet.Numerics.IntegralTransforms;
 
 namespace Trackdub.Inference.Onnx.SortFormer;
@@ -112,6 +113,151 @@ internal sealed class SortFormerFeatureExtractor
         finally
         {
             ArrayPool<float>.Shared.Return(paddedSamples);
+        }
+    }
+
+    /// <summary>
+    /// Feature frame count for <paramref name="sampleFrameCount"/> mono samples:
+    /// symmetric padding totals <see cref="FftSize"/>, so frames = 1 + samples / hop,
+    /// including the padded final frame for exact multiples.
+    /// </summary>
+    internal static int GetFrameCount(long sampleFrameCount)
+    {
+        if (sampleFrameCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sampleFrameCount));
+        }
+
+        if (sampleFrameCount == 0)
+        {
+            return 0; // parity with Extract(ReadOnlySpan<float>): empty input -> no frames
+        }
+
+        long frameCount = 1 + (sampleFrameCount / HopLength);
+        return frameCount > int.MaxValue
+            ? throw new InvalidOperationException($"Audio is too long for SortFormer diarization ({sampleFrameCount} samples).")
+            : (int)frameCount;
+    }
+
+    /// <summary>
+    /// Extracts log-mel features for frames [startFrame, startFrame + frameCount) directly from
+    /// the source stream, reading only the sample window those frames need (plus one predecessor
+    /// for pre-emphasis). Numerically equivalent to slicing <see cref="Extract(ReadOnlySpan{float})"/>.
+    /// </summary>
+    internal SortFormerFeatureInputSet Extract(
+        IAudioSamples samples,
+        int startFrame,
+        int frameCount,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(samples);
+        if (samples.SampleFrameCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(samples), "Sample count must be non-negative.");
+        }
+
+        int totalFrameCount = GetFrameCount(samples.SampleFrameCount);
+        if (startFrame < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startFrame));
+        }
+
+        // frameCount <= total first so total - frameCount cannot underflow, then the
+        // subtraction form avoids int overflow on startFrame + frameCount.
+        if (frameCount < 0 || frameCount > totalFrameCount || startFrame > totalFrameCount - frameCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(frameCount),
+                $"Frame range starting at {startFrame} with length {frameCount} exceeds {totalFrameCount} frames.");
+        }
+
+        if (frameCount == 0 || samples.SampleFrameCount == 0)
+        {
+            return new SortFormerFeatureInputSet(Array.Empty<float>(), 0, MelBins);
+        }
+
+        long sampleCount = samples.SampleFrameCount;
+        const int padAmount = FftSize / 2;
+        // Frame g reads source samples g*Hop + i - pad for i in [0, FftSize); the range's
+        // needed window is [lo, hi] plus one predecessor sample for pre-emphasis.
+        long lo = ((long)startFrame * HopLength) - padAmount;
+        long hi = ((long)(startFrame + frameCount - 1) * HopLength) + (FftSize - 1) - padAmount;
+        long readLo = Math.Max(0, lo - 1);
+        long readHi = Math.Min(sampleCount - 1, hi);
+        int windowLength = readHi >= readLo ? checked((int)(readHi - readLo + 1)) : 0;
+
+        float[] sourceWindow = ArrayPool<float>.Shared.Rent(Math.Max(1, windowLength));
+        try
+        {
+            if (windowLength > 0)
+            {
+                samples.ReadMonoSamples(readLo, sourceWindow.AsSpan(0, windowLength));
+            }
+
+            float Raw(long index) => index < readLo || index > readHi ? 0f : sourceWindow[index - readLo];
+
+            float PreEmphasized(long sourceIndex) => sourceIndex switch
+            {
+                < 0 => 0f,
+                _ when sourceIndex >= sampleCount => 0f,
+                0 => Raw(0),
+                _ => Raw(sourceIndex) - (PreEmphasis * Raw(sourceIndex - 1)),
+            };
+
+            int featureElementCount = frameCount * MelBins;
+            float[] data = ArrayPool<float>.Shared.Rent(featureElementCount);
+            bool transferredOwnership = false;
+            try
+            {
+                var spectrum = new Complex[FftSize];
+                var framePower = new float[FrequencyBins];
+                for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    long frameSampleOrigin = (long)(startFrame + frameIndex) * HopLength - padAmount;
+                    Array.Clear(spectrum);
+                    for (int sampleIndex = 0; sampleIndex < FftSize; sampleIndex++)
+                    {
+                        double windowed = PreEmphasized(frameSampleOrigin + sampleIndex) * fftWindow[sampleIndex];
+                        spectrum[sampleIndex] = new Complex(windowed, 0);
+                    }
+
+                    Fourier.Forward(spectrum, FourierOptions.Matlab);
+                    for (int binIndex = 0; binIndex < FrequencyBins; binIndex++)
+                    {
+                        double magnitude = spectrum[binIndex].Magnitude;
+                        framePower[binIndex] = (float)(magnitude * magnitude);
+                    }
+
+                    int dataOffset = frameIndex * MelBins;
+                    for (int melIndex = 0; melIndex < MelBins; melIndex++)
+                    {
+                        double sum = 0;
+                        for (int binIndex = 0; binIndex < FrequencyBins; binIndex++)
+                        {
+                            sum += melFilters[melIndex, binIndex] * framePower[binIndex];
+                        }
+
+                        data[dataOffset + melIndex] = MathF.Log((float)sum + LogZeroGuard);
+                    }
+                }
+
+                SortFormerFeatureInputSet inputSet = new(data, frameCount, MelBins);
+                transferredOwnership = true;
+                return inputSet;
+            }
+            finally
+            {
+                if (!transferredOwnership)
+                {
+                    ArrayPool<float>.Shared.Return(data);
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<float>.Shared.Return(sourceWindow);
         }
     }
 

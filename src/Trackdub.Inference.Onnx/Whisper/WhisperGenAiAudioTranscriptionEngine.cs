@@ -16,7 +16,7 @@ namespace Trackdub.Inference.Onnx.Whisper;
 /// ONNX Runtime GenAI Whisper transcription engine.
 /// Uses OGA's native generator loop instead of the manual token-by-token decoder.
 /// </summary>
-public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEngineAdapter, IStageRuntimeExecutionReporter, IDisposable
+public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEngineAdapter, IStageRuntimeExecutionReporter
 {
     public const string EngineFamilyName = "whisper-genai";
 
@@ -35,11 +35,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
     private readonly IRuntimePlanningPreferences? runtimePlanningPreferences;
     private readonly BenchmarkModelPathResolver modelPathResolver;
     private readonly WhisperOnnxAudioTranscriptionEngine legacyEngine;
-    private readonly string tempDirectory = Path.Join(
-        Path.GetTempPath(),
-        "Trackdub",
-        "whisper-genai",
-        Guid.NewGuid().ToString("N"));
 
     public WhisperGenAiAudioTranscriptionEngine(
         IRuntimePlanner runtimePlanner,
@@ -159,10 +154,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         var segments = new List<RecognizedTranscriptSegment>(effectiveRegions.Count);
         int droppedDegenerateChunks = 0;
 
-        // Each request gets an isolated subdirectory so concurrent calls on the same engine
-        // instance don't overwrite each other's chunk files or delete a live directory.
-        string requestTempDirectory = Path.Join(tempDirectory, Guid.NewGuid().ToString("N"));
-        try
         {
             Directory.CreateDirectory(requestTempDirectory);
             GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
@@ -177,7 +168,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                RegionTranscription transcription = await TranscribeRegionAsync(
+                RegionTranscription transcription = TranscribeRegion(
                     model,
                     processor,
                     targetAudio,
@@ -185,8 +176,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
                     durationSeconds,
                     request.SourceLanguage,
                     languageTokensById,
-                    requestTempDirectory,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken);
 
                 droppedDegenerateChunks += transcription.DroppedDegenerateChunks;
 
@@ -203,10 +193,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
                     transcription.DetectedLanguage,
                     transcription.Words));
             }
-        }
-        finally
-        {
-            TryDeleteDirectory(requestTempDirectory);
         }
 
         string bootstrapDetail = "ONNX Runtime GenAI native generator loop.";
@@ -310,8 +296,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         return null;
     }
 
-    public void Dispose() => TryDeleteDirectory(tempDirectory);
-
     private static void EnsurePlanReady(StageRuntimePlan plan)
     {
         if (plan.IsRunnable() && plan.ExecutionProvider is not null && !string.IsNullOrWhiteSpace(plan.ModelAlias))
@@ -354,7 +338,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
                token.All(static character => character is >= 'a' and <= 'z' || character == '-');
     }
 
-    private async Task<RegionTranscription> TranscribeRegionAsync(
+    private RegionTranscription TranscribeRegion(
         Model model,
         MultiModalProcessor processor,
         IAudioSamples targetAudio,
@@ -362,7 +346,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         double durationSeconds,
         string? sourceLanguage,
         IReadOnlyDictionary<int, string> languageTokensById,
-        string tempDirectory,
         CancellationToken cancellationToken)
     {
         double startSeconds = Math.Clamp(region.StartSeconds, 0d, durationSeconds);
@@ -390,15 +373,14 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
                 continue;
             }
 
-            string clipPath = Path.Join(tempDirectory, $"region-{region.Index:D4}-chunk-{chunkIndex:D4}.wav");
-            await WriteClipAsync(targetAudio, chunkStartSeconds, chunkEndSeconds, clipPath, cancellationToken).ConfigureAwait(false);
+            byte[] clipBytes = EncodeClip(targetAudio, chunkStartSeconds, chunkEndSeconds, cancellationToken);
 
             string? detectedLanguage = NormalizeLanguageCode(sourceLanguage)
-                ?? DetectClipLanguage(model, processor, clipPath, languageTokensById, cancellationToken);
+                ?? DetectClipLanguage(model, processor, clipBytes, languageTokensById, cancellationToken);
             int[] transcriptionTokens = GenerateClipTokens(
                 model,
                 processor,
-                clipPath,
+                clipBytes,
                 BuildTranscriptionPrompt(detectedLanguage),
                 GenAiMaxLength,
                 cancellationToken);
@@ -440,30 +422,35 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
             droppedDegenerateChunks);
     }
 
-    private static async Task WriteClipAsync(
+    // One chunk is at most ~28 s of 16 kHz mono PCM16 (~0.9 MB), so the encoded WAV is
+    // bounded and stays entirely in memory for Audios.Load.
+    internal static byte[] EncodeClip(
         IAudioSamples targetAudio,
         double startSeconds,
         double endSeconds,
-        string clipPath,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(targetAudio);
+        cancellationToken.ThrowIfCancellationRequested();
+
         long startSample = Math.Max(0, (long)Math.Floor(startSeconds * TargetSampleRate));
         long endSample = Math.Min(targetAudio.SampleFrameCount, (long)Math.Ceiling(endSeconds * TargetSampleRate));
         if (endSample <= startSample)
         {
-            await WaveAudioWriter.WriteMonoPcm16Async(clipPath, [], TargetSampleRate, cancellationToken).ConfigureAwait(false);
-            return;
+            return WaveAudioWriter.EncodeMonoPcm16([], TargetSampleRate);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         float[] samples = new float[checked((int)(endSample - startSample))];
         targetAudio.ReadMonoSamples(startSample, samples);
-        await WaveAudioWriter.WriteMonoPcm16Async(clipPath, samples, TargetSampleRate, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return WaveAudioWriter.EncodeMonoPcm16(samples, TargetSampleRate);
     }
 
     private static string? DetectClipLanguage(
         Model model,
         MultiModalProcessor processor,
-        string clipPath,
+        byte[] clipBytes,
         IReadOnlyDictionary<int, string> languageTokensById,
         CancellationToken cancellationToken)
     {
@@ -475,7 +462,7 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         int[] tokens = GenerateClipTokens(
             model,
             processor,
-            clipPath,
+            clipBytes,
             WhisperLanguageDetectionPrompt,
             GenAiLanguageDetectionMaxLength,
             cancellationToken);
@@ -486,12 +473,12 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
     private static int[] GenerateClipTokens(
         Model model,
         MultiModalProcessor processor,
-        string clipPath,
+        byte[] clipBytes,
         string prompt,
         double maxLength,
         CancellationToken cancellationToken)
     {
-        using Audios audios = Audios.Load([clipPath]);
+        using Audios audios = Audios.Load(clipBytes);
         using NamedTensors inputTensors = processor.ProcessAudios([prompt], audios);
 
         using GeneratorParams generatorParams = new(model);
@@ -522,28 +509,14 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
     {
         ArgumentNullException.ThrowIfNull(model);
 
-        string warmupDirectory = Path.Join(
-            Path.GetTempPath(), "Trackdub", "whisper-genai-warmup", Guid.NewGuid().ToString("N"));
-        try
+        byte[] silenceWav = WaveAudioWriter.EncodeMonoPcm16(new float[1600], TargetSampleRate);
+        await Task.Run(() =>
         {
-            Directory.CreateDirectory(warmupDirectory);
-            string clipPath = Path.Join(warmupDirectory, "silence.wav");
-            await WaveAudioWriter.WriteMonoPcm16Async(
-                    clipPath, new float[1600], TargetSampleRate, cancellationToken)
-                .ConfigureAwait(false);
-
-            await Task.Run(() =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                using MultiModalProcessor processor = new(model);
-                _ = GenerateClipTokens(
-                    model, processor, clipPath, WhisperLanguageDetectionPrompt, 8, cancellationToken);
-            }, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            TryDeleteDirectory(warmupDirectory);
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            using MultiModalProcessor processor = new(model);
+            _ = GenerateClipTokens(
+                model, processor, silenceWav, WhisperLanguageDetectionPrompt, 8, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     internal static string? InferLanguageFromTokenIds(
@@ -637,22 +610,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
             .FirstOrDefault();
 
 
-    private static void TryDeleteDirectory(string directoryPath)
-    {
-        try
-        {
-            if (Directory.Exists(directoryPath))
-            {
-                Directory.Delete(directoryPath, recursive: true);
-            }
-        }
-        catch (IOException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-    }
 
     private string ResolveModelRootPath(StageRuntimePlan plan)
     {

@@ -67,4 +67,24 @@ public sealed class SpleeterSeparationContractTests
         Assert.Equal(targetFrames * SpleeterModelConstants.MaxFreqBins, mag.Length);
         Assert.Equal(mag.Length, phase.Length);
     }
+    [Fact]
+    public void EnsureConsistentProvider_is_per_call_stateless_and_honest()
+    {
+        // Two independent call sequences must not share state; a mid-run provider change
+        // fails instead of reporting one provider for mixed execution.
+        string? aProvider = null;
+        SpleeterOnnxSeparator.EnsureConsistentProvider(aProvider, "cpu");
+        aProvider = "cpu";
+        SpleeterOnnxSeparator.EnsureConsistentProvider(aProvider, "cpu");
+        SpleeterOnnxSeparator.EnsureConsistentProvider(aProvider, "cpu");
+
+        string? bProvider = null;
+        SpleeterOnnxSeparator.EnsureConsistentProvider(bProvider, "directml");
+        bProvider = "directml";
+        Assert.Throws<InvalidOperationException>(() =>
+            SpleeterOnnxSeparator.EnsureConsistentProvider(bProvider, "cpu"));
+
+        // Sequence A unaffected by B's mismatch.
+        SpleeterOnnxSeparator.EnsureConsistentProvider(aProvider, "cpu");
+    }
 }
