@@ -130,9 +130,9 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
         EnsureGenAiModelRoot(modelRootPath);
 
-        GenAiModelKey modelKey = GenAiModelKey.Create(
+        GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
             modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
-            plan.ModelRevisionHash);
+            plan.ModelRevisionHash, cancellationToken).ConfigureAwait(false);
         string targetLanguageName = ResolveTargetLanguageName(request.TargetLanguage);
         long sequence = 0;
 
