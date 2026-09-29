@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Pool;
@@ -14,7 +15,7 @@ namespace Trackdub.Inference.Onnx.Madlad;
 public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
     BenchmarkModelPathResolver modelPathResolver,
     IRuntimePlanningPreferences? runtimePlanningPreferences = null)
-    : ITranslationEngineAdapter, IStageRuntimeExecutionReporter
+    : IStreamingTranslationEngineAdapter, IStageRuntimeExecutionReporter
 {
     public const string EngineFamilyName = "madlad";
 
@@ -85,6 +86,76 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
 
         LastExecutionSummary = CreateExecutionSummary(plan, sessionLease);
         return translatedSegments;
+    }
+
+    /// <summary>
+    /// Emits each finalized translated segment, acquiring and disposing the pooled session
+    /// bundle around only that segment so backpressure never pins native resources.
+    /// </summary>
+    public async IAsyncEnumerable<PipelineStreamItem<TranslatedTextSegment>> TranslateStreamAsync(
+        TranslationRequest request,
+        Guid runId,
+        string snapshotId,
+        Guid sourceRevisionId,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Segments);
+        PipelineStreamItemFactory.ValidateTranslationStreamContext(runId, snapshotId, sourceRevisionId);
+
+        StageRuntimePlanningRequest planningRequest = await StageRuntimePlanningRequestFactory.ApplyPreferredModelTierAsync(
+            new StageRuntimePlanningRequest(
+                RuntimeStage.Translation,
+                PreferredModelAlias: request.PreferredModelAlias,
+                SourceLanguage: request.SourceLanguage,
+                TargetLanguage: request.TargetLanguage,
+                PreferredExecutionProvider: ExecutionProviderRequest.ParsePreferredExecutionProvider(
+                    request.PreferredExecutionProvider,
+                    request.RequirePreferredExecutionProvider),
+                RequirePreferredExecutionProvider: request.RequirePreferredExecutionProvider,
+                PreferredModelVariantAlias: request.PreferredModelVariantAlias),
+            runtimePlanningPreferences,
+            cancellationToken).ConfigureAwait(false);
+
+        StageRuntimePlan plan = await runtimePlanner.PlanAsync(planningRequest, cancellationToken).ConfigureAwait(false);
+        EnsurePlanReady(plan, RuntimeStage.Translation);
+
+        string encoderModelPath = ResolveEncoderModelPath(plan, request.ResolvedModelEntryPath);
+        string decoderModelPath = ResolveDecoderModelPath(plan, encoderModelPath);
+        string modelRootPath = ResolveModelRootPath(encoderModelPath);
+        MadladTokenizerDecoder tokenizer = await MadladTokenizerDecoder.LoadAsync(modelRootPath).ConfigureAwait(false);
+        string targetLanguageTag = ResolveTargetLanguageTag(request.TargetLanguage);
+
+        if (request.Segments.Count == 0)
+        {
+            LastExecutionSummary = CreatePlannedOnlySummary(plan, "Translation skipped because the transcript did not contain any segments.");
+            yield break;
+        }
+
+        long sequence = 0;
+        foreach (TranslationInputSegment segment in request.Segments.OrderBy(static segment => segment.Index))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            TranslatedTextSegment translated;
+            using (OnnxExecutionSessionFactory.OpusSessionLease sessionLease = await OnnxExecutionSessionFactory
+                .CreatePooledOpusAsync("madlad", encoderModelPath, decoderModelPath, plan.ExecutionProvider!.Value, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                string translatedText = await TranslateSegmentAsync(
+                    sessionLease,
+                    tokenizer,
+                    targetLanguageTag,
+                    segment.Text,
+                    cancellationToken).ConfigureAwait(false);
+                translated = new TranslatedTextSegment(
+                    segment.Index, segment.StartSeconds, segment.EndSeconds, translatedText);
+                LastExecutionSummary = CreateExecutionSummary(plan, sessionLease);
+            }
+
+            yield return PipelineStreamItemFactory.CreateTranslation(
+                translated, runId, snapshotId, sourceRevisionId, sequence++);
+        }
     }
 
     private static async Task<string> TranslateSegmentAsync(

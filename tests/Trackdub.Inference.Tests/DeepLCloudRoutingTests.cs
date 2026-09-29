@@ -130,6 +130,113 @@ public sealed class DeepLCloudRoutingTests
         Assert.Equal("cloud", engine.LastExecutionSummary?.SelectedProvider);
     }
 
+    [Fact]
+    public async Task TranslateStreamAsync_local_streaming_engine_forwards_items()
+    {
+        var localEngine = new StreamingStubTranslationEngine("local-stream");
+        var cloudEngine = new StubTranslationEngine("cloud");
+        var engine = new CloudAwareTranslationEngine(localEngine, cloudEngine, cloudEngine, cloudEngine);
+
+        Guid runId = Guid.NewGuid();
+        Guid revision = Guid.NewGuid();
+        List<PipelineStreamItem<TranslatedTextSegment>> items = [];
+        await foreach (PipelineStreamItem<TranslatedTextSegment> item in engine.TranslateStreamAsync(
+            new TranslationRequest(
+                "en",
+                "es",
+                [new TranslationInputSegment(0, 0, 1, "a"), new TranslationInputSegment(1, 1, 2, "b")]),
+            runId,
+            "snap",
+            revision,
+            CancellationToken.None))
+        {
+            items.Add(item);
+        }
+
+        Assert.Equal(2, items.Count);
+        Assert.Equal([0L, 1L], items.Select(i => i.Identity.Sequence).ToArray());
+        Assert.All(items, item => Assert.Equal("local-stream", item.Payload.Text));
+        Assert.Equal(0, cloudEngine.CallCount);
+    }
+
+    [Fact]
+    public async Task TranslateStreamAsync_cloud_batch_fallback_wraps_and_reports_metadata()
+    {
+        var localEngine = new StubTranslationEngine("local");
+        var cloudEngine = new StubTranslationEngine(
+            "cloud",
+            new TranslationExecutionMetadata(
+                "deepl",
+                ModelId: null,
+                ModelAlias: TranslationModelOverrideSettings.DeepLModelAlias,
+                SelectedExecutionProvider: "cloud",
+                TranslationRoutingKind.Direct),
+            new StageRuntimeExecutionSummary(
+                RequestedProvider: "cloud",
+                SelectedProvider: "cloud",
+                ModelAlias: TranslationModelOverrideSettings.DeepLModelAlias));
+        var engine = new CloudAwareTranslationEngine(localEngine, cloudEngine, localEngine, localEngine);
+
+        Guid runId = Guid.NewGuid();
+        Guid revision = Guid.NewGuid();
+        List<PipelineStreamItem<TranslatedTextSegment>> items = [];
+        await foreach (PipelineStreamItem<TranslatedTextSegment> item in engine.TranslateStreamAsync(
+            new TranslationRequest(
+                "en",
+                "es",
+                [new TranslationInputSegment(7, 7, 8, "Hello")],
+                PreferredModelAlias: TranslationModelOverrideSettings.DeepLModelAlias),
+            runId,
+            "snap",
+            revision,
+            CancellationToken.None))
+        {
+            items.Add(item);
+        }
+
+        PipelineStreamItem<TranslatedTextSegment> item0 = Assert.Single(items);
+        Assert.Equal(0, localEngine.CallCount);
+        Assert.Equal(1, cloudEngine.CallCount);
+        Assert.Equal("cloud", item0.Payload.Text);
+        Assert.Equal(runId, item0.Identity.RunId);
+        Assert.Equal(7, item0.Identity.SegmentIndex);
+        Assert.Equal(revision, item0.Identity.RevisionId);
+        Assert.Equal("deepl", engine.LastExecutionMetadata?.ProviderName);
+        Assert.Equal("cloud", engine.LastExecutionSummary?.SelectedProvider);
+    }
+
+    private sealed class StreamingStubTranslationEngine(string translatedText)
+        : IStreamingTranslationEngine, ITranslationExecutionMetadataReporter
+    {
+        public TranslationExecutionMetadata? LastExecutionMetadata { get; private set; }
+
+        public Task<IReadOnlyList<TranslatedTextSegment>> TranslateAsync(
+            TranslationRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("batch path must not be used");
+
+        public async IAsyncEnumerable<PipelineStreamItem<TranslatedTextSegment>> TranslateStreamAsync(
+            TranslationRequest request,
+            Guid runId,
+            string snapshotId,
+            Guid sourceRevisionId,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            long sequence = 0;
+            foreach (TranslationInputSegment segment in request.Segments.OrderBy(static s => s.Index))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Yield();
+                yield return PipelineStreamItemFactory.CreateTranslation(
+                    new TranslatedTextSegment(segment.Index, segment.StartSeconds, segment.EndSeconds, translatedText),
+                    runId, snapshotId, sourceRevisionId, sequence++);
+            }
+
+            LastExecutionMetadata = new TranslationExecutionMetadata(
+                "local", "m", "a", "cpu", TranslationRoutingKind.Direct);
+        }
+    }
+
     private sealed class StaticCloudApiKeyProvider(string? apiKey) : ICloudApiKeyProvider
     {
         public Task<string?> GetApiKeyAsync(string providerKey, CancellationToken cancellationToken) =>

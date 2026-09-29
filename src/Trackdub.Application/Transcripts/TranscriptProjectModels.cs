@@ -78,7 +78,8 @@ public sealed record GenerateTranslationRequest(
     string? PreferredModelAlias = null,
     ExecutionProviderKind? PreferredExecutionProvider = null,
     bool RequirePreferredExecutionProvider = false,
-    string? PreferredModelVariantAlias = null);
+    string? PreferredModelVariantAlias = null,
+    bool EnableSegmentStreaming = false);
 
 public sealed record RetranslateSegmentRequest(
     Guid TranslationRevisionId,

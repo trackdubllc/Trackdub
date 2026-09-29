@@ -146,6 +146,13 @@ public sealed record DubbingSessionOptions
     public bool UseVoiceCloning { get; init; }
 
     /// <summary>
+    /// Experimental opt-in: enables bounded per-segment streaming inside the translation
+    /// stage only. Does not overlap TTS and never exposes a partial translation revision —
+    /// persistence still commits atomically at stage end. Default false keeps the batch path.
+    /// </summary>
+    public bool EnableTranslationSegmentStreaming { get; init; }
+
+    /// <summary>
     /// Per-speaker voice-clone map: speaker id -> clone from reference audio (true)
     /// or use the assigned/stock voice (false). When set, this map wins over the
     /// blanket <see cref="UseVoiceCloning"/> behavior for TTS. Interactive hosts
