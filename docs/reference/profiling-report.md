@@ -46,7 +46,7 @@ The focused ASR sample also spent 329,650 ms preparing prerequisites; that durat
 
 ### Revision-pinned replacement samples, 2026-09-28
 
-These fresh local runs used a clean checkout of `4eea0cc954f745ada80cac2be9e8992f93851883`, a Release `net10.0-windows10.0.19041.0` build, and `dotnet run --no-build`. The benchmark host DLL SHA-256 was `F054C1A51B37C9F5C7EA2218CC4D66EE037708DD6404C02C2571B626F1113902`. All four fixture hashes matched the local manifest before measurement. The linked [source record](../development/benchmark-evidence.md#revision-pinned-replacement-samples-2026-09-28) lists the run commands and retained reports. These are single samples per scenario, not comparison medians or evidence of a speedup over the unversioned September 23 runs.
+These fresh local runs used a clean checkout of `4eea0cc954f745ada80cac2be9e8992f93851883`, a Release `net10.0-windows10.0.19041.0` build, and `dotnet run --no-build`. The benchmark host DLL SHA-256 was `F054C1A51B37C9F5C7EA2218CC4D66EE037708DD6404C02C2571B626F1113902`. All four fixture hashes matched the local manifest before measurement. The linked [source record](../development/benchmark-evidence.md#revision-pinned-replacement-samples-2026-09-28) lists the run commands and retained reports. The raw reports omit per-run model-manifest IDs and `WindowsMlExecutionDevicePolicy`, so the full per-run provenance rule below is not yet met. These are single samples per scenario, not comparison medians or evidence of a speedup over the unversioned September 23 runs.
 
 | Fixture / run id | Mode / measured stage | Outcome | Timed pipeline |
 |---|---|---|---:|
