@@ -34,7 +34,6 @@ internal static class WinNativeDepsManifestLoader
         AllowTrailingCommas = true,
     };
 
-
     internal static WinNativeDepsManifestRoot? TryLoadFromApplicationDirectory()
     {
         string[] candidates =

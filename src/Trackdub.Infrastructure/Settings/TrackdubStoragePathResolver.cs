@@ -4,7 +4,6 @@ using Trackdub.Infrastructure;
 
 namespace Trackdub.Infrastructure.Settings;
 
-
 public sealed record TrackdubStorageOptions(
     string UserDataRoot,
     string UserCacheRoot,
