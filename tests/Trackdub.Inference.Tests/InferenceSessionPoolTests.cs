@@ -777,21 +777,20 @@ public sealed class InferenceSessionPoolTests
         using var pool = new InferenceSessionPool(maxSessions: 8);
         SessionLeaseRequest a = new(KeyA(), _ => Task.FromResult(CreateMinimalSession()));
         SessionLeaseRequest b = new(KeyB(), _ => Task.FromResult(CreateMinimalSession()));
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-
         // Same graphs are exclusive, so bundles serialize — the point is that reversed
-        // caller order still completes (stable sort) instead of deadlocking half-held.
-        Task<SessionLeaseBundle> t1 = Task.Run(
-            () => pool.GetLeaseBundleAsync([a, b], cts.Token), cts.Token);
-        Task<SessionLeaseBundle> t2 = Task.Run(
-            () => pool.GetLeaseBundleAsync([b, a], cts.Token), cts.Token);
+        // caller order still completes (stable sort) instead of deadlocking half-held. The
+        // acquisitions carry no token and the awaits below carry the hang guard: what is under
+        // test is completion, and a five-second token reported a slow runner as a deadlock.
+        Task<SessionLeaseBundle> t1 = Task.Run(() => pool.GetLeaseBundleAsync([a, b], CancellationToken.None));
+        Task<SessionLeaseBundle> t2 = Task.Run(() => pool.GetLeaseBundleAsync([b, a], CancellationToken.None));
 
-        Task<SessionLeaseBundle> first = await Task.WhenAny(t1, t2).WaitAsync(cts.Token);
-        SessionLeaseBundle firstBundle = await first.WaitAsync(cts.Token);
+        Task<SessionLeaseBundle> first = await Task.WhenAny(t1, t2)
+            .AwaitWithHangGuard("neither bundle acquisition completed");
+        SessionLeaseBundle firstBundle = await first.AwaitWithHangGuard("the first bundle never resolved");
         firstBundle.Dispose();
 
         Task<SessionLeaseBundle> second = ReferenceEquals(first, t1) ? t2 : t1;
-        SessionLeaseBundle secondBundle = await second.WaitAsync(cts.Token);
+        SessionLeaseBundle secondBundle = await second.AwaitWithHangGuard("the second bundle never resolved");
         secondBundle.Dispose();
     }
 
