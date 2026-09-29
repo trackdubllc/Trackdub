@@ -69,6 +69,8 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
             plan.ModelRevisionHash, cancellationToken).ConfigureAwait(false);
         using GenAiModelLease modelLease = await GenAiModelPool.Shared
             .GetLeaseAsync(modelKey, cancellationToken).ConfigureAwait(false);
+        using IDisposable? executionAdmission = await CpuExecutionAdmission.Shared
+            .AcquireAsync(modelKey.Provider, cancellationToken).ConfigureAwait(false);
         Model model = modelLease.Model;
         using Tokenizer tokenizer = new(model);
 
@@ -143,6 +145,8 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
             TranslatedTextSegment translated;
             using (GenAiModelLease modelLease = await GenAiModelPool.Shared
                 .GetLeaseAsync(modelKey, cancellationToken).ConfigureAwait(false))
+            using (await CpuExecutionAdmission.Shared
+                .AcquireAsync(modelKey.Provider, cancellationToken).ConfigureAwait(false))
             {
                 Model model = modelLease.Model;
                 using Tokenizer tokenizer = new(model);
