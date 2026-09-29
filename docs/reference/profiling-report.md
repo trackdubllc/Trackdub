@@ -2,7 +2,7 @@
 
 > **Status:** MIXED — controlled dubbing-pipeline samples are recorded below; startup, UI, export, and broader model/provider matrix rows marked *pending local run* remain unmeasured.
 > **Last updated:** 2026-09-28
-> **Branch evidence:** core performance-audit stack beginning at `17c4a66`
+> **Report branch:** core performance-audit stack beginning at `17c4a66` (not the revision used for the older samples)
 
 ## Measurement methodology (fill before claiming budgets)
 
@@ -21,7 +21,7 @@ Use the same procedure on every run so rows in this report stay comparable.
 
 ## Controlled dubbing-pipeline evidence
 
-The path-free source record, fixture hashes, commands, run semantics, and retained-report locations are documented in [Local benchmark evidence](../development/benchmark-evidence.md). The rows below are measured initial samples from 2026-09-23, not comparison medians or release budgets.
+The path-free source record, fixture hashes, commands, run semantics, and retained-report locations are documented in [Local benchmark evidence](../development/benchmark-evidence.md). The rows below are measured initial samples from 2026-09-23. Their producing source revision and build identity were not captured, so they are historical observations only: exclude them from like-for-like comparisons, comparison medians, and release budgets.
 
 | Host field | Measured value |
 |---|---|
@@ -31,6 +31,7 @@ The path-free source record, fixture hashes, commands, run semantics, and retain
 | GPU | NVIDIA GeForce RTX 5070 |
 | Runtime | .NET 10.0.12; ONNX Runtime 1.30.0.0 |
 | GPU memory | Unavailable; no reliable probe was active |
+| Measured revision / build | Unknown; not recorded with these runs |
 
 | Fixture / run id | Mode / measured stage | Outcome | Timed pipeline |
 |---|---|---|---:|
@@ -42,6 +43,21 @@ The path-free source record, fixture hashes, commands, run semantics, and retain
 | Short `36b343baec5d4f86a1bce26c7c354520` | Artifact resume / audio preparation | Skipped: `EXISTING_ARTIFACTS_VALID`; excluded from throughput comparisons | 482 ms |
 
 The focused ASR sample also spent 329,650 ms preparing prerequisites; that duration is separate from its 15,510 ms ASR span. Full-pipeline run `91b3193af93a49c9ae0310ebc700fa66` is excluded because translation failed, TTS/export were skipped, and its provider labels were invalidated. The samples do not claim cleared OS/driver caches, GPU-memory measurement, thirty-run warm tails, or a complete model/provider matrix.
+
+### Revision-pinned replacement samples, 2026-09-28
+
+These fresh local runs used a clean checkout of `4eea0cc954f745ada80cac2be9e8992f93851883`, a Release `net10.0-windows10.0.19041.0` build, and `dotnet run --no-build`. The benchmark host DLL SHA-256 was `F054C1A51B37C9F5C7EA2218CC4D66EE037708DD6404C02C2571B626F1113902`. All four fixture hashes matched the local manifest before measurement. The linked [source record](../development/benchmark-evidence.md#revision-pinned-replacement-samples-2026-09-28) lists the run commands and retained reports. These are single samples per scenario, not comparison medians or evidence of a speedup over the unversioned September 23 runs.
+
+| Fixture / run id | Mode / measured stage | Outcome | Timed pipeline |
+|---|---|---|---:|
+| Short `872e838f131844d1a8c612a7c761a31c` | Fresh process, compatible cache / ASR | Completed; requested and actual CPU; `qwen3-asr-0.6b` | 60,417 ms |
+| Silence `4b65ad4c1658474c90c6128907f7355a` | Fresh process, isolated engine cache / audio preparation | Completed | 7,947 ms |
+| Multi-speaker `d250be27e8e1429ca77199048ace0866` | Fresh process, isolated engine cache / audio preparation | Completed | 6,974 ms |
+| Long-form `fd9b830caf3546aab9496c4a518a0f54` | Fresh process, isolated engine cache / audio preparation | Completed | 100,791 ms |
+| Short `38bdf0786ae94d53aedfc2d0996e5bd1` | Warm host / audio preparation | Completed | 2,459 ms |
+| Short `9c32c7f661a04b689d2683dac3b31cfe` | Artifact resume / audio preparation | Skipped: `EXISTING_ARTIFACTS_VALID`; excluded from throughput comparisons | 389 ms |
+
+The ASR run spent another 30,251 ms preparing prerequisite stages; that duration is separate from the 60,417 ms timed ASR pipeline. Cache and OS state were not normalized across the historical and replacement runs. Repeat each mode in independent processes before treating these numbers as a stable performance baseline.
 
 ## Reference machine (fill before claiming budgets)
 

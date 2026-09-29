@@ -56,7 +56,7 @@ The fixtures are machine-local and are not checked into the repository. Their lo
 | Long-form | 933.8 s | `eef434a89dfdd017e465a9af35289db22a11873124956ce14300ef98bd1fe898` |
 | Silence | 12 s | `e7df589267ecde30673ffcdf9da443f56ea1e698b2d6c71ac637d31d501ec5eb` |
 
-Each run's full JSON is retained in `%LOCALAPPDATA%\Trackdub\benchmark-reports\<run-id>.json`. These are initial raw samples, not comparison medians:
+Each run's full JSON is retained in `%LOCALAPPDATA%\Trackdub\benchmark-reports\<run-id>.json`. These initial raw samples did not capture the producing Git revision or build identity. Keep them as historical observations; do not use them as a versioned baseline or in like-for-like comparisons, comparison medians, or release budgets:
 
 | Fixture / run | Mode / stage | Outcome | Timed pipeline |
 |---|---|---|---:|
@@ -70,3 +70,20 @@ Each run's full JSON is retained in `%LOCALAPPDATA%\Trackdub\benchmark-reports\<
 The focused ASR sample spent 329,650 ms preparing prerequisite stages; that time is separate from its 15,510 ms ASR pipeline span. A prior full-pipeline attempt (`91b3193af93a49c9ae0310ebc700fa66`) reached translation failure, then skipped TTS and export. Its provider labels came from a UI display projection and were invalidated; it is excluded from comparisons. A corrected full-pipeline attempt is being recorded separately.
 
 These runs used .NET 10.0.12, Windows 10.0.26200 x64, ONNX Runtime 1.30.0.0, and a host reporting 63 GB available memory. A separate local CIM query identified an AMD Ryzen 7 5700X3D CPU, NVIDIA GeForce RTX 5070 GPU, and 68,613,902,336 bytes physical RAM. Automatic CPU/GPU model-name discovery in the reports returned `Unknown` on this Windows installation. The reports do not claim cleared OS/driver caches or measured GPU memory. More repetitions on each compatible fixture, model, provider, and cache mode are needed before prioritizing findings in `Fusion_Performance_Audit.md`.
+
+## Revision-pinned replacement samples, 2026-09-28
+
+The producing checkout was clean at `4eea0cc954f745ada80cac2be9e8992f93851883`. The `Trackdub.Benchmarks.DevHost` Release build for `net10.0-windows10.0.19041.0` passed with zero warnings and errors. Every command below used `dotnet run --no-build` from that build; the host DLL SHA-256 was `F054C1A51B37C9F5C7EA2218CC4D66EE037708DD6404C02C2571B626F1113902`. All four input hashes matched the fixture manifest above before the runs. The raw reports are retained under `%LOCALAPPDATA%\Trackdub\benchmark-reports\<run-id>.json`.
+
+The command form was `dotnet run --project src/Trackdub.Benchmarks.DevHost -c Release -f net10.0-windows10.0.19041.0 --no-build -- controlled <fixture> --output <local-output-directory> --stage <stage> --mode <mode> --sha256 <fixture-hash>`. The ASR invocation also supplied `--provider Cpu --reuse-engine-cache --source-language en`; no `--reuse-engine-cache` flag was supplied for the isolated-cache runs. Each row was launched as a separate process.
+
+| Fixture / run id | Mode / stage | Outcome | Timed pipeline |
+|---|---|---|---:|
+| Short `872e838f131844d1a8c612a7c761a31c` | Fresh process, compatible cache / ASR | Completed; actual `qwen3-asr-0.6b` on CPU | 60,417 ms |
+| Silence `4b65ad4c1658474c90c6128907f7355a` | Fresh process, isolated engine cache / audio preparation | Completed | 7,947 ms |
+| Multi-speaker `d250be27e8e1429ca77199048ace0866` | Fresh process, isolated engine cache / audio preparation | Completed | 6,974 ms |
+| Long-form `fd9b830caf3546aab9496c4a518a0f54` | Fresh process, isolated engine cache / audio preparation | Completed | 100,791 ms |
+| Short `38bdf0786ae94d53aedfc2d0996e5bd1` | Warm host / audio preparation | Completed | 2,459 ms |
+| Short `9c32c7f661a04b689d2683dac3b31cfe` | Artifact resume / audio preparation | Skipped: `EXISTING_ARTIFACTS_VALID`; excluded from throughput comparisons | 389 ms |
+
+The ASR sample spent 30,251 ms preparing prerequisites before its timed pipeline. The reports recorded .NET 10.0.12, Windows 10.0.26200 x64, and ONNX Runtime 1.30.0.0. These are revision-pinned initial observations, not comparison medians or evidence of improvement over the unversioned September 23 samples. OS/driver caches were not cleared, and single runs do not establish a stable baseline. Capture the source revision, clean/dirty checkout state, build artifact hash, fixture hashes, command options, and run IDs with future measurements.
