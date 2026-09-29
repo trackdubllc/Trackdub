@@ -39,25 +39,17 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
     /// Callers that modify and persist must use <see cref="MutateAsync"/> instead.
     /// </summary>
     /// <remarks>
-    /// The index is small and always read whole, so it is read into a buffer synchronously and
-    /// deserialized from memory, matching the synchronous reads in <see cref="FileSmokeVerdictStore"/>
-    /// and <see cref="TrackdubStoragePathResolver"/>. Measured on a two-record index, this removes
-    /// ~9 ms of the one-time first read and roughly halves the per-read cost after it (0.30 ms →
-    /// 0.16 ms) that the async reader spent on its own machinery; the dominant cost is still
-    /// building the serializer metadata for the record graph, which this does not change.
-    /// <para>
-    /// A leading UTF-8 byte order mark is skipped, so an index written by an editor or script that
-    /// emits one (Notepad, PowerShell <c>-Encoding utf8</c>) loads exactly as it did through the
-    public Task<IReadOnlyList<LocalModelCacheRecord>> LoadAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
+cancellationToken.ThrowIfCancellationRequested();
 
-        if (!File.Exists(storagePaths.ModelCacheIndexPath))
-        {
-            return Task.FromResult<IReadOnlyList<LocalModelCacheRecord>>([]);
-        }
+if (!File.Exists(storagePaths.ModelCacheIndexPath))
+{
+    return [];
+}
 
-        byte[] payload = File.ReadAllBytes(storagePaths.ModelCacheIndexPath);
+byte[] payload = await File.ReadAllBytesAsync(storagePaths.ModelCacheIndexPath, cancellationToken).ConfigureAwait(false);
+LocalModelCacheRecord[]? records = JsonSerializer.Deserialize(
+    payload,
+    LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray);
         LocalModelCacheRecord[]? records = JsonSerializer.Deserialize(
             payload,
             LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray);
