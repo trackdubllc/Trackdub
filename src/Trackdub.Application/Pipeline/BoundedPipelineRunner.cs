@@ -106,7 +106,7 @@ public static class BoundedPipelineRunner
             {
                 await linkedCts.CancelAsync().ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (AggregateException ex)
             {
                 // A throwing cancellation callback must not strand the surviving worker.
                 failure ??= ex;

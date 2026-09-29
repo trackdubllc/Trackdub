@@ -901,6 +901,10 @@ public sealed class TranslationOrchestrationService(
     {
         string snapshotId = $"{sourceRevisionId:N}:{targetLanguage}";
         List<TranslatedTextSegment> collected = [];
+        HashSet<int> expectedSegmentIndexes = translationRequest.Segments
+            .Select(static segment => segment.Index)
+            .ToHashSet();
+        HashSet<int> receivedSegmentIndexes = [];
 
         await BoundedPipelineRunner.RunAsync<TranslatedTextSegment>(
             new BoundedPipelineChannelOptions(itemCapacity: 8, byteCapacity: 4 * 1024 * 1024),
@@ -929,6 +933,8 @@ public sealed class TranslationOrchestrationService(
                         || identity.RevisionId != sourceRevisionId
                         || identity.Sequence != expectedSequence
                         || identity.SegmentIndex != segment.Index
+                        || !expectedSegmentIndexes.Contains(segment.Index)
+                        || !receivedSegmentIndexes.Add(segment.Index)
                         || segment.Index <= lastSegmentIndex)
                     {
                         throw new InvalidDataException(
@@ -950,6 +956,13 @@ public sealed class TranslationOrchestrationService(
                 }
             },
             cancellationToken).ConfigureAwait(false);
+
+        if (receivedSegmentIndexes.Count != expectedSegmentIndexes.Count)
+        {
+            throw new InvalidDataException(
+                $"Translation stream ended after {receivedSegmentIndexes.Count} of "
+                    + $"{expectedSegmentIndexes.Count} requested segment(s).");
+        }
 
         return collected;
     }

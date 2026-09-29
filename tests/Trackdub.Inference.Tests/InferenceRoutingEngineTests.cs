@@ -732,6 +732,7 @@ public sealed class InferenceRoutingEngineTests
                 Guid.NewGuid(),
                 CancellationToken.None))
             {
+                // Enumerate solely to observe and assert propagation of the adapter fault.
             }
         });
 
@@ -757,6 +758,7 @@ public sealed class InferenceRoutingEngineTests
                 new TranslationRequest("en", "fr", [new TranslationInputSegment(0, 0, 1, "x")]),
                 Guid.NewGuid(), "snap", Guid.NewGuid(), cts.Token))
             {
+                // Enumerate solely to observe cancellation propagation.
             }
         });
     }

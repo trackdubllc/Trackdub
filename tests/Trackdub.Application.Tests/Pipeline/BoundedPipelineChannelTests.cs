@@ -227,6 +227,7 @@ public class BoundedPipelineChannelTests
                     {
                         await foreach (PipelineStreamItem<string> _ in items.WithCancellation(ct))
                         {
+                            // Drain until the producer's completion fault is observed.
                         }
                     }
                     catch (Exception e)

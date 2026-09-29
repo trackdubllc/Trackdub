@@ -424,6 +424,56 @@ public sealed class TranslationOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task GenerateTranslationAsync_WithUnrequestedStreamSegment_CommitsNoRevision()
+    {
+        var engine = new StreamingFakeTranslationEngine
+        {
+            RewriteItem = (item, seq) =>
+                seq == 1
+                    ? item with
+                    {
+                        Identity = item.Identity with { SegmentIndex = 99 },
+                        Payload = item.Payload with { Index = 99 },
+                    }
+                    : item,
+        };
+        TranslationHarness harness = CreateTranslationHarness(
+            transcriptLanguage: "en",
+            segmentDetectedLanguage: "en",
+            segmentCount: 3,
+            engine: engine);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            harness.Service.GenerateTranslationAsync(
+                harness.State,
+                new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "es", EnableSegmentStreaming: true),
+                TestContext.Current.CancellationToken));
+
+        Assert.Empty(harness.TranslationRepository.Revisions);
+        Assert.Equal(StageRunStatus.Failed, Assert.Single(harness.StageRunStore.All).Status);
+    }
+
+    [Fact]
+    public async Task GenerateTranslationAsync_WithIncompleteStream_CommitsNoRevision()
+    {
+        var engine = new StreamingFakeTranslationEngine { StopAfterItems = 2 };
+        TranslationHarness harness = CreateTranslationHarness(
+            transcriptLanguage: "en",
+            segmentDetectedLanguage: "en",
+            segmentCount: 3,
+            engine: engine);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            harness.Service.GenerateTranslationAsync(
+                harness.State,
+                new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "es", EnableSegmentStreaming: true),
+                TestContext.Current.CancellationToken));
+
+        Assert.Empty(harness.TranslationRepository.Revisions);
+        Assert.Equal(StageRunStatus.Failed, Assert.Single(harness.StageRunStore.All).Status);
+    }
+
+    [Fact]
     public async Task GenerateTranslationAsync_WithStreamingWrongRevision_CommitsNoRevision()
     {
         var engine = new StreamingFakeTranslationEngine
@@ -628,6 +678,8 @@ public sealed class TranslationOrchestrationServiceTests
 
         public int? FaultAfterItems { get; set; }
 
+        public int? StopAfterItems { get; set; }
+
         public Exception? Fault { get; set; }
 
         public int? CancelAfterItems { get; set; }
@@ -682,6 +734,10 @@ public sealed class TranslationOrchestrationServiceTests
                         translated, runId, snapshotId, sourceRevisionId, sequence);
                 yield return RewriteItem?.Invoke(item, sequence) ?? item;
                 sequence++;
+                if (StopAfterItems is { } stopAfter && sequence >= stopAfter)
+                {
+                    yield break;
+                }
             }
         }
     }
