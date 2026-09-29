@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release). -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(RuntimeIdentifier)' != ''">
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
 
