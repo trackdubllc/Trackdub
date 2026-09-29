@@ -343,10 +343,10 @@ public class GenAiModelPoolTests
                 // Count before signalling: a waiter that resumes on the signal must already
                 // be able to read this call.
                 Interlocked.Increment(ref factoryCalls);
-                StartSignal(factoryStarts, key).TrySetResult();
-                return factoryGates
+                TaskCompletionSource<IGenAiModelResource> gate = factoryGates
                     .GetOrAdd(key.ModelRootIdentity, static _ => new())
-                    .Task;
+                StartSignal(factoryStarts, key).TrySetResult();
+                return gate.Task;
             },
             maxEntries: 1);
 
