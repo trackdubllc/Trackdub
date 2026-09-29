@@ -44,9 +44,9 @@ GitHub, Notion, and Figma OAuth are connected (TS-5 / TS-6 / TS-19 Done).
 | Done | GitHub | Mention `TS-xxx` / `Fixes TS-xxx` in PRs |
 | Done | Notion embeds | Paste Linear URLs into Notion for previews |
 | Done | Figma embeds + plugin | Paste Figma frames into Linear; use Linear plugin in Figma |
-| In progress | Linear Release → Actions | `LINEAR_ACCESS_KEY` on `Trackdub` + `Trackdub-gated`; workflow `.github/workflows/linear-release.yml` syncs on push to `main` |
+| Removed | Linear Release → Actions | Job deleted from `.github/workflows/ci.yml`; it was failing on push to `main` and the integration is no longer wired up |
 
-Pipeline: [Trackdub Release](https://linear.app/trackdubllc/pipeline/trackdub-release/releases) (scheduled). Use Actions → Linear Release Sync → Run workflow with `command: complete` when cutting a ship.
+Pipeline: [Trackdub Release](https://linear.app/trackdubllc/pipeline/trackdub-release/releases) (scheduled). Releases are cut manually; there is no longer a Linear Release Sync workflow to run.
 
 Canonical design links (also in `docs/reference/design-standards.md`):
 
