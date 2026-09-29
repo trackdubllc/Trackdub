@@ -76,6 +76,7 @@ public sealed class RuntimeModelRequestFactoryTests
     public void CreateSelectionsFromPreferences_maps_model_aliases()
     {
         var preferences = new InferenceModelPreferences(
+            VadModelAlias: "silero-custom",
             AsrModelAlias: "whisper-large",
             DiarizationModelAlias: "pyannote");
 
@@ -84,8 +85,36 @@ public sealed class RuntimeModelRequestFactoryTests
 
         InferenceModelPreferences mapped = RuntimeModelRequestFactory.CreateModelPreferences(selections);
 
+        Assert.Equal("silero-custom", mapped.VadModelAlias);
         Assert.Equal("whisper-large", mapped.AsrModelAlias);
         Assert.Equal("pyannote", mapped.DiarizationModelAlias);
+    }
+
+    [Theory]
+    [InlineData(AsrModelOverride.Auto, "Asr")]
+    [InlineData(AsrModelOverride.GenAi, "AsrGenAi")]
+    [InlineData(AsrModelOverride.OnnxRuntime, "AsrOnnxRuntime")]
+    [InlineData(AsrModelOverride.Nemotron35, "AsrNemotron")]
+    public void CreateSelectionsFromPreferences_maps_asr_provider_from_effective_override(
+        AsrModelOverride asrModelOverride,
+        string expectedHardwareKey)
+    {
+        var preferences = new InferenceModelPreferences(
+            AsrModelAlias: AsrModelOverrideSettings.GenAiModelAlias,
+            PreferredExecutionProviders: new Dictionary<RuntimeStage, ExecutionProviderKind>
+            {
+                [RuntimeStage.Asr] = ExecutionProviderKind.Cpu,
+            });
+
+        RuntimeModelSelections selections = RuntimeModelRequestFactory.CreateSelectionsFromPreferences(
+            preferences,
+            asrModelOverride,
+            isDevBuild: true);
+
+        Assert.True(selections.IsDevBuild);
+        KeyValuePair<string, ExecutionProviderKind> hardwareOverride = Assert.Single(selections.HardwareOverrides);
+        Assert.Equal(expectedHardwareKey, hardwareOverride.Key);
+        Assert.Equal(ExecutionProviderKind.Cpu, hardwareOverride.Value);
     }
 
     [Fact]
@@ -119,13 +148,14 @@ public sealed class RuntimeModelRequestFactoryTests
     }
 
     [Fact]
-    public void CreateSelectionsFromSettings_uses_lip_stage_aliases_from_starter_pack()
+    public void CreateSelectionsFromSettings_uses_stage_aliases_from_starter_pack()
     {
         StudioSettings settings = StudioSettings.Default with
         {
             AppliedStarterPackId = "lip-pack",
             StageModelAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
+                [StageNames.Vad] = "silero-vad-custom",
                 [StageNames.LipSync] = "wav2vec2-lv60-espeak-cv-ft-onnx",
                 [StageNames.LipSynthesis] = "ByteDance/LatentSync-1.6",
             },
@@ -133,6 +163,7 @@ public sealed class RuntimeModelRequestFactoryTests
 
         RuntimeModelSelections selections = RuntimeModelRequestFactory.CreateSelectionsFromSettings(settings);
 
+        Assert.Equal("silero-vad-custom", selections.VadModelAlias);
         Assert.Equal("wav2vec2-lv60-espeak-cv-ft-onnx", selections.LipSyncModelAlias);
         Assert.Equal("ByteDance/LatentSync-1.6", selections.LipSynthesisModelAlias);
     }

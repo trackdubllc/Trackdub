@@ -328,12 +328,14 @@ public static class CompositionRoot
                 sp.GetRequiredService<IApplicationLogger>(),
                 httpClient: sp.GetRequiredService<ModelDownloadHttpClient>().Client,
                 downloadOptions: sp.GetRequiredService<HuggingFaceDownloadOptions>()));
+        services.TryAddSingleton<IModelContentHashCacheInvalidator, SessionPoolModelContentHashCacheInvalidator>();
         services.TryAddSingleton<IModelDownloaderContract>(sp =>
             new ModelDownloaderAdapter(
                 sp.GetRequiredService<IModelDownloader>(),
                 httpClient: sp.GetRequiredService<ModelDownloadHttpClient>().Client,
                 logger: sp.GetService<IApplicationLogger>(),
-                downloadOptions: sp.GetRequiredService<HuggingFaceDownloadOptions>()));
+                downloadOptions: sp.GetRequiredService<HuggingFaceDownloadOptions>(),
+                contentHashCacheInvalidator: sp.GetRequiredService<IModelContentHashCacheInvalidator>()));
 
         services.TryAddSingleton<PlaybackCapabilityProbe>();
         services.TryAddSingleton<IPlaybackBackendFactory, DefaultPlaybackBackendFactory>();
@@ -560,6 +562,11 @@ public static class CompositionRoot
                 sp.GetRequiredService<TrackdubStoragePaths>().UserCacheRoot,
                 "smoke-verdicts.json")));
         services.TryAddSingleton<IRuntimePlanner, RuntimePlanner>();
+        services.TryAddScoped<IStageWarmupCoordinator>(sp =>
+            new RuntimeStageWarmupCoordinator(
+                sp.GetRequiredService<IRuntimePlanner>(),
+                sp.GetRequiredService<IExecutionProviderSmokeTester>(),
+                sp.GetService<IRuntimePlanningPreferences>()));
         // Wire the model cache directory explicitly: the bare-type registration would fall back
         // to the constructor default (no cache), making downloaded models invisible to alias
         // resolution (e.g. the kokoro voice catalog) even when the planner reports them ready.
@@ -818,7 +825,8 @@ public static class CompositionRoot
 #endif
             OnnxExecutionProviderBootstrapperRegistry.Initialize(
                 bootstrapper,
-                sp.GetRequiredService<IWindowsMlEpDevicePolicyProvider>());
+                sp.GetRequiredService<IWindowsMlEpDevicePolicyProvider>(),
+                openVinoAvailabilityProvider: sp.GetRequiredService<IOpenVinoAvailabilityProvider>());
             return bootstrapper;
         });
 

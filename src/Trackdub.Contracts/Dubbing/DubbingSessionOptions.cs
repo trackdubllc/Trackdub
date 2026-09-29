@@ -39,6 +39,22 @@ public sealed record DubbingSessionOptions
     public IReadOnlyDictionary<string, string>? ModelPreferences { get; init; }
 
     /// <summary>
+    /// Stage-specific execution-provider pins. Keys are canonical stage names
+    /// (<see cref="Trackdub.Domain.StageRuns.StageNames"/> members that map to a
+    /// <see cref="Trackdub.Domain.RuntimeStage"/>), values are provider labels
+    /// understood by <see cref="Trackdub.Domain.ExecutionProviderTokens"/>.
+    /// When null, the planner chooses providers as usual.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? ExecutionProviderPreferences { get; init; }
+
+    /// <summary>
+    /// When true, <see cref="ExecutionProviderPreferences"/> pins are required: a stage
+    /// whose pinned provider cannot be used fails instead of silently falling back.
+    /// Defaults to false (pins act as preferences).
+    /// </summary>
+    public bool RequireExecutionProviderPreferences { get; init; }
+
+    /// <summary>
     /// Preferred export container format. Supported values are "mp4" and "mkv".
     /// When null, the export stage uses the product default.
     /// </summary>
@@ -128,6 +144,13 @@ public sealed record DubbingSessionOptions
     /// Defaults to false.
     /// </summary>
     public bool UseVoiceCloning { get; init; }
+
+    /// <summary>
+    /// Experimental opt-in: enables bounded per-segment streaming inside the translation
+    /// stage only. Does not overlap TTS and never exposes a partial translation revision —
+    /// persistence still commits atomically at stage end. Default false keeps the batch path.
+    /// </summary>
+    public bool EnableTranslationSegmentStreaming { get; init; }
 
     /// <summary>
     /// Per-speaker voice-clone map: speaker id -> clone from reference audio (true)

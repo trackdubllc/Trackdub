@@ -1,5 +1,6 @@
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Pool;
 
 namespace Trackdub.Inference.Onnx.Qwen3Asr;
@@ -78,7 +79,9 @@ internal static class Qwen3AsrGreedyDecoder
 
     internal static void RunSmokeInitAndStep(
         OnnxExecutionSessionFactory.Qwen3AsrSessionLease sessionLease,
-        Tensor<float> audioFeatures)
+        Tensor<float> audioFeatures,
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sessionLease);
         ArgumentNullException.ThrowIfNull(audioFeatures);
@@ -106,7 +109,8 @@ internal static class Qwen3AsrGreedyDecoder
                    ? BuildDecoderInitInputIds(audioFeatures, promptIds, positionIds)
                    : BuildDecoderInitSmokeEmbeds(audioFeatures, promptIds, positionIds, hiddenSize))
         using (IDisposableReadOnlyCollection<DisposableNamedOnnxValue> initResults =
-               sessionLease.DecoderInitSession.Run(initInputs.Values))
+               sessionLease.DecoderInitSession.RunWithRetry(
+                   initInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider))
         {
             _ = ExtractLogits(initResults);
             kvState = CloneKvState(initResults);
@@ -116,7 +120,8 @@ internal static class Qwen3AsrGreedyDecoder
         {
             using Qwen3AsrInputSet stepInputs = BuildDecoderStepInputs(new float[hiddenSize], promptIds.Count, kvState);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ =
-                sessionLease.DecoderStepSession.Run(stepInputs.Values);
+                sessionLease.DecoderStepSession.RunWithRetry(
+                    stepInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider);
         }
         finally
         {

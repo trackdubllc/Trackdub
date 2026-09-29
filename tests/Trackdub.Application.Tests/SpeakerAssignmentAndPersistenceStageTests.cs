@@ -116,12 +116,13 @@ public sealed class SpeakerAssignmentAndPersistenceStageTests
             new RecognizedTranscriptSegment(1, 2.0d, 3.0d, "   "),
             new RecognizedTranscriptSegment(2, 3.0d, 4.0d, "World"),
         ]);
+        var progress = new CollectingProgress();
         await artifactStore.WriteJsonAsync(
             ProjectArtifactPaths.ManifestRelativePath,
             ProjectManifest.FromProject(context.Project),
             TestContext.Current.CancellationToken);
 
-        await stage.ExecuteAsync(context, TestContext.Current.CancellationToken);
+        await stage.ExecuteAsync(context, TestContext.Current.CancellationToken, progress);
 
         TranscriptRevision revision = Assert.Single(transcriptRepository.Revisions);
         IReadOnlyList<TranscriptSegment> saved = await transcriptRepository.GetSegmentsAsync(
@@ -132,6 +133,79 @@ public sealed class SpeakerAssignmentAndPersistenceStageTests
         Assert.Equal("World", saved[1].Text);
         Assert.Equal(0, saved[0].SegmentIndex);
         Assert.Equal(2, saved[1].SegmentIndex);
+
+        PipelineProgressEvent output = Assert.Single(progress.Events, e => e.OutputKind is not null);
+        Assert.Equal(PipelineOutputKind.TranscriptSegmentPersisted, output.OutputKind);
+        Assert.Equal(saved[0].SegmentIndex, output.ItemIndex);
+        Assert.Equal(revision.Id, output.RevisionId);
+        Assert.Equal(saved[0].Id, output.SegmentId);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_emits_no_persisted_output_when_transcript_artifact_write_fails()
+    {
+        var artifactStore = new FakeArtifactStore
+        {
+            // The persisted-output event must never precede a failed artifact write.
+            FailingJsonWriteFileName = "transcript-revision-0001.json",
+        };
+        var transcriptRepository = new FakeTranscriptRepository();
+        var mediaAssetRepository = new FakeMediaAssetRepository();
+        var fingerprintService = new FakeFileFingerprintService();
+        var artifactWriter = new TranscriptArtifactWriter(artifactStore, fingerprintService, mediaAssetRepository);
+        var speakerAssignmentService = new SpeakerAssignmentService(
+            new FakeSpeakerRepository(),
+            transcriptRepository,
+            new SegmentEditingService(transcriptRepository, new FakeTtsTakeRepository(), artifactWriter),
+            artifactStore,
+            new FakeProjectStageRunStore(),
+            new FakeDiarizationEngine(),
+            new SpeakerReferenceClipService(
+                artifactStore,
+                new FakeAudioClipExtractor(),
+                fingerprintService,
+                mediaAssetRepository,
+                new FakeVoiceAssignmentRepository(),
+                new FakeTtsTakeRepository(),
+                new FakeReferenceClipAnalyzer(),
+                new FakeReferenceClipTrimmer()),
+            artifactWriter,
+            new DiarizationStageHandler(
+                new FakeDiarizationEngine(),
+                new WritingModelDownloader(),
+                modelCacheRoot: Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N")),
+                expectedSha256: SortFormerTestFixtures.ExpectedSha256));
+        var stage = new SpeakerAssignmentAndPersistenceStage(
+            speakerAssignmentService,
+            transcriptRepository,
+            artifactWriter,
+            artifactStore,
+            new FakeProjectStageRunStore());
+
+        TranscriptGenerationContext context = CreateContext();
+        var progress = new CollectingProgress();
+        await artifactStore.WriteJsonAsync(
+            ProjectArtifactPaths.ManifestRelativePath,
+            ProjectManifest.FromProject(context.Project),
+            TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            stage.ExecuteAsync(context, TestContext.Current.CancellationToken, progress));
+
+        Assert.DoesNotContain(progress.Events, e => e.OutputKind is not null);
+    }
+
+    private sealed class CollectingProgress : IProgress<PipelineProgressEvent>
+    {
+        public List<PipelineProgressEvent> Events { get; } = [];
+
+        public void Report(PipelineProgressEvent value)
+        {
+            lock (Events)
+            {
+                Events.Add(value);
+            }
+        }
     }
 
     private static TranscriptGenerationContext CreateContext(

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 
@@ -8,7 +9,7 @@ public sealed class CloudAwareTranslationEngine(
     ITranslationEngine deepLCloudEngine,
     ITranslationEngine openAiCloudEngine,
     ITranslationEngine geminiCloudEngine)
-    : ITranslationEngine, ITranslationExecutionMetadataReporter, IStageRuntimeExecutionReporter
+    : IStreamingTranslationEngine, ITranslationExecutionMetadataReporter, IStageRuntimeExecutionReporter
 {
     private readonly ITranslationEngine localEngine = localEngine ?? throw new ArgumentNullException(nameof(localEngine));
     private readonly ITranslationEngine deepLCloudEngine = deepLCloudEngine ?? throw new ArgumentNullException(nameof(deepLCloudEngine));
@@ -26,7 +27,64 @@ public sealed class CloudAwareTranslationEngine(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ITranslationEngine selectedEngine = request.PreferredModelAlias switch
+        ITranslationEngine selectedEngine = SelectEngine(request);
+
+        IReadOnlyList<TranslatedTextSegment> translated = await selectedEngine
+            .TranslateAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+
+        CaptureExecutionInfo(selectedEngine);
+        return translated;
+    }
+
+    /// <summary>
+    /// Streams when the selected engine supports it; batch-only engines (cloud providers)
+    /// execute once and their completed segments are wrapped in input order — compatibility,
+    /// not progressive inference.
+    /// </summary>
+    public async IAsyncEnumerable<PipelineStreamItem<TranslatedTextSegment>> TranslateStreamAsync(
+        TranslationRequest request,
+        Guid runId,
+        string snapshotId,
+        Guid sourceRevisionId,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        PipelineStreamItemFactory.ValidateTranslationStreamContext(runId, snapshotId, sourceRevisionId);
+
+        ITranslationEngine selectedEngine = SelectEngine(request);
+        try
+        {
+            if (selectedEngine is IStreamingTranslationEngine streamingEngine)
+            {
+                await foreach (PipelineStreamItem<TranslatedTextSegment> item in streamingEngine
+                    .TranslateStreamAsync(request, runId, snapshotId, sourceRevisionId, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    yield return item;
+                }
+            }
+            else
+            {
+                IReadOnlyList<TranslatedTextSegment> batch = await selectedEngine
+                    .TranslateAsync(request, cancellationToken)
+                    .ConfigureAwait(false);
+                long sequence = 0;
+                foreach (TranslatedTextSegment segment in batch.OrderBy(static s => s.Index))
+                {
+                    yield return PipelineStreamItemFactory.CreateTranslation(
+                        segment, runId, snapshotId, sourceRevisionId, sequence++);
+                }
+            }
+        }
+        finally
+        {
+            CaptureExecutionInfo(selectedEngine);
+        }
+    }
+
+    private ITranslationEngine SelectEngine(TranslationRequest request) =>
+        request.PreferredModelAlias switch
         {
             var a when TranslationModelOverrideSettings.IsDeepLModelAlias(a) => deepLCloudEngine,
             var a when TranslationModelOverrideSettings.IsOpenAiGptAlias(a) => openAiCloudEngine,
@@ -34,16 +92,13 @@ public sealed class CloudAwareTranslationEngine(
             _ => localEngine
         };
 
-        IReadOnlyList<TranslatedTextSegment> translated = await selectedEngine
-            .TranslateAsync(request, cancellationToken)
-            .ConfigureAwait(false);
-
+    private void CaptureExecutionInfo(ITranslationEngine selectedEngine)
+    {
         LastExecutionMetadata = selectedEngine is ITranslationExecutionMetadataReporter metadataReporter
             ? metadataReporter.LastExecutionMetadata
             : null;
         LastExecutionSummary = selectedEngine is IStageRuntimeExecutionReporter runtimeReporter
             ? runtimeReporter.LastExecutionSummary
             : null;
-        return translated;
     }
 }

@@ -1,4 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trackdub.Benchmarks;
+using Trackdub.Benchmarks.Scenarios;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Persistence;
 
@@ -115,6 +118,144 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
         finally
         {
             File.Delete(fixture);
+        }
+    }
+
+    [Fact]
+    public async Task Mock_run_reports_ttft_from_structured_output_events_not_stage_completion()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"ttft-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string fixture = Path.Join(directory, "fixture.wav");
+        await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
+        try
+        {
+            using var runner = new ControlledDubbingBenchmarkRunner(new NoHistory());
+            var report = await runner.RunAsync(new ControlledDubbingBenchmarkOptions
+            {
+                FixturePath = fixture,
+                OutputDirectory = Path.Join(directory, "output"),
+                Mock = true,
+            });
+
+            Assert.Equal(BenchmarkEvidenceStatus.Completed, report.Status);
+
+            double available = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstUsableTranscript"]);
+            double persisted = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstPersistedTranscript"]);
+            double playable = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstPlayableAudio"]);
+
+            // The mock emits TranscriptSegmentAvailable at the start of the transcription stage
+            // and TranscriptSegmentPersisted only after its ~30 ms simulated work completes.
+            // A completion-derived TTFT would collapse this gap to ~0.
+            Assert.True(
+                persisted - available >= 10,
+                $"firstPersistedTranscript ({persisted}) should lag firstUsableTranscript ({available}) by the stage work interval.");
+
+            // PlayableAudioPersisted is emitted after the dubbing stage's simulated work
+            // succeeds, inside the pipeline total.
+            double pipeline = Assert.IsType<double>(report.TimingsMilliseconds["pipeline"]);
+            Assert.True(playable >= 0 && playable <= pipeline,
+                $"firstPlayableAudio ({playable}) should lie within the pipeline total ({pipeline}).");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Mock_multi_run_reports_first_output_p50_instead_of_final_iteration()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"ttft-p50-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string fixture = Path.Join(directory, "fixture.wav");
+        await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
+        try
+        {
+            var transcriptionStage = new SequencedTranscriptionStage(
+                TimeSpan.Zero,
+                TimeSpan.Zero,
+                TimeSpan.FromMilliseconds(1000));
+            using var runner = new ControlledDubbingBenchmarkRunner(
+                new NoHistory(),
+                services =>
+                {
+                    MockDubbingPipelineServices.ConfigureMockPipeline(services);
+                    services.Replace(ServiceDescriptor.Singleton<ITranscriptionStage>(transcriptionStage));
+                });
+            var report = await runner.RunAsync(new ControlledDubbingBenchmarkOptions
+            {
+                FixturePath = fixture,
+                OutputDirectory = Path.Join(directory, "output"),
+                Mock = true,
+                RunCount = 3,
+            });
+
+            Assert.Equal(BenchmarkEvidenceStatus.Completed, report.Status);
+            double available = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstUsableTranscript"]);
+            double persisted = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstPersistedTranscript"]);
+            Assert.True(
+                persisted - available < 500,
+                $"p50 first-output gap should exclude the final 1000 ms outlier, but was {persisted - available} ms.");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Mock_run_with_failed_transcription_reports_no_output_timings()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"ttft-fail-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string fixture = Path.Join(directory, "fixture.wav");
+        await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
+        try
+        {
+            using var runner = new ControlledDubbingBenchmarkRunner(
+                new NoHistory(),
+                services => Trackdub.Benchmarks.Scenarios.MockDubbingPipelineServices.ConfigureMockPipeline(
+                    services, mock => mock.FailStage = "transcription"));
+            var report = await runner.RunAsync(new ControlledDubbingBenchmarkOptions
+            {
+                FixturePath = fixture,
+                OutputDirectory = Path.Join(directory, "output"),
+                Mock = true,
+            });
+
+            Assert.Equal(BenchmarkEvidenceStatus.Failed, report.Status);
+            // A configured failure emits no structured output: the timings stay null even
+            // though the mock artifact probe reports usable transcript/playable take.
+            Assert.Null(report.TimingsMilliseconds["firstUsableTranscript"]);
+            Assert.Null(report.TimingsMilliseconds["firstPersistedTranscript"]);
+            Assert.Null(report.TimingsMilliseconds["firstPlayableAudio"]);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private sealed class SequencedTranscriptionStage : ITranscriptionStage
+    {
+        private readonly TimeSpan[] delays;
+        private int index;
+
+        public SequencedTranscriptionStage(params TimeSpan[] delays)
+        {
+            this.delays = delays;
+        }
+
+        public async Task ExecuteAsync(CancellationToken cancellationToken)
+        {
+            int current = Interlocked.Increment(ref index) - 1;
+            await Task.Delay(delays[current], cancellationToken);
         }
     }
 

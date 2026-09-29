@@ -330,7 +330,7 @@ public sealed class ChallengerResourceTelemetryStressTests
             {
                 readExceptions.Add(ex);
             }
-        }, cts.Token)).ToArray();
+        })).ToArray();
 
         // 50 writer tasks:
         // Tasks 0..24 write to unique stages (stage-0 to stage-24)
@@ -559,4 +559,3 @@ public sealed class ChallengerResourceTelemetryStressTests
         Assert.InRange(gen2, samples.Min(s => s.Gen2Collections), samples.Max(s => s.Gen2Collections));
     }
 }
-

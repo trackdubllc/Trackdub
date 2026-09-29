@@ -64,6 +64,9 @@ public sealed class DubbingPipelineEngine(
         ArgumentNullException.ThrowIfNull(options);
 
         Guid runId = Guid.NewGuid();
+        // All preflight/nested/stage events of this run carry the same RunId and a
+        // strictly increasing SequenceNumber; downstream callers see only the wrapper.
+        var scopedProgress = new RunScopedProgressReporter(runId, progress);
         DateTimeOffset runStart = DateTimeOffset.UtcNow;
         Guid projectId = Guid.Empty;
         var stageOutcomes = new List<StageOutcome>();
@@ -142,7 +145,7 @@ public sealed class DubbingPipelineEngine(
                     runStart,
                     stageOutcomes,
                     executionSnapshot,
-                    progress,
+                    scopedProgress,
                     cancellationToken,
                     initialProjectState).ConfigureAwait(false);
             }
@@ -170,7 +173,7 @@ public sealed class DubbingPipelineEngine(
                 stagesToRun,
                 executionSnapshot,
                 runtimeSelections,
-                progress,
+                scopedProgress,
                 projectId,
                 runId,
                 stageOutcomes,
@@ -183,7 +186,7 @@ public sealed class DubbingPipelineEngine(
                 stagesToRun,
                 executionSnapshot,
                 runtimeSelections,
-                progress,
+                scopedProgress,
                 projectId,
                 runId,
                 stageOutcomes,
@@ -366,67 +369,190 @@ public sealed class DubbingPipelineEngine(
     {
         string? failedPrerequisiteStage = null;
 
-        foreach (string stageName in stagesToRun)
+        // Optimization-only lookahead. GenAI currently has a one-entry pool, so the next
+        // stage's warmup starts only after the current stage has completed and released its
+        // model lease; starting it earlier can evict/reload the active model. At most one
+        // pending warmup exists and it is always joined before its target or on exit.
+        IStageWarmupCoordinator? warmupCoordinator =
+            session.Services?.GetService<IStageWarmupCoordinator>();
+        PendingStageWarmup? pendingWarmup = null;
+
+        try
         {
-            // Check cancellation between stages
-            if (cancellationToken.IsCancellationRequested)
+            for (int i = 0; i < stagesToRun.Length; i++)
             {
-                stageOutcomes.Add(BuildSkippedOutcome(stageName, "CANCELLED"));
-                ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped, "Cancelled");
-                continue;
-            }
+                string stageName = stagesToRun[i];
 
-            // Skip if a prerequisite stage failed
-            if (failedPrerequisiteStage is not null)
-            {
-                stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.PrerequisiteFailed));
-                ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
-                    $"Skipped due to failed prerequisite: {failedPrerequisiteStage}");
-                continue;
-            }
+                if (pendingWarmup is not null
+                    && string.Equals(pendingWarmup.StageName, stageName, StringComparison.OrdinalIgnoreCase))
+                {
+                    await ObserveWarmupAsync(pendingWarmup.Task, cancellationToken).ConfigureAwait(false);
+                    pendingWarmup = null;
+                }
 
-            // Skip optional stages whose model the user declined during pre-flight
-            // provisioning; without the model they would fail mid-run.
-            if (declinedOptionalStages.Contains(stageName))
-            {
-                stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.OptionalModelDeclined));
-                ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
-                    "Skipped — optional model setup declined");
-                continue;
-            }
+                // Check cancellation between stages
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    stageOutcomes.Add(BuildSkippedOutcome(stageName, "CANCELLED"));
+                    ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped, "Cancelled");
+                    continue;
+                }
 
-            // Check resumability: skip stages with valid existing artifacts
-            if (!options.ForceRerun &&
-                await HasValidExistingArtifactsAsync(
+                // Skip if a prerequisite stage failed
+                if (failedPrerequisiteStage is not null)
+                {
+                    stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.PrerequisiteFailed));
+                    ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
+                        $"Skipped due to failed prerequisite: {failedPrerequisiteStage}");
+                    continue;
+                }
+
+                // Skip optional stages whose model the user declined during pre-flight
+                // provisioning; without the model they would fail mid-run.
+                if (declinedOptionalStages.Contains(stageName))
+                {
+                    stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.OptionalModelDeclined));
+                    ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
+                        "Skipped — optional model setup declined");
+                    continue;
+                }
+
+                // Check resumability: skip stages with valid existing artifacts
+                if (!options.ForceRerun &&
+                    await HasValidExistingArtifactsAsync(
+                        session,
+                        options,
+                        stageName,
+                        executionSnapshot,
+                        cancellationToken).ConfigureAwait(false))
+                {
+                    stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.ExistingArtifactsValid));
+                    ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
+                        "Skipped — valid artifacts from prior run");
+                    continue;
+                }
+
+                Task<StageOutcome> stageTask = ExecuteStageAsync(
                     session,
                     options,
                     stageName,
                     executionSnapshot,
-                    cancellationToken).ConfigureAwait(false))
+                    runtimeSelections,
+                    progress,
+                    projectId,
+                    runId,
+                    cancellationToken);
+
+                StageOutcome outcome = await stageTask.ConfigureAwait(false);
+                stageOutcomes.Add(outcome);
+
+                // Keep the active stage's GenAI residency secure through its actual work.
+                // Once released, warm the next stage; its lease is joined at the top of that
+                // stage's iteration before execution begins.
+                if (warmupCoordinator is not null && pendingWarmup is null)
+                {
+                    pendingWarmup = StartNextStageWarmup(
+                        warmupCoordinator,
+                        stagesToRun,
+                        i + 1,
+                        runtimeSelections,
+                        options,
+                        declinedOptionalStages,
+                        cancellationToken);
+                }
+
+                if (outcome.Status == StageStatus.Failed && DubbingPipelineStages.PrerequisiteStages.Contains(stageName))
+                {
+                    failedPrerequisiteStage = stageName;
+                }
+            }
+        }
+        finally
+        {
+            // Stop joining warmup promptly on cancellation; the coordinator receives the
+            // same token and will stop at its next cancellable checkpoint.
+            if (pendingWarmup is not null)
             {
-                stageOutcomes.Add(BuildSkippedOutcome(stageName, StageSkipReasonCodes.ExistingArtifactsValid));
-                ReportProgress(progress, stageName, PipelineProgressEventKind.Skipped,
-                    "Skipped — valid artifacts from prior run");
+                await ObserveWarmupAsync(pendingWarmup.Task, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>An in-flight warmup for a named pipeline stage; optimization-only.</summary>
+    internal sealed record PendingStageWarmup(string StageName, Task<StageWarmupResult> Task);
+
+    /// <summary>
+    /// Starts warmup for the first stage after <paramref name="startIndex"/> that maps to a
+    /// runtime stage and was not declined in pre-flight. Returns without awaiting so the
+    /// model loads while the current stage executes.
+    /// </summary>
+    internal static PendingStageWarmup? StartNextStageWarmup(
+        IStageWarmupCoordinator coordinator,
+        string[] stagesToRun,
+        int startIndex,
+        RuntimeModelSelections runtimeSelections,
+        DubbingSessionOptions options,
+        IReadOnlySet<string> declinedOptionalStages,
+        CancellationToken cancellationToken)
+    {
+        for (int i = startIndex; i < stagesToRun.Length; i++)
+        {
+            if (declinedOptionalStages.Contains(stagesToRun[i])
+                || MapStageNameToRuntimeStage(stagesToRun[i]) is not { } runtimeStage)
+            {
                 continue;
             }
 
-            // Execute the stage
-            StageOutcome outcome = await ExecuteStageAsync(
-                session,
-                options,
-                stageName,
-                executionSnapshot,
-                runtimeSelections,
-                progress,
-                projectId,
-                runId,
-                cancellationToken).ConfigureAwait(false);
-            stageOutcomes.Add(outcome);
-
-            if (outcome.Status == StageStatus.Failed && DubbingPipelineStages.PrerequisiteStages.Contains(stageName))
+            Task<StageWarmupResult> task;
+            try
             {
-                failedPrerequisiteStage = stageName;
+                task = coordinator.WarmAsync(
+                    new StageWarmupRequest(
+                        runtimeStage,
+                        runtimeSelections,
+                        options.SourceLanguageCode,
+                        options.TargetLanguageCode,
+                        RequestsVoiceCloning(options)),
+                    cancellationToken);
             }
+            catch (Exception ex)
+            {
+                task = Task.FromResult(new StageWarmupResult(
+                    Attempted: true,
+                    Succeeded: false,
+                    Detail: ex.Message));
+            }
+
+            return new PendingStageWarmup(stagesToRun[i], task);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Joins a warmup task without letting its outcome affect the run: ordinary failures are
+    /// optimization-only, and cancellation is swallowed only when the run itself is cancelled.
+    /// </summary>
+    internal static async Task ObserveWarmupAsync(
+        Task<StageWarmupResult> warmupTask,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _ = await warmupTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Run cancelled — the warmup was optimization-only.
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancelled warmup on a live run token is real cancellation, not a failure.
+            throw;
+        }
+        catch (Exception)
+        {
+            // Optimization failure must not affect stage outcomes.
         }
     }
 
@@ -947,8 +1073,8 @@ public sealed class DubbingPipelineEngine(
         }
     }
 
-    private static RuntimeStage? MapStageNameToRuntimeStage(string stageName) =>
-        stageName switch
+    internal static RuntimeStage? MapStageNameToRuntimeStage(string stageName) =>
+        stageName.ToLowerInvariant() switch
         {
             StageNames.Vad => RuntimeStage.Vad,
             StageNames.Asr => RuntimeStage.Asr,
@@ -957,6 +1083,7 @@ public sealed class DubbingPipelineEngine(
             StageNames.Tts => RuntimeStage.Tts,
             StageNames.Separation => RuntimeStage.Separation,
             StageNames.AudioPreparation => RuntimeStage.SpeechEnhancement,
+            StageNames.SpeechEnhancement => RuntimeStage.SpeechEnhancement,
             StageNames.OverlapRescue => RuntimeStage.OverlapRescue,
             StageNames.TextRefinementAsr => RuntimeStage.TextRefinement,
             StageNames.LipSync => RuntimeStage.LipSync,
@@ -1484,11 +1611,21 @@ public sealed class DubbingPipelineEngine(
 
         string sourceLanguage = options.SourceLanguageCode ?? "auto";
         DateTimeOffset stageWorkStartedUtc = DateTimeOffset.UtcNow;
+        RuntimeExecutionProviderSelection translationExecutionProvider =
+            RuntimeModelSetupCoordinator.CreateExecutionProviderSelection(
+                runtimeSelections,
+                RuntimeStage.Translation);
         TranscriptProjectState translatedState = await workspace.GenerateTranslationAsync(
             new GenerateTranslationRequest(
                 SourceLanguage: sourceLanguage,
                 TargetLanguage: options.TargetLanguageCode,
-                PreferredModelAlias: runtimeSelections.TranslationModelAlias),
+                PreferredModelAlias: runtimeSelections.TranslationModelAlias,
+                PreferredExecutionProvider: translationExecutionProvider.PreferredExecutionProvider,
+                RequirePreferredExecutionProvider: translationExecutionProvider.RequirePreferredExecutionProvider,
+                PreferredModelVariantAlias: RuntimeModelSetupCoordinator.ResolvePreferredModelVariantAlias(
+                    runtimeSelections,
+                    RuntimeStage.Translation),
+                EnableSegmentStreaming: options.EnableTranslationSegmentStreaming),
             cancellationToken,
             progress).ConfigureAwait(false);
         return BuildStageWorkflowResultFromStageRun(translatedState, StageNames.Translation, stageWorkStartedUtc);
@@ -2037,6 +2174,9 @@ public sealed class DubbingPipelineEngine(
         CancellationToken cancellationToken,
         TranscriptProjectState? state = null)
     {
+        InferenceModelPreferences? preferences = BuildModelPreferences(options);
+        RuntimeModelSelections selections;
+
         if (TryResolveService<IPipelineRuntimeSelectionsProvider>(session) is { } selectionsProvider)
         {
             RuntimeModelSelections? provided = await selectionsProvider
@@ -2049,7 +2189,8 @@ public sealed class DubbingPipelineEngine(
                 // clone runs) and take precedence over the host's UI-side selections,
                 // matching the precedence the settings path applies via
                 // CreateSelectionsFromSettings.
-                return ApplyModelPreferenceAliases(provided, BuildModelPreferences(options));
+                selections = ApplyModelPreferenceAliases(provided, preferences);
+                return ApplyExecutionProviderPins(selections, options, preferences);
             }
         }
 
@@ -2060,9 +2201,49 @@ public sealed class DubbingPipelineEngine(
             settings = await settingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return RuntimeModelRequestFactory.CreateSelectionsFromSettings(
+        selections = RuntimeModelRequestFactory.CreateSelectionsFromSettings(
             settings,
-            BuildModelPreferences(options));
+            preferences);
+        return ApplyExecutionProviderPins(selections, options, preferences);
+    }
+
+    /// <summary>
+    /// Overlays per-stage execution-provider pins from <paramref name="preferences"/> onto the
+    /// resolved <paramref name="selections"/> hardware overrides. Pinned stages become required
+    /// providers only when <see cref="DubbingSessionOptions.RequireExecutionProviderPreferences"/>
+    /// is set; otherwise they act as preferences and existing host/settings overrides still apply.
+    /// </summary>
+    private static RuntimeModelSelections ApplyExecutionProviderPins(
+        RuntimeModelSelections selections,
+        DubbingSessionOptions options,
+        InferenceModelPreferences? preferences)
+    {
+        if (preferences?.PreferredExecutionProviders is not { Count: > 0 })
+        {
+            return selections;
+        }
+
+        // CreateSelectionsFromPreferences maps the stage-keyed provider pins onto the
+        // HardwareOverrides key vocabulary (including the ASR engine disambiguation).
+        IReadOnlyDictionary<string, ExecutionProviderKind> pinOverrides =
+            RuntimeModelRequestFactory.CreateSelectionsFromPreferences(
+                preferences,
+                selections.AsrModelOverride,
+                selections.IsDevBuild).HardwareOverrides;
+        var overrides = new Dictionary<string, ExecutionProviderKind>(
+            selections.HardwareOverrides,
+            StringComparer.OrdinalIgnoreCase);
+        foreach ((string key, ExecutionProviderKind provider) in pinOverrides)
+        {
+            overrides[key] = provider;
+        }
+
+        return selections with
+        {
+            HardwareOverrides = overrides,
+            RequirePreferredExecutionProviders = selections.RequirePreferredExecutionProviders
+                || options.RequireExecutionProviderPreferences,
+        };
     }
 
     /// <summary>
@@ -2081,6 +2262,7 @@ public sealed class DubbingPipelineEngine(
 
         return selections with
         {
+            VadModelAlias = preferences.VadModelAlias ?? selections.VadModelAlias,
             DiarizationModelAlias = preferences.DiarizationModelAlias ?? selections.DiarizationModelAlias,
             SeparationModelAlias = preferences.SeparationModelAlias ?? selections.SeparationModelAlias,
             OverlapRescueModelAlias = preferences.OverlapRescueModelAlias ?? selections.OverlapRescueModelAlias,
@@ -2095,17 +2277,24 @@ public sealed class DubbingPipelineEngine(
 
     /// <summary>
     /// Builds <see cref="InferenceModelPreferences"/> from the dubbing session options.
+    /// Per-stage provider pins in <see cref="DubbingSessionOptions.ExecutionProviderPreferences"/>
+    /// are mapped from canonical <see cref="StageNames"/> keys onto runtime stages and marked
+    /// required; a stage name with no runtime mapping or an unparseable provider label is an
+    /// argument error, never silently ignored.
     /// </summary>
     internal static InferenceModelPreferences? BuildModelPreferences(DubbingSessionOptions options)
     {
         bool hasModelOverrides = options.ModelPreferences is { Count: > 0 };
-        if (!hasModelOverrides && !options.EnableAsrTextRefinement)
+        bool hasProviderPins = options.ExecutionProviderPreferences is { Count: > 0 };
+        if (!hasModelOverrides && !hasProviderPins && !options.EnableAsrTextRefinement)
         {
             return null;
         }
 
         IReadOnlyDictionary<string, string> modelPreferences = options.ModelPreferences
             ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        IReadOnlyDictionary<RuntimeStage, ExecutionProviderKind>? providerPins =
+            ParseExecutionProviderPreferences(options);
 
         return new InferenceModelPreferences(
             VadModelAlias: modelPreferences.GetValueOrDefault(StageNames.Vad),
@@ -2118,7 +2307,48 @@ public sealed class DubbingPipelineEngine(
             TextRefinementModelAlias: modelPreferences.GetValueOrDefault(StageNames.TextRefinementAsr),
             LipSyncModelAlias: modelPreferences.GetValueOrDefault(StageNames.LipSync),
             LipSynthesisModelAlias: modelPreferences.GetValueOrDefault(StageNames.LipSynthesis),
-            EnableAsrTextRefinement: options.EnableAsrTextRefinement);
+            EnableAsrTextRefinement: options.EnableAsrTextRefinement,
+            PreferredExecutionProviders: providerPins,
+            RequiredExecutionProviderStages:
+                providerPins is { Count: > 0 } && options.RequireExecutionProviderPreferences
+                    ? new HashSet<RuntimeStage>(providerPins.Keys)
+                    : null);
+    }
+
+    /// <summary>
+    /// Parses <see cref="DubbingSessionOptions.ExecutionProviderPreferences"/> into a
+    /// runtime-stage keyed map. Returns null when no pins were supplied.
+    /// </summary>
+    private static IReadOnlyDictionary<RuntimeStage, ExecutionProviderKind>? ParseExecutionProviderPreferences(
+        DubbingSessionOptions options)
+    {
+        if (options.ExecutionProviderPreferences is not { Count: > 0 } pins)
+        {
+            return null;
+        }
+
+        var providers = new Dictionary<RuntimeStage, ExecutionProviderKind>();
+        foreach ((string stageName, string label) in pins)
+        {
+            if (MapStageNameToRuntimeStage(stageName) is not { } stage)
+            {
+                throw new ArgumentException(
+                    $"Execution provider pin names unknown or non-runtime stage '{stageName}'.",
+                    nameof(options));
+            }
+
+            if (!ExecutionProviderTokens.TryParse(label, out ExecutionProviderKind provider))
+            {
+                throw new ArgumentException(
+                    $"Execution provider pin for stage '{stageName}' has invalid provider label '{label}'. " +
+                    $"Expected one of: {ExecutionProviderTokens.FormatSupportedCliTags()}.",
+                    nameof(options));
+            }
+
+            providers[stage] = ExecutionProviderTokens.ResolvePlatformPin(provider);
+        }
+
+        return providers;
     }
 
     /// <summary>

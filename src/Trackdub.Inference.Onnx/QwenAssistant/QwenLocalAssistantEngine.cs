@@ -3,6 +3,7 @@ using Trackdub.Contracts;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Runtime.Planning;
+using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Runtime.Planning;
 
@@ -100,7 +101,14 @@ public sealed class QwenLocalAssistantEngine(
 
         string prompt = QwenAssistantPromptBuilder.BuildPrompt(request);
 
-        using Model model = CreateModel(modelRootPath, plan.ExecutionProvider.Value);
+        GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
+            modelRootPath, plan.ExecutionProvider.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
+            plan.ModelRevisionHash, cancellationToken).ConfigureAwait(false);
+        using GenAiModelLease modelLease = await GenAiModelPool.Shared
+            .GetLeaseAsync(modelKey, cancellationToken).ConfigureAwait(false);
+        using IDisposable? executionAdmission = await CpuExecutionAdmission.Shared
+            .AcquireAsync(modelKey.Provider, cancellationToken).ConfigureAwait(false);
+        Model model = modelLease.Model;
         using Tokenizer tokenizer = new(model);
 
         string rawOutput = GenerateText(model, tokenizer, prompt, cancellationToken);
@@ -172,20 +180,4 @@ public sealed class QwenLocalAssistantEngine(
         return result.Trim();
     }
 
-    private static Model CreateModel(string modelRootPath, ExecutionProviderKind executionProvider)
-    {
-        GenAiNativeCompatibility.EnsureCompatible();
-        if (executionProvider is ExecutionProviderKind.Cpu)
-        {
-            return new Model(modelRootPath);
-        }
-
-        using Config config = new(modelRootPath);
-        config.ClearProviders();
-        config.AppendProvider(ToGenAiProviderName(executionProvider));
-        return new Model(config);
-    }
-
-    private static string ToGenAiProviderName(ExecutionProviderKind executionProvider) =>
-        GenAiExecutionProviderNames.Resolve(executionProvider);
 }

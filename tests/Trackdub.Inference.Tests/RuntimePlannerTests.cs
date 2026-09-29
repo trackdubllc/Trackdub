@@ -560,24 +560,7 @@ public sealed class RuntimePlannerTests
     public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForMadlad_PlansDirectMlWithoutTrtSmoke()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
-        BundledModelManifestRegistry registry = workspace.WriteManifest(
-            new ManifestSpec(
-                ModelId: "google/madlad400-3b-mt",
-                Task: "translation",
-                License: "Apache-2.0",
-                CommercialAllowed: true,
-                RequiresAttribution: true,
-                RequiresUserConsent: false,
-                VoiceCloning: false,
-                EngineFamily: "madlad",
-                Aliases: ["madlad400-mt", "madlad400"],
-                RootFolder: "madlad400",
-                BenchmarkEntry: "encoder_model.onnx",
-                Variants:
-                [
-                    new ManifestVariantSpec("int8", "encoder_model_int8.onnx"),
-                    new ManifestVariantSpec("fp16", "encoder_model_fp16.onnx")
-                ]));
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateMadladTranslationSpec());
         string cacheRoot = workspace.CreateCacheRoot("google/madlad400-3b-mt");
         workspace.WriteCacheFile(cacheRoot, "encoder_model.onnx");
 
@@ -1138,35 +1121,7 @@ public sealed class RuntimePlannerTests
     public async Task PlanAsync_AsrSourceLanguageFiltersManifestCoverage()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
-        BundledModelManifestRegistry registry = workspace.WriteManifest(
-            new ManifestSpec(
-                ModelId: "test/en-asr",
-                Task: "asr",
-                License: "MIT",
-                CommercialAllowed: true,
-                RequiresAttribution: false,
-                RequiresUserConsent: false,
-                VoiceCloning: false,
-                EngineFamily: "whisper-onnx",
-                Aliases: ["aaa-en-asr"],
-                RootFolder: "en-asr",
-                BenchmarkEntry: "model.onnx",
-                Variants: [new ManifestVariantSpec("default", "model.onnx")],
-                SourceLanguages: ["en"]),
-            new ManifestSpec(
-                ModelId: "test/es-asr",
-                Task: "asr",
-                License: "MIT",
-                CommercialAllowed: true,
-                RequiresAttribution: false,
-                RequiresUserConsent: false,
-                VoiceCloning: false,
-                EngineFamily: "qwen3-asr",
-                Aliases: ["zzz-es-asr"],
-                RootFolder: "es-asr",
-                BenchmarkEntry: "model.onnx",
-                Variants: [new ManifestVariantSpec("default", "model.onnx")],
-                SourceLanguages: ["es"]));
+        BundledModelManifestRegistry registry = CreateAsrSourceLanguageRegistry(workspace);
 
         RuntimePlanner planner = CreatePlanner(
             registry,
@@ -1186,35 +1141,7 @@ public sealed class RuntimePlannerTests
     public async Task PlanAsync_AsrSourceLanguageNormalizesBcp47RegionTags()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
-        BundledModelManifestRegistry registry = workspace.WriteManifest(
-            new ManifestSpec(
-                ModelId: "test/en-asr",
-                Task: "asr",
-                License: "MIT",
-                CommercialAllowed: true,
-                RequiresAttribution: false,
-                RequiresUserConsent: false,
-                VoiceCloning: false,
-                EngineFamily: "whisper-onnx",
-                Aliases: ["aaa-en-asr"],
-                RootFolder: "en-asr",
-                BenchmarkEntry: "model.onnx",
-                Variants: [new ManifestVariantSpec("default", "model.onnx")],
-                SourceLanguages: ["en"]),
-            new ManifestSpec(
-                ModelId: "test/es-asr",
-                Task: "asr",
-                License: "MIT",
-                CommercialAllowed: true,
-                RequiresAttribution: false,
-                RequiresUserConsent: false,
-                VoiceCloning: false,
-                EngineFamily: "qwen3-asr",
-                Aliases: ["zzz-es-asr"],
-                RootFolder: "es-asr",
-                BenchmarkEntry: "model.onnx",
-                Variants: [new ManifestVariantSpec("default", "model.onnx")],
-                SourceLanguages: ["es"]));
+        BundledModelManifestRegistry registry = CreateAsrSourceLanguageRegistry(workspace);
 
         RuntimePlanner planner = CreatePlanner(
             registry,
@@ -2007,24 +1934,7 @@ public sealed class RuntimePlannerTests
     public async Task PlanAsync_TranslationWithPreferredAlias_NoLongerBlocksBroaderPairs()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
-        BundledModelManifestRegistry registry = workspace.WriteManifest(
-            new ManifestSpec(
-                ModelId: "google/madlad400-3b-mt",
-                Task: "translation",
-                License: "Apache-2.0",
-                CommercialAllowed: true,
-                RequiresAttribution: true,
-                RequiresUserConsent: false,
-                VoiceCloning: false,
-                EngineFamily: "madlad",
-                Aliases: ["madlad400-mt", "madlad400"],
-                RootFolder: "madlad400",
-                BenchmarkEntry: "encoder_model.onnx",
-                Variants:
-                [
-                    new ManifestVariantSpec("int8", "encoder_model_int8.onnx"),
-                    new ManifestVariantSpec("fp16", "encoder_model_fp16.onnx")
-                ]));
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateMadladTranslationSpec());
         string cacheRoot = workspace.CreateCacheRoot("google/madlad400-3b-mt");
         workspace.WriteCacheFile(cacheRoot, "encoder_model.onnx");
 
@@ -2289,6 +2199,35 @@ public sealed class RuntimePlannerTests
                 Directory.Delete(rootPath, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task PlanAsync_CarriesResolvedModelRevisionHash_IntoPlanAndSmokeRequest()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/silero-vad");
+        workspace.WriteCacheFile(cacheRoot, "onnx/model_fp16.onnx");
+
+        var smokeRequests = new List<ExecutionProviderSmokeTestRequest>();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("onnx-community/silero-vad", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [new(ExecutionProviderKind.DirectMl, true)],
+            request =>
+            {
+                smokeRequests.Add(request);
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
+
+        Assert.Equal(StageRuntimePlanStatus.Verified, plan.Status);
+        Assert.Equal(ValidSha256, plan.ModelRevisionHash);
+        ExecutionProviderSmokeTestRequest smoke = Assert.Single(smokeRequests);
+        Assert.Equal(ValidSha256, smoke.ModelRevisionHash);
     }
 
     private static RuntimePlanner CreatePlanner(
@@ -3172,6 +3111,56 @@ public sealed class RuntimePlannerTests
         public Task<IReadOnlyList<LocalModelCacheRecord>> LoadAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(records);
     }
+
+    private static BundledModelManifestRegistry CreateAsrSourceLanguageRegistry(RuntimePlannerTestWorkspace workspace) =>
+        workspace.WriteManifest(
+            new ManifestSpec(
+                ModelId: "test/en-asr",
+                Task: "asr",
+                License: "MIT",
+                CommercialAllowed: true,
+                RequiresAttribution: false,
+                RequiresUserConsent: false,
+                VoiceCloning: false,
+                EngineFamily: "whisper-onnx",
+                Aliases: ["aaa-en-asr"],
+                RootFolder: "en-asr",
+                BenchmarkEntry: "model.onnx",
+                Variants: [new ManifestVariantSpec("default", "model.onnx")],
+                SourceLanguages: ["en"]),
+            new ManifestSpec(
+                ModelId: "test/es-asr",
+                Task: "asr",
+                License: "MIT",
+                CommercialAllowed: true,
+                RequiresAttribution: false,
+                RequiresUserConsent: false,
+                VoiceCloning: false,
+                EngineFamily: "qwen3-asr",
+                Aliases: ["zzz-es-asr"],
+                RootFolder: "es-asr",
+                BenchmarkEntry: "model.onnx",
+                Variants: [new ManifestVariantSpec("default", "model.onnx")],
+                SourceLanguages: ["es"]));
+
+    private static ManifestSpec CreateMadladTranslationSpec() =>
+        new(
+            ModelId: "google/madlad400-3b-mt",
+            Task: "translation",
+            License: "Apache-2.0",
+            CommercialAllowed: true,
+            RequiresAttribution: true,
+            RequiresUserConsent: false,
+            VoiceCloning: false,
+            EngineFamily: "madlad",
+            Aliases: ["madlad400-mt", "madlad400"],
+            RootFolder: "madlad400",
+            BenchmarkEntry: "encoder_model.onnx",
+            Variants:
+            [
+                new ManifestVariantSpec("int8", "encoder_model_int8.onnx"),
+                new ManifestVariantSpec("fp16", "encoder_model_fp16.onnx")
+            ]);
 
     private sealed record ManifestSpec(
         string ModelId,

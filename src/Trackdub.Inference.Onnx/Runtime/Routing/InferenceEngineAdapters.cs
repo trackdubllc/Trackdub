@@ -54,6 +54,16 @@ public interface ITranslationEngineAdapter : IInferenceEngineAdapter, ITranslati
 {
 }
 
+/// <summary>
+/// Optional streaming translation capability for local adapters, consumed only when the
+/// caller explicitly opts in — batch translation remains the default. Emits one finalized
+/// translated segment at a time; implementations must dispose their exclusive model/session
+/// lease before each yield so a consumer holding backpressure holds no native resource.
+/// </summary>
+public interface IStreamingTranslationEngineAdapter : ITranslationEngineAdapter, IStreamingTranslationEngine
+{
+}
+
 public interface ITtsEngineAdapter : IInferenceEngineAdapter, ITtsEngine
 {
     Task<TtsSynthesisResult> SynthesizeAsync(

@@ -3,6 +3,7 @@ using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Audio;
+using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.Qwen3Tts.Pipeline;
 using Trackdub.Inference.Onnx.Runtime.Routing;
 using Trackdub.Inference.Runtime.Planning;
@@ -87,6 +88,14 @@ public sealed class Qwen3TtsEngine(
                 modelFiles,
                 plan.ExecutionProvider!.Value,
                 cancellationToken).ConfigureAwait(false);
+            // DirectML runs the language model on the GPU but the vocoder session is
+            // explicitly CPU-backed, so account the full operation against CPU admission.
+            ExecutionProviderKind admissionProvider = pipeline.SelectedProvider is ExecutionProviderKind.DirectMl
+                ? ExecutionProviderKind.Cpu
+                : pipeline.SelectedProvider;
+            using IDisposable? executionAdmission = await CpuExecutionAdmission.Shared
+                .AcquireAsync(admissionProvider, cancellationToken)
+                .ConfigureAwait(false);
 
             string tempPath = Path.Join(Path.GetTempPath(), $"qwen3tts_{Guid.NewGuid():N}.wav");
             try

@@ -64,12 +64,24 @@ internal static class InferenceRetryPolicy
     {
         if (!cancellationToken.CanBeCanceled)
         {
-            return Execute(() => session.Run(inputs), maxAttempts, cancellationToken, provider);
+            return Execute(
+                () =>
+                {
+                    using IDisposable? permit = CpuExecutionAdmission.Shared.Acquire(session, provider, cancellationToken);
+                    return session.Run(inputs);
+                },
+                maxAttempts,
+                cancellationToken,
+                provider);
         }
 
         using var runOptions = new RunOptions();
         return Execute(
-            () => session.Run(inputs, session.OutputNames, runOptions),
+            () =>
+            {
+                using IDisposable? permit = CpuExecutionAdmission.Shared.Acquire(session, provider, cancellationToken);
+                return session.Run(inputs, session.OutputNames, runOptions);
+            },
             maxAttempts,
             cancellationToken,
             provider,
@@ -96,6 +108,9 @@ internal static class InferenceRetryPolicy
         {
             try
             {
+                using IDisposable? permit = await CpuExecutionAdmission.Shared
+                    .AcquireAsync(session, provider, cancellationToken)
+                    .ConfigureAwait(false);
                 return RunOnce(() => session.Run(inputs, session.OutputNames, runOptions), runOptions, cancellationToken);
             }
             catch (OnnxRuntimeException ex) when (!cancellationToken.IsCancellationRequested &&
@@ -128,7 +143,11 @@ internal static class InferenceRetryPolicy
         CancellationToken cancellationToken = default,
         ExecutionProviderKind? provider = null) =>
         Execute(
-            () => session.RunWithBindingAndNames(runOptions, binding, outputNames),
+            () =>
+            {
+                using IDisposable? permit = CpuExecutionAdmission.Shared.Acquire(session, provider, cancellationToken);
+                return session.RunWithBindingAndNames(runOptions, binding, outputNames);
+            },
             maxAttempts,
             cancellationToken,
             provider,

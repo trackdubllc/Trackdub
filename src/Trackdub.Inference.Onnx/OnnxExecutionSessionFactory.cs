@@ -39,10 +39,13 @@ internal static class OnnxExecutionSessionFactory
     private static int initializeCompleted;
 
     private static IExecutionProviderBootstrapper _bootstrapper = GetPlatformBootstrapper();
+    private static IOpenVinoAvailabilityProvider _openVinoAvailability = NullOpenVinoAvailabilityProvider.Instance;
     private static IWindowsMlEpDevicePolicyProvider _devicePolicyProvider = NullWindowsMlEpDevicePolicyProvider.Instance;
     private static ILogger? _logger;
     private static readonly ConcurrentDictionary<string, byte> WarnedUnmappedCatalogEpNames =
         new(StringComparer.OrdinalIgnoreCase);
+
+    internal static bool UseOpenVinoCpuProxy => _openVinoAvailability.UseOpenVinoCpuProxy;
 
     /// <summary>
     /// One-time process initialization. The first successful call wins; later calls are ignored.
@@ -50,7 +53,8 @@ internal static class OnnxExecutionSessionFactory
     internal static void Initialize(
         IExecutionProviderBootstrapper bootstrapper,
         IWindowsMlEpDevicePolicyProvider? devicePolicyProvider = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IOpenVinoAvailabilityProvider? openVinoAvailabilityProvider = null)
     {
         lock (InitializeLock)
         {
@@ -61,6 +65,7 @@ internal static class OnnxExecutionSessionFactory
 
             _bootstrapper = bootstrapper ?? throw new ArgumentNullException(nameof(bootstrapper));
             _devicePolicyProvider = devicePolicyProvider ?? NullWindowsMlEpDevicePolicyProvider.Instance;
+            _openVinoAvailability = openVinoAvailabilityProvider ?? NullOpenVinoAvailabilityProvider.Instance;
             _logger = logger;
             initializeCompleted = 1;
         }
@@ -76,6 +81,7 @@ internal static class OnnxExecutionSessionFactory
             initializeCompleted = 0;
             _bootstrapper = GetPlatformBootstrapper();
             _devicePolicyProvider = NullWindowsMlEpDevicePolicyProvider.Instance;
+            _openVinoAvailability = NullOpenVinoAvailabilityProvider.Instance;
             _logger = null;
             WarnedUnmappedCatalogEpNames.Clear();
         }
@@ -91,13 +97,15 @@ internal static class OnnxExecutionSessionFactory
         SessionOptionsSelection Decoder);
 
     private sealed record DualSessionMetadata(
-        string SelectedProviderLabel,
+        ExecutionProviderKind SelectedProvider,
+        ExecutionProviderKind EncoderProvider,
+        ExecutionProviderKind DecoderProvider,
         string? BootstrapDetail);
 
     private sealed record DualPooledLeasePair(
         SessionLeaseBundle Bundle,
         string RequestedProviderLabel,
-        string SelectedProviderLabel,
+        ExecutionProviderKind SelectedProvider,
         string? BootstrapDetail)
     {
         /// <summary>Caller-order index 0 (encoder). See <c>AcquireDualPooledSessionsAsync</c>.</summary>
@@ -159,35 +167,30 @@ internal static class OnnxExecutionSessionFactory
         InferenceSession encoderSession,
         InferenceSession decoderSession)
     {
-        ExecutionProviderKind resolvedSelectedProvider = ResolveEffectiveDualSessionProvider(
-            requestedProvider,
+        ExecutionProviderKind encoderEffective = ResolveEffectiveProviderKindFromSession(
             encoderSession,
-            decoderSession,
             selections.Encoder.SelectedProvider,
+            ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Encoder.SelectedProvider));
+        ExecutionProviderKind decoderEffective = ResolveEffectiveProviderKindFromSession(
+            decoderSession,
             selections.Decoder.SelectedProvider,
-            bootstrap.DevicePolicy);
+            ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Decoder.SelectedProvider));
+        ExecutionProviderKind resolvedSelectedProvider = ResolveSharedSelectedProvider(
+            requestedProvider, encoderEffective, decoderEffective);
         string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
-            requestedProvider,
-            ResolveEffectiveProviderKindFromSession(
-                encoderSession,
-                selections.Encoder.SelectedProvider,
-                ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Encoder.SelectedProvider)),
-            selections.Encoder);
+            requestedProvider, encoderEffective, selections.Encoder);
         string? decoderFallbackReason = BuildSessionOptionsFallbackReason(
-            requestedProvider,
-            ResolveEffectiveProviderKindFromSession(
-                decoderSession,
-                selections.Decoder.SelectedProvider,
-                ShouldUseCatalogDevicePolicy(bootstrap.DevicePolicy, selections.Decoder.SelectedProvider)),
-            selections.Decoder);
+            requestedProvider, decoderEffective, selections.Decoder);
         return new DualSessionMetadata(
-            FormatProviderLabel(resolvedSelectedProvider),
+            resolvedSelectedProvider,
+            encoderEffective,
+            decoderEffective,
             FormatBootstrapDetail(
                 bootstrap.Bootstrap.Detail,
                 MergeFallbackReasons(encoderFallbackReason, decoderFallbackReason)));
     }
 
-    private static (SessionPoolKey EncoderKey, SessionPoolKey DecoderKey) BuildDualPooledKeys(
+    private static async Task<(SessionPoolKey EncoderKey, SessionPoolKey DecoderKey)> BuildDualPooledKeysAsync(
         string engineFamily,
         string encoderModelPath,
         string decoderModelPath,
@@ -197,19 +200,22 @@ internal static class OnnxExecutionSessionFactory
         IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions,
         string? modelId,
         string? variant,
+        CancellationToken cancellationToken,
         bool enableEncoderCudaGraph = false)
     {
         string encoderFingerprint = BuildSessionOptionsFingerprint(
             selections.Encoder.SelectedProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph);
         string decoderFingerprint = BuildSessionOptionsFingerprint(
             selections.Decoder.SelectedProvider, devicePolicy, additionalTrtDecoderOptions);
-        return (
-            SessionPoolKey.ForEncoder(
-                engineFamily, encoderModelPath, selections.Encoder.SelectedProvider,
-                modelId, variant, optionsFingerprint: encoderFingerprint),
-            SessionPoolKey.ForDecoder(
-                engineFamily, decoderModelPath, selections.Decoder.SelectedProvider,
-                modelId, variant, optionsFingerprint: decoderFingerprint));
+        SessionPoolKey encoderKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            engineFamily, modelId, variant, selections.Encoder.SelectedProvider,
+            encoderModelPath, deviceId: null, graphRole: "encoder", encoderFingerprint, cancellationToken)
+            .ConfigureAwait(false));
+        SessionPoolKey decoderKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            engineFamily, modelId, variant, selections.Decoder.SelectedProvider,
+            decoderModelPath, deviceId: null, graphRole: "decoder", decoderFingerprint, cancellationToken)
+            .ConfigureAwait(false));
+        return (encoderKey, decoderKey);
     }
 
     private static async Task<DualPooledLeasePair> AcquireDualPooledSessionsAsync(
@@ -242,10 +248,12 @@ internal static class OnnxExecutionSessionFactory
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 requestedProvider, bootstrap, selections,
                 bundle.LeaseAt(0).Session, bundle.LeaseAt(1).Session);
+            CpuExecutionAdmission.Shared.RegisterSession(bundle.LeaseAt(0).Session, metadata.EncoderProvider);
+            CpuExecutionAdmission.Shared.RegisterSession(bundle.LeaseAt(1).Session, metadata.DecoderProvider);
             return new DualPooledLeasePair(
                 bundle,
                 bootstrap.RequestedProviderLabel,
-                metadata.SelectedProviderLabel,
+                metadata.SelectedProvider,
                 metadata.BootstrapDetail);
         }
         catch
@@ -291,6 +299,7 @@ internal static class OnnxExecutionSessionFactory
             string? bootstrapDetail = FormatBootstrapDetail(
                 bootstrapResult.Detail,
                 BuildSessionOptionsFallbackReason(provider, effectiveProvider, sessionOptionsSelection));
+            CpuExecutionAdmission.Shared.RegisterSession(session, effectiveProvider);
             return new SingleSessionLease(
                 session,
                 requestedProvider,
@@ -555,12 +564,14 @@ internal static class OnnxExecutionSessionFactory
             decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 provider, bootstrap, selections, encoderSession, decoderSession);
+            CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
+            CpuExecutionAdmission.Shared.RegisterSession(decoderSession, metadata.DecoderProvider);
 
             return new WhisperSessionLease(
                 encoderSession,
                 decoderSession,
                 bootstrap.RequestedProviderLabel,
-                metadata.SelectedProviderLabel,
+                FormatProviderLabel(metadata.SelectedProvider),
                 metadata.BootstrapDetail);
         }
         catch
@@ -594,12 +605,14 @@ internal static class OnnxExecutionSessionFactory
             decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 provider, bootstrap, selections, encoderSession, decoderSession);
+            CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
+            CpuExecutionAdmission.Shared.RegisterSession(decoderSession, metadata.DecoderProvider);
 
             return new OpusSessionLease(
                 encoderSession,
                 decoderSession,
                 bootstrap.RequestedProviderLabel,
-                metadata.SelectedProviderLabel,
+                FormatProviderLabel(metadata.SelectedProvider),
                 metadata.BootstrapDetail);
         }
         catch
@@ -688,13 +701,16 @@ internal static class OnnxExecutionSessionFactory
 
         string optionsFingerprint =
             $"{BuildSessionOptionsFingerprint(optionsSelectedProvider, devicePolicy, additionalTrtOptions)}|trt-init-fallback:{allowTrtInitFallback}";
-        SessionPoolKey key = SessionPoolKey.ForSingle(
+        SessionPoolKey key = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
             engineFamily,
-            modelPath,
-            optionsSelection.SelectedProvider,
             modelId,
             variant,
-            optionsFingerprint: optionsFingerprint);
+            optionsSelection.SelectedProvider,
+            modelPath,
+            deviceId: null,
+            graphRole: "default",
+            optionsFingerprint,
+            cancellationToken).ConfigureAwait(false));
 
         SessionLease? poolLease = null;
         try
@@ -733,6 +749,7 @@ internal static class OnnxExecutionSessionFactory
             string selectedProvider = FormatProviderLabel(effectiveProvider);
             string? epFallbackReason = BuildSessionOptionsFallbackReason(provider, effectiveProvider, leaseSelection);
             string? bootstrapDetail = FormatBootstrapDetail(bootstrapResult.Detail, epFallbackReason);
+            CpuExecutionAdmission.Shared.RegisterSession(poolLease.Session, effectiveProvider);
 
             return new SingleSessionLease(poolLease.Session, requestedProvider, selectedProvider, bootstrapDetail)
             {
@@ -866,10 +883,10 @@ internal static class OnnxExecutionSessionFactory
             additionalTrtEncoderOptions, additionalTrtDecoderOptions);
         using SessionOptions encoderOptions = selections.Encoder.Options;
         using SessionOptions decoderOptions = selections.Decoder.Options;
-        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = BuildDualPooledKeys(
+        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = await BuildDualPooledKeysAsync(
             engineFamily, encoderModelPath, decoderModelPath, selections,
             bootstrap.DevicePolicy, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
-            modelId, variant);
+            modelId, variant, cancellationToken).ConfigureAwait(false);
 
         DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
             selectedProviderKind, bootstrap, selections,
@@ -879,7 +896,7 @@ internal static class OnnxExecutionSessionFactory
 
         return new WhisperSessionLease(
             pair.EncoderLease.Session, pair.DecoderLease.Session,
-            requestedProvider, pair.SelectedProviderLabel,
+            requestedProvider, FormatProviderLabel(pair.SelectedProvider),
             MergeFallbackReasons(graphFallbackReason, pair.BootstrapDetail))
         {
             EncoderPoolLease = pair.EncoderLease,
@@ -949,27 +966,15 @@ internal static class OnnxExecutionSessionFactory
         string encoderOptionsFingerprint = BuildSessionOptionsFingerprint(encoderOptionsSelectedProvider, devicePolicy, additionalTrtEncoderOptions);
         string decoderOptionsFingerprint = BuildSessionOptionsFingerprint(decoderOptionsSelectedProvider, devicePolicy, additionalTrtDecoderOptions);
 
-        SessionPoolKey encoderKey = SessionPoolKey.ForEncoder(
-            engineFamily,
-            encoderModelPath,
-            encoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: encoderOptionsFingerprint);
-        SessionPoolKey decoderInitKey = SessionPoolKey.ForDecoderInit(
-            engineFamily,
-            decoderInitModelPath,
-            decoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: decoderOptionsFingerprint);
-        SessionPoolKey decoderStepKey = SessionPoolKey.ForDecoderStep(
-            engineFamily,
-            decoderStepModelPath,
-            decoderOptionsSelection.SelectedProvider,
-            modelId,
-            variant,
-            optionsFingerprint: decoderOptionsFingerprint);
+        SessionPoolKey encoderKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            engineFamily, modelId, variant, encoderOptionsSelection.SelectedProvider,
+            encoderModelPath, null, "encoder", encoderOptionsFingerprint, cancellationToken).ConfigureAwait(false));
+        SessionPoolKey decoderInitKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            engineFamily, modelId, variant, decoderOptionsSelection.SelectedProvider,
+            decoderInitModelPath, null, "decoder-init", decoderOptionsFingerprint, cancellationToken).ConfigureAwait(false));
+        SessionPoolKey decoderStepKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            engineFamily, modelId, variant, decoderOptionsSelection.SelectedProvider,
+            decoderStepModelPath, null, "decoder-step", decoderOptionsFingerprint, cancellationToken).ConfigureAwait(false));
 
         // Atomic bundle (audit §3A): never hold the encoder while waiting on decoders.
         SessionLeaseBundle bundle = await pool.GetLeaseBundleAsync(
@@ -992,35 +997,34 @@ internal static class OnnxExecutionSessionFactory
             SessionLease decoderInitPoolLease = bundle.LeaseAt(1);
             SessionLease decoderStepPoolLease = bundle.LeaseAt(2);
 
-            ExecutionProviderKind effectiveProvider = ResolveEffectiveTripleSessionProvider(
-                provider,
+            ExecutionProviderKind encoderEffective = ResolveEffectiveProviderKindFromSession(
                 encoderPoolLease.Session,
-                decoderInitPoolLease.Session,
-                decoderStepPoolLease.Session,
                 encoderOptionsSelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider));
+            ExecutionProviderKind decoderInitEffective = ResolveEffectiveProviderKindFromSession(
+                decoderInitPoolLease.Session,
                 decoderOptionsSelectedProvider,
-                devicePolicy);
+                ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
+            ExecutionProviderKind decoderStepEffective = ResolveEffectiveProviderKindFromSession(
+                decoderStepPoolLease.Session,
+                decoderOptionsSelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
+            ExecutionProviderKind effectiveProvider =
+                encoderEffective == decoderInitEffective && encoderEffective == decoderStepEffective
+                    ? encoderEffective
+                    : ExecutionProviderKind.Cpu;
             string selectedProvider = FormatProviderLabel(effectiveProvider);
             string? encoderFallbackReason = BuildSessionOptionsFallbackReason(
                 provider,
-                ResolveEffectiveProviderKindFromSession(
-                    encoderPoolLease.Session,
-                    encoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider)),
+                encoderEffective,
                 encoderOptionsSelection);
             string? decoderInitFallbackReason = BuildSessionOptionsFallbackReason(
                 provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderInitPoolLease.Session,
-                    decoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider)),
+                decoderInitEffective,
                 decoderOptionsSelection);
             string? decoderStepFallbackReason = BuildSessionOptionsFallbackReason(
                 provider,
-                ResolveEffectiveProviderKindFromSession(
-                    decoderStepPoolLease.Session,
-                    decoderOptionsSelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider)),
+                decoderStepEffective,
                 decoderOptionsSelection);
             string? bootstrapDetail = FormatBootstrapDetail(
                 bootstrapResult.Detail,
@@ -1030,6 +1034,9 @@ internal static class OnnxExecutionSessionFactory
                         encoderFallbackReason,
                         MergeFallbackReasons(decoderInitFallbackReason, decoderStepFallbackReason))));
 
+            CpuExecutionAdmission.Shared.RegisterSession(encoderPoolLease.Session, encoderEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(decoderInitPoolLease.Session, decoderInitEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(decoderStepPoolLease.Session, decoderStepEffective);
             return new Qwen3AsrSessionLease(
                 encoderPoolLease.Session,
                 decoderInitPoolLease.Session,
@@ -1086,14 +1093,19 @@ internal static class OnnxExecutionSessionFactory
         ExecutionProviderKind unetSelectedProvider = unetOptionsSelection.SelectedProvider;
         ExecutionProviderKind whisperSelectedProvider = whisperOptionsSelection.SelectedProvider;
 
-        SessionPoolKey unetKey = SessionPoolKey.ForLatentSyncUNet(
-            unetModelPath, unetOptionsSelection.SelectedProvider, modelId, variant);
-        SessionPoolKey vaeEncKey = SessionPoolKey.ForLatentSyncVaeEncoder(
-            vaeEncoderModelPath, vaeEncOptionsSelection.SelectedProvider, modelId, variant);
-        SessionPoolKey vaeDecKey = SessionPoolKey.ForLatentSyncVaeDecoder(
-            vaeDecoderModelPath, vaeDecOptionsSelection.SelectedProvider, modelId, variant);
-        SessionPoolKey whisperKey = SessionPoolKey.ForLatentSyncWhisperEncoder(
-            whisperEncoderModelPath, whisperOptionsSelection.SelectedProvider, modelId, variant);
+        const string poolEngineFamily = "latentsync-diffusion";
+        SessionPoolKey unetKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            poolEngineFamily, modelId, variant, unetOptionsSelection.SelectedProvider,
+            unetModelPath, null, "unet", null, cancellationToken).ConfigureAwait(false));
+        SessionPoolKey vaeEncKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            poolEngineFamily, modelId, variant, vaeEncOptionsSelection.SelectedProvider,
+            vaeEncoderModelPath, null, "vae-encoder", null, cancellationToken).ConfigureAwait(false));
+        SessionPoolKey vaeDecKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            poolEngineFamily, modelId, variant, vaeDecOptionsSelection.SelectedProvider,
+            vaeDecoderModelPath, null, "vae-decoder", null, cancellationToken).ConfigureAwait(false));
+        SessionPoolKey whisperKey = WithOpenVinoResidency(await SessionPoolKey.CreateAsync(
+            poolEngineFamily, modelId, variant, whisperOptionsSelection.SelectedProvider,
+            whisperEncoderModelPath, null, "whisper-encoder", null, cancellationToken).ConfigureAwait(false));
 
         // Atomic bundle (audit §3A): acquire all four graphs or none.
         SessionLeaseBundle bundle = await pool.GetLeaseBundleAsync(
@@ -1120,47 +1132,47 @@ internal static class OnnxExecutionSessionFactory
             SessionLease vaeDecPoolLease = bundle.LeaseAt(2);
             SessionLease whisperPoolLease = bundle.LeaseAt(3);
 
-            ExecutionProviderKind effective = ResolveEffectiveQuadSessionProvider(
-                provider,
-                unetPoolLease.Session, vaeEncPoolLease.Session,
-                vaeDecPoolLease.Session, whisperPoolLease.Session,
-                unetSelectedProvider, whisperSelectedProvider,
-                devicePolicy);
+            ExecutionProviderKind unetEffective = ResolveEffectiveProviderKindFromSession(
+                unetPoolLease.Session,
+                unetOptionsSelection.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, unetOptionsSelection.SelectedProvider));
+            ExecutionProviderKind vaeEncEffective = ResolveEffectiveProviderKindFromSession(
+                vaeEncPoolLease.Session,
+                vaeEncOptionsSelection.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, vaeEncOptionsSelection.SelectedProvider));
+            ExecutionProviderKind vaeDecEffective = ResolveEffectiveProviderKindFromSession(
+                vaeDecPoolLease.Session,
+                vaeDecOptionsSelection.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, vaeDecOptionsSelection.SelectedProvider));
+            ExecutionProviderKind whisperEffective = ResolveEffectiveProviderKindFromSession(
+                whisperPoolLease.Session,
+                whisperOptionsSelection.SelectedProvider,
+                ShouldUseCatalogDevicePolicy(devicePolicy, whisperOptionsSelection.SelectedProvider));
+            ExecutionProviderKind effective =
+                unetEffective == vaeEncEffective
+                    && unetEffective == vaeDecEffective
+                    && unetEffective == whisperEffective
+                    ? unetEffective
+                    : ExecutionProviderKind.Cpu;
             string selectedProvider = FormatProviderLabel(effective);
             string? unetFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    unetPoolLease.Session,
-                    unetOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, unetOptionsSelection.SelectedProvider)),
-                unetOptionsSelection);
+                provider, unetEffective, unetOptionsSelection);
             string? vaeEncFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    vaeEncPoolLease.Session,
-                    vaeEncOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, vaeEncOptionsSelection.SelectedProvider)),
-                vaeEncOptionsSelection);
+                provider, vaeEncEffective, vaeEncOptionsSelection);
             string? vaeDecFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    vaeDecPoolLease.Session,
-                    vaeDecOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, vaeDecOptionsSelection.SelectedProvider)),
-                vaeDecOptionsSelection);
+                provider, vaeDecEffective, vaeDecOptionsSelection);
             string? whisperFallbackReason = BuildSessionOptionsFallbackReason(
-                provider,
-                ResolveEffectiveProviderKindFromSession(
-                    whisperPoolLease.Session,
-                    whisperOptionsSelection.SelectedProvider,
-                    ShouldUseCatalogDevicePolicy(devicePolicy, whisperOptionsSelection.SelectedProvider)),
-                whisperOptionsSelection);
+                provider, whisperEffective, whisperOptionsSelection);
             string? bootstrapDetail = FormatBootstrapDetail(
                 bootstrapResult.Detail,
                 MergeFallbackReasons(
                     MergeFallbackReasons(unetFallbackReason, vaeEncFallbackReason),
                     MergeFallbackReasons(vaeDecFallbackReason, whisperFallbackReason)));
 
+            CpuExecutionAdmission.Shared.RegisterSession(unetPoolLease.Session, unetEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(vaeEncPoolLease.Session, vaeEncEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(vaeDecPoolLease.Session, vaeDecEffective);
+            CpuExecutionAdmission.Shared.RegisterSession(whisperPoolLease.Session, whisperEffective);
             return new LatentSyncSessionLease(
                 unetPoolLease.Session,
                 vaeEncPoolLease.Session,
@@ -1219,10 +1231,10 @@ internal static class OnnxExecutionSessionFactory
             additionalTrtEncoderOptions, additionalTrtDecoderOptions, enableEncoderCudaGraph);
         using SessionOptions encoderOptions = selections.Encoder.Options;
         using SessionOptions decoderOptions = selections.Decoder.Options;
-        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = BuildDualPooledKeys(
+        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = await BuildDualPooledKeysAsync(
             engineFamily, encoderModelPath, decoderJointModelPath, selections,
             bootstrap.DevicePolicy, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
-            modelId, variant, enableEncoderCudaGraph);
+            modelId, variant, cancellationToken, enableEncoderCudaGraph).ConfigureAwait(false);
 
         DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
             provider, bootstrap, selections,
@@ -1234,69 +1246,12 @@ internal static class OnnxExecutionSessionFactory
             pair.EncoderLease.Session,
             pair.DecoderLease.Session,
             pair.RequestedProviderLabel,
-            pair.SelectedProviderLabel,
+            FormatProviderLabel(pair.SelectedProvider),
             pair.BootstrapDetail)
         {
             EncoderPoolLease = pair.EncoderLease,
             DecoderJointPoolLease = pair.DecoderLease,
         };
-    }
-
-    private static ExecutionProviderKind ResolveEffectiveTripleSessionProvider(
-        ExecutionProviderKind requestedProvider,
-        InferenceSession encoderSession,
-        InferenceSession decoderInitSession,
-        InferenceSession decoderStepSession,
-        ExecutionProviderKind encoderOptionsSelectedProvider,
-        ExecutionProviderKind decoderOptionsSelectedProvider,
-        WindowsMlExecutionDevicePolicy devicePolicy)
-    {
-        ExecutionProviderKind encoderEffective = ResolveEffectiveProviderKindFromSession(
-            encoderSession,
-            encoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider));
-        ExecutionProviderKind decoderInitEffective = ResolveEffectiveProviderKindFromSession(
-            decoderInitSession,
-            decoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
-        ExecutionProviderKind decoderStepEffective = ResolveEffectiveProviderKindFromSession(
-            decoderStepSession,
-            decoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
-
-        if (encoderEffective != decoderInitEffective || encoderEffective != decoderStepEffective)
-        {
-            return ExecutionProviderKind.Cpu;
-        }
-
-        return encoderEffective;
-    }
-
-    private static ExecutionProviderKind ResolveEffectiveQuadSessionProvider(
-        ExecutionProviderKind requestedProvider,
-        InferenceSession sessionA,
-        InferenceSession sessionB,
-        InferenceSession sessionC,
-        InferenceSession sessionD,
-        ExecutionProviderKind abOptionsSelectedProvider,
-        ExecutionProviderKind cdOptionsSelectedProvider,
-        WindowsMlExecutionDevicePolicy devicePolicy)
-    {
-        ExecutionProviderKind aEffective = ResolveEffectiveProviderKindFromSession(
-            sessionA, abOptionsSelectedProvider, ShouldUseCatalogDevicePolicy(devicePolicy, abOptionsSelectedProvider));
-        ExecutionProviderKind bEffective = ResolveEffectiveProviderKindFromSession(
-            sessionB, abOptionsSelectedProvider, ShouldUseCatalogDevicePolicy(devicePolicy, abOptionsSelectedProvider));
-        ExecutionProviderKind cEffective = ResolveEffectiveProviderKindFromSession(
-            sessionC, cdOptionsSelectedProvider, ShouldUseCatalogDevicePolicy(devicePolicy, cdOptionsSelectedProvider));
-        ExecutionProviderKind dEffective = ResolveEffectiveProviderKindFromSession(
-            sessionD, cdOptionsSelectedProvider, ShouldUseCatalogDevicePolicy(devicePolicy, cdOptionsSelectedProvider));
-
-        if (aEffective != bEffective || aEffective != cEffective || aEffective != dEffective)
-        {
-            return ExecutionProviderKind.Cpu;
-        }
-
-        return aEffective;
     }
 
     public static async Task<OpusSessionLease> CreatePooledOpusAsync(
@@ -1327,10 +1282,10 @@ internal static class OnnxExecutionSessionFactory
             additionalTrtEncoderOptions, additionalTrtDecoderOptions);
         using SessionOptions encoderOptions = selections.Encoder.Options;
         using SessionOptions decoderOptions = selections.Decoder.Options;
-        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = BuildDualPooledKeys(
+        (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = await BuildDualPooledKeysAsync(
             engineFamily, encoderModelPath, decoderModelPath, selections,
             bootstrap.DevicePolicy, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
-            modelId, variant);
+            modelId, variant, cancellationToken).ConfigureAwait(false);
 
         DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
             provider, bootstrap, selections,
@@ -1340,7 +1295,7 @@ internal static class OnnxExecutionSessionFactory
 
         return new OpusSessionLease(
             pair.EncoderLease.Session, pair.DecoderLease.Session,
-            pair.RequestedProviderLabel, pair.SelectedProviderLabel, pair.BootstrapDetail)
+            pair.RequestedProviderLabel, FormatProviderLabel(pair.SelectedProvider), pair.BootstrapDetail)
         {
             EncoderPoolLease = pair.EncoderLease,
             DecoderPoolLease = pair.DecoderLease
@@ -1422,6 +1377,11 @@ internal static class OnnxExecutionSessionFactory
             ExecutionProviderKind.VitisAi => "vitisai",
             _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, "Unsupported execution provider kind.")
         };
+
+    private static SessionPoolKey WithOpenVinoResidency(SessionPoolKey key) =>
+        key.Provider is ExecutionProviderKind.OpenVino
+            ? key with { UseOpenVinoCpuProxy = _openVinoAvailability.UseOpenVinoCpuProxy }
+            : key;
 
     private static SessionOptionsSelection CreateSessionOptions(
         ExecutionProviderKind provider,
@@ -1599,25 +1559,6 @@ internal static class OnnxExecutionSessionFactory
         return requestedProvider is ExecutionProviderKind.TensorRTRtx
             ? ExecutionProviderKind.Cpu
             : requestedProvider;
-    }
-
-    private static ExecutionProviderKind ResolveEffectiveDualSessionProvider(
-        ExecutionProviderKind requestedProvider,
-        InferenceSession encoderSession,
-        InferenceSession decoderSession,
-        ExecutionProviderKind encoderOptionsSelectedProvider,
-        ExecutionProviderKind decoderOptionsSelectedProvider,
-        WindowsMlExecutionDevicePolicy devicePolicy)
-    {
-        ExecutionProviderKind encoderEffective = ResolveEffectiveProviderKindFromSession(
-            encoderSession,
-            encoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, encoderOptionsSelectedProvider));
-        ExecutionProviderKind decoderEffective = ResolveEffectiveProviderKindFromSession(
-            decoderSession,
-            decoderOptionsSelectedProvider,
-            ShouldUseCatalogDevicePolicy(devicePolicy, decoderOptionsSelectedProvider));
-        return ResolveSharedSelectedProvider(requestedProvider, encoderEffective, decoderEffective);
     }
 
     internal static ExecutionProviderKind ResolveEffectiveProviderKindFromSession(

@@ -42,6 +42,9 @@ public sealed record BenchmarkEvidenceReport
     public IReadOnlyDictionary<string, string> RuntimeVersions { get; init; } = new Dictionary<string, string>();
     public IReadOnlyDictionary<string, double?> TimingsMilliseconds { get; init; } = new Dictionary<string, double?>();
     public IReadOnlyDictionary<string, long?> MemoryBytes { get; init; } = new Dictionary<string, long?>();
+    /// <summary>Measured counters (summed across iterations) and maxima (peak across
+    /// iterations) recorded by <see cref="BenchmarkPhaseCapture"/> under raw names.</summary>
+    public IReadOnlyDictionary<string, long?> Counters { get; init; } = new Dictionary<string, long?>();
     public IReadOnlyList<BenchmarkEvidenceStage> Stages { get; init; } = [];
     public ResourceTelemetryBounds? ResourceTelemetryBounds { get; init; }
     public ResourceTelemetryStatus? ResourceValidationStatus { get; init; }

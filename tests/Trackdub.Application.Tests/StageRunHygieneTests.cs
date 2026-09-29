@@ -138,21 +138,7 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.Vad, DateTimeOffset.UtcNow.AddHours(-1))
             .Complete(DateTimeOffset.UtcNow);
 
-        const string regionsPath = "artifacts/speech-regions/regions.json";
-        artifactStore.Seed(regionsPath);
-        ProjectArtifact regionsArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            Guid.NewGuid(),
-            ArtifactKind.SpeechRegions,
-            regionsPath,
-            "hash",
-            2,
-            null,
-            null,
-            null,
-            DateTimeOffset.UtcNow,
-            StageRunId: run.Id);
+        ProjectArtifact regionsArtifact = CreateSpeechRegionsArtifact(projectId, run, artifactStore);
 
         TranscriptProjectState state = CreateState(projectId, [run], [regionsArtifact]);
 
@@ -407,32 +393,16 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.Asr, now.AddHours(-1))
             .PartiallyComplete(now, "Some regions failed.");
 
-        const string rawAsrPath = "artifacts/asr/run/raw.json";
-        artifactStore.Seed(rawAsrPath);
-        ProjectArtifact rawArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            rawAsrPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: run.Id,
-            Provenance: "generated-asr-raw");
-
-        var revision = TranscriptRevision.Create(projectId, run.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
+        (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment) transcript =
+            CreateTranscriptFixture(projectId, mediaAssetId, run, artifactStore, now,
+                "artifacts/asr/run/raw.json", "generated-asr-raw");
 
         TranscriptProjectState state = CreateState(
             projectId,
             [run],
-            [rawArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment]);
+            [transcript.Artifact],
+            currentTranscriptRevision: transcript.Revision,
+            transcriptSegments: [transcript.Segment]);
 
         Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
             state,
@@ -453,32 +423,16 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.Asr, now.AddHours(-1))
             .Complete(now);
 
-        const string rawAsrPath = "artifacts/asr/run/raw.json";
-        artifactStore.Seed(rawAsrPath);
-        ProjectArtifact rawArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            rawAsrPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: run.Id,
-            Provenance: "generated-asr-raw");
-
-        var revision = TranscriptRevision.Create(projectId, run.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
+        (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment) transcript =
+            CreateTranscriptFixture(projectId, mediaAssetId, run, artifactStore, now,
+                "artifacts/asr/run/raw.json", "generated-asr-raw");
 
         TranscriptProjectState state = CreateState(
             projectId,
             [run],
-            [rawArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment]);
+            [transcript.Artifact],
+            currentTranscriptRevision: transcript.Revision,
+            transcriptSegments: [transcript.Segment]);
 
         Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
             state,
@@ -502,32 +456,16 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.SpeakerAssignment, now.AddHours(-1))
             .PartiallyComplete(now, "Persistence interrupted.");
 
-        const string transcriptPath = "artifacts/transcript/transcript-revision-0001.json";
-        artifactStore.Seed(transcriptPath);
-        ProjectArtifact transcriptArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            transcriptPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: asrRun.Id,
-            Provenance: "generated-asr");
-
-        var revision = TranscriptRevision.Create(projectId, asrRun.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
+        (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment) transcript =
+            CreateTranscriptFixture(projectId, mediaAssetId, asrRun, artifactStore, now,
+                "artifacts/transcript/transcript-revision-0001.json", "generated-asr");
 
         TranscriptProjectState state = CreateState(
             projectId,
             [asrRun, run],
-            [transcriptArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment]);
+            [transcript.Artifact],
+            currentTranscriptRevision: transcript.Revision,
+            transcriptSegments: [transcript.Segment]);
 
         Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
             state,
@@ -551,32 +489,16 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.SpeakerAssignment, now.AddHours(-1))
             .Complete(now);
 
-        const string transcriptPath = "artifacts/transcript/transcript-revision-0001.json";
-        artifactStore.Seed(transcriptPath);
-        ProjectArtifact transcriptArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            transcriptPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: asrRun.Id,
-            Provenance: "generated-asr");
-
-        var revision = TranscriptRevision.Create(projectId, asrRun.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
+        (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment) transcript =
+            CreateTranscriptFixture(projectId, mediaAssetId, asrRun, artifactStore, now,
+                "artifacts/transcript/transcript-revision-0001.json", "generated-asr");
 
         TranscriptProjectState state = CreateState(
             projectId,
             [asrRun, run],
-            [transcriptArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment]);
+            [transcript.Artifact],
+            currentTranscriptRevision: transcript.Revision,
+            transcriptSegments: [transcript.Segment]);
 
         Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
             state,
@@ -600,31 +522,16 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.SpeakerAssignment, now.AddHours(-1))
             .Complete(now);
 
-        const string transcriptPath = "artifacts/transcript/transcript-revision-0001.json";
-        ProjectArtifact transcriptArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            transcriptPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: asrRun.Id,
-            Provenance: "generated-asr");
-
-        var revision = TranscriptRevision.Create(projectId, asrRun.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
+        (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment) transcript =
+            CreateTranscriptFixture(projectId, mediaAssetId, asrRun, artifactStore, now,
+                "artifacts/transcript/transcript-revision-0001.json", "generated-asr", seedArtifact: false);
 
         TranscriptProjectState state = CreateState(
             projectId,
             [asrRun, run],
-            [transcriptArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment]);
+            [transcript.Artifact],
+            currentTranscriptRevision: transcript.Revision,
+            transcriptSegments: [transcript.Segment]);
 
         Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
             state,
@@ -698,32 +605,16 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.SpeakerAssignment, now.AddHours(-1))
             .Complete(now);
 
-        const string transcriptPath = "artifacts/transcript/transcript-revision-0001.json";
-        artifactStore.Seed(transcriptPath);
-        ProjectArtifact transcriptArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            transcriptPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: asrRun.Id,
-            Provenance: "generated-asr");
-
-        var revision = TranscriptRevision.Create(projectId, asrRun.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
+        (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment) transcript =
+            CreateTranscriptFixture(projectId, mediaAssetId, asrRun, artifactStore, now,
+                "artifacts/transcript/transcript-revision-0001.json", "generated-asr");
 
         TranscriptProjectState state = CreateState(
             projectId,
             [asrRun, speakerRun],
-            [transcriptArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment]);
+            [transcript.Artifact],
+            currentTranscriptRevision: transcript.Revision,
+            transcriptSegments: [transcript.Segment]);
 
         var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -1041,21 +932,7 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.Vad, DateTimeOffset.UtcNow.AddHours(-1))
             .Complete(DateTimeOffset.UtcNow);
 
-        const string regionsPath = "artifacts/speech-regions/regions.json";
-        artifactStore.Seed(regionsPath);
-        ProjectArtifact regionsArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            Guid.NewGuid(),
-            ArtifactKind.SpeechRegions,
-            regionsPath,
-            "hash",
-            2,
-            null,
-            null,
-            null,
-            DateTimeOffset.UtcNow,
-            StageRunId: run.Id);
+        ProjectArtifact regionsArtifact = CreateSpeechRegionsArtifact(projectId, run, artifactStore);
 
         // Source-dependent artifacts can never be resumed once the media is gone or replaced.
         TranscriptProjectState state = CreateState(
@@ -1081,21 +958,7 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.Vad, DateTimeOffset.UtcNow.AddHours(-1))
             .Complete(DateTimeOffset.UtcNow);
 
-        const string regionsPath = "artifacts/speech-regions/regions.json";
-        artifactStore.Seed(regionsPath);
-        ProjectArtifact regionsArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            Guid.NewGuid(),
-            ArtifactKind.SpeechRegions,
-            regionsPath,
-            "hash",
-            2,
-            null,
-            null,
-            null,
-            DateTimeOffset.UtcNow,
-            StageRunId: run.Id);
+        ProjectArtifact regionsArtifact = CreateSpeechRegionsArtifact(projectId, run, artifactStore);
 
         var reference = new SourceMediaReference(
             @"D:\media\original.mp4",
@@ -1132,21 +995,7 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.Vad, DateTimeOffset.UtcNow.AddHours(-1))
             .Complete(DateTimeOffset.UtcNow);
 
-        const string regionsPath = "artifacts/speech-regions/regions.json";
-        artifactStore.Seed(regionsPath);
-        ProjectArtifact regionsArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            Guid.NewGuid(),
-            ArtifactKind.SpeechRegions,
-            regionsPath,
-            "hash",
-            2,
-            null,
-            null,
-            null,
-            DateTimeOffset.UtcNow,
-            StageRunId: run.Id);
+        ProjectArtifact regionsArtifact = CreateSpeechRegionsArtifact(projectId, run, artifactStore);
 
         // Build platform-native absolute paths: "." collapse is exercised everywhere, and the
         // case difference applies only where the evaluator compares OrdinalIgnoreCase
@@ -1523,6 +1372,62 @@ public sealed class StageArtifactResumeEvaluatorTests
         return new TtsScenario(state, artifactStore, speakerId);
     }
 
+    private static (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment)
+        CreateTranscriptFixture(
+            Guid projectId,
+            Guid mediaAssetId,
+            StageRunRecord sourceRun,
+            FakeArtifactStore artifactStore,
+            DateTimeOffset createdAt,
+            string artifactPath,
+            string provenance,
+            bool seedArtifact = true)
+    {
+        if (seedArtifact)
+        {
+            artifactStore.Seed(artifactPath);
+        }
+        ProjectArtifact artifact = new(
+            Guid.NewGuid(),
+            projectId,
+            mediaAssetId,
+            ArtifactKind.TranscriptRevision,
+            artifactPath,
+            "hash",
+            64,
+            null,
+            null,
+            null,
+            createdAt,
+            StageRunId: sourceRun.Id,
+            Provenance: provenance);
+        TranscriptRevision revision = TranscriptRevision.Create(projectId, sourceRun.Id, 1, createdAt);
+        TranscriptSegment segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
+        return (artifact, revision, segment);
+    }
+
+    private static ProjectArtifact CreateSpeechRegionsArtifact(
+        Guid projectId,
+        StageRunRecord run,
+        FakeArtifactStore artifactStore)
+    {
+        const string regionsPath = "artifacts/speech-regions/regions.json";
+        artifactStore.Seed(regionsPath);
+        return new ProjectArtifact(
+            Guid.NewGuid(),
+            projectId,
+            Guid.NewGuid(),
+            ArtifactKind.SpeechRegions,
+            regionsPath,
+            "hash",
+            2,
+            null,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            StageRunId: run.Id);
+    }
+
     private static TranscriptProjectState CreateState(
         Guid projectId,
         IReadOnlyList<StageRunRecord> stageRuns,
@@ -1687,106 +1592,32 @@ public sealed class StageArtifactResumeEvaluatorTests
         Assert.True(StageArtifactResumeEvaluator.RuntimeMatchesSnapshot(run, StageNames.Asr, snapshot));
     }
 
-    [Fact]
-    public void CanResumeStage_returns_false_for_asr_when_requested_source_language_does_not_match_persisted_transcript_language()
+    [Theory]
+    [InlineData("es", false)]
+    [InlineData("en", true)]
+    public void CanResumeStage_matches_requested_source_language_to_persisted_transcript_language(
+        string requestedLanguage,
+        bool expectedCanResume)
     {
-        var artifactStore = new FakeArtifactStore();
-        Guid projectId = Guid.NewGuid();
-        Guid mediaAssetId = Guid.NewGuid();
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        StageRunRecord run = StageRunRecord
-            .Start(projectId, StageNames.Asr, now.AddHours(-1))
-            .Complete(now);
+        (TranscriptProjectState state, FakeArtifactStore artifactStore) =
+            CreateAsrResumableState(persistedLanguage: "en");
 
-        const string rawAsrPath = "artifacts/asr/run/raw.json";
-        artifactStore.Seed(rawAsrPath);
-        ProjectArtifact rawArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            rawAsrPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: run.Id,
-            Provenance: "generated-asr-raw");
-
-        var revision = TranscriptRevision.Create(projectId, run.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
-
-        TranscriptProjectState state = CreateState(
-            projectId,
-            [run],
-            [rawArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment],
-            transcriptLanguage: "en");
-
-        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+        Assert.Equal(expectedCanResume, StageArtifactResumeEvaluator.CanResumeStage(
             state,
             artifactStore,
             StageNames.Asr,
-            snapshot: new Dictionary<string, string> { ["SourceLanguage"] = "es" },
+            snapshot: new Dictionary<string, string> { ["SourceLanguage"] = requestedLanguage },
             projectRootPath: artifactStore.GetPath(".")));
     }
 
-    [Fact]
-    public void CanResumeStage_returns_true_for_asr_when_requested_source_language_matches_persisted_transcript_language()
+    [Theory]
+    [InlineData("whisper-large", false)]
+    [InlineData("whisper-small", true)]
+    public void CanResumeStage_matches_speaker_assignment_to_upstream_asr_alias(
+        string requestedAsrAlias,
+        bool expectedCanResume)
     {
-        var artifactStore = new FakeArtifactStore();
-        Guid projectId = Guid.NewGuid();
-        Guid mediaAssetId = Guid.NewGuid();
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        StageRunRecord run = StageRunRecord
-            .Start(projectId, StageNames.Asr, now.AddHours(-1))
-            .Complete(now);
-
-        const string rawAsrPath = "artifacts/asr/run/raw.json";
-        artifactStore.Seed(rawAsrPath);
-        ProjectArtifact rawArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            rawAsrPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: run.Id,
-            Provenance: "generated-asr-raw");
-
-        var revision = TranscriptRevision.Create(projectId, run.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
-
-        TranscriptProjectState state = CreateState(
-            projectId,
-            [run],
-            [rawArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment],
-            transcriptLanguage: "en");
-
-        Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
-            state,
-            artifactStore,
-            StageNames.Asr,
-            snapshot: new Dictionary<string, string> { ["SourceLanguage"] = "en" },
-            projectRootPath: artifactStore.GetPath(".")));
-    }
-
-    [Fact]
-    public void CanResumeStage_returns_false_for_speaker_assignment_when_upstream_asr_alias_mismatches_snapshot()
-    {
-        // SpeakerAssignment's own run/outputs are all valid; only the upstream ASR run's recorded
-        // model alias disagrees with what the snapshot now expects. AsrUpstreamMatchesSnapshot must
-        // catch this even though RuntimeMatchesSnapshot(speakerAssignmentRun, ...) trivially passes.
+        // Only the upstream ASR model alias varies; the speaker assignment run and artifacts are valid.
         var artifactStore = new FakeArtifactStore();
         Guid projectId = Guid.NewGuid();
         Guid mediaAssetId = Guid.NewGuid();
@@ -1795,92 +1626,25 @@ public sealed class StageArtifactResumeEvaluatorTests
             .Start(projectId, StageNames.Asr, now.AddHours(-2))
             .WithRuntimeInfo("cpu", "cpu", modelAlias: "whisper-small")
             .Complete(now.AddHours(-2));
-        StageRunRecord run = StageRunRecord
+        StageRunRecord speakerRun = StageRunRecord
             .Start(projectId, StageNames.SpeakerAssignment, now.AddHours(-1))
             .Complete(now);
 
-        const string transcriptPath = "artifacts/transcript/transcript-revision-0001.json";
-        artifactStore.Seed(transcriptPath);
-        ProjectArtifact transcriptArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            transcriptPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: asrRun.Id,
-            Provenance: "generated-asr");
-
-        var revision = TranscriptRevision.Create(projectId, asrRun.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
-
+        (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment) transcript =
+            CreateTranscriptFixture(projectId, mediaAssetId, asrRun, artifactStore, now,
+                "artifacts/transcript/transcript-revision-0001.json", "generated-asr");
         TranscriptProjectState state = CreateState(
             projectId,
-            [asrRun, run],
-            [transcriptArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment]);
+            [asrRun, speakerRun],
+            [transcript.Artifact],
+            currentTranscriptRevision: transcript.Revision,
+            transcriptSegments: [transcript.Segment]);
 
-        Assert.False(StageArtifactResumeEvaluator.CanResumeStage(
+        Assert.Equal(expectedCanResume, StageArtifactResumeEvaluator.CanResumeStage(
             state,
             artifactStore,
             StageNames.SpeakerAssignment,
-            snapshot: new Dictionary<string, string> { [$"Model:{StageNames.Asr}"] = "whisper-large" },
-            projectRootPath: artifactStore.GetPath(".")));
-    }
-
-    [Fact]
-    public void CanResumeStage_returns_true_for_speaker_assignment_when_upstream_asr_alias_matches_snapshot()
-    {
-        var artifactStore = new FakeArtifactStore();
-        Guid projectId = Guid.NewGuid();
-        Guid mediaAssetId = Guid.NewGuid();
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        StageRunRecord asrRun = StageRunRecord
-            .Start(projectId, StageNames.Asr, now.AddHours(-2))
-            .WithRuntimeInfo("cpu", "cpu", modelAlias: "whisper-small")
-            .Complete(now.AddHours(-2));
-        StageRunRecord run = StageRunRecord
-            .Start(projectId, StageNames.SpeakerAssignment, now.AddHours(-1))
-            .Complete(now);
-
-        const string transcriptPath = "artifacts/transcript/transcript-revision-0001.json";
-        artifactStore.Seed(transcriptPath);
-        ProjectArtifact transcriptArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            transcriptPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: asrRun.Id,
-            Provenance: "generated-asr");
-
-        var revision = TranscriptRevision.Create(projectId, asrRun.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 2.0, "hello");
-
-        TranscriptProjectState state = CreateState(
-            projectId,
-            [asrRun, run],
-            [transcriptArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment]);
-
-        Assert.True(StageArtifactResumeEvaluator.CanResumeStage(
-            state,
-            artifactStore,
-            StageNames.SpeakerAssignment,
-            snapshot: new Dictionary<string, string> { [$"Model:{StageNames.Asr}"] = "whisper-small" },
+            snapshot: new Dictionary<string, string> { [$"Model:{StageNames.Asr}"] = requestedAsrAlias },
             projectRootPath: artifactStore.GetPath(".")));
     }
 
@@ -1944,32 +1708,16 @@ public sealed class StageArtifactResumeEvaluatorTests
         StageRunRecord asrRun = StageRunRecord
             .Start(projectId, StageNames.Asr, now.AddHours(-1))
             .Complete(now);
-        var revision = TranscriptRevision.Create(projectId, asrRun.Id, 1, now);
-        var segment = TranscriptSegment.Create(revision.Id, 0, 0.0, 1.0, "hello");
-
-        const string rawTranscriptPath = "artifacts/transcript/transcript-revision-raw.json";
-        artifactStore.Seed(rawTranscriptPath);
-        ProjectArtifact rawArtifact = new(
-            Guid.NewGuid(),
-            projectId,
-            mediaAssetId,
-            ArtifactKind.TranscriptRevision,
-            rawTranscriptPath,
-            "hash",
-            64,
-            null,
-            null,
-            null,
-            now,
-            StageRunId: asrRun.Id,
-            Provenance: "generated-asr-raw");
+        (ProjectArtifact Artifact, TranscriptRevision Revision, TranscriptSegment Segment) transcript =
+            CreateTranscriptFixture(projectId, mediaAssetId, asrRun, artifactStore, now,
+                "artifacts/transcript/transcript-revision-raw.json", "generated-asr-raw");
 
         TranscriptProjectState state = CreateState(
             projectId,
             [asrRun],
-            [rawArtifact],
-            currentTranscriptRevision: revision,
-            transcriptSegments: [segment],
+            [transcript.Artifact],
+            currentTranscriptRevision: transcript.Revision,
+            transcriptSegments: [transcript.Segment],
             transcriptLanguage: persistedLanguage);
 
         return (state, artifactStore);

@@ -221,4 +221,169 @@ public sealed class SpleeterStftParityTests
         Assert.True(lateEnergy < 1e-3f, $"Late-frame energy {lateEnergy} suggests wrap-around instead of zero pad.");
         Assert.True(phase.Length == mag.Length);
     }
+
+    [Fact]
+    public void GetTargetFrameCount_matches_legacy_forward_target()
+    {
+        var processor = new SpleeterStftProcessor();
+        foreach (int n in new[] { 1, Nfft, Nfft + Hop, Nfft + (PadTo * Hop), Nfft + (PadTo * Hop) + 1 })
+        {
+            Assert.Equal(ExpectedTargetFrames(n), processor.GetTargetFrameCount(n));
+        }
+    }
+
+    [Fact]
+    public void BlockPipeline_matches_global_forward_mask_inverse_per_sample()
+    {
+        // >1 split: baseFrames must exceed PadTo -> n > Nfft + PadTo*Hop (~12s at 44.1kHz).
+        const int n = Nfft + (PadTo * Hop) + 777;
+        var processor = new SpleeterStftProcessor();
+        float[] left = MakeSine(n, 440, 0.4);
+        float[] right = MakeSine(n, 660, 0.3);
+
+        int targetFrames = processor.GetTargetFrameCount(n);
+        Assert.Equal(ExpectedTargetFrames(n), targetFrames);
+        int numSplits = targetFrames / PadTo;
+        Assert.True(numSplits > 1);
+
+        // Global legacy reference: full Forward per channel, deterministic mask function
+        // of global (channel, frame, bin), soft masks, per-channel Inverse, mono average.
+        (float[] leftMag, float[] leftPhase, int leftFrames) = processor.Forward(left);
+        (float[] rightMag, float[] rightPhase, int _) = processor.Forward(right);
+        Assert.Equal(targetFrames, leftFrames);
+        int channelStride = targetFrames * MaxFreqs;
+
+        float MaskVocals(int ch, int f, int k) => 0.2f + (0.6f * ((ch * 7 + f * 3 + k) % 11) / 11f);
+        float MaskAcc(int ch, int f, int k) => 0.1f + (0.8f * ((ch * 13 + f * 5 + k) % 17) / 17f);
+
+        var vocalsLeftMasked = new float[channelStride];
+        var accLeftMasked = new float[channelStride];
+        var vocalsRightMasked = new float[channelStride];
+        var accRightMasked = new float[channelStride];
+        for (int f = 0; f < targetFrames; f++)
+        {
+            for (int k = 0; k < MaxFreqs; k++)
+            {
+                int i = (f * MaxFreqs) + k;
+                float vL = MaskVocals(0, f, k);
+                float aL = MaskAcc(0, f, k);
+                float vR = MaskVocals(1, f, k);
+                float aR = MaskAcc(1, f, k);
+                SpleeterModelConstants.ComputeSoftMasks(vL, aL, out float maskVocalsL, out float maskAccL);
+                SpleeterModelConstants.ComputeSoftMasks(vR, aR, out float maskVocalsR, out float maskAccR);
+                vocalsLeftMasked[i] = leftMag[i] * maskVocalsL;
+                accLeftMasked[i] = leftMag[i] * maskAccL;
+                vocalsRightMasked[i] = rightMag[i] * maskVocalsR;
+                accRightMasked[i] = rightMag[i] * maskAccR;
+            }
+        }
+
+        float[] refVocalsL = processor.Inverse(vocalsLeftMasked, leftPhase, targetFrames, n);
+        float[] refVocalsR = processor.Inverse(vocalsRightMasked, rightPhase, targetFrames, n);
+        float[] refAccL = processor.Inverse(accLeftMasked, leftPhase, targetFrames, n);
+        float[] refAccR = processor.Inverse(accRightMasked, rightPhase, targetFrames, n);
+        var refVocalsMono = new float[n];
+        var refAccMono = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            refVocalsMono[i] = (refVocalsL[i] + refVocalsR[i]) * 0.5f;
+            refAccMono[i] = (refAccL[i] + refAccR[i]) * 0.5f;
+        }
+
+        // New block path: one pad-block at a time, block-local mask slices of the same
+        // global function, overlap-add, then shared normalization.
+        var vocalsMono = new float[n];
+        var accMono = new float[n];
+        var windowSum = new float[n];
+        for (int split = 0; split < numSplits; split++)
+        {
+            int startFrame = split * PadTo;
+            using SpleeterStftBlock block = processor.ForwardBlock(left, right, startFrame, PadTo);
+            Assert.Equal(PadTo, block.FrameCount);
+            Assert.Equal(2 * PadTo * MaxFreqs, block.Magnitudes.Length); // bounded, not audio-scaled
+
+            var vocalsMask = new float[2 * PadTo * MaxFreqs];
+            var accMask = new float[2 * PadTo * MaxFreqs];
+            for (int ch = 0; ch < 2; ch++)
+            {
+                for (int f = 0; f < PadTo; f++)
+                {
+                    for (int k = 0; k < MaxFreqs; k++)
+                    {
+                        int blockIndex = ((ch * PadTo) + f) * MaxFreqs + k;
+                        vocalsMask[blockIndex] = MaskVocals(ch, startFrame + f, k);
+                        accMask[blockIndex] = MaskAcc(ch, startFrame + f, k);
+                    }
+                }
+            }
+
+            processor.OverlapAddMaskedBlock(
+                block, vocalsMask, accMask, vocalsMono, accMono, windowSum,
+                TestContext.Current.CancellationToken);
+        }
+
+        SpleeterStftProcessor.NormalizeOverlapAdd(vocalsMono, accMono, windowSum);
+
+        float maxDiff = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            maxDiff = Math.Max(maxDiff, Math.Abs(refVocalsMono[i] - vocalsMono[i]));
+            maxDiff = Math.Max(maxDiff, Math.Abs(refAccMono[i] - accMono[i]));
+        }
+
+        Assert.True(maxDiff < 1e-5f, $"block overlap-add drifted {maxDiff} from legacy pipeline");
+    }
+
+    [Fact]
+    public void ForwardBlock_matches_global_forward_slice()
+    {
+        const int n = Nfft + (PadTo * Hop) + 500;
+        var processor = new SpleeterStftProcessor();
+        float[] left = MakeSine(n, 330, 0.35);
+        float[] right = MakeSine(n, 550, 0.25);
+
+        (float[] leftMag, float[] leftPhase, int targetFrames) = processor.Forward(left);
+        (float[] rightMag, float[] rightPhase, _) = processor.Forward(right);
+
+        int startFrame = PadTo; // second split; exercises non-zero frame origins
+        using SpleeterStftBlock block = processor.ForwardBlock(left, right, startFrame, PadTo);
+        ReadOnlySpan<float> blockMag = block.Magnitudes.Span;
+        ReadOnlySpan<float> blockPhase = block.Phases.Span;
+
+        for (int f = 0; f < PadTo; f++)
+        {
+            int globalOffset = (startFrame + f) * MaxFreqs;
+            int leftOffset = f * MaxFreqs;
+            int rightOffset = (PadTo + f) * MaxFreqs;
+            for (int k = 0; k < MaxFreqs; k++)
+            {
+                Assert.Equal(leftMag[globalOffset + k], blockMag[leftOffset + k]);
+                Assert.Equal(rightMag[globalOffset + k], blockMag[rightOffset + k]);
+                Assert.Equal(leftPhase[globalOffset + k], blockPhase[leftOffset + k]);
+                Assert.Equal(rightPhase[globalOffset + k], blockPhase[rightOffset + k]);
+            }
+        }
+    }
+
+    [Fact]
+    public void OverlapAddMaskedBlock_validates_lengths()
+    {
+        var processor = new SpleeterStftProcessor();
+        float[] mono = MakeSine(Nfft + Hop, 220, 0.2f);
+        using SpleeterStftBlock block = processor.ForwardBlock(mono, mono, 0, PadTo);
+        int blockElems = 2 * PadTo * MaxFreqs;
+        var mask = new float[blockElems];
+        var outBuf = new float[mono.Length];
+        var winSum = new float[mono.Length];
+
+        Assert.Throws<ArgumentException>(() =>
+            processor.OverlapAddMaskedBlock(
+                block, new float[4], mask, outBuf, outBuf, winSum,
+                TestContext.Current.CancellationToken));
+        Assert.Throws<ArgumentException>(() =>
+            processor.OverlapAddMaskedBlock(
+                block, mask, mask, outBuf, outBuf, new float[4],
+                TestContext.Current.CancellationToken));
+        Assert.Throws<ArgumentOutOfRangeException>(() => processor.ForwardBlock(mono, mono, -1, PadTo));
+    }
 }

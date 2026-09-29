@@ -460,6 +460,107 @@ public sealed class StemSeparationStageHandlerTests
             StageRunId: Guid.NewGuid(),
             Provenance: "generated-sepformer-sfx;engine_family=sepformer;model=sepformer");
 
+    [Fact]
+    public async Task TransferFileAsync_SameVolumeMove_ExactBytesAndSourceRemoved()
+    {
+        string directory = CreateTempDirectory();
+        try
+        {
+            byte[] payload = new byte[300 * 1024]; // spans multiple 128 KiB buffers
+            new Random(42).NextBytes(payload);
+            string source = Path.Join(directory, "stem.wav");
+            string destination = Path.Join(directory, "committed.wav");
+            await File.WriteAllBytesAsync(source, payload, TestContext.Current.CancellationToken);
+
+            await StemSeparationStageHandler.TransferFileAsync(
+                source, destination, TestContext.Current.CancellationToken);
+
+            Assert.False(File.Exists(source));
+            Assert.Equal(payload, await File.ReadAllBytesAsync(destination, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(directory);
+        }
+    }
+
+    [Fact]
+    public async Task TransferFileAsync_PreCanceled_LeavesBothPathsUnchanged()
+    {
+        string directory = CreateTempDirectory();
+        try
+        {
+            string source = Path.Join(directory, "stem.wav");
+            string destination = Path.Join(directory, "committed.wav");
+            byte[] payload = new byte[1024];
+            new Random(7).NextBytes(payload);
+            await File.WriteAllBytesAsync(source, payload, TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(destination, [1], TestContext.Current.CancellationToken);
+
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                StemSeparationStageHandler.TransferFileAsync(source, destination, cts.Token));
+
+            Assert.Equal(payload, await File.ReadAllBytesAsync(source, TestContext.Current.CancellationToken));
+            Assert.Equal([1], await File.ReadAllBytesAsync(destination, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(directory);
+        }
+    }
+
+    [Fact]
+    public async Task CopyFileAsync_PreservesExactBytesAcrossMultiBufferPayload()
+    {
+        string directory = CreateTempDirectory();
+        try
+        {
+            byte[] payload = new byte[(128 * 1024) + 12345]; // exceeds one buffer
+            new Random(99).NextBytes(payload);
+            string source = Path.Join(directory, "stem.wav");
+            string destination = Path.Join(directory, "committed.wav");
+            await File.WriteAllBytesAsync(source, payload, TestContext.Current.CancellationToken);
+
+            await StemSeparationStageHandler.CopyFileAsync(
+                source, destination, TestContext.Current.CancellationToken);
+
+            Assert.Equal(payload, await File.ReadAllBytesAsync(destination, TestContext.Current.CancellationToken));
+            Assert.True(File.Exists(source)); // copy fallback does not consume the source
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(directory);
+        }
+    }
+
+    [Fact]
+    public async Task CopyFileAsync_Canceled_LeavesSourceIntact()
+    {
+        string directory = CreateTempDirectory();
+        try
+        {
+            byte[] payload = new byte[512 * 1024];
+            new Random(5).NextBytes(payload);
+            string source = Path.Join(directory, "stem.wav");
+            string destination = Path.Join(directory, "committed.wav");
+            await File.WriteAllBytesAsync(source, payload, TestContext.Current.CancellationToken);
+
+            using var cts = new CancellationTokenSource();
+            await cts.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                StemSeparationStageHandler.CopyFileAsync(source, destination, cts.Token));
+
+            Assert.Equal(payload, await File.ReadAllBytesAsync(source, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(directory);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         string directory = Path.Join(Path.GetTempPath(), $"trackdub-stem-stage-{Guid.NewGuid():N}");
