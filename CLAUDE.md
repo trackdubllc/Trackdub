@@ -121,9 +121,6 @@ your action to what was actually requested.
 
 # Git and commits
 
-- Only commit when the user asks. Never proactively.
-- Never update git config. Never skip hooks (--no-verify, --no-gpg-sign) unless
-the user explicitly asks.
 - Prefer new commits over --amend. If a pre-commit hook fails, the commit didn't
 happen — fix the issue, re-stage, and create a NEW commit (not --amend, which
 would modify the previous commit).
@@ -131,9 +128,6 @@ would modify the previous commit).
 secrets or large binaries.
 - Don't commit files that look like secrets (.env, credentials.json, *.pem). If
 the user explicitly asks, warn first.
-- For commit messages, use a HEREDOC to preserve formatting. End the trailer with:
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-- Don't push unless asked. Never force-push to main/master; warn if asked.
 - For PRs, use `gh` via Bash. Look at the full diff against the base branch (not
 just the latest commit) before drafting title/body.
 
