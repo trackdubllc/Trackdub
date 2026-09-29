@@ -26,9 +26,10 @@ The changed read+deserialize expressions:
   metadata. File I/O, existence guards and candidate probing were identical on both sides; loader
   validation and post-processing ran in neither arm, because the change did not touch them. The
   media shape called the real loader against a faithful pre-change copy of its body.
-- `dotnet test -c Release --no-build`, one shape per fresh process. This matters: touching
-  `InfrastructureSerializationContext.Default` builds metadata for all four declared types, so a
-  second shape measured in the same process would no longer be a first call.
+- `dotnet test -c Release --no-build`, one shape per fresh process, so each shape's first read is
+  measured with cold serializer machinery and JIT. The generated context's per-type metadata is
+  lazy (see Interpretation below): a fresh process isolates the one-time options-instance setup
+  and JIT warming, not an eager multi-type metadata build.
 - The timed region is the first read. The same call then ran 200 times and the median is recorded as
   the steady-state number.
 - Both modes first warmed the generic serializer entry points with a throwaway dummy type, so the
