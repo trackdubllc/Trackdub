@@ -14,9 +14,4 @@
     <ProjectReference Include="..\Trackdub.Media\Trackdub.Media.csproj" />
   </ItemGroup>
 
-  <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release). -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <PublishReadyToRun>true</PublishReadyToRun>
-  </PropertyGroup>
-
 </Project>

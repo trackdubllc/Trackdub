@@ -14,12 +14,6 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
   </ItemGroup>
 
-  <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release).
-       BenchmarkDotNet runs are Release; R2R removes JIT noise outside the measured region. -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <PublishReadyToRun>true</PublishReadyToRun>
-  </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj" />
   </ItemGroup>
