@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Trackdub.Domain;
 using Trackdub.Infrastructure;
@@ -44,6 +45,11 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
     /// ~9 ms of the one-time first read and roughly halves the per-read cost after it (0.30 ms →
     /// 0.16 ms) that the async reader spent on its own machinery; the dominant cost is still
     /// building the serializer metadata for the record graph, which this does not change.
+    /// <para>
+    /// A leading UTF-8 byte order mark is skipped, so an index written by an editor or script that
+    /// emits one (Notepad, PowerShell <c>-Encoding utf8</c>) loads exactly as it did through the
+    /// stream-based read this replaced. The store never writes a mark itself.
+    /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<LocalModelCacheRecord>> LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -55,8 +61,15 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
         }
 
         byte[] payload = File.ReadAllBytes(storagePaths.ModelCacheIndexPath);
+        ReadOnlySpan<byte> json = payload;
+        ReadOnlySpan<byte> preamble = Encoding.UTF8.GetPreamble();
+        if (json.StartsWith(preamble))
+        {
+            json = json[preamble.Length..];
+        }
+
         LocalModelCacheRecord[]? records = JsonSerializer.Deserialize(
-            payload,
+            json,
             LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray);
 
         return records ?? [];

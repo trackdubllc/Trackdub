@@ -181,6 +181,34 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
         Assert.Equal(frozen, rewritten);
     }
 
+    // The stream-based read this replaced tolerated a UTF-8 byte order mark, which Notepad and
+    // PowerShell -Encoding utf8 produce; an index carrying one has to keep loading, and the store
+    // must not start writing the mark back into the pinned on-disk bytes.
+    [Fact]
+    public async Task LoadAsync_reads_an_index_that_starts_with_a_utf8_bom()
+    {
+        LocalModelCacheRecordStore store = CreateStore();
+        TrackdubStoragePaths storagePaths = CreateStoragePaths();
+        Directory.CreateDirectory(storagePaths.ModelCacheDirectory);
+        byte[] pinned = Encoding.UTF8.GetBytes(ExpectedIndexJson.Replace("\n", Environment.NewLine, StringComparison.Ordinal));
+        byte[] withBom = [0xEF, 0xBB, 0xBF, .. pinned];
+        await File.WriteAllBytesAsync(
+            storagePaths.ModelCacheIndexPath,
+            withBom,
+            TestContext.Current.CancellationToken);
+
+        IReadOnlyList<LocalModelCacheRecord> loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["example/model", "example/model-b"], loaded.Select(record => record.ModelId));
+        Assert.Equal("olive-cuda-fp16", Assert.Single(loaded[0].Variants).Alias);
+
+        await store.SaveAsync(loaded, TestContext.Current.CancellationToken);
+
+        Assert.Equal(pinned, await File.ReadAllBytesAsync(
+            storagePaths.ModelCacheIndexPath,
+            TestContext.Current.CancellationToken));
+    }
+
     [Fact]
     public async Task LoadAsync_reports_malformed_index_content()
     {
