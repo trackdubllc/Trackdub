@@ -27,8 +27,7 @@
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
 
-  <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release).
-       Benchmark hosts publish per-run; R2R shortens startup before the measured region. -->
+  <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release). -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
