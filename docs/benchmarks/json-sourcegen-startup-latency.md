@@ -38,6 +38,9 @@ The changed read+deserialize expressions:
 - Raw data: one JSONL row per run (`TRACKDUB_JSON_PROBE_MODE`, `TRACKDUB_JSON_PROBE_OUT`),
   aggregated as the median per (shape, mode). The probe classes were committed as `0a6eb24e` and
   removed again in the follow-up to #305; they are not part of CI.
+- A second set of temporary phase probes timed the context access and then each store's first read
+  in sequence, once with 200 steady reads of each phase in between (serializer machinery warm) and
+  once back to back with no steady loops (the `startup.all` protocol).
 
 Environment: AMD Ryzen 7 5700X3D / 64 GB / Windows 11 Pro 26200 / .NET SDK 10.0.401, `main` @
 `1fd52a3a`.
@@ -63,26 +66,64 @@ Single store per process:
 Steady state after the first read (median of 200): 0.10-0.35 ms per read in both modes. Raw
 file-read floor for an 895-character manifest: 0.56 ms cold, 0.14 ms steady.
 
-Diagnostic with the generated contexts built before the timed region:
+Prewarm diagnostic — metadata for the two heaviest graphs (storage config and the model cache index,
+~51 ms of the cold total) built before the timed region, so this measures what is left once those
+costs are already paid:
 
 | Shape | reflection | generated |
 | --- | --- | --- |
 | five stores | 39.7 ms (n=5) | 24.0 ms (n=5) |
 | win-native-deps manifest | 7.62 ms (n=3) | 2.87 ms (n=3) |
 
+## Where the cold cost actually lives
+
+Per phase, in a fresh process, in order (median of 5-6 runs). "Warm machinery" repeats 200 steady
+reads of each phase before moving to the next; "cold chain" runs the phases back to back with no
+steady loops, mirroring the `startup.all` protocol.
+
+| Phase | generated, warm machinery | reflection, warm machinery | generated, cold chain | reflection, cold chain |
+| --- | --- | --- | --- | --- |
+| `InfrastructureSerializationContext.Default` | 1.72 ms | n/a | 0.58 ms | n/a |
+| second `Default` access | 0.05 ms | n/a | — | — |
+| AFX manifest | 11.61 ms | 15.86 ms | 9.18 ms | 10.17 ms |
+| TRT-RTX manifest | 5.82 ms | 5.64 ms | 5.24 ms | 3.44 ms |
+| storage config | 9.87 ms | 9.13 ms | 9.34 ms | 5.69 ms |
+| smoke verdicts | 2.98 ms | 2.76 ms | 1.45 ms | 1.27 ms |
+| model cache index | 41.20 ms | 42.07 ms | — | — |
+| **sum** | **73.25 ms** | **75.46 ms** | **25.79 ms** | **20.57 ms** |
+
 ## Interpretation
 
-- The difference is entirely one-time metadata/type-info initialization. Once metadata exists, both
-  metadata sources deserialize at the same speed.
-- Timed cold — the scenario the latency claim described — the generated-metadata reads are not
-  faster; they are consistently slower. The most plausible cause is that touching
-  `InfrastructureSerializationContext.Default` builds metadata eagerly for all four declared types,
-  while the pre-change stores built one type's metadata lazily on first use. The prewarmed
-  diagnostic is consistent with this: with metadata already built, the generated path is the faster
-  one.
-- Source-generated metadata remains a legitimate goal (compile-time metadata instead of runtime
-  reflection/emit). It is simply not a measured startup-latency win for these stores, and nothing
-  in the code should claim that it is.
+The generated contract metadata is **already lazy per type**, so there is no eager build to remove:
+
+- The generated context stores each type as `_X ??= (JsonTypeInfo<X>)Options.GetTypeInfo(typeof(X))`
+  (`obj/…/generated/…/InfrastructureSerializationContext.<Type>.g.cs`), and the phase data confirms
+  it: every store's first read carries its own cost. The last phase, smoke verdicts, still costs
+  1.45 ms (generated) / 1.27 ms (reflection) after three heavier reads, whereas a second access to
+  the already-built context costs 0.05 ms.
+- The only eager work when the context is first touched is the context's own options instance:
+  0.58-1.72 ms, once.
+- Splitting the shared context into per-store contexts therefore cannot remove any measured cost: it
+  would keep the same per-type metadata work and add one options instance per extra context. With a
+  shared context, a startup that reads one store already builds metadata for that store only.
+
+Where the two metadata sources differ, they trade places rather than one dominating: AFX favours the
+generated path (9-12 ms vs 10-16 ms), TRT-RTX and storage config favour reflection (5.2/9.3 ms vs
+3.4/5.7 ms in the cold chain), and the model cache index — 41 ms of the ~75 ms — is the same in both.
+With the serializer machinery warm between phases the sums are equal within noise (73.3 ms vs
+75.5 ms); back to back cold they are not (25.8 ms vs 20.6 ms over four stores). The `startup.all`
+result above is that same back-to-back protocol, so its sign is consistent with cold-JIT volume
+rather than with eager metadata.
+
+Conclusion for the latency question: source-generated metadata is not a startup-latency win for these
+stores, and no lazy-metadata fix is available to make it one — the per-type laziness that would be
+asked for is already how the runtime behaves. If startup latency on this path is the goal, the lever
+is the model cache index read (41 ms of ~75 ms, identical in both metadata sources), not the
+metadata source.
+
+The prewarm diagnostic above also corrects its own earlier reading: it looked like evidence of an
+eager four-type build, but it prewarmed the two heaviest graphs, which is what actually disappeared
+from the timed region — not four types' worth of metadata.
 
 ## Limits
 
