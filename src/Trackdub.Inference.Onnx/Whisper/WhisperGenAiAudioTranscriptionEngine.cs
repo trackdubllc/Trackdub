@@ -155,7 +155,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         int droppedDegenerateChunks = 0;
 
         {
-            Directory.CreateDirectory(requestTempDirectory);
             GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
                 modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
                 plan.ModelRevisionHash, cancellationToken).ConfigureAwait(false);
