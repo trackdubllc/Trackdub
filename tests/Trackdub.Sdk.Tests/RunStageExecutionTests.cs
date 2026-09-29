@@ -134,6 +134,41 @@ public sealed class RunStageExecutionTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecuteAsync_DisabledOptionalStage_IsReportedAsSkippedWithReason()
+    {
+        string tempDir = CreateTempProjectDir();
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
+        Directory.CreateDirectory(projectDir);
+        string mediaPath = Path.Join(tempDir, "video.mp4");
+        await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
+
+        using TrackdubSessionFactory factory = CreateFactory();
+        await using (TrackdubSession session = factory.CreateSession(projectDir))
+        {
+            await session.Workspace.CreateMediaSpineAsync(
+                new CreateTranscriptProjectRequest("sample", mediaPath),
+                CancellationToken.None);
+        }
+
+        var engine = new DubbingPipelineEngine(factory);
+        DubbingRunResult result = await engine.ExecuteAsync(new DubbingSessionOptions
+        {
+            SourceMediaPath = mediaPath,
+            ProjectOutputDirectory = projectDir,
+            TargetLanguageCode = "es",
+            EnableStemSeparation = false,
+            ForceRerun = true,
+            StageFilter = [StageNames.Separation],
+        });
+
+        StageOutcome outcome = Assert.Single(result.StageOutcomes);
+        Assert.Equal(StageNames.Separation, outcome.StageName);
+        Assert.Equal(StageStatus.Skipped, outcome.Status);
+        Assert.Equal(StageSkipReasonCodes.DisabledByOption, outcome.ReasonCode);
+        Assert.Empty(outcome.ArtifactPaths);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_StageFilterTargetingExportOnly_DoesNotRequireSourceMediaToExist()
     {
         // Stages that don't consume source media (translation, tts, export) must
