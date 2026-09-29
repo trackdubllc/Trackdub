@@ -382,6 +382,79 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Manifest_companion_methods_fail_closed_for_unknown_alias()
+    {
+        BundledModelManifestRegistry registry = CreateHushRegistry();
+        TrackdubStoragePaths storagePaths = new(tempRoot);
+        var downloader = new RecordingModelDownloader();
+        var registrar = new RecordingModelCacheRegistrar();
+        var service = new RuntimeModelBootstrapService(
+            new QueueRuntimePlanner(),
+            registry,
+            downloader,
+            registrar,
+            new StaticFileFingerprintService(),
+            storagePaths);
+
+        RequiredRuntimeModelStatus? status = await service.GetManifestCompanionModelStatusAsync(
+            "missing-companion",
+            RuntimeStage.Separation);
+        RequiredRuntimeModelStatus downloadStatus = await service.DownloadManifestCompanionModelAsync(
+            "missing-companion",
+            RuntimeStage.Separation);
+
+        Assert.NotNull(status);
+        Assert.Equal("missing-companion", status!.ModelId);
+        Assert.False(status.IsAvailable);
+        Assert.False(status.CanAutoDownload);
+        Assert.Contains("could not resolve", status.FailureReason, StringComparison.OrdinalIgnoreCase);
+        Assert.False(downloadStatus.IsAvailable);
+        Assert.False(downloadStatus.CanAutoDownload);
+        Assert.Contains("could not resolve", downloadStatus.FailureReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(downloader.DownloadedFiles);
+        Assert.Empty(downloader.DownloadedUris);
+        Assert.Null(registrar.LastRecord);
+    }
+
+    [Fact]
+    public async Task DownloadManifestCompanionModelAsync_downloads_manifest_files_and_registers_cache()
+    {
+        BundledModelManifestRegistry registry = CreateHushRegistry();
+        TrackdubStoragePaths storagePaths = new(tempRoot);
+        string modelRoot = Path.Join(storagePaths.ModelCacheDirectory, "weya-ai", "hush");
+        var downloader = new RecordingModelDownloader();
+        var registrar = new RecordingModelCacheRegistrar();
+        var service = new RuntimeModelBootstrapService(
+            new QueueRuntimePlanner(),
+            registry,
+            downloader,
+            registrar,
+            new StaticFileFingerprintService(),
+            storagePaths);
+
+        RequiredRuntimeModelStatus? missingStatus = await service.GetManifestCompanionModelStatusAsync(
+            "hush-dialogue",
+            RuntimeStage.Separation);
+        Assert.NotNull(missingStatus);
+        Assert.True(missingStatus!.CanAutoDownload);
+
+        RequiredRuntimeModelStatus downloadedStatus = await service.DownloadManifestCompanionModelAsync(
+            "hush-dialogue",
+            RuntimeStage.Separation,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(downloadedStatus.IsAvailable, $"FailureReason={downloadedStatus.FailureReason}");
+        Assert.Equal(RuntimeStage.Separation, downloadedStatus.Stage);
+        Assert.Equal(["onnx/advanced_dfnet16k_model_best_onnx.tar.gz"], downloader.DownloadedFiles);
+        Assert.Equal(["https://example.test/hush/weya_nc.dll"], downloader.DownloadedUris);
+        Assert.True(File.Exists(Path.Join(modelRoot, "onnx", "advanced_dfnet16k_model_best_onnx.tar.gz")));
+        Assert.True(File.Exists(Path.Join(modelRoot, "deployment", "lib", "weya_nc.dll")));
+        Assert.NotNull(registrar.LastRecord);
+        Assert.Equal("weya-ai/hush", registrar.LastRecord!.ModelId);
+        Assert.Equal(modelRoot, registrar.LastRecord.RootPath);
+    }
+
+    [Fact]
     public async Task DownloadRequiredModelAsync_rejects_file_when_sha256_does_not_match_manifest()
     {
         BundledModelManifestRegistry registry = CreateRegistryWithSha256(MismatchedSha256);
