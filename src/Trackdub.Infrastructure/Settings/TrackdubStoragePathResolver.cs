@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Text.Json;
+using Trackdub.Infrastructure;
 
 namespace Trackdub.Infrastructure.Settings;
 
@@ -29,11 +30,6 @@ public static class TrackdubStoragePathResolver
     public const string EngineCacheRootEnvironmentVariable = "TRACKDUB_ENGINE_CACHE_ROOT";
     public const string PortableEnvironmentVariable = "TRACKDUB_PORTABLE";
     public const string PortableDataRootEnvironmentVariable = "TRACKDUB_PORTABLE_DATA_ROOT";
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
 
     // Shared LIFO stacks backing ApplyToCurrentProcessScoped, keyed by env var name. Lets
     // an out-of-order Dispose() correctly rebase to whatever is now the topmost surviving
@@ -255,7 +251,7 @@ public static class TrackdubStoragePathResolver
             try
             {
                 using FileStream stream = File.OpenRead(candidatePath);
-                StorageConfig? config = JsonSerializer.Deserialize<StorageConfig>(stream, JsonOptions);
+                StorageConfig? config = JsonSerializer.Deserialize(stream, InfrastructureSerializationContext.Default.StorageConfig);
                 if (config != null && config.HasAnyRoot)
                 {
                     return config;
@@ -330,7 +326,9 @@ public static class TrackdubStoragePathResolver
             ? null
             : Path.GetFullPath(Environment.ExpandEnvironmentVariables(path));
 
-    private sealed class StorageConfig
+    // Kept internal (not private) so the JSON source generator in
+    // InfrastructureSerializationContext can bind metadata for it at compile time.
+    internal sealed class StorageConfig
     {
         public string? UserDataRoot { get; set; }
 
