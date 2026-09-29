@@ -12,4 +12,10 @@
     <ProjectReference Include="..\Trackdub.Infrastructure\Trackdub.Infrastructure.csproj" />
     <PackageReference Include="Avalonia.Desktop" />
   </ItemGroup>
+
+  <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release).
+       Mirrors Trackdub-gated's desktop app publish setting. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
 </Project>
