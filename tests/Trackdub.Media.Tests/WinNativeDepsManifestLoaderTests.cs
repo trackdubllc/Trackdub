@@ -1,3 +1,4 @@
+using System.Text;
 using Trackdub.Media.Playback;
 
 namespace Trackdub.Media.Tests;
@@ -146,6 +147,37 @@ public sealed class WinNativeDepsManifestLoaderTests
             Dictionary<string, WinNativeDepsRuntimeEntry> runtimes =
                 Assert.IsType<Dictionary<string, WinNativeDepsRuntimeEntry>>(manifest.Runtimes);
             Assert.Equal("https://example.com/uppercase-ffmpeg.zip", runtimes["win-x64"].FfmpegZipUrl);
+        }
+        finally
+        {
+            DeleteDirectory(root);
+        }
+    }
+
+    // The manifest is read as text, which drops a byte order mark, and the tolerant reader already
+    // accepts the rest: a copy re-saved by a Windows editor still resolves.
+    [Fact]
+    public void TryLoadFromDirectory_reads_a_manifest_re_saved_with_a_utf8_bom_and_windows_newlines()
+    {
+        string root = CreateTempDirectory();
+        try
+        {
+            string manifestDirectory = Path.Join(root, "runtime");
+            Directory.CreateDirectory(manifestDirectory);
+            string json = File.ReadAllText(ResolveFixturePath("win-native-deps.manifest.json"))
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace("\n", "\r\n", StringComparison.Ordinal);
+            File.WriteAllBytes(
+                Path.Join(manifestDirectory, "win-native-deps.manifest.json"),
+                [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(json)]);
+
+            WinNativeDepsManifestRoot? manifest = WinNativeDepsManifestLoader.TryLoadFromDirectory(root);
+
+            Assert.NotNull(manifest);
+            Assert.Equal(1, manifest.SchemaVersion);
+            Dictionary<string, WinNativeDepsRuntimeEntry> runtimes =
+                Assert.IsType<Dictionary<string, WinNativeDepsRuntimeEntry>>(manifest.Runtimes);
+            Assert.True(runtimes.ContainsKey("win-x64"));
         }
         finally
         {

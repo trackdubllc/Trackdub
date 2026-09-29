@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Trackdub.Infrastructure.Settings;
 
@@ -98,6 +99,41 @@ public sealed class TrackdubStoragePathResolverTests
         Assert.Equal(Path.GetFullPath(dataRoot), options.UserDataRoot);
         Assert.Equal(Path.GetFullPath(cacheRoot), options.UserCacheRoot);
         Assert.Equal(Path.GetFullPath(sharedRoot), options.SharedAssetRoot);
+    }
+
+    // The installer config is read through a FileStream: a storage.json re-saved by a Windows editor
+    // (UTF-8 byte order mark, CRLF endings) has to resolve the same roots.
+    [Fact]
+    public void Resolve_reads_installer_storage_config_re_saved_with_a_utf8_bom_and_windows_newlines()
+    {
+        string testRoot = CreateTestRoot();
+        string commonRoot = Path.Join(testRoot, "program-data");
+        string dataRoot = Path.Join(testRoot, "configured-data");
+        string cacheRoot = Path.Join(testRoot, "configured-cache");
+        string configDirectory = Path.Join(commonRoot, "Trackdub");
+        Directory.CreateDirectory(configDirectory);
+        string json = JsonSerializer.Serialize(
+            new
+            {
+                userDataRoot = dataRoot,
+                userCacheRoot = cacheRoot
+            },
+            new JsonSerializerOptions { WriteIndented = true });
+        File.WriteAllBytes(
+            Path.Join(configDirectory, "storage.json"),
+            [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(json.Replace("\n", "\r\n", StringComparison.Ordinal))]);
+
+        var context = new TrackdubStoragePathResolutionContext(
+            Path.Join(testRoot, "app"),
+            Path.Join(testRoot, "local"),
+            commonRoot,
+            new Dictionary<string, string?>());
+
+        TrackdubStorageOptions options = TrackdubStoragePathResolver.Resolve(context);
+
+        Assert.False(options.IsPortable);
+        Assert.Equal(Path.GetFullPath(dataRoot), options.UserDataRoot);
+        Assert.Equal(Path.GetFullPath(cacheRoot), options.UserCacheRoot);
     }
 
     private static string CreateTestRoot()

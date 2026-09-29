@@ -1,3 +1,4 @@
+using System.Text;
 using Trackdub.Contracts;
 using Trackdub.Domain;
 using Trackdub.Infrastructure.Settings;
@@ -201,6 +202,30 @@ public sealed class FileSmokeVerdictStoreTests
             File.WriteAllText(path, "{ not valid json");
             var store = new FileSmokeVerdictStore(path);
             Assert.False(store.IsVerified(CreateKey(ModelSha, ExecutionProviderKind.TensorRTRtx, "560.35.03")));
+        }
+        finally
+        {
+            DeleteStore(path);
+        }
+    }
+
+    // The file is read as text, which drops a byte order mark, and the JSON reader treats CRLF as
+    // whitespace: verdicts recorded before an editor re-saved the file have to survive a cold load.
+    [Fact]
+    public void Verdicts_survive_a_file_re_saved_with_a_utf8_bom_and_windows_newlines()
+    {
+        string path = NewStorePath();
+        try
+        {
+            SmokeVerdictKey key = CreateKey(ModelSha, ExecutionProviderKind.TensorRTRtx, "560.35.03");
+            new FileSmokeVerdictStore(path).RecordVerified(key);
+
+            string json = File.ReadAllText(path)
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace("\n", "\r\n", StringComparison.Ordinal);
+            File.WriteAllBytes(path, [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(json)]);
+
+            Assert.True(new FileSmokeVerdictStore(path).IsVerified(key));
         }
         finally
         {
