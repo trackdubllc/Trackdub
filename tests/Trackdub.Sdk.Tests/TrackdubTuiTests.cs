@@ -431,5 +431,4 @@ public sealed class TrackdubTuiTests : IDisposable
         public Task<bool> HandleKeyAsync(ConsoleKeyInfo key, TrackdubTuiContext context) =>
             Task.FromResult(false);
     }
-
 }

@@ -719,5 +719,4 @@ public sealed class PipelineTuiScreenPickerTests : IDisposable
             return Task.FromResult(Program.ExitSuccess);
         }
     }
-
 }
