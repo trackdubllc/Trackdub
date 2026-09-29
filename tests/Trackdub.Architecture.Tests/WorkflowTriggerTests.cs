@@ -8,6 +8,11 @@ namespace Trackdub.Architecture.Tests;
 /// the run: the workflow fires only for pull requests whose base is <c>main</c>, so a stacked branch
 /// reaches <c>main</c> without ever having run those checks. Asserting the filter out here stops a
 /// later edit from reintroducing it unnoticed.
+/// <para>
+/// Only <c>branches</c> is rejected. A <c>paths</c> filter is not a base-branch filter: it selects
+/// which changes run the workflow and applies identically to every base branch, so
+/// <c>model-audit.yml</c> and <c>benchmark-report-validation.yml</c> keep theirs deliberately.
+/// </para>
 /// </remarks>
 public sealed class WorkflowTriggerTests
 {
@@ -22,24 +27,26 @@ public sealed class WorkflowTriggerTests
 
         IReadOnlyList<string> filters = ReadTriggerFilters(workflow, "pull_request");
 
-        Assert.True(
-            filters.Count == 0,
-            $"{workflowPath} narrows its pull_request trigger with "
-            + $"{string.Join(", ", filters)}. A stacked pull request (base = another branch) then "
-            + "never runs that workflow's checks. Remove the base-branch filter, passing every "
-            + "pull request as the trigger's comment describes; if a workflow is deliberately "
-            + "main-only again, delete its InlineData in the same commit.");
+        Assert.DoesNotContain(
+            "branches",
+            filters);
     }
 
     [Fact]
     public void Base_branch_filter_is_detected_on_the_trigger_that_carries_it()
     {
-        // An empty result is what the guard above wants to see, and it is also what a reader that
+        // A missing "branches" is what the guard above wants to see, and it is also what a reader that
         // cannot see anything would return, so pin both directions and the sibling trigger
         // boundaries on samples rather than trusting the real file alone.
         Assert.Contains("branches", ReadTriggerFilters(NarrowedSample, "pull_request"));
         Assert.Empty(ReadTriggerFilters(UnfilteredSample, "pull_request"));
         Assert.Contains("branches", ReadTriggerFilters(UnfilteredSample, "push"));
+
+        // A paths-only trigger is narrowed, yet not by base branch, so it must survive the guard
+        // above. Without this the reader could start filtering everything out and the guard would
+        // pass for the wrong reason.
+        Assert.Equal(["paths"], ReadTriggerFilters(PathFilteredSample, "pull_request"));
+        Assert.Contains("branches", ReadTriggerFilters(PathFilteredSample, "push"));
     }
 
     private const string NarrowedSample = """
@@ -61,6 +68,20 @@ public sealed class WorkflowTriggerTests
             branches: [main]
           # A comment at trigger indentation, between the two triggers.
           pull_request:
+          workflow_dispatch:
+        """;
+
+    private const string PathFilteredSample = """
+        name: Model manifest audit
+
+        on:
+          push:
+            branches: [main]
+            paths:
+              - "src/Trackdub.Inference/Runtime/ModelManifest/**"
+          pull_request:
+            paths:
+              - "src/Trackdub.Inference/Runtime/ModelManifest/**"
           workflow_dispatch:
         """;
 
