@@ -53,259 +53,14 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         ArgumentNullException.ThrowIfNull(options);
         string? stage = ResolveStage(options.Stage);
         ValidateOptions(options);
-        Guid reportId = Guid.NewGuid();
-        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
-        var clock = Stopwatch.StartNew();
-        Dictionary<string, double?> timings = CreateTimings();
-        var resourceTelemetry = new List<BenchmarkStageResourceTelemetry>();
-        ResourceTelemetrySnapshot? processTelemetryStart = ResourceTelemetry.TryCaptureProcess();
-        WorkingSetPeakMonitor? processWorkingSetPeak = new(
-            new ProcessWorkingSetSampler(), processTelemetryStart?.WorkingSetBytes);
-        Dictionary<string, long?> memory = CreateMemory(processTelemetryStart);
-        var counterTotals = new Dictionary<string, long>(StringComparer.Ordinal);
-        var observedMaxima = new Dictionary<string, long>(StringComparer.Ordinal);
-        string? fixtureHash = null;
-        string? reason = null;
-        BenchmarkEvidenceStatus status = BenchmarkEvidenceStatus.Failed;
-        IReadOnlyList<BenchmarkEvidenceStage> stages = [];
-        Guid runId = reportId;
-        string? actualModel = null;
-        string? actualProvider = null;
-        string projectRoot = Path.Join(options.OutputDirectory, "projects", reportId.ToString("N"));
-        string fixtureCopy = Path.Join(projectRoot, "fixture" + Path.GetExtension(options.FixturePath));
-        string projectPath = Path.Join(projectRoot, "project.trackdub");
-        HeadlessDubbingHost? host = null;
-        IDisposable? cacheScope = null;
-        bool ownsHost = false;
+        var context = new BenchmarkRunContext(options, stage, Guid.NewGuid());
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            Directory.CreateDirectory(projectRoot);
-            long preparationStart = Stopwatch.GetTimestamp();
-            fixtureHash = await CopyFixtureAsync(options.FixturePath, fixtureCopy, cancellationToken)
-                .ConfigureAwait(false);
-            timings["fixturePreparation"] = Stopwatch.GetElapsedTime(preparationStart).TotalMilliseconds;
-            if (options.ExpectedFixtureSha256 is not null &&
-                !fixtureHash.Equals(options.ExpectedFixtureSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                status = BenchmarkEvidenceStatus.Failed;
-                reason = "Fixture checksum differs from the expected SHA-256.";
-                throw new PreparationIncompleteException();
-            }
-
-            if (options.Mode == "fresh-process" && !options.ReuseEngineCache)
-            {
-                string cache = Path.Join(projectRoot, "engine-cache");
-                Directory.CreateDirectory(cache);
-                cacheScope = new EnvironmentOverride(TrackdubStoragePathResolver.EngineCacheRootEnvironmentVariable, cache);
-                ((EnvironmentOverride)cacheScope).Apply();
-            }
-
-            long hostStart = Stopwatch.GetTimestamp();
-            ownsHost = options.Mode != "warm-host";
-            host = ownsHost ? CreateHost(options) : AcquireWarmHost(options);
-            // Headless storage overrides may set this variable while building the host.
-            // Apply the per-sample engine-cache root again before any session is created.
-            if (cacheScope is EnvironmentOverride engineCache)
-                engineCache.Apply();
-            timings["hostCreation"] = Stopwatch.GetElapsedTime(hostStart).TotalMilliseconds;
-
-            int runCount = Math.Max(1, options.RunCount);
-            string baselineProjectPath = Path.Join(projectRoot, "baseline", "project.trackdub");
-            bool hasPrerequisites = false;
-
-            if (stage is not null)
-            {
-                IReadOnlyList<string> prerequisites = PrerequisitesFor(stage);
-                if (prerequisites.Count > 0)
-                {
-                    hasPrerequisites = true;
-                    Directory.CreateDirectory(Path.GetDirectoryName(baselineProjectPath)!);
-                    long prerequisiteStart = Stopwatch.GetTimestamp();
-                    DubbingRunResult preparation = await ExecuteWithTelemetryAsync(
-                        baselineProjectPath, prerequisites, true, "prerequisites", 0).ConfigureAwait(false);
-                    timings["prerequisites"] = Stopwatch.GetElapsedTime(prerequisiteStart).TotalMilliseconds;
-                    RequirePreparationSucceeded(
-                        preparation, "Prerequisite preparation did not complete successfully.",
-                        out reason, out status, out stages);
-
-                    // A stage already run by its prerequisites is timed as an in-place re-run
-                    // (for ASR: re-transcribing existing segments), not as the stage itself.
-                    // No prerequisite regenerates a later stage today, but guard against one
-                    // sneaking the timed stage in (e.g. an opt-in stage running during import).
-                    RunArtifacts prepared = await ReadRunArtifactsAsync(host, baselineProjectPath, options, cancellationToken)
-                        .ConfigureAwait(false);
-                    if (prepared.StageRuns.Any(run => run.StageName.Equals(stage, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        reason = $"Prerequisites already ran '{stage}'; the timed run would measure a re-run.";
-                        status = BenchmarkEvidenceStatus.Skipped;
-                        throw new PreparationIncompleteException();
-                    }
-                }
-            }
-
-            IReadOnlyList<string>? filter = stage is null ? null : [stage];
-            if (options.Mode == "warm-host")
-            {
-                string warmupProjectPath = Path.Join(projectRoot, "warmup", "project.trackdub");
-                SeedProjectDirectory(hasPrerequisites ? baselineProjectPath : null, warmupProjectPath);
-
-                long warmupStart = Stopwatch.GetTimestamp();
-                DubbingRunResult warmup = await ExecuteWithTelemetryAsync(
-                    warmupProjectPath, filter, true, "warmup", 0).ConfigureAwait(false);
-                timings["warmup"] = Stopwatch.GetElapsedTime(warmupStart).TotalMilliseconds;
-                RequirePreparationSucceeded(
-                    warmup, "Warm-host preparation did not complete successfully.",
-                    out reason, out status, out stages);
-            }
-
-            string? primingProjectPath = null;
-            if (options.Mode == "artifact-resume")
-            {
-                primingProjectPath = Path.Join(projectRoot, "priming", "project.trackdub");
-                SeedProjectDirectory(hasPrerequisites ? baselineProjectPath : null, primingProjectPath);
-
-                DubbingRunResult priming = await ExecuteWithTelemetryAsync(
-                    primingProjectPath, filter, true, "priming", 0).ConfigureAwait(false);
-                if (priming.OverallStatus != DubbingRunStatus.Succeeded)
-                {
-                    reason = "Artifact-resume preparation did not complete successfully.";
-                    status = BenchmarkEvidenceStatus.Skipped;
-                    stages = MapStages(priming, [], null, null, null);
-                    throw new PreparationIncompleteException();
-                }
-            }
-
-            var stageSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
-            var stageMemorySamples = new Dictionary<string, List<ResourceTelemetryDelta>>(StringComparer.OrdinalIgnoreCase);
-            var pipelineSamples = new List<double>(runCount);
-            var phaseSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
-            var firstOutputSamples = new Dictionary<string, List<double>>(StringComparer.Ordinal);
-            DubbingRunResult lastResult = null!;
-            StageTimingCollector lastClock = null!;
-            string lastProjectPath = null!;
-
-            for (int runIndex = 1; runIndex <= runCount; runIndex++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                string iterProjectPath = Path.Join(projectRoot, $"run_{runIndex}", "project.trackdub");
-
-                // Artifact-resume seeds from the primed project so the measured run actually
-                // resumes/skips the already-completed stages instead of doing a full cold run.
-                SeedProjectDirectory(
-                    options.Mode == "artifact-resume" ? primingProjectPath
-                        : hasPrerequisites ? baselineProjectPath : null,
-                    iterProjectPath);
-
-                long runStart = Stopwatch.GetTimestamp();
-                var stageClock = new StageTimingCollector(runStart);
-                var phases = new BenchmarkPhaseCapture();
-                DubbingRunResult iterResult;
-                using (BenchmarkPhaseCapture.Activate(phases))
-                {
-                    iterResult = await ExecuteWithTelemetryAsync(
-                        iterProjectPath, filter, options.Mode != "artifact-resume",
-                        "measured", runIndex, stageClock).ConfigureAwait(false);
-                }
-
-                double pipeDuration = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
-                pipelineSamples.Add(pipeDuration);
-
-                foreach ((string name, double? duration) in phases.SnapshotMilliseconds())
-                {
-                    if (duration is double phaseMs)
-                        AddSample(phaseSamples, name, phaseMs);
-                }
-
-                foreach ((string counter, long count) in phases.SnapshotCounters())
-                    counterTotals[counter] = counterTotals.GetValueOrDefault(counter) + count;
-                foreach ((string gauge, long value) in phases.SnapshotMaxima())
-                    observedMaxima[gauge] = Math.Max(observedMaxima.GetValueOrDefault(gauge), value);
-
-                foreach (var outcome in iterResult.StageOutcomes)
-                {
-                    if (stageClock.GetMilliseconds(outcome.StageName) is double stageMs)
-                        AddSample(stageSamples, outcome.StageName, stageMs);
-                    if (stageClock.GetMemoryDelta(outcome.StageName) is ResourceTelemetryDelta memDelta)
-                        AddSample(stageMemorySamples, outcome.StageName, memDelta);
-                }
-
-                if (stageClock.GetFirstOutputMilliseconds(
-                        PipelineOutputKind.TranscriptSegmentAvailable) is double firstUsableTranscript)
-                    AddSample(firstOutputSamples, "firstUsableTranscript", firstUsableTranscript);
-                if (stageClock.GetFirstOutputMilliseconds(
-                        PipelineOutputKind.TranscriptSegmentPersisted) is double firstPersistedTranscript)
-                    AddSample(firstOutputSamples, "firstPersistedTranscript", firstPersistedTranscript);
-                if (stageClock.GetFirstOutputMilliseconds(
-                        PipelineOutputKind.PlayableAudioPersisted) is double firstPlayableAudio)
-                    AddSample(firstOutputSamples, "firstPlayableAudio", firstPlayableAudio);
-
-                lastResult = iterResult;
-                lastClock = stageClock;
-                lastProjectPath = iterProjectPath;
-
-                if (iterResult.OverallStatus != DubbingRunStatus.Succeeded)
-                {
-                    break;
-                }
-            }
-
-            RunArtifacts artifacts = await ReadRunArtifactsAsync(host, lastProjectPath, options, cancellationToken)
-                .ConfigureAwait(false);
-            double mediaDuration = artifacts.MediaDurationSeconds;
-
-            RecordStageTimings(timings, stageSamples, mediaDuration, stage);
-            RecordStageMemory(memory, stageSamples.Keys, stageMemorySamples, lastClock, resourceTelemetry);
-
-            if (pipelineSamples.Count > 0)
-            {
-                RecordLatencyStatistics(timings, "pipeline", PercentileCalculator.Calculate(
-                    pipelineSamples,
-                    totalUnits: mediaDuration,
-                    totalDurationSeconds: pipelineSamples.Sum() / 1000.0));
-            }
-
-            foreach ((string name, List<double> pSamples) in phaseSamples)
-            {
-                timings[name] = PercentileCalculator.Calculate(pSamples).P50Milliseconds;
-            }
-
-            timings["import"] = timings.GetValueOrDefault("phase:import");
-            timings["preflight"] = timings.GetValueOrDefault("phase:preflight");
-            timings["export"] = timings.GetValueOrDefault("stage:Export:p50")
-                ?? lastClock?.GetMilliseconds("Export");
-
-            runId = lastResult.RunId;
-            stages = MapStages(lastResult, artifacts.StageRuns, options.Model, stageSamples, lastClock);
-
-            // TTFT comes only from structured output events — stage completion is not a
-            // substitute for the first usable artifact. Artifact presence gates whether a
-            // recorded event is accepted into the report; it never creates a timing alone.
-            if (artifacts.HasUsableTranscript)
-            {
-                timings["firstUsableTranscript"] = firstOutputSamples.TryGetValue(
-                    "firstUsableTranscript", out List<double>? firstUsableSamples)
-                        ? PercentileCalculator.Calculate(firstUsableSamples).P50Milliseconds
-                        : null;
-                timings["firstPersistedTranscript"] = firstOutputSamples.TryGetValue(
-                    "firstPersistedTranscript", out List<double>? firstPersistedSamples)
-                        ? PercentileCalculator.Calculate(firstPersistedSamples).P50Milliseconds
-                        : null;
-            }
-
-            if (artifacts.HasPlayableTake)
-            {
-                timings["firstPlayableAudio"] = firstOutputSamples.TryGetValue(
-                    "firstPlayableAudio", out List<double>? firstPlayableSamples)
-                        ? PercentileCalculator.Calculate(firstPlayableSamples).P50Milliseconds
-                        : null;
-            }
-
-            BenchmarkEvidenceStage? requestedStage = FindRequestedStage(stages, stage);
-            actualModel = requestedStage?.ActualModel;
-            actualProvider = requestedStage?.ActualProvider;
-            (status, reason) = ResolveRunOutcome(
-                stage, requestedStage, lastResult, stages, options.Provider, actualProvider, reason);
+            await PrepareHostAsync(context, options, cancellationToken).ConfigureAwait(false);
+            await PreparePrerequisitesAsync(context, options, cancellationToken).ConfigureAwait(false);
+            await RunPreparationPhasesAsync(context, options, cancellationToken).ConfigureAwait(false);
+            await MeasureRunsAsync(context, options, cancellationToken).ConfigureAwait(false);
+            await RecordMeasuredOutcomeAsync(context, options, cancellationToken).ConfigureAwait(false);
         }
         catch (PreparationIncompleteException)
         {
@@ -313,123 +68,396 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         }
         catch (OperationCanceledException)
         {
-            status = BenchmarkEvidenceStatus.Canceled;
-            reason = "Canceled.";
+            context.Status = BenchmarkEvidenceStatus.Canceled;
+            context.Reason = "Canceled.";
         }
         catch (Exception ex)
         {
-            status = BenchmarkEvidenceStatus.Failed;
-            reason = $"{ex.GetType().Name}: {ex.Message}";
+            context.Status = BenchmarkEvidenceStatus.Failed;
+            context.Reason = $"{ex.GetType().Name}: {ex.Message}";
         }
         finally
         {
-            if (ownsHost && host is not null)
+            if (context.OwnsHost && context.Host is not null)
             {
                 long disposeStart = Stopwatch.GetTimestamp();
-                host.Dispose();
-                timings["disposal"] = Stopwatch.GetElapsedTime(disposeStart).TotalMilliseconds;
+                context.Host.Dispose();
+                context.Timings["disposal"] = Stopwatch.GetElapsedTime(disposeStart).TotalMilliseconds;
             }
-            cacheScope?.Dispose();
+            context.CacheScope?.Dispose();
         }
-        return await FinishAsync().ConfigureAwait(false);
+        return await CreateReportAsync(context, options, cancellationToken).ConfigureAwait(false);
+    }
 
-        async Task<BenchmarkEvidenceReport> FinishAsync()
+    private async Task PrepareHostAsync(
+        BenchmarkRunContext context,
+        ControlledDubbingBenchmarkOptions options,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Directory.CreateDirectory(context.ProjectRoot);
+        long preparationStart = Stopwatch.GetTimestamp();
+        context.FixtureHash = await CopyFixtureAsync(options.FixturePath, context.FixtureCopy, cancellationToken)
+            .ConfigureAwait(false);
+        context.Timings["fixturePreparation"] = Stopwatch.GetElapsedTime(preparationStart).TotalMilliseconds;
+        if (options.ExpectedFixtureSha256 is not null &&
+            !context.FixtureHash.Equals(options.ExpectedFixtureSha256, StringComparison.OrdinalIgnoreCase))
         {
-            clock.Stop();
-            ResourceTelemetrySnapshot? processTelemetryEnd = ResourceTelemetry.TryCaptureProcess();
-            ResourceTelemetryDelta? processDelta = processTelemetryStart is not null && processTelemetryEnd is not null
-                ? ResourceTelemetry.CalculateDelta(processTelemetryStart, processTelemetryEnd) : null;
+            context.Status = BenchmarkEvidenceStatus.Failed;
+            context.Reason = "Fixture checksum differs from the expected SHA-256.";
+            throw new PreparationIncompleteException();
+        }
 
-            long? sampledProcessPeak = processWorkingSetPeak?.Stop();
-            RecordProcessMemory(memory, processTelemetryEnd, processDelta, sampledProcessPeak, resourceTelemetry);
+        if (options.Mode == "fresh-process" && !options.ReuseEngineCache)
+        {
+            string cache = Path.Join(context.ProjectRoot, "engine-cache");
+            Directory.CreateDirectory(cache);
+            context.CacheScope = new EnvironmentOverride(TrackdubStoragePathResolver.EngineCacheRootEnvironmentVariable, cache);
+            ((EnvironmentOverride)context.CacheScope).Apply();
+        }
 
-            EnsureMeasuredTelemetry(resourceTelemetry, stage, reason);
-            string[] resourceFailures = CollectResourceFailures(resourceTelemetry);
-            if (resourceFailures.Length > 0)
+        long hostStart = Stopwatch.GetTimestamp();
+        context.OwnsHost = options.Mode != "warm-host";
+        context.Host = context.OwnsHost ? CreateHost(options) : AcquireWarmHost(options);
+        // Headless storage overrides may set this variable while building the host.
+        // Apply the per-sample engine-cache root again before any session is created.
+        if (context.CacheScope is EnvironmentOverride engineCache)
+            engineCache.Apply();
+        context.Timings["hostCreation"] = Stopwatch.GetElapsedTime(hostStart).TotalMilliseconds;
+    }
+
+    private async Task PreparePrerequisitesAsync(
+        BenchmarkRunContext context,
+        ControlledDubbingBenchmarkOptions options,
+        CancellationToken cancellationToken)
+    {
+        string? stage = context.Stage;
+        if (stage is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<string> prerequisites = PrerequisitesFor(stage);
+        if (prerequisites.Count == 0)
+        {
+            return;
+        }
+
+        context.HasPrerequisites = true;
+        Directory.CreateDirectory(Path.GetDirectoryName(context.BaselineProjectPath)!);
+        long prerequisiteStart = Stopwatch.GetTimestamp();
+        DubbingRunResult preparation = await ExecuteWithTelemetryAsync(
+            context, options, context.BaselineProjectPath, prerequisites, true,
+            "prerequisites", 0, stageClock: null, cancellationToken).ConfigureAwait(false);
+        context.Timings["prerequisites"] = Stopwatch.GetElapsedTime(prerequisiteStart).TotalMilliseconds;
+        RequirePreparationSucceeded(
+            preparation, "Prerequisite preparation did not complete successfully.", context);
+
+        // A stage already run by its prerequisites is timed as an in-place re-run
+        // (for ASR: re-transcribing existing segments), not as the stage itself.
+        // No prerequisite regenerates a later stage today, but guard against one
+        // sneaking the timed stage in (e.g. an opt-in stage running during import).
+        RunArtifacts prepared = await ReadRunArtifactsAsync(context.Host!, context.BaselineProjectPath, options, cancellationToken)
+            .ConfigureAwait(false);
+        if (prepared.StageRuns.Any(run => run.StageName.Equals(stage, StringComparison.OrdinalIgnoreCase)))
+        {
+            context.Reason = $"Prerequisites already ran '{stage}'; the timed run would measure a re-run.";
+            context.Status = BenchmarkEvidenceStatus.Skipped;
+            throw new PreparationIncompleteException();
+        }
+    }
+
+    private async Task RunPreparationPhasesAsync(
+        BenchmarkRunContext context,
+        ControlledDubbingBenchmarkOptions options,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<string>? filter = context.Stage is null ? null : [context.Stage];
+        if (options.Mode == "warm-host")
+        {
+            string warmupProjectPath = Path.Join(context.ProjectRoot, "warmup", "project.trackdub");
+            SeedProjectDirectory(context.HasPrerequisites ? context.BaselineProjectPath : null, warmupProjectPath);
+
+            long warmupStart = Stopwatch.GetTimestamp();
+            DubbingRunResult warmup = await ExecuteWithTelemetryAsync(
+                context, options, warmupProjectPath, filter, true,
+                "warmup", 0, stageClock: null, cancellationToken).ConfigureAwait(false);
+            context.Timings["warmup"] = Stopwatch.GetElapsedTime(warmupStart).TotalMilliseconds;
+            RequirePreparationSucceeded(
+                warmup, "Warm-host preparation did not complete successfully.", context);
+        }
+
+        if (options.Mode == "artifact-resume")
+        {
+            context.PrimingProjectPath = Path.Join(context.ProjectRoot, "priming", "project.trackdub");
+            SeedProjectDirectory(context.HasPrerequisites ? context.BaselineProjectPath : null, context.PrimingProjectPath);
+
+            DubbingRunResult priming = await ExecuteWithTelemetryAsync(
+                context, options, context.PrimingProjectPath, filter, true,
+                "priming", 0, stageClock: null, cancellationToken).ConfigureAwait(false);
+            if (priming.OverallStatus != DubbingRunStatus.Succeeded)
             {
-                if (status != BenchmarkEvidenceStatus.Canceled) status = BenchmarkEvidenceStatus.Failed;
-                reason = string.Join("; ", new[] { reason, "Resource validation failed: " + string.Join("; ", resourceFailures) }
-                    .Where(text => !string.IsNullOrWhiteSpace(text)));
+                context.Reason = "Artifact-resume preparation did not complete successfully.";
+                context.Status = BenchmarkEvidenceStatus.Skipped;
+                context.Stages = MapStages(priming, [], null, null, null);
+                throw new PreparationIncompleteException();
             }
-            ResourceTelemetryStatus resourceStatus = ResolveResourceStatus(resourceTelemetry, resourceFailures.Length > 0);
+        }
+    }
 
-            timings["total"] = clock.Elapsed.TotalMilliseconds;
-            var counters = new Dictionary<string, long?>(StringComparer.Ordinal);
-            foreach ((string name, long value) in counterTotals)
+    private async Task MeasureRunsAsync(
+        BenchmarkRunContext context,
+        ControlledDubbingBenchmarkOptions options,
+        CancellationToken cancellationToken)
+    {
+        int runCount = Math.Max(1, options.RunCount);
+        var stageSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
+        var stageMemorySamples = new Dictionary<string, List<ResourceTelemetryDelta>>(StringComparer.OrdinalIgnoreCase);
+        var pipelineSamples = new List<double>(runCount);
+        var phaseSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
+        var firstOutputSamples = new Dictionary<string, List<double>>(StringComparer.Ordinal);
+        DubbingRunResult lastResult = null!;
+        StageTimingCollector lastClock = null!;
+        string lastProjectPath = null!;
+        IReadOnlyList<string>? filter = context.Stage is null ? null : [context.Stage];
+
+        for (int runIndex = 1; runIndex <= runCount; runIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string iterProjectPath = Path.Join(context.ProjectRoot, $"run_{runIndex}", "project.trackdub");
+
+            // Artifact-resume seeds from the primed project so the measured run actually
+            // resumes/skips the already-completed stages instead of doing a full cold run.
+            SeedProjectDirectory(
+                options.Mode == "artifact-resume" ? context.PrimingProjectPath
+                    : context.HasPrerequisites ? context.BaselineProjectPath : null,
+                iterProjectPath);
+
+            long runStart = Stopwatch.GetTimestamp();
+            var stageClock = new StageTimingCollector(runStart);
+            var phases = new BenchmarkPhaseCapture();
+            DubbingRunResult iterResult;
+            using (BenchmarkPhaseCapture.Activate(phases))
+            {
+                iterResult = await ExecuteWithTelemetryAsync(
+                    context, options, iterProjectPath, filter, options.Mode != "artifact-resume",
+                    "measured", runIndex, stageClock, cancellationToken).ConfigureAwait(false);
+            }
+
+            double pipeDuration = Stopwatch.GetElapsedTime(runStart).TotalMilliseconds;
+            pipelineSamples.Add(pipeDuration);
+
+            foreach ((string name, double? duration) in phases.SnapshotMilliseconds())
+            {
+                if (duration is double phaseMs)
+                    AddSample(phaseSamples, name, phaseMs);
+            }
+
+            foreach ((string counter, long count) in phases.SnapshotCounters())
+                context.CounterTotals[counter] = context.CounterTotals.GetValueOrDefault(counter) + count;
+            foreach ((string gauge, long value) in phases.SnapshotMaxima())
+                context.ObservedMaxima[gauge] = Math.Max(context.ObservedMaxima.GetValueOrDefault(gauge), value);
+
+            foreach (var outcome in iterResult.StageOutcomes)
+            {
+                if (stageClock.GetMilliseconds(outcome.StageName) is double stageMs)
+                    AddSample(stageSamples, outcome.StageName, stageMs);
+                if (stageClock.GetMemoryDelta(outcome.StageName) is ResourceTelemetryDelta memDelta)
+                    AddSample(stageMemorySamples, outcome.StageName, memDelta);
+            }
+
+            if (stageClock.GetFirstOutputMilliseconds(
+                    PipelineOutputKind.TranscriptSegmentAvailable) is double firstUsableTranscript)
+                AddSample(firstOutputSamples, "firstUsableTranscript", firstUsableTranscript);
+            if (stageClock.GetFirstOutputMilliseconds(
+                    PipelineOutputKind.TranscriptSegmentPersisted) is double firstPersistedTranscript)
+                AddSample(firstOutputSamples, "firstPersistedTranscript", firstPersistedTranscript);
+            if (stageClock.GetFirstOutputMilliseconds(
+                    PipelineOutputKind.PlayableAudioPersisted) is double firstPlayableAudio)
+                AddSample(firstOutputSamples, "firstPlayableAudio", firstPlayableAudio);
+
+            lastResult = iterResult;
+            lastClock = stageClock;
+            lastProjectPath = iterProjectPath;
+
+            if (iterResult.OverallStatus != DubbingRunStatus.Succeeded)
+            {
+                break;
+            }
+        }
+
+        context.MeasuredRuns = new MeasuredRuns(
+            stageSamples, stageMemorySamples, pipelineSamples, phaseSamples,
+            firstOutputSamples, lastResult, lastClock, lastProjectPath);
+    }
+
+    private async Task RecordMeasuredOutcomeAsync(
+        BenchmarkRunContext context,
+        ControlledDubbingBenchmarkOptions options,
+        CancellationToken cancellationToken)
+    {
+        MeasuredRuns runs = context.MeasuredRuns;
+        RunArtifacts artifacts = await ReadRunArtifactsAsync(context.Host!, runs.LastProjectPath, options, cancellationToken)
+            .ConfigureAwait(false);
+        double mediaDuration = artifacts.MediaDurationSeconds;
+
+        RecordStageTimings(context.Timings, runs.StageSamples, mediaDuration, context.Stage);
+        RecordStageMemory(context.Memory, runs.StageSamples.Keys, runs.StageMemorySamples, runs.LastClock, context.ResourceTelemetry);
+
+        if (runs.PipelineSamples.Count > 0)
+        {
+            RecordLatencyStatistics(context.Timings, "pipeline", PercentileCalculator.Calculate(
+                runs.PipelineSamples,
+                totalUnits: mediaDuration,
+                totalDurationSeconds: runs.PipelineSamples.Sum() / 1000.0));
+        }
+
+        foreach ((string name, List<double> pSamples) in runs.PhaseSamples)
+        {
+            context.Timings[name] = PercentileCalculator.Calculate(pSamples).P50Milliseconds;
+        }
+
+        context.Timings["import"] = context.Timings.GetValueOrDefault("phase:import");
+        context.Timings["preflight"] = context.Timings.GetValueOrDefault("phase:preflight");
+        context.Timings["export"] = context.Timings.GetValueOrDefault("stage:Export:p50")
+            ?? runs.LastClock?.GetMilliseconds("Export");
+
+        context.RunId = runs.LastResult.RunId;
+        context.Stages = MapStages(runs.LastResult, artifacts.StageRuns, options.Model, runs.StageSamples, runs.LastClock);
+
+        // TTFT comes only from structured output events — stage completion is not a
+        // substitute for the first usable artifact. Artifact presence gates whether a
+        // recorded event is accepted into the report; it never creates a timing alone.
+        if (artifacts.HasUsableTranscript)
+        {
+            context.Timings["firstUsableTranscript"] = runs.FirstOutputSamples.TryGetValue(
+                "firstUsableTranscript", out List<double>? firstUsableSamples)
+                    ? PercentileCalculator.Calculate(firstUsableSamples).P50Milliseconds
+                    : null;
+            context.Timings["firstPersistedTranscript"] = runs.FirstOutputSamples.TryGetValue(
+                "firstPersistedTranscript", out List<double>? firstPersistedSamples)
+                    ? PercentileCalculator.Calculate(firstPersistedSamples).P50Milliseconds
+                    : null;
+        }
+
+        if (artifacts.HasPlayableTake)
+        {
+            context.Timings["firstPlayableAudio"] = runs.FirstOutputSamples.TryGetValue(
+                "firstPlayableAudio", out List<double>? firstPlayableSamples)
+                    ? PercentileCalculator.Calculate(firstPlayableSamples).P50Milliseconds
+                    : null;
+        }
+
+        BenchmarkEvidenceStage? requestedStage = FindRequestedStage(context.Stages, context.Stage);
+        context.ActualModel = requestedStage?.ActualModel;
+        context.ActualProvider = requestedStage?.ActualProvider;
+        (context.Status, context.Reason) = ResolveRunOutcome(
+            context.Stage, requestedStage, runs.LastResult, context.Stages,
+            options.Provider, context.ActualProvider, context.Reason);
+    }
+
+    private async Task<BenchmarkEvidenceReport> CreateReportAsync(
+        BenchmarkRunContext context,
+        ControlledDubbingBenchmarkOptions options,
+        CancellationToken cancellationToken)
+    {
+        context.Clock.Stop();
+        ResourceTelemetrySnapshot? processTelemetryEnd = ResourceTelemetry.TryCaptureProcess();
+        ResourceTelemetryDelta? processDelta = context.ProcessTelemetryStart is not null && processTelemetryEnd is not null
+            ? ResourceTelemetry.CalculateDelta(context.ProcessTelemetryStart, processTelemetryEnd) : null;
+
+        long? sampledProcessPeak = context.ProcessWorkingSetPeak?.Stop();
+        RecordProcessMemory(context.Memory, processTelemetryEnd, processDelta, sampledProcessPeak, context.ResourceTelemetry);
+
+        EnsureMeasuredTelemetry(context.ResourceTelemetry, context.Stage, context.Reason);
+        string[] resourceFailures = CollectResourceFailures(context.ResourceTelemetry);
+        if (resourceFailures.Length > 0)
+        {
+            if (context.Status != BenchmarkEvidenceStatus.Canceled) context.Status = BenchmarkEvidenceStatus.Failed;
+            context.Reason = string.Join("; ", new[] { context.Reason, "Resource validation failed: " + string.Join("; ", resourceFailures) }
+                .Where(text => !string.IsNullOrWhiteSpace(text)));
+        }
+        ResourceTelemetryStatus resourceStatus = ResolveResourceStatus(context.ResourceTelemetry, resourceFailures.Length > 0);
+
+        context.Timings["total"] = context.Clock.Elapsed.TotalMilliseconds;
+        var counters = new Dictionary<string, long?>(StringComparer.Ordinal);
+        foreach ((string name, long value) in context.CounterTotals)
+            counters[name] = value;
+        foreach ((string name, long value) in context.ObservedMaxima)
+        {
+            // A counter/max key collision is not expected by instrumentation
+            // convention; if one occurs keep the larger value rather than
+            // silently lowering an existing counter.
+            if (!counters.TryGetValue(name, out long? existing) || value > existing)
                 counters[name] = value;
-            foreach ((string name, long value) in observedMaxima)
-            {
-                // A counter/max key collision is not expected by instrumentation
-                // convention; if one occurs keep the larger value rather than
-                // silently lowering an existing counter.
-                if (!counters.TryGetValue(name, out long? existing) || value > existing)
-                    counters[name] = value;
-            }
-            var report = new BenchmarkEvidenceReport
-            {
-                RunId = runId,
-                Kind = BenchmarkEvidenceKind.Benchmark,
-                Scenario = stage ?? "full-pipeline",
-                RunMode = DescribeRunMode(options),
-                Status = status,
-                Reason = reason,
-                StartedAtUtc = startedAt,
-                CompletedAtUtc = DateTimeOffset.UtcNow,
-                FixtureSha256 = fixtureHash,
-                RequestedModel = options.Model,
-                ActualModel = actualModel,
-                RequestedProvider = options.Provider,
-                ActualProvider = actualProvider,
-                Configuration = BuildConfiguration(options, stage, stages, processWorkingSetPeak),
-                RuntimeVersions = CaptureRuntimeVersions(),
-                TimingsMilliseconds = timings,
-                MemoryBytes = memory,
-                Counters = counters,
-                Stages = stages,
-                ResourceTelemetryBounds = options.ResourceTelemetryBounds,
-                ResourceValidationStatus = resourceStatus,
-                ResourceTelemetry = resourceTelemetry.ToArray(),
-                ResourceDistribution = ResourceTelemetryAggregator.Aggregate(resourceTelemetry),
-            };
-            using var saveTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            CancellationToken saveToken = status == BenchmarkEvidenceStatus.Canceled
-                ? saveTimeout.Token
-                : cancellationToken;
-            await _history.SaveAsync(report, saveToken).ConfigureAwait(false);
-            return report;
         }
-
-        async Task<DubbingRunResult> ExecuteWithTelemetryAsync(
-            string project, IReadOnlyList<string>? filter, bool forceRerun,
-            string phase, int iteration, StageTimingCollector? stageClock = null)
+        var report = new BenchmarkEvidenceReport
         {
-            var capture = new StageResourceTelemetryCapture(
-                host!.Services.GetRequiredService<IResourceTelemetryCollector>(),
-                host.Services.GetRequiredService<IResourceTelemetryValidator>(),
-                options.ResourceTelemetryBounds, phase, iteration, stageClock,
-                host.Services.GetRequiredService<IWorkingSetSampler>());
-            try
-            {
-                DubbingRunResult result = await ExecuteAsync(host, fixtureCopy, project, options,
-                    filter, forceRerun, cancellationToken, capture).ConfigureAwait(false);
-                capture.CompleteOutcomes(result.StageOutcomes);
-                capture.CompletePending(BenchmarkEvidenceStatus.Failed, "Stage emitted no terminal outcome.");
-                return result;
-            }
-            catch (OperationCanceledException)
-            {
-                capture.CompletePending(BenchmarkEvidenceStatus.Canceled, "Canceled.");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                capture.CompletePending(BenchmarkEvidenceStatus.Failed, $"{ex.GetType().Name}: {ex.Message}");
-                throw;
-            }
-            finally
-            {
-                resourceTelemetry.AddRange(capture.Snapshot());
-            }
+            RunId = context.RunId,
+            Kind = BenchmarkEvidenceKind.Benchmark,
+            Scenario = context.Stage ?? "full-pipeline",
+            RunMode = DescribeRunMode(options),
+            Status = context.Status,
+            Reason = context.Reason,
+            StartedAtUtc = context.StartedAt,
+            CompletedAtUtc = DateTimeOffset.UtcNow,
+            FixtureSha256 = context.FixtureHash,
+            RequestedModel = options.Model,
+            ActualModel = context.ActualModel,
+            RequestedProvider = options.Provider,
+            ActualProvider = context.ActualProvider,
+            Configuration = BuildConfiguration(options, context.Stage, context.Stages, context.ProcessWorkingSetPeak),
+            RuntimeVersions = CaptureRuntimeVersions(),
+            TimingsMilliseconds = context.Timings,
+            MemoryBytes = context.Memory,
+            Counters = counters,
+            Stages = context.Stages,
+            ResourceTelemetryBounds = options.ResourceTelemetryBounds,
+            ResourceValidationStatus = resourceStatus,
+            ResourceTelemetry = context.ResourceTelemetry.ToArray(),
+            ResourceDistribution = ResourceTelemetryAggregator.Aggregate(context.ResourceTelemetry),
+        };
+        using var saveTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        CancellationToken saveToken = context.Status == BenchmarkEvidenceStatus.Canceled
+            ? saveTimeout.Token
+            : cancellationToken;
+        await _history.SaveAsync(report, saveToken).ConfigureAwait(false);
+        return report;
+    }
+
+    private async Task<DubbingRunResult> ExecuteWithTelemetryAsync(
+        BenchmarkRunContext context,
+        ControlledDubbingBenchmarkOptions options,
+        string project, IReadOnlyList<string>? filter, bool forceRerun,
+        string phase, int iteration, StageTimingCollector? stageClock,
+        CancellationToken cancellationToken)
+    {
+        var capture = new StageResourceTelemetryCapture(
+            context.Host!.Services.GetRequiredService<IResourceTelemetryCollector>(),
+            context.Host.Services.GetRequiredService<IResourceTelemetryValidator>(),
+            options.ResourceTelemetryBounds, phase, iteration, stageClock,
+            context.Host.Services.GetRequiredService<IWorkingSetSampler>());
+        try
+        {
+            DubbingRunResult result = await ExecuteAsync(context.Host, context.FixtureCopy, project, options,
+                filter, forceRerun, cancellationToken, capture).ConfigureAwait(false);
+            capture.CompleteOutcomes(result.StageOutcomes);
+            capture.CompletePending(BenchmarkEvidenceStatus.Failed, "Stage emitted no terminal outcome.");
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            capture.CompletePending(BenchmarkEvidenceStatus.Canceled, "Canceled.");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            capture.CompletePending(BenchmarkEvidenceStatus.Failed, $"{ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
+        finally
+        {
+            context.ResourceTelemetry.AddRange(capture.Snapshot());
         }
     }
 
@@ -1018,24 +1046,22 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     private static void RequirePreparationSucceeded(
         DubbingRunResult preparation,
         string failureMessage,
-        out string? reason,
-        out BenchmarkEvidenceStatus status,
-        out IReadOnlyList<BenchmarkEvidenceStage> stages)
+        BenchmarkRunContext context)
     {
         if (preparation.OverallStatus != DubbingRunStatus.Succeeded ||
             preparation.StageOutcomes.Any(x => x.Status != StageStatus.Succeeded &&
                 !(x.Status == StageStatus.Skipped &&
                     StageSkipReasonCodes.IsBenignSkip(x.ReasonCode))))
         {
-            reason = failureMessage;
-            status = BenchmarkEvidenceStatus.Skipped;
-            stages = MapStages(preparation, [], null, null);
+            context.Reason = failureMessage;
+            context.Status = BenchmarkEvidenceStatus.Skipped;
+            context.Stages = MapStages(preparation, [], null, null);
             throw new PreparationIncompleteException();
         }
 
-        reason = null;
-        status = BenchmarkEvidenceStatus.Skipped;
-        stages = [];
+        context.Reason = null;
+        context.Status = BenchmarkEvidenceStatus.Skipped;
+        context.Stages = [];
     }
 
     private static Task<DubbingRunResult> ExecuteAsync(
@@ -1164,4 +1190,69 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     }
 
     private sealed class PreparationIncompleteException : Exception;
+
+    // Mutable state shared across the async run phases. Async phases cannot use out
+    // parameters, and preparation failures must record status/reason before throwing, so
+    // the phases mutate this context instead of returning every accumulated value.
+    private sealed class BenchmarkRunContext
+    {
+        public BenchmarkRunContext(ControlledDubbingBenchmarkOptions options, string? stage, Guid reportId)
+        {
+            Stage = stage;
+            ReportId = reportId;
+            StartedAt = DateTimeOffset.UtcNow;
+            Clock = Stopwatch.StartNew();
+            Timings = CreateTimings();
+            ResourceTelemetry = new List<BenchmarkStageResourceTelemetry>();
+            ProcessTelemetryStart = Metrics.ResourceTelemetry.TryCaptureProcess();
+            ProcessWorkingSetPeak = new WorkingSetPeakMonitor(
+                new ProcessWorkingSetSampler(), ProcessTelemetryStart?.WorkingSetBytes);
+            Memory = CreateMemory(ProcessTelemetryStart);
+            CounterTotals = new Dictionary<string, long>(StringComparer.Ordinal);
+            ObservedMaxima = new Dictionary<string, long>(StringComparer.Ordinal);
+            ProjectRoot = Path.Join(options.OutputDirectory, "projects", reportId.ToString("N"));
+            FixtureCopy = Path.Join(ProjectRoot, "fixture" + Path.GetExtension(options.FixturePath));
+            BaselineProjectPath = Path.Join(ProjectRoot, "baseline", "project.trackdub");
+            RunId = reportId;
+        }
+
+        public string? Stage { get; }
+        public Guid ReportId { get; }
+        public DateTimeOffset StartedAt { get; }
+        public Stopwatch Clock { get; }
+        public Dictionary<string, double?> Timings { get; }
+        public List<BenchmarkStageResourceTelemetry> ResourceTelemetry { get; }
+        public ResourceTelemetrySnapshot? ProcessTelemetryStart { get; }
+        public WorkingSetPeakMonitor? ProcessWorkingSetPeak { get; }
+        public Dictionary<string, long?> Memory { get; }
+        public Dictionary<string, long> CounterTotals { get; }
+        public Dictionary<string, long> ObservedMaxima { get; }
+        public string ProjectRoot { get; }
+        public string FixtureCopy { get; }
+        public string BaselineProjectPath { get; }
+        public string? PrimingProjectPath { get; set; }
+        public bool HasPrerequisites { get; set; }
+        public HeadlessDubbingHost? Host { get; set; }
+        public IDisposable? CacheScope { get; set; }
+        public bool OwnsHost { get; set; }
+        public MeasuredRuns MeasuredRuns { get; set; } = null!;
+
+        public string? FixtureHash { get; set; }
+        public string? Reason { get; set; }
+        public BenchmarkEvidenceStatus Status { get; set; } = BenchmarkEvidenceStatus.Failed;
+        public IReadOnlyList<BenchmarkEvidenceStage> Stages { get; set; } = [];
+        public Guid RunId { get; set; }
+        public string? ActualModel { get; set; }
+        public string? ActualProvider { get; set; }
+    }
+
+    private sealed record MeasuredRuns(
+        Dictionary<string, List<double>> StageSamples,
+        Dictionary<string, List<ResourceTelemetryDelta>> StageMemorySamples,
+        List<double> PipelineSamples,
+        Dictionary<string, List<double>> PhaseSamples,
+        Dictionary<string, List<double>> FirstOutputSamples,
+        DubbingRunResult LastResult,
+        StageTimingCollector LastClock,
+        string LastProjectPath);
 }
