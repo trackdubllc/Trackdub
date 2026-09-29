@@ -1561,7 +1561,6 @@ internal static class OnnxExecutionSessionFactory
             : requestedProvider;
     }
 
-
     internal static ExecutionProviderKind ResolveEffectiveProviderKindFromSession(
         InferenceSession session,
         ExecutionProviderKind optionsSelectedProvider,
