@@ -13,6 +13,130 @@ namespace Trackdub.Inference.Tests;
 public sealed class SortFormerDiarizationEngineTests
 {
     [Fact]
+    public void SortFormerFeatureExtractor_RangeExtract_MatchesFullExtract()
+    {
+        float[] samples = CreateSineWave(durationSeconds: 1.0, sampleRate: 16000); // 16000 -> 101 frames
+        var extractor = new SortFormerFeatureExtractor();
+        using SortFormerFeatureInputSet full = extractor.Extract(samples);
+        int totalFrames = SortFormerFeatureExtractor.GetFrameCount(samples.Length);
+        Assert.Equal(full.FrameCount, totalFrames);
+
+        foreach (int chunkFrames in new[] { 1, 7, 37, 101 })
+        {
+            var fake = new FakeAudioSamples(samples);
+            var combined = new List<float>(full.FrameCount * full.FeatureCount);
+            for (int start = 0; start < totalFrames; start += chunkFrames)
+            {
+                int count = Math.Min(chunkFrames, totalFrames - start);
+                using SortFormerFeatureInputSet part = extractor.Extract(
+                    fake, start, count, CancellationToken.None);
+                Assert.Equal(count, part.FrameCount);
+                combined.AddRange(part.Data.ToArray());
+            }
+
+            Assert.Equal(full.Data.Length, combined.Count);
+            for (int i = 0; i < combined.Count; i++)
+            {
+                Assert.Equal(full.Data[i], combined[i], 5);
+            }
+
+            // Reads must stay bounded by the needed window, never the full waveform.
+            int expectedLastFrame = totalFrames - 1;
+            long maxNeeded = ((long)expectedLastFrame * SortFormerFeatureExtractor.HopLength)
+                + SortFormerFeatureExtractor.FftSize - (SortFormerFeatureExtractor.FftSize / 2);
+            Assert.True(fake.MaxReadEnd <= maxNeeded + 2);
+        }
+    }
+
+    [Fact]
+    public void SortFormerFeatureExtractor_RangeExtract_LongAudioReadsOnlyChunkWindow()
+    {
+        float[] samples = CreateSineWave(durationSeconds: 10.0, sampleRate: 16000); // 160000 -> 1001 frames
+        var fake = new FakeAudioSamples(samples);
+        var extractor = new SortFormerFeatureExtractor();
+
+        using SortFormerFeatureInputSet firstChunk = extractor.Extract(fake, 0, 50, CancellationToken.None);
+
+        Assert.Equal(50, firstChunk.FrameCount);
+        long boundedEnd = ((long)49 * SortFormerFeatureExtractor.HopLength)
+            + SortFormerFeatureExtractor.FftSize - (SortFormerFeatureExtractor.FftSize / 2) + 1;
+        Assert.True(
+            fake.MaxReadEnd <= boundedEnd + 1,
+            $"streamed chunk read {fake.MaxReadEnd} samples but chunk window ends at {boundedEnd}");
+        Assert.True(fake.MaxReadEnd < samples.Length);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]     // empty input produces zero frames, matching span Extract
+    [InlineData(160, 2)]   // exact hop multiple still gets the final padded frame
+    [InlineData(1600, 11)]
+    [InlineData(320, 3)]
+    public void SortFormerFeatureExtractor_GetFrameCount_MatchesFormula(int sampleCount, int expected)
+    {
+        Assert.Equal(expected, SortFormerFeatureExtractor.GetFrameCount(sampleCount));
+    }
+
+    [Fact]
+    public void SortFormerFeatureExtractor_GetFrameCount_OverflowThrows()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            SortFormerFeatureExtractor.GetFrameCount((long)int.MaxValue * SortFormerFeatureExtractor.HopLength));
+    }
+
+    [Fact]
+    public void SortFormerFeatureExtractor_RangeExtract_CancellationThrowsWithoutPartialResult()
+    {
+        float[] samples = CreateSineWave(durationSeconds: 1.0, sampleRate: 16000);
+        var fake = new FakeAudioSamples(samples);
+        var extractor = new SortFormerFeatureExtractor();
+        using var canceled = new CancellationTokenSource();
+        canceled.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+        {
+            using SortFormerFeatureInputSet _ = extractor.Extract(fake, 0, 10, canceled.Token);
+        });
+    }
+
+    [Fact]
+    public void SortFormerFeatureExtractor_RangeExtract_RejectsOutOfRange()
+    {
+        float[] samples = CreateSineWave(durationSeconds: 0.5, sampleRate: 16000);
+        var fake = new FakeAudioSamples(samples);
+        var extractor = new SortFormerFeatureExtractor();
+        int total = SortFormerFeatureExtractor.GetFrameCount(samples.Length);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => extractor.Extract(fake, -1, 1, CancellationToken.None));
+        Assert.Throws<ArgumentOutOfRangeException>(() => extractor.Extract(fake, 0, -1, CancellationToken.None));
+        Assert.Throws<ArgumentOutOfRangeException>(() => extractor.Extract(fake, total - 1, 2, CancellationToken.None));
+        // startFrame + frameCount overflow must be rejected, never wrap to a valid range
+        Assert.Throws<ArgumentOutOfRangeException>(() => extractor.Extract(fake, int.MaxValue, int.MaxValue, CancellationToken.None));
+        Assert.Equal(0, fake.MaxReadEnd);
+        using SortFormerFeatureInputSet empty = extractor.Extract(fake, 0, 0, CancellationToken.None);
+        Assert.Equal(0, empty.FrameCount);
+    }
+
+    /// <summary>Deterministic in-memory <see cref="Trackdub.Inference.Onnx.Audio.IAudioSamples"/> that records read extent.</summary>
+    private sealed class FakeAudioSamples(float[] data) : Trackdub.Inference.Onnx.Audio.IAudioSamples
+    {
+        public int SampleRate => 16000;
+
+        public long SampleFrameCount => data.Length;
+
+        public long MaxReadEnd { get; private set; }
+
+        public void ReadMonoSamples(long startFrame, Span<float> destination)
+        {
+            MaxReadEnd = Math.Max(MaxReadEnd, startFrame + destination.Length);
+            data.AsSpan((int)startFrame, destination.Length).CopyTo(destination);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    [Fact]
     public void MaxSupportedSpeakers_IsPublicConstantEqualToFour()
     {
         Assert.Equal(4, SortFormerDiarizationEngine.MaxSupportedSpeakers);

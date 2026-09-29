@@ -54,12 +54,14 @@ public sealed class StartTtsStageHandlerLifecycleTests
         var stageRunStore = new FakeProjectStageRunStore();
         using var handler = CreateHandler(stageRunStore, new ThrowingTtsEngine());
         StartTtsStageRequest request = CreateRequest();
+        var progress = new CollectingProgress();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            handler.HandleAsync(request, TestContext.Current.CancellationToken));
+            handler.HandleAsync(request, TestContext.Current.CancellationToken, progress));
 
         StageRunRecord run = Assert.Single(stageRunStore.All);
         Assert.Equal(StageRunStatus.Failed, run.Status);
+        Assert.DoesNotContain(progress.Events, e => e.OutputKind is not null);
     }
 
     [Fact]
@@ -68,11 +70,21 @@ public sealed class StartTtsStageHandlerLifecycleTests
         var stageRunStore = new FakeProjectStageRunStore();
         using var handler = CreateHandler(stageRunStore);
         StartTtsStageRequest request = CreateRequest();
+        var progress = new CollectingProgress();
 
-        StartTtsStageResult result = await handler.HandleAsync(request, TestContext.Current.CancellationToken);
+        StartTtsStageResult result = await handler.HandleAsync(
+            request, TestContext.Current.CancellationToken, progress);
 
         Assert.Equal(StageRunStatus.Completed, result.StageRun.Status);
-        Assert.Single(result.Takes);
+        TtsTake take = Assert.Single(result.Takes);
+
+        PipelineProgressEvent output = Assert.Single(progress.Events, e => e.OutputKind is not null);
+        Assert.Equal(PipelineOutputKind.PlayableAudioPersisted, output.OutputKind);
+        Assert.Equal(request.TranslatedSegments[0].SegmentIndex, output.ItemIndex);
+        Assert.Equal(request.TranslatedSegments[0].Id, output.SegmentId);
+        Assert.NotNull(output.ArtifactId);
+        Assert.NotEqual(Guid.Empty, output.ArtifactId!.Value);
+        Assert.Equal(take.ArtifactId, output.ArtifactId);
     }
 
     [Fact]
@@ -272,6 +284,19 @@ public sealed class StartTtsStageHandlerLifecycleTests
             voiceAssignment,
             transcriptSegments,
             translatedSegments);
+    }
+
+    private sealed class CollectingProgress : IProgress<PipelineProgressEvent>
+    {
+        public List<PipelineProgressEvent> Events { get; } = [];
+
+        public void Report(PipelineProgressEvent value)
+        {
+            lock (Events)
+            {
+                Events.Add(value);
+            }
+        }
     }
 
     private sealed class DelayingTtsEngine : FakeTtsEngine

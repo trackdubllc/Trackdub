@@ -17,6 +17,18 @@ namespace Trackdub.Inference.Onnx.Runtime.Planning;
 
 public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTester
 {
+    private readonly GenAiModelPool genAiModelPool;
+
+    public OnnxExecutionProviderSmokeTester()
+        : this(GenAiModelPool.Shared)
+    {
+    }
+
+    internal OnnxExecutionProviderSmokeTester(GenAiModelPool genAiModelPool)
+    {
+        this.genAiModelPool = genAiModelPool;
+    }
+
     public async Task<ExecutionProviderSmokeTestResult> SmokeTestAsync(
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken = default)
@@ -83,6 +95,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                     await SmokeTestTextRefinementGenAiAsync(
                         request.ModelRootPath,
                         request.EntryPath,
+                        request.ModelId,
+                        request.Variant,
+                        request.ModelRevisionHash,
                         request.ExecutionProvider,
                         cancellationToken).ConfigureAwait(false);
                     break;
@@ -111,9 +126,12 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         }
     }
 
-    private static async Task SmokeTestTextRefinementGenAiAsync(
+    private async Task SmokeTestTextRefinementGenAiAsync(
         string modelRootPath,
         string entryPath,
+        string? modelId,
+        string? variant,
+        string? modelRevisionHash,
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
@@ -124,10 +142,20 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             entryPath,
             "Text refinement smoke test requires genai_config.json in the model root.");
 
+        // Same key the stage adapters use: the model the smoke creates is the one the
+        // stage leases next. The lease keeps the shared Model exclusive for the probe.
+        GenAiModelKey key = await GenAiModelKey.CreateAsync(
+            genAiRoot, provider, modelId, variant, deviceId: null,
+            modelRevisionHash: modelRevisionHash, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using GenAiModelLease lease = await genAiModelPool.GetLeaseAsync(key, cancellationToken)
+            .ConfigureAwait(false);
+        using IDisposable? executionAdmission = await CpuExecutionAdmission.Shared
+            .AcquireAsync(provider, cancellationToken).ConfigureAwait(false);
+        Model model = lease.Model;
+
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using Model model = CreateGenAiSmokeModel(genAiRoot, provider);
             using Tokenizer tokenizer = new(model);
             using GeneratorParams generatorParams = new(model);
             using Sequences input = tokenizer.Encode("Hello");
@@ -135,20 +163,6 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             generator.AppendTokenSequences(input);
             generator.GenerateNextToken();
         }, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static Model CreateGenAiSmokeModel(string modelRootPath, ExecutionProviderKind provider)
-    {
-        GenAiNativeCompatibility.EnsureCompatible();
-        if (provider is ExecutionProviderKind.Cpu)
-        {
-            return new Model(modelRootPath);
-        }
-
-        using Config config = new(modelRootPath);
-        config.ClearProviders();
-        config.AppendProvider(GenAiExecutionProviderNames.Resolve(provider));
-        return new Model(config);
     }
 
     private static async Task SmokeTestVadAsync(
@@ -175,7 +189,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             }
 
             using var input = CreateVadInputs();
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(input.Values);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.RunWithRetry(input.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -210,11 +224,11 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
         using var encoderInputs = CreateWhisperEncoderInputs(sessionLease.EncoderSession.InputMetadata);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults = sessionLease.EncoderSession.Run(encoderInputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults = sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider);
         Tensor<float> hiddenStates = ResolveWhisperEncoderHiddenStates(encoderResults);
 
         using var decoderInputs = CreateWhisperDecoderInputs(hiddenStates);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderSession.Run(decoderInputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderSession.RunWithRetry(decoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider);
     }
 
     private static Tensor<float> ResolveWhisperEncoderHiddenStates(
@@ -237,7 +251,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             + $"Available outputs: {(string.IsNullOrWhiteSpace(available) ? "(none)" : available)}.");
     }
 
-    private static async Task SmokeTestAsrAsync(
+    private async Task SmokeTestAsrAsync(
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
@@ -273,6 +287,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             await SmokeTestGenAiLoadAsync(
                     request.ModelRootPath,
                     request.EntryPath,
+                    request.ModelId,
+                    request.Variant,
+                    request.ModelRevisionHash,
                     request.ExecutionProvider,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -292,9 +309,12 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         && (engineFamily.Equals("phi-genai", StringComparison.OrdinalIgnoreCase)
             || engineFamily.Equals("qwen-instruct", StringComparison.OrdinalIgnoreCase));
 
-    private static async Task SmokeTestGenAiLoadAsync(
+    private async Task SmokeTestGenAiLoadAsync(
         string modelRootPath,
         string entryPath,
+        string? modelId,
+        string? variant,
+        string? modelRevisionHash,
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
@@ -305,13 +325,18 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             entryPath,
             "GenAI smoke test requires genai_config.json in the model root.");
 
-        await Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using (CreateGenAiSmokeModel(genAiRoot, provider))
-            {
-            }
-        }, cancellationToken).ConfigureAwait(false);
+        // Same key WhisperGenAiAudioTranscriptionEngine uses: the smoke warms the shared
+        // resident model and exercises the real audio+generation profile on silence.
+        GenAiModelKey key = await GenAiModelKey.CreateAsync(
+            genAiRoot, provider, modelId, variant, deviceId: null,
+            modelRevisionHash: modelRevisionHash, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using GenAiModelLease lease = await genAiModelPool.GetLeaseAsync(key, cancellationToken)
+            .ConfigureAwait(false);
+        using IDisposable? executionAdmission = await CpuExecutionAdmission.Shared
+            .AcquireAsync(provider, cancellationToken).ConfigureAwait(false);
+        await WhisperGenAiAudioTranscriptionEngine
+            .WarmModelAsync(lease.Model, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // ORT GenAI's NvTensorRtRtx device terminates the host process (native stack overflow) on
@@ -376,7 +401,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
         using var inputs = CreateMetadataDrivenInputs(sessionLease.Session.InputMetadata);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(inputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.RunWithRetry(inputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: request.ExecutionProvider);
     }
 
     /// <summary>
@@ -446,9 +471,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             NamedOnnxValue.CreateFromTensor("mel", new DenseTensor<float>(new float[128], [1, 128, 1]))
         ]);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
-            sessionLease.EncoderSession.Run(encoderInputs.Values);
+            sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider);
         Tensor<float> audioFeatures = encoderResults.First().AsTensor<float>();
-        Qwen3AsrGreedyDecoder.RunSmokeInitAndStep(sessionLease, audioFeatures);
+        Qwen3AsrGreedyDecoder.RunSmokeInitAndStep(sessionLease, audioFeatures, provider, cancellationToken);
     }
 
     private static async Task SmokeTestNemotronAsrAsync(
@@ -474,10 +499,10 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
         using var encoderInputs = CreateNemotronEncoderInputs(sessionLease.EncoderSession.InputMetadata);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
-            sessionLease.EncoderSession.Run(encoderInputs.Values);
+            sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: request.ExecutionProvider);
         Tensor<float> encoded = encoderResults.Single(static result => result.Name == "encoded").AsTensor<float>();
         using var decoderInputs = CreateNemotronDecoderInputs(sessionLease.DecoderJointSession.InputMetadata, encoded);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderJointSession.Run(decoderInputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderJointSession.RunWithRetry(decoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: request.ExecutionProvider);
     }
 
     private static async Task SmokeTestParakeetTdtAsync(
@@ -517,10 +542,10 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             NamedOnnxValue.CreateFromTensor("length", new DenseTensor<long>(new long[] { melFrames }, [1])),
         ]);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults =
-            sessionLease.EncoderSession.Run(encoderInputs.Values);
+            sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: request.ExecutionProvider);
         Tensor<float> encoded = encoderResults.Single(static result => result.Name == "outputs").AsTensor<float>();
         using var decoderInputs = CreateNemotronDecoderInputs(sessionLease.DecoderJointSession.InputMetadata, encoded);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderJointSession.Run(decoderInputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderJointSession.RunWithRetry(decoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: request.ExecutionProvider);
     }
 
     private static async Task SmokeTestSeparationAsync(
@@ -535,7 +560,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         EnsureSelectedProviderMatchesRequested(request.ExecutionProvider, sessionLease.SelectedProvider);
 
         using var inputs = CreateSeparationInputs(sessionLease.Session);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(inputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.RunWithRetry(inputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: request.ExecutionProvider);
     }
 
     /// <summary>
@@ -590,7 +615,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
         using var inputs = CreateDiarizationInputs(sessionLease.Session);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(inputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.RunWithRetry(inputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider);
     }
 
     private static async Task SmokeTestTtsAsync(
@@ -610,7 +635,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
         using var inputs = CreateTtsInputs(sessionLease.Session.InputMetadata);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.Run(inputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.Session.RunWithRetry(inputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider);
 
         if (IsChatterboxTtsModel(modelId, modelAlias))
         {
@@ -1264,7 +1289,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         return null;
     }
 
-    private static async Task SmokeTestTranslationAsync(
+    private async Task SmokeTestTranslationAsync(
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
@@ -1275,6 +1300,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             await SmokeTestTextRefinementGenAiAsync(
                 request.ModelRootPath,
                 request.EntryPath,
+                request.ModelId,
+                request.Variant,
+                request.ModelRevisionHash,
                 request.ExecutionProvider,
                 cancellationToken).ConfigureAwait(false);
             return;
@@ -1291,7 +1319,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             NamedOnnxValue.CreateFromTensor("input_ids", new DenseTensor<long>(new long[] { 0L }, [1, 1])),
             NamedOnnxValue.CreateFromTensor("attention_mask", new DenseTensor<long>(new long[] { 1L }, [1, 1]))
         ]);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults = sessionLease.EncoderSession.Run(encoderInputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults = sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: request.ExecutionProvider);
         Tensor<float> encoderHiddenStates = encoderResults
             .Single(static r => r.Name == "last_hidden_state")
             .AsTensor<float>();
@@ -1299,7 +1327,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         using var decoderInputs = CreateTranslationDecoderInputs(
             sessionLease.DecoderSession.InputMetadata,
             encoderHiddenStates);
-        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderSession.Run(decoderInputs.Values);
+        using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> _ = sessionLease.DecoderSession.RunWithRetry(decoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: request.ExecutionProvider);
     }
 
     private static void EnsureSelectedProviderMatchesRequested(

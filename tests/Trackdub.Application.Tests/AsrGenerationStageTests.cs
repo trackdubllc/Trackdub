@@ -34,11 +34,14 @@ public sealed class AsrGenerationStageTests
                 [new SpeechRegion(0, 0.0, 2.0)],
                 new Dictionary<int, Guid>())
         };
+        var progress = new CollectingProgress();
 
-        TranscriptGenerationContext result = await stage.ExecuteAsync(context, TestContext.Current.CancellationToken);
+        TranscriptGenerationContext result = await stage.ExecuteAsync(
+            context, TestContext.Current.CancellationToken, progress);
 
         Assert.NotNull(result.AsrResult);
         Assert.Empty(result.AsrResult!.Segments);
+        Assert.DoesNotContain(progress.Events, e => e.OutputKind is not null);
         ProjectArtifact[] degradationArtifacts = [.. mediaAssetRepository.Artifacts
             .Where(artifact => artifact.Kind == ArtifactKind.PipelineDegradation)];
         Assert.Contains(
@@ -76,10 +79,19 @@ public sealed class AsrGenerationStageTests
                 new Dictionary<int, Guid>())
         };
 
-        TranscriptGenerationContext result = await stage.ExecuteAsync(context, TestContext.Current.CancellationToken);
+        var progress = new CollectingProgress();
+
+        TranscriptGenerationContext result = await stage.ExecuteAsync(
+            context, TestContext.Current.CancellationToken, progress);
 
         Assert.NotNull(result.AsrResult);
         Assert.Single(result.AsrResult!.Segments);
+        PipelineProgressEvent output = Assert.Single(progress.Events, e => e.OutputKind is not null);
+        Assert.Equal(PipelineOutputKind.TranscriptSegmentAvailable, output.OutputKind);
+        Assert.Equal(0, output.ItemIndex);
+        Assert.Null(output.RevisionId);
+        Assert.Null(output.SegmentId);
+        Assert.Null(output.ArtifactId);
         Assert.Equal(2, transcriptionEngine.CallCount);
         Assert.Equal("qwen3-asr-0.6b", transcriptionEngine.LastPreferredAlias);
         Assert.Contains(
@@ -162,6 +174,19 @@ public sealed class AsrGenerationStageTests
                     DetectedLanguage: "en")
             ];
             return Task.FromResult(segments);
+        }
+    }
+
+    private sealed class CollectingProgress : IProgress<PipelineProgressEvent>
+    {
+        public List<PipelineProgressEvent> Events { get; } = [];
+
+        public void Report(PipelineProgressEvent value)
+        {
+            lock (Events)
+            {
+                Events.Add(value);
+            }
         }
     }
 

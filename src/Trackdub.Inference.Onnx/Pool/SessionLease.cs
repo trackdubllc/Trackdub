@@ -96,3 +96,66 @@ internal sealed class SessionLeaseBundle : IDisposable
         }
     }
 }
+
+/// <summary>
+/// Token returned by <see cref="InferenceSessionPool.ReserveExternalAsync"/> for memory
+/// held outside an ONNX <see cref="InferenceSession"/> (e.g. a cached GenAI model object).
+/// The pool owns the admission accounting; the token is an idempotent handle whose
+/// <see cref="Dispose"/> releases the reservation and wakes admission waiters.
+/// </summary>
+internal sealed class ExternalMemoryReservation : IDisposable
+{
+    private readonly InferenceSessionPool owner;
+    private readonly Guid id;
+    private int disposed;
+
+    internal ExternalMemoryReservation(InferenceSessionPool owner, Guid id)
+    {
+        this.owner = owner;
+        this.id = id;
+    }
+
+    /// <summary>
+    /// Registers the callback the pool may invoke to evict this reservation when its host
+    /// RAM / accelerator bucket is under pressure. The callback must return
+    /// <see langword="true"/> only when it actually released the idle resource (and should
+    /// dispose the token). A busy resource returns <see langword="false"/> and stays
+    /// resident. Returns <see langword="false"/> once the token is disposed or the owning
+    /// pool no longer tracks the reservation — callers must treat false as "registration
+    /// failed; the reservation is gone".
+    /// </summary>
+    internal bool TrySetIdleEvictionCallback(Func<bool> callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        if (Volatile.Read(ref disposed) != 0)
+        {
+            return false;
+        }
+
+        return owner.TrySetExternalEvictionCallback(id, callback);
+    }
+
+    /// <summary>
+    /// Records that the external resource went idle (for LRU eviction ordering) and wakes
+    /// admission waiters. No-op once the token is disposed.
+    /// </summary>
+    internal void MarkReleased()
+    {
+        if (Volatile.Read(ref disposed) != 0)
+        {
+            return;
+        }
+
+        owner.NotifyExternalReservationReleased(id);
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref disposed, 1) != 0)
+        {
+            return;
+        }
+
+        owner.ReleaseExternalReservation(id);
+    }
+}

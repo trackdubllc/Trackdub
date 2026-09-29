@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Trackdub.Domain;
@@ -25,6 +26,12 @@ namespace Trackdub.Inference.Onnx.Pool;
 /// to handle case-sensitive APFS and ext4 volumes correctly.
 /// Separators and relative segments are not canonicalised.
 /// Use <see cref="HashPath"/> to derive this value from a model file path.</para>
+/// <para><strong>ModelContentHash:</strong>
+/// Cached lowercase hex SHA-256 of the model file's content (see <see cref="HashModelContent"/>).
+/// The key therefore carries both the path location and a content digest: replacing a model
+/// file at the same path changes the helper-built key and invalidates the stale pooled
+/// session. Missing or unreadable files yield <see langword="null"/> and keep path identity.
+/// Directly constructed keys may leave it unset.</para>
 /// <para><strong>DeviceId:</strong>
 /// Device ordinal (0 for the default device). Used to distinguish sessions on different GPUs.</para>
 /// <para><strong>GraphRole:</strong>
@@ -46,6 +53,7 @@ internal sealed record SessionPoolKey
     private string? _modelId;
     private string? _variant;
     private string _pathHash = null!;
+    private string? _modelContentHash;
     private string _graphRole = null!;
     private string _optionsFingerprint = null!;
 
@@ -57,7 +65,8 @@ internal sealed record SessionPoolKey
         string pathHash,
         int? deviceId,
         string graphRole,
-        string? optionsFingerprint = null)
+        string? optionsFingerprint = null,
+        string? modelContentHash = null)
     {
         ArgumentNullException.ThrowIfNull(engineFamily);
         ArgumentNullException.ThrowIfNull(pathHash);
@@ -73,6 +82,9 @@ internal sealed record SessionPoolKey
         _optionsFingerprint = string.IsNullOrWhiteSpace(optionsFingerprint)
             ? DefaultOptionsFingerprint
             : optionsFingerprint.ToLowerInvariant();
+        _modelContentHash = string.IsNullOrWhiteSpace(modelContentHash)
+            ? null
+            : modelContentHash.ToLowerInvariant();
     }
 
     public string EngineFamily
@@ -99,6 +111,18 @@ internal sealed record SessionPoolKey
         init => _pathHash = (value ?? throw new System.ArgumentNullException(nameof(PathHash))).ToLowerInvariant();
     }
 
+    /// <summary>
+    /// Cached SHA-256 digest of the model file's content, or <see langword="null"/> when the
+    /// file could not be read. Helper-built keys always carry it, so replacing a model at
+    /// the same path produces a different pool key instead of silently reusing the stale
+    /// session; directly constructed keys may omit it and keep path-only identity.
+    /// </summary>
+    public string? ModelContentHash
+    {
+        get => _modelContentHash;
+        init => _modelContentHash = string.IsNullOrWhiteSpace(value) ? null : value.ToLowerInvariant();
+    }
+
     public string GraphRole
     {
         get => _graphRole;
@@ -116,6 +140,9 @@ internal sealed record SessionPoolKey
     public ExecutionProviderKind Provider { get; init; }
 
     public int? DeviceId { get; init; }
+
+    /// <summary>True when standalone OpenVINO is configured to execute on the CPU proxy.</summary>
+    public bool UseOpenVinoCpuProxy { get; init; }
 
     /// <summary>Estimated VRAM footprint of this session in MB. Used for VRAM-budget eviction.</summary>
     public long EstimatedVramMb { get; init; } = 0;
@@ -157,6 +184,267 @@ internal sealed record SessionPoolKey
         return DefaultEstimatedVramMb;
     }
 
+    /// <summary>
+    /// Content-digest cache keyed by normalised full path. An entry is only trusted while
+    /// the file's length and <see cref="FileInfo.LastWriteTimeUtc"/> still match, so a
+    /// same-path replacement rehashes once instead of reusing a stale digest — and repeated
+    /// pool-key construction over an unchanged multi-GB model never re-reads it.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, (long Length, long WriteTicks, string Hash)> ModelContentHashCache =
+        new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, long> ModelContentHashGenerations = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Streams a SHA-256 over the model file's content and returns lowercase hex, or
+    /// <see langword="null"/> when the path is missing, malformed, or inaccessible (the key
+    /// then falls back to path identity). Results are cached per
+    /// (path, length, last-write ticks); if the file's metadata changes while it is being
+    /// hashed the digest is retaken once under the fresh metadata before caching, and a
+    /// file that is still mutating after that retry yields <see langword="null"/> rather
+    /// than pinning pool identity to an inconsistent snapshot.
+    /// </summary>
+    internal static string? HashModelContent(string? modelPath)
+    {
+        if (string.IsNullOrWhiteSpace(modelPath))
+        {
+            return null;
+        }
+
+        string cacheKey;
+        try
+        {
+            cacheKey = Path.GetFullPath(modelPath);
+            if (OperatingSystem.IsWindows() && !PreserveWindowsPathCase())
+            {
+                cacheKey = cacheKey.ToUpperInvariant();
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"SessionPoolKey: malformed model path '{modelPath}': {ex.Message}");
+            return null;
+        }
+
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            FileInfo info;
+            long length;
+            long writeTicks;
+            try
+            {
+                info = new FileInfo(modelPath);
+                if (!info.Exists)
+                {
+                    return null;
+                }
+
+                // Read metadata under the same guard: the file can disappear between
+                // Exists and Length (FileNotFoundException), or be inaccessible.
+                length = info.Length;
+                writeTicks = info.LastWriteTimeUtc.Ticks;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"SessionPoolKey: failed to inspect model file '{modelPath}': {ex.Message}");
+                return null;
+            }
+
+            if (attempt == 0 &&
+                ModelContentHashCache.TryGetValue(cacheKey, out var cached) &&
+                cached.Length == length && cached.WriteTicks == writeTicks)
+            {
+                return cached.Hash;
+            }
+
+            string hash;
+            try
+            {
+                using FileStream stream = File.OpenRead(modelPath);
+                hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException or DirectoryNotFoundException)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"SessionPoolKey: failed to hash model file '{modelPath}': {ex.Message}");
+                return null;
+            }
+
+            // If the file changed under the stream, the digest describes an inconsistent
+            // snapshot — retry once under the fresh metadata before trusting it.
+            bool unchanged;
+            try
+            {
+                info.Refresh();
+                unchanged = info.Exists
+                    && info.Length == length
+                    && info.LastWriteTimeUtc.Ticks == writeTicks;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return null;
+            }
+
+            if (unchanged)
+            {
+                ModelContentHashCache[cacheKey] = (length, writeTicks, hash);
+                return hash;
+            }
+        }
+
+        // The file was still mutating after the second hash — conservative fallback: do
+        // not pin pool identity to an inconsistent snapshot; path identity still applies.
+        return null;
+    }
+
+    internal static void InvalidateModelContentHash(string modelPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
+        string cacheKey = Path.GetFullPath(modelPath);
+        if (OperatingSystem.IsWindows() && !PreserveWindowsPathCase())
+        {
+            cacheKey = cacheKey.ToUpperInvariant();
+        }
+
+        ModelContentHashCache.TryRemove(cacheKey, out _);
+        ModelContentHashGenerations.AddOrUpdate(cacheKey, 1, static (_, generation) => generation + 1);
+    }
+
+    internal static async Task<SessionPoolKey> CreateAsync(
+        string engineFamily,
+        string? modelId,
+        string? variant,
+        ExecutionProviderKind provider,
+        string modelPath,
+        int? deviceId,
+        string graphRole,
+        string? optionsFingerprint,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        string? contentHash = await HashModelContentAsync(modelPath, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return new SessionPoolKey(
+            engineFamily,
+            modelId,
+            variant,
+            provider,
+            HashPath(modelPath),
+            deviceId,
+            graphRole,
+            optionsFingerprint)
+        {
+            EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = contentHash,
+        };
+    }
+
+    internal static async Task<string?> HashModelContentAsync(
+        string? modelPath,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(modelPath))
+        {
+            return null;
+        }
+
+        string cacheKey;
+        try
+        {
+            cacheKey = Path.GetFullPath(modelPath);
+            if (OperatingSystem.IsWindows() && !PreserveWindowsPathCase())
+            {
+                cacheKey = cacheKey.ToUpperInvariant();
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            long generation = ModelContentHashGenerations.GetOrAdd(cacheKey, 0);
+            FileInfo info;
+            long length;
+            long writeTicks;
+            try
+            {
+                info = new FileInfo(modelPath);
+                if (!info.Exists)
+                {
+                    return null;
+                }
+
+                length = info.Length;
+                writeTicks = info.LastWriteTimeUtc.Ticks;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return null;
+            }
+
+            if (attempt == 0 && ModelContentHashCache.TryGetValue(cacheKey, out var cached) &&
+                cached.Length == length && cached.WriteTicks == writeTicks &&
+                ModelContentHashGenerations.GetOrAdd(cacheKey, 0) == generation)
+            {
+                return cached.Hash;
+            }
+
+            string hash;
+            try
+            {
+                await using var stream = new FileStream(
+                    modelPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 1024 * 1024,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                byte[] digest = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
+                hash = Convert.ToHexString(digest).ToLowerInvariant();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return null;
+            }
+
+            bool unchanged;
+            try
+            {
+                info.Refresh();
+                unchanged = info.Exists && info.Length == length && info.LastWriteTimeUtc.Ticks == writeTicks;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return null;
+            }
+
+            if (unchanged)
+            {
+                if (ModelContentHashGenerations.GetOrAdd(cacheKey, 0) == generation)
+                {
+                    ModelContentHashCache[cacheKey] = (length, writeTicks, hash);
+                    if (ModelContentHashGenerations.GetOrAdd(cacheKey, 0) == generation)
+                    {
+                        return hash;
+                    }
+
+                    ModelContentHashCache.TryRemove(cacheKey, out _);
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Builds a key for a single-session model (graph role = "default").</summary>
     public static SessionPoolKey ForSingle(
         string engineFamily,
@@ -169,6 +457,7 @@ internal sealed record SessionPoolKey
         new(engineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "default", optionsFingerprint)
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     /// <summary>Builds an encoder key for a dual-session model.</summary>
@@ -183,6 +472,7 @@ internal sealed record SessionPoolKey
         new(engineFamily, modelId, variant, provider, HashPath(encoderPath), deviceId, "encoder", optionsFingerprint)
         {
             EstimatedVramMb = EstimateVramMb(encoderPath),
+            ModelContentHash = HashModelContent(encoderPath),
         };
 
     /// <summary>Builds a decoder key for a dual-session model.</summary>
@@ -197,6 +487,7 @@ internal sealed record SessionPoolKey
         new(engineFamily, modelId, variant, provider, HashPath(decoderPath), deviceId, "decoder", optionsFingerprint)
         {
             EstimatedVramMb = EstimateVramMb(decoderPath),
+            ModelContentHash = HashModelContent(decoderPath),
         };
 
     public static SessionPoolKey ForDecoderInit(
@@ -210,6 +501,7 @@ internal sealed record SessionPoolKey
         new(engineFamily, modelId, variant, provider, HashPath(decoderInitPath), deviceId, "decoder-init", optionsFingerprint)
         {
             EstimatedVramMb = EstimateVramMb(decoderInitPath),
+            ModelContentHash = HashModelContent(decoderInitPath),
         };
 
     public static SessionPoolKey ForDecoderStep(
@@ -223,6 +515,7 @@ internal sealed record SessionPoolKey
         new(engineFamily, modelId, variant, provider, HashPath(decoderStepPath), deviceId, "decoder-step", optionsFingerprint)
         {
             EstimatedVramMb = EstimateVramMb(decoderStepPath),
+            ModelContentHash = HashModelContent(decoderStepPath),
         };
 
     // ── Chatterbox four-graph helpers ─────────────────────────────────────────
@@ -241,6 +534,7 @@ internal sealed record SessionPoolKey
         new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "speech-encoder")
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     /// <summary>
@@ -257,6 +551,7 @@ internal sealed record SessionPoolKey
         new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "embed-tokens")
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     /// <summary>
@@ -273,6 +568,7 @@ internal sealed record SessionPoolKey
         new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "lm")
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     /// <summary>
@@ -289,6 +585,7 @@ internal sealed record SessionPoolKey
         new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "conditional-decoder")
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     /// <summary>Engine-family constant used by the Chatterbox factory helpers.</summary>
@@ -305,6 +602,7 @@ internal sealed record SessionPoolKey
         new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "unet")
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     public static SessionPoolKey ForLatentSyncVaeEncoder(
@@ -316,6 +614,7 @@ internal sealed record SessionPoolKey
         new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "vae-encoder")
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     public static SessionPoolKey ForLatentSyncVaeDecoder(
@@ -327,6 +626,7 @@ internal sealed record SessionPoolKey
         new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "vae-decoder")
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     public static SessionPoolKey ForLatentSyncWhisperEncoder(
@@ -338,6 +638,7 @@ internal sealed record SessionPoolKey
         new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "whisper-encoder")
         {
             EstimatedVramMb = EstimateVramMb(modelPath),
+            ModelContentHash = HashModelContent(modelPath),
         };
 
     private const string LatentSyncEngineFamily = "latentsync-diffusion";
@@ -398,6 +699,12 @@ internal sealed record SessionPoolKey
             }
 
             c = string.CompareOrdinal(x.PathHash, y.PathHash);
+            if (c != 0)
+            {
+                return c;
+            }
+
+            c = string.CompareOrdinal(x.ModelContentHash ?? string.Empty, y.ModelContentHash ?? string.Empty);
             if (c != 0)
             {
                 return c;

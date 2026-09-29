@@ -609,6 +609,225 @@ public sealed class InferenceRoutingEngineTests
         }
     }
 
+    [Fact]
+    public async Task RoutedTranslationEngine_Stream_ForwardsStreamingAdapterItemsAndMetadata()
+    {
+        var route = new TranslationRouteSelection(
+            "en",
+            "fr",
+            TranslationRoutingKind.Pivot,
+            IsAvailable: true,
+            ProviderName: "madlad400",
+            RouteDetail: "MADLAD-400 pivot",
+            ModelId: "madlad-model",
+            PreferredModelAlias: "madlad400-mt",
+            EngineFamily: "madlad");
+        var languageRouter = new StubTranslationLanguageRouter(route);
+        var streaming = new FakeStreamingTranslationEngineAdapter("madlad");
+        var skipped = new FakeTranslationEngineAdapter("opus-mt");
+        var router = new RoutedTranslationEngine(languageRouter, [skipped, streaming]);
+
+        Guid runId = Guid.NewGuid();
+        Guid revision = Guid.NewGuid();
+        List<PipelineStreamItem<TranslatedTextSegment>> items = [];
+        await foreach (PipelineStreamItem<TranslatedTextSegment> item in router.TranslateStreamAsync(
+            new TranslationRequest(
+                "en",
+                "fr",
+                [new TranslationInputSegment(0, 0, 1, "hello"), new TranslationInputSegment(1, 1, 2, "world")],
+                PreferredModelAlias: "user-choice"),
+            runId,
+            "snap-42",
+            revision,
+            CancellationToken.None))
+        {
+            items.Add(item);
+        }
+
+        Assert.Equal(2, items.Count);
+        Assert.Equal([0, 1], items.Select(i => i.Identity.SegmentIndex).ToArray());
+        Assert.Equal([0L, 1L], items.Select(i => i.Identity.Sequence).ToArray());
+        Assert.All(items, item =>
+        {
+            Assert.Equal(runId, item.Identity.RunId);
+            Assert.Equal("snap-42", item.Identity.SnapshotId);
+            Assert.Equal(RuntimeStage.Translation, item.Identity.Stage);
+            Assert.Equal(revision, item.Identity.RevisionId);
+            Assert.Equal(item.Identity.SegmentIndex, item.Payload.Index);
+            Assert.True(item.EstimatedBytes > 0);
+        });
+        Assert.Equal(0, skipped.CallCount);
+        Assert.Equal("madlad400-mt", streaming.LastRequest?.PreferredModelAlias); // routed alias
+        Assert.Equal(streaming.LastExecutionSummary, router.LastExecutionSummary);
+        Assert.Equal("madlad400", router.LastExecutionMetadata?.ProviderName);
+        Assert.Equal(TranslationRoutingKind.Pivot, router.LastExecutionMetadata?.RoutingKind);
+    }
+
+    [Fact]
+    public async Task RoutedTranslationEngine_Stream_BatchAdapter_WrapsInInputOrder()
+    {
+        var route = new TranslationRouteSelection(
+            "en",
+            "es",
+            TranslationRoutingKind.Direct,
+            IsAvailable: true,
+            ProviderName: "opus",
+            RouteDetail: "direct",
+            ModelId: "opus-model",
+            PreferredModelAlias: "opus-mt",
+            EngineFamily: "opus-mt");
+        var languageRouter = new StubTranslationLanguageRouter(route);
+        var batchOnly = new FakeTranslationEngineAdapter("opus-mt");
+        var router = new RoutedTranslationEngine(languageRouter, [batchOnly]);
+
+        Guid runId = Guid.NewGuid();
+        Guid revision = Guid.NewGuid();
+        List<PipelineStreamItem<TranslatedTextSegment>> items = [];
+        await foreach (PipelineStreamItem<TranslatedTextSegment> item in router.TranslateStreamAsync(
+            new TranslationRequest(
+                "en",
+                "es",
+                [new TranslationInputSegment(5, 5, 6, "late-index"), new TranslationInputSegment(2, 2, 3, "early-index")]),
+            runId,
+            "snap",
+            revision,
+            CancellationToken.None))
+        {
+            items.Add(item);
+        }
+
+        Assert.Equal(1, batchOnly.CallCount); // batch ran once, not per segment
+        Assert.Equal([2, 5], items.Select(i => i.Payload.Index).ToArray()); // ordered by input index
+        Assert.Equal([0L, 1L], items.Select(i => i.Identity.Sequence).ToArray());
+        Assert.All(items, item =>
+        {
+            Assert.Equal(runId, item.Identity.RunId);
+            Assert.Equal(revision, item.Identity.RevisionId);
+            Assert.Equal(item.Payload.Index, item.Identity.SegmentIndex);
+        });
+        Assert.Equal(batchOnly.LastExecutionSummary, router.LastExecutionSummary);
+    }
+
+    [Fact]
+    public async Task RoutedTranslationEngine_Stream_AdapterFault_PropagatesAndCapturesMetadata()
+    {
+        var route = new TranslationRouteSelection(
+            "en",
+            "fr",
+            TranslationRoutingKind.Pivot,
+            IsAvailable: true,
+            ProviderName: "madlad400",
+            RouteDetail: "MADLAD-400 pivot",
+            EngineFamily: "madlad");
+        var languageRouter = new StubTranslationLanguageRouter(route);
+        var adapter = new FaultingStreamingTranslationEngineAdapter("madlad", new InvalidOperationException("stream broke"));
+        var router = new RoutedTranslationEngine(languageRouter, [adapter]);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (PipelineStreamItem<TranslatedTextSegment> _ in router.TranslateStreamAsync(
+                new TranslationRequest("en", "fr", [new TranslationInputSegment(0, 0, 1, "x")]),
+                Guid.NewGuid(),
+                "snap",
+                Guid.NewGuid(),
+                CancellationToken.None))
+            {
+                // Enumerate solely to observe and assert propagation of the adapter fault.
+            }
+        });
+
+        Assert.Equal("stream broke", ex.Message);
+        Assert.NotNull(router.LastExecutionMetadata); // captured via finally despite the fault
+    }
+
+    [Fact]
+    public async Task RoutedTranslationEngine_Stream_Cancellation_Propagates()
+    {
+        var route = new TranslationRouteSelection(
+            "en", "fr", TranslationRoutingKind.Pivot, IsAvailable: true,
+            ProviderName: "madlad400", RouteDetail: "pivot", EngineFamily: "madlad");
+        var adapter = new FakeStreamingTranslationEngineAdapter("madlad");
+        var router = new RoutedTranslationEngine(new StubTranslationLanguageRouter(route), [adapter]);
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken.None);
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (PipelineStreamItem<TranslatedTextSegment> _ in router.TranslateStreamAsync(
+                new TranslationRequest("en", "fr", [new TranslationInputSegment(0, 0, 1, "x")]),
+                Guid.NewGuid(), "snap", Guid.NewGuid(), cts.Token))
+            {
+                // Enumerate solely to observe cancellation propagation.
+            }
+        });
+    }
+
+    private sealed class FakeStreamingTranslationEngineAdapter(string engineFamily)
+        : IStreamingTranslationEngineAdapter, IStageRuntimeExecutionReporter
+    {
+        public string EngineFamily => engineFamily;
+
+        public TranslationRequest? LastRequest { get; private set; }
+
+        public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
+
+        public Task<IReadOnlyList<TranslatedTextSegment>> TranslateAsync(
+            TranslationRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException("batch path must not be used in streaming tests");
+
+        public async IAsyncEnumerable<PipelineStreamItem<TranslatedTextSegment>> TranslateStreamAsync(
+            TranslationRequest request,
+            Guid runId,
+            string snapshotId,
+            Guid sourceRevisionId,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            long sequence = 0;
+            foreach (TranslationInputSegment segment in request.Segments.OrderBy(static s => s.Index))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Yield();
+                var translated = new TranslatedTextSegment(
+                    segment.Index, segment.StartSeconds, segment.EndSeconds, $"translated:{segment.Text}");
+                yield return PipelineStreamItemFactory.CreateTranslation(
+                    translated, runId, snapshotId, sourceRevisionId, sequence++);
+            }
+
+            LastExecutionSummary = CreateSummary(engineFamily);
+        }
+    }
+
+    private sealed class FaultingStreamingTranslationEngineAdapter(string engineFamily, Exception fault)
+        : IStreamingTranslationEngineAdapter, IStageRuntimeExecutionReporter
+    {
+        public string EngineFamily => engineFamily;
+
+        public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; } =
+            CreateSummary(engineFamily);
+
+        public Task<IReadOnlyList<TranslatedTextSegment>> TranslateAsync(
+            TranslationRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromException<IReadOnlyList<TranslatedTextSegment>>(fault);
+
+        public async IAsyncEnumerable<PipelineStreamItem<TranslatedTextSegment>> TranslateStreamAsync(
+            TranslationRequest request,
+            Guid runId,
+            string snapshotId,
+            Guid sourceRevisionId,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield return PipelineStreamItemFactory.CreateTranslation(
+                new TranslatedTextSegment(request.Segments[0].Index, 0, 1, "first"),
+                runId, snapshotId, sourceRevisionId, 0);
+            throw fault;
+        }
+    }
+
     private static StageRuntimeExecutionSummary CreateSummary(string engineFamily) =>
         new(
             "auto",

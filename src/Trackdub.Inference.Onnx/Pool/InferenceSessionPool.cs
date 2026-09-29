@@ -18,27 +18,32 @@ namespace Trackdub.Inference.Onnx.Pool;
 ///
 /// <para><strong>Bounded capacity:</strong>
 /// The pool holds at most <c>maxSessions</c> live sessions across all keys (default: 12).
-/// This is a <em>count-based</em> cap. Optional memory admission (off by default) adds a
-/// VRAM budget: before construct, reserve <see cref="SessionPoolKey.EstimatedVramMb"/>,
-/// evict idle sessions to fit, and wait — never allocate an unbudgeted ephemeral session.
-/// When admission is off and the count limit is reached with every entry leased, the new
-/// session is created outside the pool (ephemeral) and disposed when its lease is released.</para>
+/// This is a <em>count-based</em> cap that applies when memory admission is explicitly
+/// disabled. Memory admission (on by default) adds a resident-memory budget per bucket:
+/// before construct, reserve <see cref="SessionPoolKey.EstimatedVramMb"/>, evict idle
+/// sessions to fit, and wait — never allocate an unbudgeted ephemeral session. CPU, DNNL,
+/// and OpenVINO CPU-proxy sessions are accounted against the host RAM budget; OpenVINO NPU
+/// sessions and other accelerators are accounted per device, so CPU work no longer
+/// collides with GPU 0. When admission is explicitly
+/// disabled and the count limit is reached with every entry leased, the new session is
+/// created outside the pool (ephemeral) and disposed when its lease is released.</para>
 ///
 /// <para><strong>Single-flight creation:</strong>
 /// Concurrent misses for the same key share one factory invocation. Cancelling one waiter
 /// does not cancel another caller’s valid acquisition.</para>
 ///
 /// <para><strong>Model invalidation:</strong>
-/// Session keys are keyed by model file <em>path hash</em>, not file content.  If a model file
-/// changes on disk at the same path (e.g. hot-swap during development), evict the stale entry
-/// explicitly via <see cref="EvictModelAsync"/> or restart the process.  Content-hash
-/// invalidation on every pool lookup is out of scope for this PR.</para>
+/// Session keys carry both the model file <em>path hash</em> and a cached content digest
+/// (<see cref="SessionPoolKey.ModelContentHash"/>): helper-built keys invalidate when a
+/// model file is replaced at the same path, while direct-constructed keys that omit the
+/// content hash keep path-only identity.</para>
 ///
 /// <para><strong>Memory pressure guidance:</strong>
-/// Each ONNX session can consume hundreds of MB of GPU/CPU memory depending on model size.
-/// Prefer enabling memory admission with a realistic budget over relying on the count cap.
-/// Call <see cref="EvictModelAsync"/> to free memory for a model that is no longer needed,
-/// or <see cref="Dispose"/> to release the entire pool.</para>
+/// Each ONNX session can consume hundreds of MB of accelerator or host memory depending on
+/// model size. Admission enforces realistic budgets; call <see cref="EvictModelAsync"/> to
+/// free memory for a model that is no longer needed, or <see cref="Dispose"/> to release
+/// the entire pool. The default host limit can reject large graphs and graph bundles; see
+/// <c>docs/reference/session-pool-memory-admission.md</c> for sizing and the explicit override.</para>
 ///
 /// <para><strong>Thread safety:</strong>
 /// All public APIs are thread-safe.  Sessions are single-threaded: only one caller may hold
@@ -54,11 +59,11 @@ internal sealed class InferenceSessionPool : IDisposable
     /// </remarks>
     /// <remarks>
     /// The shared instance is built from <see cref="SharedPoolOptions"/>, which reads
-    /// <c>TRACKDUB_SESSION_ADMISSION</c> and <c>TRACKDUB_SESSION_VRAM_BUDGET_MB</c>. It is
-    /// resolved lazily on first use so an operator can opt into budgeted admission, but the
-    /// default is admission <em>off</em> — the historical behaviour, where a miss past
-    /// <c>maxSessions</c> creates a short-lived ephemeral session. See
-    /// <see cref="SharedPoolOptions"/> for the activation contract.
+    /// <c>TRACKDUB_SESSION_ADMISSION</c>, <c>TRACKDUB_SESSION_VRAM_BUDGET_MB</c>,
+    /// <c>TRACKDUB_SESSION_RAM_BUDGET_MB</c>, and <c>TRACKDUB_SESSION_MAX_SESSIONS</c>.
+    /// It is resolved lazily on first use. Admission
+    /// is <em>on</em> by default — the safe behaviour; an operator can opt out explicitly for
+    /// diagnostics. See <see cref="SharedPoolOptions"/> for the activation contract.
     /// </remarks>
     public static InferenceSessionPool Shared => SharedPool.Value;
 
@@ -66,15 +71,19 @@ internal sealed class InferenceSessionPool : IDisposable
         static () => new InferenceSessionPool(
             maxSessions: SharedPoolOptions.MaxSessions,
             enableMemoryAdmission: SharedPoolOptions.EnableMemoryAdmission,
-            memoryBudgetMb: SharedPoolOptions.MemoryBudgetMb),
+            memoryBudgetMb: SharedPoolOptions.MemoryBudgetMb,
+            hostMemoryBudgetMb: SharedPoolOptions.HostMemoryBudgetMb),
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     // Sized for a full dub working set (VAD + separation + diarization + ASR encoder/decoder
     // + translation encoder/decoder + multi-graph TTS) so LRU does not thrash mid-pipeline.
     public const int DefaultMaxSessions = 12;
 
-    /// <summary>Default VRAM admission budget when <c>enableMemoryAdmission</c> is on.</summary>
+    /// <summary>Default accelerator (VRAM) admission budget per device when <c>enableMemoryAdmission</c> is on.</summary>
     public const long DefaultMemoryBudgetMb = 4096;
+
+    /// <summary>Default host RAM admission budget shared by CPU/DNNL and OpenVINO CPU-proxy sessions.</summary>
+    public const long DefaultHostMemoryBudgetMb = 4096;
 
     /// <summary>
     /// Idle sessions released within this window are treated as part of the active pipeline
@@ -198,30 +207,84 @@ internal sealed class InferenceSessionPool : IDisposable
     private TaskCompletionSource<bool> bundleStateChanged = CreateBundleStateChangedSignal();
     private readonly bool enableMemoryAdmission;
     private readonly long memoryBudgetMb;
-    /// <summary>Pending create reservations per device (audit §3A: budget is per physical device).</summary>
-    private readonly ConcurrentDictionary<int, long> pendingCreateMbByDevice = new();
+    private readonly long hostMemoryBudgetMb;
+    /// <summary>Pending create reservations per admission bucket (host RAM vs accelerator device).</summary>
+    private readonly ConcurrentDictionary<AdmissionBucket, long> pendingCreateMbByBucket = new();
+    /// <summary>Live external-residency reservations (e.g. GenAI model loads) per bucket.</summary>
+    private readonly ConcurrentDictionary<Guid, ExternalReservationState> externalReservations = new();
     private int admissionWaiters;
     private volatile bool disposed;
     private int pooledCount;
     private int disposeOnce; // 0 = not yet, 1 = disposed; Interlocked guard for single-winner teardown
 
+    /// <summary>
+    /// Admission accounting bucket: CPU/DNNL and OpenVINO CPU-proxy sessions share host RAM;
+    /// standalone OpenVINO accelerator sessions use an NPU-specific bucket, separate from GPU 0.
+    /// </summary>
+    private readonly record struct AdmissionBucket(bool IsHost, ExecutionProviderKind? AcceleratorProvider, int DeviceId);
+
+    private static bool IsHostProvider(ExecutionProviderKind provider) =>
+        provider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl;
+
+    private static AdmissionBucket BucketOf(SessionPoolKey key) =>
+        IsHostProvider(key.Provider) || (key.Provider is ExecutionProviderKind.OpenVino && key.UseOpenVinoCpuProxy)
+            ? new(true, null, 0)
+            : key.Provider is ExecutionProviderKind.OpenVino
+                ? new(false, ExecutionProviderKind.OpenVino, key.DeviceId ?? 0)
+                : new(false, null, key.DeviceId ?? 0);
+
+    private static AdmissionBucket BucketOf(
+        ExecutionProviderKind provider,
+        int? deviceId,
+        bool useOpenVinoCpuProxy = false) =>
+        IsHostProvider(provider) || (provider is ExecutionProviderKind.OpenVino && useOpenVinoCpuProxy)
+            ? new(true, null, 0)
+            : provider is ExecutionProviderKind.OpenVino
+                ? new(false, ExecutionProviderKind.OpenVino, deviceId ?? 0)
+                : new(false, null, deviceId ?? 0);
+
+    private long BudgetFor(AdmissionBucket bucket) =>
+        bucket.IsHost ? hostMemoryBudgetMb : memoryBudgetMb;
+
+    private static string DescribeBucket(AdmissionBucket bucket) =>
+        bucket.IsHost
+            ? "host RAM"
+            : bucket.AcceleratorProvider is ExecutionProviderKind.OpenVino
+                ? $"OpenVINO NPU device {bucket.DeviceId}"
+                : $"accelerator device {bucket.DeviceId}";
+
+    /// <summary>
+    /// Live state for one external memory reservation. The pool owns accounting; the
+    /// <see cref="ExternalMemoryReservation"/> token is only a handle into this entry.
+    /// <see cref="TryEvictIdle"/> is registered by the owner of the external resource and
+    /// returns <see langword="true"/> only when it actually released the idle resource.
+    /// </summary>
+    private sealed class ExternalReservationState(
+        AdmissionBucket bucket,
+        long estimatedMemoryMb)
+    {
+        public AdmissionBucket Bucket { get; } = bucket;
+        public long EstimatedMemoryMb { get; } = estimatedMemoryMb;
+        // volatile: the callback is registered after the state is already visible in the
+        // dictionary, so readers must see the write without a lock.
+        public volatile Func<bool>? TryEvictIdle;
+        public long LastReleasedTicks { get; set; } = Environment.TickCount64;
+    }
+
     public InferenceSessionPool(
         int maxSessions = DefaultMaxSessions,
-        bool enableMemoryAdmission = false,
-        long memoryBudgetMb = DefaultMemoryBudgetMb)
+        bool enableMemoryAdmission = true,
+        long memoryBudgetMb = DefaultMemoryBudgetMb,
+        long hostMemoryBudgetMb = DefaultHostMemoryBudgetMb)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxSessions, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(memoryBudgetMb, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(hostMemoryBudgetMb, 1);
         this.maxSessions = maxSessions;
         this.enableMemoryAdmission = enableMemoryAdmission;
         this.memoryBudgetMb = memoryBudgetMb;
+        this.hostMemoryBudgetMb = hostMemoryBudgetMb;
     }
-
-    /// <summary>
-    /// Device ordinal used for admission accounting. Null means the default device (0).
-    /// DirectML and TensorRT on the same GPU share this budget — provider is not part of the key.
-    /// </summary>
-    private static int DeviceOf(SessionPoolKey key) => key.DeviceId ?? 0;
 
     private static TaskCompletionSource<bool> CreateBundleStateChangedSignal() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -311,6 +374,128 @@ internal sealed class InferenceSessionPool : IDisposable
     }
 
     /// <summary>
+    /// Reserves <paramref name="estimatedMemoryMb"/> against the admission bucket for
+    /// <paramref name="provider"/>/<paramref name="deviceId"/> and returns a token whose
+    /// disposal releases the accounting. Used by external residency owners (e.g. ORT GenAI
+    /// model caches) so model resources share the same host RAM / per-device accelerator
+    /// ceiling as pooled ONNX sessions instead of an independent cache.
+    /// </summary>
+    /// <remarks>
+    /// External reservations always use hard admission — they cannot opt into ephemeral
+    /// overflow — and one token occupies exactly one bucket: CPU/DNNL/OpenVINO share the
+    /// host RAM budget when OpenVINO CPU-proxy mode is active; otherwise OpenVINO and every
+    /// other accelerator provider use their device budget.
+    /// </remarks>
+    internal async Task<ExternalMemoryReservation> ReserveExternalAsync(
+        ExecutionProviderKind provider,
+        int? deviceId,
+        long estimatedMemoryMb,
+        CancellationToken cancellationToken,
+        bool useOpenVinoCpuProxy = false)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(estimatedMemoryMb, 1);
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        AdmissionBucket bucket = BucketOf(provider, deviceId, useOpenVinoCpuProxy);
+        long budgetMb = BudgetFor(bucket);
+        if (estimatedMemoryMb > budgetMb)
+        {
+            throw new InvalidOperationException(
+                $"External resource for '{provider}' needs ~{estimatedMemoryMb} MB, which exceeds the " +
+                $"{DescribeBucket(bucket)} admission budget of {budgetMb} MB.");
+        }
+
+        // Takes the pending reservation (evicting idle pooled/external entries to fit) so
+        // benchmark maxima see external construction honestly; publishing the live state
+        // below then transfers the accounting so nothing is double-counted.
+        await WaitForAdmissionBudgetAsync(estimatedMemoryMb, bucket, cancellationToken).ConfigureAwait(false);
+
+        // Publish under creationLock so pool disposal cannot interleave: either the reserve
+        // wins the lock and publishes first (Dispose then sees and clears the state), or
+        // Dispose wins and the publish throws ObjectDisposedException before accounting
+        // for a resource the pool can no longer track.
+        Guid id = Guid.NewGuid();
+        bool published = false;
+        bool pendingReleased = false;
+        try
+        {
+            await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                externalReservations[id] = new ExternalReservationState(bucket, estimatedMemoryMb);
+                // Transfer pending -> live while holding creationLock so admission readers
+                // cannot observe the same reservation in both accounting buckets.
+                ReleaseReservation(bucket, estimatedMemoryMb);
+                pendingReleased = true;
+                published = true;
+            }
+            finally
+            {
+                creationLock.Release();
+            }
+
+            SignalBundleStateChanged();
+            return new ExternalMemoryReservation(this, id);
+        }
+        finally
+        {
+            // Release pending accounting on cancellation, disposal, or publish failure.
+            if (!pendingReleased)
+            {
+                ReleaseReservation(bucket, estimatedMemoryMb);
+            }
+            if (!published)
+            {
+                externalReservations.TryRemove(id, out _);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Attaches the idle-eviction callback to a still-live reservation. Returns
+    /// <see langword="false"/> when the pool is disposed or the id is already gone — callers
+    /// must treat false as "the reservation no longer exists" and roll back rather than
+    /// publish an unaccounted resource.
+    /// </summary>
+    internal bool TrySetExternalEvictionCallback(Guid id, Func<bool> callback)
+    {
+        creationLock.Wait();
+        try
+        {
+            if (disposed
+                || !externalReservations.TryGetValue(id, out ExternalReservationState? state))
+            {
+                return false;
+            }
+
+            state.TryEvictIdle = callback;
+            return true;
+        }
+        finally
+        {
+            creationLock.Release();
+        }
+    }
+
+    internal void NotifyExternalReservationReleased(Guid id)
+    {
+        if (externalReservations.TryGetValue(id, out ExternalReservationState? state))
+        {
+            state.LastReleasedTicks = Environment.TickCount64;
+            SignalBundleStateChanged();
+        }
+    }
+
+    internal void ReleaseExternalReservation(Guid id)
+    {
+        if (externalReservations.TryRemove(id, out _))
+        {
+            SignalBundleStateChanged();
+        }
+    }
+
+    /// <summary>
     /// Pins an already-pooled session if present. Used after a create/warm when the caller
     /// re-acquires with the same <see cref="SessionPoolKey"/> for each execution.
     /// </summary>
@@ -345,6 +530,15 @@ internal sealed class InferenceSessionPool : IDisposable
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(factory);
 
+        bool cacheMissRecorded = false;
+
+        // Snapshot the creation wave at arrival: a caller that arrives while a creator is
+        // in flight — but is delayed by a gate or lock until after that creator fails —
+        // must still consume the recorded failure instead of re-running the factory.
+        SemaphoreSlim createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        long observedCreationWave = Volatile.Read(ref creationWave);
+        bool creationSnapshotPending = true;
+
         while (true)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
@@ -362,6 +556,12 @@ internal sealed class InferenceSessionPool : IDisposable
                         ObjectDisposedException.ThrowIf(disposed, this);
                     }
 
+                    // One counter per acquire request: a request that already recorded
+                    // a miss is not reclassified as a hit if it lands on an entry later.
+                    if (!cacheMissRecorded)
+                    {
+                        BenchmarkPhaseCapture.Increment("poolHit");
+                    }
                     return BuildLease(existing);
                 }
                 catch (ObjectDisposedException)
@@ -373,15 +573,27 @@ internal sealed class InferenceSessionPool : IDisposable
                 }
             }
 
+            if (!cacheMissRecorded)
+            {
+                BenchmarkPhaseCapture.Increment("poolMiss");
+                cacheMissRecorded = true;
+            }
+
             // Single-flight create: one factory invocation per key. Cancelling this waiter
             // does not cancel the shared create for other callers. A caller that queues behind
             // an in-flight creator (gate already held) consumes that creator's recorded
             // failure so construction failures propagate without rebuilding; callers that
             // arrive afterwards retry the factory — failed sessions are not cached.
-            SemaphoreSlim createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
-            bool queuedBehindCreator = createGate.CurrentCount == 0;
+            if (!creationSnapshotPending)
+            {
+                // A retry iteration re-observes the pool after the arrival snapshot was
+                // consumed — refresh it so each iteration reflects current state.
+                createGate = createGates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+                observedCreationWave = Volatile.Read(ref creationWave);
+            }
+            creationSnapshotPending = false;
+
             bool propagatedRecentFailure = false;
-            long observedCreationWave = Volatile.Read(ref creationWave);
             using (BenchmarkPhaseCapture.Start("pool-single-flight-wait"))
                 await createGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -395,21 +607,20 @@ internal sealed class InferenceSessionPool : IDisposable
                 // If memory admission is enabled and model exceeds budget, fail fast before
                 // attempting to create an unbudgeted session (audit §3B).
                 long needMb = ResolveReservationMb(key);
-                int device = DeviceOf(key);
-                if (enableMemoryAdmission && needMb > memoryBudgetMb)
+                AdmissionBucket bucket = BucketOf(key);
+                if (enableMemoryAdmission && needMb > BudgetFor(bucket))
                 {
                     throw new InvalidOperationException(
                         $"'{key.EngineFamily}' needs ~{needMb} MB, which exceeds the " +
-                        $"device {device} admission budget of {memoryBudgetMb} MB.");
+                        $"{DescribeBucket(bucket)} admission budget of {BudgetFor(bucket)} MB.");
                 }
 
-                if (queuedBehindCreator
-                    && creationFailures.TryGetValue(key, out var recentFailure))
+                if (creationFailures.TryGetValue(key, out var recentFailure))
                 {
                     if (recentFailure.Wave > observedCreationWave)
                     {
-                        // Failure from a later wave than we observed when we queued: we
-                        // waited behind that creator — propagate without rebuilding.
+                        // Failure from a later wave than our arrival snapshot: we arrived
+                        // while that creator was in flight — propagate without rebuilding.
                         propagatedRecentFailure = true;
                         System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(recentFailure.Error).Throw();
                     }
@@ -434,11 +645,11 @@ internal sealed class InferenceSessionPool : IDisposable
 
                     if (enableMemoryAdmission)
                     {
-                        // Evict idle sessions on this device until the reservation fits.
-                        // Other devices have their own budgets (shared across EPs on one GPU).
-                        while (CurrentReservedMb(device) + needMb > memoryBudgetMb)
+                        // Evict idle sessions in this bucket until the reservation fits.
+                        // Other buckets have their own budgets (host RAM vs each accelerator).
+                        while (CurrentReservedMb(bucket) + needMb > BudgetFor(bucket))
                         {
-                            PoolEntry? evictedForBudget = TryEvictLruIdle(onlyDevice: device);
+                            PoolEntry? evictedForBudget = TryEvictLruIdle(onlyBucket: bucket);
                             if (evictedForBudget is null)
                             {
                                 break;
@@ -447,9 +658,9 @@ internal sealed class InferenceSessionPool : IDisposable
                             evictedForBudget.Dispose();
                         }
 
-                        if (CurrentReservedMb(device) + needMb <= memoryBudgetMb)
+                        if (CurrentReservedMb(bucket) + needMb <= BudgetFor(bucket))
                         {
-                            AddPendingReservation(device, needMb);
+                            AddPendingReservation(bucket, needMb);
                             reserved = true;
                         }
                         // else: do not hold a reservation while waiting — that deadlocks
@@ -466,7 +677,7 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 if (enableMemoryAdmission && !reserved)
                 {
-                    await WaitForAdmissionBudgetAsync(needMb, device, cancellationToken).ConfigureAwait(false);
+                    await WaitForAdmissionBudgetAsync(needMb, bucket, cancellationToken).ConfigureAwait(false);
                     // Budget reserved by WaitForAdmissionBudgetAsync on success.
                     reserved = true;
                 }
@@ -476,6 +687,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 InferenceSession session;
                 try
                 {
+                    BenchmarkPhaseCapture.Increment("sessionCreate");
                     using (BenchmarkPhaseCapture.Start("session-create"))
                         session = await factory(cancellationToken).ConfigureAwait(false);
                 }
@@ -484,8 +696,8 @@ internal sealed class InferenceSessionPool : IDisposable
                     if (reserved)
                     {
                         // Always release reservation on factory failure to prevent a reservation leak
-                        // (audit §3A: VRAM accounting integrity).
-                        ReleaseReservation(device, needMb);
+                        // (audit §3A: memory accounting integrity).
+                        ReleaseReservation(bucket, needMb);
                     }
 
                     throw;
@@ -497,7 +709,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 {
                     if (reserved)
                     {
-                        ReleaseReservation(device, needMb);
+                        ReleaseReservation(bucket, needMb);
                     }
 
                     return BuildLease(freshEntry);
@@ -557,7 +769,7 @@ internal sealed class InferenceSessionPool : IDisposable
 
                     if (reserved)
                     {
-                        ReleaseReservation(device, needMb);
+                        ReleaseReservation(bucket, needMb);
                     }
 
                     lruEvicted2?.Dispose();
@@ -572,7 +784,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     // drop the pending reservation so it is not double-counted.
                     if (reserved)
                     {
-                        ReleaseReservation(device, needMb);
+                        ReleaseReservation(bucket, needMb);
                     }
 
                     return BuildLease(freshEntry);
@@ -582,7 +794,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 {
                     if (reserved)
                     {
-                        ReleaseReservation(device, needMb);
+                        ReleaseReservation(bucket, needMb);
                     }
 
                     return BuildLease(freshEntry);
@@ -593,7 +805,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 freshEntry.Dispose();
                 if (reserved)
                 {
-                    ReleaseReservation(device, needMb);
+                    ReleaseReservation(bucket, needMb);
                 }
 
                 if (competitor is not null)
@@ -639,85 +851,154 @@ internal sealed class InferenceSessionPool : IDisposable
     /// <summary>
     /// Acquires every graph in <paramref name="requests"/> as one all-or-nothing bundle
     /// (audit §3A: never hold an encoder while waiting indefinitely for a decoder).
-    /// Sessions are created first (single-flight), then exclusive gates are taken in
-    /// <see cref="SessionPoolKey.StableComparer"/> order without blocking on a later
-    /// key while holding an earlier one — if any gate is busy the attempt rolls back
-    /// and retries. Duplicate keys are rejected.
+    /// Sessions are created and pinned resident first (serialized under
+    /// <c>bundleAcquireLock</c> so opposing bundles cannot pin themselves into a memory
+    /// deadlock), then exclusive gates are taken in <see cref="SessionPoolKey.StableComparer"/>
+    /// order without blocking on a later key while holding an earlier one — if any gate is
+    /// busy the attempt rolls back and retries. Duplicate keys are rejected. When memory
+    /// admission is enabled, an aggregate per-bucket budget check fails the bundle before
+    /// any factory runs.
     /// </summary>
     public async Task<SessionLeaseBundle> GetLeaseBundleAsync(
         IReadOnlyList<SessionLeaseRequest> requests,
         CancellationToken cancellationToken)
     {
-        SessionLeaseRequest[] ordered = await PrepareBundleRequestsAsync(requests, cancellationToken)
-            .ConfigureAwait(false);
+        SessionLeaseRequest[] ordered = ValidateBundleRequests(requests);
 
-        // Phase 2: all-or-nothing exclusive acquire in stable order. TryWait(0) per key
-        // so we never block on key N while holding keys 1..N-1. One bundle at a time
-        // (bundleAcquireLock) so opposing caller orders cannot livelock each other.
+        if (enableMemoryAdmission)
+        {
+            // Aggregate preflight: a bundle whose graphs jointly exceed a bucket's budget
+            // can never fit, so fail before invoking any factory.
+            foreach (IGrouping<AdmissionBucket, SessionLeaseRequest> group in
+                     ordered.GroupBy(request => BucketOf(request.Key)))
+            {
+                long totalMb = group.Sum(request => ResolveReservationMb(request.Key));
+                long budgetMb = BudgetFor(group.Key);
+                if (totalMb > budgetMb)
+                {
+                    throw new InvalidOperationException(
+                        $"Session bundle needs ~{totalMb} MB across {group.Count()} graph(s) on " +
+                        $"{DescribeBucket(group.Key)}, which exceeds its admission budget of {budgetMb} MB.");
+                }
+            }
+        }
+
+        // Serialize preparation and acquisition: while one bundle is pinning or acquiring,
+        // no opposing bundle can incrementally pin itself into a memory deadlock.
         await bundleAcquireLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var pins = new List<SessionResidency>(ordered.Length);
         try
         {
-            int rewarmAttempts = 0;
-            const int maxRewarmAttempts = 25; // ~5s of real re-warm tries at the 200ms cadence below.
-            var rewarmStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            while (true)
+            try
             {
-                ObjectDisposedException.ThrowIf(disposed, this);
-                cancellationToken.ThrowIfCancellationRequested();
-
-                // Capture the signal before attempting the bundle. A lease release or pool
-                // publication that races this attempt either wakes this waiter or is observed
-                // by the next iteration, so no state change can be lost between check and wait.
-                Task bundleStateSignal = Volatile.Read(ref bundleStateChanged).Task;
-                SessionLeaseBundle? bundle = TryAcquireBundle(ordered, requests);
-                if (bundle is not null) return bundle;
-
-                // A key can be permanently missing from `entries` — phase 1's GetLeaseAsync
-                // returns an ephemeral (unpooled) lease when admission is off and the pool is
-                // full, or an entry can be idle-evicted between phase 1 and here. Blindly
-                // waiting never recovers that. Re-warm on a throttled cadence (~200ms) gated by
-                // elapsed wall-clock time rather than iteration count: each iteration can wait
-                // up to 1s on bundleStateSignal, so a miss-count-based cadence would stretch the
-                // re-warm interval (and the maxRewarmAttempts give-up bound) far past ~5s.
-                if (rewarmStopwatch.Elapsed >= TimeSpan.FromMilliseconds(200))
+                // Phase 1: create each session — no execution gates held. Under hard
+                // admission, pin each graph resident so idle eviction cannot remove it
+                // before its gate is taken. In count mode a warm may land ephemeral and
+                // never reach `entries`, so a residency pin could spin forever — just
+                // warm and release instead; the bounded re-warm below retries.
+                foreach (SessionLeaseRequest request in ordered)
                 {
-                    rewarmStopwatch.Restart();
-                    bool anyMissing = false;
-                    foreach (SessionLeaseRequest request in ordered.Where(request => !entries.ContainsKey(request.Key)))
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (enableMemoryAdmission)
                     {
-                        anyMissing = true;
+                        pins.Add(await GetResidencyAsync(request.Key, request.Factory, cancellationToken)
+                            .ConfigureAwait(false));
+                    }
+                    else
+                    {
                         using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
                             .ConfigureAwait(false);
                     }
+                }
 
-                    // The pool stays at capacity (every entry leased or pinned) if a re-warm
-                    // still leaves a key ephemeral — GetLeaseAsync succeeded but the lease was
-                    // never added to `entries`. Bound the retries instead of spinning until the
-                    // caller's cancellation token fires while holding bundleAcquireLock.
-                    if (anyMissing && ordered.Any(request => !entries.ContainsKey(request.Key)))
+                int rewarmAttempts = 0;
+                const int maxRewarmAttempts = 25; // ~5s of real re-warm tries at the 200ms cadence below.
+                var rewarmStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                while (true)
+                {
+                    ObjectDisposedException.ThrowIf(disposed, this);
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    // Capture the signal before attempting the bundle. A lease release or pool
+                    // publication that races this attempt either wakes this waiter or is observed
+                    // by the next iteration, so no state change can be lost between check and wait.
+                    Task bundleStateSignal = Volatile.Read(ref bundleStateChanged).Task;
+                    SessionLeaseBundle? bundle = TryAcquireBundle(ordered, requests);
+                    if (bundle is not null)
                     {
-                        rewarmAttempts++;
-                        if (rewarmAttempts >= maxRewarmAttempts)
+                        // Execution gates now protect the entries; the residency pins have
+                        // done their job.
+                        foreach (SessionResidency pin in pins)
                         {
-                            throw new InvalidOperationException(
-                                "Unable to acquire session bundle: the pool stayed at capacity " +
-                                $"(every entry leased or pinned) across {maxRewarmAttempts} re-warm attempts.");
+                            pin.Dispose();
+                        }
+
+                        pins.Clear();
+                        return bundle;
+                    }
+
+                    // A key can still be missing from `entries` — a pinned entry survives idle
+                    // eviction, but explicit EvictAllIdleAsync/EvictModelAsync calls remove it.
+                    // Re-warm on a throttled cadence (~200ms) gated by elapsed wall-clock time
+                    // rather than iteration count, as before.
+                    if (rewarmStopwatch.Elapsed >= TimeSpan.FromMilliseconds(200))
+                    {
+                        rewarmStopwatch.Restart();
+                        SessionLeaseRequest[] missing =
+                            ordered.Where(request => !entries.ContainsKey(request.Key)).ToArray();
+                        if (missing.Length > 0)
+                        {
+                            foreach (SessionLeaseRequest request in missing)
+                            {
+                                if (enableMemoryAdmission)
+                                {
+                                    pins.Add(await GetResidencyAsync(request.Key, request.Factory, cancellationToken)
+                                        .ConfigureAwait(false));
+                                }
+                                else
+                                {
+                                    using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
+                                        .ConfigureAwait(false);
+                                }
+                            }
+                        }
+
+                        // The pool stays at capacity (every entry leased or pinned) if a re-warm
+                        // still leaves a key unpooled. Bound the retries instead of spinning until
+                        // the caller's cancellation token fires while holding bundleAcquireLock.
+                        if (missing.Length > 0 &&
+                            ordered.Any(request => !entries.ContainsKey(request.Key)))
+                        {
+                            rewarmAttempts++;
+                            if (rewarmAttempts >= maxRewarmAttempts)
+                            {
+                                throw new InvalidOperationException(
+                                    "Unable to acquire session bundle: the pool stayed at capacity " +
+                                    $"(every entry leased or pinned) across {maxRewarmAttempts} re-warm attempts.");
+                            }
                         }
                     }
-                }
 
-                // Wait for a state transition rather than polling every 10ms. The timeout is
-                // only a lost-wakeup safety net; normal progress is signaled by release,
-                // publication, and eviction paths below. Kept at the same ~200ms cadence as the
-                // re-warm gate above so the stuck-pool give-up bound stays near the documented
-                // ~5s (maxRewarmAttempts * 200ms) even when no signal ever fires.
-                try
-                {
-                    await bundleStateSignal.WaitAsync(TimeSpan.FromMilliseconds(200), cancellationToken).ConfigureAwait(false);
+                    // Wait for a state transition rather than polling every 10ms. The timeout is
+                    // only a lost-wakeup safety net; normal progress is signaled by release,
+                    // publication, and eviction paths below. Kept at the same ~200ms cadence as the
+                    // re-warm gate above so the stuck-pool give-up bound stays near the documented
+                    // ~5s (maxRewarmAttempts * 200ms) even when no signal ever fires.
+                    try
+                    {
+                        await bundleStateSignal.WaitAsync(TimeSpan.FromMilliseconds(200), cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (TimeoutException)
+                    {
+                        // Lost-wakeup safety net; retry the bundle attempt.
+                    }
                 }
-                catch (TimeoutException)
+            }
+            finally
+            {
+                foreach (SessionResidency pin in pins)
                 {
-                    // Lost-wakeup safety net; retry the bundle attempt.
+                    pin.Dispose();
                 }
             }
         }
@@ -728,7 +1009,8 @@ internal sealed class InferenceSessionPool : IDisposable
     }
 
     private SessionLeaseBundle? TryAcquireBundle(
-        SessionLeaseRequest[] ordered, IReadOnlyList<SessionLeaseRequest> requests)
+        SessionLeaseRequest[] ordered,
+        IReadOnlyList<SessionLeaseRequest> requests)
     {
         var held = new List<(SessionPoolKey Key, PoolEntry Entry)>(ordered.Length);
         bool allAcquired = true;
@@ -789,8 +1071,7 @@ internal sealed class InferenceSessionPool : IDisposable
         return new SessionLeaseBundle(leases);
     }
 
-    private async Task<SessionLeaseRequest[]> PrepareBundleRequestsAsync(
-        IReadOnlyList<SessionLeaseRequest> requests, CancellationToken cancellationToken)
+    private static SessionLeaseRequest[] ValidateBundleRequests(IReadOnlyList<SessionLeaseRequest> requests)
     {
         ArgumentNullException.ThrowIfNull(requests);
         if (requests.Count == 0)
@@ -809,43 +1090,51 @@ internal sealed class InferenceSessionPool : IDisposable
             }
         }
 
-        // Warm each session before holding any bundle gate.
-        foreach (SessionLeaseRequest request in ordered)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using SessionLease warm = await GetLeaseAsync(request.Key, request.Factory, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
         return ordered;
     }
 
-    private long CurrentReservedMb(int device)
+    private long CurrentReservedMb(AdmissionBucket bucket)
     {
         long pooled = 0;
-        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries.Where(pair => DeviceOf(pair.Key) == device))
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries.Where(pair => BucketOf(pair.Key) == bucket))
         {
             pooled += ResolveReservationMb(pair.Key);
         }
 
-        pendingCreateMbByDevice.TryGetValue(device, out long pending);
-        return pooled + pending;
+        long external = 0;
+        foreach (KeyValuePair<Guid, ExternalReservationState> pair in externalReservations)
+        {
+            if (pair.Value.Bucket == bucket)
+            {
+                external += pair.Value.EstimatedMemoryMb;
+            }
+        }
+
+        pendingCreateMbByBucket.TryGetValue(bucket, out long pending);
+        return pooled + pending + external;
     }
 
-    private void AddPendingReservation(int device, long mb) =>
-        pendingCreateMbByDevice.AddOrUpdate(device, mb, (_, existing) => existing + mb);
+    private void AddPendingReservation(AdmissionBucket bucket, long mb)
+    {
+        pendingCreateMbByBucket.AddOrUpdate(bucket, mb, (_, existing) => existing + mb);
+        // Process-wide maximum: host pending plus every accelerator bucket's pending.
+        BenchmarkPhaseCapture.ObserveMaximum(
+            "pendingReservationMb",
+            pendingCreateMbByBucket.Values.Sum());
+    }
 
-    private void ReleaseReservation(int device, long mb) =>
-        pendingCreateMbByDevice.AddOrUpdate(device, 0, (_, existing) => Math.Max(0, existing - mb));
+    private void ReleaseReservation(AdmissionBucket bucket, long mb) =>
+        pendingCreateMbByBucket.AddOrUpdate(bucket, 0, (_, existing) => Math.Max(0, existing - mb));
 
     /// <summary>
-    /// Waits until <paramref name="needMb"/> fits in <paramref name="device"/>'s budget
-    /// (evicting idle sessions on that device as needed), then takes the reservation.
-    /// Never holds a reservation while waiting. Budget is shared across EPs on one device.
+    /// Waits until <paramref name="needMb"/> fits in <paramref name="bucket"/>'s budget
+    /// (evicting idle sessions in that bucket as needed), then takes the reservation.
+    /// Never holds a reservation while waiting. Host-backed providers share the host RAM budget;
+    /// accelerator providers share their device's VRAM budget.
     /// </summary>
-    private async Task WaitForAdmissionBudgetAsync(long needMb, int device, CancellationToken cancellationToken)
+    private async Task WaitForAdmissionBudgetAsync(long needMb, AdmissionBucket bucket, CancellationToken cancellationToken)
     {
-        Interlocked.Increment(ref admissionWaiters);
+        BenchmarkPhaseCapture.ObserveMaximum("admissionWaiters", Interlocked.Increment(ref admissionWaiters));
         try
         {
             while (true)
@@ -855,13 +1144,14 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 bool acquired = false;
                 List<PoolEntry>? toDispose = null;
+                List<KeyValuePair<Guid, ExternalReservationState>>? idleExternals = null;
                 await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
                     ObjectDisposedException.ThrowIf(disposed, this);
-                    while (CurrentReservedMb(device) + needMb > memoryBudgetMb)
+                    while (CurrentReservedMb(bucket) + needMb > BudgetFor(bucket))
                     {
-                        PoolEntry? evicted = TryEvictLruIdle(onlyDevice: device);
+                        PoolEntry? evicted = TryEvictLruIdle(onlyBucket: bucket);
                         if (evicted is null)
                         {
                             break;
@@ -871,9 +1161,16 @@ internal sealed class InferenceSessionPool : IDisposable
                         toDispose.Add(evicted);
                     }
 
-                    if (CurrentReservedMb(device) + needMb <= memoryBudgetMb)
+                    if (CurrentReservedMb(bucket) + needMb > BudgetFor(bucket))
                     {
-                        AddPendingReservation(device, needMb);
+                        // No pooled ONNX entry in this bucket is evictable; offer every idle
+                        // external reservation a chance to release its resource, oldest first.
+                        idleExternals = OrderedIdleExternals(bucket);
+                    }
+
+                    if (CurrentReservedMb(bucket) + needMb <= BudgetFor(bucket))
+                    {
+                        AddPendingReservation(bucket, needMb);
                         acquired = true;
                     }
                 }
@@ -895,7 +1192,43 @@ internal sealed class InferenceSessionPool : IDisposable
                     return;
                 }
 
-                if (CurrentReservedMb(device) + needMb > memoryBudgetMb)
+                if (idleExternals is not null)
+                {
+                    // Invoke outside creationLock in LRU order: a refusal or throwing
+                    // callback must not starve newer evictable candidates. Callbacks that
+                    // declined stay registered — the resource may go idle later.
+                    bool anyEvicted = false;
+                    foreach (KeyValuePair<Guid, ExternalReservationState> candidate in idleExternals)
+                    {
+                        bool evictedExternal;
+                        try
+                        {
+                            evictedExternal = candidate.Value.TryEvictIdle!();
+                        }
+                        catch
+                        {
+                            // A failing callback must not corrupt admission — treat as refusal.
+                            evictedExternal = false;
+                        }
+
+                        if (evictedExternal)
+                        {
+                            // Defensive removal: a well-behaved callback already disposed
+                            // the token.
+                            externalReservations.TryRemove(candidate);
+                            SignalBundleStateChanged();
+                            anyEvicted = true;
+                            break;
+                        }
+                    }
+
+                    if (anyEvicted)
+                    {
+                        continue;
+                    }
+                }
+
+                if (CurrentReservedMb(bucket) + needMb > BudgetFor(bucket))
                 {
                     // Doesn't fit yet — poll instead of blocking a thread-pool thread on
                     // Monitor.Wait. Bounded delay; loops back to retake creationLock and
@@ -1161,6 +1494,36 @@ internal sealed class InferenceSessionPool : IDisposable
         {
             entry.Dispose();
         }
+
+        // External reservations are dropped from accounting; each registered idle callback
+        // is then attempted so a released external resource (e.g. a cached GenAI model) is
+        // freed with the pool. A resource still leased may refuse eviction (false); its
+        // token stays idempotent even though pool accounting is already cleared.
+        foreach (KeyValuePair<Guid, ExternalReservationState> pair in externalReservations.ToArray())
+        {
+            if (!externalReservations.TryRemove(pair))
+            {
+                continue;
+            }
+
+            try
+            {
+                pair.Value.TryEvictIdle?.Invoke();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The external owner may be disposing concurrently.
+            }
+            catch (InvalidOperationException)
+            {
+                // Teardown must tolerate an external owner that cannot evict now.
+            }
+            catch (Exception)
+            {
+                // Teardown must not throw or abandon the remaining reservations if a
+                // native external resource fails while disposing.
+            }
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -1221,11 +1584,12 @@ internal sealed class InferenceSessionPool : IDisposable
     /// <see cref="InferenceSession"/> teardown.
     /// </returns>
     /// <summary>
-    /// Evicts the least-recently-released idle entry, optionally restricted to one device
-    /// (so a budget shortfall on GPU 0 is not “fixed” by dropping GPU 1 sessions).
+    /// Evicts the least-recently-released idle entry, optionally restricted to one admission
+    /// bucket (so a host RAM shortfall is not “fixed” by dropping GPU sessions, and a
+    /// shortfall on accelerator device 0 is not “fixed” by dropping device 1 sessions).
     /// Must be called while <see cref="creationLock"/> is held.
     /// </summary>
-    private PoolEntry? TryEvictLruIdle(int? onlyDevice = null)
+    private PoolEntry? TryEvictLruIdle(AdmissionBucket? onlyBucket = null)
     {
         // Prefer evicting entries that have been idle for a while. Sessions released within
         // the recent window are treated as the active pipeline working set (e.g. the next
@@ -1233,10 +1597,10 @@ internal sealed class InferenceSessionPool : IDisposable
         long now = Environment.TickCount64;
         long recentCutoff = now - RecentReleaseWindowMs;
 
-        (SessionPoolKey? candidateKey, PoolEntry? candidateEntry) = FindOldestIdle(onlyDevice, recentCutoff);
+        (SessionPoolKey? candidateKey, PoolEntry? candidateEntry) = FindOldestIdle(onlyBucket, recentCutoff);
         if (candidateEntry is null)
         {
-            (candidateKey, candidateEntry) = FindOldestIdle(onlyDevice, recentCutoff: null);
+            (candidateKey, candidateEntry) = FindOldestIdle(onlyBucket, recentCutoff: null);
         }
 
         if (candidateEntry is null)
@@ -1272,14 +1636,14 @@ internal sealed class InferenceSessionPool : IDisposable
         return null;
     }
 
-    private (SessionPoolKey? Key, PoolEntry? Entry) FindOldestIdle(int? onlyDevice, long? recentCutoff)
+    private (SessionPoolKey? Key, PoolEntry? Entry) FindOldestIdle(AdmissionBucket? onlyBucket, long? recentCutoff)
     {
         SessionPoolKey? candidateKey = null;
         PoolEntry? candidateEntry = null;
         long candidateLastReleasedTicks = long.MaxValue;
         foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
         {
-            if (onlyDevice is not null && DeviceOf(pair.Key) != onlyDevice.Value)
+            if (onlyBucket is not null && BucketOf(pair.Key) != onlyBucket.Value)
             {
                 continue;
             }
@@ -1305,6 +1669,26 @@ internal sealed class InferenceSessionPool : IDisposable
         }
 
         return (candidateKey, candidateEntry);
+    }
+
+    /// <summary>
+    /// Snapshot of live external reservations in <paramref name="bucket"/> that registered an
+    /// idle-eviction callback, ordered least-recently-released first (Guid tie-break for
+    /// determinism). Reservations still under construction have no callback and are never
+    /// candidates — pending accounting already covers them.
+    /// </summary>
+    private List<KeyValuePair<Guid, ExternalReservationState>> OrderedIdleExternals(AdmissionBucket bucket)
+    {
+        List<KeyValuePair<Guid, ExternalReservationState>> candidates = externalReservations
+            .Where(pair => pair.Value.Bucket == bucket && pair.Value.TryEvictIdle is not null)
+            .ToList();
+
+        candidates.Sort(static (x, y) =>
+        {
+            int c = x.Value.LastReleasedTicks.CompareTo(y.Value.LastReleasedTicks);
+            return c != 0 ? c : x.Key.CompareTo(y.Key);
+        });
+        return candidates;
     }
 
     private static bool TryAcquireGate(PoolEntry entry)

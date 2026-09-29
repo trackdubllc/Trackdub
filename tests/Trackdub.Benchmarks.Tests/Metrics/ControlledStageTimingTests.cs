@@ -163,6 +163,138 @@ public sealed class ControlledStageTimingTests
     }
 
     [Fact]
+    public void StageTimingCollector_FirstOutput_RecordsFirstEventOnly()
+    {
+        var collector = new StageTimingCollector(Stopwatch.GetTimestamp());
+
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.Asr,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.TranscriptSegmentAvailable,
+            ItemIndex: 0));
+        double? first = collector.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentAvailable);
+
+        Thread.Sleep(10);
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.Asr,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.TranscriptSegmentAvailable,
+            ItemIndex: 1));
+
+        Assert.NotNull(first);
+        Assert.Equal(first, collector.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentAvailable));
+    }
+
+    [Fact]
+    public void StageTimingCollector_FirstOutput_NeverSubstitutesTerminalCompletion()
+    {
+        var collector = new StageTimingCollector(Stopwatch.GetTimestamp());
+
+        collector.Report(new PipelineProgressEvent(StageName: StageNames.Asr, EventKind: PipelineProgressEventKind.Started));
+        Thread.Sleep(2);
+        collector.Report(new PipelineProgressEvent(StageName: StageNames.Asr, EventKind: PipelineProgressEventKind.Completed));
+
+        Assert.Null(collector.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentAvailable));
+        Assert.Null(collector.GetFirstOutputMilliseconds(PipelineOutputKind.PlayableAudioPersisted));
+    }
+
+    [Fact]
+    public void StageTimingCollector_FirstOutput_TracksKindsIndependently()
+    {
+        var collector = new StageTimingCollector(Stopwatch.GetTimestamp());
+
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.Asr,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.TranscriptSegmentAvailable,
+            ItemIndex: 0));
+        Thread.Sleep(5);
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.SpeakerAssignment,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.TranscriptSegmentPersisted,
+            ItemIndex: 0,
+            RevisionId: Guid.NewGuid(),
+            SegmentId: Guid.NewGuid()));
+
+        double? available = collector.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentAvailable);
+        double? persisted = collector.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentPersisted);
+
+        Assert.NotNull(available);
+        Assert.NotNull(persisted);
+        Assert.True(persisted > available);
+        Assert.Null(collector.GetFirstOutputMilliseconds(PipelineOutputKind.PlayableAudioPersisted));
+    }
+
+    [Fact]
+    public void StageTimingCollector_FirstOutput_RejectsMalformedEvents()
+    {
+        var collector = new StageTimingCollector(Stopwatch.GetTimestamp());
+
+        // Missing ItemIndex.
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.Asr,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.TranscriptSegmentAvailable));
+        // Missing revision/segment ids on a persisted event.
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.SpeakerAssignment,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.TranscriptSegmentPersisted,
+            ItemIndex: 0));
+        // Empty ids are not real identities.
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.SpeakerAssignment,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.TranscriptSegmentPersisted,
+            ItemIndex: 0,
+            RevisionId: Guid.Empty,
+            SegmentId: Guid.NewGuid()));
+        // Missing artifact id on a playable event.
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.Tts,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.PlayableAudioPersisted,
+            ItemIndex: 0,
+            SegmentId: Guid.NewGuid()));
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.Tts,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.PlayableAudioPersisted,
+            ItemIndex: 0,
+            SegmentId: Guid.NewGuid(),
+            ArtifactId: Guid.Empty));
+
+        Assert.Null(collector.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentAvailable));
+        Assert.Null(collector.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentPersisted));
+        Assert.Null(collector.GetFirstOutputMilliseconds(PipelineOutputKind.PlayableAudioPersisted));
+    }
+
+    [Fact]
+    public void StageTimingCollector_FirstOutput_RecordsValidPersistedAndPlayable()
+    {
+        var collector = new StageTimingCollector(Stopwatch.GetTimestamp());
+
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.SpeakerAssignment,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.TranscriptSegmentPersisted,
+            ItemIndex: 0,
+            RevisionId: Guid.NewGuid(),
+            SegmentId: Guid.NewGuid()));
+        collector.Report(new PipelineProgressEvent(
+            StageName: StageNames.Tts,
+            EventKind: PipelineProgressEventKind.Progress,
+            OutputKind: PipelineOutputKind.PlayableAudioPersisted,
+            ItemIndex: 0,
+            SegmentId: Guid.NewGuid(),
+            ArtifactId: Guid.NewGuid()));
+
+        Assert.NotNull(collector.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentPersisted));
+        Assert.NotNull(collector.GetFirstOutputMilliseconds(PipelineOutputKind.PlayableAudioPersisted));
+    }
+
+    [Fact]
     public void MultiRunAggregation_PopulatesPercentileKeysInTimingsDictionary()
     {
         // Simulate 3 runs of stage timings collected across all 5 stages

@@ -58,14 +58,33 @@ public sealed class DubbingPipelineEngineTests
             AsrModelOverride.Auto,
             IsDevBuild: false,
             new Dictionary<string, ExecutionProviderKind>(),
+            VadModelAlias: "silero-ui-pick",
             AsrModelAlias: "whisper-ui-pick",
             TtsModelAlias: "kokoro-ui-pick");
-        var preferences = new InferenceModelPreferences(TtsModelAlias: "chatterbox-clone-pin");
+        var preferences = new InferenceModelPreferences(
+            VadModelAlias: "silero-request-pin",
+            TtsModelAlias: "chatterbox-clone-pin");
 
         RuntimeModelSelections merged = DubbingPipelineEngine.ApplyModelPreferenceAliases(selections, preferences);
 
+        Assert.Equal("silero-request-pin", merged.VadModelAlias);
         Assert.Equal("chatterbox-clone-pin", merged.TtsModelAlias);
         Assert.Equal("whisper-ui-pick", merged.AsrModelAlias);
+    }
+
+    [Fact]
+    public void ApplyModelPreferenceAliases_keeps_vad_selection_without_explicit_alias()
+    {
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            VadModelAlias: "silero-ui-pick");
+        var preferences = new InferenceModelPreferences(TtsModelAlias: "kokoro-request-pin");
+
+        RuntimeModelSelections merged = DubbingPipelineEngine.ApplyModelPreferenceAliases(selections, preferences);
+
+        Assert.Equal("silero-ui-pick", merged.VadModelAlias);
     }
 
     [Fact]
@@ -75,10 +94,12 @@ public sealed class DubbingPipelineEngineTests
             AsrModelOverride.Auto,
             IsDevBuild: false,
             new Dictionary<string, ExecutionProviderKind>(),
+            VadModelAlias: "silero-ui-pick",
             TtsModelAlias: "kokoro-ui-pick");
 
         RuntimeModelSelections merged = DubbingPipelineEngine.ApplyModelPreferenceAliases(selections, null);
 
+        Assert.Equal("silero-ui-pick", merged.VadModelAlias);
         Assert.Equal("kokoro-ui-pick", merged.TtsModelAlias);
     }
 
@@ -138,6 +159,90 @@ public sealed class DubbingPipelineEngineTests
         Assert.Equal(runId, result.RunId);
         Assert.Equal(correlationId, result.CorrelationId);
         Assert.NotEqual(result.RunId, result.CorrelationId);
+    }
+
+    [Fact]
+    public void BuildModelPreferences_maps_provider_pins_to_runtime_stages()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ExecutionProviderPreferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ASR"] = "cpu",
+                [StageNames.Tts] = "directml",
+            },
+            RequireExecutionProviderPreferences = true,
+        };
+
+        InferenceModelPreferences? preferences = DubbingPipelineEngine.BuildModelPreferences(options);
+
+        Assert.NotNull(preferences);
+        Assert.Equal(ExecutionProviderKind.Cpu, preferences!.GetPreferredExecutionProvider(RuntimeStage.Asr));
+        Assert.Equal(ExecutionProviderKind.DirectMl, preferences.GetPreferredExecutionProvider(RuntimeStage.Tts));
+        Assert.True(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Asr));
+        Assert.True(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Tts));
+        Assert.False(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Vad));
+        Assert.NotNull(preferences.RequiredExecutionProviderStages);
+        Assert.True(preferences.RequiredExecutionProviderStages!.SetEquals(
+            [RuntimeStage.Asr, RuntimeStage.Tts]));
+    }
+
+    [Fact]
+    public void BuildModelPreferences_provider_pins_are_preferences_only_without_require_flag()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ExecutionProviderPreferences = new Dictionary<string, string>
+            {
+                [StageNames.Asr] = "cpu",
+            },
+        };
+
+        InferenceModelPreferences? preferences = DubbingPipelineEngine.BuildModelPreferences(options);
+
+        Assert.NotNull(preferences);
+        Assert.Equal(ExecutionProviderKind.Cpu, preferences!.GetPreferredExecutionProvider(RuntimeStage.Asr));
+        Assert.Null(preferences.RequiredExecutionProviderStages);
+        Assert.False(preferences.RequiresPreferredExecutionProvider(RuntimeStage.Asr));
+    }
+
+    [Theory]
+    [InlineData(StageNames.Export)]
+    [InlineData(StageNames.SpeakerAssignment)]
+    [InlineData("not-a-stage")]
+    public void BuildModelPreferences_rejects_non_runtime_stage_provider_pin(string stage)
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ExecutionProviderPreferences = new Dictionary<string, string>
+            {
+                [stage] = "cpu",
+            },
+        };
+
+        Assert.Throws<ArgumentException>(() => DubbingPipelineEngine.BuildModelPreferences(options));
+    }
+
+    [Fact]
+    public void BuildModelPreferences_rejects_invalid_provider_label()
+    {
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ExecutionProviderPreferences = new Dictionary<string, string>
+            {
+                [StageNames.Asr] = "definitely-not-a-provider",
+            },
+        };
+
+        Assert.Throws<ArgumentException>(() => DubbingPipelineEngine.BuildModelPreferences(options));
     }
 
     private static int IndexOf(IReadOnlyList<string> order, string stageName)

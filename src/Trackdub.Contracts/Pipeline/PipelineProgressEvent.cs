@@ -22,6 +22,23 @@ public enum PipelineProgressEventKind
 }
 
 /// <summary>
+/// Identifies the kind of pipeline output that truthfully exists. Output events keep
+/// <see cref="PipelineProgressEventKind.Progress"/> and are distinguished structurally
+/// by <see cref="PipelineProgressEvent.OutputKind"/>.
+/// </summary>
+public enum PipelineOutputKind
+{
+    /// <summary>The first recognized transcript segment exists in memory.</summary>
+    TranscriptSegmentAvailable = 0,
+
+    /// <summary>A transcript segment was persisted: repository save and artifact write succeeded.</summary>
+    TranscriptSegmentPersisted = 1,
+
+    /// <summary>Playable dubbed audio for a segment was persisted (artifact and store committed).</summary>
+    PlayableAudioPersisted = 2
+}
+
+/// <summary>
 /// A structured progress event emitted during pipeline execution.
 /// </summary>
 public sealed record PipelineProgressEvent
@@ -56,7 +73,14 @@ public sealed record PipelineProgressEvent
         string? Phase = null,
         int? CompletedUnits = null,
         int? TotalUnits = null,
-        string? CurrentItemLabel = null)
+        string? CurrentItemLabel = null,
+        Guid? RunId = null,
+        long SequenceNumber = 0,
+        PipelineOutputKind? OutputKind = null,
+        int? ItemIndex = null,
+        Guid? RevisionId = null,
+        Guid? SegmentId = null,
+        Guid? ArtifactId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(StageName);
 
@@ -72,6 +96,13 @@ public sealed record PipelineProgressEvent
         this.CompletedUnits = CompletedUnits;
         this.TotalUnits = TotalUnits;
         this.CurrentItemLabel = CurrentItemLabel;
+        this.RunId = RunId;
+        this.SequenceNumber = SequenceNumber;
+        this.OutputKind = OutputKind;
+        this.ItemIndex = ItemIndex;
+        this.RevisionId = RevisionId;
+        this.SegmentId = SegmentId;
+        this.ArtifactId = ArtifactId;
     }
 
     /// <summary>The user-facing name of the pipeline stage.</summary>
@@ -106,4 +137,25 @@ public sealed record PipelineProgressEvent
 
     /// <summary>Elapsed time for terminal events.</summary>
     public TimeSpan ElapsedDuration { get; init; }
+
+    /// <summary>Identity of the engine run that emitted this event, stamped by the run-scoped reporter.</summary>
+    public Guid? RunId { get; init; }
+
+    /// <summary>Monotonic sequence number within <see cref="RunId"/>; strictly increasing per run.</summary>
+    public long SequenceNumber { get; init; }
+
+    /// <summary>When set, this <see cref="PipelineProgressEventKind.Progress"/> event reports a pipeline output that truthfully exists.</summary>
+    public PipelineOutputKind? OutputKind { get; init; }
+
+    /// <summary>Zero-based item index the output refers to (e.g. segment index).</summary>
+    public int? ItemIndex { get; init; }
+
+    /// <summary>Transcript revision the output belongs to, when persisted.</summary>
+    public Guid? RevisionId { get; init; }
+
+    /// <summary>Persisted segment identity, when the output names a stored segment.</summary>
+    public Guid? SegmentId { get; init; }
+
+    /// <summary>Persisted artifact identity, when the output names a committed artifact.</summary>
+    public Guid? ArtifactId { get; init; }
 }

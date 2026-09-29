@@ -4,6 +4,7 @@ using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Inference.Onnx.Audio;
+using Trackdub.Inference.Onnx.Pool;
 
 namespace Trackdub.Inference.Onnx.ForcedAlignment;
 
@@ -152,7 +153,7 @@ public sealed class QwenForcedAligner : IForcedAlignerAdapter, IDisposable
             // ── 7. ONNX forward pass ──────────────────────────────────────────
             cancellationToken.ThrowIfCancellationRequested();
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
-                session!.Run(inputs);
+                session!.RunWithRetry(inputs, maxAttempts: 1, cancellationToken: cancellationToken);
 
             Tensor<float> logitsTensor = outputs
                 .Single(static o => string.Equals(o.Name, "logits", StringComparison.Ordinal))
