@@ -53,7 +53,7 @@ public sealed class OnnxTranscriptEnginesTests
     public void WhisperGenAi_EncodeClip_PreCanceledToken_ThrowsEvenForEmptyRange()
     {
         using var audio = new MemoryAudioSamples(new float[1600]);
-        var canceled = new CancellationTokenSource();
+        using var canceled = new CancellationTokenSource();
         canceled.Cancel();
 
         Assert.Throws<OperationCanceledException>(() =>

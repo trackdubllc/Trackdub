@@ -89,7 +89,7 @@ public sealed class SortFormerDiarizationEngineTests
         float[] samples = CreateSineWave(durationSeconds: 1.0, sampleRate: 16000);
         var fake = new FakeAudioSamples(samples);
         var extractor = new SortFormerFeatureExtractor();
-        var canceled = new CancellationTokenSource();
+        using var canceled = new CancellationTokenSource();
         canceled.Cancel();
 
         Assert.Throws<OperationCanceledException>(() =>
