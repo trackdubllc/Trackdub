@@ -200,7 +200,6 @@ public sealed class QwenTextRefinementEngine(
         }
     }
 
-
     private static StageRuntimeExecutionSummary CreateExecutionSummary(
         StageRuntimePlan plan,
         string bootstrapDetail) =>

@@ -268,7 +268,6 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
         }
     }
 
-
     private static StageRuntimeExecutionSummary CreateExecutionSummary(
         StageRuntimePlan plan,
         string bootstrapDetail) =>

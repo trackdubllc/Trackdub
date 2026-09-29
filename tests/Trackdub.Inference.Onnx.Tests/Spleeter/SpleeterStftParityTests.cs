@@ -253,8 +253,8 @@ public sealed class SpleeterStftParityTests
         Assert.Equal(targetFrames, leftFrames);
         int channelStride = targetFrames * MaxFreqs;
 
-        float MaskVocals(int ch, int f, int k) => 0.2f + (0.6f * ((ch * 7 + f * 3 + k) % 11) / 11f);
-        float MaskAcc(int ch, int f, int k) => 0.1f + (0.8f * ((ch * 13 + f * 5 + k) % 17) / 17f);
+        float MaskVocals(int ch, int f, int k) => 0.2f + (0.6f * (((ch * 7) + (f * 3) + k) % 11) / 11f);
+        float MaskAcc(int ch, int f, int k) => 0.1f + (0.8f * (((ch * 13) + (f * 5) + k) % 17) / 17f);
 
         var vocalsLeftMasked = new float[channelStride];
         var accLeftMasked = new float[channelStride];
@@ -310,7 +310,7 @@ public sealed class SpleeterStftParityTests
                 {
                     for (int k = 0; k < MaxFreqs; k++)
                     {
-                        int blockIndex = ((ch * PadTo) + f) * MaxFreqs + k;
+                        int blockIndex = (((ch * PadTo) + f) * MaxFreqs) + k;
                         vocalsMask[blockIndex] = MaskVocals(ch, startFrame + f, k);
                         accMask[blockIndex] = MaskAcc(ch, startFrame + f, k);
                     }
