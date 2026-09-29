@@ -319,7 +319,6 @@ public class GenAiModelPoolTests
         }
     }
 
-
     [Fact]
     public async Task GetLeaseAsync_TwoColdKeysAtCapacity_ContenderNeverHangsOrCreatesEphemeral()
     {

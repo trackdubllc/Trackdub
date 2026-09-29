@@ -1,0 +1,18 @@
+{
+  // Fixture for WinNativeDepsManifestLoaderTests: the shipped manifest is hand-edited, so the loader
+  // must keep tolerating comments and trailing commas on top of the generated resolver.
+  "schemaVersion": 1,
+  "sevenZipPortableExeUrl": "https://example.com/7zr.exe",
+  "runtimes": {
+    "win-x64": {
+      "libmpvDevArchiveUrl": "https://example.com/libmpv-dev-win-x64.zip",
+      "libmpvDevArchiveSha256": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      "libmpvExtractMember": "libmpv-dev/include/mpv/client.h",
+      "ffmpegZipUrl": "https://example.com/ffmpeg-win-x64.zip",
+      "uvZipUrl": "https://example.com/uv-win-x64.zip",
+    },
+    "osx-arm64": {
+      "libmpvDevArchiveUrl": "https://example.com/libmpv-dev-osx-arm64.tar.gz",
+    },
+  },
+}

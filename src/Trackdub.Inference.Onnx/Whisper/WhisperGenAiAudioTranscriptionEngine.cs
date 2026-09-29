@@ -153,7 +153,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
 
         var segments = new List<RecognizedTranscriptSegment>(effectiveRegions.Count);
         int droppedDegenerateChunks = 0;
-
         {
             GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
                 modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
@@ -609,8 +608,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
             .ThenBy(static group => group.Key, StringComparer.Ordinal)
             .Select(static group => group.Key)
             .FirstOrDefault();
-
-
 
     private string ResolveModelRootPath(StageRuntimePlan plan)
     {

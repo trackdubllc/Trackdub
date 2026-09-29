@@ -123,10 +123,7 @@ internal sealed class SortFormerFeatureExtractor
     /// </summary>
     internal static int GetFrameCount(long sampleFrameCount)
     {
-        if (sampleFrameCount < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(sampleFrameCount));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(sampleFrameCount);
 
         if (sampleFrameCount == 0)
         {
@@ -157,10 +154,7 @@ internal sealed class SortFormerFeatureExtractor
         }
 
         int totalFrameCount = GetFrameCount(samples.SampleFrameCount);
-        if (startFrame < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(startFrame));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(startFrame);
 
         // frameCount <= total first so total - frameCount cannot underflow, then the
         // subtraction form avoids int overflow on startFrame + frameCount.
@@ -215,7 +209,7 @@ internal sealed class SortFormerFeatureExtractor
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    long frameSampleOrigin = (long)(startFrame + frameIndex) * HopLength - padAmount;
+                    long frameSampleOrigin = ((long)(startFrame + frameIndex) * HopLength) - padAmount;
                     Array.Clear(spectrum);
                     for (int sampleIndex = 0; sampleIndex < FftSize; sampleIndex++)
                     {

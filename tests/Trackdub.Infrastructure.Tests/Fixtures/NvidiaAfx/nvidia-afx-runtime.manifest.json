@@ -1,0 +1,28 @@
+{
+  "manifestVersion": "1.0.0",
+  "packages": [
+    {
+      "architecture": "win-x64",
+      "downloadUrl": "https://example.com/afx-runtime-win-x64.zip",
+      "sha256": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      "sizeBytes": 1234567890,
+      "runtimeVersion": "1.2.3",
+      "licenseUrl": "https://example.com/afx-license",
+      "modelRelativePaths": [
+        "models/afx/win-x64/encoder.onnx",
+        "models/afx/win-x64/decoder.onnx"
+      ]
+    },
+    {
+      "architecture": "linux-x64",
+      "downloadUrl": "https://example.com/afx-runtime-linux-x64.zip",
+      "sha256": "feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface",
+      "sizeBytes": 987654321,
+      "runtimeVersion": "1.2.3",
+      "licenseUrl": "https://example.com/afx-license",
+      "modelRelativePaths": [
+        "models/afx/linux-x64/encoder.onnx"
+      ]
+    }
+  ]
+}
