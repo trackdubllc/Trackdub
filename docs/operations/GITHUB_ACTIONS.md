@@ -2,7 +2,7 @@
 
 CI/CD lives in `.github/workflows/`. Windows jobs use self-hosted runners; Linux jobs use `self-hosted`.
 
-`ci.yml`, `codeql.yml`, `model-audit.yml`, `dependabot-auto-merge.yml`, and `opencode-review.yml` run automatically on their triggers. Everything else is manual (`workflow_dispatch`) or PR-comment triggered:
+`ci.yml`, `codeql.yml`, `model-audit.yml`, `benchmark-report-validation.yml`, `dependabot-auto-merge.yml`, and `opencode-review.yml` run automatically on their triggers. Everything else is manual (`workflow_dispatch`) or PR-comment triggered:
 
 Pull-request triggers are not restricted to pull requests whose base is `main`. `ci.yml`, `codeql.yml`,
 `model-audit.yml`, and `benchmark-report-validation.yml` also run for stacked pull requests based on
