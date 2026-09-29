@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using Trackdub.Contracts.Licensing;
 using Trackdub.Contracts;
+using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Infrastructure.Logging;
 using Trackdub.Infrastructure.Retry;
 
@@ -14,7 +15,8 @@ public sealed class ModelDownloaderAdapter(
     IModelDownloader innerDownloader,
     HttpClient? httpClient = null,
     IApplicationLogger? logger = null,
-    HuggingFaceDownloadOptions? downloadOptions = null)
+    HuggingFaceDownloadOptions? downloadOptions = null,
+    IModelContentHashCacheInvalidator? contentHashCacheInvalidator = null)
     : IModelDownloaderContract, IDisposable
 {
     private const int BufferSize = 65536;
@@ -24,6 +26,7 @@ public sealed class ModelDownloaderAdapter(
     private readonly bool ownsHttpClient = httpClient is null;
     private readonly IApplicationLogger logger = logger ?? new DebugApplicationLogger();
     private readonly HuggingFaceDownloadOptions downloadOptions = downloadOptions ?? HuggingFaceDownloadOptions.Default;
+    private readonly IModelContentHashCacheInvalidator? contentHashCacheInvalidator = contentHashCacheInvalidator;
     private bool disposed;
 
     public async Task<bool> DownloadAsync(
@@ -50,13 +53,19 @@ public sealed class ModelDownloaderAdapter(
                     infra.EstimatedTimeRemaining));
             });
 
-        return await innerDownloader.DownloadAsync(
+        bool downloaded = await innerDownloader.DownloadAsync(
             modelId,
             fileName,
             destinationPath,
             infraProgress,
             cancellationToken,
             revision).ConfigureAwait(false);
+        if (downloaded)
+        {
+            contentHashCacheInvalidator?.Invalidate(destinationPath);
+        }
+
+        return downloaded;
     }
 
     public async Task<bool> DownloadUriAsync(
@@ -101,6 +110,7 @@ public sealed class ModelDownloaderAdapter(
                         cancellationToken).ConfigureAwait(false))
                 {
                     File.Move(tempPath, resolvedDestinationPath, overwrite: true);
+                    contentHashCacheInvalidator?.Invalidate(resolvedDestinationPath);
                     DeleteIfExists(PartialDownloadState.MetaPath(tempPath));
                     logger.LogInformation($"Runtime support file parallel download completed: {resolvedDestinationPath}");
                     return true;
@@ -247,6 +257,7 @@ public sealed class ModelDownloaderAdapter(
                     effectiveUri);
 
                 File.Move(tempPath, resolvedDestinationPath, overwrite: true);
+                contentHashCacheInvalidator?.Invalidate(resolvedDestinationPath);
                 DeleteIfExists(PartialDownloadState.MetaPath(tempPath));
                 logger.LogInformation($"Runtime support file download completed: {resolvedDestinationPath}");
                 return true;
@@ -385,4 +396,3 @@ public sealed class ModelDownloaderAdapter(
             : null;
     }
 }
-

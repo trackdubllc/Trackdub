@@ -1,12 +1,29 @@
 using System.Net;
 using System.Net.Http.Headers;
 using Trackdub.Contracts;
+using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Infrastructure.Licensing;
 
 namespace Trackdub.Infrastructure.Tests;
 
 public sealed class ModelDownloaderAdapterTests
 {
+    [Fact]
+    public async Task DownloadAsync_invalidates_model_fingerprint_after_successful_replacement()
+    {
+        const string destinationPath = "C:\\models\\replacement.onnx";
+        var invalidator = new RecordingModelContentHashCacheInvalidator();
+        using var adapter = new ModelDownloaderAdapter(
+            new SuccessfulModelDownloader(),
+            logger: new RecordingApplicationLogger(),
+            contentHashCacheInvalidator: invalidator);
+
+        bool downloaded = await adapter.DownloadAsync("model", "replacement.onnx", destinationPath);
+
+        Assert.True(downloaded);
+        Assert.Equal([destinationPath], invalidator.InvalidatedPaths);
+    }
+
     [Fact]
     public async Task DownloadUriAsync_writes_successful_runtime_support_file()
     {
@@ -732,6 +749,31 @@ public sealed class ModelDownloaderAdapterTests
             string expectedHash,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
+    }
+
+    private sealed class SuccessfulModelDownloader : IModelDownloader
+    {
+        public Task<bool> DownloadAsync(
+            string modelId,
+            string fileName,
+            string destinationPath,
+            IProgress<DownloadProgress>? progress = null,
+            CancellationToken cancellationToken = default,
+            string? revision = null) =>
+            Task.FromResult(true);
+
+        public Task<bool> VerifyHashAsync(
+            string filePath,
+            string expectedHash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+    }
+
+    private sealed class RecordingModelContentHashCacheInvalidator : IModelContentHashCacheInvalidator
+    {
+        public List<string> InvalidatedPaths { get; } = [];
+
+        public void Invalidate(string modelPath) => InvalidatedPaths.Add(modelPath);
     }
 
     private sealed class RecordingApplicationLogger : IApplicationLogger
