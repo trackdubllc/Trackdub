@@ -28,6 +28,13 @@ public class GenAiModelPoolTests
         string root = "/models/root") =>
         new(identity, modelId, variant, provider, deviceId, estimatedMb, root);
 
+    private static TaskCompletionSource StartSignal(
+        ConcurrentDictionary<string, TaskCompletionSource> starts,
+        GenAiModelKey key) =>
+        starts.GetOrAdd(
+            key.ModelRootIdentity,
+            static _ => new(TaskCreationOptions.RunContinuationsAsynchronously));
+
     private static Func<GenAiModelKey, CancellationToken, Task<IGenAiModelResource>> TrackingFactory(
         List<FakeGenAiModelResource> created)
     {
@@ -327,12 +334,16 @@ public class GenAiModelPoolTests
         // ephemeral second create), then create exactly once after A's lease frees.
         using var admission = NewAdmissionPool(hostBudgetMb: 400);
         var factoryGates = new ConcurrentDictionary<string, TaskCompletionSource<IGenAiModelResource>>();
+        var factoryStarts = new ConcurrentDictionary<string, TaskCompletionSource>(StringComparer.Ordinal);
         int factoryCalls = 0;
         using var pool = new GenAiModelPool(
             admission,
             (key, _) =>
             {
+                // Count before signalling: a waiter that resumes on the signal must already
+                // be able to read this call.
                 Interlocked.Increment(ref factoryCalls);
+                StartSignal(factoryStarts, key).TrySetResult();
                 return factoryGates
                     .GetOrAdd(key.ModelRootIdentity, static _ => new())
                     .Task;
@@ -341,29 +352,37 @@ public class GenAiModelPoolTests
 
         var keyA = Key("race-a");
         var keyB = Key("race-b");
+        TaskCompletionSource startA = StartSignal(factoryStarts, keyA);
+        TaskCompletionSource startB = StartSignal(factoryStarts, keyB);
 
+        // Await each factory's own start signal instead of polling factoryCalls for a fixed
+        // duration: the wait ends the moment the factory runs, and this thread is released
+        // rather than spinning for a budget the handoff may need that thread to meet.
         Task<GenAiModelLease> leaseA = pool.GetLeaseAsync(keyA, CancellationToken.None);
-        Assert.True(SpinWait.SpinUntil(() => factoryCalls == 1, TimeSpan.FromSeconds(5)));
+        await startA.Task.AwaitWithHangGuard("A's factory never started");
 
         Task<GenAiModelLease> leaseB = pool.GetLeaseAsync(keyB, CancellationToken.None);
-        await Task.Delay(100);
+        await Task.Delay(100); // probe window, not synchronization: room for B to create ephemerally
         Assert.False(leaseB.IsCompleted);
-        Assert.Equal(1, factoryCalls); // B cannot even start its factory while capacity is busy
+        Assert.False(startB.Task.IsCompleted); // B cannot even start its factory while capacity is busy
+        Assert.Equal(1, Volatile.Read(ref factoryCalls));
 
         // Publish A; A stays leased so B still cannot create.
         factoryGates[keyA.ModelRootIdentity].SetResult(new FakeGenAiModelResource());
-        using GenAiModelLease heldA = await leaseA.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(100);
+        using GenAiModelLease heldA = await leaseA.AwaitWithHangGuard("A's lease never resolved");
+        await Task.Delay(100); // probe window, as above
         Assert.False(leaseB.IsCompleted);
-        Assert.Equal(1, factoryCalls);
+        Assert.False(startB.Task.IsCompleted);
+        Assert.Equal(1, Volatile.Read(ref factoryCalls));
 
         // Freeing A lets B evict it and create exactly once.
         heldA.Dispose();
-        Assert.True(SpinWait.SpinUntil(() => factoryCalls == 2, TimeSpan.FromSeconds(5)));
+        await startB.Task.AwaitWithHangGuard("B's factory never started after A's lease was freed");
+        Assert.Equal(2, Volatile.Read(ref factoryCalls));
         factoryGates.GetOrAdd(keyB.ModelRootIdentity, static _ => new())
             .SetResult(new FakeGenAiModelResource());
-        using GenAiModelLease finalB = await leaseB.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(2, factoryCalls);
+        using GenAiModelLease finalB = await leaseB.AwaitWithHangGuard("B's lease never resolved");
+        Assert.Equal(2, Volatile.Read(ref factoryCalls));
         Assert.NotNull(finalB.Resource);
     }
 
