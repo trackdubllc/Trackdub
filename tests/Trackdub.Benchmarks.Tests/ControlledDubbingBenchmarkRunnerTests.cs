@@ -130,10 +130,55 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
         await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
         try
         {
+            using var runner = new ControlledDubbingBenchmarkRunner(new NoHistory());
+            var report = await runner.RunAsync(new ControlledDubbingBenchmarkOptions
+            {
+                FixturePath = fixture,
+                OutputDirectory = Path.Join(directory, "output"),
+                Mock = true,
+            });
+
+            Assert.Equal(BenchmarkEvidenceStatus.Completed, report.Status);
+
+            double available = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstUsableTranscript"]);
+            double persisted = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstPersistedTranscript"]);
+            double playable = Assert.IsType<double>(
+                report.TimingsMilliseconds["firstPlayableAudio"]);
+
+            // The mock emits TranscriptSegmentAvailable at the start of the transcription stage
+            // and TranscriptSegmentPersisted only after its ~30 ms simulated work completes.
+            // A completion-derived TTFT would collapse this gap to ~0.
+            Assert.True(
+                persisted - available >= 10,
+                $"firstPersistedTranscript ({persisted}) should lag firstUsableTranscript ({available}) by the stage work interval.");
+
+            // PlayableAudioPersisted is emitted after the dubbing stage's simulated work
+            // succeeds, inside the pipeline total.
+            double pipeline = Assert.IsType<double>(report.TimingsMilliseconds["pipeline"]);
+            Assert.True(playable >= 0 && playable <= pipeline,
+                $"firstPlayableAudio ({playable}) should lie within the pipeline total ({pipeline}).");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Mock_multi_run_reports_first_output_p50_instead_of_final_iteration()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"ttft-p50-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string fixture = Path.Join(directory, "fixture.wav");
+        await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
+        try
+        {
             var transcriptionStage = new SequencedTranscriptionStage(
-                TimeSpan.FromMilliseconds(20),
-                TimeSpan.FromMilliseconds(100),
-                TimeSpan.FromMilliseconds(300));
+                TimeSpan.Zero,
+                TimeSpan.Zero,
+                TimeSpan.FromMilliseconds(1000));
             using var runner = new ControlledDubbingBenchmarkRunner(
                 new NoHistory(),
                 services =>
@@ -150,27 +195,13 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
             });
 
             Assert.Equal(BenchmarkEvidenceStatus.Completed, report.Status);
-
             double available = Assert.IsType<double>(
                 report.TimingsMilliseconds["firstUsableTranscript"]);
             double persisted = Assert.IsType<double>(
                 report.TimingsMilliseconds["firstPersistedTranscript"]);
-            double playable = Assert.IsType<double>(
-                report.TimingsMilliseconds["firstPlayableAudio"]);
-
-            // The measured iterations delay transcription by 20, 100, and 300 ms.
-            // The p50 gap tracks the middle sample instead of the final 300 ms sample.
-            // The bounds allow scheduler overhead without accepting the last-only value.
-            Assert.InRange(
-                persisted - available,
-                50,
-                220);
-
-            // PlayableAudioPersisted is emitted after the dubbing stage's simulated work
-            // succeeds, inside the pipeline total.
-            double pipeline = Assert.IsType<double>(report.TimingsMilliseconds["pipeline"]);
-            Assert.True(playable >= 0 && playable <= pipeline,
-                $"firstPlayableAudio ({playable}) should lie within the pipeline total ({pipeline}).");
+            Assert.True(
+                persisted - available < 500,
+                $"p50 first-output gap should exclude the final 1000 ms outlier, but was {persisted - available} ms.");
         }
         finally
         {
