@@ -44,6 +44,17 @@ public sealed record StageRuntimePlan
     [JsonIgnore]
     public bool IsLocalOptimizedVariant { get; init; }
 
+    /// <summary>
+    /// Resolved model revision/content digest (manifest sha256) captured during planning;
+    /// feeds residency identity so a same-path weights replacement cannot reuse stale
+    /// state. This is an identity value, not an integrity verdict — it does not imply the
+    /// payload was verified; <see cref="ModelIntegrityStatus"/> remains the source of
+    /// truth (it may be <see cref="RuntimeModelIntegrityStatus.Skipped"/>). Null on
+    /// non-runnable plans.
+    /// </summary>
+    [JsonIgnore]
+    public string? ModelRevisionHash { get; init; }
+
     public int? DeviceIndex { get; init; }
 
     public string? DeviceAdapterDescription { get; init; }
@@ -86,7 +97,8 @@ public sealed record ExecutionProviderSmokeTestRequest(
     string Variant,
     ExecutionProviderKind ExecutionProvider,
     string ModelRootPath,
-    string EntryPath);
+    string EntryPath,
+    string? ModelRevisionHash = null);
 
 public sealed record ExecutionProviderSmokeTestResult(
     bool Passed,

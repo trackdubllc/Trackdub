@@ -562,6 +562,11 @@ public static class CompositionRoot
                 sp.GetRequiredService<TrackdubStoragePaths>().UserCacheRoot,
                 "smoke-verdicts.json")));
         services.TryAddSingleton<IRuntimePlanner, RuntimePlanner>();
+        services.TryAddScoped<IStageWarmupCoordinator>(sp =>
+            new RuntimeStageWarmupCoordinator(
+                sp.GetRequiredService<IRuntimePlanner>(),
+                sp.GetRequiredService<IExecutionProviderSmokeTester>(),
+                sp.GetService<IRuntimePlanningPreferences>()));
         // Wire the model cache directory explicitly: the bare-type registration would fall back
         // to the constructor default (no cache), making downloaded models invisible to alias
         // resolution (e.g. the kokoro voice catalog) even when the planner reports them ready.

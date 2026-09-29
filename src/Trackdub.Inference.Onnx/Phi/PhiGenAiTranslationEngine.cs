@@ -4,6 +4,7 @@ using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Runtime.Routing;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Inference.Onnx.Runtime.Planning;
+using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Runtime.Planning;
 
@@ -62,7 +63,12 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
         EnsureGenAiModelRoot(modelRootPath);
 
-        using Model model = CreateModel(modelRootPath, plan.ExecutionProvider!.Value);
+        GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
+            modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
+            plan.ModelRevisionHash, cancellationToken).ConfigureAwait(false);
+        using GenAiModelLease modelLease = await GenAiModelPool.Shared
+            .GetLeaseAsync(modelKey, cancellationToken).ConfigureAwait(false);
+        Model model = modelLease.Model;
         using Tokenizer tokenizer = new(model);
 
         string targetLanguageName = ResolveTargetLanguageName(request.TargetLanguage);
@@ -189,22 +195,6 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
         }
     }
 
-    private static Model CreateModel(string modelRootPath, ExecutionProviderKind executionProvider)
-    {
-        GenAiNativeCompatibility.EnsureCompatible();
-        if (executionProvider is ExecutionProviderKind.Cpu)
-        {
-            return new Model(modelRootPath);
-        }
-
-        using Config config = new(modelRootPath);
-        config.ClearProviders();
-        config.AppendProvider(ToGenAiProviderName(executionProvider));
-        return new Model(config);
-    }
-
-    private static string ToGenAiProviderName(ExecutionProviderKind executionProvider) =>
-        GenAiExecutionProviderNames.Resolve(executionProvider);
 
     private static StageRuntimeExecutionSummary CreateExecutionSummary(
         StageRuntimePlan plan,

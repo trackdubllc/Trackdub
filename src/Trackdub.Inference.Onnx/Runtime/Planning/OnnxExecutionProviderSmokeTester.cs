@@ -17,6 +17,18 @@ namespace Trackdub.Inference.Onnx.Runtime.Planning;
 
 public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTester
 {
+    private readonly GenAiModelPool genAiModelPool;
+
+    public OnnxExecutionProviderSmokeTester()
+        : this(GenAiModelPool.Shared)
+    {
+    }
+
+    internal OnnxExecutionProviderSmokeTester(GenAiModelPool genAiModelPool)
+    {
+        this.genAiModelPool = genAiModelPool;
+    }
+
     public async Task<ExecutionProviderSmokeTestResult> SmokeTestAsync(
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken = default)
@@ -83,6 +95,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                     await SmokeTestTextRefinementGenAiAsync(
                         request.ModelRootPath,
                         request.EntryPath,
+                        request.ModelId,
+                        request.Variant,
+                        request.ModelRevisionHash,
                         request.ExecutionProvider,
                         cancellationToken).ConfigureAwait(false);
                     break;
@@ -111,9 +126,12 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         }
     }
 
-    private static async Task SmokeTestTextRefinementGenAiAsync(
+    private async Task SmokeTestTextRefinementGenAiAsync(
         string modelRootPath,
         string entryPath,
+        string? modelId,
+        string? variant,
+        string? modelRevisionHash,
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
@@ -124,10 +142,18 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             entryPath,
             "Text refinement smoke test requires genai_config.json in the model root.");
 
+        // Same key the stage adapters use: the model the smoke creates is the one the
+        // stage leases next. The lease keeps the shared Model exclusive for the probe.
+        GenAiModelKey key = await GenAiModelKey.CreateAsync(
+            genAiRoot, provider, modelId, variant, deviceId: null,
+            modelRevisionHash: modelRevisionHash, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using GenAiModelLease lease = await genAiModelPool.GetLeaseAsync(key, cancellationToken)
+            .ConfigureAwait(false);
+        Model model = lease.Model;
+
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using Model model = CreateGenAiSmokeModel(genAiRoot, provider);
             using Tokenizer tokenizer = new(model);
             using GeneratorParams generatorParams = new(model);
             using Sequences input = tokenizer.Encode("Hello");
@@ -135,20 +161,6 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             generator.AppendTokenSequences(input);
             generator.GenerateNextToken();
         }, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static Model CreateGenAiSmokeModel(string modelRootPath, ExecutionProviderKind provider)
-    {
-        GenAiNativeCompatibility.EnsureCompatible();
-        if (provider is ExecutionProviderKind.Cpu)
-        {
-            return new Model(modelRootPath);
-        }
-
-        using Config config = new(modelRootPath);
-        config.ClearProviders();
-        config.AppendProvider(GenAiExecutionProviderNames.Resolve(provider));
-        return new Model(config);
     }
 
     private static async Task SmokeTestVadAsync(
@@ -237,7 +249,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             + $"Available outputs: {(string.IsNullOrWhiteSpace(available) ? "(none)" : available)}.");
     }
 
-    private static async Task SmokeTestAsrAsync(
+    private async Task SmokeTestAsrAsync(
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
@@ -273,6 +285,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             await SmokeTestGenAiLoadAsync(
                     request.ModelRootPath,
                     request.EntryPath,
+                    request.ModelId,
+                    request.Variant,
+                    request.ModelRevisionHash,
                     request.ExecutionProvider,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -292,9 +307,12 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         && (engineFamily.Equals("phi-genai", StringComparison.OrdinalIgnoreCase)
             || engineFamily.Equals("qwen-instruct", StringComparison.OrdinalIgnoreCase));
 
-    private static async Task SmokeTestGenAiLoadAsync(
+    private async Task SmokeTestGenAiLoadAsync(
         string modelRootPath,
         string entryPath,
+        string? modelId,
+        string? variant,
+        string? modelRevisionHash,
         ExecutionProviderKind provider,
         CancellationToken cancellationToken)
     {
@@ -305,13 +323,16 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             entryPath,
             "GenAI smoke test requires genai_config.json in the model root.");
 
-        await Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            using (CreateGenAiSmokeModel(genAiRoot, provider))
-            {
-            }
-        }, cancellationToken).ConfigureAwait(false);
+        // Same key WhisperGenAiAudioTranscriptionEngine uses: the smoke warms the shared
+        // resident model and exercises the real audio+generation profile on silence.
+        GenAiModelKey key = await GenAiModelKey.CreateAsync(
+            genAiRoot, provider, modelId, variant, deviceId: null,
+            modelRevisionHash: modelRevisionHash, cancellationToken: cancellationToken).ConfigureAwait(false);
+        using GenAiModelLease lease = await genAiModelPool.GetLeaseAsync(key, cancellationToken)
+            .ConfigureAwait(false);
+        await WhisperGenAiAudioTranscriptionEngine
+            .WarmModelAsync(lease.Model, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     // ORT GenAI's NvTensorRtRtx device terminates the host process (native stack overflow) on
@@ -1264,7 +1285,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         return null;
     }
 
-    private static async Task SmokeTestTranslationAsync(
+    private async Task SmokeTestTranslationAsync(
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
@@ -1275,6 +1296,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             await SmokeTestTextRefinementGenAiAsync(
                 request.ModelRootPath,
                 request.EntryPath,
+                request.ModelId,
+                request.Variant,
+                request.ModelRevisionHash,
                 request.ExecutionProvider,
                 cancellationToken).ConfigureAwait(false);
             return;
