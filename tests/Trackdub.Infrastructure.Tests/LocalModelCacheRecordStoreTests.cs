@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Trackdub.Domain;
 using Trackdub.Infrastructure.Persistence.Repositories;
@@ -138,18 +139,46 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
         Assert.Equal(beforeChange, written);
     }
 
+    // Byte-identical round trip anchored on the frozen wire format rather than on whatever this
+    // build's writer happens to emit: the exact bytes a stored index must have are placed on disk,
+    // read back through LoadAsync, and written out again by SaveAsync. A read-path change that
+    // drops, renames, reorders or reshapes a field fails here even if reader and writer were moved
+    // together, so the format loaded today is the format that stays on disk.
     [Fact]
-    public async Task Index_bytes_survive_a_load_and_save_round_trip()
+    public async Task Index_bytes_round_trip_byte_for_byte_from_the_frozen_wire_format()
     {
         LocalModelCacheRecordStore store = CreateStore();
-        await store.SaveAsync(BuildGoldenRecords(), TestContext.Current.CancellationToken);
-        byte[] first = await File.ReadAllBytesAsync(CreateStoragePaths().ModelCacheIndexPath, TestContext.Current.CancellationToken);
+        TrackdubStoragePaths storagePaths = CreateStoragePaths();
+        Directory.CreateDirectory(storagePaths.ModelCacheDirectory);
+        // Indented output follows the platform newline (JsonWriterOptions.NewLine defaults to it),
+        // so the frozen sample is materialised with the same convention; the comparison below is
+        // then verbatim, with no byte normalised on either side.
+        Assert.Equal(Environment.NewLine, new JsonWriterOptions().NewLine);
+        byte[] frozen = Encoding.UTF8.GetBytes(ExpectedIndexJson.Replace("\n", Environment.NewLine, StringComparison.Ordinal));
+        await File.WriteAllBytesAsync(
+            storagePaths.ModelCacheIndexPath,
+            frozen,
+            TestContext.Current.CancellationToken);
 
-        IReadOnlyList<LocalModelCacheRecord> reloaded = await store.LoadAsync(TestContext.Current.CancellationToken);
-        await store.SaveAsync(reloaded, TestContext.Current.CancellationToken);
-        byte[] second = await File.ReadAllBytesAsync(CreateStoragePaths().ModelCacheIndexPath, TestContext.Current.CancellationToken);
+        IReadOnlyList<LocalModelCacheRecord> loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(first, second);
+        // The reader has to recover the whole graph, not merely tolerate the bytes.
+        Assert.Equal(["example/model", "example/model-b"], loaded.Select(record => record.ModelId));
+        LocalModelVariantRecord variant = Assert.Single(loaded[0].Variants);
+        Assert.Equal("olive-cuda-fp16", variant.Alias);
+        Assert.Equal(ExecutionProviderKind.Cuda, variant.ExecutionProvider);
+        ModelOptimizedVariantProvenance provenance = Assert.IsType<ModelOptimizedVariantProvenance>(variant.Provenance);
+        Assert.Equal(
+            [ModelOptimizationOperation.Compression, ModelOptimizationOperation.Registration],
+            provenance.Operations);
+
+        await store.SaveAsync(loaded, TestContext.Current.CancellationToken);
+
+        byte[] rewritten = await File.ReadAllBytesAsync(
+            storagePaths.ModelCacheIndexPath,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(frozen, rewritten);
     }
 
     [Fact]
