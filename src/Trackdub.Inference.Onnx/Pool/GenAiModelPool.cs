@@ -447,7 +447,7 @@ internal sealed class GenAiModelPool : IDisposable
                 return null;
             }
 
-            using ExternalMemoryReservation reservation = await admissionPool
+            ExternalMemoryReservation reservation = await admissionPool
                 .ReserveExternalAsync(
                     key.Provider,
                     key.DeviceId,
