@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Trackdub.Application.Dubbing;
 using Trackdub.Composition.Headless;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Dubbing;
+using Trackdub.Contracts.Pipeline;
 
 namespace Trackdub.Benchmarks;
 
@@ -98,12 +101,23 @@ public sealed class DubbingBenchmarkRunner
                 SourceLanguageCode = options.SourceLanguageCode,
                 TargetLanguageCode = options.TargetLanguage,
                 ForceRerun = options.ForceRerun,
+                ModelPreferences = options.ModelPins,
+                ExecutionProviderPreferences = options.ProviderPins,
+                RequireExecutionProviderPreferences = options.ProviderPins is { Count: > 0 },
             };
 
-            DubbingRunResult result = await engine.ExecuteAsync(
-                pipelineOptions,
-                progress: null,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+            // Structured output events observed here are the only source of TTFT timings —
+            // stage completion is never a substitute for the first usable output boundary.
+            var stageClock = new StageTimingCollector(Stopwatch.GetTimestamp());
+            var phases = new BenchmarkPhaseCapture();
+            DubbingRunResult result;
+            using (BenchmarkPhaseCapture.Activate(phases))
+            {
+                result = await engine.ExecuteAsync(
+                    pipelineOptions,
+                    progress: stageClock,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
 
             int segmentCount = await TryReadSegmentCountAsync(
                 host.SessionFactory,
@@ -117,7 +131,9 @@ public sealed class DubbingBenchmarkRunner
                 result,
                 hardwareInfo,
                 startedAtUtc,
-                segmentCount);
+                segmentCount,
+                stageClock,
+                phases);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -191,7 +207,9 @@ public sealed class DubbingBenchmarkRunner
         DubbingRunResult result,
         string hardwareInfo,
         DateTimeOffset startedAtUtc,
-        int segmentCount)
+        int segmentCount,
+        StageTimingCollector stageClock,
+        BenchmarkPhaseCapture phases)
     {
         TimeSpan asr = TimeSpan.Zero;
         TimeSpan translation = TimeSpan.Zero;
@@ -221,6 +239,23 @@ public sealed class DubbingBenchmarkRunner
 
         TimeSpan total = result.EndTime - result.StartTime;
 
+        // Counter and gauge namespaces are disjoint by instrumentation convention; on a
+        // collision keep the larger value rather than silently lowering a measurement.
+        var counters = new Dictionary<string, long?>(StringComparer.Ordinal);
+        foreach ((string name, long value) in phases.SnapshotCounters())
+        {
+            counters[name] = counters.TryGetValue(name, out long? existing)
+                ? Math.Max(existing ?? 0, value)
+                : value;
+        }
+
+        foreach ((string name, long value) in phases.SnapshotMaxima())
+        {
+            counters[name] = counters.TryGetValue(name, out long? existing)
+                ? Math.Max(existing ?? 0, value)
+                : value;
+        }
+
         return new DubbingBenchmarkReport(
             InputPath: options.InputPath,
             TargetLanguage: options.TargetLanguage,
@@ -236,7 +271,19 @@ public sealed class DubbingBenchmarkRunner
             StageOutcomes: result.StageOutcomes,
             Error: result.OverallStatus != DubbingRunStatus.Succeeded
                 ? BuildErrorReason(result)
-                : null);
+                : null)
+        {
+            RunId = result.RunId,
+            FirstUsableTranscriptMilliseconds =
+                stageClock.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentAvailable),
+            FirstPersistedTranscriptMilliseconds =
+                stageClock.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentPersisted),
+            FirstPlayableAudioMilliseconds =
+                stageClock.GetFirstOutputMilliseconds(PipelineOutputKind.PlayableAudioPersisted),
+            RuntimeVersions = BenchmarkRuntimeVersions.Capture(),
+            PhaseTimingsMilliseconds = phases.SnapshotMilliseconds(),
+            Counters = counters,
+        };
     }
 
     private static string? BuildErrorReason(DubbingRunResult result)

@@ -295,6 +295,18 @@ public sealed class StartTtsStageHandler(
         }
 
         ctx.Takes.Add(take);
+        if (take.ArtifactId is Guid persistedArtifactId)
+        {
+            PipelineProgressReporter.Output(
+                progress,
+                StageNames.Tts,
+                PipelineOutputKind.PlayableAudioPersisted,
+                translatedSegment.SegmentIndex,
+                segmentId: translatedSegment.Id,
+                artifactId: persistedArtifactId,
+                message: $"Playable audio persisted for segment {translatedSegment.SegmentIndex}.");
+        }
+
         int completed = Interlocked.Increment(ref ctx.CompletedSegments);
         ReportProgress(completed, $"Segment {completed} of {ctx.TotalSegments}");
     }

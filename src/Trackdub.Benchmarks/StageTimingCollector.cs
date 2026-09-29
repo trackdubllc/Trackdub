@@ -19,6 +19,7 @@ public sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
     private readonly Dictionary<string, double> _completions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<double>> _samples = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly Dictionary<PipelineOutputKind, double> _firstOutputMilliseconds = new();
     private readonly Dictionary<string, ResourceTelemetrySnapshot> _memoryStarts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ResourceTelemetryDelta> _memoryDeltas = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<ResourceTelemetryDelta>> _memorySamples = new(StringComparer.OrdinalIgnoreCase);
@@ -42,6 +43,15 @@ public sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
 
         lock (_lock)
         {
+            if (value.EventKind == PipelineProgressEventKind.Progress &&
+                value.OutputKind is { } outputKind &&
+                IsTruthfulOutput(value) &&
+                !_firstOutputMilliseconds.ContainsKey(outputKind))
+            {
+                _firstOutputMilliseconds[outputKind] =
+                    Stopwatch.GetElapsedTime(_runStart).TotalMilliseconds;
+            }
+
             if (value.EventKind == PipelineProgressEventKind.Started)
             {
                 long timestamp = Stopwatch.GetTimestamp();
@@ -131,6 +141,23 @@ public sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
         }
     }
 
+    /// <summary>
+    /// An output event only counts for TTFT when it names a real item index and carries
+    /// the persisted identities its kind requires — a malformed event is not evidence.
+    /// </summary>
+    private static bool IsTruthfulOutput(PipelineProgressEvent value) =>
+        value.ItemIndex is >= 0 && value.OutputKind switch
+        {
+            PipelineOutputKind.TranscriptSegmentAvailable => true,
+            PipelineOutputKind.TranscriptSegmentPersisted =>
+                value.RevisionId is Guid revisionId && revisionId != Guid.Empty &&
+                value.SegmentId is Guid segmentId && segmentId != Guid.Empty,
+            PipelineOutputKind.PlayableAudioPersisted =>
+                value.SegmentId is Guid segmentId && segmentId != Guid.Empty &&
+                value.ArtifactId is Guid artifactId && artifactId != Guid.Empty,
+            _ => false,
+        };
+
     public double? GetCompletionMilliseconds(string stage)
     {
         if (string.IsNullOrWhiteSpace(stage)) return null;
@@ -138,6 +165,19 @@ public sealed class StageTimingCollector : IProgress<PipelineProgressEvent>
         lock (_lock)
         {
             return _completions.TryGetValue(stage, out double ms) ? ms : null;
+        }
+    }
+
+    /// <summary>
+    /// Elapsed milliseconds from the run start at which the first structured output event
+    /// of <paramref name="outputKind"/> arrived, or null when none was observed. First writer
+    /// wins; terminal stage-completion events never substitute for a missing output event.
+    /// </summary>
+    public double? GetFirstOutputMilliseconds(PipelineOutputKind outputKind)
+    {
+        lock (_lock)
+        {
+            return _firstOutputMilliseconds.TryGetValue(outputKind, out double ms) ? ms : null;
         }
     }
 

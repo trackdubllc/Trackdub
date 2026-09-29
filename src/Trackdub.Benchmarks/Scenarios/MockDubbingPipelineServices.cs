@@ -375,6 +375,20 @@ public sealed class MockDubbingPipelineService(
                 };
             }
 
+            // Structured output events model the real pipeline's truthful-output
+            // reporting: a recognized segment can exist in memory before the rest of
+            // the stage's work, and only ever appears on the success path.
+            if (canonical == "transcription")
+            {
+                progress?.Report(new PipelineProgressEvent(
+                    StageName: canonical,
+                    EventKind: PipelineProgressEventKind.Progress,
+                    Phase: "Output available",
+                    OutputKind: PipelineOutputKind.TranscriptSegmentAvailable,
+                    ItemIndex: 0,
+                    Message: "First transcript segment recognized (index 0)."));
+            }
+
             try
             {
                 switch (canonical)
@@ -412,6 +426,32 @@ public sealed class MockDubbingPipelineService(
                     Message: "Canceled",
                     ElapsedDuration: cancelTime - stageStart));
                 throw;
+            }
+
+            // Persisted outputs only exist once the simulated stage work has succeeded.
+            if (canonical == "transcription")
+            {
+                progress?.Report(new PipelineProgressEvent(
+                    StageName: canonical,
+                    EventKind: PipelineProgressEventKind.Progress,
+                    Phase: "Output available",
+                    OutputKind: PipelineOutputKind.TranscriptSegmentPersisted,
+                    ItemIndex: 0,
+                    RevisionId: Guid.NewGuid(),
+                    SegmentId: Guid.NewGuid(),
+                    Message: "Persisted transcript revision 1 (1 segment(s))."));
+            }
+            else if (canonical == "dubbing")
+            {
+                progress?.Report(new PipelineProgressEvent(
+                    StageName: canonical,
+                    EventKind: PipelineProgressEventKind.Progress,
+                    Phase: "Output available",
+                    OutputKind: PipelineOutputKind.PlayableAudioPersisted,
+                    ItemIndex: 0,
+                    SegmentId: Guid.NewGuid(),
+                    ArtifactId: Guid.NewGuid(),
+                    Message: "Playable audio persisted for segment 0."));
             }
 
             DateTimeOffset stageEnd = DateTimeOffset.UtcNow;

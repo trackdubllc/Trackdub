@@ -1,3 +1,4 @@
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Pool;
 using Trackdub.TestDoubles;
@@ -620,6 +621,53 @@ public sealed class InferenceSessionPoolTests
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => pool.GetLeaseAsync(gpu0Trt, _ => Task.FromResult(CreateMinimalSession()), cts.Token));
+    }
+
+    [Fact]
+    public async Task GetLeaseAsync_PhaseCapture_RecordsTruthfulPoolCountersAndMaxima()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 4,
+            enableMemoryAdmission: true,
+            memoryBudgetMb: 100);
+        var key1 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "pc1", 0, "default") { EstimatedVramMb = 80 };
+        var key2 = new SessionPoolKey("eng", null, null, ExecutionProviderKind.Cpu, "pc2", 0, "default") { EstimatedVramMb = 80 };
+
+        var capture = new BenchmarkPhaseCapture();
+        using (BenchmarkPhaseCapture.Activate(capture))
+        {
+            // Cold acquire: miss + create, reservation observed while pending.
+            SessionLease lease1 = await pool.GetLeaseAsync(
+                key1, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+            // 80MB held of a 100MB device budget — key2 becomes an admission waiter.
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => pool.GetLeaseAsync(key2, _ => Task.FromResult(CreateMinimalSession()), cts.Token));
+
+            // Releasing key1 frees budget; key2 misses and creates (evicting idle key1).
+            lease1.Dispose();
+            using (await pool.GetLeaseAsync(key2, _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None))
+            {
+            }
+
+            // Reacquire of the published key2 entry is a true hit: no factory call.
+            using SessionLease reacquired = await pool.GetLeaseAsync(
+                key2,
+                _ => Task.FromException<InferenceSession>(new Exception("factory must not run on a hit")),
+                CancellationToken.None);
+        }
+
+        IReadOnlyDictionary<string, long> counters = capture.SnapshotCounters();
+        // The canceled admission waiter is still a miss — one miss or hit per acquire
+        // request, while sessionCreate counts actual factory invocations.
+        Assert.Equal(3, counters["poolMiss"]);
+        Assert.Equal(2, counters["sessionCreate"]);
+        Assert.Equal(1, counters["poolHit"]);
+
+        IReadOnlyDictionary<string, long> maxima = capture.SnapshotMaxima();
+        Assert.Equal(1, maxima["admissionWaiters"]);
+        Assert.Equal(80, maxima["pendingReservationMb"]);
     }
 
     // ── Residency ≠ execution exclusivity (audit §3A) ─────────────────────────

@@ -325,6 +325,78 @@ public sealed class RunStageExecutionTests : IDisposable
         Assert.NotEqual(StageSkipReasonCodes.OptionalModelDeclined, outcome.ReasonCode);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_StampsOneRunIdAndIncreasingSequence_PerRun()
+    {
+        string tempDir = CreateTempProjectDir();
+        string projectDir = Path.Join(tempDir, "sample.trackdub");
+        Directory.CreateDirectory(projectDir);
+        string mediaPath = Path.Join(tempDir, "video.mp4");
+        await File.WriteAllBytesAsync(mediaPath, [0x00, 0x00, 0x00, 0x20]);
+
+        using TrackdubSessionFactory factory = CreateFactory(services =>
+        {
+            services.Replace(ServiceDescriptor.Singleton<IPipelineReadinessService>(
+                new FakePipelineReadinessService(ReadinessState.DownloadRequired)));
+            services.Replace(ServiceDescriptor.Singleton<IPipelineModelSetupInteraction>(
+                new SkipOptionalStageSetupInteraction()));
+            services.Replace(ServiceDescriptor.Singleton<IRuntimeModelBootstrapService>(
+                new MissingRuntimeModelBootstrapService()));
+        });
+
+        await using (TrackdubSession session = factory.CreateSession(projectDir))
+        {
+            await session.Workspace.CreateMediaSpineAsync(
+                new CreateTranscriptProjectRequest("sample", mediaPath),
+                CancellationToken.None);
+        }
+
+        var engine = new TrackdubDubbingEngine(factory);
+        var options = new DubbingSessionOptions
+        {
+            SourceMediaPath = mediaPath,
+            ProjectOutputDirectory = projectDir,
+            TargetLanguageCode = "es",
+            EnableStemSeparation = true,
+            StageFilter = [StageNames.Separation],
+        };
+
+        var firstRun = new CollectingProgress();
+        DubbingRunResult result1 = await engine.ExecuteAsync(options, firstRun);
+        var secondRun = new CollectingProgress();
+        DubbingRunResult result2 = await engine.ExecuteAsync(options, secondRun);
+
+        Assert.NotEqual(Guid.Empty, result1.RunId);
+        Assert.NotEqual(result1.RunId, result2.RunId);
+        Assert.NotEmpty(firstRun.Events);
+        Assert.NotEmpty(secondRun.Events);
+
+        Assert.All(firstRun.Events, e => Assert.Equal(result1.RunId, e.RunId));
+        Assert.All(secondRun.Events, e => Assert.Equal(result2.RunId, e.RunId));
+
+        long[] firstSequence = firstRun.Events.Select(e => e.SequenceNumber).ToArray();
+        long[] secondSequence = secondRun.Events.Select(e => e.SequenceNumber).ToArray();
+        Assert.Equal(
+            Enumerable.Range(1, firstRun.Events.Count).Select(i => (long)i).ToArray(),
+            firstSequence);
+        Assert.Equal(
+            Enumerable.Range(1, secondRun.Events.Count).Select(i => (long)i).ToArray(),
+            secondSequence);
+    }
+
+    private sealed class CollectingProgress : IProgress<PipelineProgressEvent>
+    {
+        public List<PipelineProgressEvent> Events { get; } = [];
+
+        public void Report(PipelineProgressEvent value)
+        {
+            lock (Events)
+            {
+                Events.Add(value);
+            }
+        }
+    }
+
     private static TrackdubSessionFactory CreateFactory(Action<IServiceCollection>? configureServices = null)
     {
         var options = new TrackdubOptions
