@@ -45,6 +45,8 @@ internal static class OnnxExecutionSessionFactory
     private static readonly ConcurrentDictionary<string, byte> WarnedUnmappedCatalogEpNames =
         new(StringComparer.OrdinalIgnoreCase);
 
+    internal static bool UseOpenVinoCpuProxy => _openVinoAvailability.UseOpenVinoCpuProxy;
+
     /// <summary>
     /// One-time process initialization. The first successful call wins; later calls are ignored.
     /// </summary>

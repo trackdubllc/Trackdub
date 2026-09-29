@@ -210,6 +210,8 @@ internal sealed class InferenceSessionPool : IDisposable
     private readonly long hostMemoryBudgetMb;
     /// <summary>Pending create reservations per admission bucket (host RAM vs accelerator device).</summary>
     private readonly ConcurrentDictionary<AdmissionBucket, long> pendingCreateMbByBucket = new();
+    /// <summary>Live external-residency reservations (e.g. GenAI model loads) per bucket.</summary>
+    private readonly ConcurrentDictionary<Guid, ExternalReservationState> externalReservations = new();
     private int admissionWaiters;
     private volatile bool disposed;
     private int pooledCount;
@@ -231,6 +233,16 @@ internal sealed class InferenceSessionPool : IDisposable
                 ? new(false, ExecutionProviderKind.OpenVino, key.DeviceId ?? 0)
                 : new(false, null, key.DeviceId ?? 0);
 
+    private static AdmissionBucket BucketOf(
+        ExecutionProviderKind provider,
+        int? deviceId,
+        bool useOpenVinoCpuProxy = false) =>
+        IsHostProvider(provider) || (provider is ExecutionProviderKind.OpenVino && useOpenVinoCpuProxy)
+            ? new(true, null, 0)
+            : provider is ExecutionProviderKind.OpenVino
+                ? new(false, ExecutionProviderKind.OpenVino, deviceId ?? 0)
+                : new(false, null, deviceId ?? 0);
+
     private long BudgetFor(AdmissionBucket bucket) =>
         bucket.IsHost ? hostMemoryBudgetMb : memoryBudgetMb;
 
@@ -240,6 +252,24 @@ internal sealed class InferenceSessionPool : IDisposable
             : bucket.AcceleratorProvider is ExecutionProviderKind.OpenVino
                 ? $"OpenVINO NPU device {bucket.DeviceId}"
                 : $"accelerator device {bucket.DeviceId}";
+
+    /// <summary>
+    /// Live state for one external memory reservation. The pool owns accounting; the
+    /// <see cref="ExternalMemoryReservation"/> token is only a handle into this entry.
+    /// <see cref="TryEvictIdle"/> is registered by the owner of the external resource and
+    /// returns <see langword="true"/> only when it actually released the idle resource.
+    /// </summary>
+    private sealed class ExternalReservationState(
+        AdmissionBucket bucket,
+        long estimatedMemoryMb)
+    {
+        public AdmissionBucket Bucket { get; } = bucket;
+        public long EstimatedMemoryMb { get; } = estimatedMemoryMb;
+        // volatile: the callback is registered after the state is already visible in the
+        // dictionary, so readers must see the write without a lock.
+        public volatile Func<bool>? TryEvictIdle;
+        public long LastReleasedTicks { get; set; } = Environment.TickCount64;
+    }
 
     public InferenceSessionPool(
         int maxSessions = DefaultMaxSessions,
@@ -340,6 +370,128 @@ internal sealed class InferenceSessionPool : IDisposable
 
             // Evicted between release and pin — retry create.
             cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
+
+    /// <summary>
+    /// Reserves <paramref name="estimatedMemoryMb"/> against the admission bucket for
+    /// <paramref name="provider"/>/<paramref name="deviceId"/> and returns a token whose
+    /// disposal releases the accounting. Used by external residency owners (e.g. ORT GenAI
+    /// model caches) so model resources share the same host RAM / per-device accelerator
+    /// ceiling as pooled ONNX sessions instead of an independent cache.
+    /// </summary>
+    /// <remarks>
+    /// External reservations always use hard admission — they cannot opt into ephemeral
+    /// overflow — and one token occupies exactly one bucket: CPU/DNNL/OpenVINO share the
+    /// host RAM budget when OpenVINO CPU-proxy mode is active; otherwise OpenVINO and every
+    /// other accelerator provider use their device budget.
+    /// </remarks>
+    internal async Task<ExternalMemoryReservation> ReserveExternalAsync(
+        ExecutionProviderKind provider,
+        int? deviceId,
+        long estimatedMemoryMb,
+        CancellationToken cancellationToken,
+        bool useOpenVinoCpuProxy = false)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(estimatedMemoryMb, 1);
+        ObjectDisposedException.ThrowIf(disposed, this);
+
+        AdmissionBucket bucket = BucketOf(provider, deviceId, useOpenVinoCpuProxy);
+        long budgetMb = BudgetFor(bucket);
+        if (estimatedMemoryMb > budgetMb)
+        {
+            throw new InvalidOperationException(
+                $"External resource for '{provider}' needs ~{estimatedMemoryMb} MB, which exceeds the " +
+                $"{DescribeBucket(bucket)} admission budget of {budgetMb} MB.");
+        }
+
+        // Takes the pending reservation (evicting idle pooled/external entries to fit) so
+        // benchmark maxima see external construction honestly; publishing the live state
+        // below then transfers the accounting so nothing is double-counted.
+        await WaitForAdmissionBudgetAsync(estimatedMemoryMb, bucket, cancellationToken).ConfigureAwait(false);
+
+        // Publish under creationLock so pool disposal cannot interleave: either the reserve
+        // wins the lock and publishes first (Dispose then sees and clears the state), or
+        // Dispose wins and the publish throws ObjectDisposedException before accounting
+        // for a resource the pool can no longer track.
+        Guid id = Guid.NewGuid();
+        bool published = false;
+        bool pendingReleased = false;
+        try
+        {
+            await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ObjectDisposedException.ThrowIf(disposed, this);
+                externalReservations[id] = new ExternalReservationState(bucket, estimatedMemoryMb);
+                // Transfer pending -> live while holding creationLock so admission readers
+                // cannot observe the same reservation in both accounting buckets.
+                ReleaseReservation(bucket, estimatedMemoryMb);
+                pendingReleased = true;
+                published = true;
+            }
+            finally
+            {
+                creationLock.Release();
+            }
+
+            SignalBundleStateChanged();
+            return new ExternalMemoryReservation(this, id);
+        }
+        finally
+        {
+            // Release pending accounting on cancellation, disposal, or publish failure.
+            if (!pendingReleased)
+            {
+                ReleaseReservation(bucket, estimatedMemoryMb);
+            }
+            if (!published)
+            {
+                externalReservations.TryRemove(id, out _);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Attaches the idle-eviction callback to a still-live reservation. Returns
+    /// <see langword="false"/> when the pool is disposed or the id is already gone — callers
+    /// must treat false as "the reservation no longer exists" and roll back rather than
+    /// publish an unaccounted resource.
+    /// </summary>
+    internal bool TrySetExternalEvictionCallback(Guid id, Func<bool> callback)
+    {
+        creationLock.Wait();
+        try
+        {
+            if (disposed
+                || !externalReservations.TryGetValue(id, out ExternalReservationState? state))
+            {
+                return false;
+            }
+
+            state.TryEvictIdle = callback;
+            return true;
+        }
+        finally
+        {
+            creationLock.Release();
+        }
+    }
+
+    internal void NotifyExternalReservationReleased(Guid id)
+    {
+        if (externalReservations.TryGetValue(id, out ExternalReservationState? state))
+        {
+            state.LastReleasedTicks = Environment.TickCount64;
+            SignalBundleStateChanged();
+        }
+    }
+
+    internal void ReleaseExternalReservation(Guid id)
+    {
+        if (externalReservations.TryRemove(id, out _))
+        {
+            SignalBundleStateChanged();
         }
     }
 
@@ -949,8 +1101,17 @@ internal sealed class InferenceSessionPool : IDisposable
             pooled += ResolveReservationMb(pair.Key);
         }
 
+        long external = 0;
+        foreach (KeyValuePair<Guid, ExternalReservationState> pair in externalReservations)
+        {
+            if (pair.Value.Bucket == bucket)
+            {
+                external += pair.Value.EstimatedMemoryMb;
+            }
+        }
+
         pendingCreateMbByBucket.TryGetValue(bucket, out long pending);
-        return pooled + pending;
+        return pooled + pending + external;
     }
 
     private void AddPendingReservation(AdmissionBucket bucket, long mb)
@@ -983,6 +1144,7 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 bool acquired = false;
                 List<PoolEntry>? toDispose = null;
+                List<KeyValuePair<Guid, ExternalReservationState>>? idleExternals = null;
                 await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
@@ -997,6 +1159,13 @@ internal sealed class InferenceSessionPool : IDisposable
 
                         toDispose ??= new List<PoolEntry>();
                         toDispose.Add(evicted);
+                    }
+
+                    if (CurrentReservedMb(bucket) + needMb > BudgetFor(bucket))
+                    {
+                        // No pooled ONNX entry in this bucket is evictable; offer every idle
+                        // external reservation a chance to release its resource, oldest first.
+                        idleExternals = OrderedIdleExternals(bucket);
                     }
 
                     if (CurrentReservedMb(bucket) + needMb <= BudgetFor(bucket))
@@ -1021,6 +1190,42 @@ internal sealed class InferenceSessionPool : IDisposable
                 if (acquired)
                 {
                     return;
+                }
+
+                if (idleExternals is not null)
+                {
+                    // Invoke outside creationLock in LRU order: a refusal or throwing
+                    // callback must not starve newer evictable candidates. Callbacks that
+                    // declined stay registered — the resource may go idle later.
+                    bool anyEvicted = false;
+                    foreach (KeyValuePair<Guid, ExternalReservationState> candidate in idleExternals)
+                    {
+                        bool evictedExternal;
+                        try
+                        {
+                            evictedExternal = candidate.Value.TryEvictIdle!();
+                        }
+                        catch
+                        {
+                            // A failing callback must not corrupt admission — treat as refusal.
+                            evictedExternal = false;
+                        }
+
+                        if (evictedExternal)
+                        {
+                            // Defensive removal: a well-behaved callback already disposed
+                            // the token.
+                            externalReservations.TryRemove(candidate);
+                            SignalBundleStateChanged();
+                            anyEvicted = true;
+                            break;
+                        }
+                    }
+
+                    if (anyEvicted)
+                    {
+                        continue;
+                    }
                 }
 
                 if (CurrentReservedMb(bucket) + needMb > BudgetFor(bucket))
@@ -1289,6 +1494,36 @@ internal sealed class InferenceSessionPool : IDisposable
         {
             entry.Dispose();
         }
+
+        // External reservations are dropped from accounting; each registered idle callback
+        // is then attempted so a released external resource (e.g. a cached GenAI model) is
+        // freed with the pool. A resource still leased may refuse eviction (false); its
+        // token stays idempotent even though pool accounting is already cleared.
+        foreach (KeyValuePair<Guid, ExternalReservationState> pair in externalReservations.ToArray())
+        {
+            if (!externalReservations.TryRemove(pair))
+            {
+                continue;
+            }
+
+            try
+            {
+                pair.Value.TryEvictIdle?.Invoke();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The external owner may be disposing concurrently.
+            }
+            catch (InvalidOperationException)
+            {
+                // Teardown must tolerate an external owner that cannot evict now.
+            }
+            catch (Exception)
+            {
+                // Teardown must not throw or abandon the remaining reservations if a
+                // native external resource fails while disposing.
+            }
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -1434,6 +1669,26 @@ internal sealed class InferenceSessionPool : IDisposable
         }
 
         return (candidateKey, candidateEntry);
+    }
+
+    /// <summary>
+    /// Snapshot of live external reservations in <paramref name="bucket"/> that registered an
+    /// idle-eviction callback, ordered least-recently-released first (Guid tie-break for
+    /// determinism). Reservations still under construction have no callback and are never
+    /// candidates — pending accounting already covers them.
+    /// </summary>
+    private List<KeyValuePair<Guid, ExternalReservationState>> OrderedIdleExternals(AdmissionBucket bucket)
+    {
+        List<KeyValuePair<Guid, ExternalReservationState>> candidates = externalReservations
+            .Where(pair => pair.Value.Bucket == bucket && pair.Value.TryEvictIdle is not null)
+            .ToList();
+
+        candidates.Sort(static (x, y) =>
+        {
+            int c = x.Value.LastReleasedTicks.CompareTo(y.Value.LastReleasedTicks);
+            return c != 0 ? c : x.Key.CompareTo(y.Key);
+        });
+        return candidates;
     }
 
     private static bool TryAcquireGate(PoolEntry entry)

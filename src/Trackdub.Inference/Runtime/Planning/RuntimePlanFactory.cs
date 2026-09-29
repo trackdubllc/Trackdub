@@ -109,7 +109,8 @@ internal sealed class RuntimePlanFactory
                         requiredModelRelativePaths: variant.RequiredRelativePaths,
                         preferredExecutionProviderSkippedForEngine: preferredForbiddenForEngine
                             ? preferredExecutionProvider
-                            : null);
+                            : null,
+                        modelRevisionHash: modelSha256);
                 }
 
                 // A local optimized variant is a different graph file from its source model;
@@ -138,7 +139,8 @@ internal sealed class RuntimePlanFactory
                         requiredModelRelativePaths: variant.RequiredRelativePaths,
                         preferredExecutionProviderSkippedForEngine: preferredForbiddenForEngine
                             ? preferredExecutionProvider
-                            : null);
+                            : null,
+                        modelRevisionHash: modelSha256);
                 }
 
                 ExecutionProviderSmokeTestResult smokeResult;
@@ -153,7 +155,8 @@ internal sealed class RuntimePlanFactory
                             variant.Alias,
                             provider,
                             rootPath,
-                            entryPath),
+                            entryPath,
+                            modelSha256),
                         cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -190,7 +193,8 @@ internal sealed class RuntimePlanFactory
                         requiredModelRelativePaths: variant.RequiredRelativePaths,
                         preferredExecutionProviderSkippedForEngine: preferredForbiddenForEngine
                             ? preferredExecutionProvider
-                            : null);
+                            : null,
+                        modelRevisionHash: modelSha256);
                 }
 
                 if (requirePreferredExecutionProvider && !preferredForbiddenForEngine)
@@ -409,7 +413,8 @@ internal sealed class RuntimePlanFactory
         string? modelRootPath = null,
         string? modelEntryRelativePath = null,
         IReadOnlyList<string>? requiredModelRelativePaths = null,
-        ExecutionProviderKind? preferredExecutionProviderSkippedForEngine = null)
+        ExecutionProviderKind? preferredExecutionProviderSkippedForEngine = null,
+        string? modelRevisionHash = null)
     {
         return new StageRuntimePlan
         {
@@ -427,6 +432,7 @@ internal sealed class RuntimePlanFactory
             ModelEntryRelativePath = modelEntryRelativePath,
             RequiredModelRelativePaths = requiredModelRelativePaths ?? [],
             IsLocalOptimizedVariant = isLocalOptimizedVariant,
+            ModelRevisionHash = modelRevisionHash,
             Fallback = fallback,
             Warnings = BuildWarnings(
                 candidate.Entry,

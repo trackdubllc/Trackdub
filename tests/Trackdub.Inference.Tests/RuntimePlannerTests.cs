@@ -2291,6 +2291,35 @@ public sealed class RuntimePlannerTests
         }
     }
 
+    [Fact]
+    public async Task PlanAsync_CarriesResolvedModelRevisionHash_IntoPlanAndSmokeRequest()
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
+
+        string cacheRoot = workspace.CreateCacheRoot("onnx-community/silero-vad");
+        workspace.WriteCacheFile(cacheRoot, "onnx/model_fp16.onnx");
+
+        var smokeRequests = new List<ExecutionProviderSmokeTestRequest>();
+        RuntimePlanner planner = CreatePlanner(
+            registry,
+            [new("onnx-community/silero-vad", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [new(ExecutionProviderKind.DirectMl, true)],
+            request =>
+            {
+                smokeRequests.Add(request);
+                return new ExecutionProviderSmokeTestResult(true);
+            });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
+
+        Assert.Equal(StageRuntimePlanStatus.Verified, plan.Status);
+        Assert.Equal(ValidSha256, plan.ModelRevisionHash);
+        ExecutionProviderSmokeTestRequest smoke = Assert.Single(smokeRequests);
+        Assert.Equal(ValidSha256, smoke.ModelRevisionHash);
+    }
+
     private static RuntimePlanner CreatePlanner(
         BundledModelManifestRegistry registry,
         IReadOnlyList<LocalModelCacheRecord> cacheRecords,

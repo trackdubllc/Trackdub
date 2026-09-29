@@ -3,6 +3,7 @@ using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Audio;
 using Trackdub.Inference.Onnx.Runtime.Routing;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.Runtime.Planning;
 using Trackdub.Inference.Onnx.Runtime;
 using Trackdub.Inference.Runtime.Planning;
@@ -164,7 +165,12 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         try
         {
             Directory.CreateDirectory(requestTempDirectory);
-            using Model model = CreateModel(modelRootPath, plan.ExecutionProvider!.Value);
+            GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
+                modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
+                plan.ModelRevisionHash, cancellationToken).ConfigureAwait(false);
+            using GenAiModelLease modelLease = await GenAiModelPool.Shared
+                .GetLeaseAsync(modelKey, cancellationToken).ConfigureAwait(false);
+            Model model = modelLease.Model;
             using MultiModalProcessor processor = new(model);
             // targetAudio is already loaded above.
             foreach (SpeechRegion region in effectiveRegions.OrderBy(static region => region.Index))
@@ -507,6 +513,39 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
         return generator.GetSequence(0).ToArray();
     }
 
+    /// <summary>
+    /// Representative warmup profile for the shared Whisper GenAI model: runs the real
+    /// audio preprocessing plus a bounded generator pass on 0.1s of silence. No artifacts,
+    /// stage-run records, or readiness state are produced.
+    /// </summary>
+    internal static async Task WarmModelAsync(Model model, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+
+        string warmupDirectory = Path.Join(
+            Path.GetTempPath(), "Trackdub", "whisper-genai-warmup", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(warmupDirectory);
+            string clipPath = Path.Join(warmupDirectory, "silence.wav");
+            await WaveAudioWriter.WriteMonoPcm16Async(
+                    clipPath, new float[1600], TargetSampleRate, cancellationToken)
+                .ConfigureAwait(false);
+
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                using MultiModalProcessor processor = new(model);
+                _ = GenerateClipTokens(
+                    model, processor, clipPath, WhisperLanguageDetectionPrompt, 8, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            TryDeleteDirectory(warmupDirectory);
+        }
+    }
+
     internal static string? InferLanguageFromTokenIds(
         IReadOnlyList<int> tokenIds,
         IReadOnlyDictionary<int, string> languageTokensById)
@@ -597,22 +636,6 @@ public sealed class WhisperGenAiAudioTranscriptionEngine : IAudioTranscriptionEn
             .Select(static group => group.Key)
             .FirstOrDefault();
 
-    private static Model CreateModel(string modelRootPath, ExecutionProviderKind executionProvider)
-    {
-        GenAiNativeCompatibility.EnsureCompatible();
-        if (executionProvider is ExecutionProviderKind.Cpu)
-        {
-            return new Model(modelRootPath);
-        }
-
-        using Config config = new(modelRootPath);
-        config.ClearProviders();
-        config.AppendProvider(ToGenAiProviderName(executionProvider));
-        return new Model(config);
-    }
-
-    private static string ToGenAiProviderName(ExecutionProviderKind executionProvider) =>
-        GenAiExecutionProviderNames.Resolve(executionProvider);
 
     private static void TryDeleteDirectory(string directoryPath)
     {
