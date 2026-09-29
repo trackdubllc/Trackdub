@@ -61,6 +61,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
         }
 
         byte[] payload = File.ReadAllBytes(storagePaths.ModelCacheIndexPath);
+        cancellationToken.ThrowIfCancellationRequested();
         ReadOnlySpan<byte> json = payload;
         ReadOnlySpan<byte> preamble = Encoding.UTF8.GetPreamble();
         if (json.StartsWith(preamble))
