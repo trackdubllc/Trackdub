@@ -109,22 +109,29 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
     }
 
     // Byte-level guard on the persisted contract: naming policy, indentation, enum representation,
-    // property order and field loss all have to fail here, not silently ship.
+    // property order, field loss and the newline convention all have to fail here, not silently
+    // ship. The comparison is deliberately verbatim: normalising newlines away would hide the one
+    // property that made the same cache state produce different files on different operating
+    // systems.
     [Fact]
     public async Task Index_bytes_are_pinned_to_the_current_wire_format()
     {
         LocalModelCacheRecordStore store = CreateStore();
         await store.SaveAsync(BuildGoldenRecords(), TestContext.Current.CancellationToken);
 
-        string written = NormalizeNewLines(await File.ReadAllTextAsync(
+        string written = await File.ReadAllTextAsync(
             CreateStoragePaths().ModelCacheIndexPath,
-            TestContext.Current.CancellationToken));
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(ExpectedIndexJson, written);
+        Assert.DoesNotContain('\r', written);
     }
 
+    // Independent oracle for the persisted shape: reflection over the same records with the same
+    // options, including the pinned newline. It catches a generated contract that drifts from the
+    // declared one; the pinned-bytes test above catches a change to the declaration itself.
     [Fact]
-    public async Task Index_bytes_match_the_pre_source_generation_writer()
+    public async Task Index_bytes_match_reflection_serialization_with_the_pinned_newline()
     {
         LocalModelCacheRecordStore store = CreateStore();
         LocalModelCacheRecord[] records = BuildGoldenRecords();
@@ -133,10 +140,11 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
             CreateStoragePaths().ModelCacheIndexPath,
             TestContext.Current.CancellationToken);
 
-        // The options LocalModelCacheRecordStore declared before source generation.
-        byte[] beforeChange = JsonSerializer.SerializeToUtf8Bytes(records, new JsonSerializerOptions { WriteIndented = true });
+        byte[] reflection = JsonSerializer.SerializeToUtf8Bytes(
+            records,
+            new JsonSerializerOptions { WriteIndented = true, NewLine = "\n" });
 
-        Assert.Equal(beforeChange, written);
+        Assert.Equal(reflection, written);
     }
 
     // Byte-identical round trip anchored on the frozen wire format rather than on whatever this
@@ -150,11 +158,9 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
         LocalModelCacheRecordStore store = CreateStore();
         TrackdubStoragePaths storagePaths = CreateStoragePaths();
         Directory.CreateDirectory(storagePaths.ModelCacheDirectory);
-        // Indented output follows the platform newline (JsonWriterOptions.NewLine defaults to it),
-        // so the frozen sample is materialised with the same convention; the comparison below is
-        // then verbatim, with no byte normalised on either side.
-        Assert.Equal(Environment.NewLine, new JsonWriterOptions().NewLine);
-        byte[] frozen = Encoding.UTF8.GetBytes(ExpectedIndexJson.Replace("\n", Environment.NewLine, StringComparison.Ordinal));
+        // The writer pins the newline, so the frozen sample is the same bytes on every operating
+        // system; the comparison below is verbatim, with no byte normalised on either side.
+        byte[] frozen = PinnedIndexBytes();
         await File.WriteAllBytesAsync(
             storagePaths.ModelCacheIndexPath,
             frozen,
@@ -181,11 +187,11 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
         Assert.Equal(frozen, rewritten);
     }
 
-    // Every shape this path can meet on disk has to load: CRLF and LF newline conventions (this
-    // build writes the platform one, another OS or a script writes the other), a UTF-8 byte order
-    // mark, which Notepad and PowerShell -Encoding utf8 produce, and a compact body with no
-    // whitespace at all. Whatever comes in, the store normalizes back to the pinned bytes on save,
-    // so the restored tolerance cannot start drifting the file.
+    // Every shape this path can meet on disk has to load: LF, which this build now writes on every
+    // operating system, CRLF, which older builds wrote on Windows and other tools still write, a
+    // UTF-8 byte order mark, which Notepad and PowerShell -Encoding utf8 produce, and a compact
+    // body with no whitespace at all. Whatever comes in, the store normalizes back to the pinned
+    // bytes on save, so accepting a shape cannot start drifting the file.
     [Theory]
     [InlineData("crlf")]
     [InlineData("lf")]
@@ -286,19 +292,16 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
             ModelOptimizationFallbackPolicy.None,
             ScriptIdentifiers: ["script-a"]));
 
-    private static string NormalizeNewLines(string value) => value.Replace("\r\n", "\n", StringComparison.Ordinal);
-
-    // The pinned sample with the newline convention the store's indented writer emits on this OS.
-    private static byte[] PinnedIndexBytes() =>
-        Encoding.UTF8.GetBytes(ExpectedIndexJson.Replace("\n", Environment.NewLine, StringComparison.Ordinal));
+    // The pinned sample exactly as the store writes it, on any operating system.
+    private static byte[] PinnedIndexBytes() => Encoding.UTF8.GetBytes(ExpectedIndexJson);
 
     private static byte[] BuildIndexPayload(string shape) => shape switch
     {
-        // Windows convention, including when read on Linux or macOS.
+        // What a Windows build before the newline was pinned wrote, and what other tools write.
         "crlf" => Encoding.UTF8.GetBytes(ExpectedIndexJson.Replace("\n", "\r\n", StringComparison.Ordinal)),
-        // Linux/macOS convention, including when read on Windows.
-        "lf" => Encoding.UTF8.GetBytes(ExpectedIndexJson),
-        // A byte order mark in front of the bytes this OS's writer would produce.
+        // What this build writes on every operating system.
+        "lf" => PinnedIndexBytes(),
+        // A byte order mark in front of the bytes this build would produce.
         "bom" => [0xEF, 0xBB, 0xBF, .. PinnedIndexBytes()],
         // A minimal writer that drops every whitespace character.
         "compact" => JsonSerializer.SerializeToUtf8Bytes(
