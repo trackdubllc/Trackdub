@@ -181,30 +181,37 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
         Assert.Equal(frozen, rewritten);
     }
 
-    // The stream-based read this replaced tolerated a UTF-8 byte order mark, which Notepad and
-    // PowerShell -Encoding utf8 produce; an index carrying one has to keep loading, and the store
-    // must not start writing the mark back into the pinned on-disk bytes.
-    [Fact]
-    public async Task LoadAsync_reads_an_index_that_starts_with_a_utf8_bom()
+    // Every shape this path can meet on disk has to load: CRLF and LF newline conventions (this
+    // build writes the platform one, another OS or a script writes the other), a UTF-8 byte order
+    // mark, which Notepad and PowerShell -Encoding utf8 produce, and a compact body with no
+    // whitespace at all. Whatever comes in, the store normalizes back to the pinned bytes on save,
+    // so the restored tolerance cannot start drifting the file.
+    [Theory]
+    [InlineData("crlf")]
+    [InlineData("lf")]
+    [InlineData("bom")]
+    [InlineData("compact")]
+    public async Task LoadAsync_accepts_every_on_disk_index_shape(string shape)
     {
         LocalModelCacheRecordStore store = CreateStore();
         TrackdubStoragePaths storagePaths = CreateStoragePaths();
         Directory.CreateDirectory(storagePaths.ModelCacheDirectory);
-        byte[] pinned = Encoding.UTF8.GetBytes(ExpectedIndexJson.Replace("\n", Environment.NewLine, StringComparison.Ordinal));
-        byte[] withBom = [0xEF, 0xBB, 0xBF, .. pinned];
         await File.WriteAllBytesAsync(
             storagePaths.ModelCacheIndexPath,
-            withBom,
+            BuildIndexPayload(shape),
             TestContext.Current.CancellationToken);
 
         IReadOnlyList<LocalModelCacheRecord> loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(["example/model", "example/model-b"], loaded.Select(record => record.ModelId));
         Assert.Equal("olive-cuda-fp16", Assert.Single(loaded[0].Variants).Alias);
+        Assert.Equal(
+            [ModelOptimizationOperation.Compression, ModelOptimizationOperation.Registration],
+            Assert.IsType<ModelOptimizedVariantProvenance>(loaded[0].Variants[0].Provenance).Operations);
 
         await store.SaveAsync(loaded, TestContext.Current.CancellationToken);
 
-        Assert.Equal(pinned, await File.ReadAllBytesAsync(
+        Assert.Equal(PinnedIndexBytes(), await File.ReadAllBytesAsync(
             storagePaths.ModelCacheIndexPath,
             TestContext.Current.CancellationToken));
     }
@@ -280,6 +287,25 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
             ScriptIdentifiers: ["script-a"]));
 
     private static string NormalizeNewLines(string value) => value.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    // The pinned sample with the newline convention the store's indented writer emits on this OS.
+    private static byte[] PinnedIndexBytes() =>
+        Encoding.UTF8.GetBytes(ExpectedIndexJson.Replace("\n", Environment.NewLine, StringComparison.Ordinal));
+
+    private static byte[] BuildIndexPayload(string shape) => shape switch
+    {
+        // Windows convention, including when read on Linux or macOS.
+        "crlf" => Encoding.UTF8.GetBytes(ExpectedIndexJson.Replace("\n", "\r\n", StringComparison.Ordinal)),
+        // Linux/macOS convention, including when read on Windows.
+        "lf" => Encoding.UTF8.GetBytes(ExpectedIndexJson),
+        // A byte order mark in front of the bytes this OS's writer would produce.
+        "bom" => [0xEF, 0xBB, 0xBF, .. PinnedIndexBytes()],
+        // A minimal writer that drops every whitespace character.
+        "compact" => JsonSerializer.SerializeToUtf8Bytes(
+            BuildGoldenRecords(),
+            new JsonSerializerOptions { WriteIndented = false }),
+        _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, "Unsupported index shape."),
+    };
 
     private static LocalModelCacheRecord BuildRecord(int index) => new(
         $"model-{index}",
