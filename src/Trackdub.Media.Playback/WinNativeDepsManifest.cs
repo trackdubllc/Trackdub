@@ -34,12 +34,22 @@ internal static class WinNativeDepsManifestLoader
         AllowTrailingCommas = true,
     };
 
-    internal static WinNativeDepsManifestRoot? TryLoadFromApplicationDirectory()
+    internal static WinNativeDepsManifestRoot? TryLoadFromApplicationDirectory() =>
+        TryLoadFromDirectory(AppContext.BaseDirectory);
+
+    /// <summary>
+    /// Directory-rooted variant of <see cref="TryLoadFromApplicationDirectory"/>. Mirrors the base-directory
+    /// seam on <see cref="LibMpvRuntimeLocator"/> and <see cref="LibVlcRuntimeLocator"/> so tests can pin the
+    /// manifest contract without writing into the test host's app directory.
+    /// </summary>
+    internal static WinNativeDepsManifestRoot? TryLoadFromDirectory(string baseDirectory)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
+
         string[] candidates =
         [
-            Path.Join(AppContext.BaseDirectory, "runtime", "win-native-deps.manifest.json"),
-            Path.Join(AppContext.BaseDirectory, "win-native-deps.manifest.json"),
+            Path.Join(baseDirectory, "runtime", "win-native-deps.manifest.json"),
+            Path.Join(baseDirectory, "win-native-deps.manifest.json"),
         ];
 
         foreach (string path in candidates)
