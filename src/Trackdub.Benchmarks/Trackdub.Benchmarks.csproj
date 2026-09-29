@@ -27,6 +27,12 @@
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
 
+  <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release).
+       Benchmark hosts publish per-run; R2R shortens startup before the measured region. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
     <ProjectReference Update="..\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj"
                       SetTargetFramework="TargetFramework=net10.0-windows10.0.19041.0" />

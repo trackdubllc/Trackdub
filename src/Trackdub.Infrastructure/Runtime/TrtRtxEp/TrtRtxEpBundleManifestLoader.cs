@@ -1,14 +1,10 @@
 using System.Text.Json;
+using Trackdub.Infrastructure;
 
 namespace Trackdub.Infrastructure.Runtime.TrtRtxEp;
 
 public static class TrtRtxEpBundleManifestLoader
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
     public static TrtRtxEpBundleManifest Load(string manifestPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(manifestPath);
@@ -19,7 +15,7 @@ public static class TrtRtxEpBundleManifestLoader
         }
 
         using FileStream stream = File.OpenRead(fullPath);
-        TrtRtxEpBundleManifestDto? dto = JsonSerializer.Deserialize<TrtRtxEpBundleManifestDto>(stream, JsonOptions);
+        TrtRtxEpBundleManifestDto? dto = JsonSerializer.Deserialize(stream, InfrastructureSerializationContext.Default.TrtRtxEpBundleManifestDto);
         if (dto is null || dto.Packages is null || dto.Packages.Count == 0)
         {
             throw new InvalidOperationException("TensorRT RTX EP bundle manifest does not contain any packages.");
@@ -55,7 +51,8 @@ public static class TrtRtxEpBundleManifestLoader
             packages);
     }
 
-    private sealed class TrtRtxEpBundleManifestDto
+    // Kept internal (not private) so the JSON source generator can bind metadata at compile time.
+    internal sealed class TrtRtxEpBundleManifestDto
     {
         public int SchemaVersion { get; set; }
 
@@ -68,7 +65,7 @@ public static class TrtRtxEpBundleManifestLoader
         public Dictionary<string, TrtRtxEpBundlePackageDto>? Packages { get; set; }
     }
 
-    private sealed class TrtRtxEpBundlePackageDto
+    internal sealed class TrtRtxEpBundlePackageDto
     {
         public string? ArchiveUrl { get; set; }
 

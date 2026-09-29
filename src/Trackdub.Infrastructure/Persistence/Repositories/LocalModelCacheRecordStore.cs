@@ -1,16 +1,12 @@
 using System.Text.Json;
 using Trackdub.Domain;
+using Trackdub.Infrastructure;
 using Trackdub.Infrastructure.Settings;
 
 namespace Trackdub.Infrastructure.Persistence.Repositories;
 
 public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths)
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = true
-    };
-
     private readonly SemaphoreSlim mutationLock = new(1, 1);
 
     /// <summary>
@@ -55,9 +51,9 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
             FileShare.Read,
             bufferSize: 4096,
             options: FileOptions.Asynchronous);
-        LocalModelCacheRecord[]? records = await JsonSerializer.DeserializeAsync<LocalModelCacheRecord[]>(
+        LocalModelCacheRecord[]? records = await JsonSerializer.DeserializeAsync(
             stream,
-            SerializerOptions,
+            LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray,
             cancellationToken).ConfigureAwait(false);
 
         return records ?? [];
@@ -87,7 +83,12 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
                              bufferSize: 4096,
                              options: FileOptions.Asynchronous))
             {
-                await JsonSerializer.SerializeAsync(stream, records, SerializerOptions, cancellationToken)
+                // The generated metadata is bound to LocalModelCacheRecord[], so materialize
+                // IReadOnlyList<T> implementations (e.g. single-element wrappers) before serializing.
+                LocalModelCacheRecord[] materialized = records is LocalModelCacheRecord[] array
+                    ? array
+                    : [.. records];
+                await JsonSerializer.SerializeAsync(stream, materialized, LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray, cancellationToken)
                     .ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             }

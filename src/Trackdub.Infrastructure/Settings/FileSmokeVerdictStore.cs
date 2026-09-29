@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Trackdub.Contracts;
+using Trackdub.Infrastructure;
 
 namespace Trackdub.Infrastructure.Settings;
 
@@ -11,11 +12,6 @@ namespace Trackdub.Infrastructure.Settings;
 public sealed class FileSmokeVerdictStore : ISmokeVerdictStore
 {
     private const int MaxEntries = 512;
-
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        WriteIndented = false,
-    };
 
     private readonly string filePath;
     private readonly object gate = new();
@@ -100,9 +96,9 @@ public sealed class FileSmokeVerdictStore : ISmokeVerdictStore
                 return;
             }
 
-            SmokeVerdictFilePayload? payload = JsonSerializer.Deserialize<SmokeVerdictFilePayload>(
+            SmokeVerdictFilePayload? payload = JsonSerializer.Deserialize(
                 File.ReadAllText(filePath),
-                SerializerOptions);
+                InfrastructureSerializationContext.Default.SmokeVerdictFilePayload);
             if (payload?.Verified is null)
             {
                 return;
@@ -166,7 +162,7 @@ public sealed class FileSmokeVerdictStore : ISmokeVerdictStore
                 Version = 1,
                 Verified = entries,
             };
-            File.WriteAllText(filePath, JsonSerializer.Serialize(payload, SerializerOptions));
+            File.WriteAllText(filePath, JsonSerializer.Serialize(payload, InfrastructureSerializationContext.Default.SmokeVerdictFilePayload));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -174,7 +170,8 @@ public sealed class FileSmokeVerdictStore : ISmokeVerdictStore
         }
     }
 
-    private sealed class SmokeVerdictFilePayload
+    // Kept internal (not private) so the JSON source generator can bind metadata at compile time.
+    internal sealed class SmokeVerdictFilePayload
     {
         public int Version { get; set; }
 

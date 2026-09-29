@@ -26,13 +26,14 @@ internal sealed class WinNativeDepsRuntimeEntry
 
 internal static class WinNativeDepsManifestLoader
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    // Wrapper keeps the generated resolver (fast path) while restoring the hand-edited
+    // manifest tolerances (comments and trailing commas) that the generated options omit.
+    private static readonly JsonSerializerOptions JsonOptions = new(WinNativeDepsSerializationContext.Default.Options)
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
-        PropertyNameCaseInsensitive = true,
     };
+
 
     internal static WinNativeDepsManifestRoot? TryLoadFromApplicationDirectory()
     {

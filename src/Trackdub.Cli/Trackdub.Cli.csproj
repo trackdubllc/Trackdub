@@ -22,6 +22,12 @@
     <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
   </PropertyGroup>
 
+  <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release).
+       Mirrors Trackdub-gated's desktop app publish setting; build/test/CI runs are unaffected. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Trackdub.Sdk.Tests" />
   </ItemGroup>
