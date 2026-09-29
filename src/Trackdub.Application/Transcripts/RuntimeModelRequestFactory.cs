@@ -23,7 +23,8 @@ public sealed record RuntimeModelRequestOptions(
     TtsModelOverride TtsModelOverride = TtsModelOverride.Auto,
     SeparationModelOverride SeparationModelOverride = SeparationModelOverride.Auto,
     IReadOnlyDictionary<string, string>? ModelVariantOverrides = null,
-    bool RequirePreferredExecutionProviders = false);
+    bool RequirePreferredExecutionProviders = false,
+    string? VadModelAlias = null);
 
 public sealed record RuntimeModelSelections(
     AsrModelOverride AsrModelOverride,
@@ -43,7 +44,8 @@ public sealed record RuntimeModelSelections(
     TtsModelOverride TtsModelOverride = TtsModelOverride.Auto,
     SeparationModelOverride SeparationModelOverride = SeparationModelOverride.Auto,
     IReadOnlyDictionary<string, string>? ModelVariantOverrides = null,
-    bool RequirePreferredExecutionProviders = false);
+    bool RequirePreferredExecutionProviders = false,
+    string? VadModelAlias = null);
 
 public static class RuntimeModelRequestFactory
 {
@@ -57,7 +59,7 @@ public static class RuntimeModelRequestFactory
         return new RuntimeModelSelections(
             asrModelOverride,
             isDevBuild,
-            CreateHardwareOverrides(preferences),
+            CreateHardwareOverrides(preferences, asrModelOverride),
             DiarizationModelAlias: preferences.DiarizationModelAlias,
             SeparationModelAlias: preferences.SeparationModelAlias,
             OverlapRescueModelAlias: preferences.OverlapRescueModelAlias,
@@ -68,7 +70,8 @@ public static class RuntimeModelRequestFactory
             LipSyncModelAlias: preferences.LipSyncModelAlias,
             LipSynthesisModelAlias: preferences.LipSynthesisModelAlias,
             EnableAsrTextRefinement: preferences.EnableAsrTextRefinement,
-            ModelVariantOverrides: CreateModelVariantOverridesFromPreferences(preferences));
+            ModelVariantOverrides: CreateModelVariantOverridesFromPreferences(preferences),
+            VadModelAlias: preferences.VadModelAlias);
     }
 
     public static RuntimeModelSelections CreateSelectionsFromSettings(
@@ -96,7 +99,8 @@ public static class RuntimeModelRequestFactory
             TtsModelOverride: settings.TtsModelOverride,
             SeparationModelOverride: settings.SeparationModelOverride,
             ModelVariantOverrides: settings.ModelVariantOverrides,
-            RequirePreferredExecutionProviders: settings.RequirePreferredExecutionProviders);
+            RequirePreferredExecutionProviders: settings.RequirePreferredExecutionProviders,
+            VadModelAlias: ResolveVadAlias(settings, explicitPreferences));
     }
 
     private static string? ResolveAsrAlias(StudioSettings settings, InferenceModelPreferences? explicitPreferences)
@@ -194,6 +198,21 @@ public static class RuntimeModelRequestFactory
             : null;
     }
 
+    private static string? ResolveVadAlias(
+        StudioSettings settings,
+        InferenceModelPreferences? explicitPreferences)
+    {
+        string? explicitAlias = ResolveExplicitAlias(explicitPreferences?.VadModelAlias);
+        if (explicitAlias is not null)
+        {
+            return explicitAlias;
+        }
+
+        return TryGetStageAlias(settings.StageModelAliases, StageNames.Vad, out string? packAlias)
+            ? packAlias
+            : null;
+    }
+
     private static string? ResolveDiarizationAlias(StudioSettings settings, InferenceModelPreferences? explicitPreferences)
     {
         string? explicitAlias = ResolveExplicitAlias(explicitPreferences?.DiarizationModelAlias);
@@ -274,7 +293,8 @@ public static class RuntimeModelRequestFactory
             selections.TtsModelOverride,
             selections.SeparationModelOverride,
             selections.ModelVariantOverrides,
-            selections.RequirePreferredExecutionProviders);
+            selections.RequirePreferredExecutionProviders,
+            selections.VadModelAlias);
     }
 
     public static InferenceModelPreferences CreateModelPreferences(RuntimeModelSelections selections) =>
@@ -282,6 +302,7 @@ public static class RuntimeModelRequestFactory
 
     public static InferenceModelPreferences CreateModelPreferences(RuntimeModelRequestOptions options) =>
         new(
+            VadModelAlias: options.VadModelAlias,
             AsrModelAlias: ResolveExplicitAsrModelAlias(options),
             DiarizationModelAlias: ResolveDiarizationModelAlias(options),
             SeparationModelAlias: ResolveSeparationModelAlias(options),
@@ -826,7 +847,8 @@ public static class RuntimeModelRequestFactory
     }
 
     private static IReadOnlyDictionary<string, ExecutionProviderKind> CreateHardwareOverrides(
-        InferenceModelPreferences preferences)
+        InferenceModelPreferences preferences,
+        AsrModelOverride asrModelOverride)
     {
         if (preferences.PreferredExecutionProviders is not { Count: > 0 } providers)
         {
@@ -838,16 +860,14 @@ public static class RuntimeModelRequestFactory
         {
             string key = stage switch
             {
-                RuntimeStage.Asr when string.Equals(
-                    preferences.AsrModelAlias,
-                    AsrModelOverrideSettings.GenAiModelAlias,
-                    StringComparison.OrdinalIgnoreCase) => "AsrGenAi",
-                RuntimeStage.Asr when string.Equals(
-                    preferences.AsrModelAlias,
-                    AsrModelOverrideSettings.Nemotron35ModelAlias,
-                    StringComparison.OrdinalIgnoreCase) => "AsrNemotron",
-                RuntimeStage.Asr => "AsrOnnxRuntime",
-                _ => stage.ToString()
+                RuntimeStage.Asr => asrModelOverride switch
+                {
+                    AsrModelOverride.GenAi => "AsrGenAi",
+                    AsrModelOverride.OnnxRuntime => "AsrOnnxRuntime",
+                    AsrModelOverride.Nemotron35 => "AsrNemotron",
+                    _ => "Asr",
+                },
+                _ => stage.ToString(),
             };
             overrides[key] = provider;
         }

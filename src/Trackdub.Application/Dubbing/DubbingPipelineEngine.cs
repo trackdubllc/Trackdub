@@ -2093,7 +2093,10 @@ public sealed class DubbingPipelineEngine(
         // CreateSelectionsFromPreferences maps the stage-keyed provider pins onto the
         // HardwareOverrides key vocabulary (including the ASR engine disambiguation).
         IReadOnlyDictionary<string, ExecutionProviderKind> pinOverrides =
-            RuntimeModelRequestFactory.CreateSelectionsFromPreferences(preferences).HardwareOverrides;
+            RuntimeModelRequestFactory.CreateSelectionsFromPreferences(
+                preferences,
+                selections.AsrModelOverride,
+                selections.IsDevBuild).HardwareOverrides;
         var overrides = new Dictionary<string, ExecutionProviderKind>(
             selections.HardwareOverrides,
             StringComparer.OrdinalIgnoreCase);
@@ -2126,6 +2129,7 @@ public sealed class DubbingPipelineEngine(
 
         return selections with
         {
+            VadModelAlias = preferences.VadModelAlias ?? selections.VadModelAlias,
             DiarizationModelAlias = preferences.DiarizationModelAlias ?? selections.DiarizationModelAlias,
             SeparationModelAlias = preferences.SeparationModelAlias ?? selections.SeparationModelAlias,
             OverlapRescueModelAlias = preferences.OverlapRescueModelAlias ?? selections.OverlapRescueModelAlias,

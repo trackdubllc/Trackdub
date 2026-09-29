@@ -58,14 +58,33 @@ public sealed class DubbingPipelineEngineTests
             AsrModelOverride.Auto,
             IsDevBuild: false,
             new Dictionary<string, ExecutionProviderKind>(),
+            VadModelAlias: "silero-ui-pick",
             AsrModelAlias: "whisper-ui-pick",
             TtsModelAlias: "kokoro-ui-pick");
-        var preferences = new InferenceModelPreferences(TtsModelAlias: "chatterbox-clone-pin");
+        var preferences = new InferenceModelPreferences(
+            VadModelAlias: "silero-request-pin",
+            TtsModelAlias: "chatterbox-clone-pin");
 
         RuntimeModelSelections merged = DubbingPipelineEngine.ApplyModelPreferenceAliases(selections, preferences);
 
+        Assert.Equal("silero-request-pin", merged.VadModelAlias);
         Assert.Equal("chatterbox-clone-pin", merged.TtsModelAlias);
         Assert.Equal("whisper-ui-pick", merged.AsrModelAlias);
+    }
+
+    [Fact]
+    public void ApplyModelPreferenceAliases_keeps_vad_selection_without_explicit_alias()
+    {
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            VadModelAlias: "silero-ui-pick");
+        var preferences = new InferenceModelPreferences(TtsModelAlias: "kokoro-request-pin");
+
+        RuntimeModelSelections merged = DubbingPipelineEngine.ApplyModelPreferenceAliases(selections, preferences);
+
+        Assert.Equal("silero-ui-pick", merged.VadModelAlias);
     }
 
     [Fact]
@@ -75,10 +94,12 @@ public sealed class DubbingPipelineEngineTests
             AsrModelOverride.Auto,
             IsDevBuild: false,
             new Dictionary<string, ExecutionProviderKind>(),
+            VadModelAlias: "silero-ui-pick",
             TtsModelAlias: "kokoro-ui-pick");
 
         RuntimeModelSelections merged = DubbingPipelineEngine.ApplyModelPreferenceAliases(selections, null);
 
+        Assert.Equal("silero-ui-pick", merged.VadModelAlias);
         Assert.Equal("kokoro-ui-pick", merged.TtsModelAlias);
     }
 

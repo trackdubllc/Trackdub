@@ -180,6 +180,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             var stageMemorySamples = new Dictionary<string, List<ResourceTelemetryDelta>>(StringComparer.OrdinalIgnoreCase);
             var pipelineSamples = new List<double>(runCount);
             var phaseSamples = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
+            var firstOutputSamples = new Dictionary<string, List<double>>(StringComparer.Ordinal);
             DubbingRunResult lastResult = null!;
             StageTimingCollector lastClock = null!;
             string lastProjectPath = null!;
@@ -229,6 +230,16 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                         AddSample(stageMemorySamples, outcome.StageName, memDelta);
                 }
 
+                if (stageClock.GetFirstOutputMilliseconds(
+                        PipelineOutputKind.TranscriptSegmentAvailable) is double firstUsableTranscript)
+                    AddSample(firstOutputSamples, "firstUsableTranscript", firstUsableTranscript);
+                if (stageClock.GetFirstOutputMilliseconds(
+                        PipelineOutputKind.TranscriptSegmentPersisted) is double firstPersistedTranscript)
+                    AddSample(firstOutputSamples, "firstPersistedTranscript", firstPersistedTranscript);
+                if (stageClock.GetFirstOutputMilliseconds(
+                        PipelineOutputKind.PlayableAudioPersisted) is double firstPlayableAudio)
+                    AddSample(firstOutputSamples, "firstPlayableAudio", firstPlayableAudio);
+
                 lastResult = iterResult;
                 lastClock = stageClock;
                 lastProjectPath = iterProjectPath;
@@ -272,15 +283,23 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             // recorded event is accepted into the report; it never creates a timing alone.
             if (artifacts.HasUsableTranscript)
             {
-                timings["firstUsableTranscript"] =
-                    lastClock?.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentAvailable);
-                timings["firstPersistedTranscript"] =
-                    lastClock?.GetFirstOutputMilliseconds(PipelineOutputKind.TranscriptSegmentPersisted);
+                timings["firstUsableTranscript"] = firstOutputSamples.TryGetValue(
+                    "firstUsableTranscript", out List<double>? firstUsableSamples)
+                        ? PercentileCalculator.Calculate(firstUsableSamples).P50Milliseconds
+                        : null;
+                timings["firstPersistedTranscript"] = firstOutputSamples.TryGetValue(
+                    "firstPersistedTranscript", out List<double>? firstPersistedSamples)
+                        ? PercentileCalculator.Calculate(firstPersistedSamples).P50Milliseconds
+                        : null;
             }
 
             if (artifacts.HasPlayableTake)
-                timings["firstPlayableAudio"] =
-                    lastClock?.GetFirstOutputMilliseconds(PipelineOutputKind.PlayableAudioPersisted);
+            {
+                timings["firstPlayableAudio"] = firstOutputSamples.TryGetValue(
+                    "firstPlayableAudio", out List<double>? firstPlayableSamples)
+                        ? PercentileCalculator.Calculate(firstPlayableSamples).P50Milliseconds
+                        : null;
+            }
 
             BenchmarkEvidenceStage? requestedStage = FindRequestedStage(stages, stage);
             actualModel = requestedStage?.ActualModel;

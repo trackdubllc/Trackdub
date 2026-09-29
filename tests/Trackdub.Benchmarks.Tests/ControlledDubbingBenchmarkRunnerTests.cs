@@ -1,4 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Trackdub.Benchmarks;
+using Trackdub.Benchmarks.Scenarios;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Persistence;
 
@@ -127,12 +130,23 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
         await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
         try
         {
-            using var runner = new ControlledDubbingBenchmarkRunner(new NoHistory());
+            var transcriptionStage = new SequencedTranscriptionStage(
+                TimeSpan.FromMilliseconds(20),
+                TimeSpan.FromMilliseconds(100),
+                TimeSpan.FromMilliseconds(300));
+            using var runner = new ControlledDubbingBenchmarkRunner(
+                new NoHistory(),
+                services =>
+                {
+                    MockDubbingPipelineServices.ConfigureMockPipeline(services);
+                    services.Replace(ServiceDescriptor.Singleton<ITranscriptionStage>(transcriptionStage));
+                });
             var report = await runner.RunAsync(new ControlledDubbingBenchmarkOptions
             {
                 FixturePath = fixture,
                 OutputDirectory = Path.Join(directory, "output"),
                 Mock = true,
+                RunCount = 3,
             });
 
             Assert.Equal(BenchmarkEvidenceStatus.Completed, report.Status);
@@ -144,12 +158,13 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
             double playable = Assert.IsType<double>(
                 report.TimingsMilliseconds["firstPlayableAudio"]);
 
-            // The mock emits TranscriptSegmentAvailable at the start of the transcription stage
-            // and TranscriptSegmentPersisted only after its ~30 ms simulated work completes.
-            // A completion-derived TTFT would collapse this gap to ~0.
-            Assert.True(
-                persisted - available >= 10,
-                $"firstPersistedTranscript ({persisted}) should lag firstUsableTranscript ({available}) by the stage work interval.");
+            // The measured iterations delay transcription by 20, 100, and 300 ms.
+            // The p50 gap tracks the middle sample instead of the final 300 ms sample.
+            // The bounds allow scheduler overhead without accepting the last-only value.
+            Assert.InRange(
+                persisted - available,
+                50,
+                220);
 
             // PlayableAudioPersisted is emitted after the dubbing stage's simulated work
             // succeeds, inside the pipeline total.
@@ -193,6 +208,23 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
         finally
         {
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private sealed class SequencedTranscriptionStage : ITranscriptionStage
+    {
+        private readonly TimeSpan[] delays;
+        private int index;
+
+        public SequencedTranscriptionStage(params TimeSpan[] delays)
+        {
+            this.delays = delays;
+        }
+
+        public async Task ExecuteAsync(CancellationToken cancellationToken)
+        {
+            int current = Interlocked.Increment(ref index) - 1;
+            await Task.Delay(delays[current], cancellationToken);
         }
     }
 
