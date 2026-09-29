@@ -48,32 +48,21 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
     /// <para>
     /// A leading UTF-8 byte order mark is skipped, so an index written by an editor or script that
     /// emits one (Notepad, PowerShell <c>-Encoding utf8</c>) loads exactly as it did through the
-    /// stream-based read this replaced. The store never writes a mark itself.
-    /// </para>
-    /// </remarks>
-    public async Task<IReadOnlyList<LocalModelCacheRecord>> LoadAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<LocalModelCacheRecord>> LoadAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!File.Exists(storagePaths.ModelCacheIndexPath))
         {
-            return [];
+            return Task.FromResult<IReadOnlyList<LocalModelCacheRecord>>([]);
         }
 
         byte[] payload = File.ReadAllBytes(storagePaths.ModelCacheIndexPath);
-        cancellationToken.ThrowIfCancellationRequested();
-        ReadOnlySpan<byte> json = payload;
-        ReadOnlySpan<byte> preamble = Encoding.UTF8.GetPreamble();
-        if (json.StartsWith(preamble))
-        {
-            json = json[preamble.Length..];
-        }
-
         LocalModelCacheRecord[]? records = JsonSerializer.Deserialize(
-            json,
+            payload,
             LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray);
 
-        return records ?? [];
+        return Task.FromResult<IReadOnlyList<LocalModelCacheRecord>>(records ?? []);
     }
 
     /// <summary>
