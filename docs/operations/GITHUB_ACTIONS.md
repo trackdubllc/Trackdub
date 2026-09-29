@@ -4,6 +4,13 @@ CI/CD lives in `.github/workflows/`. Windows jobs use self-hosted runners; Linux
 
 `ci.yml`, `codeql.yml`, `model-audit.yml`, `dependabot-auto-merge.yml`, and `opencode-review.yml` run automatically on their triggers. Everything else is manual (`workflow_dispatch`) or PR-comment triggered:
 
+Pull-request triggers are not restricted to pull requests whose base is `main`. `ci.yml`, `codeql.yml`,
+`model-audit.yml`, and `benchmark-report-validation.yml` also run for stacked pull requests based on
+another branch; the workflows with a `paths` filter still run only when a matching path changes.
+`codeql.yml` is itself disabled at the repository level, so its trigger stays inert until the workflow
+is re-enabled. Pre-merge CodeQL analysis currently comes from GitHub's default code scanning setup,
+which runs for pull requests into `main`; a pull request based on another branch currently gets none.
+
 | Command (PR comment) | Workflow |
 |----------------------|----------|
 | `/oc` or `/opencode` | OpenCode bot |
@@ -21,7 +28,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### CI (`ci.yml`)
 
-- **Trigger:** Push/PR to `main`, or manual (`workflow_dispatch`)
+- **Trigger:** Push to `main`, any pull request, or manual (`workflow_dispatch`)
 - **Jobs:**
   - **Verify Code Format** (self-hosted): `dotnet format Trackdub.sln --verify-no-changes`
   - **Build & Test (Windows):** restore/build/test `Trackdub.sln` (Release, `-m:1`)
@@ -47,7 +54,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### Model manifest audit (`model-audit.yml`)
 
-- **Trigger:** push/PR to `main` touching `src/Trackdub.Inference/Runtime/ModelManifest/**`, `tools/ci/**`, or the workflow itself; weekly schedule (Mon 06:00 UTC); manual (`workflow_dispatch`)
+- **Trigger:** push to `main` or any pull request touching `src/Trackdub.Inference/Runtime/ModelManifest/**`, `tools/ci/**`, or the workflow itself; weekly schedule (Mon 06:00 UTC); manual (`workflow_dispatch`)
 - **Runs:** self-hosted
 - **Tasks:** `tools/ci/audit-bundled-model-manifest.py`
 
@@ -89,7 +96,7 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 ### CodeQL Advanced (`codeql.yml`)
 
-- **Trigger:** Push/PR to `main`, weekly schedule (Mon 01:42 UTC), manual (`workflow_dispatch`)
+- **Trigger:** Push to `main`, any pull request, weekly schedule (Mon 01:42 UTC), manual (`workflow_dispatch`)
 - **Runs:** `ubuntu-latest` (actions, JS/TS, Python — `build-mode: none`); `windows-latest` (C# manual `Trackdub.sln` build)
 - **Tasks:** Advanced CodeQL with `security-extended,security-and-quality`; path config in `.github/codeql/codeql-config.yml`
 - **Important:** Only canonical CodeQL workflow for this repo. Disable GitHub default CodeQL (org `trackdubllc-org-config-1` or repo settings) to avoid duplicate dynamic `CodeQL` runs. See `docs/internal/codeql-advanced-setup.md`.
@@ -101,7 +108,7 @@ gh run list --workflow=codeql.yml --limit 3
 
 ### Code coverage (`code-coverage.yml`)
 
-- **Trigger:** Push/PR to `main`, manual (`workflow_dispatch`)
+- **Trigger:** Manual (`workflow_dispatch`) only; the push/PR triggers are disabled so the Linux CI test run is not duplicated
 - **Runs:** `ubuntu-latest`
 - **Tasks:** Coverlet on `Trackdub.Avalonia.slnf`, ReportGenerator merge, `actions/upload-code-coverage`, PR comment
 

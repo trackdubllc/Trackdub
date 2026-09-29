@@ -3,8 +3,11 @@ name: CodeQL Advanced
 on:
   push:
     branches: [main]
+  # Every pull request, not only the ones targeting main. A stacked pull request (base = another
+  # branch) is still merged code, but with the branch filter above in place its analysis only ran
+  # after the change landed on main. Pull requests into main are unaffected; the concurrency group
+  # below already keys on the pull request number.
   pull_request:
-    branches: [main]
   schedule:
     - cron: "42 1 * * 1"
   workflow_dispatch:
