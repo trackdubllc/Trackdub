@@ -11,21 +11,24 @@ namespace Trackdub.Architecture.Tests;
 /// </remarks>
 public sealed class WorkflowTriggerTests
 {
-    [Fact]
-    public void CiWorkflow_pull_request_trigger_is_not_narrowed_to_a_base_branch()
+    [Theory]
+    [InlineData(".github/workflows/ci.yml")]
+    [InlineData(".github/workflows/codeql.yml")]
+    [InlineData(".github/workflows/model-audit.yml")]
+    [InlineData(".github/workflows/benchmark-report-validation.yml")]
+    public void Pull_request_trigger_is_not_narrowed_to_a_base_branch(string workflowPath)
     {
-        string workflow = File.ReadAllText(ResolveRepositoryFile(".github/workflows/ci.yml"));
+        string workflow = File.ReadAllText(ResolveRepositoryFile(workflowPath));
 
         IReadOnlyList<string> filters = ReadTriggerFilters(workflow, "pull_request");
 
         Assert.True(
             filters.Count == 0,
-            ".github/workflows/ci.yml narrows its pull_request trigger with "
+            $"{workflowPath} narrows its pull_request trigger with "
             + $"{string.Join(", ", filters)}. A stacked pull request (base = another branch) then "
-            + "never runs the matrix, the format job, the repository-boundary job or the "
-            + "controlled-budget job. Remove the base-branch filter, passing every pull request as "
-            + "the trigger's comment describes; if CI is deliberately main-only again, delete this "
-            + "test in the same commit.");
+            + "never runs that workflow's checks. Remove the base-branch filter, passing every "
+            + "pull request as the trigger's comment describes; if a workflow is deliberately "
+            + "main-only again, delete its InlineData in the same commit.");
     }
 
     [Fact]
