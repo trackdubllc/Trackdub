@@ -179,5 +179,4 @@ public sealed class QwenLocalAssistantEngine(
 
         return result.Trim();
     }
-
 }

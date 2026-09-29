@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Trackdub.Infrastructure;
 
 namespace Trackdub.Infrastructure.Components.NvidiaAfx;
 
@@ -14,12 +15,9 @@ public static class NvidiaAfxRuntimeManifestLoader
         }
 
         using FileStream stream = File.OpenRead(fullPath);
-        NvidiaAfxRuntimeManifest? manifest = JsonSerializer.Deserialize<NvidiaAfxRuntimeManifest>(
+        NvidiaAfxRuntimeManifest? manifest = JsonSerializer.Deserialize(
             stream,
-            new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            InfrastructureSerializationContext.Default.NvidiaAfxRuntimeManifest);
 
         if (manifest is null || manifest.Packages is null || manifest.Packages.Length == 0)
         {
