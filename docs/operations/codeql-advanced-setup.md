@@ -7,8 +7,8 @@ Trackdub uses **advanced CodeQL only** via [`.github/workflows/codeql.yml`](../.
 | | Default CodeQL (`CodeQL` workflow) | Advanced (`CodeQL Advanced`) |
 |---|-----------------------------------|------------------------------|
 | Source | Org/repo dynamic setup | `.github/workflows/codeql.yml` |
-| C# build | `build-mode: none` on Linux | Manual `Trackdub.sln` build on Windows |
-| Frontend (JS/TS) | Default | `build-mode: none` (JS/TS does not support manual builds) |
+| C# build | `build-mode: none` on Linux | Manual `Trackdub.slnx` build on Windows |
+| Frontend (JS/TS) | Default | Not in the advanced matrix today (it covers `actions`, `csharp`, `python` only) |
 | Queries | Default suite | `security-extended,security-and-quality` |
 | Paths | Whole repo | `.github/codeql/codeql-config.yml` scopes |
 
@@ -74,7 +74,9 @@ gh workflow run codeql.yml --repo trackdubllc/Trackdub
 gh run list --repo trackdubllc/Trackdub --workflow=codeql.yml --limit 1
 ```
 
-Expect four matrix jobs: `actions`, `csharp` (Windows), `javascript-typescript`, `python`.
+Expect three matrix jobs: `actions`, `csharp` (Windows), `python`. The workflow file is currently
+disabled at the repository level (`gh api` returns `state: disabled_manually`), so re-enable it before
+dispatching; until then, pre-merge analysis comes from GitHub's default code scanning setup.
 
 ## Related workflows
 

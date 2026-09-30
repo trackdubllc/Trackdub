@@ -7,8 +7,8 @@ Trackdub uses **advanced CodeQL only** via [`.github/workflows/codeql.yml`](../.
 | | Default CodeQL (`CodeQL` workflow) | Advanced (`CodeQL Advanced`) |
 |---|-----------------------------------|------------------------------|
 | Source | Org/repo dynamic setup | `.github/workflows/codeql.yml` |
-| C# build | `build-mode: none` on Linux | Manual `Trackdub.sln` build on Windows |
-| Frontend (JS/TS) | Default | `build-mode: none` (JS/TS does not support manual builds) |
+| C# build | `build-mode: none` on Linux | Manual `Trackdub.slnx` build on Windows |
+| Frontend (JS/TS) | Default | Not in the advanced matrix today (it covers `actions`, `csharp`, `python` only) |
 | Queries | Default suite | `security-extended,security-and-quality` |
 | Paths | Whole repo | `.github/codeql/codeql-config.yml` scopes |
 
@@ -74,7 +74,9 @@ gh workflow run codeql.yml --repo trackdubllc/Trackdub
 gh run list --repo trackdubllc/Trackdub --workflow=codeql.yml --limit 1
 ```
 
-Expect four matrix jobs: `actions`, `csharp` (Windows), `javascript-typescript`, `python`.
+Expect three matrix jobs: `actions`, `csharp` (Windows), `python`. The workflow file is currently
+disabled at the repository level (`gh api` returns `state: disabled_manually`), so re-enable it before
+dispatching; until then, pre-merge analysis comes from GitHub's default code scanning setup.
 
 ## Related workflows
 
@@ -88,9 +90,14 @@ Expect four matrix jobs: `actions`, `csharp` (Windows), `javascript-typescript`,
 
 # GitHub Actions Workflows
 
-CI/CD lives in `.github/workflows/`. Windows jobs use self-hosted runners; Linux jobs use `self-hosted`.
+CI/CD lives in `.github/workflows/`. All jobs run on GitHub-hosted runners (`ubuntu-latest`,
+`windows-latest`, `macos-latest`), except `trt-rtx-smoke.yml`, which needs the self-hosted Windows
+runner.
 
-`ci.yml`, `codeql.yml`, `model-audit.yml`, `dependabot-auto-merge.yml`, and `opencode-review.yml` run automatically on their triggers. Everything else is manual (`workflow_dispatch`) or PR-comment triggered:
+`ci.yml`, `codeql.yml`, `model-audit.yml`, `benchmark-report-validation.yml`,
+`release-shipping-guard.yml`, `dependabot-auto-merge.yml`, and `opencode-review.yml` run
+automatically on their triggers. `benchmark-dotnet.yml` runs on a nightly schedule. Everything else
+is manual (`workflow_dispatch`) or PR-comment triggered:
 
 Pull-request triggers are not restricted to pull requests whose base is `main`. `ci.yml`, `codeql.yml`,
 `model-audit.yml`, and `benchmark-report-validation.yml` also run for stacked pull requests based on
@@ -107,8 +114,8 @@ Manual dispatch still works:
 
 ```powershell
 gh workflow run ci.yml
-gh workflow run release.yml -f tag=v1.2.3
-gh workflow run cursor-code-review.yml -f pull_request_number=123
+gh workflow run code-coverage.yml
+gh workflow run benchmark-dotnet.yml -f mode=cpu
 gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 ```
 
@@ -118,40 +125,49 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 
 - **Trigger:** Push to `main`, any pull request, or manual (`workflow_dispatch`)
 - **Jobs:**
-  - **Verify Code Format** (self-hosted): `dotnet format Trackdub.sln --verify-no-changes`
-  - **Build & Test (Windows):** restore/build/test `Trackdub.sln` (Release, `-m:1`)
-  - **Build & Test (Linux):** restore/build/test `Trackdub.Avalonia.slnf` on `net10.0`; tests run per project via `scripts/ci/run-avslnf-tests-sequential.sh`
-- **Timeout:** 45 minutes per build matrix leg
+  - **Verify Code Format** (`ubuntu-latest`): `dotnet format Trackdub.slnx --verify-no-changes`,
+    scoped to the C# files changed against the PR base (the whole solution when no base SHA is
+    available)
+  - **Verify Repository Boundary** (`ubuntu-latest`): `python3 scripts/ci/check-repository-boundary.py`
+  - **Controlled Matrix CPU Budget** (`ubuntu-latest`): restore `Trackdub.slnx`, build
+    `src/Trackdub.Benchmarks.DevHost`, then `python3 scripts/ci/check_controlled_matrix_cpu_budget.py`
+  - **Build & Test (Windows / Linux / macOS):** restore, build, and test `Trackdub.slnx`
+    (Release, `-m:1`) on `windows-latest`, `ubuntu-latest`, and `macos-latest`
+- **Timeout:** 45 minutes per build job (format 15, boundary 5, CPU budget 20 minutes)
+
+### Release Restore & Shipping Guard (`release-shipping-guard.yml`)
+
+- **Trigger:** Push to `main`, any pull request, or manual (`workflow_dispatch`)
+- **Runs:** `ubuntu-latest`
+- **Tasks:** locked-mode restore of `Trackdub.slnx` for Debug, then Release (the Release restore is
+  deliberately the last restore before the build, so the Release build resolves Release-frozen
+  assets), Release build and publish of `src/DubBench.DevHost`, then assertions that no
+  `AvaloniaUI.DiagnosticsSupport` output and no `Avalonia.Diagnostics.Diagnostic.IsEnabled`
+  runtimeconfig flag reaches `bin/Release`
 
 ### Dependabot Auto-Merge (`dependabot-auto-merge.yml`)
 
-- **Trigger:** Automatically runs on `pull_request` when Dependabot opens or updates a PR
+- **Trigger:** Automatically runs on `pull_request_target` for PRs targeting `main` when Dependabot opens or updates a PR
 - **Jobs:**
   - **Auto-merge Dependabot PR:** fetches Dependabot metadata, approves the PR, and enables auto-merge with `--squash` via `gh` CLI. It ensures that once all required status checks/tests pass on the PR, the PR is automatically and safely merged.
-
-### Release (`release.yml`)
-
-- **Trigger:** Manual (`workflow_dispatch`, required `tag` input e.g. `v1.2.3`)
-- **Jobs:** Solution tests, Windows release build, Linux/macOS-style Unix publish matrix, GitHub Release upload
-
-### API deploy (`api-deploy.yml`)
-
-- **Trigger:** Manual (`workflow_dispatch`)
-- **Runs:** self-hosted
-- **Tasks:** Docker build, ECR push, ECS task render + deploy
 
 ### Model manifest audit (`model-audit.yml`)
 
 - **Trigger:** push to `main` or any pull request touching `src/Trackdub.Inference/Runtime/ModelManifest/**`, `tools/ci/**`, or the workflow itself; weekly schedule (Mon 06:00 UTC); manual (`workflow_dispatch`)
-- **Runs:** self-hosted
+- **Runs:** `ubuntu-latest`
 - **Tasks:** `tools/ci/audit-bundled-model-manifest.py`
 
-### Cursor code review (`cursor-code-review.yml`)
+### BenchmarkDotNet (`benchmark-dotnet.yml`)
 
-- **Trigger:** Manual (`workflow_dispatch`, required `pull_request_number`)
+- **Trigger:** nightly schedule (03:17 UTC), or manual (`workflow_dispatch` with `mode` = `cpu`, `baseline`, or `onnx`)
 - **Runs:** `ubuntu-latest`
-- **Tasks:** Deno 2 runs `tools/cursor-sdk-agent` via `@cursor/sdk`; posts/updates a single PR comment
-- **Secret:** `CURSOR_API_KEY` (repository secret)
+- **Tasks:** CPU microbenchmarks (the scheduled run only executes when the `TRACKDUB_BENCHMARKDOTNET` repository variable is `true`), a saved-commit baseline comparison, or an opt-in real-model ONNX benchmark; results are uploaded as workflow artifacts
+
+### Benchmark report validation (`benchmark-report-validation.yml`)
+
+- **Trigger:** push to `main` or `benchmark`, or any pull request, touching `src/Trackdub.Benchmarks/**`, `tests/Trackdub.Benchmarks.Tests/**`, or the workflow itself; manual (`workflow_dispatch`)
+- **Runs:** `ubuntu-latest`
+- **Tasks:** restore/build `Trackdub.slnx`, run the report export tests, validate the mock-matrix JSON output, upload the `benchmark-report-validation` artifact
 
 ### OpenCode review (`opencode-review.yml`)
 
@@ -177,17 +193,12 @@ gh workflow run opencode.yml -f prompt="Summarize recent pipeline changes"
 - **Model download:** a "Download starter-pack models" step runs `trackdub models download` for every target in `TrtRtxSmokeCatalog.StarterPackTurboGpu` (with variants `gpu-int4`, `quantized`, and `fp16` where the catalog defines them) before the smoke run. Without it the resolver skips every target. The download step and the smoke step share one model cache via job-level `TRACKDUB_CACHE_ROOT` and `TRACKDUB_MODEL_CACHE` (kept consistent so `TRACKDUB_MODEL_CACHE == TRACKDUB_CACHE_ROOT/model-cache`).
 - **Failure surfacing:** the job no longer uses `continue-on-error`, so a non-zero smoke exit fails the run. The benchmark exits non-zero when every target is skipped ("TRT RTX smoke did not run any targets (all skipped)"), so a run that downloads nothing or skips everything now turns red instead of reporting green.
 
-### Frontend build (`frontend-build.yml`)
-
-- **Trigger:** Manual (`workflow_dispatch`)
-- **Tasks:** `pnpm install --frozen-lockfile` + Vite production build for `frontend/`
-
 ### CodeQL Advanced (`codeql.yml`)
 
 - **Trigger:** Push to `main`, any pull request, weekly schedule (Mon 01:42 UTC), manual (`workflow_dispatch`)
-- **Runs:** `ubuntu-latest` (actions, JS/TS, Python — `build-mode: none`); `windows-latest` (C# manual `Trackdub.sln` build)
+- **Runs:** `ubuntu-latest` (`actions`, `python` — `build-mode: none`); `windows-latest` (C# manual `Trackdub.slnx` build)
 - **Tasks:** Advanced CodeQL with `security-extended,security-and-quality`; path config in `.github/codeql/codeql-config.yml`
-- **Important:** Only canonical CodeQL workflow for this repo. Disable GitHub default CodeQL (org `trackdubllc-org-config-1` or repo settings) to avoid duplicate dynamic `CodeQL` runs. See `docs/internal/codeql-advanced-setup.md`.
+- **Important:** Only canonical CodeQL workflow for this repo, but it is currently disabled at the repository level (`disabled_manually`) while GitHub's default code scanning setup is enabled. Disable GitHub default CodeQL (org `trackdubllc-org-config-1` or repo settings) and re-enable this workflow to avoid duplicate dynamic `CodeQL` runs. See `docs/operations/codeql-advanced-setup.md`.
 
 ```powershell
 gh workflow run codeql.yml
@@ -198,31 +209,28 @@ gh run list --workflow=codeql.yml --limit 3
 
 - **Trigger:** Manual (`workflow_dispatch`) only; the push/PR triggers are disabled so the Linux CI test run is not duplicated
 - **Runs:** `ubuntu-latest`
-- **Tasks:** Coverlet on `Trackdub.Avalonia.slnf`, ReportGenerator merge, `actions/upload-code-coverage`, PR comment
+- **Tasks:** Coverlet on `Trackdub.slnx` (`-f net10.0`), ReportGenerator merge, `actions/upload-code-coverage`
 
-## Secrets (deploy + review)
+## Secrets (review + audit)
 
 | Secret | Purpose |
 |--------|---------|
-| `AWS_DEPLOY_ROLE_ARN` | OIDC role for API deploy |
-| `ECS_EXECUTION_ROLE_ARN` / `ECS_TASK_ROLE_ARN` | ECS task definition |
-| `AWS_ACCOUNT_ID` / `EFS_FILE_SYSTEM_ID` | Task definition substitution |
-| `CURSOR_API_KEY` | Cursor SDK PR review (`cursor-code-review.yml`) |
+| `GRAPHITE_CI_OPTIMIZER_TOKEN` | Graphite CI optimizer in `model-audit.yml` |
 | `OPENCODE_API_KEY` | OpenCode review/bot zen: probe chain (`opencode-review.yml`, `opencode.yml`) |
 | `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` | OpenCode review/bot cf: Workers AI probe chain |
+| `CONTEXT7_API_KEY` / `OPENROUTER_API_KEY` | OpenCode review/bot model providers (`opencode-review.yml`, `opencode.yml`) |
 
 ## Local parity
 
 ```powershell
-dotnet format Trackdub.sln --verify-no-changes
-dotnet build Trackdub.sln -c Release -m:1
-dotnet test Trackdub.sln -c Release --no-build -m:1
-dotnet build Trackdub.Avalonia.slnf -c Release -f net10.0 -m:1
-./scripts/ci/run-avslnf-tests-sequential.sh Trackdub.Avalonia.slnf "--framework net10.0"
-deno task validate
+dotnet restore Trackdub.slnx -m:1
+dotnet format Trackdub.slnx --verify-no-changes
+dotnet build Trackdub.slnx -c Release --no-restore -m:1
+dotnet test Trackdub.slnx -c Release --no-build -m:1
+python3 scripts/ci/check-repository-boundary.py
 ```
 
-Last updated: 2026-07-11
+Last updated: 2026-09-30
 
 # macOS Deployment Notes
 
@@ -346,8 +354,8 @@ releases or CI artifacts.
 
 Manifest: [`runtime/win-native-deps.manifest.json`](../../runtime/win-native-deps.manifest.json).
 
-`tools/dev/Build-TrackdubAvalonia.ps1` and release CI fetch Windows (and macOS release jobs fetch
-mac) when artifacts are missing.
+`tools/dev/Fetch-WinNativeDeps.ps1` and `tools/dev/Fetch-MacNativeDeps.ps1` fetch the artifacts on
+demand when they are missing; no workflow in `.github/workflows/` runs them automatically.
 
 ## Windows x64 (published app folder)
 

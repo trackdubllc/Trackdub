@@ -28,8 +28,8 @@ releases or CI artifacts.
 
 Manifest: [`runtime/win-native-deps.manifest.json`](../../runtime/win-native-deps.manifest.json).
 
-`tools/dev/Build-TrackdubAvalonia.ps1` and release CI fetch Windows (and macOS release jobs fetch
-mac) when artifacts are missing.
+`tools/dev/Fetch-WinNativeDeps.ps1` and `tools/dev/Fetch-MacNativeDeps.ps1` fetch the artifacts on
+demand when they are missing; no workflow in `.github/workflows/` runs them automatically.
 
 ## Windows x64 (published app folder)
 
