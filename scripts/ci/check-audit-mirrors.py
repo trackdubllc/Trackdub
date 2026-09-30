@@ -36,7 +36,14 @@ MIRRORS = (
 
 def read_lines(relative: str) -> list[str]:
     """Read a file as lines, normalizing line endings across platforms."""
-    return (REPO_ROOT / relative).read_text(encoding="utf-8").splitlines()
+    try:
+        return (REPO_ROOT / relative).read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        print(f"Error: File not found: {relative}")
+        raise SystemExit(1)
+    except Exception as e:
+        print(f"Error reading {relative}: {e}")
+        raise SystemExit(1)
 
 
 def find_contiguous(haystack: list[str], needle: list[str]) -> int:
