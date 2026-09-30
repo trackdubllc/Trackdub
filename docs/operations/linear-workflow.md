@@ -15,7 +15,7 @@ Canonical agent-facing copy also lives in Linear document **Agent Linear Workflo
 | Cloud & Portal | API + portal |
 | Marketing Site | `trackdub.com` + brand |
 | Platform & Tooling | CI, integrations, release, agent ops |
-| Near-term Product Backlog | Active `docs/BACKLOG.md` P0–P5 items |
+| Near-term Product Backlog | Short-horizon P0–P5 product items |
 | Legacy Milestone Archive | Imported open issues from `Trackdub-Monorepo-Archive` |
 
 ## Agent loop (mandatory)
@@ -63,4 +63,4 @@ Prefer commenting progress on the issue over burying status only in chat.
 
 Source code/tests > task instructions > `AGENT_CONTEXT.md` (gated) > `AGENTS.md` > Linear issue text > other docs.
 
-If Linear and `docs/BACKLOG.md` disagree on status, update Linear to match verified code state and note the reconciliation in a comment.
+If Linear and the code disagree on status, update Linear to match verified code state and note the reconciliation in a comment.
