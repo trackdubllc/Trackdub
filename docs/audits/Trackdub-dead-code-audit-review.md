@@ -64,15 +64,13 @@ These are **CommunityToolkit.Mvvm `[ObservableProperty]` hook points**. The sour
 
 ---
 
-## 3. WRONG: Interface `CancellationToken` parameters (~10 entries)
+## 3. WRONG: Interface `CancellationToken` parameters (~11 entries)
 
 The audit flags `ct` / `cancellationToken` parameters on interface methods in:
 
-- `Trackdub.Contracts/IAudioPreviewTransport.cs` (5 methods)
-- `Trackdub.Application/Services/ITranslationService.cs`
-- `Trackdub.Application/Services/IVoiceAssignmentService.cs`
-- `Trackdub.Application/Runtime/ILicenseConsentService.cs`
-- `Trackdub.Application/Updates/IUpdateService.cs`
+- `Trackdub.Contracts/IAudioPreviewTransport.cs` (6 methods)
+- `Trackdub.Application/Runtime/ILicenseConsentService.cs` (2 methods)
+- `Trackdub.Application/Updates/IUpdateService.cs` (3 methods)
 
 These are **interface contract parameters**. Implementations must accept them. Removing them is a breaking API change.
 
@@ -172,10 +170,12 @@ All 46 items are verified:
 
 | Category | Original | Corrected | Delta |
 |----------|----------|-----------|-------|
-| Do not remove | 46 | ~56 | +10 (interface params, NullOpenVino) |
+| Do not remove | 46 | ~57 | +11 (interface params, NullOpenVino) |
 | Review needed | 1156 | ~1056 | -100 (partial methods, confirmed-dead promoted out) |
 | Safe to remove | 1838 | ~1928 | +90 (promoted from review needed) |
 | GlobalUsings to delete | 16 | 5-6 (re-verify) | Most are NOT empty |
+
+> **Interface-parameter component recomputed from the tree.** The surviving interfaces carry 11 such parameters (`IAudioPreviewTransport` 6, `ILicenseConsentService` 2, `IUpdateService` 3). The original `+10` predated the removal of `ITranslationService` (1) and `IVoiceAssignmentService` (2), and undercounted `IAudioPreviewTransport`, which has 6 methods rather than the 5 the audit claimed.
 
 ---
 

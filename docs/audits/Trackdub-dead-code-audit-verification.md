@@ -61,7 +61,7 @@ Two different `NullOpenVinoAvailabilityProvider` exist:
 
 ---
 
-### 3. WRONG: Interface `CancellationToken` parameters (~10 entries) (Section 3)
+### 3. WRONG: Interface `CancellationToken` parameters (~11 entries) (Section 3)
 
 **Review claim:** These are interface contract parameters and should not be removed.
 
@@ -237,7 +237,7 @@ The review provides corrected counts:
 
 | Category | Original | Corrected | Delta |
 |----------|----------|-----------|-------|
-| Do not remove | 46 | ~56 | +10 |
+| Do not remove | 46 | ~57 | +11 |
 | Review needed | 1156 | ~1056 | -100 |
 | Safe to remove | 1838 | ~1928 | +90 |
 
