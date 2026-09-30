@@ -1,0 +1,87 @@
+name: Release Restore & Shipping Guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-shipping-guard-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# NuGet keeps one lock file per project regardless of configuration, so a lock
+# can only be correct for every configuration if each project's package graph
+# is configuration-independent. AvaloniaUI.DiagnosticsSupport violated that:
+# its assets were excluded in Release at restore time, which freezes the
+# exclusion into project.assets.json. CI's default Debug restore therefore
+# left a later -c Release --no-restore build with Debug-frozen exclusions, and
+# the diagnostics DLL (unknown license, must never ship) landed in bin/Release
+# anyway. The ordering below is load-bearing: the Release locked restore is
+# the LAST restore before the Release build, so the Release build resolves
+# Release-frozen assets while still proving the Debug lock is intact.
+jobs:
+  release-shipping-guard:
+    name: Verify Release Restore & Diagnostics-Free Shipping
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        # See ci.yml: redirect SDK installs into runner temp so self-hosted
+        # runner service accounts can always write them.
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: |
+            **/packages.lock.json
+            NuGet.config
+
+      - name: Restore Dependencies (Debug, locked mode)
+        shell: bash
+        run: dotnet restore Trackdub.slnx --locked-mode -p:Configuration=Debug -m:1
+
+      - name: Restore Dependencies (Release, locked mode)
+        shell: bash
+        run: dotnet restore Trackdub.slnx --locked-mode -p:Configuration=Release -m:1
+
+      - name: Build DevHost (Release)
+        shell: bash
+        run: dotnet build src/DubBench.DevHost/Trackdub.DubBench.DevHost.csproj -c Release --no-restore -f net10.0 -m:1
+
+      - name: Publish DevHost (Release)
+        shell: bash
+        run: dotnet publish src/DubBench.DevHost/Trackdub.DubBench.DevHost.csproj -c Release -f net10.0 --no-build --no-restore -m:1
+
+      # Unknown-license guard. AvaloniaUI.DiagnosticsSupport has no license
+      # metadata and must never reach a shipping artifact. The csproj
+      # exclusions only take effect for whichever configuration was restored
+      # last; these assertions are the backstop that fires if a future
+      # dependency change reintroduces the package into Release output.
+      - name: Assert no DiagnosticsSupport in Release output
+        shell: bash
+        run: |
+          offenders=$(find src -path '*bin/Release*' -iname 'AvaloniaUI.DiagnosticsSupport*' 2>/dev/null || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::AvaloniaUI.DiagnosticsSupport (no license metadata) reached Release output:"
+            echo "$offenders"
+            exit 1
+          fi
+          # The flag is legitimate in Debug output (WithDeveloperTools only
+          # runs under DEBUG), so scope this scan to Release bins.
+          flags=$(find src -path '*bin/Release*' -name '*.runtimeconfig.json' -exec grep -l 'Avalonia.Diagnostics.Diagnostic.IsEnabled' {} + 2>/dev/null || true)
+          if [ -n "$flags" ]; then
+            echo "::error::DevTools diagnostic flag enabled in Release runtimeconfig:"
+            echo "$flags"
+            exit 1
+          fi
+          echo "Release output is diagnostics-free."
