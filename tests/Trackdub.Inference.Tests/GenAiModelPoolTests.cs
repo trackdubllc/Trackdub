@@ -404,20 +404,23 @@ public class GenAiModelPoolTests
 
         using var cts = new CancellationTokenSource();
         Task<GenAiModelLease> acquire = pool.GetLeaseAsync(Key("c1", estimatedMb: 80), cts.Token);
-        await factoryStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await factoryStarted.Task.AwaitWithHangGuard("the factory never started");
 
         await cts.CancelAsync();
         var fake = new FakeGenAiModelResource();
         completeFactory.SetResult(fake);
 
+        // The assertion is that cancellation is observed. The guard only bounds how long we
+        // wait for that verdict, so a loaded runner cannot pass a five-second budget off as
+        // the deadlock this test exists to catch.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => acquire.WaitAsync(TimeSpan.FromSeconds(5)));
+            () => acquire.AwaitWithHangGuard("the cancelled acquire never reported cancellation"));
         Assert.Equal(1, fake.DisposeCount);
 
         // No hidden accounting: a full-bucket reservation must fit.
         using ExternalMemoryReservation probe = await admission.ReserveExternalAsync(
             ExecutionProviderKind.Cpu, null, 100, CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(5));
+            .AwaitWithHangGuard("the post-cancellation accounting probe never completed");
         Assert.NotNull(probe);
     }
 
