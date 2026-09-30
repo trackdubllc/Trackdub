@@ -14,6 +14,11 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
   </ItemGroup>
 
+  <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release). -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(RuntimeIdentifier)' != ''">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj" />
   </ItemGroup>
