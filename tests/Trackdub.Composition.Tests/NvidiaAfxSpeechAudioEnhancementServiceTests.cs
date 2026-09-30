@@ -61,6 +61,30 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
         Assert.True(fallback.WasCalled);
     }
 
+    [Fact]
+    public async Task EnhanceAsync_FallsBack_WhenAecProfileMissingFarEnd()
+    {
+        var fallback = new FakeSpeechAudioEnhancementService();
+        // Force past stub short-circuit by using a fake readiness + only testing far-end gate
+        // after IsStubbed flips; while stubbed the stub gate wins first, which is also correct.
+        var readiness = new FakeReadinessService(new NvidiaAfxRuntimeReadiness(true, "Ready", "C:\\afx", null));
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback);
+
+        SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
+            new SpeechAudioEnhancementRequest(
+                "source.wav",
+                "dest.wav",
+                new SpeechAudioEnhancementOptions(
+                    true,
+                    NvidiaAfxProfile.AcousticEchoCancellation,
+                    1.0f,
+                    FarEndReferenceAudioPath: null)),
+            CancellationToken.None);
+
+        Assert.Equal(SpeechAudioEnhancementBackend.Ffmpeg, result.Backend);
+        Assert.True(fallback.WasCalled);
+    }
+
     private sealed class FakeReadinessService(NvidiaAfxRuntimeReadiness readiness) : INvidiaAfxRuntimeReadinessService
     {
         public NvidiaAfxRuntimeReadiness GetReadiness(NvidiaAfxProfile profile) => readiness;

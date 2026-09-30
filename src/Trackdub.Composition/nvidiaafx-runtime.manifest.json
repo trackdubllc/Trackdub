@@ -1,5 +1,8 @@
 {
   "manifestVersion": "1.0.0",
+  "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+  "developerResourcesUrl": "https://www.nvidia.com/broadcast-sdk-resources",
+  "notes": "Packages remain placeholders until Trackdub hosts NVIDIA Maxine AFX redistributables with verified SHA-256/size. Local installs via NvidiaAfxRuntimeDirectory or TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT are supported for probing after IsStubbed() flips. Do not treat this manifest as downloadable.",
   "packages": [
     {
       "architecture": "turing",
@@ -12,7 +15,8 @@
         "models/denoiser_48k.nvam",
         "models/dereverb_48k.nvam",
         "models/dereverb_denoiser_48k.nvam",
-        "models/superres_48k.nvam",
+        "models/superres_16k.nvam",
+        "models/denoiser_16k.nvam",
         "models/aec_48k.nvam"
       ]
     },
@@ -27,7 +31,8 @@
         "models/denoiser_48k.nvam",
         "models/dereverb_48k.nvam",
         "models/dereverb_denoiser_48k.nvam",
-        "models/superres_48k.nvam",
+        "models/superres_16k.nvam",
+        "models/denoiser_16k.nvam",
         "models/aec_48k.nvam"
       ]
     },
@@ -42,7 +47,8 @@
         "models/denoiser_48k.nvam",
         "models/dereverb_48k.nvam",
         "models/dereverb_denoiser_48k.nvam",
-        "models/superres_48k.nvam",
+        "models/superres_16k.nvam",
+        "models/denoiser_16k.nvam",
         "models/aec_48k.nvam"
       ]
     },
@@ -57,7 +63,8 @@
         "models/denoiser_48k.nvam",
         "models/dereverb_48k.nvam",
         "models/dereverb_denoiser_48k.nvam",
-        "models/superres_48k.nvam",
+        "models/superres_16k.nvam",
+        "models/denoiser_16k.nvam",
         "models/aec_48k.nvam"
       ]
     }

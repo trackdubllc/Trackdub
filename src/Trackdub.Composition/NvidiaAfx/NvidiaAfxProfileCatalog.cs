@@ -54,11 +54,12 @@ public static class NvidiaAfxProfileCatalog
         new(
             NvidiaAfxProfile.TelephonyUpscale,
             "Telephony Upscale",
-            Selector: "superres_denoiser",
+            // Matches NVIDIA Maxine chained selector (8 kHz → 16 kHz + denoise).
+            Selector: "superres8kto16k_denoiser16k",
             IsChainedEffect: true,
-            SupportedSampleRates: [16000],
+            SupportedSampleRates: [8000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/superres_48k.nvam", "models/denoiser_48k.nvam"],
+            RequiredModelRelativePaths: ["models/superres_16k.nvam", "models/denoiser_16k.nvam"],
             RequiresFarEndReference: false,
             SupportsIntensityRatio: true),
         new(

@@ -3,7 +3,7 @@ namespace Trackdub.Contracts;
 /// <summary>
 /// Discoverability and honesty markers for the NVIDIA Audio Effects (AFX) integration.
 /// While <see cref="IsStubbed"/> is true, readiness must never report Ready and downloads
-/// must refuse to install placeholder packages.
+/// must refuse to install packages (placeholder or otherwise).
 /// </summary>
 public static class NvidiaAfxIntegration
 {
@@ -14,7 +14,16 @@ public static class NvidiaAfxIntegration
     public const string StubStatusLabel = "Stub";
 
     public const string StubReason =
-        "NVIDIA AFX is registered as a stub. Native NvAudioEffects runtime packaging and download URLs are not wired yet.";
+        "NVIDIA AFX remains stubbed for readiness: Trackdub-hosted redistributable URLs/checksums " +
+        "are not published yet, and NvAudioEffects.dll create/run has not been verified on shipping GPUs. " +
+        "Native API bindings, AEC far-end wiring, settings→stage options, and packaging gates are in place; " +
+        "install NVIDIA Maxine AFX via the developer installer or set TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT " +
+        "for local probing only after IsStubbed() flips.";
+
+    public const string LicenseUrl =
+        "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/";
+
+    public const string DeveloperResourcesUrl = "https://www.nvidia.com/broadcast-sdk-resources";
 
     // Method (not const) so stub gates do not create CS0162 unreachable-code failures while
     // the real install/readiness bodies remain compiled for the future live flip.

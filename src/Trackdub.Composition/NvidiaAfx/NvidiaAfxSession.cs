@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Trackdub.Contracts;
 
 namespace Trackdub.Composition.NvidiaAfx;
@@ -5,27 +6,38 @@ namespace Trackdub.Composition.NvidiaAfx;
 internal sealed class NvidiaAfxSession : IDisposable
 {
     private readonly NvidiaAfxEffectHandle _handle;
-    private readonly uint _channels;
-    private readonly uint _samplesPerFrame;
     private readonly string _selector;
+    private readonly uint _numInputChannels;
+    private readonly uint _numInputSamplesPerFrame;
+    private readonly uint _numOutputSamplesPerFrame;
+    private readonly bool _requiresFarEndReference;
 
     private NvidiaAfxSession(
         NvidiaAfxEffectHandle handle,
         string selector,
-        uint channels,
-        uint samplesPerFrame)
+        uint numInputChannels,
+        uint numInputSamplesPerFrame,
+        uint numOutputSamplesPerFrame,
+        bool requiresFarEndReference)
     {
         _handle = handle;
         _selector = selector;
-        _channels = channels;
-        _samplesPerFrame = samplesPerFrame;
+        _numInputChannels = numInputChannels;
+        _numInputSamplesPerFrame = numInputSamplesPerFrame;
+        _numOutputSamplesPerFrame = numOutputSamplesPerFrame;
+        _requiresFarEndReference = requiresFarEndReference;
     }
+
+    public uint NumInputSamplesPerFrame => _numInputSamplesPerFrame;
+
+    public uint NumOutputSamplesPerFrame => _numOutputSamplesPerFrame;
+
+    public bool RequiresFarEndReference => _requiresFarEndReference;
 
     public static NvidiaAfxSession Create(
         NvidiaAfxProfileDefinition profile,
         string runtimeRoot,
         int sampleRate,
-        int channels,
         float intensityRatio)
     {
         NvidiaAfxNativeLoader.EnsureLoaded(runtimeRoot);
@@ -95,17 +107,35 @@ internal sealed class NvidiaAfxSession : IDisposable
                 NvidiaAfxNative.NvAFX_Load(safeHandle.DangerousGetHandle()),
                 profile.Selector,
                 "Load");
-            uint frameSize = 0;
-            int frameStatus = NvidiaAfxNative.NvAFX_GetU32(
-                safeHandle.DangerousGetHandle(),
-                NvidiaAfxNativeParameters.SamplesPerFrame,
-                out frameSize);
-            if (frameStatus != 0 || frameSize == 0)
+
+            uint numInputChannels = QueryU32OrDefault(
+                safeHandle,
+                NvidiaAfxNativeParameters.NumInputChannels,
+                profile.RequiresFarEndReference ? 2u : 1u);
+            uint numInputSamples = QueryU32OrDefault(
+                safeHandle,
+                NvidiaAfxNativeParameters.NumInputSamplesPerFrame,
+                fallbackParameter: NvidiaAfxNativeParameters.SamplesPerFrameLegacy,
+                defaultValue: 480u);
+            uint numOutputSamples = QueryU32OrDefault(
+                safeHandle,
+                NvidiaAfxNativeParameters.NumOutputSamplesPerFrame,
+                fallbackParameter: NvidiaAfxNativeParameters.SamplesPerFrameLegacy,
+                defaultValue: numInputSamples);
+
+            if (profile.RequiresFarEndReference && numInputChannels < 2)
             {
-                frameSize = 480;
+                throw new InvalidOperationException(
+                    $"NVIDIA AFX AEC profile '{profile.Selector}' reported {numInputChannels} input channel(s); expected at least 2 (near-end + far-end).");
             }
 
-            return new NvidiaAfxSession(safeHandle, profile.Selector, (uint)channels, frameSize);
+            return new NvidiaAfxSession(
+                safeHandle,
+                profile.Selector,
+                numInputChannels,
+                numInputSamples,
+                numOutputSamples,
+                profile.RequiresFarEndReference);
         }
         catch
         {
@@ -114,34 +144,66 @@ internal sealed class NvidiaAfxSession : IDisposable
         }
     }
 
-    public float[] Process(float[] input)
+    public float[] Process(float[] nearEnd, float[]? farEnd = null)
     {
-        float[] output = new float[input.Length];
-        int frameSize = checked((int)_samplesPerFrame);
-        int channels = checked((int)_channels);
-        int stride = frameSize * channels;
-        if (stride <= 0)
+        ArgumentNullException.ThrowIfNull(nearEnd);
+
+        if (_requiresFarEndReference)
+        {
+            ArgumentNullException.ThrowIfNull(farEnd);
+        }
+
+        int inputFrame = checked((int)_numInputSamplesPerFrame);
+        int outputFrame = checked((int)_numOutputSamplesPerFrame);
+        if (inputFrame <= 0 || outputFrame <= 0)
         {
             throw new InvalidOperationException("Invalid AFX frame size.");
         }
 
-        for (int offset = 0; offset < input.Length; offset += stride)
+        int sampleCount = nearEnd.Length;
+        if (farEnd is not null)
         {
-            int remaining = input.Length - offset;
-            int currentFrameSamples = Math.Min(stride, remaining);
-            float[] frameIn = new float[stride];
-            float[] frameOut = new float[stride];
-            Array.Copy(input, offset, frameIn, 0, currentFrameSamples);
-            EnsureSuccess(
-                NvidiaAfxNative.NvAFX_Run(
-                    _handle.DangerousGetHandle(),
-                    frameIn,
-                    frameOut,
-                    _samplesPerFrame,
-                    _channels),
-                _selector,
-                "Run");
-            Array.Copy(frameOut, 0, output, offset, currentFrameSamples);
+            sampleCount = Math.Min(sampleCount, farEnd.Length);
+        }
+
+        // Align to whole input frames (pad tail with zeros like the SDK sample).
+        int alignedInput = ((sampleCount + inputFrame - 1) / inputFrame) * inputFrame;
+        float[] nearAligned = new float[alignedInput];
+        Array.Copy(nearEnd, nearAligned, sampleCount);
+        float[]? farAligned = null;
+        if (_requiresFarEndReference)
+        {
+            farAligned = new float[alignedInput];
+            Array.Copy(farEnd!, farAligned, sampleCount);
+        }
+
+        int outputLength = (alignedInput / inputFrame) * outputFrame;
+        float[] output = new float[outputLength];
+        float[] nearFrame = new float[inputFrame];
+        float[] farFrame = _requiresFarEndReference ? new float[inputFrame] : [];
+        float[] outFrame = new float[outputFrame];
+
+        for (int inputOffset = 0, outputOffset = 0;
+             inputOffset < alignedInput;
+             inputOffset += inputFrame, outputOffset += outputFrame)
+        {
+            Array.Copy(nearAligned, inputOffset, nearFrame, 0, inputFrame);
+            if (_requiresFarEndReference)
+            {
+                Array.Copy(farAligned!, inputOffset, farFrame, 0, inputFrame);
+            }
+
+            RunFrame(nearFrame, farFrame, outFrame);
+            Array.Copy(outFrame, 0, output, outputOffset, outputFrame);
+        }
+
+        // Trim padding beyond the original sample count, mapped 1:1 for same-rate effects.
+        // For rate-changing chained effects, return full produced frames.
+        if (outputFrame == inputFrame && sampleCount < output.Length)
+        {
+            float[] trimmed = new float[sampleCount];
+            Array.Copy(output, trimmed, sampleCount);
+            return trimmed;
         }
 
         return output;
@@ -159,6 +221,77 @@ internal sealed class NvidiaAfxSession : IDisposable
     {
         _handle.Dispose();
         GC.SuppressFinalize(this);
+    }
+
+    private void RunFrame(float[] nearFrame, float[] farFrame, float[] outFrame)
+    {
+        GCHandle nearHandle = GCHandle.Alloc(nearFrame, GCHandleType.Pinned);
+        GCHandle farHandle = default;
+        GCHandle outHandle = GCHandle.Alloc(outFrame, GCHandleType.Pinned);
+        try
+        {
+            IntPtr[] inputs;
+            if (_requiresFarEndReference)
+            {
+                farHandle = GCHandle.Alloc(farFrame, GCHandleType.Pinned);
+                inputs = [nearHandle.AddrOfPinnedObject(), farHandle.AddrOfPinnedObject()];
+            }
+            else
+            {
+                inputs = [nearHandle.AddrOfPinnedObject()];
+            }
+
+            IntPtr[] outputs = [outHandle.AddrOfPinnedObject()];
+            EnsureSuccess(
+                NvidiaAfxNative.NvAFX_Run(
+                    _handle.DangerousGetHandle(),
+                    inputs,
+                    outputs,
+                    _numInputSamplesPerFrame,
+                    _numInputChannels),
+                _selector,
+                "Run");
+        }
+        finally
+        {
+            if (farHandle.IsAllocated)
+            {
+                farHandle.Free();
+            }
+
+            nearHandle.Free();
+            outHandle.Free();
+        }
+    }
+
+    private static uint QueryU32OrDefault(
+        NvidiaAfxEffectHandle handle,
+        string parameter,
+        uint defaultValue,
+        string? fallbackParameter = null)
+    {
+        int status = NvidiaAfxNative.NvAFX_GetU32(
+            handle.DangerousGetHandle(),
+            parameter,
+            out uint value);
+        if (status == 0 && value != 0)
+        {
+            return value;
+        }
+
+        if (fallbackParameter is not null)
+        {
+            status = NvidiaAfxNative.NvAFX_GetU32(
+                handle.DangerousGetHandle(),
+                fallbackParameter,
+                out value);
+            if (status == 0 && value != 0)
+            {
+                return value;
+            }
+        }
+
+        return defaultValue;
     }
 
     private static void EnsureSuccess(int status, string selector, string operation)

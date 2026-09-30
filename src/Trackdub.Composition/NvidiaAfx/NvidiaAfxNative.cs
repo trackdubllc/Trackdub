@@ -3,6 +3,10 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Trackdub.Composition.NvidiaAfx;
 
+/// <summary>
+/// P/Invoke bindings for NVIDIA Maxine AFX (<c>NvAudioEffects.dll</c>), matching
+/// <c>nvAudioEffects.h</c> from NVIDIA-Maxine/Maxine-AFX-SDK.
+/// </summary>
 internal static class NvidiaAfxNative
 {
     private const string LibraryName = "NvAudioEffects";
@@ -17,7 +21,7 @@ internal static class NvidiaAfxNative
         string chainedSelector,
         out IntPtr effectHandle);
 
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int NvAFX_DestroyEffect(IntPtr effectHandle);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
@@ -54,13 +58,17 @@ internal static class NvidiaAfxNative
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int NvAFX_Load(IntPtr effectHandle);
 
+    /// <summary>
+    /// Native signature is <c>const float** input, float** output</c>. Each array entry is a
+    /// pointer to a planar channel buffer. AEC uses two inputs: near-end then far-end.
+    /// </summary>
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int NvAFX_Run(
         IntPtr effectHandle,
-        [In] float[] input,
-        [Out] float[] output,
-        uint samplesPerFrame,
-        uint channels);
+        [In] IntPtr[] input,
+        [In] IntPtr[] output,
+        uint numInputSamples,
+        uint numInputChannels);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int NvAFX_Reset(IntPtr effectHandle);
@@ -70,8 +78,15 @@ internal static class NvidiaAfxNativeParameters
 {
     public const string ModelPath = "model_path";
     public const string InputSampleRate = "input_sample_rate";
+    public const string OutputSampleRate = "output_sample_rate";
     public const string IntensityRatio = "intensity_ratio";
-    public const string SamplesPerFrame = "num_samples_per_frame";
+    public const string NumInputSamplesPerFrame = "num_input_samples_per_frame";
+    public const string NumOutputSamplesPerFrame = "num_output_samples_per_frame";
+    public const string NumInputChannels = "num_input_channels";
+    public const string NumOutputChannels = "num_output_channels";
+
+    // Deprecated aliases retained for older SDK builds.
+    public const string SamplesPerFrameLegacy = "num_samples_per_frame";
 }
 
 internal static class NvidiaAfxNativeLoader

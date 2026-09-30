@@ -22,6 +22,10 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         }
 
         NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(options.NvidiaAfxProfile);
+        if (definition.RequiresFarEndReference && string.IsNullOrWhiteSpace(options.FarEndReferenceAudioPath))
+        {
+            return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
+        }
 
         try
         {
@@ -44,24 +48,33 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
                 monoSamples = ReadAllSamples(resampled);
             }
 
+            float[]? farEndSamples = null;
+            if (definition.RequiresFarEndReference)
+            {
+                farEndSamples = await ReadMonoSamplesAtRateAsync(
+                    options.FarEndReferenceAudioPath!,
+                    targetSampleRate,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             using NvidiaAfxSession session = NvidiaAfxSession.Create(
                 definition,
                 readiness.RuntimeRoot!,
                 targetSampleRate,
-                channels: 1,
                 options.NvidiaAfxIntensityRatio);
-            float[] enhanced = session.Process(monoSamples);
+            float[] enhanced = session.Process(monoSamples, farEndSamples);
 
+            int outputSampleRate = targetSampleRate;
             await WaveAudioWriter.WriteMonoPcm16Async(
                 request.DestinationPath,
                 enhanced,
-                targetSampleRate,
+                outputSampleRate,
                 cancellationToken).ConfigureAwait(false);
 
             return new SpeechAudioEnhancementResult(
                 request.DestinationPath,
-                DurationSeconds: (double)enhanced.Length / targetSampleRate,
-                SampleRate: targetSampleRate,
+                DurationSeconds: (double)enhanced.Length / outputSampleRate,
+                SampleRate: outputSampleRate,
                 ChannelCount: 1,
                 SampleFrames: enhanced.Length,
                 Backend: SpeechAudioEnhancementBackend.NvidiaAfx,
@@ -75,6 +88,23 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<float[]> ReadMonoSamplesAtRateAsync(
+        string path,
+        int targetSampleRate,
+        CancellationToken cancellationToken)
+    {
+        using IAudioSamples source = await WaveAudioReader
+            .ReadMonoPcm16Async(path, cancellationToken)
+            .ConfigureAwait(false);
+        if (source.SampleRate == targetSampleRate)
+        {
+            return ReadAllSamples(source);
+        }
+
+        using IAudioSamples resampled = AudioResampler.CreateResampledStream(source, targetSampleRate);
+        return ReadAllSamples(resampled);
     }
 
     private static float[] ReadAllSamples(IAudioSamples audio)

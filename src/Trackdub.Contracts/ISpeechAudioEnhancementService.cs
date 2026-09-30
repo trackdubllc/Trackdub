@@ -27,13 +27,34 @@ public sealed record SpeechAudioEnhancementResult(
 public sealed record SpeechAudioEnhancementOptions(
     bool EnableNvidiaAfx,
     NvidiaAfxProfile NvidiaAfxProfile,
-    float NvidiaAfxIntensityRatio)
+    float NvidiaAfxIntensityRatio,
+    /// <summary>
+    /// Optional far-end reference WAV path required by <see cref="NvidiaAfxProfile.AcousticEchoCancellation"/>.
+    /// </summary>
+    string? FarEndReferenceAudioPath = null)
 {
     /// <summary>
     /// Default options: NVIDIA AFX disabled, noise+reverb profile, full intensity.
     /// </summary>
     public static SpeechAudioEnhancementOptions Default { get; } =
         new(EnableNvidiaAfx: false, NvidiaAfxProfile: NvidiaAfxProfile.NoiseAndReverb, NvidiaAfxIntensityRatio: 1.0f);
+
+    public static SpeechAudioEnhancementOptions FromStudioSettings(StudioSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        float intensity = settings.NvidiaAfxIntensityRatio;
+        if (float.IsNaN(intensity) || float.IsInfinity(intensity))
+        {
+            intensity = 1.0f;
+        }
+
+        intensity = Math.Clamp(intensity, 0f, 1f);
+        return new SpeechAudioEnhancementOptions(
+            settings.EnableNvidiaAfx,
+            settings.NvidiaAfxProfile,
+            intensity,
+            FarEndReferenceAudioPath: null);
+    }
 }
 
 /// <summary>

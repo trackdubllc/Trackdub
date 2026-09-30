@@ -58,6 +58,16 @@ public sealed record StudioSettings(
     bool NvidiaTensorRtRtxLicenseAccepted = false,
     bool IntelOpenVinoLicenseAccepted = false,
     bool QualcommQnnLicenseAccepted = false,
+    /// <summary>
+    /// User accepted the NVIDIA AFX / Maxine redistributable license. Required before any
+    /// Trackdub-hosted AFX package download once packaging URLs are real.
+    /// </summary>
+    bool NvidiaAfxLicenseAccepted = false,
+    /// <summary>
+    /// Optional local AFX runtime root (NVIDIA Maxine installer output or manually staged
+    /// package containing NvAudioEffects.dll + models). Overrides ComponentStore install path.
+    /// </summary>
+    string? NvidiaAfxRuntimeDirectory = null,
     string ThemeName = AppThemeNames.Dark,
     /// <summary>
     /// When true, disables breathing pulse animation on running pipeline stage accent stripes.

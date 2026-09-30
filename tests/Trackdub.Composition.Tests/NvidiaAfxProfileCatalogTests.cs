@@ -34,4 +34,24 @@ public sealed class NvidiaAfxProfileCatalogTests
         Assert.Equal("dereverb_denoiser", definition.Selector);
         Assert.False(definition.RequiresFarEndReference);
     }
+
+    [Fact]
+    public void AcousticEchoCancellation_RequiresFarEndReference()
+    {
+        NvidiaAfxProfileDefinition definition =
+            NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.AcousticEchoCancellation);
+        Assert.Equal("aec", definition.Selector);
+        Assert.True(definition.RequiresFarEndReference);
+        Assert.False(definition.SupportsIntensityRatio);
+    }
+
+    [Fact]
+    public void TelephonyUpscale_UsesMaxineChainedSelector()
+    {
+        NvidiaAfxProfileDefinition definition =
+            NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.TelephonyUpscale);
+        Assert.Equal("superres8kto16k_denoiser16k", definition.Selector);
+        Assert.True(definition.IsChainedEffect);
+        Assert.Contains(8000, definition.SupportedSampleRates);
+    }
 }
