@@ -38,9 +38,12 @@ The changed read+deserialize expressions:
   reversed to rule out ordering bias.
 - Test project: `tests/Trackdub.Infrastructure.Tests` (five stores) and
   `tests/Trackdub.Media.Tests` (win-native-deps single store).
-- Command (one shape per invocation): `dotnet test -c Release --no-build --filter
-  "FullyQualifiedName~JsonLatencyProbe.TimedColdRead"` with `TRACKDUB_JSON_PROBE_MODE=reflection`
-  or `TRACKDUB_JSON_PROBE_MODE=generated` (default).
+- Command for the five-store comparison: `dotnet test -c Release --filter
+  "FullyQualifiedName~JsonLatencyProbe.Probe_startup_all_stores"` with
+  `TRACKDUB_JSON_PROBE_MODE=reflection` or `TRACKDUB_JSON_PROBE_MODE=generated` (default). Run one
+  mode per fresh process. The single-store tests use `Probe_afx`, `Probe_trtrtx`,
+  `Probe_storageconfig`, `Probe_smokeverdict`, and `Probe_modelcache` in the Infrastructure project;
+  `Probe_winnd` is in the Media project.
 - The probe emitted one JSONL row per run to `TRACKDUB_JSON_PROBE_OUT` (or a temporary default
   path), and the rows were aggregated as the median per (shape, mode). The original JSONL files
   were not retained as a repository or CI artifact, so the reported raw rows are unavailable for
@@ -50,11 +53,10 @@ The changed read+deserialize expressions:
   `tests/Trackdub.Infrastructure.Tests/JsonLatencyProbe.cs` and
   `tests/Trackdub.Media.Tests/JsonLatencyProbe.cs`) and removed again in this follow-up to #305;
   they are not part of CI. To reproduce, restore them from git at that revision.
-- Phase probe invocation: A second set of temporary phase probes (also at `0a6eb24e`, not committed
-  to main) timed the context access and then each store's first read
-  in sequence, once with 200 steady reads of each phase in between (serializer machinery warm) and
-  once back to back with no steady loops (the `startup.all` protocol). Run with `dotnet test -c
-  Release --no-build --filter "FullyQualifiedName~JsonLatencyProbe.PhaseBreakdown"`.
+- The probe at `0a6eb24e` includes an aggregate `Probe_startup_all_stores_prewarmed_serializers`
+  test. The separate per-phase probe source used for the table below was temporary and was not
+  retained, so those phase rows have no replay command and are recorded diagnostics rather than
+  independently reproducible measurements.
 
 Environment: AMD Ryzen 7 5700X3D / 64 GB / Windows 11 Pro 26200 / .NET SDK 10.0.401, `main` @
 `1fd52a3a`.
