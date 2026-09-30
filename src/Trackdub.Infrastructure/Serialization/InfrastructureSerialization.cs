@@ -9,13 +9,18 @@ namespace Trackdub.Infrastructure;
 /// <summary>
 /// Compile-time JSON serialization metadata for local-first startup-path stores.
 /// Storage config, smoke verdicts, and runtime bundle manifests deserialize through
-/// pre-generated metadata instead of reflection-based first-call deserialization,
-/// with identical wire format (compact, case-insensitive property matching).
+/// pre-generated metadata, with identical wire format (compact, case-insensitive
+/// property matching) to the reflection-based options they replace.
+///
+/// This is not a measured startup-latency win: timed cold, the generated-metadata reads
+/// for these stores were no faster than the reflection path they replaced (see
+/// docs/benchmarks/json-sourcegen-startup-latency.md).
 ///
 /// Types whose serialization depends on runtime-registered converters
 /// (<see cref="JsonStudioSettingsService"/>) deliberately stay on reflection-based
 /// options: their tolerant converters accept shapes the generated contract would
-/// reject, and preserving that behavior outranks the latency win.
+/// reject, and preserving that behavior outranks metadata-source consistency for
+/// those types.
 /// </summary>
 [JsonSourceGenerationOptions(
     WriteIndented = false,
