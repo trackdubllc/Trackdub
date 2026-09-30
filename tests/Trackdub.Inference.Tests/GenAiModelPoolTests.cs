@@ -344,7 +344,7 @@ public class GenAiModelPoolTests
                 // be able to read this call.
                 Interlocked.Increment(ref factoryCalls);
                 TaskCompletionSource<IGenAiModelResource> gate = factoryGates
-                    .GetOrAdd(key.ModelRootIdentity, static _ => new())
+                    .GetOrAdd(key.ModelRootIdentity, static _ => new());
                 StartSignal(factoryStarts, key).TrySetResult();
                 return gate.Task;
             },
