@@ -11,8 +11,10 @@ Trackdub public core AFX integration is past pure stubs for **API surface and pl
 | Local runtime override | `NvidiaAfxRuntimeDirectory` / `TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT` resolved by `NvidiaAfxRuntimePathResolver` |
 | Installer scaffolding | `NvidiaAfxRuntimeInstaller` (stub + gate + license) registered in DI |
 | Native P/Invoke | Aligns with Maxine `nvAudioEffects.h` (`float**` `NvAFX_Run`, sample/channel params) |
-| AEC far-end | Options + session accept near-end + far-end; stage request can pass `FarEndReferenceAudioPath` |
-| Settings → stage | `SpeechAudioEnhancementStageHandler` loads `SpeechAudioEnhancementOptions.FromStudioSettings` |
+| Output sample rate | Telephony upscale labels WAV with 16 kHz (native/profile), not 8 kHz input |
+| AEC far-end | Shorter far-end is zero-padded to full near-end length (no silent truncate) |
+| Native probe before Ready | `INvidiaAfxEffectProbe` create/load check after DLL/model presence |
+| Settings → stage | Loads options from studio settings; settings-load failures fall back to defaults |
 | DeepFilterNet fallback | Still the live enhancement path while stubbed / not ready |
 
 ## Still blocked (honest)

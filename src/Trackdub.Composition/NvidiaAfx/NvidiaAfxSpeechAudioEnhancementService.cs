@@ -8,6 +8,12 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
     INvidiaAfxRuntimeReadinessService readinessService,
     ISpeechAudioEnhancementService ffmpegFallback) : ISpeechAudioEnhancementService
 {
+    /// <summary>
+    /// Test seam for exercising post-stub gates (AEC far-end, readiness) without flipping
+    /// <see cref="NvidiaAfxIntegration.IsStubbed"/> for the whole process.
+    /// </summary>
+    internal Func<bool>? IsStubbedOverride { get; set; }
+
     public async Task<SpeechAudioEnhancementResult> EnhanceAsync(
         SpeechAudioEnhancementRequest request,
         CancellationToken cancellationToken)
@@ -16,7 +22,7 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         // Gate before readiness: TryAddSingleton hosts may replace readiness with a probe that
         // throws. Disabled/stubbed AFX must still fall through to DeepFilterNet safely.
         // Never pretend AFX ran.
-        if (!options.EnableNvidiaAfx || NvidiaAfxIntegration.IsStubbed())
+        if (!options.EnableNvidiaAfx || IsIntegrationStubbed())
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
@@ -70,7 +76,10 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
                 options.NvidiaAfxIntensityRatio);
             float[] enhanced = session.Process(monoSamples, farEndSamples);
 
-            int outputSampleRate = targetSampleRate;
+            // Prefer the native/session output rate (telephony upscale is 8 kHz in → 16 kHz out).
+            int outputSampleRate = session.OutputSampleRate > 0
+                ? session.OutputSampleRate
+                : definition.ResolveOutputSampleRate(targetSampleRate);
             await WaveAudioWriter.WriteMonoPcm16Async(
                 request.DestinationPath,
                 enhanced,
@@ -112,6 +121,9 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         using IAudioSamples resampled = AudioResampler.CreateResampledStream(source, targetSampleRate);
         return ReadAllSamples(resampled);
     }
+
+    private bool IsIntegrationStubbed() =>
+        IsStubbedOverride?.Invoke() ?? NvidiaAfxIntegration.IsStubbed();
 
     private static float[] ReadAllSamples(IAudioSamples audio)
     {

@@ -3,6 +3,7 @@ using Trackdub.Contracts;
 using Trackdub.Domain;
 using Trackdub.Domain.Artifacts;
 using Trackdub.Domain.Media;
+using Trackdub.Domain.StageRuns;
 using Trackdub.TestDoubles;
 
 namespace Trackdub.Application.Tests;
@@ -63,6 +64,22 @@ public sealed class SpeechAudioEnhancementOptionsPlumbingTests
         await handler.HandleAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(@"C:\refs\farend.wav", enhancementService.LastRequest!.Options!.FarEndReferenceAudioPath);
+    }
+
+    [Fact]
+    public async Task StageHandler_UsesDefaultOptions_WhenSettingsLoadFails()
+    {
+        var enhancementService = new FakeSpeechAudioEnhancementService();
+        (SpeechAudioEnhancementStageHandler handler, SpeechAudioEnhancementStageRequest request) =
+            CreateHandler(enhancementService, new ThrowingStudioSettingsService());
+
+        SpeechAudioEnhancementStageResult result = await handler.HandleAsync(
+            request,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(StageRunStatus.Completed, result.StageRun.Status);
+        Assert.NotNull(enhancementService.LastRequest?.Options);
+        Assert.Equal(SpeechAudioEnhancementOptions.Default, enhancementService.LastRequest!.Options);
     }
 
     private static (
@@ -132,5 +149,20 @@ public sealed class SpeechAudioEnhancementOptionsPlumbingTests
             string projectName,
             CancellationToken cancellationToken) =>
             Task.FromResult(settings);
+    }
+
+    private sealed class ThrowingStudioSettingsService : IStudioSettingsService
+    {
+        public Task<StudioSettings> LoadAsync(CancellationToken cancellationToken) =>
+            Task.FromException<StudioSettings>(new IOException("settings unavailable"));
+
+        public Task SaveAsync(StudioSettings settingsToSave, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<StudioSettings> TouchRecentProjectAsync(
+            string projectPath,
+            string projectName,
+            CancellationToken cancellationToken) =>
+            Task.FromException<StudioSettings>(new IOException("settings unavailable"));
     }
 }

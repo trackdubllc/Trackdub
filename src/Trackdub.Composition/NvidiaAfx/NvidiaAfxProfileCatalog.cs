@@ -7,11 +7,21 @@ public sealed record NvidiaAfxProfileDefinition(
     string DisplayName,
     string Selector,
     bool IsChainedEffect,
+    /// <summary>Supported input sample rates for this effect.</summary>
     int[] SupportedSampleRates,
     int MaxChannels,
     string[] RequiredModelRelativePaths,
     bool RequiresFarEndReference,
-    bool SupportsIntensityRatio);
+    bool SupportsIntensityRatio,
+    /// <summary>
+    /// Explicit output sample rate when it differs from the selected input rate
+    /// (for example telephony upscale 8 kHz → 16 kHz). Null means output matches input.
+    /// </summary>
+    int? OutputSampleRate = null)
+{
+    public int ResolveOutputSampleRate(int inputSampleRate) =>
+        OutputSampleRate ?? inputSampleRate;
+}
 
 public static class NvidiaAfxProfileCatalog
 {
@@ -61,7 +71,8 @@ public static class NvidiaAfxProfileCatalog
             MaxChannels: 1,
             RequiredModelRelativePaths: ["models/superres_16k.nvam", "models/denoiser_16k.nvam"],
             RequiresFarEndReference: false,
-            SupportsIntensityRatio: true),
+            SupportsIntensityRatio: true,
+            OutputSampleRate: 16000),
         new(
             NvidiaAfxProfile.AcousticEchoCancellation,
             "Acoustic Echo Cancellation",

@@ -129,8 +129,20 @@ public sealed class SpeechAudioEnhancementStageHandler(
         }
         else if (studioSettingsService is not null)
         {
-            StudioSettings settings = await studioSettingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
-            options = SpeechAudioEnhancementOptions.FromStudioSettings(settings);
+            try
+            {
+                StudioSettings settings = await studioSettingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
+                options = SpeechAudioEnhancementOptions.FromStudioSettings(settings);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
+            {
+                // Settings are optional for the live DeepFilterNet path. Never fail the stage
+                // because AFX preference loading broke.
+                logger?.LogWarning(
+                    "Failed to load studio settings for speech enhancement options; using defaults.",
+                    ex);
+                options = SpeechAudioEnhancementOptions.Default;
+            }
         }
         else
         {

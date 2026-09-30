@@ -10,6 +10,7 @@ internal sealed class NvidiaAfxSession : IDisposable
     private readonly uint _numInputChannels;
     private readonly uint _numInputSamplesPerFrame;
     private readonly uint _numOutputSamplesPerFrame;
+    private readonly int _outputSampleRate;
     private readonly bool _requiresFarEndReference;
 
     private NvidiaAfxSession(
@@ -18,6 +19,7 @@ internal sealed class NvidiaAfxSession : IDisposable
         uint numInputChannels,
         uint numInputSamplesPerFrame,
         uint numOutputSamplesPerFrame,
+        int outputSampleRate,
         bool requiresFarEndReference)
     {
         _handle = handle;
@@ -25,12 +27,19 @@ internal sealed class NvidiaAfxSession : IDisposable
         _numInputChannels = numInputChannels;
         _numInputSamplesPerFrame = numInputSamplesPerFrame;
         _numOutputSamplesPerFrame = numOutputSamplesPerFrame;
+        _outputSampleRate = outputSampleRate;
         _requiresFarEndReference = requiresFarEndReference;
     }
 
     public uint NumInputSamplesPerFrame => _numInputSamplesPerFrame;
 
     public uint NumOutputSamplesPerFrame => _numOutputSamplesPerFrame;
+
+    /// <summary>
+    /// Native or profile-declared output sample rate. May differ from the input rate for
+    /// rate-changing chained effects such as telephony upscale.
+    /// </summary>
+    public int OutputSampleRate => _outputSampleRate;
 
     public bool RequiresFarEndReference => _requiresFarEndReference;
 
@@ -92,6 +101,16 @@ internal sealed class NvidiaAfxSession : IDisposable
                 profile.Selector,
                 "Set input sample rate");
 
+            int expectedOutputSampleRate = profile.ResolveOutputSampleRate(sampleRate);
+            if (expectedOutputSampleRate != sampleRate)
+            {
+                // Best-effort: some Maxine builds accept an explicit output rate for chained effects.
+                _ = NvidiaAfxNative.NvAFX_SetU32(
+                    safeHandle.DangerousGetHandle(),
+                    NvidiaAfxNativeParameters.OutputSampleRate,
+                    (uint)expectedOutputSampleRate);
+            }
+
             if (profile.SupportsIntensityRatio)
             {
                 EnsureSuccess(
@@ -117,11 +136,15 @@ internal sealed class NvidiaAfxSession : IDisposable
                 NvidiaAfxNativeParameters.NumInputSamplesPerFrame,
                 fallbackParameter: NvidiaAfxNativeParameters.SamplesPerFrameLegacy,
                 defaultValue: 480u);
-            uint numOutputSamples = QueryU32OrDefault(
+            int outputSampleRate = QueryOutputSampleRate(
                 safeHandle,
-                NvidiaAfxNativeParameters.NumOutputSamplesPerFrame,
-                fallbackParameter: NvidiaAfxNativeParameters.SamplesPerFrameLegacy,
-                defaultValue: numInputSamples);
+                expectedOutputSampleRate);
+            uint numOutputSamples = ResolveOutputSamplesPerFrame(
+                safeHandle,
+                profile,
+                sampleRate,
+                outputSampleRate,
+                numInputSamples);
 
             if (profile.RequiresFarEndReference && numInputChannels < 2)
             {
@@ -135,6 +158,7 @@ internal sealed class NvidiaAfxSession : IDisposable
                 numInputChannels,
                 numInputSamples,
                 numOutputSamples,
+                outputSampleRate,
                 profile.RequiresFarEndReference);
         }
         catch
@@ -160,21 +184,18 @@ internal sealed class NvidiaAfxSession : IDisposable
             throw new InvalidOperationException("Invalid AFX frame size.");
         }
 
-        int sampleCount = nearEnd.Length;
-        if (farEnd is not null)
-        {
-            sampleCount = Math.Min(sampleCount, farEnd.Length);
-        }
-
-        // Align to whole input frames (pad tail with zeros like the SDK sample).
-        int alignedInput = ((sampleCount + inputFrame - 1) / inputFrame) * inputFrame;
+        // Always process the full near-end stream. When far-end is shorter, zero-pad it rather
+        // than truncating speech; when far-end is longer, ignore the excess.
+        int nearSampleCount = nearEnd.Length;
+        int alignedInput = ((nearSampleCount + inputFrame - 1) / inputFrame) * inputFrame;
         float[] nearAligned = new float[alignedInput];
-        Array.Copy(nearEnd, nearAligned, sampleCount);
+        Array.Copy(nearEnd, nearAligned, nearSampleCount);
         float[]? farAligned = null;
         if (_requiresFarEndReference)
         {
             farAligned = new float[alignedInput];
-            Array.Copy(farEnd!, farAligned, sampleCount);
+            int farCopy = Math.Min(farEnd!.Length, nearSampleCount);
+            Array.Copy(farEnd, farAligned, farCopy);
         }
 
         int outputLength = (alignedInput / inputFrame) * outputFrame;
@@ -197,16 +218,35 @@ internal sealed class NvidiaAfxSession : IDisposable
             Array.Copy(outFrame, 0, output, outputOffset, outputFrame);
         }
 
-        // Trim padding beyond the original sample count, mapped 1:1 for same-rate effects.
+        // Trim padding beyond the original near-end sample count for same-rate effects.
         // For rate-changing chained effects, return full produced frames.
-        if (outputFrame == inputFrame && sampleCount < output.Length)
+        if (outputFrame == inputFrame && nearSampleCount < output.Length)
         {
-            float[] trimmed = new float[sampleCount];
-            Array.Copy(output, trimmed, sampleCount);
+            float[] trimmed = new float[nearSampleCount];
+            Array.Copy(output, trimmed, nearSampleCount);
             return trimmed;
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Aligns AEC far-end audio to the near-end length by zero-padding a shorter far-end
+    /// (or truncating a longer one). Exposed for unit tests.
+    /// </summary>
+    internal static float[] AlignFarEndToNearEnd(float[] nearEnd, float[] farEnd)
+    {
+        ArgumentNullException.ThrowIfNull(nearEnd);
+        ArgumentNullException.ThrowIfNull(farEnd);
+
+        if (farEnd.Length == nearEnd.Length)
+        {
+            return farEnd;
+        }
+
+        float[] aligned = new float[nearEnd.Length];
+        Array.Copy(farEnd, aligned, Math.Min(farEnd.Length, nearEnd.Length));
+        return aligned;
     }
 
     public void Reset()
@@ -264,31 +304,107 @@ internal sealed class NvidiaAfxSession : IDisposable
         }
     }
 
+    private static int QueryOutputSampleRate(NvidiaAfxEffectHandle handle, int fallback)
+    {
+        if (TryQueryU32(handle, NvidiaAfxNativeParameters.OutputSampleRate, out uint value) && value != 0)
+        {
+            return checked((int)value);
+        }
+
+        return fallback;
+    }
+
+    private static uint ResolveOutputSamplesPerFrame(
+        NvidiaAfxEffectHandle handle,
+        NvidiaAfxProfileDefinition profile,
+        int inputSampleRate,
+        int outputSampleRate,
+        uint numInputSamples)
+    {
+        bool rateChanging = outputSampleRate != inputSampleRate || profile.IsChainedEffect;
+        if (TryQueryU32(handle, NvidiaAfxNativeParameters.NumOutputSamplesPerFrame, out uint numOutputSamples)
+            && numOutputSamples != 0)
+        {
+            if (rateChanging && numInputSamples > 0)
+            {
+                ValidateOutputFrameRatio(
+                    profile.Selector,
+                    inputSampleRate,
+                    outputSampleRate,
+                    numInputSamples,
+                    numOutputSamples);
+            }
+
+            return numOutputSamples;
+        }
+
+        if (rateChanging)
+        {
+            throw new InvalidOperationException(
+                $"NVIDIA AFX rate-changing profile '{profile.Selector}' did not report " +
+                $"{NvidiaAfxNativeParameters.NumOutputSamplesPerFrame}; refusing to fall back to the input frame size.");
+        }
+
+        return QueryU32OrDefault(
+            handle,
+            NvidiaAfxNativeParameters.NumOutputSamplesPerFrame,
+            fallbackParameter: NvidiaAfxNativeParameters.SamplesPerFrameLegacy,
+            defaultValue: numInputSamples);
+    }
+
+    /// <summary>
+    /// Ensures native output-frame size roughly matches the sample-rate ratio for rate-changing effects.
+    /// </summary>
+    internal static void ValidateOutputFrameRatio(
+        string selector,
+        int inputSampleRate,
+        int outputSampleRate,
+        uint numInputSamples,
+        uint numOutputSamples)
+    {
+        if (inputSampleRate <= 0 || outputSampleRate <= 0 || numInputSamples == 0 || numOutputSamples == 0)
+        {
+            throw new InvalidOperationException(
+                $"NVIDIA AFX profile '{selector}' reported invalid frame/sample-rate metadata.");
+        }
+
+        if (inputSampleRate == outputSampleRate)
+        {
+            return;
+        }
+
+        // expectedOut ≈ numInput * outRate / inRate (integer ratio for Maxine chained effects).
+        long expected = ((long)numInputSamples * outputSampleRate) / inputSampleRate;
+        if (expected <= 0 || Math.Abs(expected - numOutputSamples) > 1)
+        {
+            throw new InvalidOperationException(
+                $"NVIDIA AFX profile '{selector}' output frame size {numOutputSamples} does not match " +
+                $"input frame {numInputSamples} at {inputSampleRate}→{outputSampleRate} Hz (expected ~{expected}).");
+        }
+    }
+
+    private static bool TryQueryU32(NvidiaAfxEffectHandle handle, string parameter, out uint value)
+    {
+        int status = NvidiaAfxNative.NvAFX_GetU32(handle.DangerousGetHandle(), parameter, out value);
+        return status == 0;
+    }
+
     private static uint QueryU32OrDefault(
         NvidiaAfxEffectHandle handle,
         string parameter,
         uint defaultValue,
         string? fallbackParameter = null)
     {
-        int status = NvidiaAfxNative.NvAFX_GetU32(
-            handle.DangerousGetHandle(),
-            parameter,
-            out uint value);
-        if (status == 0 && value != 0)
+        if (TryQueryU32(handle, parameter, out uint value) && value != 0)
         {
             return value;
         }
 
-        if (fallbackParameter is not null)
+        if (fallbackParameter is not null
+            && TryQueryU32(handle, fallbackParameter, out value)
+            && value != 0)
         {
-            status = NvidiaAfxNative.NvAFX_GetU32(
-                handle.DangerousGetHandle(),
-                fallbackParameter,
-                out value);
-            if (status == 0 && value != 0)
-            {
-                return value;
-            }
+            return value;
         }
 
         return defaultValue;

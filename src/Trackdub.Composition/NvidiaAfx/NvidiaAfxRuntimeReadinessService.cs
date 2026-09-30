@@ -15,12 +15,89 @@ public interface INvidiaAfxRuntimeReadinessService
     NvidiaAfxRuntimeReadiness GetReadiness(NvidiaAfxProfile profile);
 }
 
+/// <summary>
+/// Post-stub readiness evaluation for an already-resolved runtime root (DLL/models/native probe).
+/// Separated so unit tests can cover the gate without flipping <see cref="NvidiaAfxIntegration.IsStubbed"/>.
+/// </summary>
+public sealed class NvidiaAfxInstalledRuntimeEvaluator(
+    INvidiaAfxArchitectureDetector architectureDetector,
+    string manifestPath,
+    INvidiaAfxEffectProbe effectProbe)
+{
+    public NvidiaAfxRuntimeReadiness Evaluate(NvidiaAfxProfile profile, string runtimeRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
+
+        if (!NvidiaAfxRuntimePathResolver.HasNativeLibrary(runtimeRoot))
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "Missing native library",
+                runtimeRoot,
+                $"NvAudioEffects.dll was not found under '{runtimeRoot}'.");
+        }
+
+        NvidiaAfxRuntimeManifest manifest;
+        try
+        {
+            manifest = NvidiaAfxRuntimeManifestLoader.Load(manifestPath);
+        }
+        catch (Exception ex)
+        {
+            return new NvidiaAfxRuntimeReadiness(false, "Manifest error", runtimeRoot, ex.Message);
+        }
+
+        string architecture = architectureDetector.DetectArchitectureBucket();
+        NvidiaAfxRuntimePackage? package = manifest.Packages
+            .FirstOrDefault(candidate => string.Equals(candidate.Architecture, architecture, StringComparison.OrdinalIgnoreCase));
+        if (package is null)
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "Unsupported GPU",
+                runtimeRoot,
+                $"No AFX runtime package is available for architecture bucket '{architecture}'.");
+        }
+
+        NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
+        bool hasRequiredModels = definition.RequiredModelRelativePaths.All(model =>
+            File.Exists(Path.Join(runtimeRoot, model)));
+        if (!hasRequiredModels)
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "Missing model files",
+                runtimeRoot,
+                $"Required model files are missing for profile '{profile}'.");
+        }
+
+        int inputSampleRate = definition.SupportedSampleRates[0];
+        NvidiaAfxEffectProbeResult probe = effectProbe.Probe(runtimeRoot, definition, inputSampleRate);
+        if (!probe.Succeeded)
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "Native probe failed",
+                runtimeRoot,
+                probe.FailureReason ?? "AFX native library/effect probe failed.");
+        }
+
+        return new NvidiaAfxRuntimeReadiness(true, "Ready", runtimeRoot, null);
+    }
+}
+
 public sealed class NvidiaAfxRuntimeReadinessService(
     ComponentStore componentStore,
     INvidiaAfxArchitectureDetector architectureDetector,
     string manifestPath,
-    Func<StudioSettings>? settingsProvider = null) : INvidiaAfxRuntimeReadinessService
+    Func<StudioSettings>? settingsProvider = null,
+    INvidiaAfxEffectProbe? effectProbe = null) : INvidiaAfxRuntimeReadinessService
 {
+    private readonly NvidiaAfxInstalledRuntimeEvaluator _evaluator = new(
+        architectureDetector,
+        manifestPath,
+        effectProbe ?? NvidiaAfxSessionEffectProbe.Instance);
+
     public NvidiaAfxRuntimeReadiness GetReadiness(NvidiaAfxProfile profile)
     {
         // Defense in depth: even if this concrete service is constructed while the integration
@@ -54,51 +131,6 @@ public sealed class NvidiaAfxRuntimeReadinessService(
                 "or set NvidiaAfxRuntimeDirectory / TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT to a local Maxine AFX install.");
         }
 
-        if (!NvidiaAfxRuntimePathResolver.HasNativeLibrary(runtimeRoot))
-        {
-            return new NvidiaAfxRuntimeReadiness(
-                false,
-                "Missing native library",
-                runtimeRoot,
-                $"NvAudioEffects.dll was not found under '{runtimeRoot}'.");
-        }
-
-        NvidiaAfxRuntimeManifest manifest;
-        try
-        {
-            manifest = NvidiaAfxRuntimeManifestLoader.Load(manifestPath);
-        }
-        catch (Exception ex)
-        {
-            return new NvidiaAfxRuntimeReadiness(false, "Manifest error", runtimeRoot, ex.Message);
-        }
-
-        string architecture = architectureDetector.DetectArchitectureBucket();
-        NvidiaAfxRuntimePackage? package = manifest.Packages
-            .FirstOrDefault(candidate => string.Equals(candidate.Architecture, architecture, StringComparison.OrdinalIgnoreCase));
-        if (package is null)
-        {
-            return new NvidiaAfxRuntimeReadiness(
-                false,
-                "Unsupported GPU",
-                runtimeRoot,
-                $"No AFX runtime package is available for architecture bucket '{architecture}'.");
-        }
-
-        // External/local runtime roots may precede Trackdub-hosted downloads; still require
-        // profile models on disk before claiming Ready.
-        NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
-        bool hasRequiredModels = definition.RequiredModelRelativePaths.All(model =>
-            File.Exists(Path.Join(runtimeRoot, model)));
-        if (!hasRequiredModels)
-        {
-            return new NvidiaAfxRuntimeReadiness(
-                false,
-                "Missing model files",
-                runtimeRoot,
-                $"Required model files are missing for profile '{profile}'.");
-        }
-
-        return new NvidiaAfxRuntimeReadiness(true, "Ready", runtimeRoot, null);
+        return _evaluator.Evaluate(profile, runtimeRoot);
     }
 }

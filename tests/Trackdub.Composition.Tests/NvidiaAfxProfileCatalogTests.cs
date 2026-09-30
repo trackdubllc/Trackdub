@@ -53,5 +53,7 @@ public sealed class NvidiaAfxProfileCatalogTests
         Assert.Equal("superres8kto16k_denoiser16k", definition.Selector);
         Assert.True(definition.IsChainedEffect);
         Assert.Contains(8000, definition.SupportedSampleRates);
+        Assert.Equal(16000, definition.OutputSampleRate);
+        Assert.Equal(16000, definition.ResolveOutputSampleRate(8000));
     }
 }
