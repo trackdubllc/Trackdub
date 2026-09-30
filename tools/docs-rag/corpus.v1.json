@@ -82,6 +82,7 @@
         ["trt-rtx-graphsurgeon-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/api/onnx-graphsurgeon-api.html"],
         ["trt-rtx-polygraphy-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/api/polygraphy-api.html"],
         ["trt-rtx-onnx-parser-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/_static/python-api/parsers/Onnx/pyOnnx.html"],
+        ["trt-rtx-onnx-parser-cpp-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/_static/c-api/classnvonnxparser_1_1_i_parser.html"],
         ["trt-rtx-install-overview", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/installing-tensorrt-rtx/installation-overview.html"],
         ["trt-rtx-installing", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/installing-tensorrt-rtx/installing.html"],
         ["trt-rtx-prerequisites", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/installing-tensorrt-rtx/prerequisites.html"],
@@ -122,7 +123,8 @@
         ["ort-genai", "https://onnxruntime.ai/docs/genai/"],
         ["tune-performance", "https://onnxruntime.ai/docs/performance/tune-performance/"],
         ["graph-optimizations", "https://onnxruntime.ai/docs/performance/graph-optimizations.html"],
-        ["quantization", "https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html"]
+        ["quantization", "https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html"],
+        ["compatibility", "https://onnxruntime.ai/docs/reference/compatibility.html"]
       ]
     },
     {
@@ -182,6 +184,8 @@
         ["kokoro-tts", "https://huggingface.co/hexgrad/Kokoro-82M"],
         ["opus-mt", "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/raw/main/README.md"],
         ["madlad400", "https://huggingface.co/google/madlad400-3b-mt/raw/main/README.md"],
+        ["madlad400-config", "https://huggingface.co/google/madlad400-3b-mt/raw/fa184c675da0b5c9e1c8694fccd4e12e2d422094/config.json"],
+        ["madlad-seq2seq-onnx-export", "https://huggingface.co/docs/optimum-onnx/en/onnx/usage_guides/export_a_model"],
         ["spleeter", "https://github.com/deezer/spleeter"]
       ]
     },
