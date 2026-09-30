@@ -48,6 +48,8 @@ def read_lines(relative: str) -> list[str]:
 def find_contiguous(haystack: list[str], needle: list[str]) -> int:
     """Return the index where needle starts inside haystack, or -1."""
     span = len(needle)
+    if span == 0:
+        return -1
     for start in range(len(haystack) - span + 1):
         if haystack[start : start + span] == needle:
             return start
