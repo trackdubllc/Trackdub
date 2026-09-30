@@ -14,7 +14,9 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
     {
         SpeechAudioEnhancementOptions options = request.Options ?? SpeechAudioEnhancementOptions.Default;
         NvidiaAfxRuntimeReadiness readiness = readinessService.GetReadiness(options.NvidiaAfxProfile);
-        if (!options.EnableNvidiaAfx || !readiness.IsReady)
+        // Stubbed integration and unreadiness both fall through to the primary backend
+        // (DeepFilterNet via ResolvingSpeechAudioEnhancementService). Never pretend AFX ran.
+        if (!options.EnableNvidiaAfx || NvidiaAfxIntegration.IsStubbed() || !readiness.IsReady)
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }

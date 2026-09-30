@@ -6,10 +6,11 @@ using Trackdub.Inference.Runtime.Planning;
 
 namespace Trackdub.Composition.DeepFilterNet;
 
-// DeepFilterNet3 is the only speech enhancement backend. When its model is not cached the
-// stage is skipped (RequiredModelNotAvailableException) and downstream stages use the mix:
-// the ffmpeg denoise/speechnorm chain flagged music as speech for VAD and hurt ASR, so it is
-// not a safe fallback.
+// DeepFilterNet3 is the shipping speech enhancement backend. NVIDIA AFX is registered as a
+// stub (see NvidiaAfxIntegration.IsStubbed()) and must not be treated as ready. When DeepFilterNet
+// is not cached the stage is skipped (RequiredModelNotAvailableException) and downstream stages
+// use the mix: the ffmpeg denoise/speechnorm chain flagged music as speech for VAD and hurt ASR,
+// so it is not a safe fallback.
 internal sealed class ResolvingSpeechAudioEnhancementService(
     BundledModelManifestRegistry? registry,
     IModelCacheInventory? modelCacheInventory) : ISpeechAudioEnhancementService

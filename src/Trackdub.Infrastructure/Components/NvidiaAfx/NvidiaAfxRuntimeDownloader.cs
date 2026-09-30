@@ -21,6 +21,11 @@ public sealed class NvidiaAfxRuntimeDownloader(
     {
         ArgumentNullException.ThrowIfNull(package);
 
+        if (NvidiaAfxIntegration.IsStubbed())
+        {
+            throw new InvalidOperationException(NvidiaAfxIntegration.StubReason);
+        }
+
         string componentDirectory = componentStore.GetComponentDirectory(ComponentId);
         string archivePath = Path.Join(componentDirectory, $"{package.Architecture}{TempSuffix}");
         Directory.CreateDirectory(componentDirectory);
