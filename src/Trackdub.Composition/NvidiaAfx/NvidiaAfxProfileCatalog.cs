@@ -15,6 +15,10 @@ public sealed record NvidiaAfxProfileDefinition(
 
 public static class NvidiaAfxProfileCatalog
 {
+    /// <summary>
+    /// First-class discovery surface for AFX profiles. Profiles are listed even while the
+    /// integration is stubbed so planners/settings can enumerate them without implying readiness.
+    /// </summary>
     public static IReadOnlyList<NvidiaAfxProfileDefinition> Definitions { get; } =
     [
         new(

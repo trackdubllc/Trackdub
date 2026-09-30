@@ -13,8 +13,16 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         CancellationToken cancellationToken)
     {
         SpeechAudioEnhancementOptions options = request.Options ?? SpeechAudioEnhancementOptions.Default;
+        // Gate before readiness: TryAddSingleton hosts may replace readiness with a probe that
+        // throws. Disabled/stubbed AFX must still fall through to DeepFilterNet safely.
+        // Never pretend AFX ran.
+        if (!options.EnableNvidiaAfx || NvidiaAfxIntegration.IsStubbed())
+        {
+            return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         NvidiaAfxRuntimeReadiness readiness = readinessService.GetReadiness(options.NvidiaAfxProfile);
-        if (!options.EnableNvidiaAfx || !readiness.IsReady)
+        if (!readiness.IsReady)
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }

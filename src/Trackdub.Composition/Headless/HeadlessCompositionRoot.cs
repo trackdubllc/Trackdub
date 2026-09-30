@@ -4,6 +4,7 @@ using Trackdub.Contracts.Pipeline;
 using Trackdub.Application.Benchmarking;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Composition.DeepFilterNet;
+using Trackdub.Composition.NvidiaAfx;
 using Trackdub.Composition.Runtime;
 using Trackdub.Infrastructure.Diagnostics;
 using Trackdub.Infrastructure.Settings;
@@ -121,9 +122,11 @@ public static class HeadlessCompositionRoot
             services.Replace(ServiceDescriptor.Singleton<ISpeechAudioProcessingService>(
                 _ => new FfmpegSpeechAudioProcessingService(ffmpegPath)));
             services.Replace(ServiceDescriptor.Singleton<ISpeechAudioEnhancementService>(sp =>
-                new ResolvingSpeechAudioEnhancementService(
-                    sp.GetService<BundledModelManifestRegistry>(),
-                    sp.GetService<IModelCacheInventory>())));
+                new NvidiaAfxSpeechAudioEnhancementService(
+                    sp.GetRequiredService<INvidiaAfxRuntimeReadinessService>(),
+                    new ResolvingSpeechAudioEnhancementService(
+                        sp.GetService<BundledModelManifestRegistry>(),
+                        sp.GetService<IModelCacheInventory>()))));
             services.Replace(ServiceDescriptor.Scoped<IAudioTimeStretchService>(
                 _ => new AudioTimeStretchService(ffmpegPath)));
         }

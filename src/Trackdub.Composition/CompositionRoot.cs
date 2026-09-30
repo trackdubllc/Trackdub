@@ -9,6 +9,7 @@ using Trackdub.Application.Runtime;
 using Trackdub.Application.Settings;
 using Trackdub.Composition.ForcedAlignment;
 using Trackdub.Composition.LipSynthesis;
+using Trackdub.Composition.NvidiaAfx;
 using Trackdub.Composition.Pipeline;
 using Trackdub.Inference.Onnx.ForcedAlignment;
 using Trackdub.Contracts.Transcripts;
@@ -28,6 +29,7 @@ using Trackdub.Contracts.Diagnostics;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Contracts.StarterPacks;
 using Trackdub.Infrastructure.Components;
+using Trackdub.Infrastructure.Components.NvidiaAfx;
 using Trackdub.Infrastructure.Diagnostics;
 using Trackdub.Infrastructure.FileSystem;
 using Trackdub.Infrastructure.Licensing;
@@ -398,10 +400,16 @@ public static class CompositionRoot
         services.TryAddSingleton<IAudioQualityAnalyzer, PcmAudioQualityAnalyzer>();
         services.TryAddSingleton<ISpeechAudioPreparationPlanner, SpeechAudioPreparationPlanner>();
         services.TryAddSingleton<ISpeechAudioProcessingService>(_ => new FfmpegSpeechAudioProcessingService(ffmpegPath: null));
+        // NVIDIA AFX is discoverable but stubbed: readiness never reports Ready, and the wrapper
+        // falls through to DeepFilterNet until NvidiaAfxIntegration.IsStubbed() is flipped.
+        services.TryAddSingleton<INvidiaAfxRuntimeReadinessService, StubNvidiaAfxRuntimeReadinessService>();
+        services.TryAddSingleton<INvidiaAfxArchitectureDetector, NvidiaAfxArchitectureDetector>();
         services.AddSingleton<ISpeechAudioEnhancementService>(sp =>
-            new Trackdub.Composition.DeepFilterNet.ResolvingSpeechAudioEnhancementService(
-                sp.GetService<BundledModelManifestRegistry>(),
-                sp.GetService<IModelCacheInventory>()));
+            new NvidiaAfxSpeechAudioEnhancementService(
+                sp.GetRequiredService<INvidiaAfxRuntimeReadinessService>(),
+                new Trackdub.Composition.DeepFilterNet.ResolvingSpeechAudioEnhancementService(
+                    sp.GetService<BundledModelManifestRegistry>(),
+                    sp.GetService<IModelCacheInventory>())));
         services.TryAddSingleton<IWaveformSummaryGenerator, WaveformSummaryGenerator>();
         services.TryAddSingleton<IReferenceClipAnalyzer, Pcm16ReferenceClipAnalyzer>();
         services.TryAddSingleton<IReferenceClipTrimmer, Pcm16ReferenceClipTrimmer>();

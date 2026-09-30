@@ -90,6 +90,7 @@
           "reference/impl-plan-g5-readiness-gate",
           "reference/impl-plan-g7-attribution",
           "reference/migraphx-phase0-seams",
+          "reference/nvidia-afx-stubs",
           "reference/olive-recipe-pilot",
           "reference/profiling-report",
           "reference/tensorrt-rtx-ep-abi-plugin",

@@ -22,6 +22,18 @@ public sealed class NvidiaAfxRuntimeReadinessService(
 {
     public NvidiaAfxRuntimeReadiness GetReadiness(NvidiaAfxProfile profile)
     {
+        // Defense in depth: even if this concrete service is constructed while the integration
+        // is still stubbed, never claim Ready. Flip NvidiaAfxIntegration.IsStubbed() only after
+        // real packaging and validation land.
+        if (NvidiaAfxIntegration.IsStubbed())
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                NvidiaAfxIntegration.StubStatusLabel,
+                null,
+                NvidiaAfxIntegration.StubReason);
+        }
+
         if (!OperatingSystem.IsWindows())
         {
             return new NvidiaAfxRuntimeReadiness(false, "Unsupported OS", null, "NVIDIA AFX is Windows-only.");
