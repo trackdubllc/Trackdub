@@ -11,6 +11,11 @@
     <ProjectReference Include="..\DubBench\Trackdub.DubBench.csproj" />
     <ProjectReference Include="..\Trackdub.Infrastructure\Trackdub.Infrastructure.csproj" />
     <PackageReference Include="Avalonia.Desktop" />
+    <!-- Keep the package graph stable for lock-file restore, but don't consume or ship
+         developer-tool assets in Release. Program enables the tools only under DEBUG. -->
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport">
+      <ExcludeAssets Condition="'$(Configuration)' == 'Release'">all</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!-- Release publish: precompile managed assemblies for faster cold start (dotnet publish -c Release).
