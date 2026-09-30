@@ -11,7 +11,7 @@ public sealed class TranslationLanguageRouterTests
 {
     private const string ValidSha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     [Fact]
-    public async Task ResolveRouteAsync_WhenDirectOpusPairIsInstalled_SelectsDirectRoute()
+    public async Task ResolveRouteAsync_WhenMadladAndDirectOpusPairAreInstalled_PrefersMadladPivotByDefault()
     {
         using var workspace = new TranslationRouterTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
@@ -34,6 +34,38 @@ public sealed class TranslationLanguageRouterTests
             ]));
 
         TranslationRouteSelection route = await router.ResolveRouteAsync("en", "es", CancellationToken.None);
+
+        Assert.True(route.IsAvailable);
+        Assert.Equal(TranslationRoutingKind.Pivot, route.RoutingKind);
+        Assert.Equal("madlad400", route.ProviderName);
+        Assert.Equal("google/madlad400-3b-mt", route.ModelId);
+    }
+
+    [Fact]
+    public async Task ResolveRouteAsync_WhenPreferredAliasTargetsDirectOpusPair_SelectsDirectRoute()
+    {
+        using var workspace = new TranslationRouterTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(
+            CreateTranslationSpec(
+                "Helsinki-NLP/opus-mt-en-es",
+                ["opus-en-es", "helsinki-opus-en-es"],
+                "manifest-models/opus-en-es"),
+            CreateMadladSpec());
+        string opusCacheRoot = workspace.CreateCacheRoot("Helsinki-NLP/opus-mt-en-es");
+        workspace.WriteOpusCacheFiles(opusCacheRoot);
+        string madladCacheRoot = workspace.CreateCacheRoot("google/madlad400-3b-mt");
+        workspace.WriteMadladCacheFiles(madladCacheRoot);
+
+        var router = new TranslationLanguageRouter(
+            registry,
+            new InMemoryModelCacheInventory(
+            [
+                new LocalModelCacheRecord("Helsinki-NLP/opus-mt-en-es", opusCacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow),
+                new LocalModelCacheRecord("google/madlad400-3b-mt", madladCacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)
+            ]));
+
+        TranslationRouteSelection route = await router.ResolveRouteAsync(
+            "en", "es", CancellationToken.None, preferredModelAlias: "opus-en-es");
 
         Assert.True(route.IsAvailable);
         Assert.Equal(TranslationRoutingKind.Direct, route.RoutingKind);

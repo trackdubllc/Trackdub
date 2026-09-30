@@ -79,11 +79,100 @@ internal sealed class InferenceSessionPool : IDisposable
     // + translation encoder/decoder + multi-graph TTS) so LRU does not thrash mid-pipeline.
     public const int DefaultMaxSessions = 12;
 
-    /// <summary>Default accelerator (VRAM) admission budget per device when <c>enableMemoryAdmission</c> is on.</summary>
-    public const long DefaultMemoryBudgetMb = 4096;
+    /// <summary>
+    /// Default accelerator (VRAM) admission budget per device when <c>enableMemoryAdmission</c> is on.
+    /// Scaled with detected GPU VRAM (three-quarters of the largest adapter, floor 4GB,
+    /// cap 16GB) so large bundles such as MADLAD-400 (~6.4GB reservation) fit on big
+    /// GPUs out-of-the-box, while small GPUs keep the conservative 4GB guard.
+    /// Deliberately a larger fraction than the host-RAM default (quarter): VRAM is the
+    /// working set's home, and reservations are already 2x-pessimistic, so admitting
+    /// three-quarters of VRAM in reservations is still conservative in actual bytes.
+    /// An explicit <c>TRACKDUB_SESSION_VRAM_BUDGET_MB</c> always wins over this default.
+    /// Unknown/unavailable VRAM (non-Windows, no GPU, detection failure) falls back to
+    /// the 4GB floor — never lower than the historical default.
+    /// </summary>
+    public static long DefaultMemoryBudgetMb { get; } = ResolveDefaultMemoryBudgetMb();
 
-    /// <summary>Default host RAM admission budget shared by CPU/DNNL and OpenVINO CPU-proxy sessions.</summary>
-    public const long DefaultHostMemoryBudgetMb = 4096;
+    /// <summary>Floor for the scaled accelerator budget: the historical conservative guard.</summary>
+    public const long AcceleratorBudgetFloorMb = 4096;
+
+    /// <summary>Cap for the scaled accelerator budget.</summary>
+    public const long AcceleratorBudgetCapMb = 16384;
+
+    internal static long ScaleAcceleratorBudgetMb(long maxVramMb) =>
+        Math.Clamp(maxVramMb * 3 / 4, AcceleratorBudgetFloorMb, AcceleratorBudgetCapMb);
+
+    internal static long DetectMaxAcceleratorVramMb()
+    {
+#if WINDOWS
+        if (!OperatingSystem.IsWindows())
+            return 0;
+
+        try
+        {
+            return AcceleratorVramProbe.QueryMaxDedicatedVramMb();
+        }
+        catch
+        {
+            return 0;
+        }
+#else
+        if (!OperatingSystem.IsLinux())
+            return 0;
+
+        try
+        {
+            return AcceleratorVramProbe.QueryLinuxMaxDedicatedVramMb();
+        }
+        catch
+        {
+            return 0;
+        }
+#endif
+    }
+
+    private static long ResolveDefaultMemoryBudgetMb()
+    {
+        try
+        {
+            return ScaleAcceleratorBudgetMb(DetectMaxAcceleratorVramMb());
+        }
+        catch
+        {
+            return AcceleratorBudgetFloorMb;
+        }
+    }
+
+    /// <summary>
+    /// Default host RAM admission budget shared by CPU/DNNL and OpenVINO CPU-proxy sessions.
+    /// Scaled with physical RAM (quarter of total, floor 4GB, cap 16GB) so large CPU
+    /// bundles such as MADLAD-400 (~6.4GB reservation) are admissible out-of-the-box on
+    /// ample machines, while small machines keep the conservative 4GB guard.
+    /// An explicit <c>TRACKDUB_SESSION_RAM_BUDGET_MB</c> always wins over this default.
+    /// </summary>
+    public static long DefaultHostMemoryBudgetMb { get; } = ResolveDefaultHostMemoryBudgetMb();
+
+    /// <summary>Floor for the scaled host RAM budget: the historical conservative guard.</summary>
+    public const long HostMemoryBudgetFloorMb = 4096;
+
+    /// <summary>Cap for the scaled host RAM budget.</summary>
+    public const long HostMemoryBudgetCapMb = 16384;
+
+    internal static long ScaleHostMemoryBudgetMb(long totalRamMb) =>
+        Math.Clamp(totalRamMb / 4, HostMemoryBudgetFloorMb, HostMemoryBudgetCapMb);
+
+    private static long ResolveDefaultHostMemoryBudgetMb()
+    {
+        try
+        {
+            long totalRamMb = (long)(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
+            return ScaleHostMemoryBudgetMb(totalRamMb);
+        }
+        catch
+        {
+            return HostMemoryBudgetFloorMb;
+        }
+    }
 
     /// <summary>
     /// Idle sessions released within this window are treated as part of the active pipeline
@@ -274,16 +363,18 @@ internal sealed class InferenceSessionPool : IDisposable
     public InferenceSessionPool(
         int maxSessions = DefaultMaxSessions,
         bool enableMemoryAdmission = true,
-        long memoryBudgetMb = DefaultMemoryBudgetMb,
-        long hostMemoryBudgetMb = DefaultHostMemoryBudgetMb)
+        long? memoryBudgetMb = null,
+        long? hostMemoryBudgetMb = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxSessions, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(memoryBudgetMb, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(hostMemoryBudgetMb, 1);
+        long resolvedMemoryBudgetMb = memoryBudgetMb ?? DefaultMemoryBudgetMb;
+        ArgumentOutOfRangeException.ThrowIfLessThan(resolvedMemoryBudgetMb, 1);
+        long resolvedHostBudgetMb = hostMemoryBudgetMb ?? DefaultHostMemoryBudgetMb;
+        ArgumentOutOfRangeException.ThrowIfLessThan(resolvedHostBudgetMb, 1);
         this.maxSessions = maxSessions;
         this.enableMemoryAdmission = enableMemoryAdmission;
-        this.memoryBudgetMb = memoryBudgetMb;
-        this.hostMemoryBudgetMb = hostMemoryBudgetMb;
+        this.memoryBudgetMb = resolvedMemoryBudgetMb;
+        this.hostMemoryBudgetMb = resolvedHostBudgetMb;
     }
 
     private static TaskCompletionSource<bool> CreateBundleStateChangedSignal() =>

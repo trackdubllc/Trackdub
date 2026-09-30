@@ -1009,8 +1009,114 @@ public sealed class InferenceSessionPoolTests
         Assert.Null(SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.HostBudgetMbVariable));
         Assert.Null(SharedPoolOptions.ReadPositiveInt32(SharedPoolOptions.MaxSessionsVariable));
         Assert.Equal(12, InferenceSessionPool.DefaultMaxSessions);
-        Assert.Equal(4096L, InferenceSessionPool.DefaultMemoryBudgetMb);
-        Assert.Equal(4096L, InferenceSessionPool.DefaultHostMemoryBudgetMb);
+        // Accelerator default scales with detected GPU VRAM (floor 4GB, cap 16GB)
+        // so it is machine-dependent; it must stay within the documented band.
+        Assert.InRange(
+            InferenceSessionPool.DefaultMemoryBudgetMb,
+            InferenceSessionPool.AcceleratorBudgetFloorMb,
+            InferenceSessionPool.AcceleratorBudgetCapMb);
+        // Host default scales with physical RAM (floor 4GB, cap 16GB) so it is
+        // machine-dependent; it must stay within the documented band.
+        Assert.InRange(
+            InferenceSessionPool.DefaultHostMemoryBudgetMb,
+            InferenceSessionPool.HostMemoryBudgetFloorMb,
+            InferenceSessionPool.HostMemoryBudgetCapMb);
+    }
+
+    [Theory]
+    [InlineData(8L * 1024, 4096L)]
+    [InlineData(16L * 1024, 4096L)]
+    [InlineData(24L * 1024, 6144L)]
+    [InlineData(32L * 1024, 8192L)]
+    [InlineData(64L * 1024, 16384L)]
+    [InlineData(128L * 1024, 16384L)]
+    public void ScaleHostMemoryBudgetMb_QuarterRam_Floor4Gb_Cap16Gb(long totalRamMb, long expectedMb)
+    {
+        Assert.Equal(expectedMb, InferenceSessionPool.ScaleHostMemoryBudgetMb(totalRamMb));
+    }
+
+    [Theory]
+    [InlineData(0L, 4096L)]
+    [InlineData(2048L, 4096L)]
+    [InlineData(6144L, 4608L)]
+    [InlineData(8192L, 6144L)]
+    [InlineData(10240L, 7680L)]
+    [InlineData(12288L, 9216L)]
+    [InlineData(16384L, 12288L)]
+    [InlineData(24576L, 16384L)]
+    [InlineData(49152L, 16384L)]
+    public void ScaleAcceleratorBudgetMb_ThreeQuarterVram_Floor4Gb_Cap16Gb(long maxVramMb, long expectedMb)
+    {
+        Assert.Equal(expectedMb, InferenceSessionPool.ScaleAcceleratorBudgetMb(maxVramMb));
+    }
+
+    [Fact]
+    public void DefaultMemoryBudgetMb_MatchesScaledDetectedVram()
+    {
+        // The process default must equal the scale function applied to this
+        // machine's largest GPU: MADLAD-class bundles (~6.4GB) are admissible by
+        // default on 10GB+ GPUs and stay guarded on small ones.
+        Assert.Equal(
+            InferenceSessionPool.ScaleAcceleratorBudgetMb(InferenceSessionPool.DetectMaxAcceleratorVramMb()),
+            InferenceSessionPool.DefaultMemoryBudgetMb);
+    }
+
+    [Theory]
+    [InlineData("Model: NVIDIA GeForce RTX 5070\nVideo Memory:      12288 MB\n", 12288L)]
+    [InlineData("Video Memory: 8192MB\n", 8192L)]
+    [InlineData("Video Memory: 16384 MiB\n", 16384L)]
+    [InlineData("Model: Something\nNoMemoryHere\n", 0L)]
+    [InlineData("", 0L)]
+    public void ParseNvidiaInformationMb_ReadsProcDriverFormat(string text, long expectedMb)
+    {
+        Assert.Equal(expectedMb, AcceleratorVramProbe.ParseNvidiaInformationMb(text));
+    }
+
+    [Theory]
+    [InlineData("8589934592", 8192L)]
+    [InlineData("  12884901888\n", 12288L)]
+    [InlineData(null, 0L)]
+    [InlineData("", 0L)]
+    [InlineData("not-a-number", 0L)]
+    [InlineData("0", 0L)]
+    public void ParseAmdVramBytes_ConvertsSysfsBytesToMb(string? bytesText, long expectedMb)
+    {
+        Assert.Equal(expectedMb, AcceleratorVramProbe.ParseAmdVramBytes(bytesText));
+    }
+
+    [Theory]
+    [InlineData("0x10de", 0x10de)]
+    [InlineData("0X1002", 0x1002)]
+    [InlineData("030200", 0x030200)]
+    public void TryParseHex_ParsesSysfsHexFields(string text, uint expected)
+    {
+        Assert.True(AcceleratorVramProbe.TryParseHex(text, out uint value));
+        Assert.Equal(expected, value);
+    }
+
+    [Fact]
+    public void TryParseHex_RejectsNonHex()
+    {
+        Assert.False(AcceleratorVramProbe.TryParseHex("xyz", out _));
+    }
+
+    [Fact]
+    public void QueryLinuxMaxDedicatedVramMb_NeverReturnsNegative()
+    {
+        // OS-dependent live probe: asserts only the 0-as-unknown contract.
+        Assert.True(AcceleratorVramProbe.QueryLinuxMaxDedicatedVramMb() >= 0);
+    }
+
+    [Fact]
+    public void DefaultHostMemoryBudgetMb_MatchesScaledPhysicalRam()
+    {
+        // The process default must equal the scale function applied to this
+        // machine's RAM: MADLAD-class bundles (~6.4GB) are admissible by default
+        // on 32GB+ machines and stay guarded on small ones.
+        long totalRamMb = (long)(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
+        Assert.Equal(
+            InferenceSessionPool.ScaleHostMemoryBudgetMb(totalRamMb),
+            InferenceSessionPool.DefaultHostMemoryBudgetMb);
     }
 
     [Fact]

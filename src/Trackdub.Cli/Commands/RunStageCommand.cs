@@ -51,7 +51,7 @@ internal static class RunStageCommand
 
             Examples:
               trackdub run-stage --project ./sample.trackdub --stage vad
-              trackdub run-stage --project ./sample.trackdub --stage translation --model translation:madlad
+              trackdub run-stage --project ./sample.trackdub --stage translation --model translation:madlad400
             """)
         {
             projectOption,

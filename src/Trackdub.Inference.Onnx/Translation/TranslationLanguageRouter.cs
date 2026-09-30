@@ -190,6 +190,17 @@ public sealed class TranslationLanguageRouter(
             return preferredRoute!;
         }
 
+        // MADLAD-first default: when no model is preferred (Auto), the universal
+        // MADLAD-400 pivot wins over per-pair direct models so one model covers all
+        // languages. An explicit preferred alias is honored above via
+        // TryResolvePreferredRoute, and when MADLAD is not installed this falls
+        // through to the direct/genai routes below.
+        if (string.IsNullOrWhiteSpace(preferredModelAlias) &&
+            TryResolveMadladPivotRoute(context, normalizedSourceLanguage, normalizedTargetLanguage, out TranslationRouteSelection? madladRoute))
+        {
+            return madladRoute!;
+        }
+
         if (TryResolveDirectRoute(context, normalizedSourceLanguage, normalizedTargetLanguage, out TranslationRouteSelection? directRoute))
         {
             return directRoute!;
@@ -254,6 +265,25 @@ public sealed class TranslationLanguageRouter(
 
             if (string.Equals(entry.EngineFamily, "phi-genai", StringComparison.OrdinalIgnoreCase) &&
                 TryResolveGenAiPivotRoute(context, sourceLanguage, targetLanguage, entry, out route))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryResolveMadladPivotRoute(
+        TranslationRoutingContext context,
+        string sourceLanguage,
+        string targetLanguage,
+        out TranslationRouteSelection? route)
+    {
+        route = null;
+        foreach (BundledModelManifestEntry entry in GetPivotEntriesForPair(context, sourceLanguage, targetLanguage)
+                     .Where(static entry => string.Equals(entry.EngineFamily, "madlad", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (TryResolvePivotRoute(context, sourceLanguage, targetLanguage, entry, out route))
             {
                 return true;
             }

@@ -62,30 +62,59 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             return [];
         }
 
-        using OnnxExecutionSessionFactory.OpusSessionLease sessionLease = await OnnxExecutionSessionFactory
-            .CreatePooledOpusAsync("madlad", encoderModelPath, decoderModelPath, plan.ExecutionProvider!.Value, cancellationToken)
-            .ConfigureAwait(false);
-
-        var translatedSegments = new List<TranslatedTextSegment>(request.Segments.Count);
-        foreach (TranslationInputSegment segment in request.Segments.OrderBy(static segment => segment.Index))
+        // GPU-first with CPU fallback: the 3B MADLAD encoder+decoder bundle (~6.4GB)
+        // can exceed the accelerator admission budget on smaller GPUs (e.g. 4GB DML
+        // budget on RTX 5070). On that specific preflight failure, re-plan pinned to
+        // CPU and retry instead of failing the stage. An explicitly required GPU pin
+        // (RequirePreferredExecutionProvider) is honored — no silent fallback.
+        StageRuntimePlan effectivePlan = plan;
+        string effectiveEncoderModelPath = encoderModelPath;
+        string effectiveDecoderModelPath = decoderModelPath;
+        OnnxExecutionSessionFactory.OpusSessionLease? sessionLease = null;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            string translatedText = await TranslateSegmentAsync(
-                sessionLease,
-                tokenizer,
-                targetLanguageTag,
-                segment.Text,
-                cancellationToken).ConfigureAwait(false);
+            try
+            {
+                sessionLease = await OnnxExecutionSessionFactory
+                    .CreatePooledOpusAsync("madlad", effectiveEncoderModelPath, effectiveDecoderModelPath, effectivePlan.ExecutionProvider!.Value, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex) when (IsAdmissionBudgetFailure(ex) && CanFallBackToCpu(request, effectivePlan))
+            {
+                effectivePlan = await ReplanForCpuAsync(request, cancellationToken).ConfigureAwait(false);
+                EnsurePlanReady(effectivePlan, RuntimeStage.Translation);
+                effectiveEncoderModelPath = ResolveEncoderModelPath(effectivePlan, request.ResolvedModelEntryPath);
+                effectiveDecoderModelPath = ResolveDecoderModelPath(effectivePlan, effectiveEncoderModelPath);
+                sessionLease = await OnnxExecutionSessionFactory
+                    .CreatePooledOpusAsync("madlad", effectiveEncoderModelPath, effectiveDecoderModelPath, ExecutionProviderKind.Cpu, cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
-            translatedSegments.Add(new TranslatedTextSegment(
-                segment.Index,
-                segment.StartSeconds,
-                segment.EndSeconds,
-                translatedText));
+            var translatedSegments = new List<TranslatedTextSegment>(request.Segments.Count);
+            foreach (TranslationInputSegment segment in request.Segments.OrderBy(static segment => segment.Index))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string translatedText = await TranslateSegmentAsync(
+                    sessionLease,
+                    tokenizer,
+                    targetLanguageTag,
+                    segment.Text,
+                    cancellationToken).ConfigureAwait(false);
+
+                translatedSegments.Add(new TranslatedTextSegment(
+                    segment.Index,
+                    segment.StartSeconds,
+                    segment.EndSeconds,
+                    translatedText));
+            }
+
+            LastExecutionSummary = CreateExecutionSummary(effectivePlan, sessionLease);
+            return translatedSegments;
         }
-
-        LastExecutionSummary = CreateExecutionSummary(plan, sessionLease);
-        return translatedSegments;
+        finally
+        {
+            sessionLease?.Dispose();
+        }
     }
 
     /// <summary>
@@ -133,29 +162,93 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
         }
 
         long sequence = 0;
+        StageRuntimePlan effectivePlan = plan;
+        string effectiveEncoderModelPath = encoderModelPath;
+        string effectiveDecoderModelPath = decoderModelPath;
         foreach (TranslationInputSegment segment in request.Segments.OrderBy(static segment => segment.Index))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             TranslatedTextSegment translated;
-            using (OnnxExecutionSessionFactory.OpusSessionLease sessionLease = await OnnxExecutionSessionFactory
-                .CreatePooledOpusAsync("madlad", encoderModelPath, decoderModelPath, plan.ExecutionProvider!.Value, cancellationToken)
-                .ConfigureAwait(false))
+            try
             {
-                string translatedText = await TranslateSegmentAsync(
-                    sessionLease,
-                    tokenizer,
-                    targetLanguageTag,
-                    segment.Text,
-                    cancellationToken).ConfigureAwait(false);
-                translated = new TranslatedTextSegment(
-                    segment.Index, segment.StartSeconds, segment.EndSeconds, translatedText);
-                LastExecutionSummary = CreateExecutionSummary(plan, sessionLease);
+                using (OnnxExecutionSessionFactory.OpusSessionLease sessionLease = await AcquireLeaseAsync(
+                    effectivePlan, effectiveEncoderModelPath, effectiveDecoderModelPath, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    string translatedText = await TranslateSegmentAsync(
+                        sessionLease,
+                        tokenizer,
+                        targetLanguageTag,
+                        segment.Text,
+                        cancellationToken).ConfigureAwait(false);
+                    translated = new TranslatedTextSegment(
+                        segment.Index, segment.StartSeconds, segment.EndSeconds, translatedText);
+                    LastExecutionSummary = CreateExecutionSummary(effectivePlan, sessionLease);
+                }
+            }
+            catch (InvalidOperationException ex) when (IsAdmissionBudgetFailure(ex) && CanFallBackToCpu(request, effectivePlan))
+            {
+                effectivePlan = await ReplanForCpuAsync(request, cancellationToken).ConfigureAwait(false);
+                EnsurePlanReady(effectivePlan, RuntimeStage.Translation);
+                effectiveEncoderModelPath = ResolveEncoderModelPath(effectivePlan, request.ResolvedModelEntryPath);
+                effectiveDecoderModelPath = ResolveDecoderModelPath(effectivePlan, effectiveEncoderModelPath);
+                using (OnnxExecutionSessionFactory.OpusSessionLease sessionLease = await OnnxExecutionSessionFactory
+                    .CreatePooledOpusAsync("madlad", effectiveEncoderModelPath, effectiveDecoderModelPath, ExecutionProviderKind.Cpu, cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    string translatedText = await TranslateSegmentAsync(
+                        sessionLease,
+                        tokenizer,
+                        targetLanguageTag,
+                        segment.Text,
+                        cancellationToken).ConfigureAwait(false);
+                    translated = new TranslatedTextSegment(
+                        segment.Index, segment.StartSeconds, segment.EndSeconds, translatedText);
+                    LastExecutionSummary = CreateExecutionSummary(effectivePlan, sessionLease);
+                }
             }
 
             yield return PipelineStreamItemFactory.CreateTranslation(
                 translated, runId, snapshotId, sourceRevisionId, sequence++);
         }
+    }
+
+    private static async Task<OnnxExecutionSessionFactory.OpusSessionLease> AcquireLeaseAsync(
+        StageRuntimePlan plan,
+        string encoderModelPath,
+        string decoderModelPath,
+        CancellationToken cancellationToken) =>
+        await OnnxExecutionSessionFactory
+            .CreatePooledOpusAsync("madlad", encoderModelPath, decoderModelPath, plan.ExecutionProvider!.Value, cancellationToken)
+            .ConfigureAwait(false);
+
+    private static bool IsAdmissionBudgetFailure(Exception ex) =>
+        ex is InvalidOperationException &&
+        ex.Message.Contains("admission budget", StringComparison.OrdinalIgnoreCase);
+
+    private static bool CanFallBackToCpu(TranslationRequest request, StageRuntimePlan plan) =>
+        !request.RequirePreferredExecutionProvider &&
+        plan.ExecutionProvider is not null &&
+        plan.ExecutionProvider != ExecutionProviderKind.Cpu;
+
+    private async Task<StageRuntimePlan> ReplanForCpuAsync(
+        TranslationRequest request,
+        CancellationToken cancellationToken)
+    {
+        StageRuntimePlanningRequest cpuRequest = await StageRuntimePlanningRequestFactory.ApplyPreferredModelTierAsync(
+            new StageRuntimePlanningRequest(
+                RuntimeStage.Translation,
+                PreferredModelAlias: request.PreferredModelAlias,
+                SourceLanguage: request.SourceLanguage,
+                TargetLanguage: request.TargetLanguage,
+                PreferredExecutionProvider: ExecutionProviderKind.Cpu,
+                RequirePreferredExecutionProvider: true,
+                PreferredModelVariantAlias: request.PreferredModelVariantAlias),
+            runtimePlanningPreferences,
+            cancellationToken).ConfigureAwait(false);
+
+        return await runtimePlanner.PlanAsync(cpuRequest, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<string> TranslateSegmentAsync(

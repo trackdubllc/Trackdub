@@ -41,11 +41,11 @@ public static class SharedPoolOptions
     /// <summary>Whether budgeted admission is enabled for the shared pool.</summary>
     public static bool EnableMemoryAdmission { get; } = ReadAdmissionFlag(AdmissionVariable);
 
-    /// <summary>Accelerator (VRAM) admission budget in MB, per device.</summary>
+    /// <summary>Accelerator (VRAM) admission budget in MB, per device. Defaults to the VRAM-scaled pool default when unset.</summary>
     public static long MemoryBudgetMb { get; } =
         ReadPositiveInt64(BudgetMbVariable) ?? InferenceSessionPool.DefaultMemoryBudgetMb;
 
-    /// <summary>Host RAM admission budget in MB, shared by CPU/DNNL and OpenVINO CPU-proxy sessions.</summary>
+    /// <summary>Host RAM admission budget in MB, shared by CPU/DNNL and OpenVINO CPU-proxy sessions. Defaults to the RAM-scaled pool default when unset.</summary>
     public static long HostMemoryBudgetMb { get; } =
         ReadPositiveInt64(HostBudgetMbVariable) ?? InferenceSessionPool.DefaultHostMemoryBudgetMb;
 
