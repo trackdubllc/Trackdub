@@ -1,3 +1,4 @@
+using System.Reflection;
 using Trackdub.Application.Dubbing;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Sdk;
@@ -363,5 +364,122 @@ public sealed class BatchProcessorTests : IDisposable
         {
             throw _exception;
         }
+    }
+
+    // ─── Host-supplied engine accessibility ─────────────────────────────────────
+    //
+    // Regression cover for the desktop shell (Trackdub-gated G1). The desktop registers its
+    // own IDubbingPipelineEngine in its DI container so the batch lane shares the host's
+    // session factory, model-selection providers, and licensing. Before BatchProcessor's
+    // IDubbingPipelineEngine overload was public, the only public constructor demanded the
+    // sealed TrackdubDubbingEngine, whose TrackdubSessionFactory dependency has an internal
+    // constructor reachable only via TrackdubBuilder — forcing the desktop to build a second
+    // headless container that silently bypasses every override the host registered.
+    //
+    // NOTE: the behavioural tests below cannot detect the constructor being narrowed back to
+    // internal, because this project holds InternalsVisibleTo for Trackdub.Sdk and can call an
+    // internal constructor. Verified by negative control: reverting the ctor to internal left
+    // this file compiling and passing. The real enforcement is the reflection-based
+    // Constructor_IsPublic_* tests plus the desktop's own call site, which has no such grant.
+    // Do not "simplify" the behaviour tests into accessibility coverage.
+
+    [Fact]
+    public void Constructor_AcceptsHostSuppliedEngine_WithoutTrackdubDubbingEngine()
+    {
+        IDubbingPipelineEngine hostEngine = new ThrowingEngine(new InvalidOperationException("unused"));
+
+        // No cast to the sealed SDK engine, and no TrackdubBuilder container.
+        var processor = new BatchProcessor(hostEngine);
+
+        Assert.NotNull(processor);
+    }
+
+    [Fact]
+    public void Constructor_HostSuppliedEngine_Null_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => new BatchProcessor((IDubbingPipelineEngine)null!));
+    }
+
+    [Fact]
+    public async Task Constructor_HostSuppliedEngine_DrivesTheBatchRun()
+    {
+        // Proves the injected instance is the one actually executed, not a wrapped copy.
+        var recording = new RecordingEngine();
+        var processor = new BatchProcessor((IDubbingPipelineEngine)recording);
+
+        string existing = Path.Join(_tempDir, "recorded.mp4");
+        File.WriteAllBytes(existing, [0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70]);
+
+        BatchReport report = await processor.ExecuteAsync(
+            [existing], CreateTemplateOptions(), new BatchOptions { ContinueOnError = true },
+            progress: null, CancellationToken.None);
+
+        Assert.Single(recording.Options);
+        Assert.Equal(existing, recording.Options[0].SourceMediaPath);
+        Assert.Equal(1, report.SucceededCount);
+        Assert.Equal(BatchFileStatus.Success, report.Files[0].Status);
+    }
+
+    // ─── Accessibility: asserted reflectively so InternalsVisibleTo cannot mask it ──
+
+    [Fact]
+    public void Constructor_TakingIDubbingPipelineEngine_IsPublic()
+    {
+        ConstructorInfo? ctor = typeof(BatchProcessor)
+            .GetConstructor([typeof(IDubbingPipelineEngine)]);
+
+        Assert.NotNull(ctor);
+        Assert.True(
+            ctor.IsPublic,
+            "BatchProcessor(IDubbingPipelineEngine) must stay public. Trackdub.Sdk.Tests holds "
+            + "InternalsVisibleTo, so this assertion — not the behaviour tests above — is what "
+            + "detects the constructor being narrowed, which would break UI hosts such as the "
+            + "Trackdub-gated desktop shell that have no such grant.");
+    }
+
+    [Fact]
+    public void BatchOutputPaths_IsPublicStaticWithPublicEntryPoints()
+    {
+        // The desktop report view resolves per-file output directories so it shows where each
+        // file actually landed. Keep the type and its two entry points reachable.
+        Type type = typeof(BatchOutputPaths);
+
+        Assert.True(type.IsPublic, "BatchOutputPaths must stay public for host batch UIs.");
+        Assert.True(type.IsAbstract && type.IsSealed, "BatchOutputPaths must remain a static class.");
+
+        foreach (string name in new[] { "BuildProjectDirectory", "BuildUniqueProjectFolderName" })
+        {
+            MethodInfo? method = type.GetMethod(
+                name,
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.True(method is not null, $"BatchOutputPaths.{name} must be public static.");
+        }
+    }
+
+    /// <summary>
+    /// Engine double that records the options it was handed and reports success, so tests can
+    /// assert the host-supplied instance is the one the batch loop drives.
+    /// </summary>
+    private sealed class RecordingEngine : IDubbingPipelineEngine
+    {
+        public List<DubbingSessionOptions> Options { get; } = [];
+
+        public Task<DubbingRunResult> ExecuteAsync(
+            DubbingSessionOptions options,
+            IProgress<PipelineProgressEvent>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            Options.Add(options);
+            return Task.FromResult(SuccessResult());
+        }
+
+        private static DubbingRunResult SuccessResult() => new()
+        {
+            RunId = Guid.NewGuid(),
+            StartTime = DateTimeOffset.UnixEpoch,
+            EndTime = DateTimeOffset.UnixEpoch,
+            OverallStatus = DubbingRunStatus.Succeeded,
+            StageOutcomes = [],
+        };
     }
 }

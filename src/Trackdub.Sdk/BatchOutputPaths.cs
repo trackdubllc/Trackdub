@@ -3,11 +3,27 @@ using System.Text;
 
 namespace Trackdub.Sdk;
 
-internal static class BatchOutputPaths
+/// <summary>
+/// Resolves the per-file project directory a batch run writes into.
+/// </summary>
+/// <remarks>
+/// Exposed for hosts that render batch output locations (the desktop report view shows where
+/// each file landed) without re-deriving the folder-naming scheme. <see cref="BatchProcessor"/>
+/// uses the same method internally, so a host that previews paths gets the directories the run
+/// will actually use rather than a look-alike.
+/// </remarks>
+public static class BatchOutputPaths
 {
     private const int MaxProjectFolderNameLength = 240;
 
-    internal static string BuildProjectDirectory(string mediaFilePath, string outputRoot)
+    /// <summary>
+    /// Builds the project directory for <paramref name="mediaFilePath"/> under
+    /// <paramref name="outputRoot"/>.
+    /// </summary>
+    /// <param name="mediaFilePath">Absolute or relative path to the source media file.</param>
+    /// <param name="outputRoot">Root directory that holds one subdirectory per media file.</param>
+    /// <returns>Full path of the project directory for this media file.</returns>
+    public static string BuildProjectDirectory(string mediaFilePath, string outputRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mediaFilePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRoot);
@@ -17,7 +33,13 @@ internal static class BatchOutputPaths
         return Path.Join(Path.GetFullPath(outputRoot), folderName);
     }
 
-    internal static string BuildUniqueProjectFolderName(string fullMediaPath)
+    /// <summary>
+    /// Builds the collision-resistant folder name for a media file: a sanitized, bounded
+    /// readable prefix plus a short SHA-256 prefix of the normalized full path.
+    /// </summary>
+    /// <param name="fullMediaPath">Full path to the source media file.</param>
+    /// <returns>Folder name (no directory separators) unique to this media path.</returns>
+    public static string BuildUniqueProjectFolderName(string fullMediaPath)
     {
         string normalizedPath = Path.GetFullPath(fullMediaPath);
         string pathHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)))[..8];
