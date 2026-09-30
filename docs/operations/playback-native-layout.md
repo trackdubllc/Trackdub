@@ -26,10 +26,14 @@ releases or CI artifacts.
 | Windows ARM64 | `.\tools\dev\Fetch-WinNativeDeps.ps1 -Architecture Arm64` | `native/win-arm64/libmpv-2.dll` |
 | macOS | `pwsh ./tools/dev/Fetch-MacNativeDeps.ps1` (on Mac) | `native/osx-x64/libmpv.2.dylib` or `native/osx-arm64/...` |
 
-Manifest: [`runtime/win-native-deps.manifest.json`](../../runtime/win-native-deps.manifest.json).
+> [!WARNING]
+> These fetch scripts currently require `runtime/win-native-deps.manifest.json`, which is not present in
+> the repository. Both scripts will fail immediately with "Missing native deps manifest" until the manifest
+> is restored or generated. Native dependencies must be obtained manually in the interim.
 
-`tools/dev/Fetch-WinNativeDeps.ps1` and `tools/dev/Fetch-MacNativeDeps.ps1` fetch the artifacts on
-demand when they are missing; no workflow in `.github/workflows/` runs them automatically.
+When the manifest is available, `tools/dev/Fetch-WinNativeDeps.ps1` and `tools/dev/Fetch-MacNativeDeps.ps1`
+fetch the artifacts on demand when they are missing; no workflow in `.github/workflows/` runs them
+automatically.
 
 ## Windows x64 (published app folder)
 
