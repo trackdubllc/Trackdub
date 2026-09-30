@@ -213,14 +213,14 @@
         "type": "Project",
         "dependencies": {
           "MathNet.Numerics": "[5.0.0, )",
+          "Microsoft.ML.OnnxRuntime": "[1.30.0, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.30.0, )",
+          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI.Cuda": "[0.17.0, )",
           "Microsoft.ML.Tokenizers": "[3.0.0-preview.26473.1, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
-          "Trackdub.Inference": "[1.0.0, )",
-          "Microsoft.ML.OnnxRuntime": "[1.30.0, )",
-          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )"
+          "Trackdub.Inference": "[1.0.0, )"
         }
       },
       "MathNet.Numerics": {
@@ -270,6 +270,16 @@
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
         }
       },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "CentralTransitive",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
+        }
+      },
       "Microsoft.ML.OnnxRuntimeGenAI.Cuda": {
         "type": "CentralTransitive",
         "requested": "[0.17.0, )",
@@ -294,16 +304,6 @@
         "requested": "[3.0.0-preview.26473.1, )",
         "resolved": "3.0.0-preview.26473.1",
         "contentHash": "GCz2IZbFXkKjFCaKpd9qQxuPDfkj6yr/3JI71zu274069gZ84QBAY6TP/x8wSRRjfRNJCPyVWqDp/lc7QLg5mw=="
-      },
-      "Microsoft.ML.OnnxRuntimeGenAI": {
-        "type": "CentralTransitive",
-        "requested": "[0.17.0, )",
-        "resolved": "0.17.0",
-        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
-        "dependencies": {
-          "Microsoft.ML.OnnxRuntime": "1.30.0",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
-        }
       }
     }
   }

@@ -368,6 +368,8 @@
           "Microsoft.Extensions.DependencyInjection": "[10.0.12, )",
           "Microsoft.Extensions.Http": "[10.0.11, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.30.0, )",
+          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )",
+          "Microsoft.Windows.AI.MachineLearning": "[2.0.300, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )",
           "Trackdub.Inference.Onnx": "[1.0.0, )",
@@ -398,14 +400,14 @@
         "type": "Project",
         "dependencies": {
           "MathNet.Numerics": "[5.0.0, )",
+          "Microsoft.ML.OnnxRuntime": "[1.30.0, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.30.0, )",
+          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI.Cuda": "[0.17.0, )",
           "Microsoft.ML.Tokenizers": "[3.0.0-preview.26473.1, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
-          "Trackdub.Inference": "[1.0.0, )",
-          "Microsoft.ML.OnnxRuntime": "[1.30.0, )",
-          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )"
+          "Trackdub.Inference": "[1.0.0, )"
         }
       },
       "trackdub.infrastructure": {
@@ -612,6 +614,12 @@
         "requested": "[3.0.0-preview.26473.1, )",
         "resolved": "3.0.0-preview.26473.1",
         "contentHash": "GCz2IZbFXkKjFCaKpd9qQxuPDfkj6yr/3JI71zu274069gZ84QBAY6TP/x8wSRRjfRNJCPyVWqDp/lc7QLg5mw=="
+      },
+      "Microsoft.Windows.AI.MachineLearning": {
+        "type": "CentralTransitive",
+        "requested": "[2.0.300, )",
+        "resolved": "2.0.300",
+        "contentHash": "OiJX15N198kG30Lop7LH8WjmBfk2/9iU9it9eLPnkNZ49Yi/vAa4ntONGiGOgv5mb8/fvFHV5trCWSPM+OQhSw=="
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "CentralTransitive",
@@ -1025,7 +1033,6 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "[10.0.12, )",
           "Microsoft.Extensions.Http": "[10.0.11, )",
-          "Microsoft.ML.OnnxRuntime.Gpu": "[1.30.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )",
