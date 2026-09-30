@@ -41,10 +41,11 @@ The changed read+deserialize expressions:
 - Command (one shape per invocation): `dotnet test -c Release --no-build --filter
   "FullyQualifiedName~JsonLatencyProbe.TimedColdRead"` with `TRACKDUB_JSON_PROBE_MODE=reflection`
   or `TRACKDUB_JSON_PROBE_MODE=generated` (default).
-- Raw data: one JSONL row per run, written to the path specified by `TRACKDUB_JSON_PROBE_OUT` or a
-  default temp file, then aggregated as the median per (shape, mode). Raw measurements:
-  [json-sourcegen-startup-latency-2026-09-29.jsonl](https://gist.github.com/tonythethompson/PLACEHOLDER_GIST_ID/raw/json-sourcegen-startup-latency-2026-09-29.jsonl)
-  (PLACEHOLDER: replace with actual stable link when raw JSONL is uploaded).
+- The probe emitted one JSONL row per run to `TRACKDUB_JSON_PROBE_OUT` (or a temporary default
+  path), and the rows were aggregated as the median per (shape, mode). The original JSONL files
+  were not retained as a repository or CI artifact, so the reported raw rows are unavailable for
+  independent inspection. The probe revision and commands below allow the measurements to be
+  regenerated; preserve the output at a durable location when rerunning.
 - The probe classes were committed as `0a6eb24e` (`JsonLatencyProbe` in
   `tests/Trackdub.Infrastructure.Tests/JsonLatencyProbe.cs` and
   `tests/Trackdub.Media.Tests/JsonLatencyProbe.cs`) and removed again in this follow-up to #305;
