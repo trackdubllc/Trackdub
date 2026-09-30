@@ -58,15 +58,14 @@
     </PackageReference>
   </ItemGroup>
 
-  <!-- macOS portable leg: Composition owns GenAI publish closure. Linux uses GenAI.Cuda via Inference.Onnx only. -->
-  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0' And $([MSBuild]::IsOSPlatform('OSX'))">
+  <!-- Keep the portable TFM's package graph identical across restore hosts; locked restores share
+       one net10.0 graph. RID-specific runtime asset selection remains platform-dependent. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'">
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
     <!-- Pin to match Inference.Onnx requirement; OnnxRuntimeGenAI pulls 1.8.x transitively -->
     <PackageReference Include="Microsoft.Windows.AI.MachineLearning" ExcludeAssets="native;build;buildMultitargeting;buildTransitive;contentFiles;analyzers" />
-  </ItemGroup>
-
-  <!-- Linux: reference OnnxRuntime.Gpu so its native CUDA assets land in output -->
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <!-- Linux uses these native assets; the portable TFM keeps the references on all hosts so its
+         single locked dependency graph is valid everywhere. -->
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" GeneratePathProperty="true" />
   </ItemGroup>
 

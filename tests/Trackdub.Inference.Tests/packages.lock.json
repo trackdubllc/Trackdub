@@ -403,7 +403,9 @@
           "Microsoft.ML.Tokenizers": "[3.0.0-preview.26473.1, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
-          "Trackdub.Inference": "[1.0.0, )"
+          "Trackdub.Inference": "[1.0.0, )",
+          "Microsoft.ML.OnnxRuntime": "[1.30.0, )",
+          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )"
         }
       },
       "trackdub.infrastructure": {

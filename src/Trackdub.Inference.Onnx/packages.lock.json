@@ -115,6 +115,25 @@
         "dependencies": {
           "Microsoft.Extensions.AI.Abstractions": "9.8.0"
         }
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Direct",
+        "requested": "[1.30.0, )",
+        "resolved": "1.30.0",
+        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "Direct",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
+        }
       }
     },
     "net10.0/linux-arm64": {
@@ -142,6 +161,25 @@
         "contentHash": "TA9/mtOhJI+MJZXzkGkHbYJFGMCkRcBzS7XEMdauC36exh6q4+lw7P/90MbIgrrwYK04SIFykvTFnAXDpDpscA==",
         "dependencies": {
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Direct",
+        "requested": "[1.30.0, )",
+        "resolved": "1.30.0",
+        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "Direct",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
         }
       }
     },
@@ -171,6 +209,25 @@
         "dependencies": {
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
         }
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Direct",
+        "requested": "[1.30.0, )",
+        "resolved": "1.30.0",
+        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "Direct",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
+        }
       }
     },
     "net10.0/osx-arm64": {
@@ -198,6 +255,25 @@
         "contentHash": "TA9/mtOhJI+MJZXzkGkHbYJFGMCkRcBzS7XEMdauC36exh6q4+lw7P/90MbIgrrwYK04SIFykvTFnAXDpDpscA==",
         "dependencies": {
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Direct",
+        "requested": "[1.30.0, )",
+        "resolved": "1.30.0",
+        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "Direct",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
         }
       }
     },
@@ -227,6 +303,25 @@
         "dependencies": {
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
         }
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Direct",
+        "requested": "[1.30.0, )",
+        "resolved": "1.30.0",
+        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "Direct",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
+        }
       }
     },
     "net10.0/win-arm64": {
@@ -255,6 +350,25 @@
         "dependencies": {
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
         }
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Direct",
+        "requested": "[1.30.0, )",
+        "resolved": "1.30.0",
+        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "Direct",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
+        }
       }
     },
     "net10.0/win-x64": {
@@ -282,6 +396,25 @@
         "contentHash": "TA9/mtOhJI+MJZXzkGkHbYJFGMCkRcBzS7XEMdauC36exh6q4+lw7P/90MbIgrrwYK04SIFykvTFnAXDpDpscA==",
         "dependencies": {
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "Direct",
+        "requested": "[1.30.0, )",
+        "resolved": "1.30.0",
+        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "Direct",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
         }
       }
     },

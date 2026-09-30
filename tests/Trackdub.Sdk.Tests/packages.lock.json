@@ -424,7 +424,9 @@
           "Microsoft.ML.Tokenizers": "[3.0.0-preview.26473.1, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
-          "Trackdub.Inference": "[1.0.0, )"
+          "Trackdub.Inference": "[1.0.0, )",
+          "Microsoft.ML.OnnxRuntime": "[1.30.0, )",
+          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.0, )"
         }
       },
       "trackdub.infrastructure": {
@@ -654,6 +656,25 @@
         "requested": "[2.0.12, )",
         "resolved": "2.0.12",
         "contentHash": "FpW672e6qqrTd1EfKqsvUtFZaJWlTlszUR1o8tdakXhkzKbnEZVndtpfd4K3fUPCFcIs9UmcswMyYGJP1zp/rg=="
+      },
+      "Microsoft.ML.OnnxRuntime": {
+        "type": "CentralTransitive",
+        "requested": "[1.30.0, )",
+        "resolved": "1.30.0",
+        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+        }
+      },
+      "Microsoft.ML.OnnxRuntimeGenAI": {
+        "type": "CentralTransitive",
+        "requested": "[0.17.0, )",
+        "resolved": "0.17.0",
+        "contentHash": "ymBnMeeJsJKsE9rVqgWYc1VV+d3fEALAW9Ji7If1ahuGBREz6wRhQXB/1RWEi+cXtWpUWtjSVSxRLDx9aqxGZw==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntime": "1.30.0",
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.0"
+        }
       }
     }
   }
