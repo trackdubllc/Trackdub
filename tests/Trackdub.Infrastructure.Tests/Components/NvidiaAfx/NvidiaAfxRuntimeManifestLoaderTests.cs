@@ -1,3 +1,4 @@
+using System.Text;
 using Trackdub.Infrastructure.Components.NvidiaAfx;
 
 namespace Trackdub.Infrastructure.Tests.Components.NvidiaAfx;
@@ -62,6 +63,42 @@ public sealed class NvidiaAfxRuntimeManifestLoaderTests
             }
         }
     }
+
+    // Stream-based read plus a JSON reader that treats CRLF as whitespace: a manifest re-saved by a
+    // Windows editor (UTF-8 byte order mark, CRLF endings) has to load like the repository copy.
+    [Fact]
+    public void Load_reads_a_manifest_re_saved_with_a_utf8_bom_and_windows_newlines()
+    {
+        string tempPath = Path.Join(Path.GetTempPath(), $"nvidia-afx-manifest-bom-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllBytes(
+                tempPath,
+                WithBomAndWindowsNewlines(File.ReadAllText(ResolveFixturePath("nvidia-afx-runtime.manifest.json"))));
+
+            NvidiaAfxRuntimeManifest manifest = NvidiaAfxRuntimeManifestLoader.Load(tempPath);
+
+            Assert.Equal("1.0.0", manifest.ManifestVersion);
+            Assert.Equal(["win-x64", "linux-x64"], manifest.Packages.Select(package => package.Architecture));
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+    }
+
+    private static byte[] WithBomAndWindowsNewlines(string json) =>
+    [
+        0xEF,
+        0xBB,
+        0xBF,
+        .. Encoding.UTF8.GetBytes(json
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\n", "\r\n", StringComparison.Ordinal)),
+    ];
 
     private static string ResolveFixturePath(string fileName)
     {

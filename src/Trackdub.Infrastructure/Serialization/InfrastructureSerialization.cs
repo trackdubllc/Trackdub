@@ -37,9 +37,18 @@ internal sealed partial class InfrastructureSerializationContext : JsonSerialize
 /// Indented variant for the local model cache index, whose on-disk format is
 /// human-readable JSON (WriteIndented = true). Kept separate because source
 /// generation options are per-context.
+///
+/// The newline is pinned to "\n" rather than left at the platform default, so the index
+/// is byte-identical on every operating system: an index written on Windows carried CRLF
+/// while one written on Linux or macOS carried LF, which made checksums, backups, and any
+/// external tooling see different files for the same cache state. Indented output is the
+/// only thing that has a newline at all, and this context is the only writer of the index.
+/// Files written in the other convention still load, because a JSON reader treats CRLF
+/// and LF alike, and the next save rewrites them in the pinned form.
 /// </summary>
 [JsonSourceGenerationOptions(
     WriteIndented = true,
+    NewLine = "\n",
     PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(LocalModelCacheRecord[]))]
 internal sealed partial class LocalModelCacheSerializationContext : JsonSerializerContext

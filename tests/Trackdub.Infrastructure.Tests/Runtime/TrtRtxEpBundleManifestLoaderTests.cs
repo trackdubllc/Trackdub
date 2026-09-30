@@ -1,3 +1,4 @@
+using System.Text;
 using Trackdub.Infrastructure.Runtime.TrtRtxEp;
 
 namespace Trackdub.Infrastructure.Tests.Runtime;
@@ -73,6 +74,41 @@ public sealed class TrtRtxEpBundleManifestLoaderTests
             }
         }
     }
+
+    // Same tolerance as the AFX loader: the read is stream-based, so a manifest re-saved with a UTF-8
+    // byte order mark and CRLF endings loads like the repository copy.
+    [Fact]
+    public void Load_reads_a_manifest_re_saved_with_a_utf8_bom_and_windows_newlines()
+    {
+        string tempPath = Path.Join(Path.GetTempPath(), $"trt-rtx-manifest-bom-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllBytes(tempPath, WithBomAndWindowsNewlines(File.ReadAllText(ResolveRepoManifestPath())));
+
+            TrtRtxEpBundleManifest manifest = TrtRtxEpBundleManifestLoader.Load(tempPath);
+
+            Assert.Equal(1, manifest.SchemaVersion);
+            Assert.True(manifest.Packages.ContainsKey("win-x64"));
+            Assert.True(manifest.Packages.ContainsKey("linux-x64"));
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+    }
+
+    private static byte[] WithBomAndWindowsNewlines(string json) =>
+    [
+        0xEF,
+        0xBB,
+        0xBF,
+        .. Encoding.UTF8.GetBytes(json
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\n", "\r\n", StringComparison.Ordinal)),
+    ];
 
     private static string ResolveRepoManifestPath()
     {
