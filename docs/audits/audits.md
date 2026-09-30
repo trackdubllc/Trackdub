@@ -473,7 +473,7 @@ These were conservatively marked "review needed" but verification confirms they 
 |--------|--------|
 | Remove 7 unused `PackageVersion` entries from `Directory.Packages.props` | **Confirmed safe** -- individually verified, no PackageReference in any csproj (see below) |
 | Remove `BuildSyntheticEvent` from `WebhookDelivery/Function.cs:95` | **Confirmed dead** -- private method, never called |
-| `SessionService._sessions` is write-only | **Confirmed** -- collection populated but never queried (type itself is live, used by Api DubbingOrchestrator) |
+| `SessionService._sessions` is write-only | **Confirmed dead** -- collection populated but never queried. The earlier "type itself is live, used by Api DubbingOrchestrator" note was stale: `Trackdub.Api` was split into `api.trackdub` during the open-core split, and neither `api.trackdub` nor `Trackdub-gated` references `ISessionService` or `SessionService`. The gated desktop tier uses `ProjectSessionService`, a different type. `SessionService` and `ISessionService` have since been removed |
 | `DubbingPipelineEngine._serviceConfigurator` | **May already be removed** -- field does not exist in current `main` (audit ran on `codex/refactor` branch) |
 | `ModelCacheDiagnostics` duplication | **Confirmed** -- `DiagnosticsCollector.cs:68` has identical private `DetermineModelCacheEntry` method; static class version at `ModelCacheDiagnostics.cs:9` has zero callers |
 
@@ -534,7 +534,6 @@ All 46 items are verified:
    - `ShellViewModel.ShellStatus`
    - `SettingsWindowViewModel.AppName`
    - `Function.BuildSyntheticEvent`
-   - `SessionService._sessions` field (keep the class)
 5. **Do NOT touch:**
    - Source-generator partial method `value` parameters
    - Interface `CancellationToken` parameters
