@@ -6,11 +6,17 @@ on:
     paths:
       - 'src/Trackdub.Benchmarks/**'
       - 'tests/Trackdub.Benchmarks.Tests/**'
+      # The workflow itself, so a change to the validation is validated.
+      - '.github/workflows/benchmark-report-validation.yml'
+  # Every pull request, not only the ones targeting main: a stacked pull request (base = another
+  # branch) still exports reports, but with the branch filter in place validation only ran once the
+  # change landed on main.
   pull_request:
-    branches: [main]
     paths:
       - 'src/Trackdub.Benchmarks/**'
       - 'tests/Trackdub.Benchmarks.Tests/**'
+      # The workflow itself, so a change to the validation is validated.
+      - '.github/workflows/benchmark-report-validation.yml'
   workflow_dispatch:
 
 concurrency:
