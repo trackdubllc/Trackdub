@@ -8,8 +8,11 @@ on:
       - "src/Trackdub.Inference/Runtime/ModelManifest/**"
       - "tools/ci/**"
       - ".github/workflows/model-audit.yml"
+  # Every pull request, not only the ones targeting main: a stacked pull request (base = another
+  # branch) still changes the manifest and tooling, but with the branch filter in place the audit
+  # only ran after the change landed on main. The paths filter below still limits this to manifest
+  # and tooling changes.
   pull_request:
-    branches: [main]
     paths:
       - "src/Trackdub.Inference/Runtime/ModelManifest/**"
       - "tools/ci/**"
