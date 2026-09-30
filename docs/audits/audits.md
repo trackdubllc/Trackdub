@@ -402,11 +402,11 @@ These are **CommunityToolkit.Mvvm `[ObservableProperty]` hook points**. The sour
 ---
 
 ## 3. WRONG: Interface `CancellationToken` parameters (~10 entries)
-## 3. WRONG: Interface `CancellationToken` parameters (~8 entries)
+
 The audit flags `ct` / `cancellationToken` parameters on interface methods in:
 
 - `Trackdub.Contracts/IAudioPreviewTransport.cs` (5 methods)
-- `Trackdub.Application/Services/ITranslationService.cs`
+- `Trackdub.Application/Runtime/ILicenseConsentService.cs` (2 methods)
 - `Trackdub.Application/Updates/IUpdateService.cs`
 
 These are **interface contract parameters**. Implementations must accept them. Removing them is a breaking API change.
@@ -508,7 +508,7 @@ All 46 items are verified:
 | Category | Original | Corrected | Delta |
 |----------|----------|-----------|-------|
 | Do not remove | 46 | ~56 | +10 (interface params, NullOpenVino) |
-| Do not remove | 46 | ~54 | +8 (interface params, NullOpenVino) |
+| Review needed | 1156 | ~1056 | -100 (partial methods, confirmed-dead promoted out) |
 | Safe to remove | 1838 | ~1928 | +90 (promoted from review needed) |
 | GlobalUsings to delete | 16 | 5-6 (re-verify) | Most are NOT empty |
 
@@ -605,7 +605,7 @@ Two different `NullOpenVinoAvailabilityProvider` exist:
 ### 3. WRONG: Interface `CancellationToken` parameters (~10 entries) (Section 3)
 
 **Review claim:** These are interface contract parameters and should not be removed.
-### 3. WRONG: Interface `CancellationToken` parameters (~8 entries) (Section 3)
+
 **Verification Result: CONFIRMED CORRECT**
 
 **Evidence:**
@@ -778,7 +778,7 @@ The review provides corrected counts:
 
 | Category | Original | Corrected | Delta |
 |----------|----------|-----------|-------|
-| Do not remove | 46 | ~54 | +8 |
+| Do not remove | 46 | ~56 | +10 |
 | Review needed | 1156 | ~1056 | -100 |
 | Safe to remove | 1838 | ~1928 | +90 |
 

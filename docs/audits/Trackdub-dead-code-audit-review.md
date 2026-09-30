@@ -69,9 +69,7 @@ These are **CommunityToolkit.Mvvm `[ObservableProperty]` hook points**. The sour
 The audit flags `ct` / `cancellationToken` parameters on interface methods in:
 
 - `Trackdub.Contracts/IAudioPreviewTransport.cs` (5 methods)
-- `Trackdub.Application/Services/ITranslationService.cs`
-- `Trackdub.Application/Services/IVoiceAssignmentService.cs`
-- `Trackdub.Application/Runtime/ILicenseConsentService.cs`
+- `Trackdub.Application/Runtime/ILicenseConsentService.cs` (2 methods)
 - `Trackdub.Application/Updates/IUpdateService.cs`
 
 These are **interface contract parameters**. Implementations must accept them. Removing them is a breaking API change.
