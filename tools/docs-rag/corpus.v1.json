@@ -81,6 +81,7 @@
         ["trt-rtx-operators", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/api/operators.html"],
         ["trt-rtx-graphsurgeon-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/api/onnx-graphsurgeon-api.html"],
         ["trt-rtx-polygraphy-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/api/polygraphy-api.html"],
+        ["trt-rtx-onnx-parser-api", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/_static/python-api/parsers/Onnx/pyOnnx.html"],
         ["trt-rtx-install-overview", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/installing-tensorrt-rtx/installation-overview.html"],
         ["trt-rtx-installing", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/installing-tensorrt-rtx/installing.html"],
         ["trt-rtx-prerequisites", "https://docs.nvidia.com/deeplearning/tensorrt-rtx/latest/installing-tensorrt-rtx/prerequisites.html"],
