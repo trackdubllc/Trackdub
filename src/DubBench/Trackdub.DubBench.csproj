@@ -34,8 +34,4 @@
     <PackageReference Include="CommunityToolkit.Mvvm" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
-    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" />
-  </ItemGroup>
-
 </Project>
