@@ -36,12 +36,24 @@ The changed read+deserialize expressions:
   timed call measures metadata resolution rather than first-call JIT of the generic path.
 - The two modes alternated within each repetition, and the whole pairing was repeated with the order
   reversed to rule out ordering bias.
-- Raw data: one JSONL row per run (`TRACKDUB_JSON_PROBE_MODE`, `TRACKDUB_JSON_PROBE_OUT`),
-  aggregated as the median per (shape, mode). The probe classes were committed as `0a6eb24e` and
-  removed again in the follow-up to #305; they are not part of CI.
-- A second set of temporary phase probes timed the context access and then each store's first read
+- Test project: `tests/Trackdub.Infrastructure.Tests` (five stores) and
+  `tests/Trackdub.Media.Tests` (win-native-deps single store).
+- Command (one shape per invocation): `dotnet test -c Release --no-build --filter
+  "FullyQualifiedName~JsonLatencyProbe.TimedColdRead"` with `TRACKDUB_JSON_PROBE_MODE=reflection`
+  or `TRACKDUB_JSON_PROBE_MODE=generated` (default).
+- Raw data: one JSONL row per run, written to the path specified by `TRACKDUB_JSON_PROBE_OUT` or a
+  default temp file, then aggregated as the median per (shape, mode). Raw measurements:
+  [json-sourcegen-startup-latency-2026-09-29.jsonl](https://gist.github.com/tonythethompson/PLACEHOLDER_GIST_ID/raw/json-sourcegen-startup-latency-2026-09-29.jsonl)
+  (PLACEHOLDER: replace with actual stable link when raw JSONL is uploaded).
+- The probe classes were committed as `0a6eb24e` (`JsonLatencyProbe` in
+  `tests/Trackdub.Infrastructure.Tests/JsonLatencyProbe.cs` and
+  `tests/Trackdub.Media.Tests/JsonLatencyProbe.cs`) and removed again in this follow-up to #305;
+  they are not part of CI. To reproduce, restore them from git at that revision.
+- Phase probe invocation: A second set of temporary phase probes (also at `0a6eb24e`, not committed
+  to main) timed the context access and then each store's first read
   in sequence, once with 200 steady reads of each phase in between (serializer machinery warm) and
-  once back to back with no steady loops (the `startup.all` protocol).
+  once back to back with no steady loops (the `startup.all` protocol). Run with `dotnet test -c
+  Release --no-build --filter "FullyQualifiedName~JsonLatencyProbe.PhaseBreakdown"`.
 
 Environment: AMD Ryzen 7 5700X3D / 64 GB / Windows 11 Pro 26200 / .NET SDK 10.0.401, `main` @
 `1fd52a3a`.
@@ -55,7 +67,7 @@ Five changed stores read once each, in a fresh process (`startup.all`):
 | reflection (pre-change) | 17 | 76.0 ms | 59.0-104.0 ms |
 | generated | 16 | 89.6 ms | 69.0-167.6 ms |
 
-Paired by repetition, generated was slower in 16/16 pairs (median delta +20.1 ms), in both
+Paired by repetition, generated was slower in 16/16 pairs (median paired delta +20.1 ms, generated minus reflection), in both
 orderings.
 
 Single store per process:
