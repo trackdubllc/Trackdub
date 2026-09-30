@@ -310,7 +310,6 @@ public static class CompositionRoot
                 sp.GetRequiredService<TrackdubStoragePaths>(),
                 sp.GetRequiredService<IApplicationLogger>()));
 
-        services.TryAddSingleton<IAppHealthMonitor, AppHealthMonitor>();
         services.TryAddSingleton<IFfmpegHealthCheck>(_ => new FfmpegHealthCheck());
         services.TryAddSingleton<IEspeakNgHealthCheck, EspeakNgHealthCheck>();
         services.TryAddSingleton<IExplicitFfmpegInstaller>(_ => new FfmpegExplicitInstaller());
