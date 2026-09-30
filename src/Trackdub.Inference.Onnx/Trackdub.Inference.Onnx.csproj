@@ -71,16 +71,11 @@
     </PackageReference>
   </ItemGroup>
 
-  <!-- Linux: OnnxRuntime.Gpu (CPU + CUDA EP) + GenAI.Cuda natives (NVIDIA OGA interface, including NvTensorRtRtx). -->
-  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'
-                        And $([MSBuild]::IsOSPlatform('Linux'))">
+  <!-- Keep the portable TFM's package graph identical across restore hosts. Locked restores use
+       one net10.0 graph; runtime asset selection below remains RID-specific. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'">
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" />
-  </ItemGroup>
-
-  <!-- macOS + portable fallback: standard OnnxRuntime (includes CoreML on macOS) + GenAI. -->
-  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'
-                        And !$([MSBuild]::IsOSPlatform('Linux'))">
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
   </ItemGroup>
