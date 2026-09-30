@@ -112,6 +112,90 @@ public sealed class TrackdubDubbingEngineStageRunOutcomeTests
     }
 
     [Fact]
+    public void DetermineOverallStatus_PrerequisiteFailedWithDownstreamSkips_ReturnsFailed()
+    {
+        // Core #327: translation failed honestly and TTS/export were correctly skipped,
+        // yet the run must not read as success — no deliverable exists.
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var outcomes = new List<StageOutcome>
+        {
+            SucceededOutcome(StageNames.Vad, now),
+            SucceededOutcome(StageNames.Asr, now),
+            FailedOutcome(StageNames.Translation, now),
+            SkippedOutcome(StageNames.Tts, now, StageSkipReasonCodes.PrerequisiteFailed),
+            SkippedOutcome(StageNames.Export, now, StageSkipReasonCodes.PrerequisiteFailed),
+        };
+
+        Assert.Equal(DubbingRunStatus.Failed, TrackdubDubbingEngine.DetermineOverallStatus(outcomes));
+    }
+
+    [Fact]
+    public void DetermineOverallStatus_TtsFailedWithExportSkipped_ReturnsFailed()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var outcomes = new List<StageOutcome>
+        {
+            SucceededOutcome(StageNames.Vad, now),
+            SucceededOutcome(StageNames.Asr, now),
+            SucceededOutcome(StageNames.Translation, now),
+            FailedOutcome(StageNames.Tts, now),
+            SkippedOutcome(StageNames.Export, now, StageSkipReasonCodes.PrerequisiteFailed),
+        };
+
+        Assert.Equal(DubbingRunStatus.Failed, TrackdubDubbingEngine.DetermineOverallStatus(outcomes));
+    }
+
+    [Fact]
+    public void DetermineOverallStatus_NonPrerequisiteFailed_ReturnsPartialSuccess()
+    {
+        // Separation is not a prerequisite stage: without stems the pipeline still
+        // delivers, so a lone separation failure stays PartialSuccess.
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var outcomes = new List<StageOutcome>
+        {
+            SucceededOutcome(StageNames.Vad, now),
+            SucceededOutcome(StageNames.Asr, now),
+            SucceededOutcome(StageNames.Translation, now),
+            FailedOutcome(StageNames.Separation, now),
+            SucceededOutcome(StageNames.Tts, now),
+            SucceededOutcome(StageNames.Export, now),
+        };
+
+        Assert.Equal(DubbingRunStatus.PartialSuccess, TrackdubDubbingEngine.DetermineOverallStatus(outcomes));
+    }
+
+    private static StageOutcome SucceededOutcome(string stageName, DateTimeOffset now) =>
+        new()
+        {
+            StageName = stageName,
+            Status = StageStatus.Succeeded,
+            StartTime = now,
+            EndTime = now,
+            ArtifactPaths = [],
+        };
+
+    private static StageOutcome FailedOutcome(string stageName, DateTimeOffset now) =>
+        new()
+        {
+            StageName = stageName,
+            Status = StageStatus.Failed,
+            StartTime = now,
+            EndTime = now,
+            ArtifactPaths = [],
+        };
+
+    private static StageOutcome SkippedOutcome(string stageName, DateTimeOffset now, string? reasonCode) =>
+        new()
+        {
+            StageName = stageName,
+            Status = StageStatus.Skipped,
+            StartTime = now,
+            EndTime = now,
+            ArtifactPaths = [],
+            ReasonCode = reasonCode,
+        };
+
+    [Fact]
     public void MapStageRunToSdkOutcome_MissingStageRun_ReturnsFailed()
     {
         (StageStatus status, string? reasonCode, _) =

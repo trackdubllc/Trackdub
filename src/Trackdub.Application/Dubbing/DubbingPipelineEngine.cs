@@ -2814,6 +2814,16 @@ public sealed class DubbingPipelineEngine(
             return DubbingRunStatus.Succeeded;
         }
 
+        // A failed prerequisite stage blocks every subsequent stage in the runner, so no
+        // deliverable can exist. Report Failed even when earlier stages succeeded:
+        // PartialSuccess would let callers count a deliverable-free run as success (#327).
+        bool prerequisiteFailed = outcomes.Any(o =>
+            o.Status == StageStatus.Failed && DubbingPipelineStages.PrerequisiteStages.Contains(o.StageName));
+        if (prerequisiteFailed)
+        {
+            return DubbingRunStatus.Failed;
+        }
+
         bool anyFailed = outcomes.Any(o => o.Status == StageStatus.Failed);
         bool anySucceededOrPartial = outcomes.Any(o =>
             o.Status is StageStatus.Succeeded or StageStatus.PartiallySucceeded);

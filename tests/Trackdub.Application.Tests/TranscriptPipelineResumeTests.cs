@@ -16,12 +16,20 @@ using Trackdub.TestDoubles;
 
 namespace Trackdub.Application.Tests;
 
-public sealed class TranscriptPipelineResumeTests
+public sealed class TranscriptPipelineResumeTests : IDisposable
 {
-    [Fact]
-    public async Task ExecuteAsync_skips_resumable_vad_stage_and_hydrates_speech_regions()
+    private readonly string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-resume-{Guid.NewGuid():N}");
+
+    [Theory]
+    [InlineData(false, true, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(false, false, false, false)]
+    [InlineData(false, true, true, false)]
+    [InlineData(true, true, false, true)]
+    public async Task ExecuteAsync_reuses_vad_only_when_artifacts_and_runtime_are_valid(
+        bool forceRerun, bool hasCachedOutput, bool modelChanged, bool detectorFails)
     {
-        var artifactStore = new FakeArtifactStore(Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var artifactStore = new FakeArtifactStore(tempRoot);
         var mediaRepository = new FakeMediaAssetRepository();
         var stageRunStore = new FakeProjectStageRunStore();
         var transcriptRepository = new FakeTranscriptRepository();
@@ -61,16 +69,25 @@ public sealed class TranscriptPipelineResumeTests
             now);
 
         StageRunRecord vadRun = StageRunRecord.Start(projectId, StageNames.Vad, now).Complete(now);
+        artifactStore.Seed(audioArtifact.RelativePath, FakeWavHelper.MinimalPcm16(durationSeconds: 10.0));
         mediaRepository.Seed(mediaAsset);
         await mediaRepository.SaveArtifactAsync(audioArtifact, CancellationToken.None);
-        await artifactWriter.WriteSpeechRegionsArtifactAsync(
-            projectId,
-            mediaAsset,
-            [new SpeechRegion(0, 0.0, 2.0)],
-            vadRun.Id,
-            CancellationToken.None);
+        if (hasCachedOutput)
+        {
+            await artifactWriter.WriteSpeechRegionsArtifactAsync(
+                projectId,
+                mediaAsset,
+                [new SpeechRegion(0, 0.0, 2.0)],
+                vadRun.Id,
+                CancellationToken.None);
+        }
 
         var vadDetector = new FakeSpeechRegionDetector();
+        vadDetector.SetRegions(new SpeechRegion(0, 3.0, 4.0));
+        if (detectorFails)
+        {
+            vadDetector.SetException(new InvalidOperationException("VAD unavailable"));
+        }
         var vadStage = new VadGenerationStage(
             new VadStageHandler(vadDetector, stageRunStore),
             artifactWriter,
@@ -118,21 +135,45 @@ public sealed class TranscriptPipelineResumeTests
             enableSpeakerDiarization: false,
             sourceLanguage: "en")
         {
-            ExecutionSnapshot = new Dictionary<string, string>(),
+            ExecutionSnapshot = modelChanged
+                ? new Dictionary<string, string> { [$"Model:{StageNames.Vad}"] = "replacement-vad" }
+                : new Dictionary<string, string>(),
             ProjectState = resumeState,
             ProjectRootPath = artifactStore.GetPath("."),
-            ForceRerun = false
+            ForceRerun = forceRerun
         };
+
+        if (detectorFails)
+        {
+            InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                pipeline.ExecuteAsync(context, TestContext.Current.CancellationToken));
+            Assert.Equal("VAD unavailable", error.Message);
+            Assert.Equal(StageRunStatus.Failed, Assert.Single(stageRunStore.All).Status);
+            IReadOnlyList<SpeechRegion>? preserved = await artifactWriter.TryReadSpeechRegionsAsync(
+                projectId, TestContext.Current.CancellationToken);
+            Assert.Equal(0.0, Assert.Single(preserved!).StartSeconds);
+            return;
+        }
 
         TranscriptGenerationContext result = await pipeline.ExecuteAsync(
             context,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(0, vadDetector.DetectCallCount);
-        Assert.Single(result.SpeechRegions);
-        StageRunRecord skippedRun = Assert.Single(stageRunStore.All);
-        Assert.Equal(StageNames.Vad, skippedRun.StageName);
-        Assert.Equal(StageRunStatus.Skipped, skippedRun.Status);
+        bool shouldResume = !forceRerun && hasCachedOutput && !modelChanged;
+        Assert.Equal(shouldResume ? 0 : 1, vadDetector.DetectCallCount);
+        Assert.Equal(shouldResume ? 0.0 : 3.0, Assert.Single(result.SpeechRegions).StartSeconds);
+        StageRunRecord recordedRun = Assert.Single(stageRunStore.All);
+        Assert.Equal(StageNames.Vad, recordedRun.StageName);
+        Assert.Equal(shouldResume ? StageRunStatus.Skipped : StageRunStatus.Completed, recordedRun.Status);
+        Assert.Equal(shouldResume ? vadRun.Id : recordedRun.Id, result.VadStageRunId);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(tempRoot))
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
     }
 
     private sealed class NoOpEnhancementStage : ITranscriptGenerationStage
