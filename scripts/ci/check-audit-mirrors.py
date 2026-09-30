@@ -20,6 +20,7 @@ sides of it, which is where the fix belongs.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -35,23 +36,31 @@ MIRRORS = (
 
 def read_lines(relative: str) -> list[str]:
     """Read a file as lines, normalizing line endings across platforms."""
-    try:
-        return (REPO_ROOT / relative).read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        print(f"Error: File not found: {relative}")
-        raise SystemExit(1)
-    except Exception as e:
-        print(f"Error reading {relative}: {e}")
-        raise SystemExit(1)
+    return (REPO_ROOT / relative).read_text(encoding="utf-8").splitlines()
 
 
-def find_contiguous(haystack: list[str], needle: list[str]) -> int:
-    """Return the index where needle starts inside haystack, or -1."""
-    span = len(needle)
-    for start in range(len(haystack) - span + 1):
-        if haystack[start : start + span] == needle:
-            return start
-    return -1
+def find_section(aggregate: list[str], mirror: list[str]) -> tuple[int, int] | None:
+    """Return the bounded aggregate section matching a mirror's heading."""
+    if not mirror:
+        return None
+
+    heading = next((line for line in mirror if line.strip()), None)
+    if heading is None:
+        return None
+
+    # Select the last matching top-level heading, then stop at the next one.
+    start = next(
+        (i for i in range(len(aggregate) - 1, -1, -1) if aggregate[i] == heading),
+        -1,
+    )
+    if start < 0:
+        return None
+
+    end = next(
+        (i for i in range(start + 1, len(aggregate)) if aggregate[i].startswith("# ")),
+        len(aggregate),
+    )
+    return start, end
 
 
 def describe_divergence(mirror_lines: list[str], aggregate_lines: list[str]) -> str:
@@ -95,9 +104,12 @@ def main() -> int:
 
     for mirror in MIRRORS:
         mirror_lines = read_lines(mirror)
-        if find_contiguous(aggregate, mirror_lines) >= 0:
-            print(f"  in sync: {mirror} ({len(mirror_lines)} lines)")
-            continue
+        section = find_section(aggregate, mirror_lines)
+        if section is not None:
+            start, end = section
+            if mirror_lines and aggregate[start:end] == mirror_lines:
+                print(f"  in sync: {mirror} ({len(mirror_lines)} lines)")
+                continue
         failures.append(f"{mirror}: {describe_divergence(mirror_lines, aggregate)}")
 
     if failures:
