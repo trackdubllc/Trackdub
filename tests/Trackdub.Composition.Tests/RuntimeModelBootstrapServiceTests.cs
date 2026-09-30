@@ -518,6 +518,101 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
         Assert.NotNull(registrar.LastRecord);
     }
 
+    [Fact]
+    public async Task Companion_hash_retry_exhaustion_never_registers_corrupt_model_and_preserves_support_files()
+    {
+        BundledModelManifestRegistry registry = CreateRegistryWithSha256(MismatchedSha256);
+        TrackdubStoragePaths storagePaths = new(tempRoot);
+        string root = Path.Join(storagePaths.ModelCacheDirectory, "example", "model");
+        Directory.CreateDirectory(root);
+        string tokenizer = Path.Join(root, "tokenizer.json");
+        await File.WriteAllBytesAsync(tokenizer, [7, 8], TestContext.Current.CancellationToken);
+        var downloader = new RecordingModelDownloader();
+        var registrar = new RecordingModelCacheRegistrar();
+        var service = new RuntimeModelBootstrapService(new QueueRuntimePlanner(), registry, downloader,
+            registrar, new StaticFileFingerprintService(), storagePaths);
+
+        RequiredRuntimeModelStatus result = await service.DownloadManifestCompanionModelAsync(
+            "example", RuntimeStage.Tts, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsAvailable);
+        Assert.Contains("after 3 attempts", result.FailureReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, downloader.DownloadedFiles.Count(file => file == "onnx/model.onnx"));
+        Assert.DoesNotContain("tokenizer.json", downloader.DownloadedFiles);
+        Assert.Equal(new byte[] { 7, 8 }, await File.ReadAllBytesAsync(tokenizer, TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(Path.Join(root, "onnx", "model.onnx")));
+        Assert.Null(registrar.LastRecord);
+    }
+
+    [Fact]
+    public async Task Companion_failed_download_is_unavailable_and_does_not_register_cache()
+    {
+        var downloader = new RecordingModelDownloader("onnx/model.onnx");
+        var registrar = new RecordingModelCacheRegistrar();
+        var service = new RuntimeModelBootstrapService(new QueueRuntimePlanner(), CreateRegistry(), downloader,
+            registrar, new StaticFileFingerprintService(), new TrackdubStoragePaths(tempRoot));
+
+        RequiredRuntimeModelStatus result = await service.DownloadManifestCompanionModelAsync("example", RuntimeStage.Tts);
+
+        Assert.False(result.IsAvailable);
+        Assert.Contains("Failed to download", result.FailureReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("onnx/model.onnx", result.ExpectedFileName);
+        Assert.Null(registrar.LastRecord);
+    }
+
+    [Fact]
+    public async Task Companion_cancellation_before_download_propagates_without_registration()
+    {
+        var downloader = new RecordingModelDownloader();
+        var registrar = new RecordingModelCacheRegistrar();
+        var service = new RuntimeModelBootstrapService(new QueueRuntimePlanner(), CreateRegistry(), downloader,
+            registrar, new StaticFileFingerprintService(), new TrackdubStoragePaths(tempRoot));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.DownloadManifestCompanionModelAsync(
+            "example", RuntimeStage.Tts, cancellationToken: cancellation.Token));
+
+        Assert.Empty(downloader.DownloadedFiles);
+        Assert.Null(registrar.LastRecord);
+    }
+
+    [Theory]
+    [InlineData(MismatchedSha256, false)]
+    [InlineData("4bf5122f344554c53bde2ebb8cd2b7e3d1600ad631c385a5d7cce23c7785459a", true)]
+    public async Task Single_file_import_registers_only_verified_model_and_preserves_source(string expectedHash, bool valid)
+    {
+        BundledModelManifestRegistry registry = CreateRegistryWithSha256(expectedHash, singleFile: true);
+        TrackdubStoragePaths storagePaths = new(tempRoot);
+        string source = Path.Join(tempRoot, "user-model.onnx");
+        await File.WriteAllBytesAsync(source, [1], TestContext.Current.CancellationToken);
+        string entry = Path.Join(storagePaths.ModelCacheDirectory, "example", "model", "onnx", "model_q4.onnx");
+        var registrar = new RecordingModelCacheRegistrar();
+        var downloader = new RecordingModelDownloader();
+        var service = new RuntimeModelBootstrapService(
+            new QueueRuntimePlanner(CreatePlan(StageRuntimePlanStatus.DownloadRequired), CreatePlan(StageRuntimePlanStatus.Ready, entry)),
+            registry, downloader, registrar, new StaticFileFingerprintService(), storagePaths);
+
+        RequiredRuntimeModelStatus result = await service.ImportRequiredModelAsync(
+            new RuntimeModelRequest(RuntimeStage.Tts, "example", RequirePreferredModelAlias: true), source,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(valid, result.IsAvailable);
+        Assert.Equal(new byte[] { 1 }, await File.ReadAllBytesAsync(source, TestContext.Current.CancellationToken));
+        Assert.Empty(downloader.DownloadedFiles);
+        if (valid)
+        {
+            Assert.NotNull(registrar.LastRecord);
+            Assert.Equal(expectedHash, registrar.LastRecord!.Sha256);
+            Assert.Equal(new byte[] { 1 }, await File.ReadAllBytesAsync(entry, TestContext.Current.CancellationToken));
+        }
+        else
+        {
+            Assert.Contains("Hash verification failed", result.FailureReason, StringComparison.OrdinalIgnoreCase);
+            Assert.Null(registrar.LastRecord);
+        }
+    }
+
     public void Dispose()
     {
         try
@@ -580,7 +675,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
         return BundledModelManifestRegistry.Load(manifestPath);
     }
 
-    private BundledModelManifestRegistry CreateRegistryWithSha256(string sha256)
+    private BundledModelManifestRegistry CreateRegistryWithSha256(string sha256, bool singleFile = false)
     {
         string manifestPath = Path.Join(tempRoot, "manifest-sha.json");
         Directory.CreateDirectory(tempRoot);
@@ -611,7 +706,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
                   "aliases": [ "example" ],
                   "root_path": "models/example",
                   "benchmark_entry": "onnx/model.onnx",
-                  "download_files": [ "tokenizer.json" ],
+                  "download_files": {{(singleFile ? "[]" : "[ \"tokenizer.json\" ]")}},
                   "download_file_hashes": {
                     "onnx/model_q4.onnx": "{{sha256}}"
                   },
@@ -619,7 +714,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
                     {
                       "alias": "q4",
                       "entry_path": "onnx/model_q4.onnx",
-                      "download_files": [ "onnx/model_q4.onnx_data" ]
+                      "download_files": {{(singleFile ? "[]" : "[ \"onnx/model_q4.onnx_data\" ]")}}
                     }
                   ]
                 }
@@ -730,7 +825,7 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
         }
     }
 
-    private sealed class RecordingModelDownloader : IModelDownloaderContract
+    private sealed class RecordingModelDownloader(string? failedFile = null) : IModelDownloaderContract
     {
         private readonly List<string> downloadedFiles = [];
         private readonly List<string?> downloadedRevisions = [];
@@ -750,6 +845,10 @@ public sealed class RuntimeModelBootstrapServiceTests : IDisposable
         {
             downloadedFiles.Add(fileName.Replace('\\', '/'));
             downloadedRevisions.Add(revision);
+            if (fileName.Replace('\\', '/') == failedFile)
+            {
+                return false;
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
             await File.WriteAllBytesAsync(destinationPath, [1], cancellationToken).ConfigureAwait(false);
             progress?.Report(new ModelDownloadProgress(1, 1, 100, $"Downloaded {fileName}"));
