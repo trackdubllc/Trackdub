@@ -21,4 +21,3 @@ Linear workspace `trackdubllc` (team **TS**) is the source of truth for trackabl
 - `docs/operations/linear-workflow.md`
 - Linear document: Agent Linear Workflow
 - Integrations connected: GitHub, Notion, Figma (mention `TS-xxx` on PRs)
-- Remaining Platform work: TS-8 Linear Release → Actions
