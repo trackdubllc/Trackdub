@@ -265,7 +265,11 @@ output/unused-code-audit/
 .githooks/
 /.adal/skills
 /.agents/skills
-/.claude/skills
+# Agent skill caches stay local, but the gh-stack skill is committed backing
+# for CLAUDE.md's stacked-PR workflow (Claude Code only loads project skills
+# from .claude/skills/).
+/.claude/skills/*
+!/.claude/skills/gh-stack
 /.claude/settings.local.json
 /.openclaude/
 /.codeartsdoer/skills

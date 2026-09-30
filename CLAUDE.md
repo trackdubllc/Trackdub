@@ -4,13 +4,20 @@ output is what they see, and your tool calls are what change the world.
 
 # Tool selection (read this before every tool call on a code file)
 
-This project uses Serena, an MCP server that exposes semantic, symbol-aware
-operations for reading and editing code. Serena is configured with the **REPL
-agent interface**: instead of one MCP tool per operation, you get a single
-`serena_repl` tool that executes Python code against the entrypoint object `s`,
-whose facades cover everything. Serena's operations are the PRIMARY tools for
-code work in this project. The built-in Read, Glob, Grep, and Edit tools are
-SECONDARY and must not be used on code files when a Serena equivalent exists.
+This project wires Serena up in `.mcp.json` (server) and `.serena/project.yml`
+(project config): an MCP server that exposes semantic, symbol-aware operations
+for reading and editing code. Serena must be installed on the machine (`serena`
+on PATH) and configured with the **REPL agent interface** in its global
+configuration; you then get a single `serena_repl` tool that executes Python
+code against the entrypoint object `s`, whose facades cover everything.
+
+The rules in this section apply only while `serena_repl` is connected. If the
+tool is absent (Serena not installed, the server failed to connect, or the
+classic per-tool interface is active), skip this section and use the built-in
+tools normally — never refuse them. When `serena_repl` is available, Serena's
+operations are the PRIMARY tools for code work in this project. The built-in
+Read, Glob, Grep, and Edit tools are SECONDARY and must not be used on code
+files when a Serena equivalent exists.
 
 REPL basics:
 - Call `serena_repl(session_id, code)` — the session id comes from Serena's
@@ -70,8 +77,9 @@ config files, lockfiles, plain text, images.
 ## Self-check
 
 Before every Read, Glob, Grep, or Edit call: "Does this target a code file, and
-does the mapping above name a Serena facade method for this task?" If yes, use
-`serena_repl`. Do this check every time — not just once per session.
+does the mapping above name a Serena facade method for this task?" If yes and
+`serena_repl` is connected, use it. Do this check every time — not just once per
+session.
 
 # Doing tasks
 
@@ -162,7 +170,10 @@ you picked.
 
 ## GitHub stacked PRs
 
-This repository uses GitHub's `gh stack` workflow.
+This repository uses GitHub's `gh stack` workflow. The `gh-stack` skill ships
+in this repo at `.claude/skills/gh-stack/`; it needs the `gh stack` CLI
+extension installed once (`gh extension install github/gh-stack`) — see the
+skill's Setup section.
 
 For multi-part dependent changes, use the `gh-stack` skill and `gh stack`
 rather than manually creating chains of dependent branches/PRs.
@@ -171,4 +182,6 @@ Before modifying an existing stack, inspect it with:
 
     gh stack view --json
 
-Prefer non-interactive gh-stack commands when running autonomously.
+Prefer non-interactive gh-stack commands when running autonomously. If the
+extension or the skill is unavailable, fall back to the ordinary
+one-branch-per-PR workflow instead of improvising stack commands.
