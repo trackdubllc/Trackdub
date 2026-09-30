@@ -25,7 +25,15 @@ public sealed class BatchProcessor
     /// Creates a new <see cref="BatchProcessor"/> backed by the given dubbing engine.
     /// </summary>
     /// <param name="engine">Engine used to execute each file through the pipeline.</param>
-    internal BatchProcessor(IDubbingPipelineEngine engine)
+    /// <remarks>
+    /// Hosts that already own an <see cref="IDubbingPipelineEngine"/> — the desktop shell wires
+    /// one through its own DI container so the batch lane shares that host's session factory,
+    /// model-selection providers, and licensing — use this overload instead of the
+    /// <see cref="TrackdubDubbingEngine"/> one. That overload forces such a host to stand up a
+    /// second headless container via <see cref="TrackdubBuilder"/>, which silently bypasses every
+    /// override the host registered.
+    /// </remarks>
+    public BatchProcessor(IDubbingPipelineEngine engine)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
     }
