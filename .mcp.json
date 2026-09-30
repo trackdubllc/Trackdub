@@ -1,5 +1,15 @@
 {
   "mcpServers": {
+    "serena": {
+      "type": "stdio",
+      "command": "serena",
+      "args": [
+        "start-mcp-server",
+        "--context=claude-code",
+        "--project-from-cwd"
+      ],
+      "env": {}
+    },
     "nvidia-cuda-docs": {
       "type": "http",
       "url": "https://api.copilot.nsight.ngc.nvidia.com/mcp/cuda-docs"
