@@ -45,13 +45,18 @@ def read_lines(relative: str) -> list[str]:
         raise SystemExit(1)
 
 
-def find_contiguous(haystack: list[str], needle: list[str]) -> int:
-    """Return the index where needle starts inside haystack, or -1."""
-    span = len(needle)
-    for start in range(len(haystack) - span + 1):
-        if haystack[start : start + span] == needle:
-            return start
-    return -1
+def find_section(haystack: list[str], heading: str) -> tuple[int, int] | None:
+    """Return the sole top-level section bounded by heading, if unambiguous."""
+    starts = [i for i, line in enumerate(haystack) if line == heading]
+    if len(starts) != 1:
+        return None
+
+    start = starts[0]
+    end = next(
+        (i for i in range(start + 1, len(haystack)) if haystack[i].startswith("# ")),
+        len(haystack),
+    )
+    return start, end
 
 
 def describe_divergence(mirror_lines: list[str], aggregate_lines: list[str]) -> str:
@@ -95,7 +100,21 @@ def main() -> int:
 
     for mirror in MIRRORS:
         mirror_lines = read_lines(mirror)
-        if find_contiguous(aggregate, mirror_lines) >= 0:
+        if not mirror_lines or not any(line.strip() for line in mirror_lines):
+            failures.append(f"{mirror}: file is empty")
+            continue
+
+        heading = next((line for line in mirror_lines if line.strip()), None)
+        section = find_section(aggregate, heading) if heading else None
+        if section is None:
+            failures.append(
+                f"{mirror}: expected exactly one aggregate section headed {heading.strip()!r}"
+            )
+            continue
+
+        start, end = section
+        aggregate_section = aggregate[start:end]
+        if aggregate_section == mirror_lines:
             print(f"  in sync: {mirror} ({len(mirror_lines)} lines)")
             continue
         failures.append(f"{mirror}: {describe_divergence(mirror_lines, aggregate)}")
