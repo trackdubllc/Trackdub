@@ -97,6 +97,18 @@ jobs:
         shell: bash
         run: python3 scripts/ci/check-repository-boundary.py
 
+  audit-mirrors:
+    name: Verify Audit Mirrors
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Verify the concatenated dead-code audit matches its standalone copies
+        shell: bash
+        run: python3 scripts/ci/check-audit-mirrors.py
+
   controlled-matrix-cpu-budget:
     name: Controlled Matrix CPU Budget
     runs-on: ubuntu-latest
