@@ -39,9 +39,10 @@ The changed read+deserialize expressions:
 - Test project: `tests/Trackdub.Infrastructure.Tests` (five stores) and
   `tests/Trackdub.Media.Tests` (win-native-deps single store).
 - Command for the five-store comparison: `dotnet test -c Release --filter
-  "FullyQualifiedName~JsonLatencyProbe.Probe_startup_all_stores"` with
-  `TRACKDUB_JSON_PROBE_MODE=reflection` or `TRACKDUB_JSON_PROBE_MODE=generated` (default). Run one
-  mode per fresh process. The single-store tests use `Probe_afx`, `Probe_trtrtx`,
+  "FullyQualifiedName=Trackdub.Infrastructure.Tests.JsonLatencyProbe.Probe_startup_all_stores"`
+  with `TRACKDUB_JSON_PROBE_MODE=reflection` or `TRACKDUB_JSON_PROBE_MODE=generated` (default). The
+  exact filter excludes `Probe_startup_all_stores_prewarmed_serializers`. Run one mode per fresh
+  process. The single-store tests use `Probe_afx`, `Probe_trtrtx`,
   `Probe_storageconfig`, `Probe_smokeverdict`, and `Probe_modelcache` in the Infrastructure project;
   `Probe_winnd` is in the Media project.
 - The probe emitted one JSONL row per run to `TRACKDUB_JSON_PROBE_OUT` (or a temporary default
