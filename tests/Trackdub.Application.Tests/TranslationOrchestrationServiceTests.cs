@@ -293,18 +293,40 @@ public sealed class TranslationOrchestrationServiceTests
         TranslationHarness harness = CreateTranslationHarness(
             transcriptLanguage: "en",
             segmentDetectedLanguage: "en");
-        // The fresh repository starts empty, so the new revision lands at
-        // artifacts/translation/es/translation-revision-0001.json.
+        await harness.ArtifactStore.WriteJsonAsync(
+            ProjectArtifactPaths.ManifestRelativePath,
+            ProjectManifest.FromProject(harness.State.ProjectState.Project, "en")
+                .WithUiSettings(new ProjectUiSettings(SelectedTranslationTargetLanguage: "es")),
+            TestContext.Current.CancellationToken);
         harness.ArtifactStore.FailingJsonWriteFileName = "translation-revision-0001.json";
 
         await Assert.ThrowsAsync<IOException>(() =>
             harness.Service.GenerateTranslationAsync(
                 harness.State,
-                new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "es"),
+                new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "fr"),
                 TestContext.Current.CancellationToken));
 
         StageRunRecord stageRun = Assert.Single(harness.StageRunStore.All);
         Assert.Equal(StageRunStatus.Failed, stageRun.Status);
+        ProjectManifest? manifest = await harness.ArtifactStore.ReadJsonAsync<ProjectManifest>(
+            ProjectArtifactPaths.ManifestRelativePath, TestContext.Current.CancellationToken);
+        Assert.Equal("es", manifest?.UiSettings?.SelectedTranslationTargetLanguage);
+    }
+
+    [Fact]
+    public async Task GenerateTranslationAsync_WhenTargetSelectionPersistFails_MarksStageFailedNotCompleted()
+    {
+        TranslationHarness harness = CreateTranslationHarness(transcriptLanguage: "en", segmentDetectedLanguage: "en");
+        harness.ArtifactStore.FailingJsonWriteFileName = Path.GetFileName(ProjectArtifactPaths.ManifestRelativePath);
+
+        await Assert.ThrowsAsync<IOException>(() => harness.Service.GenerateTranslationAsync(
+            harness.State,
+            new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "fr"),
+            TestContext.Current.CancellationToken));
+
+        Assert.NotNull(await harness.TranslationRepository.GetCurrentRevisionAsync(
+            harness.State.ProjectState.Project.Id, "fr", TestContext.Current.CancellationToken));
+        Assert.Equal(StageRunStatus.Failed, Assert.Single(harness.StageRunStore.All).Status);
     }
 
     [Fact]

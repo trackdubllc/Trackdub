@@ -11,6 +11,7 @@ public class FakeTtsEngine : ITtsEngine, ITtsEngineWithExecutionSummary
     public VoiceCatalogEntry? LastVoicepack { get; private set; }
     public InferenceRequestOptions? LastOptions { get; private set; }
     public TtsSynthesisRequest? LastRequest { get; private set; }
+    public List<TtsSynthesisRequest> Requests { get; } = [];
     public int SynthesizeCallCount { get; private set; }
     public int DurationSamples { get; set; } = DefaultDurationSamples;
     public int SampleRate { get; set; } = DefaultSampleRate;
@@ -23,6 +24,7 @@ public class FakeTtsEngine : ITtsEngine, ITtsEngineWithExecutionSummary
         LastVoicepack = request.Voice;
         LastOptions = request.Options;
         LastRequest = request;
+        Requests.Add(request);
         SynthesizeCallCount++;
 
         byte[] wav = BuildMinimalSilentWav(SampleRate, DurationSamples);

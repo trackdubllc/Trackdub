@@ -48,13 +48,14 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
 
     private async Task<(FakeServiceScope Scope, TranscriptProjectState State)> CreateWorkspaceProjectAsync(
         bool enableSpeakerDiarization = true,
-        FakeTtsEngine? ttsEngine = null)
+        FakeTtsEngine? ttsEngine = null,
+        ILoudnessNormalizer? loudnessNormalizer = null)
     {
         string tempDirectory = CreateTempDirectory();
         string sourcePath = Path.Join(tempDirectory, "sample.mp4");
         await File.WriteAllBytesAsync(sourcePath, [1, 2, 3, 4], TestContext.Current.CancellationToken);
 
-        FakeServiceScope scope = CreateScope(tempDirectory, ttsEngine: ttsEngine);
+        FakeServiceScope scope = CreateScope(tempDirectory, ttsEngine: ttsEngine, loudnessNormalizer: loudnessNormalizer);
         TranscriptProjectState state = await scope.Workspace.Project.CreateAsync(
             new CreateTranscriptProjectRequest(
                 "Transcript Demo",
@@ -129,7 +130,8 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
         TtsTimingOptions? timingOptions = null,
         IExportToolAvailabilityService? exportToolAvailabilityService = null,
         FakeTranslationEngine? translationEngine = null,
-        bool enableSpeechEnhancement = false)
+        bool enableSpeechEnhancement = false,
+        ILoudnessNormalizer? loudnessNormalizer = null)
     {
         var mediaRepository = new FakeMediaAssetRepository();
         var speakerRepository = new FakeSpeakerRepository();
@@ -324,7 +326,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
                 fileFingerprintService,
                 mediaRepository,
                 stageRunStore,
-                new FakeLoudnessNormalizer(),
+                loudnessNormalizer ?? new FakeLoudnessNormalizer(),
                 new FakeExportRenderer(),
                 new FakeMediaProbe(),
                 new SubtitleExportService(),
@@ -634,15 +636,35 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
             reads[relativePath] = value!;
         }
 
-        public Task<T?> ReadJsonAsync<T>(string relativePath, CancellationToken cancellationToken)
+        public async Task<T?> ReadJsonAsync<T>(string relativePath, CancellationToken cancellationToken)
         {
             if (reads.TryGetValue(relativePath, out object? value))
             {
-                return Task.FromResult((T?)value);
+                return (T?)value;
             }
 
-            return Task.FromResult<T?>(default);
+            // Fall back to disk so a cleared cache genuinely rehydrates from durable state.
+            string path = GetPath(relativePath);
+            if (!File.Exists(path))
+            {
+                return default;
+            }
+
+            string json = await File.ReadAllTextAsync(path, cancellationToken);
+            T? deserialized = System.Text.Json.JsonSerializer.Deserialize<T>(json);
+            if (deserialized is not null)
+            {
+                reads[relativePath] = deserialized;
+            }
+
+            return deserialized;
         }
+
+        /// <summary>
+        /// Clears the in-memory JSON cache so subsequent reads come from disk,
+        /// simulating a process restart for reopen coverage.
+        /// </summary>
+        public void SimulateProcessRestart() => reads.Clear();
 
         public void Remove(string relativePath)
         {

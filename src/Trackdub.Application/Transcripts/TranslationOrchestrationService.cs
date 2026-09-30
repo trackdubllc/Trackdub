@@ -509,7 +509,10 @@ public sealed class TranslationOrchestrationService(
                 currentState.ProjectUiSettings,
                 allSegmentIndices,
                 allSegmentIndices.ToHashSet(),
-                translationStageRun.Id);
+                translationStageRun.Id) with
+            {
+                SelectedTranslationTargetLanguage = targetLanguage,
+            };
             await SegmentStageRunProvenanceStore.PersistUiSettingsAsync(
                 artifactStore,
                 currentState.ProjectState.Project,
