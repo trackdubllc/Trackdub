@@ -42,10 +42,11 @@ ARCHIVE_PAUSE_S = 0.5
 AUDIO_EXTENSIONS = {"mp3", "ogg", "oga", "wav", "flac"}
 FILETYPE_ALIASES = {"mp32": "mp3"}  # Jamendo labels its MP3 streams "mp32"
 PUBLIC_DOMAIN_URLS = (
-    "creativecommons.org/publicdomain/mark/1.0",
-    "creativecommons.org/licenses/publicdomain",
-    "creativecommons.org/publicdomain/zero/1.0",
+    "/publicdomain/mark/1.0",
+    "/licenses/publicdomain",
+    "/publicdomain/zero/1.0",
 )
+PUBLIC_DOMAIN_HOSTS = {"creativecommons.org", "www.creativecommons.org"}
 NON_SOLO_TITLE = re.compile(r"collection|anthology|dramatic|poetry|poems|\bvol(ume|\.)?\b|short stor", re.IGNORECASE)
 
 FetchJson = Callable[[str], dict]
@@ -227,8 +228,16 @@ def discover_librivox(config: dict, fetch_json: FetchJson, retrieved_at: str,
         seconds = sum(p * m for p, m in zip(reversed(parts), (1, 60, 3600)))
         return seconds >= int(config.get("min_runtime_minutes", 30)) * 60
 
+    def is_public_domain_license(value: object) -> bool:
+        parsed = urllib.parse.urlsplit(str(value).strip())
+        return (parsed.scheme.lower() == "https"
+                and parsed.hostname in PUBLIC_DOMAIN_HOSTS
+                and parsed.query == ""
+                and parsed.fragment == ""
+                and parsed.path.rstrip("/") in PUBLIC_DOMAIN_URLS)
+
     eligible = [d for d in docs
-                if any(u in str(d.get("licenseurl", "")) for u in PUBLIC_DOMAIN_URLS)
+                if is_public_domain_license(d.get("licenseurl", ""))
                 and not NON_SOLO_TITLE.search(str(d.get("title", "")))
                 and long_enough(d)]
     random.Random(int(config.get("seed", 1))).shuffle(eligible)
