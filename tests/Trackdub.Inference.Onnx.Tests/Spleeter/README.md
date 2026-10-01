@@ -14,8 +14,8 @@ Production contracts live in `SpleeterModelConstants` (used by separator, engine
 | Window | periodic Hann (locked via impulse STFT magnitudes) |
 | Mask (production = sherpa) | `(stem^2 + eps/2) / (vocals^2 + accomp^2 + eps)`, `eps=1e-10` |
 | HF bins | model-backed only `k < 1024`; inverse zeros the rest |
-| ONNX I/O | `[2, num_splits, 512, 1024]`, input name from session metadata |
-| Files | `vocals.onnx` + `accompaniment.onnx` (FP32, HF `main`) |
+| ONNX I/O | `[2, num_splits, 512, 1024]` (export @ `7001ba3`) or `[num_splits, 2, 512, 1024]` (pinned `3e5a4dd`); one split per call, so both share one `[channel, frame, freq]` buffer; layout and input name come from session metadata |
+| Files | `vocals.onnx` + `accompaniment.onnx` (FP32, HF revision `3e5a4dd`, sha256-pinned in the manifest) |
 
 Tests do **not** require model downloads. Optional `generate_spleeter_reference.py` writes mono wav + sine/noise npz goldens.
 

@@ -33,7 +33,7 @@ internal sealed class SpleeterStftProcessor
     /// Forward STFT of <paramref name="frameCount"/> consecutive frames starting at
     /// <paramref name="startFrame"/>, computed identically to the equivalent slice of the
     /// global <see cref="Forward"/> on each channel. Magnitudes/phases are laid out as
-    /// [channel, frame, freq] = model input [2, 1, frameCount, <see cref="SpleeterModelConstants.MaxFreqBins"/>].
+    /// [channel, frame, freq] = model input [2, 1, frameCount, <see cref="SpleeterModelConstants.MaxFreqBins"/>] (or [1, 2, ...] for the splits-first export).
     /// </summary>
     internal SpleeterStftBlock ForwardBlock(
         ReadOnlySpan<float> left,
@@ -275,7 +275,7 @@ internal sealed class SpleeterStftProcessor
 
 /// <summary>
 /// Pooled magnitude/phase arrays for one <see cref="SpleeterModelConstants.TimePad"/>-frame
-/// STFT block, laid out as [channel, frame, freq] = model input [2, 1, TimePad, MaxFreqBins].
+/// STFT block, laid out as [channel, frame, freq] = model input [2, 1, TimePad, MaxFreqBins] (or [1, 2, ...] for the splits-first export).
 /// </summary>
 internal sealed class SpleeterStftBlock : IDisposable
 {

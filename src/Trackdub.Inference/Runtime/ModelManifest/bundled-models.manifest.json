@@ -144,16 +144,23 @@
       "voice_cloning": false,
       "commercial_use_verified": true,
       "source_url": "https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems",
-      "revision": "main",
-      "sha256": "bdc16ab6bf6117ddd4842c19e80e40e2be188fc555295064d424616b0224ac97",
+      "revision": "3e5a4dd68259675ab0ddc38269fdae1d0c41f20c",
+      "sha256": "932fff35af1ded8eedc501031bfd6dc12cb0024a3dfa8e2c4537fd0aee9eb149",
       "aliases": [
         "spleeter"
       ],
       "root_path": "../../../../models/spleeter",
       "benchmark_entry": "vocals.onnx",
       "download_file_sources": {
-        "vocals.onnx": "https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems/resolve/main/vocals.onnx",
-        "accompaniment.onnx": "https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems/resolve/main/accompaniment.onnx"
+        "vocals.onnx": "https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems/resolve/3e5a4dd68259675ab0ddc38269fdae1d0c41f20c/vocals.onnx",
+        "accompaniment.onnx": "https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems/resolve/3e5a4dd68259675ab0ddc38269fdae1d0c41f20c/accompaniment.onnx"
+      },
+      "download_file_hashes": {
+        "vocals.onnx": "932fff35af1ded8eedc501031bfd6dc12cb0024a3dfa8e2c4537fd0aee9eb149",
+        "accompaniment.onnx": "79ee6096c9fdac9f6df781fea97035f0ffda48f73441d053b131cf220d8a7d73"
+      },
+      "hash_verification": {
+        "mode": "required"
       },
       "optimization": {
         "olive": {

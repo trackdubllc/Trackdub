@@ -11,6 +11,21 @@ namespace Trackdub.Benchmarks;
 
 public static class Program
 {
+    private delegate Task<int> CommandHandler(
+        string[] args, TextWriter output, TextWriter error, CancellationToken cancellationToken);
+
+    private static readonly IReadOnlyDictionary<string, CommandHandler> CommandHandlers =
+        new Dictionary<string, CommandHandler>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["controlled"] = RunControlledAsync,
+            ["controlled-matrix"] = RunControlledMatrixAsync,
+            ["matrix"] = RunProviderMatrixAsync,
+            ["provider-matrix"] = RunProviderMatrixAsync,
+            ["separation-eval"] = RunSeparationEvalAsync,
+            ["audio-prep"] = RunAudioPrepAsync,
+            ["dubbing"] = RunDubbingBenchmarkAsync,
+        };
+
     public static async Task<int> Main(string[] args)
     {
         var cancellationTokenSource = new CancellationTokenSource();
@@ -51,38 +66,10 @@ public static class Program
         TextWriter error,
         CancellationToken cancellationToken)
     {
-        if (args.Length > 0 &&
-            args[0].Equals("controlled", StringComparison.OrdinalIgnoreCase))
+        if (args.Length > 0 && CommandHandlers.TryGetValue(args[0], out CommandHandler? commandHandler))
         {
-            return await RunControlledAsync(args.Skip(1).ToArray(), output, error, cancellationToken)
+            return await commandHandler(args.Skip(1).ToArray(), output, error, cancellationToken)
                 .ConfigureAwait(false);
-        }
-
-        if (args.Length > 0 &&
-            args[0].Equals("controlled-matrix", StringComparison.OrdinalIgnoreCase))
-        {
-            return await RunControlledMatrixAsync(args.Skip(1).ToArray(), output, error, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        if (args.Length > 0 &&
-            (args[0].Equals("matrix", StringComparison.OrdinalIgnoreCase) ||
-             args[0].Equals("provider-matrix", StringComparison.OrdinalIgnoreCase)))
-        {
-            return await RunProviderMatrixAsync(args.Skip(1).ToArray(), output, error, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        if (args.Length > 0 &&
-            args[0].Equals("audio-prep", StringComparison.OrdinalIgnoreCase))
-        {
-            return await RunAudioPrepAsync(args.Skip(1).ToArray(), output, error, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (args.Length > 0 &&
-            args[0].Equals("dubbing", StringComparison.OrdinalIgnoreCase))
-        {
-            return await RunDubbingBenchmarkAsync(args.Skip(1).ToArray(), output, error, cancellationToken).ConfigureAwait(false);
         }
 
         if (!BenchmarkOptions.TryParse(args, error, out var options))
@@ -157,6 +144,77 @@ public static class Program
             error.WriteLine(ex.ToString());
             return 1;
         }
+    }
+
+    private static async Task<int> RunSeparationEvalAsync(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        if (!SeparationEvalOptions.TryParse(args, error, out SeparationEvalOptions options))
+        {
+            error.WriteLine(SeparationEvalOptions.Usage);
+            return 1;
+        }
+
+        if (options.ShowHelp)
+        {
+            output.WriteLine(SeparationEvalOptions.Usage);
+            return 0;
+        }
+
+        try
+        {
+            return await SeparationEvalRunner.RunAsync(options, output, error, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (IOException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (TimeoutException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+    }
+
+    private static int ReportSeparationEvalFailure(TextWriter error, Exception exception)
+    {
+        error.WriteLine(exception.ToString());
+        return 1;
     }
 
     private static async Task<int> RunControlledAsync(

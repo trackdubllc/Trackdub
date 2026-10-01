@@ -1,0 +1,29 @@
+{
+  "name": "corpus-sources.v1",
+  "notes": "Openverse anonymous quota is 200 requests per day, so the spec stays small. Openverse audio URLs for Freesound are 128 kbps MP3 previews (lossy, band-limited near 16-19 kHz), not the originals. LibriVox is read speech from 64 kbps MP3 (about 22 kHz sample rate), truncated by range_bytes. Group is the Openverse source and creator, or the LibriVox book. Tags come from the query and are unverified.",
+  "openverse": [
+    {"name": "music instrumental cinematic", "role": "music", "tags": ["instrumental"], "q": "cinematic instrumental", "source": "jamendo", "pages": 3, "limit": 30, "min_duration_s": 60, "max_duration_s": 360, "per_creator_cap": 2, "range_bytes": 3000000},
+    {"name": "music instrumental piano strings", "role": "music", "tags": ["instrumental"], "q": "instrumental piano strings", "source": "jamendo", "pages": 2, "limit": 20, "min_duration_s": 60, "max_duration_s": 360, "per_creator_cap": 2, "range_bytes": 3000000},
+    {"name": "music with vocals", "role": "music", "tags": ["vocals"], "q": "vocals", "source": "jamendo", "pages": 3, "limit": 30, "min_duration_s": 60, "max_duration_s": 360, "per_creator_cap": 2, "range_bytes": 3000000},
+    {"name": "music songs", "role": "music", "tags": ["vocals"], "q": "song", "source": "jamendo", "pages": 2, "limit": 20, "min_duration_s": 60, "max_duration_s": 360, "per_creator_cap": 2, "range_bytes": 3000000},
+
+    {"name": "sfx explosion", "role": "sfx", "tags": ["loud"], "q": "explosion", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 2, "max_duration_s": 40, "per_creator_cap": 2},
+    {"name": "sfx gunshot", "role": "sfx", "tags": ["loud"], "q": "gunshot", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 2, "max_duration_s": 40, "per_creator_cap": 2},
+    {"name": "sfx impact crash", "role": "sfx", "tags": ["loud"], "q": "impact crash", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 2, "max_duration_s": 40, "per_creator_cap": 2},
+    {"name": "sfx engine", "role": "sfx", "tags": ["loud"], "q": "engine roar", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 3, "max_duration_s": 60, "per_creator_cap": 2},
+    {"name": "sfx thunder", "role": "sfx", "tags": ["loud"], "q": "thunder", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 3, "max_duration_s": 60, "per_creator_cap": 2},
+
+    {"name": "ambience crowd", "role": "ambience", "tags": ["crowd"], "q": "crowd", "source": "freesound", "pages": 2, "limit": 25, "min_duration_s": 20, "max_duration_s": 300, "per_creator_cap": 2},
+    {"name": "ambience restaurant murmur", "role": "ambience", "tags": ["crowd"], "q": "restaurant crowd murmur", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 20, "max_duration_s": 300, "per_creator_cap": 2},
+    {"name": "ambience stadium", "role": "ambience", "tags": ["crowd"], "q": "stadium crowd", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 20, "max_duration_s": 300, "per_creator_cap": 2},
+    {"name": "ambience room tone", "role": "ambience", "tags": [], "q": "room tone", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 20, "max_duration_s": 300, "per_creator_cap": 2},
+    {"name": "ambience city", "role": "ambience", "tags": [], "q": "city ambience", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 20, "max_duration_s": 300, "per_creator_cap": 2},
+    {"name": "ambience rain", "role": "ambience", "tags": [], "q": "rain", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 20, "max_duration_s": 300, "per_creator_cap": 2},
+    {"name": "ambience forest", "role": "ambience", "tags": [], "q": "forest ambience", "source": "freesound", "pages": 1, "limit": 12, "min_duration_s": 20, "max_duration_s": 300, "per_creator_cap": 2},
+
+    {"name": "rir impulse response", "role": "rir", "tags": [], "q": "impulse response", "source": "freesound", "pages": 3, "limit": 50, "min_duration_s": 0.5, "max_duration_s": 10, "per_creator_cap": 6},
+
+    {"name": "dialogue whispered speech", "role": "dialogue", "tags": ["whisper"], "q": "whispering speech", "source": "freesound", "pages": 2, "limit": 20, "min_duration_s": 5, "max_duration_s": 120, "per_creator_cap": 2}
+  ],
+  "librivox": {"books": 50, "seed": 1, "range_bytes": 3000000, "min_runtime_minutes": 30, "section_index": 3, "search_rows": 300}
+}
