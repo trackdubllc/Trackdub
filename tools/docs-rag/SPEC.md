@@ -1,6 +1,6 @@
 # Trackdub Docs RAG — Spec
 
-Version: 1.3 (2026-09-21)
+Version: 1.4 (2026-10-01)
 Status: Live
 Endpoint: `https://trackdub-docs-rag.trackdub.workers.dev`
 Owner: Tony Thompson
@@ -239,7 +239,10 @@ Auth: `Authorization: Bearer <DOCS_RAG_TOKEN>` on every request.
 
 ### Cursor (project, committed)
 
-`Trackdub/.mcp.json` and `Trackdub-gated/.mcp.json` already contain:
+`Trackdub/.mcp.json` (Claude Code: `Bearer ${DOCS_RAG_TOKEN}`, ships
+`"disabled": true` so contributors without the token don't break config parsing),
+`Trackdub/.cursor/mcp.json` (Cursor IDE: `Bearer ${env:DOCS_RAG_TOKEN}`, enabled
+as committed), and `Trackdub-gated/.mcp.json` register:
 
 ```json
 "trackdub-docs-rag": {
@@ -248,6 +251,23 @@ Auth: `Authorization: Bearer <DOCS_RAG_TOKEN>` on every request.
   "headers": { "Authorization": "Bearer <DOCS_RAG_TOKEN>" }
 }
 ```
+
+Set `DOCS_RAG_TOKEN` in the local shell or system environment — Cursor expands
+`${env:DOCS_RAG_TOKEN}` from there and Claude Code expands `${DOCS_RAG_TOKEN}`.
+Do not commit the literal token. To use the Claude Code entry, remove
+`"disabled": true` locally (opt-in).
+
+### Cursor Cloud Agents
+
+A committed project `mcp.json` does **not** reach Cloud Agents by itself. Add the
+same HTTP server under [cursor.com/agents](https://cursor.com/agents) (personal
+MCP dropdown) or **Dashboard → Integrations & MCP** (team), with header
+`Authorization: Bearer <DOCS_RAG_TOKEN>`. The token is held as a Cursor Secret
+(`DOCS_RAG_TOKEN`, injected into the cloud-agent runtime) and/or pasted as the
+dashboard header — this is separate from, and does not replace, the local shell
+or system environment used by the IDE configs above. Streamable HTTP only;
+SSE/`mcp-remote` are unsupported. Tool calls are proxied; the bearer stays out
+of the VM.
 
 ### Cursor (global)
 
@@ -269,6 +289,33 @@ Streamable HTTP at `/mcp`; initialize handshake returns serverInfo
 `trackdub-docs-rag` v0.2.0. Any client that speaks
 `Authorization` headers + streamable HTTP works. Raw HTTP alternative:
 `POST /v1/search` and `POST /v1/ask` (`{"query","scope","limit"}`).
+### Test validation with project configuration
+
+The committed `Trackdub/.mcp.json` entry ships `"disabled": true` so contributors
+without `DOCS_RAG_TOKEN` don't break config parsing. To validate that an agent
+discovers the three tools, enable it locally first (remove `"disabled": true`
+from `.mcp.json`), then verify with `DOCS_RAG_TOKEN` set:
+
+**Claude Code (project context):**
+```bash
+# From Trackdub repo root, with DOCS_RAG_TOKEN exported
+claude mcp list --context project
+```
+
+Expected output includes:
+```
+trackdub-docs-rag (http)
+  Tools: search_trackdub_docs, ask_trackdub_docs, get_trackdub_doc
+```
+
+**Cursor IDE:**
+Open MCP panel in Cursor settings; the trackdub-docs-rag server should appear with status "Connected" and show 3 tools after environment variable substitution succeeds.
+
+**Direct HTTP initialization (any client):**
+```bash
+curl -X POST https://trackdub-docs-rag.trackdub.workers.dev/mcp -H "Authorization: Bearer ${DOCS_RAG_TOKEN}" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}'
+```
+
 
 ### Adding a *new agent identity* (per-agent tokens)
 
