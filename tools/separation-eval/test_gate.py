@@ -89,7 +89,7 @@ class BandLimitTests(unittest.TestCase):
         self.assertTrue(r.passed)
         self.assertGreater(r.bandwidth_retained_db, -0.5)
 
-    def test_content_kept_above_the_band_is_reported_and_not_gated(self):
+    def test_content_kept_above_the_band_is_reported_and_fails_the_full_band_gate(self):
         r = metrics.check_reconstruction(self.mix, self.zero, self.band_limited + 0.5 * (self.mix - self.band_limited),
                                          SR, band_limit_hz=LIMIT)
         self.assertFalse(r.passed, r.reasons)
