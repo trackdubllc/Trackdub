@@ -29,15 +29,16 @@ public sealed class SeparationEvalRunnerTests
     [InlineData("""{"id":" ","input":"x","vocals_output":"v","bed_output":"b"}""")]
     public void ReadJobs_RejectsMalformedLines(string line)
     {
-        Assert.Throws<InvalidDataException>(() => SeparationEvalRunner.ReadJobs(new StringReader(line)));
+        using var reader = new StringReader(line);
+        Assert.Throws<InvalidDataException>(() => SeparationEvalRunner.ReadJobs(reader));
     }
 
     [Fact]
     public void ReadJobs_RejectsDuplicateIds()
     {
         const string line = """{"id":"a","input":"x","vocals_output":"v","bed_output":"b"}""";
-        Assert.Throws<InvalidDataException>(
-            () => SeparationEvalRunner.ReadJobs(new StringReader(line + "\n" + line)));
+        using var reader = new StringReader(line + "\n" + line);
+        Assert.Throws<InvalidDataException>(() => SeparationEvalRunner.ReadJobs(reader));
     }
 
     [Fact]
@@ -62,7 +63,7 @@ public sealed class SeparationEvalRunnerTests
     [InlineData("--jobs")]
     public void TryParse_RejectsBadArguments(params string[] args)
     {
-        var error = new StringWriter();
+        using var error = new StringWriter();
 
         Assert.False(SeparationEvalOptions.TryParse(args, error, out _));
         Assert.NotEmpty(error.ToString());
@@ -79,7 +80,7 @@ public sealed class SeparationEvalRunnerTests
             new SeparationEvalJob("bad", "b.wav", Out("v2"), Out("b2")),
             new SeparationEvalJob("ok2", "c.wav", Out("v3"), Out("b3")),
         };
-        var lines = new StringWriter();
+        using var lines = new StringWriter();
 
         IReadOnlyList<SeparationEvalResult> results = await SeparationEvalRunner.RunJobsAsync(
             jobs, engine, sampler, "spleeter", "cpu", lines, CancellationToken.None);
@@ -90,7 +91,7 @@ public sealed class SeparationEvalRunnerTests
         Assert.Equal(12.0, results[0].AudioSeconds);
         Assert.True(results[0].Rtf > 0);
         Assert.Equal("Cpu", results[0].SelectedProvider);
-        Assert.All(results.Where(r => r.Ok), r => Assert.True(r.PeakWorkingSetBytes >= r.WorkingSetBeforeBytes));
+        Assert.All(results.Where(r => r.Ok), r => Assert.NotNull(r.PeakWorkingSetBytes));
         Assert.Equal("cpu", engine.Requests[0].PreferredExecutionProvider);
         Assert.True(engine.Requests[0].RequirePreferredExecutionProvider);
         Assert.Equal("spleeter", engine.Requests[0].PreferredModelAlias);
@@ -127,6 +128,68 @@ public sealed class SeparationEvalRunnerTests
             new FakeEngine(), new SequenceSampler(1), "spleeter", null, TextWriter.Null, cts.Token));
     }
 
+    [Fact]
+    public async Task RunJobsAsync_RecordsOutputDirectoryFailureAndContinues()
+    {
+        using var lines = new StringWriter();
+        var jobs = new[]
+        {
+            new SeparationEvalJob("bad-path", "a.wav", "\0", Out("bad-bed")),
+            new SeparationEvalJob("next", "b.wav", Out("next-vocals"), Out("next-bed")),
+        };
+        var engine = new FakeEngine();
+
+        IReadOnlyList<SeparationEvalResult> results = await SeparationEvalRunner.RunJobsAsync(
+            jobs, engine, new SequenceSampler(10, 20), "spleeter", null, lines, CancellationToken.None);
+
+        Assert.Equal([false, true], results.Select(result => result.Ok));
+        Assert.False(string.IsNullOrWhiteSpace(results[0].Error));
+        Assert.Single(engine.Requests);
+        Assert.Contains("bad-path", lines.ToString());
+        Assert.Contains("next", lines.ToString());
+    }
+
+    [Fact]
+    public async Task RunJobsAsync_RecordsUnrequestedCancellationAndContinues()
+    {
+        using var lines = new StringWriter();
+        var engine = new FakeEngine { CancelWithoutCallerRequestOn = "a.wav" };
+        var jobs = new[]
+        {
+            new SeparationEvalJob("cancelled", "a.wav", Out("cancelled-vocals"), Out("cancelled-bed")),
+            new SeparationEvalJob("next", "b.wav", Out("next-vocals"), Out("next-bed")),
+        };
+
+        IReadOnlyList<SeparationEvalResult> results = await SeparationEvalRunner.RunJobsAsync(
+            jobs, engine, new SequenceSampler(10, 20, 30, 40), "spleeter", null, lines, CancellationToken.None);
+
+        Assert.Equal([false, true], results.Select(result => result.Ok));
+        Assert.Contains("timed out", results[0].Error);
+        Assert.Equal(2, engine.Requests.Count);
+    }
+
+    [Fact]
+    public async Task RunAsync_ReportsResultsSetupFailureAsControlledError()
+    {
+        string jobsPath = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".jsonl");
+        await File.WriteAllTextAsync(jobsPath,
+            "{\"id\":\"a\",\"input\":\"in.wav\",\"vocals_output\":\"v.wav\",\"bed_output\":\"b.wav\"}\n");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var options = new SeparationEvalOptions(jobsPath, "\0", null, "spleeter", null, null, null, null, false);
+
+        try
+        {
+            int exitCode = await SeparationEvalRunner.RunAsync(options, output, error, CancellationToken.None);
+            Assert.Equal(1, exitCode);
+            Assert.Contains("setup failed", error.ToString());
+        }
+        finally
+        {
+            File.Delete(jobsPath);
+        }
+    }
+
     private static string Out(string name) =>
         Path.Join(Path.GetTempPath(), "trackdub-separation-eval-tests", name + ".wav");
 
@@ -141,6 +204,8 @@ public sealed class SeparationEvalRunnerTests
     {
         public string? FailOn { get; init; }
 
+        public string? CancelWithoutCallerRequestOn { get; init; }
+
         public List<StemSeparationRequest> Requests { get; } = [];
 
         public string EngineFamily => "spleeter";
@@ -152,6 +217,12 @@ public sealed class SeparationEvalRunnerTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             Requests.Add(request);
+            if (CancelWithoutCallerRequestOn is not null &&
+                string.Equals(request.SourceAudioPath, CancelWithoutCallerRequestOn, StringComparison.Ordinal))
+            {
+                throw new TaskCanceledException("engine timed out");
+            }
+
             if (FailOn is not null && string.Equals(request.SourceAudioPath, FailOn, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("boom");

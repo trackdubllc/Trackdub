@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -104,16 +105,23 @@ class EvaluateTests(EvalTestBase):
         self.assertTrue(a1["reconstruction"]["passed"], a1["reconstruction"])
         self.assertGreater(a1["leakage"]["dialogue_residual_db"], -6.0)
 
-    def test_dialogue_only_output_fails_the_gate_and_mutes_the_bed(self):
+    def test_dialogue_only_output_reconstructs_but_mutes_the_bed(self):
         sep = fake_separator(lambda mono: (mono, np.zeros_like(mono)))
         a1 = self.clip(evaluate(self.root, self.corpus, sep), "a1-dev-000")
         self.assertTrue(a1["ok"], a1["error"])
+        self.assertTrue(a1["separator_ok"])
+        self.assertTrue(a1["reconstruction"]["passed"])
         self.assertLess(a1["damage"]["si_sdr_db"], -20.0)
 
     def test_muted_output_fails_reconstruction(self):
         sep = fake_separator(lambda mono: (np.zeros_like(mono), np.zeros_like(mono)))
-        a1 = self.clip(evaluate(self.root, self.corpus, sep), "a1-dev-000")
+        result = evaluate(self.root, self.corpus, sep)
+        a1 = self.clip(result, "a1-dev-000")
+        self.assertFalse(a1["ok"])
+        self.assertIn("reconstruction gate failed", a1["error"])
         self.assertFalse(a1["reconstruction"]["passed"])
+        self.assertEqual(result["summary"]["clips_scored"], 3)
+        self.assertEqual(len(result["summary"]["clips_failed"]), 3)
 
     def test_undefined_metrics_are_skipped_not_fatal(self):
         sep = fake_separator(lambda mono: (np.zeros_like(mono), mono))
@@ -138,6 +146,15 @@ class EvaluateTests(EvalTestBase):
             results_path.write_text("\n".join(rows) + "\n")
         result = evaluate(self.root, self.corpus, drop_last)
         self.assertIn("no result from separator", {f["error"] for f in result["summary"]["clips_failed"]})
+
+    def test_generated_audio_hash_mismatch_stops_before_running_separator(self):
+        clip = self.corpus / "a1-dev-000" / "mixture.wav"
+        clip.write_bytes(clip.read_bytes() + b"tampered")
+        called = []
+
+        with self.assertRaisesRegex(run_eval.EvalError, "mixture SHA-256 mismatch"):
+            evaluate(self.root, self.corpus, lambda *_: called.append(True))
+        self.assertEqual(called, [])
 
     def test_resource_summary_splits_cold_and_warm(self):
         sep = fake_separator(lambda mono: (np.zeros_like(mono), mono))
@@ -175,7 +192,7 @@ class VariantTests(unittest.TestCase):
             root = Path(td)
             corpus = build_corpus(root, recipes=("A11",), count=4)
             sep = fake_separator(lambda mono: (np.zeros_like(mono), mono))
-            result = evaluate(root, corpus, sep)
+            result = evaluate(root, corpus, sep, gate={"output_bits": 16, "output_rounding": "nearest"})
             for clip in result["clips"]:
                 self.assertTrue(clip["ok"], f"{clip['variant']}: {clip['error']}")
                 # PCM16 outputs cost up to half an LSB of error, which on a quiet 8 kHz clip sits
@@ -202,6 +219,28 @@ class GateConfigTests(EvalTestBase):
 
     def test_spleeter_profile_matches_the_engine(self):
         self.assertEqual(run_eval.CANDIDATE_PROFILES["spleeter"], {"band_limit_hz": 11025.0, "output_bits": 16, "output_rounding": "truncate"})
+
+    def test_failed_reconstruction_gate_is_a_failed_cli_result_and_creates_output_parent(self):
+        out = self.root / "nested" / "results.json"
+        args = ["--corpus", str(self.corpus), "--work", str(self.root / "work"), "--out", str(out),
+                "--hardware-label", "unit-test", "--runner", "tool"]
+        with patch.object(run_eval, "dotnet_runner", return_value=fake_separator(
+                lambda mono: (np.zeros_like(mono), np.zeros_like(mono)))):
+            exit_code = run_eval.main(args)
+
+        self.assertEqual(exit_code, 2)
+        result = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(result["summary"]["clips_scored"], 3)
+        self.assertEqual(result["summary"]["strata"]["all"]["reconstruction_gate_pass"], 0)
+        self.assertEqual(len(result["summary"]["clips_failed"]), 3)
+
+
+class RunnerDefaultsTests(unittest.TestCase):
+    def test_default_framework_is_portable_off_windows_and_windows_specific_on_windows(self):
+        with patch.object(run_eval.platform, "system", return_value="Linux"):
+            self.assertEqual(run_eval.default_runner()[5], "net10.0")
+        with patch.object(run_eval.platform, "system", return_value="Windows"):
+            self.assertEqual(run_eval.default_runner()[5], "net10.0-windows10.0.19041.0")
 
 
 def lowpass_to(mono, cutoff):

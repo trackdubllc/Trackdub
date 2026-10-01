@@ -44,8 +44,13 @@ python tools/separation-eval/mixgen.py generate --manifest items.manifest.json -
 
 ```bash
 python tools/separation-eval/run_eval.py --corpus D:/corpus-dev --work D:/eval-work --out spleeter-dev.json \
-    --hardware-label "<machine description>" --provider cpu --model-directory <dir with vocals.onnx + accompaniment.onnx>
+    --hardware-label "<machine description>" --provider cpu --model-cache-directory <Trackdub model-cache root>
 ```
+
+The model-cache root must contain `model-cache-records.json` with a registered Spleeter model whose root contains
+`vocals.onnx` and `accompaniment.onnx`. If `--model-cache-directory` is omitted, `--model-directory` is used as the
+fallback model-cache root; neither option registers an arbitrary two-file directory as a Spleeter model. For direct
+local weights, the runner also honors `TRACKDUB_SPLEETER_ONNX_PATH` when it points to that two-file directory.
 
 - Inputs are prepared the way the pipeline feeds Spleeter: stereo (5.1 is downmixed), 44.1 kHz, PCM16. The engine writes mono 44.1 kHz stems.
 - Two domains are scored. The reconstruction gate runs in the separator domain (44.1 kHz mono: does `vocals + bed` equal the mono input?). Bed leakage, bed damage and dialogue SI-SDR run in the reference domain (stems resampled to the clip rate and tiled to stereo), so the stereo-to-mono collapse and resampling are part of what is measured.
@@ -60,10 +65,10 @@ python tools/separation-eval/run_eval.py --corpus D:/corpus-dev --work D:/eval-w
 
 ```bash
 python tools/separation-eval/discover.py --spec tools/separation-eval/corpus-sources.v1.json --out tools/separation-eval/items.v1.jsonl --api-cache D:/api-cache
-python tools/separation-eval/coverage.py --items tools/separation-eval/items.v1.jsonl
+python tools/separation-eval/recipe_coverage.py --items tools/separation-eval/items.v1.jsonl
 ```
 
-`coverage.py` checks every mixgen recipe against the list in both splits and exits non-zero if a source category is thin.
+`recipe_coverage.py` checks every mixgen recipe against the list in both splits and exits non-zero if a source category is thin.
 
 Caveats that affect what the corpus can show:
 - Freesound items are 128 kbps MP3 previews (lossy, band-limited near 16 to 19 kHz); LibriVox is 64 kbps read speech truncated to `range_bytes`. Neither is film-grade audio, so full-band behaviour is only partly exercised.

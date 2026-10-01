@@ -27,6 +27,8 @@ public sealed class SpleeterInputLayoutTests
     [Theory]
     [InlineData(new[] { -1, -1, 512, 1024 })]
     [InlineData(new[] { 2, 2, 512, 1024 })]
+    [InlineData(new[] { 3, 2, 512, 1024 })]
+    [InlineData(new[] { 2, 3, 512, 1024 })]
     [InlineData(new[] { 1, 1, 512, 1024 })]
     [InlineData(new[] { -1, 2, 256, 1024 })]
     [InlineData(new[] { -1, 2, 512, 2048 })]

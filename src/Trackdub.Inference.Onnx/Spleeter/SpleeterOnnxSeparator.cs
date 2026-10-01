@@ -178,8 +178,8 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
                 + $"[{SpleeterModelConstants.TimePad}, {SpleeterModelConstants.MaxFreqBins}], but declares {declared}.");
         }
 
-        bool splitsFirst = modelDimensions[1] == 2 && modelDimensions[0] != 2;
-        bool channelsFirst = modelDimensions[0] == 2 && modelDimensions[1] != 2;
+        bool splitsFirst = modelDimensions[1] == 2 && IsFixedOrDynamic(modelDimensions[0], 1);
+        bool channelsFirst = modelDimensions[0] == 2 && IsFixedOrDynamic(modelDimensions[1], 1);
         if (splitsFirst == channelsFirst)
         {
             throw new InvalidOperationException(

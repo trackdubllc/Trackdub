@@ -129,13 +129,23 @@ def loop_to_length(a: np.ndarray, n: int, rng: np.random.Generator) -> tuple[np.
     if m >= n:
         off = int(rng.integers(0, m - n + 1))
         return a[off:off + n], off
+    if m == 0:
+        raise ValueError("cannot loop an empty audio source")
+    if m == 1:
+        return np.repeat(a, n, axis=0), 0
+
     xf = max(1, min(2400, m // 4))
-    ramp = np.linspace(0.0, 1.0, xf, dtype=np.float32)[:, None]
-    out = a
-    while out.shape[0] < n:
-        blend = out[-xf:] * (1.0 - ramp) + a[:xf] * ramp
-        out = np.concatenate([out[:-xf], blend, a[xf:]], axis=0)
-    return out[:n], 0
+    ramp = np.linspace(0.0, 1.0, xf, dtype=np.float32).reshape((xf,) + (1,) * (a.ndim - 1))
+    out = np.empty((n,) + a.shape[1:], dtype=np.result_type(a.dtype, np.float32))
+    out[:m] = a
+    written = m
+    while written < n:
+        overlap_start = written - xf
+        out[overlap_start:written] = out[overlap_start:written] * (1.0 - ramp) + a[:xf] * ramp
+        appended = min(n - written, m - xf)
+        out[written:written + appended] = a[xf:xf + appended]
+        written += appended
+    return out, 0
 
 
 def assemble_dialogue(pool: ItemPool, rng: np.random.Generator, n: int, tags: tuple[str, ...],

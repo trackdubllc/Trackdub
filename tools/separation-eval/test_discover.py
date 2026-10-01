@@ -4,9 +4,9 @@ import unittest
 import urllib.parse
 from pathlib import Path
 
-import coverage
 import discover
 import ingest
+import recipe_coverage as coverage
 
 TODAY = "2026-09-30"
 
@@ -64,6 +64,13 @@ class OpenverseTests(unittest.TestCase):
         self.assertEqual(sum(1 for i in items if i["creator"] == "alice"), 2)
         self.assertNotIn("000000000010", [i["id"][-12:] for i in items])
         self.assertLessEqual(len(items), 3)
+
+    def test_stops_requesting_pages_when_limit_is_reached(self):
+        calls = []
+        rows = [result(1, creator="alice"), result(2, creator="bob")]
+        discover.discover_openverse([{**SPEC, "pages": 5, "limit": 1}],
+                                    openverse_fetch({1: rows, 2: [result(3, creator="cy")]}, calls), TODAY)
+        self.assertEqual(len(calls), 1)
 
     def test_item_fields_group_tags_and_attribution(self):
         item = self.candidates(SPEC, {1: [result(1, title="Big Crowd", creator="Inspector J", license="by", version="4.0")]})[0]
@@ -165,6 +172,11 @@ class LibriVoxTests(unittest.TestCase):
 
 
 class CacheAndDiscoverTests(unittest.TestCase):
+    def test_https_redirect_handler_rejects_downgrade(self):
+        handler = discover._HttpsRedirectHandler()
+        with self.assertRaisesRegex(discover.DiscoverError, "non-HTTPS"):
+            handler.redirect_request(None, None, 302, "Found", {}, "http://example.org/api")
+
     def test_discover_merges_sorts_and_rejects_duplicate_ids(self):
         spec = {"openverse": [SPEC], "librivox": LibriVoxTests.CONFIG}
         ov = openverse_fetch({1: [result(1), result(2, creator="b")]})

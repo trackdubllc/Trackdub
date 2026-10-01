@@ -15,8 +15,10 @@ Design: docs/audits/separation-eval-corpus-and-rubric.md (section 3).
 from __future__ import annotations
 
 import argparse
+import http.client
 import hashlib
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -37,6 +39,7 @@ MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 ROLES = ("dialogue", "music", "sfx", "ambience", "rir")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
+EXT_PATTERN = re.compile(r"^[a-z0-9]{1,5}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 # SPDX id (or LicenseRef) -> share-alike flag. Anything not listed is rejected.
@@ -86,14 +89,22 @@ def validate_record(rec: dict, allow_sharealike: bool) -> str | None:
             return f"missing or empty '{key}'"
     if rec.get("role") not in ROLES:
         return f"role must be one of {ROLES}"
-    if not rec["url"].startswith("https://"):
+    try:
+        parsed_url = urllib.parse.urlsplit(rec["url"])
+    except ValueError:
+        return "url must be a valid https URL"
+    if parsed_url.scheme.lower() != "https" or not parsed_url.hostname:
         return "url must be https"
+    ext = rec.get("ext")
+    if ext is not None and (not isinstance(ext, str) or not EXT_PATTERN.fullmatch(ext)):
+        return "ext, when given, must be 1 to 5 lowercase ASCII letters or digits"
     expected = rec.get("sha256")
     if expected is not None and not SHA256_PATTERN.match(str(expected)):
         return "sha256, when given, must be 64 lowercase hex characters"
     range_bytes = rec.get("range_bytes")
-    if range_bytes is not None and (not isinstance(range_bytes, int) or isinstance(range_bytes, bool) or range_bytes < 1024):
-        return "range_bytes, when given, must be an integer of at least 1024"
+    if range_bytes is not None and (not isinstance(range_bytes, int) or isinstance(range_bytes, bool)
+                                    or not 1024 <= range_bytes <= MAX_DOWNLOAD_BYTES):
+        return f"range_bytes, when given, must be an integer between 1024 and {MAX_DOWNLOAD_BYTES}"
     return check_license(rec["license_spdx"], allow_sharealike)
 
 
@@ -113,24 +124,68 @@ def sha256_file(path: Path) -> str:
 def http_fetch(url: str, dest: Path, range_bytes: int | None = None) -> None:
     """Download `url` to `dest`. With `range_bytes`, keep only the first that many bytes, which is
     deterministic and still decodable for MP3 and similar streams; servers that ignore Range are cut off."""
+    try:
+        parsed_url = urllib.parse.urlsplit(url)
+    except ValueError as exc:
+        raise IngestError(f"invalid download URL: {exc}") from exc
+    if parsed_url.scheme.lower() != "https" and not _is_loopback_http(url):
+        raise IngestError("url must be https")
     tmp = dest.with_suffix(dest.suffix + ".part")
     headers = {"User-Agent": "trackdub-separation-eval/1"}
     limit = MAX_DOWNLOAD_BYTES if range_bytes is None else range_bytes
     if range_bytes is not None:
         headers["Range"] = f"bytes=0-{range_bytes - 1}"
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as resp, tmp.open("wb") as out:
-        total = 0
-        while chunk := resp.read(min(1024 * 1024, limit - total + 1)):
-            total += len(chunk)
-            if total > limit:
-                if range_bytes is None:
-                    tmp.unlink(missing_ok=True)
-                    raise IngestError(f"download exceeds {MAX_DOWNLOAD_BYTES} bytes")
-                out.write(chunk[: len(chunk) - (total - limit)])
-                break
-            out.write(chunk)
-    tmp.replace(dest)
+    opener = urllib.request.build_opener(_HttpsRedirectHandler())
+    try:
+        with opener.open(req, timeout=60) as resp:
+            if urllib.parse.urlsplit(resp.geturl()).scheme.lower() != "https" and not _is_loopback_http(url):
+                raise IngestError("HTTPS download redirected to a non-HTTPS URL")
+
+            expected = None
+            content_range = resp.headers.get("Content-Range")
+            if content_range:
+                match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+|\*)", content_range.strip(), re.IGNORECASE)
+                if match and int(match.group(1)) == 0 and match.group(3) != "*":
+                    expected = min(limit, int(match.group(3)))
+                elif resp.status == 206:
+                    raise IngestError("download has an invalid Content-Range header")
+            if expected is None and resp.headers.get("Content-Length") is not None:
+                expected = min(limit, int(resp.headers["Content-Length"]))
+
+            total = 0
+            with tmp.open("wb") as out:
+                while chunk := resp.read(min(1024 * 1024, limit - total + 1)):
+                    total += len(chunk)
+                    if total > limit:
+                        if range_bytes is None:
+                            raise IngestError(f"download exceeds {MAX_DOWNLOAD_BYTES} bytes")
+                        chunk = chunk[: len(chunk) - (total - limit)]
+                        total = limit
+                    out.write(chunk)
+                    if total == limit:
+                        break
+            if expected is not None and total < expected:
+                raise IngestError(f"incomplete download: received {total} of {expected} bytes")
+        tmp.replace(dest)
+    except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError, IngestError) as exc:
+        tmp.unlink(missing_ok=True)
+        if isinstance(exc, IngestError):
+            raise
+        raise IngestError(f"download failed: {exc}") from exc
+
+
+class _HttpsRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlsplit(newurl).scheme.lower() != "https":
+            raise IngestError("HTTPS download redirected to a non-HTTPS URL")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _is_loopback_http(url: str) -> bool:
+    """Allow plain HTTP only for local fixture servers used by unit tests."""
+    parsed = urllib.parse.urlsplit(url)
+    return parsed.scheme.lower() == "http" and parsed.hostname in {"127.0.0.1", "::1", "localhost"}
 
 
 def probe_audio(path: Path) -> dict:
@@ -141,16 +196,18 @@ def probe_audio(path: Path) -> dict:
              "stream=codec_name,sample_rate,channels:format=duration", "-of", "json", str(path)],
             capture_output=True, text=True, check=False)
         if proc.returncode == 0:
-            info = json.loads(proc.stdout)
-            streams = info.get("streams") or []
-            if streams:
+            try:
+                info = json.loads(proc.stdout)
+                streams = info["streams"]
                 s = streams[0]
-                return {
-                    "duration_s": round(float(info["format"]["duration"]), 3),
-                    "sample_rate": int(s["sample_rate"]),
-                    "channels": int(s["channels"]),
-                    "codec": s.get("codec_name", "unknown"),
-                }
+                duration = float(info["format"]["duration"])
+                sample_rate, channels = int(s["sample_rate"]), int(s["channels"])
+                if not math.isfinite(duration) or duration <= 0 or sample_rate <= 0 or channels <= 0:
+                    raise ValueError("duration, sample_rate and channels must be positive")
+                return {"duration_s": round(duration, 3), "sample_rate": sample_rate,
+                        "channels": channels, "codec": s.get("codec_name", "unknown")}
+            except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError, OverflowError) as exc:
+                raise IngestError(f"invalid ffprobe output for {path.name}: {exc}") from exc
     try:
         with wave.open(str(path), "rb") as w:
             return {
@@ -164,8 +221,15 @@ def probe_audio(path: Path) -> dict:
 
 
 def cache_path(cache: Path, rec: dict) -> Path:
-    ext = f".{rec['ext']}" if rec.get("ext") else (Path(rec["url"].split("?", 1)[0]).suffix.lower() or ".bin")
-    return cache / rec["role"] / f"{rec['id']}{ext}"
+    record_ext = rec.get("ext")
+    if record_ext is not None and (not isinstance(record_ext, str) or not EXT_PATTERN.fullmatch(record_ext)):
+        raise IngestError("ext, when given, must be 1 to 5 lowercase ASCII letters or digits")
+    ext = f".{record_ext}" if record_ext else (Path(rec["url"].split("?", 1)[0]).suffix.lower() or ".bin")
+    root = cache.resolve()
+    destination = (root / rec["role"] / f"{rec['id']}{ext}").resolve()
+    if not destination.is_relative_to(root):
+        raise IngestError("cache destination escapes the cache directory")
+    return destination
 
 
 def fetch_all(
@@ -228,6 +292,9 @@ def ingest_items(
 
     valid: list[tuple[dict, Path]] = []
     for rec in records:
+        if not isinstance(rec, dict):
+            rejected.append(Rejection("<invalid>", "record must be a JSON object"))
+            continue
         item_id = str(rec.get("id", "<missing>"))
         reason = validate_record(rec, allow_sharealike)
         if reason is None and item_id in seen_ids:
@@ -266,7 +333,7 @@ def ingest_items(
 
         try:
             audio = probe(dest)
-        except IngestError as exc:
+        except (IngestError, KeyError, TypeError, ValueError, OverflowError) as exc:
             rejected.append(Rejection(item_id, str(exc)))
             continue
 
@@ -341,9 +408,12 @@ def read_jsonl(path: Path) -> list[dict]:
         if not line or line.startswith("#"):
             continue
         try:
-            records.append(json.loads(line))
+            record = json.loads(line)
         except json.JSONDecodeError as exc:
             raise IngestError(f"{path}:{n}: invalid JSON: {exc}") from exc
+        if not isinstance(record, dict):
+            raise IngestError(f"{path}:{n}: expected a JSON object")
+        records.append(record)
     return records
 
 

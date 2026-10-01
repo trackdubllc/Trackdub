@@ -58,6 +58,18 @@ class QuotaError(DiscoverError):
     pass
 
 
+class _HttpsRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urllib.parse.urlsplit(newurl).scheme.lower() != "https":
+            raise DiscoverError("HTTPS request redirected to a non-HTTPS URL")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _is_loopback_http(url: str) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    return parsed.scheme.lower() == "http" and parsed.hostname in {"127.0.0.1", "::1", "localhost"}
+
+
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
@@ -78,9 +90,14 @@ def cached_fetch_json(cache_dir: Path | None, pause_s: float, *, retries: int = 
             if wait > 0:
                 time.sleep(wait)
             last_call[0] = time.monotonic()
+            if urllib.parse.urlsplit(url).scheme.lower() != "https" and not _is_loopback_http(url):
+                raise DiscoverError("url must be https")
             req = urllib.request.Request(url, headers={"User-Agent": "trackdub-separation-eval/1", "Accept": "application/json"})
             try:
-                with urllib.request.urlopen(req, timeout=60) as resp:
+                opener = urllib.request.build_opener(_HttpsRedirectHandler())
+                with opener.open(req, timeout=60) as resp:
+                    if urllib.parse.urlsplit(resp.geturl()).scheme.lower() != "https" and not _is_loopback_http(url):
+                        raise DiscoverError("HTTPS request redirected to a non-HTTPS URL")
                     data = json.loads(resp.read().decode("utf-8"))
                 break
             except urllib.error.HTTPError as exc:
@@ -165,6 +182,8 @@ def discover_openverse(specs: list[dict], fetch_json: FetchJson, retrieved_at: s
         creator_counts: dict[str, int] = {}
         kept = 0
         for page in range(1, int(spec.get("pages", 1)) + 1):
+            if kept >= int(spec.get("limit", 40)):
+                break
             params = {"q": spec["q"], "license": "cc0,pdm,by", "page_size": OPENVERSE_PAGE_SIZE, "page": page}
             for key in ("source", "category"):
                 if spec.get(key):

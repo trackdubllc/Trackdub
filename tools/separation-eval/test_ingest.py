@@ -4,6 +4,8 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import ingest
 
@@ -74,6 +76,15 @@ class IngestTests(unittest.TestCase):
         items, rejected = self.run_ingest(bad)
         self.assertEqual(items, [])
         self.assertEqual(len(rejected), 5)
+
+    def test_rejects_extensions_that_could_escape_the_cache(self):
+        for ext in ("../../../../outside", "wav/../../outside", ".."):
+            with self.subTest(ext=ext):
+                items, rejected = self.run_ingest([rec(ext=ext)])
+                self.assertEqual(items, [])
+                self.assertIn("ext", rejected[0].reason)
+                with self.assertRaises(ingest.IngestError):
+                    ingest.cache_path(self.cache, rec(ext=ext))
 
     def test_hash_mismatch_rejected(self):
         items, rejected = self.run_ingest([rec(sha256="0" * 64)])
@@ -153,6 +164,68 @@ class RangeTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+    def test_short_http_response_is_not_committed_as_a_complete_download(self):
+        import http.server, threading
+        payload = b"partial-audio"
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(payload) + 20))
+                self.end_headers()
+                self.wfile.write(payload)
+                self.close_connection = True
+
+            def log_message(self, *a):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                dest = Path(td) / "partial.bin"
+                with self.assertRaisesRegex(ingest.IngestError, "download failed|incomplete download"):
+                    ingest.http_fetch(f"http://127.0.0.1:{server.server_port}/audio", dest)
+                self.assertFalse(dest.exists())
+                self.assertFalse(dest.with_suffix(dest.suffix + ".part").exists())
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_https_redirect_handler_rejects_downgrade(self):
+        handler = ingest._HttpsRedirectHandler()
+        with self.assertRaisesRegex(ingest.IngestError, "non-HTTPS"):
+            handler.redirect_request(None, None, 302, "Found", {}, "http://example.org/audio")
+
+    def test_plain_http_is_rejected_outside_loopback_fixtures(self):
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaisesRegex(ingest.IngestError, "url must be https"):
+                ingest.http_fetch("http://example.org/audio", Path(td) / "audio.bin")
+
+
+class ProbeAndJsonlTests(unittest.TestCase):
+    def test_probe_audio_wraps_missing_and_invalid_fields(self):
+        payloads = (
+            '{"streams":[{"sample_rate":"16000","channels":1}],"format":{}}',
+            '{"streams":[{"sample_rate":"invalid","channels":1}],"format":{"duration":"2"}}',
+        )
+        for payload in payloads:
+            with self.subTest(payload=payload), patch.object(
+                    ingest.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=payload)):
+                with self.assertRaisesRegex(ingest.IngestError, "invalid ffprobe output"):
+                    ingest.probe_audio(Path("invalid.wav"))
+
+    def test_read_jsonl_rejects_non_object_values_with_line_number(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "items.jsonl"
+            path.write_text('{"id":"ok"}\nnull\n[]\n', encoding="utf-8")
+            with self.assertRaisesRegex(ingest.IngestError, r"items\.jsonl:2: expected a JSON object"):
+                ingest.read_jsonl(path)
+
+            path.write_text('{"id":"ok"}\n[]\n', encoding="utf-8")
+            with self.assertRaisesRegex(ingest.IngestError, r"items\.jsonl:2: expected a JSON object"):
+                ingest.read_jsonl(path)
 
 
 class ParallelTests(unittest.TestCase):

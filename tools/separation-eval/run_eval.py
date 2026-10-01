@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import platform
 import shlex
 import subprocess
@@ -38,7 +37,15 @@ import metrics
 SEPARATOR_SR = 44100
 RESULTS_SCHEMA_VERSION = 1
 LENGTH_TOLERANCE_SAMPLES = 4
-DEFAULT_RUNNER = ["dotnet", "run", "--project", "src/Trackdub.Benchmarks.DevHost", "-f", "net10.0-windows10.0.19041.0", "-c", "Release", "--"]
+
+
+def default_runner() -> list[str]:
+    framework = "net10.0-windows10.0.19041.0" if platform.system() == "Windows" else "net10.0"
+    return ["dotnet", "run", "--project", "src/Trackdub.Benchmarks.DevHost", "-f", framework,
+            "-c", "Release", "--"]
+
+
+DEFAULT_RUNNER = default_runner()
 
 # (json path into a clip record, higher_is_better)
 TRACKED_METRICS: dict[str, tuple[tuple[str, ...], bool]] = {
@@ -118,6 +125,30 @@ def prepare_jobs(corpus: Path, work: Path, clips: list[dict]) -> tuple[list[dict
     return jobs, mixtures
 
 
+def verify_clip_files(corpus: Path, clips: list[dict]) -> None:
+    """Check generated audio against the hashes recorded in the corpus manifest."""
+    root = corpus.resolve()
+    for clip in clips:
+        clip_id = clip.get("clip_id")
+        clip_dir = (root / str(clip_id)).resolve()
+        if not clip_dir.is_relative_to(root):
+            raise EvalError(f"clip {clip_id!r} resolves outside the corpus directory")
+        files = clip.get("files")
+        if not isinstance(files, dict):
+            raise EvalError(f"clip {clip_id!r} has no generated-file hashes in the corpus manifest")
+        for name in ("mixture", "dialogue", "bed"):
+            expected = files.get(name)
+            if not isinstance(expected, str) or len(expected) != 64:
+                raise EvalError(f"clip {clip_id!r} has no valid {name} SHA-256 in the corpus manifest")
+            path = clip_dir / f"{name}.wav"
+            try:
+                actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            except OSError as exc:
+                raise EvalError(f"clip {clip_id!r} is missing its {name} file: {exc}") from exc
+            if actual != expected:
+                raise EvalError(f"clip {clip_id!r} {name} SHA-256 mismatch")
+
+
 def dotnet_runner(runner_cmd: list[str], provider: str | None, model_directory: str | None,
                   model: str = "spleeter", model_cache_directory: str | None = None) -> SeparatorRunner:
     def run(jobs_path: Path, results_path: Path) -> None:
@@ -144,13 +175,14 @@ def read_jsonl(path: Path) -> list[dict]:
 def score_clip(clip: dict, corpus: Path, job: dict, timing: dict, mixture44: np.ndarray,
                gate: dict | None = None) -> dict:
     record = {"clip_id": clip["clip_id"], "recipe": clip["recipe"], "variant": clip.get("variant"),
-              "codec": clip.get("codec"), "ok": False, "error": None,
+              "codec": clip.get("codec"), "ok": False, "separator_ok": False, "error": None,
               "timing": {k: timing.get(k) for k in ("job_index", "wall_ms", "rtf", "audio_seconds",
                                                      "working_set_before_bytes", "peak_working_set_bytes",
                                                      "selected_provider")}}
     if not timing.get("ok"):
         record["error"] = f"separator failed: {timing.get('error')}"
         return record
+    record["separator_ok"] = True
     try:
         vocals = am.load_audio(job["vocals_output"], channels=1, sr=SEPARATOR_SR)
         bed = am.load_audio(job["bed_output"], channels=1, sr=SEPARATOR_SR)
@@ -174,7 +206,10 @@ def score_clip(clip: dict, corpus: Path, job: dict, timing: dict, mixture44: np.
         except metrics.MetricError as exc:
             record["damage"] = {"skipped": str(exc)}
         record["dialogue_si_sdr_db"] = metrics.si_sdr(ref_d, est_d)
-        record["ok"] = True
+        record["ok"] = record["reconstruction"]["passed"]
+        if not record["ok"]:
+            reasons = record["reconstruction"].get("reasons") or ["reconstruction gate failed"]
+            record["error"] = "reconstruction gate failed: " + "; ".join(reasons)
     except (EvalError, am.AudioError, metrics.MetricError, OSError) as exc:
         record["error"] = str(exc)
     return record
@@ -198,7 +233,7 @@ def summarise(values: list[float], higher_is_better: bool) -> dict | None:
 
 
 def aggregate(records: list[dict]) -> dict:
-    scored = [r for r in records if r["ok"]]
+    scored = [r for r in records if "reconstruction" in r]
     groups = {"all": scored}
     for r in scored:
         groups.setdefault(r["recipe"], []).append(r)
@@ -206,7 +241,7 @@ def aggregate(records: list[dict]) -> dict:
     for name, rows in sorted(groups.items()):
         per_group[name] = {
             "clips": len(rows),
-            "reconstruction_gate_pass": sum(1 for r in rows if r["reconstruction"]["passed"]),
+            "reconstruction_gate_pass": sum(1 for r in rows if r["reconstruction"].get("passed")),
             "metrics": {m: summarise([v for r in rows if (v := _dig(r, path)) is not None], hib)
                         for m, (path, hib) in TRACKED_METRICS.items()},
         }
@@ -235,6 +270,7 @@ def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candid
     clips = manifest["clips"][:clip_limit] if clip_limit else manifest["clips"]
     if not clips:
         raise EvalError("corpus has no clips")
+    verify_clip_files(corpus, clips)
     work.mkdir(parents=True, exist_ok=True)
     jobs, mixtures = prepare_jobs(corpus, work, clips)
     jobs_path, results_path = work / "jobs.jsonl", work / "separator-results.jsonl"
@@ -249,7 +285,8 @@ def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candid
         cid = clip["clip_id"]
         if cid not in timings:
             records.append({"clip_id": cid, "recipe": clip["recipe"], "variant": clip.get("variant"),
-                            "codec": clip.get("codec"), "ok": False, "error": "no result from separator",
+                            "codec": clip.get("codec"), "ok": False, "separator_ok": False,
+                            "error": "no result from separator",
                             "timing": {}})
             continue
         records.append(score_clip(clip, corpus, by_id[cid], timings[cid], mixtures[cid], gate))
@@ -278,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--provider", help="execution provider to pin (e.g. cpu, directml, tensorrtrtx)")
     p.add_argument("--model-directory", help="model root passed to the separator")
     p.add_argument("--model-cache-directory", help="machine-local model cache root holding the pinned weights and model-cache-records.json")
-    p.add_argument("--runner", default=" ".join(DEFAULT_RUNNER),
+    p.add_argument("--runner", default=" ".join(default_runner()),
                    help="command prefix for Trackdub.Benchmarks, as one quoted string")
     p.add_argument("--band-limit-hz", type=float, help="override the candidate profile's declared processing band")
     p.add_argument("--output-bits", type=int, help="override the candidate profile's stem precision")
@@ -300,7 +337,12 @@ def main(argv: list[str] | None = None) -> int:
     except EvalError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    try:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"error: could not write results to {args.out}: {exc}", file=sys.stderr)
+        return 1
     s = result["summary"]
     print(f"scored {s['clips_scored']}/{s['clips_total']} clips; results in {args.out}")
     return 0 if not s["clips_failed"] else 2

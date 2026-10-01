@@ -5,7 +5,7 @@ Works on candidate lists from discover.py and on ingested manifests. Splits come
 deterministic group hash ingest.py uses, so the answer is the one the corpus will actually get.
 Exit status is 1 when any recipe lacks sources in a split.
 
-    python coverage.py --items items.v1.jsonl [--min-groups 3]
+    python recipe_coverage.py --items items.v1.jsonl [--min-groups 3]
 """
 
 from __future__ import annotations

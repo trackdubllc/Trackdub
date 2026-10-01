@@ -181,40 +181,75 @@ public static class SeparationEvalRunner
             };
         }
 
-        using HeadlessDubbingHost host = HeadlessDubbingHost.Create(new HeadlessTrackdubOptions
+        try
         {
-            ModelDirectory = options.ModelDirectory,
-            ModelCacheDirectory = options.ModelCacheDirectory,
-            FfmpegPath = options.FfmpegPath,
-            FfprobePath = options.FfprobePath,
-            HardwareOverrides = pins,
-            RequirePreferredExecutionProviders = pins is not null,
-        });
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(options.ResultsPath))!);
+            await using var results = new StreamWriter(options.ResultsPath, append: false);
+            using HeadlessDubbingHost host = HeadlessDubbingHost.Create(new HeadlessTrackdubOptions
+            {
+                ModelDirectory = options.ModelDirectory,
+                ModelCacheDirectory = options.ModelCacheDirectory,
+                FfmpegPath = options.FfmpegPath,
+                FfprobePath = options.FfprobePath,
+                HardwareOverrides = pins,
+                RequirePreferredExecutionProviders = pins is not null,
+            });
 
-        using IServiceScope scope = host.Services.CreateScope();
-        IStemSeparationEngineAdapter? engine = scope.ServiceProvider
-            .GetServices<IStemSeparationEngineAdapter>()
-            .FirstOrDefault(e => string.Equals(e.EngineFamily, SpleeterStemSeparationEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase));
-        if (engine is null)
-        {
-            error.WriteLine("No Spleeter stem-separation engine is registered.");
-            return 1;
+            using IServiceScope scope = host.Services.CreateScope();
+            IStemSeparationEngineAdapter? engine = scope.ServiceProvider
+                .GetServices<IStemSeparationEngineAdapter>()
+                .FirstOrDefault(e => string.Equals(e.EngineFamily, SpleeterStemSeparationEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase));
+            if (engine is null)
+            {
+                error.WriteLine("No Spleeter stem-separation engine is registered.");
+                return 1;
+            }
+
+            IReadOnlyList<SeparationEvalResult> all = await RunJobsAsync(
+                jobs,
+                engine,
+                scope.ServiceProvider.GetRequiredService<IWorkingSetSampler>(),
+                options.Model,
+                options.Provider,
+                results,
+                cancellationToken).ConfigureAwait(false);
+
+            int failed = all.Count(r => !r.Ok);
+            output.WriteLine($"separation-eval: {all.Count - failed} ok, {failed} failed; results in {options.ResultsPath}");
+            return failed == 0 ? 0 : 2;
         }
-
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(options.ResultsPath))!);
-        await using var results = new StreamWriter(options.ResultsPath, append: false);
-        IReadOnlyList<SeparationEvalResult> all = await RunJobsAsync(
-            jobs,
-            engine,
-            scope.ServiceProvider.GetRequiredService<IWorkingSetSampler>(),
-            options.Model,
-            options.Provider,
-            results,
-            cancellationToken).ConfigureAwait(false);
-
-        int failed = all.Count(r => !r.Ok);
-        output.WriteLine($"separation-eval: {all.Count - failed} ok, {failed} failed; results in {options.ResultsPath}");
-        return failed == 0 ? 0 : 2;
+        catch (IOException ex)
+        {
+            return ReportSetupFailure(error, ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return ReportSetupFailure(error, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return ReportSetupFailure(error, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ReportSetupFailure(error, ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            return ReportSetupFailure(error, ex);
+        }
+        catch (JsonException ex)
+        {
+            return ReportSetupFailure(error, ex);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            return ReportSetupFailure(error, ex);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            return ReportSetupFailure(error, ex);
+        }
     }
 
     public static async Task<IReadOnlyList<SeparationEvalResult>> RunJobsAsync(
@@ -255,22 +290,24 @@ public static class SeparationEvalRunner
         string? provider,
         CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(job.VocalsOutput))!);
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(job.BedOutput))!);
-
-        var request = new StemSeparationRequest(
-            SourceAudioPath: job.Input,
-            VocalsOutputPath: job.VocalsOutput,
-            AmbianceOutputPath: job.BedOutput,
-            PreferredModelAlias: model,
-            PreferredExecutionProvider: provider,
-            RequirePreferredExecutionProvider: provider is not null);
-
-        long before = sampler.CaptureWorkingSetBytes();
-        var monitor = new WorkingSetPeakMonitor(sampler, before);
+        long before = 0;
+        WorkingSetPeakMonitor? monitor = null;
         var clock = Stopwatch.StartNew();
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(job.VocalsOutput))!);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(job.BedOutput))!);
+
+            var request = new StemSeparationRequest(
+                SourceAudioPath: job.Input,
+                VocalsOutputPath: job.VocalsOutput,
+                AmbianceOutputPath: job.BedOutput,
+                PreferredModelAlias: model,
+                PreferredExecutionProvider: provider,
+                RequirePreferredExecutionProvider: provider is not null);
+
+            before = sampler.CaptureWorkingSetBytes();
+            monitor = new WorkingSetPeakMonitor(sampler, before);
             StemSeparationResult separated = await engine.SeparateAsync(request, progress: null, cancellationToken)
                 .ConfigureAwait(false);
             clock.Stop();
@@ -285,19 +322,73 @@ public static class SeparationEvalRunner
                 summary?.RequestedProvider, summary?.SelectedProvider, summary?.BootstrapDetail,
                 separated.Metadata);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            monitor.Stop();
+            monitor?.Stop();
             throw;
         }
-        catch (Exception ex)
+        catch (OperationCanceledException ex)
         {
-            clock.Stop();
-            long? peak = monitor.Stop();
-            return new SeparationEvalResult(
-                job.Id, index, Ok: false, Error: ex.Message, clock.Elapsed.TotalMilliseconds, AudioSeconds: 0,
-                Rtf: null, before, peak, RequestedProvider: provider, SelectedProvider: null,
-                BootstrapDetail: null, Metadata: null);
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
         }
+        catch (IOException ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+        catch (JsonException ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+        catch (TimeoutException ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
+        }
+    }
+
+    private static SeparationEvalResult CreateFailedResult(
+        SeparationEvalJob job,
+        int index,
+        string? provider,
+        long before,
+        Stopwatch clock,
+        WorkingSetPeakMonitor? monitor,
+        Exception exception)
+    {
+        clock.Stop();
+        long? peak = monitor?.Stop();
+        return new SeparationEvalResult(
+            job.Id, index, Ok: false, Error: exception.Message, clock.Elapsed.TotalMilliseconds, AudioSeconds: 0,
+            Rtf: null, before, peak, RequestedProvider: provider, SelectedProvider: null,
+            BootstrapDetail: null, Metadata: null);
+    }
+
+    private static int ReportSetupFailure(TextWriter error, Exception exception)
+    {
+        error.WriteLine($"separation-eval setup failed: {exception.Message}");
+        return 1;
     }
 }

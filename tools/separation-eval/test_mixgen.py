@@ -84,6 +84,28 @@ class AudioMathTests(unittest.TestCase):
         self.assertAlmostEqual(am.estimate_rt60(h), 1.0, delta=0.15)
 
 
+class LoopToLengthTests(unittest.TestCase):
+    def test_empty_source_fails_instead_of_looping_forever(self):
+        with self.assertRaisesRegex(ValueError, "empty audio source"):
+            mixgen.loop_to_length(np.empty((0, 2), np.float32), 100, np.random.default_rng(1))
+
+    def test_single_sample_source_repeats_to_requested_length(self):
+        source = np.array([[0.25, -0.5]], np.float32)
+        out, offset = mixgen.loop_to_length(source, 100, np.random.default_rng(1))
+        self.assertEqual(offset, 0)
+        self.assertEqual(out.shape, (100, 2))
+        np.testing.assert_array_equal(out, np.repeat(source, 100, axis=0))
+
+    def test_short_source_fills_long_output_with_finite_audio(self):
+        source = np.linspace(-0.5, 0.5, 256, dtype=np.float32).reshape(128, 2)
+        out, offset = mixgen.loop_to_length(source, 600_000, np.random.default_rng(1))
+        self.assertEqual(offset, 0)
+        self.assertEqual(out.shape, (600_000, 2))
+        self.assertTrue(np.isfinite(out).all())
+        crossfade = max(1, min(2400, source.shape[0] // 4))
+        np.testing.assert_array_equal(out[: source.shape[0] - crossfade], source[:-crossfade])
+
+
 class RecipeTests(MixgenTestBase):
     def test_mixture_is_exact_sum(self):
         arrays, sr, _ = self.clip("A1")
