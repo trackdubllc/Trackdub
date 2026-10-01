@@ -55,4 +55,17 @@ public sealed class NvidiaAfxSessionHelpersTests
 
         Assert.Contains("does not match", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void ComputeTrimmedOutputLength_SameRate_MatchesNearSampleCount()
+    {
+        Assert.Equal(100, NvidiaAfxSession.ComputeTrimmedOutputLength(100, inputFrame: 480, outputFrame: 480));
+    }
+
+    [Fact]
+    public void ComputeTrimmedOutputLength_RateChanging_AppliesFrameRatio()
+    {
+        // 8 kHz → 16 kHz telephony: 100 input samples → 200 output samples (ratio 960/480).
+        Assert.Equal(200, NvidiaAfxSession.ComputeTrimmedOutputLength(100, inputFrame: 480, outputFrame: 960));
+    }
 }

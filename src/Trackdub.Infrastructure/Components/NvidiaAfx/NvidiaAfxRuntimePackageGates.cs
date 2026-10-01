@@ -16,7 +16,33 @@ public static class NvidiaAfxRuntimePackageGates
         }
 
         string trimmed = sha256.Trim();
-        return trimmed.Length != 64 || trimmed.All(ch => ch == '0');
+        if (trimmed.Length != 64)
+        {
+            return true;
+        }
+
+        // Require lowercase/uppercase hex only; reject non-hex 64-char strings that would
+        // otherwise pass a length check and then fail (or worse, confuse) download verify.
+        bool allHex = true;
+        bool allZero = true;
+        foreach (char ch in trimmed)
+        {
+            bool isHexDigit = (ch >= '0' && ch <= '9')
+                || (ch >= 'a' && ch <= 'f')
+                || (ch >= 'A' && ch <= 'F');
+            if (!isHexDigit)
+            {
+                allHex = false;
+                break;
+            }
+
+            if (ch != '0')
+            {
+                allZero = false;
+            }
+        }
+
+        return !allHex || allZero;
     }
 
     public static bool IsPlaceholderDownloadUrl(string? downloadUrl)

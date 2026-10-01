@@ -35,6 +35,26 @@ public sealed class NvidiaAfxRuntimePackageGatesTests
         Assert.True(NvidiaAfxRuntimePackageGates.IsDownloadable(package));
     }
 
+    [Theory]
+    [InlineData("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")]
+    [InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd!!")]
+    [InlineData("not-a-hash")]
+    public void IsPlaceholderSha256_RejectsNonHexOrWrongLength(string sha256)
+    {
+        Assert.True(NvidiaAfxRuntimePackageGates.IsPlaceholderSha256(sha256));
+
+        var package = new NvidiaAfxRuntimePackage(
+            Architecture: "ada",
+            DownloadUrl: "https://cdn.example.com/trackdub/nvidia-afx/ada/runtime.zip",
+            Sha256: sha256,
+            SizeBytes: 1_048_576,
+            RuntimeVersion: "1.2.3",
+            LicenseUrl: NvidiaAfxIntegrationLicenseUrl(),
+            ModelRelativePaths: ["models/denoiser_48k.nvam"]);
+
+        Assert.False(NvidiaAfxRuntimePackageGates.IsDownloadable(package));
+    }
+
     [Fact]
     public void BundledManifest_HasNoDownloadablePackages()
     {

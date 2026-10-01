@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Trackdub.Contracts;
 using Trackdub.Infrastructure.Components.NvidiaAfx;
 
@@ -11,13 +12,16 @@ public sealed class NvidiaAfxRuntimeInstaller(
     NvidiaAfxRuntimeDownloader downloader,
     IStudioSettingsService settingsService,
     INvidiaAfxArchitectureDetector architectureDetector,
-    string manifestPath)
+    string manifestPath,
+    Func<bool>? isStubbed = null)
 {
+    private readonly Func<bool> _isStubbed = isStubbed ?? NvidiaAfxIntegration.IsStubbed;
+
     public async Task<NvidiaAfxRuntimeInstallResult> EnsureInstalledAsync(
         IProgress<double>? progress,
         CancellationToken cancellationToken)
     {
-        if (NvidiaAfxIntegration.IsStubbed())
+        if (_isStubbed())
         {
             return NvidiaAfxRuntimeInstallResult.Fail(NvidiaAfxIntegration.StubReason);
         }
@@ -34,7 +38,7 @@ public sealed class NvidiaAfxRuntimeInstaller(
         {
             manifest = NvidiaAfxRuntimeManifestLoader.Load(manifestPath);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is FileNotFoundException or IOException or JsonException or InvalidOperationException or ArgumentException)
         {
             return NvidiaAfxRuntimeInstallResult.Fail($"AFX runtime manifest error: {ex.Message}");
         }
@@ -72,7 +76,12 @@ public sealed class NvidiaAfxRuntimeInstaller(
         {
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is InvalidOperationException
+            or HttpRequestException
+            or IOException
+            or InvalidDataException
+            or UnauthorizedAccessException
+            or NotSupportedException)
         {
             return NvidiaAfxRuntimeInstallResult.Fail($"AFX runtime download failed: {ex.Message}");
         }

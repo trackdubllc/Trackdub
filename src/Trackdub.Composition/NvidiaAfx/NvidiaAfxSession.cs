@@ -102,13 +102,17 @@ internal sealed class NvidiaAfxSession : IDisposable
                 "Set input sample rate");
 
             int expectedOutputSampleRate = profile.ResolveOutputSampleRate(sampleRate);
-            if (expectedOutputSampleRate != sampleRate)
+            // Maxine docs: NVAFX_PARAM_OUTPUT_SAMPLE_RATE is Windows-only and not supported by
+            // chained effects. Only set (and require success) for non-chained rate changes.
+            if (!profile.IsChainedEffect && expectedOutputSampleRate != sampleRate)
             {
-                // Best-effort: some Maxine builds accept an explicit output rate for chained effects.
-                _ = NvidiaAfxNative.NvAFX_SetU32(
-                    safeHandle.DangerousGetHandle(),
-                    NvidiaAfxNativeParameters.OutputSampleRate,
-                    (uint)expectedOutputSampleRate);
+                EnsureSuccess(
+                    NvidiaAfxNative.NvAFX_SetU32(
+                        safeHandle.DangerousGetHandle(),
+                        NvidiaAfxNativeParameters.OutputSampleRate,
+                        (uint)expectedOutputSampleRate),
+                    profile.Selector,
+                    "Set output sample rate");
             }
 
             if (profile.SupportsIntensityRatio)
@@ -127,10 +131,19 @@ internal sealed class NvidiaAfxSession : IDisposable
                 profile.Selector,
                 "Load");
 
+            uint expectedInputChannels = profile.RequiresFarEndReference ? 2u : 1u;
             uint numInputChannels = QueryU32OrDefault(
                 safeHandle,
                 NvidiaAfxNativeParameters.NumInputChannels,
-                profile.RequiresFarEndReference ? 2u : 1u);
+                expectedInputChannels);
+            if (numInputChannels != expectedInputChannels)
+            {
+                throw new InvalidOperationException(
+                    $"NVIDIA AFX profile '{profile.Selector}' reported {numInputChannels} input channel(s); " +
+                    $"expected exactly {expectedInputChannels}" +
+                    (profile.RequiresFarEndReference ? " (near-end + far-end)." : "."));
+            }
+
             uint numInputSamples = QueryU32OrDefault(
                 safeHandle,
                 NvidiaAfxNativeParameters.NumInputSamplesPerFrame,
@@ -145,12 +158,6 @@ internal sealed class NvidiaAfxSession : IDisposable
                 sampleRate,
                 outputSampleRate,
                 numInputSamples);
-
-            if (profile.RequiresFarEndReference && numInputChannels < 2)
-            {
-                throw new InvalidOperationException(
-                    $"NVIDIA AFX AEC profile '{profile.Selector}' reported {numInputChannels} input channel(s); expected at least 2 (near-end + far-end).");
-            }
 
             return new NvidiaAfxSession(
                 safeHandle,
@@ -218,16 +225,30 @@ internal sealed class NvidiaAfxSession : IDisposable
             Array.Copy(outFrame, 0, output, outputOffset, outputFrame);
         }
 
-        // Trim padding beyond the original near-end sample count for same-rate effects.
-        // For rate-changing chained effects, return full produced frames.
-        if (outputFrame == inputFrame && nearSampleCount < output.Length)
+        // Trim frame-alignment padding to source duration × (outputFrame/inputFrame).
+        // Same-rate effects reduce to nearSampleCount; rate-changing effects keep the ratio.
+        int expectedOutputSamples = ComputeTrimmedOutputLength(nearSampleCount, inputFrame, outputFrame);
+        if (expectedOutputSamples < output.Length)
         {
-            float[] trimmed = new float[nearSampleCount];
-            Array.Copy(output, trimmed, nearSampleCount);
+            float[] trimmed = new float[expectedOutputSamples];
+            Array.Copy(output, trimmed, expectedOutputSamples);
             return trimmed;
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Output sample count after dropping frame-alignment padding, preserving the
+    /// input→output frame ratio (source duration × rate ratio for Maxine chained effects).
+    /// </summary>
+    internal static int ComputeTrimmedOutputLength(int nearSampleCount, int inputFrame, int outputFrame)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(nearSampleCount);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(inputFrame);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(outputFrame);
+
+        return checked((int)(((long)nearSampleCount * outputFrame) / inputFrame));
     }
 
     /// <summary>
@@ -265,6 +286,16 @@ internal sealed class NvidiaAfxSession : IDisposable
 
     private void RunFrame(float[] nearFrame, float[] farFrame, float[] outFrame)
     {
+        // Marshal exactly the validated channel count (1 non-AEC / 2 AEC). Never pass a larger
+        // native-reported channel count than the number of pinned input pointers.
+        uint marshalledChannels = _requiresFarEndReference ? 2u : 1u;
+        if (_numInputChannels != marshalledChannels)
+        {
+            throw new InvalidOperationException(
+                $"NVIDIA AFX RunFrame channel mismatch for '{_selector}': session has {_numInputChannels}, " +
+                $"marshalled {marshalledChannels}.");
+        }
+
         GCHandle nearHandle = GCHandle.Alloc(nearFrame, GCHandleType.Pinned);
         GCHandle farHandle = default;
         GCHandle outHandle = GCHandle.Alloc(outFrame, GCHandleType.Pinned);
@@ -281,6 +312,12 @@ internal sealed class NvidiaAfxSession : IDisposable
                 inputs = [nearHandle.AddrOfPinnedObject()];
             }
 
+            if (inputs.Length != marshalledChannels)
+            {
+                throw new InvalidOperationException(
+                    $"NVIDIA AFX RunFrame marshalled {inputs.Length} pointer(s) but expected {marshalledChannels}.");
+            }
+
             IntPtr[] outputs = [outHandle.AddrOfPinnedObject()];
             EnsureSuccess(
                 NvidiaAfxNative.NvAFX_Run(
@@ -288,7 +325,7 @@ internal sealed class NvidiaAfxSession : IDisposable
                     inputs,
                     outputs,
                     _numInputSamplesPerFrame,
-                    _numInputChannels),
+                    marshalledChannels),
                 _selector,
                 "Run");
         }
