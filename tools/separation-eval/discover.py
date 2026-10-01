@@ -21,6 +21,7 @@ import random
 import re
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -72,6 +73,12 @@ def _is_loopback_http(url: str) -> bool:
 
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def creator_group_key(text: str) -> str:
+    """Encode a normalized creator name without discarding non-ASCII identity."""
+    normalized = unicodedata.normalize("NFKC", text).casefold().strip()
+    return re.sub(r"[^\w]+", "-", normalized, flags=re.UNICODE).strip("-") or "unknown"
 
 
 def cached_fetch_json(cache_dir: Path | None, pause_s: float, *, retries: int = 3) -> FetchJson:
@@ -155,7 +162,7 @@ def openverse_candidate(result: dict, spec: dict, retrieved_at: str) -> tuple[di
         "source": f"openverse:{source}",
         "url": url,
         "role": spec["role"],
-        "group": f"{source}:{slug(creator)}",
+        "group": f"{source}:{creator_group_key(creator)}",
         "license_spdx": spdx,
         "attribution_text": f'"{title}" by {creator}, {spdx}, {landing}'.strip(", "),
         "license_evidence_url": landing,

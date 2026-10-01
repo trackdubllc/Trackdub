@@ -35,8 +35,8 @@ class MetricError(Exception):
 class LeakageResult:
     """Dialogue-correlated error in the estimated bed, measured on dialogue-active frames.
 
-    leakage_to_bed_db: energy of the dialogue-explained part of (estimated bed - reference bed),
-        relative to the reference bed energy. Lower is better. None when the reference bed is silent.
+    leakage_to_bed_db: energy of the dialogue-explained part of the estimated bed, relative to
+        estimated-bed energy. Lower is better. None when the estimated bed is silent.
     dialogue_residual_db: the same leaked energy relative to the reference dialogue energy
         (how much of the dialogue survives in the bed). Lower is better.
     worst_window_leakage_db: worst analysis window of leakage_to_bed_db; None when no window qualifies.
@@ -155,25 +155,18 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
                 window_s: float = DEFAULT_WINDOW_SECONDS) -> LeakageResult:
     """Measure how much reference dialogue remains in the estimated bed.
 
-    The bed error e = est_bed - ref_bed is projected onto the reference dialogue with a short
-    multichannel FIR (tolerating small delays and filtering), fitted independently in each
-    `window_s` window so leakage that comes and goes is not averaged away. Using the error rather
-    than the estimate itself means the bed's own chance correlation with the dialogue is not counted.
-    Energies are summed over dialogue-active frames of the reference dialogue.
+    The estimated bed is projected onto the reference dialogue with a short multichannel FIR
+    (tolerating small delays and filtering), fitted independently in each `window_s` window so
+    leakage that comes and goes is not averaged away. The primary ratio is dialogue-explained
+    estimated-bed energy divided by estimated-bed energy, both summed over dialogue-active frames.
+    The second ratio uses reference-dialogue energy as its denominator.
 
     Known limits: leakage whose gain changes within a window is under-measured (by up to about
     3 dB for a burst covering half a window), and the fit has a chance-capture floor of roughly
-    10*log10(unknowns / samples per window) dB relative to the error energy (about -21 dB at the
-    defaults), so very small leakage is only resolved when the error is itself small.
+    10*log10(unknowns / samples per window) dB relative to estimated-bed energy (about -21 dB at
+    the defaults), so very small dialogue components approach a nonzero capture floor.
     """
-    for name, a in (("ref_dialogue", ref_dialogue), ("ref_bed", ref_bed), ("est_bed", est_bed)):
-        if a.ndim != 2:
-            raise MetricError(f"{name} must be shaped (samples, channels)")
-        if not np.isfinite(a).all():
-            raise MetricError(f"{name} contains NaN or infinite samples")
-    if not (ref_dialogue.shape == ref_bed.shape == est_bed.shape):
-        raise MetricError(
-            f"shape mismatch: dialogue {ref_dialogue.shape}, ref bed {ref_bed.shape}, est bed {est_bed.shape}")
+    _validate_triplet(ref_dialogue, ref_bed, est_bed)
     max_lag = max(1, int(max_lag_ms * sr / 1000.0))
     win = int(window_s * sr)
     if win < 4 * max_lag:
@@ -181,15 +174,14 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
 
     sample_mask, _ = _activity_masks(ref_dialogue, sr)
 
-    err = est_bed.astype(np.float64) - ref_bed.astype(np.float64)
     bounds = _window_bounds(ref_dialogue.shape[0], win)
-    leak = np.zeros_like(err)
+    leak = np.zeros_like(est_bed, dtype=np.float64)
     for lo, hi in bounds:
         if sample_mask[lo:hi].any():
-            leak[lo:hi] = project_onto_dialogue(ref_dialogue[lo:hi], err[lo:hi], max_lag)
+            leak[lo:hi] = project_onto_dialogue(ref_dialogue[lo:hi], est_bed[lo:hi], max_lag)
 
     leak_e = float((leak[sample_mask] ** 2).sum())
-    bed_e = float((ref_bed[sample_mask].astype(np.float64) ** 2).sum())
+    bed_e = float((est_bed[sample_mask].astype(np.float64) ** 2).sum())
     dlg_e = float((ref_dialogue[sample_mask].astype(np.float64) ** 2).sum())
 
     worst: float | None = None
@@ -198,7 +190,7 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
             m = sample_mask[lo:hi]
             if m.sum() < MIN_ACTIVE_WINDOW_FRACTION * (hi - lo):
                 continue
-            w_bed = float((ref_bed[lo:hi][m].astype(np.float64) ** 2).sum())
+            w_bed = float((est_bed[lo:hi][m].astype(np.float64) ** 2).sum())
             if w_bed <= 0.0:
                 continue
             value = _db(float((leak[lo:hi][m] ** 2).sum()), w_bed)
@@ -324,17 +316,15 @@ ROUNDING_VARIANCE_LSB2 = {"nearest": 1.0 / 12.0, "truncate": 1.0 / 3.0}
 class ReconstructionResult:
     """Hard-gate check that a separator's outputs add back to its input.
 
-    The gate value is `in_band_residual_db`: the residual inside the band the candidate declares it
-    processes (the whole spectrum when no limit is declared), relative to the mixture's energy in that
-    band, allowed to be no worse than `effective_threshold_db`. That is the gate threshold, raised when
-    the output format's own rounding noise would exceed it on a quiet mixture.
+    The gate uses the full-band `residual_db` relative to `threshold_db`. Candidate band limits and
+    output precision never relax this hard gate.
 
-    residual_db: full-band residual relative to the full-band mixture, for information.
-    in_band_residual_db: the gated residual (equals residual_db when no band limit is declared).
-    effective_threshold_db: max(threshold_db, quantization_allowance_db); the level the gate really used.
-    quantization_allowance_db: rounding noise expected from `output_bits` output written with
-        `output_rounding` ("nearest" or "truncate"), with a 2x margin, relative to the in-band mixture
-        (None when no output precision is declared).
+    residual_db: full-band residual relative to the full-band mixture; this is the gated value.
+    in_band_residual_db: residual inside the declared band, reported as a diagnostic only.
+    effective_threshold_db: the threshold applied to the full-band gate (equal to threshold_db).
+    quantization_allowance_db: estimated rounding noise for `output_bits` output written with
+        `output_rounding` ("nearest" or "truncate"), with a 2x margin, relative to the full-band
+        mixture. It is a diagnostic only and does not relax the gate.
     bandwidth_retained_db: energy the outputs keep above the declared band relative to the mixture's
         energy there (0 = all kept, very negative = dropped). Reported, never gated.
     mixture_above_band_db: share of the mixture's energy above the declared band, in dB of the total.
@@ -428,12 +418,10 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
                          output_bits: int | None = None, output_rounding: str = "nearest") -> ReconstructionResult:
     """Gate: the dialogue and bed outputs must have exactly the mixture's shape and sum back to it.
 
-    `band_limit_hz` is the highest frequency the candidate claims to process (for example 11025 for
-    Spleeter, which keeps 1024 of 2049 bins). The residual is then judged inside that band, and what the
-    outputs keep above it is reported as `bandwidth_retained_db` instead of failing the gate.
-    `output_bits` is the precision of the written stems and `output_rounding` how they are reduced to it
-    ("nearest", or "truncate" for a writer that casts toward zero); together they raise the allowed
-    residual to the rounding noise that implies, so quiet mixtures do not fail on format noise alone.
+    Without `band_limit_hz` the full-band residual is compared against `threshold_db`. With it, only the
+    residual below the declared band limit is judged; the energy the separator keeps above the limit is
+    reported as `bandwidth_retained_db` and never changes pass/fail. Output precision only adds the
+    expected output-rounding noise as a diagnostic.
     Never raises for bad separator output; it fails the gate.
     """
     def fail(reasons: list[str]) -> ReconstructionResult:
@@ -461,12 +449,10 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
     res_e, mix_e, sum_e = float((residual ** 2).sum()), float((mix ** 2).sum()), float((summed ** 2).sum())
     max_abs = float(np.abs(residual).max()) if residual.size else 0.0
 
-    band_fraction = 1.0
     res_in, mix_in = res_e, mix_e
     retained: float | None = None
     above: float | None = None
     if band_limit_hz is not None:
-        band_fraction = band_limit_hz / (sr / 2.0)
         res_in = res_e * band_energy_fractions(residual, sr, band_limit_hz)[0]
         mix_frac_in, mix_frac_out = band_energy_fractions(mix, sr, band_limit_hz)
         mix_in = mix_e * mix_frac_in
@@ -479,25 +465,26 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
     if output_bits is not None:
         lsb = 2.0 ** -(output_bits - 1)
         allowance_energy = (QUANTIZATION_MARGIN * residual.size * 2.0 * lsb * lsb
-                            * ROUNDING_VARIANCE_LSB2[output_rounding] * band_fraction)
+                            * ROUNDING_VARIANCE_LSB2[output_rounding])
 
     if mix_e <= 0.0:
-        passed = res_e <= allowance_energy
+        passed = res_e == 0.0
         return ReconstructionResult(
-            passed, None, None, None, None, None, None, band_limit_hz, output_bits, output_rounding, None, max_abs, None,
+            passed, None, None, threshold_db, None, None, None, band_limit_hz, output_bits, output_rounding, None, max_abs, None,
             threshold_db, () if passed else ("mixture is silent but outputs are not",))
 
-    threshold_energy = mix_in * 10.0 ** (threshold_db / 10.0)
+    threshold_energy = mix_e * 10.0 ** (threshold_db / 10.0)
     residual_db = _db(res_e, mix_e)
     in_band_db = _db(res_in, mix_in) if mix_in > 0.0 else None
-    allowance_db = _db(allowance_energy, mix_in) if (output_bits is not None and mix_in > 0.0) else None
-    effective_db = threshold_db if allowance_db is None else max(threshold_db, allowance_db)
+    allowance_db = _db(allowance_energy, mix_e) if output_bits is not None else None
+    effective_db = threshold_db
 
     reasons: list[str] = []
-    if res_in > max(threshold_energy, allowance_energy):
-        shown = f"{in_band_db:.1f}" if in_band_db is not None else "n/a"
-        where = f" below {band_limit_hz:.0f} Hz" if band_limit_hz is not None else ""
-        reasons.append(f"residual{where} {shown} dB exceeds gate {effective_db:.1f} dB")
+    if band_limit_hz is not None and mix_in > 0.0:
+        if res_in > mix_in * 10.0 ** (threshold_db / 10.0):
+            reasons.append(f"in-band residual {in_band_db:.1f} dB exceeds gate {effective_db:.1f} dB")
+    elif res_e > threshold_energy:
+        reasons.append(f"full-band residual {residual_db:.1f} dB exceeds gate {effective_db:.1f} dB")
     lag = _estimate_lag(mixture, summed, sr) if reasons else None
     if lag:
         reasons.append(f"outputs appear shifted by {lag} samples relative to the mixture")

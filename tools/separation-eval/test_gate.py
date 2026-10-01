@@ -63,13 +63,14 @@ class BandLimitTests(unittest.TestCase):
         self.band_limited = lowpass(self.mix)
         self.zero = np.zeros_like(self.mix)
 
-    def test_band_limited_output_fails_undeclared_and_passes_declared(self):
+    def test_a_declared_band_judges_only_the_residual_inside_it(self):
         undeclared = metrics.check_reconstruction(self.mix, self.zero, self.band_limited, SR)
         self.assertFalse(undeclared.passed)
         self.assertAlmostEqual(undeclared.residual_db, -3.0, delta=0.5)
 
         declared = metrics.check_reconstruction(self.mix, self.zero, self.band_limited, SR, band_limit_hz=LIMIT)
         self.assertTrue(declared.passed, declared.reasons)
+        self.assertAlmostEqual(declared.residual_db, undeclared.residual_db, delta=0.01)
         self.assertLess(declared.in_band_residual_db, -60.0)
         self.assertAlmostEqual(declared.mixture_above_band_db, -3.0, delta=0.6)
         self.assertLess(declared.bandwidth_retained_db, -30.0)
@@ -79,7 +80,7 @@ class BandLimitTests(unittest.TestCase):
         damaged = self.band_limited + lowpass(noise(0.01, seed=2))
         r = metrics.check_reconstruction(self.mix, self.zero, damaged, SR, band_limit_hz=LIMIT)
         self.assertFalse(r.passed)
-        self.assertIn("below 11025 Hz", r.reasons[0])
+        self.assertIn("in-band residual", r.reasons[0])
         self.assertGreater(r.in_band_residual_db, -40.0)
 
     def test_full_band_output_reports_full_retention(self):
@@ -87,10 +88,10 @@ class BandLimitTests(unittest.TestCase):
         self.assertTrue(r.passed)
         self.assertGreater(r.bandwidth_retained_db, -0.5)
 
-    def test_extra_content_above_the_band_is_reported_not_gated(self):
+    def test_content_kept_above_the_band_is_reported_and_not_gated(self):
         r = metrics.check_reconstruction(self.mix, self.zero, self.band_limited + 0.5 * (self.mix - self.band_limited),
                                          SR, band_limit_hz=LIMIT)
-        self.assertTrue(r.passed)
+        self.assertTrue(r.passed, r.reasons)
         self.assertAlmostEqual(r.bandwidth_retained_db, -6.0, delta=0.6)
 
     def test_no_declaration_keeps_the_original_semantics(self):
@@ -111,16 +112,16 @@ class QuantisationTests(unittest.TestCase):
     def split_and_quantise(self, mix):
         return quantise(0.3 * mix), quantise(0.7 * mix)
 
-    def test_quiet_mixture_passes_only_with_the_declared_output_precision(self):
+    def test_quantization_allowance_is_diagnostic_and_does_not_relax_gate(self):
         mix = noise(0.002, seed=3)
         dialogue, bed = self.split_and_quantise(mix)
         strict = metrics.check_reconstruction(mix, dialogue, bed, SR)
-        self.assertFalse(strict.passed)
         aware = metrics.check_reconstruction(mix, dialogue, bed, SR, output_bits=16)
-        self.assertTrue(aware.passed, aware.reasons)
-        self.assertGreater(aware.effective_threshold_db, metrics.RECONSTRUCTION_GATE_DB)
-        self.assertEqual(aware.effective_threshold_db, aware.quantization_allowance_db)
-        self.assertLessEqual(aware.in_band_residual_db, aware.effective_threshold_db)
+        self.assertFalse(strict.passed)
+        self.assertFalse(aware.passed, aware.reasons)
+        self.assertGreater(aware.quantization_allowance_db, metrics.RECONSTRUCTION_GATE_DB)
+        self.assertEqual(aware.effective_threshold_db, metrics.RECONSTRUCTION_GATE_DB)
+        self.assertEqual(aware.residual_db, strict.residual_db)
 
     def test_loud_mixture_keeps_the_strict_threshold(self):
         mix = noise(0.1, seed=4)
@@ -143,18 +144,30 @@ class QuantisationTests(unittest.TestCase):
         r = metrics.check_reconstruction(mix, dialogue, bed + 0.3 * mix, SR, output_bits=16)
         self.assertFalse(r.passed)
 
-    def test_silent_mixture_tolerates_no_more_than_rounding_noise(self):
+    def test_silent_mixture_does_not_use_quantization_allowance(self):
         z = np.zeros((SR, 1), np.float32)
         self.assertTrue(metrics.check_reconstruction(z, z, z, SR, output_bits=16).passed)
         one_lsb = z + LSB16
         self.assertFalse(metrics.check_reconstruction(z, z, one_lsb, SR, output_bits=16).passed)
 
-    def test_band_and_precision_combine(self):
+    def test_silent_mixture_still_gates_full_band_output_above_declared_band(self):
+        t = np.arange(SR, dtype=np.float64) / SR
+        above_band = (0.01 * np.sin(2 * np.pi * 18_000 * t)).astype(np.float32)[:, None]
+        z = np.zeros_like(above_band)
+        result = metrics.check_reconstruction(z, z, above_band, SR, band_limit_hz=LIMIT)
+        self.assertFalse(result.passed)
+        self.assertIn("mixture is silent", result.reasons[0])
+
+    def test_quiet_quantised_mixture_still_fails_with_declarations(self):
         mix = noise(0.002, seed=8)
         limited = lowpass(mix)
-        r = metrics.check_reconstruction(mix, quantise(0.3 * limited), quantise(0.7 * limited), SR,
-                                         band_limit_hz=LIMIT, output_bits=16)
-        self.assertTrue(r.passed, r.reasons)
+        dialogue, bed = quantise(0.3 * limited), quantise(0.7 * limited)
+        strict = metrics.check_reconstruction(mix, dialogue, bed, SR)
+        declared = metrics.check_reconstruction(mix, dialogue, bed, SR, band_limit_hz=LIMIT, output_bits=16)
+        self.assertFalse(strict.passed)
+        self.assertFalse(declared.passed, declared.reasons)
+        self.assertAlmostEqual(declared.residual_db, strict.residual_db, delta=0.01)
+        self.assertLess(declared.in_band_residual_db, declared.residual_db)
 
     def test_truncating_writers_need_the_truncate_model(self):
         mix = noise(0.002, seed=10)
@@ -162,10 +175,11 @@ class QuantisationTests(unittest.TestCase):
         as_rounded = metrics.check_reconstruction(mix, dialogue, bed, SR, output_bits=16)
         as_truncated = metrics.check_reconstruction(mix, dialogue, bed, SR, output_bits=16, output_rounding="truncate")
         self.assertFalse(as_rounded.passed)
-        self.assertTrue(as_truncated.passed, as_truncated.reasons)
+        self.assertFalse(as_truncated.passed, as_truncated.reasons)
         self.assertAlmostEqual(as_truncated.quantization_allowance_db - as_rounded.quantization_allowance_db,
                                10 * np.log10(4.0), delta=0.01)
         self.assertEqual(as_truncated.output_rounding, "truncate")
+        self.assertEqual(as_truncated.effective_threshold_db, metrics.RECONSTRUCTION_GATE_DB)
 
     def test_unknown_rounding_is_rejected(self):
         x = noise(0.1)

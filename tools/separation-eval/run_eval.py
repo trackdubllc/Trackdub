@@ -265,28 +265,15 @@ def aggregate(records: list[dict]) -> dict:
 
 def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candidate: str, provider: str | None,
              hardware_label: str, clip_limit: int | None = None, gate: dict | None = None) -> dict:
-    manifest_path = corpus / "corpus.manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if clip_limit is not None and clip_limit <= 0:
         raise EvalError("clip_limit must be positive")
+    manifest_path = corpus / "corpus.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     clips = manifest["clips"][:clip_limit] if clip_limit is not None else manifest["clips"]
     if not clips:
         raise EvalError("corpus has no clips")
     verify_clip_files(corpus, clips)
     work.mkdir(parents=True, exist_ok=True)
-    for clip in clips:
-        clip_id = clip["clip_id"]
-        for stem in ("mixture", "dialogue", "bed"):
-            path = corpus / clip_id / f"{stem}.wav"
-            expected = clip.get("files", {}).get(stem)
-            if expected is None or not path.is_file():
-                raise EvalError(f"{clip_id}: missing manifest hash or file for {stem}")
-            digest = hashlib.sha256()
-            with path.open("rb") as source:
-                for chunk in iter(lambda: source.read(1024 * 1024), b""):
-                    digest.update(chunk)
-            if digest.hexdigest() != expected:
-                raise EvalError(f"{clip_id}: {stem} hash differs from the corpus manifest")
     jobs, mixtures = prepare_jobs(corpus, work, clips)
     jobs_path, results_path = work / "jobs.jsonl", work / "separator-results.jsonl"
     jobs_path.write_text("".join(json.dumps(j) + "\n" for j in jobs), encoding="utf-8")

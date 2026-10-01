@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import ingest
+from test_support import running_server
 
 
 def write_wav(path: Path, seconds: float = 0.5, rate: int = 16000, tone: int = 1) -> None:
@@ -23,7 +24,7 @@ def rec(item_id="dlg-0001", **over):
     base = {
         "id": item_id, "source": "librivox", "url": "https://example.org/a.wav",
         "role": "dialogue", "group": "librivox:r1", "license_spdx": "CC0-1.0",
-        "attribution_text": "x",
+        "license_evidence_url": "https://example.org/license", "attribution_text": "x",
     }
     base.update(over)
     return base
@@ -77,6 +78,26 @@ class IngestTests(unittest.TestCase):
         self.assertEqual(items, [])
         self.assertEqual(len(rejected), 5)
 
+    def test_rejects_missing_or_invalid_license_evidence_url(self):
+        for value in (None, "", "not a URL", "http://example.org/license"):
+            with self.subTest(value=value):
+                self.assertIn("license_evidence_url", ingest.validate_record(rec(license_evidence_url=value), False))
+
+    def test_rejects_malformed_tags(self):
+        for value in ("instrumental", None, ["music", 5]):
+            with self.subTest(value=value):
+                self.assertIn("tags", ingest.validate_record(rec(tags=value), False))
+
+    def test_normalizes_valid_tags(self):
+        items, rejected = self.run_ingest([rec(tags=["LOUD", "loud", " Crowd "])])
+        self.assertEqual(rejected, [])
+        self.assertEqual(items[0]["tags"], ["crowd", "loud"])
+
+    def test_rejects_nonpositive_per_host_limit_without_starting_downloads(self):
+        for per_host in (0, -1):
+            with self.subTest(per_host=per_host), self.assertRaisesRegex(ingest.IngestError, "positive"):
+                self.run_ingest([rec()], per_host=per_host)
+
     def test_rejects_extensions_that_could_escape_the_cache(self):
         for ext in ("../../../../outside", "wav/../../outside", ".."):
             with self.subTest(ext=ext):
@@ -104,7 +125,8 @@ class IngestTests(unittest.TestCase):
         self.assertIn("download failed", rejected[0].reason)
 
     def test_split_is_group_level_and_deterministic(self):
-        self.assertEqual(ingest.assign_split("g1"), ingest.assign_split("g1"))
+        self.assertEqual(ingest.assign_split("g1"), "test")
+        self.assertEqual(ingest.assign_split("speaker:alice"), "dev")
         splits = {ingest.assign_split(f"group-{i}") for i in range(200)}
         self.assertEqual(splits, {"dev", "test"})
 
@@ -139,7 +161,7 @@ class RangeTests(unittest.TestCase):
             self.assertIn("range_bytes", ingest.validate_record(rec(range_bytes=bad), False))
 
     def test_http_fetch_truncates_to_the_range_even_if_the_server_ignores_it(self):
-        import http.server, threading
+        import http.server
         payload = bytes(range(256)) * 40
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -152,21 +174,16 @@ class RangeTests(unittest.TestCase):
             def log_message(self, *a):
                 pass
 
-        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        try:
+        with running_server(Handler) as server:
             with tempfile.TemporaryDirectory() as td:
                 dest = Path(td) / "a.bin"
                 ingest.http_fetch(f"http://127.0.0.1:{server.server_port}/a", dest, range_bytes=2048)
                 self.assertEqual(dest.read_bytes(), payload[:2048])
                 ingest.http_fetch(f"http://127.0.0.1:{server.server_port}/a", dest)
                 self.assertEqual(dest.read_bytes(), payload)
-        finally:
-            server.shutdown()
-            server.server_close()
 
     def test_short_http_response_is_not_committed_as_a_complete_download(self):
-        import http.server, threading
+        import http.server
         payload = b"partial-audio"
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -180,18 +197,13 @@ class RangeTests(unittest.TestCase):
             def log_message(self, *a):
                 pass
 
-        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        try:
+        with running_server(Handler) as server:
             with tempfile.TemporaryDirectory() as td:
                 dest = Path(td) / "partial.bin"
                 with self.assertRaisesRegex(ingest.IngestError, "download failed|incomplete download"):
                     ingest.http_fetch(f"http://127.0.0.1:{server.server_port}/audio", dest)
                 self.assertFalse(dest.exists())
                 self.assertFalse(dest.with_suffix(dest.suffix + ".part").exists())
-        finally:
-            server.shutdown()
-            server.server_close()
 
     def test_https_redirect_handler_rejects_downgrade(self):
         handler = ingest._HttpsRedirectHandler()

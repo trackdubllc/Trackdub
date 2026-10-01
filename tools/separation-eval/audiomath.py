@@ -5,7 +5,9 @@ All functions work on float32 arrays shaped (samples, channels) unless noted.
 
 from __future__ import annotations
 
+from io import BytesIO
 import math
+import struct
 import shutil
 import subprocess
 from math import gcd
@@ -40,16 +42,35 @@ def _adapt_channels(x: np.ndarray, channels: int) -> np.ndarray:
     return mono if channels == 1 else np.repeat(mono, channels, axis=1)
 
 
+def _read_pipe_wav(data: bytes) -> tuple[int, np.ndarray]:
+    """Repair the sentinel RIFF/data sizes ffmpeg must write to an unseekable pipe."""
+    payload = bytearray(data)
+    if payload[:4] == b"RIFF" and struct.unpack_from("<I", payload, 4)[0] == 0xFFFFFFFF:
+        struct.pack_into("<I", payload, 4, len(payload) - 8)
+        offset = 12
+        while offset + 8 <= len(payload):
+            chunk_id = payload[offset:offset + 4]
+            chunk_size = struct.unpack_from("<I", payload, offset + 4)[0]
+            if chunk_id == b"data":
+                if chunk_size == 0xFFFFFFFF:
+                    struct.pack_into("<I", payload, offset + 4, len(payload) - offset - 8)
+                break
+            offset += 8 + chunk_size + (chunk_size & 1)
+    return wavfile.read(BytesIO(payload))
+
+
 def load_audio(path: str | Path, channels: int = 2, sr: int = SR) -> np.ndarray:
     """Decode to float32 (n, channels) at `sr`. Uses ffmpeg when present, else WAV via scipy."""
     path = Path(path)
     if have_ffmpeg():
         proc = subprocess.run(
-            ["ffmpeg", "-v", "error", "-i", str(path), "-ac", str(channels), "-ar", str(sr),
-             "-f", "f32le", "-"],
+            ["ffmpeg", "-v", "error", "-i", str(path), "-c:a", "pcm_f32le", "-f", "wav", "-"],
             capture_output=True, check=False)
         if proc.returncode == 0 and proc.stdout:
-            return np.frombuffer(proc.stdout, dtype="<f4").reshape(-1, channels).astype(np.float32)
+            rate, data = _read_pipe_wav(proc.stdout)
+            if data.ndim == 1:
+                data = data[:, None]
+            return resample(_adapt_channels(_to_float32(data), channels), rate, sr)
         if path.suffix.lower() != ".wav":
             raise AudioError(f"ffmpeg could not decode {path.name}: {proc.stderr.decode(errors='replace')[:200]}")
     if path.suffix.lower() != ".wav":
@@ -57,6 +78,10 @@ def load_audio(path: str | Path, channels: int = 2, sr: int = SR) -> np.ndarray:
     rate, data = wavfile.read(path)
     if data.ndim == 1:
         data = data[:, None]
+    return resample(_adapt_channels(_to_float32(data), channels), rate, sr)
+
+
+def _to_float32(data: np.ndarray) -> np.ndarray:
     if data.dtype == np.int16:
         data = data.astype(np.float32) / 32768.0
     elif data.dtype == np.int32:
@@ -65,7 +90,7 @@ def load_audio(path: str | Path, channels: int = 2, sr: int = SR) -> np.ndarray:
         data = (data.astype(np.float32) - 128.0) / 128.0
     else:
         data = data.astype(np.float32)
-    return resample(_adapt_channels(data, channels), rate, sr)
+    return data
 
 
 def write_wav(path: str | Path, x: np.ndarray, sr: int) -> None:
@@ -139,6 +164,8 @@ def active_rms(x: np.ndarray, mask: np.ndarray, sr: int, frame_ms: int = 20) -> 
 def estimate_rt60(rir: np.ndarray, sr: int = SR) -> float:
     """Schroeder backward integration, T20 extrapolated to 60 dB. NaN if the decay is too short."""
     h = rir.astype(np.float64).reshape(-1)
+    if h.size == 0:
+        return math.nan
     edc = np.cumsum((h ** 2)[::-1])[::-1]
     if edc[0] <= 0:
         return math.nan

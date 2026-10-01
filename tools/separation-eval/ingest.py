@@ -83,7 +83,7 @@ def validate_record(rec: dict, allow_sharealike: bool) -> str | None:
     item_id = rec.get("id", "")
     if not isinstance(item_id, str) or not ID_PATTERN.match(item_id):
         return f"id '{item_id}' must match {ID_PATTERN.pattern}"
-    for key in ("source", "url", "license_spdx", "attribution_text", "group"):
+    for key in ("source", "url", "license_spdx", "license_evidence_url", "attribution_text", "group"):
         value = rec.get(key)
         if not isinstance(value, str) or not value.strip():
             return f"missing or empty '{key}'"
@@ -95,6 +95,12 @@ def validate_record(rec: dict, allow_sharealike: bool) -> str | None:
         return "url must be a valid https URL"
     if parsed_url.scheme.lower() != "https" or not parsed_url.hostname:
         return "url must be https"
+    try:
+        evidence_url = urllib.parse.urlsplit(rec["license_evidence_url"])
+    except ValueError:
+        return "license_evidence_url must be a valid https URL"
+    if evidence_url.scheme.lower() != "https" or not evidence_url.hostname:
+        return "license_evidence_url must be https"
     ext = rec.get("ext")
     if ext is not None and (not isinstance(ext, str) or not EXT_PATTERN.fullmatch(ext)):
         return "ext, when given, must be 1 to 5 lowercase ASCII letters or digits"
@@ -105,6 +111,9 @@ def validate_record(rec: dict, allow_sharealike: bool) -> str | None:
     if range_bytes is not None and (not isinstance(range_bytes, int) or isinstance(range_bytes, bool)
                                     or not 1024 <= range_bytes <= MAX_DOWNLOAD_BYTES):
         return f"range_bytes, when given, must be an integer between 1024 and {MAX_DOWNLOAD_BYTES}"
+    tags = rec.get("tags", [])
+    if not isinstance(tags, list) or any(not isinstance(tag, str) or not tag.strip() for tag in tags):
+        return "tags, when given, must be a list of strings"
     return check_license(rec["license_spdx"], allow_sharealike)
 
 
@@ -241,6 +250,8 @@ def fetch_all(
 ) -> dict[str, Exception]:
     """Download every pending item, at most `workers` at once and `per_host` per host.
     Returns the failures by item id; a failed download never stops the others."""
+    if per_host < 1:
+        raise IngestError("per_host must be a positive integer")
     failures: dict[str, Exception] = {}
     gates: dict[str, threading.Semaphore] = {}
     lock = threading.Lock()
@@ -285,6 +296,8 @@ def ingest_items(
     per_host: int = 2,
     progress: Callable[[int, int, str], None] | None = None,
 ) -> tuple[list[dict], list[Rejection]]:
+    if per_host < 1:
+        raise IngestError("per_host must be a positive integer")
     accepted: list[dict] = []
     rejected: list[Rejection] = []
     seen_ids: set[str] = set()
@@ -347,7 +360,7 @@ def ingest_items(
             "share_alike": ALLOWED_LICENSES[rec["license_spdx"]],
             "license_evidence_url": rec.get("license_evidence_url", ""),
             "attribution_text": rec["attribution_text"],
-            "tags": sorted({str(t).lower() for t in rec.get("tags", [])}),
+            "tags": sorted({t.strip().lower() for t in rec.get("tags", [])}),
             **{k: rec[k] for k in ("range_bytes", "ext", "tag_basis", "title", "creator", "query", "retrieved_at") if k in rec},
             "sha256": digest,
             "size_bytes": dest.stat().st_size,
@@ -417,6 +430,16 @@ def read_jsonl(path: Path) -> list[dict]:
     return records
 
 
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -426,8 +449,8 @@ def main(argv: list[str] | None = None) -> int:
     p_ingest.add_argument("--cache", type=Path, required=True)
     p_ingest.add_argument("--out", type=Path, required=True)
     p_ingest.add_argument("--allow-sharealike", action="store_true")
-    p_ingest.add_argument("--workers", type=int, default=4, help="concurrent downloads (default 4)")
-    p_ingest.add_argument("--per-host", type=int, default=2, help="concurrent downloads per host (default 2)")
+    p_ingest.add_argument("--workers", type=positive_int, default=4, help="concurrent downloads (default 4)")
+    p_ingest.add_argument("--per-host", type=positive_int, default=2, help="concurrent downloads per host (default 2)")
     p_ingest.add_argument("--skip-rejected", action="store_true",
                           help="write the manifest from accepted items even if some were rejected")
 

@@ -13,10 +13,25 @@ Design and rubric: `docs/audits/separation-eval-corpus-and-rubric.md` (gated rep
 ```bash
 python tools/separation-eval/ingest.py ingest --items items.jsonl --cache D:/corpus-cache --out items.manifest.json
 python tools/separation-eval/ingest.py verify --manifest items.manifest.json --cache D:/corpus-cache
-python -m unittest discover -s tools/separation-eval
+python -m unittest discover -s tools/separation-eval -p 'test_*.py'
 ```
 
 The licenses in `items.example.jsonl` are placeholders. Verify each item's license at its `license_evidence_url` before adding it.
+
+## Python environment
+
+The corpus generator, audio metrics, and evaluation runner use pinned NumPy and SciPy dependencies.
+From a clean checkout, create an environment and install them before running those tools:
+
+```bash
+python -m venv .venv
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+python -m pip install -r tools/separation-eval/requirements.txt
+```
+
+`ingest.py` and `recipe_coverage.py` only need the Python standard library when no cached RIR audio is
+being measured. The full test suite and all DSP generation require the pinned environment above.
 
 ## Mixture generator
 
@@ -54,7 +69,7 @@ local weights, the runner also honors `TRACKDUB_SPLEETER_ONNX_PATH` when it poin
 
 - Inputs are prepared the way the pipeline feeds Spleeter: stereo (5.1 is downmixed), 44.1 kHz, PCM16. The engine writes mono 44.1 kHz stems.
 - Two domains are scored. The reconstruction gate runs in the separator domain (44.1 kHz mono: does `vocals + bed` equal the mono input?). Bed leakage, bed damage and dialogue SI-SDR run in the reference domain (stems resampled to the clip rate and tiled to stereo), so the stereo-to-mono collapse and resampling are part of what is measured.
-- The reconstruction gate uses each candidate's declared profile (`CANDIDATE_PROFILES` in `run_eval.py`): the band it processes (Spleeter 11025 Hz) and its stem precision and rounding (PCM16, truncating). The residual is judged inside the declared band; content kept above it is reported as `bandwidth_retained_db`, not gated. The allowed residual rises to the format's rounding noise on quiet mixtures. Override with `--band-limit-hz`, `--output-bits`, `--output-rounding`.
+- The reconstruction gate checks the full-band residual against the fixed threshold. When a candidate declares a band limit (`--band-limit-hz`, 11025 for Spleeter), only the residual below that limit is judged, and the energy the separator keeps above it is reported separately as `bandwidth_retained_db`; it never changes pass/fail. Stem precision/rounding (`--output-bits`, `--output-rounding`) only record `quantization_allowance_db` as a diagnostic, next to `in_band_residual_db`.
 - Undefined metrics (for example bed leakage when no dialogue exists) are recorded as skipped, not as failures. A failed or missing job fails only its own clip.
 - The results JSON records the corpus manifest hash, hardware label, per-clip metrics, per-recipe median and worst-decile aggregates, and cold versus warm RTF.
 - The weights under test must be the pinned revision in `bundled-models.manifest.json`; check their sha256 before trusting a baseline.
@@ -65,14 +80,15 @@ local weights, the runner also honors `TRACKDUB_SPLEETER_ONNX_PATH` when it poin
 
 ```bash
 python tools/separation-eval/discover.py --spec tools/separation-eval/corpus-sources.v1.json --out tools/separation-eval/items.v1.jsonl --api-cache D:/api-cache
-python tools/separation-eval/recipe_coverage.py --items tools/separation-eval/items.v1.jsonl
+python tools/separation-eval/recipe_coverage.py --items tools/separation-eval/items.v1.jsonl --cache D:/corpus-cache
 ```
 
-`recipe_coverage.py` checks every mixgen recipe against the list in both splits and exits non-zero if a source category is thin.
+`recipe_coverage.py` checks every recipe in both splits and exits non-zero if a source category is thin,
+the RIR cache is missing, or no cached RIR has an estimated RT60 in A3's 0.4–2.0 second range.
 
 Caveats that affect what the corpus can show:
 - Freesound items are 128 kbps MP3 previews (lossy, band-limited near 16 to 19 kHz); LibriVox is 64 kbps read speech truncated to `range_bytes`. Neither is film-grade audio, so full-band behaviour is only partly exercised.
 - Music, SFX, ambience and whisper tags come from the search query (`tag_basis: search-query`). Listen to a sample of each tag before trusting the A2, A4, A5 and A8 strata.
-- Impulse responses are checked for RT60 (0.4 to 2.0 s) only after download, when mixgen generates A3.
+- Impulse responses are checked for RT60 (0.4 to 2.0 s) from the audio cache before recipe coverage passes; mixgen applies the same range when generating A3.
 - CC BY items carry their attribution text in the manifest; keep it with any redistributed copy.
 - The group is the creator (or the LibriVox book), so one voice or artist stays on one side of the split.

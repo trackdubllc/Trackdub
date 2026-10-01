@@ -88,10 +88,16 @@ public sealed record SeparationEvalOptions(
             return false;
         }
 
-        if (provider is not null && !Enum.TryParse(provider, ignoreCase: true, out ExecutionProviderKind _))
+        ExecutionProviderKind parsedProvider = default;
+        if (provider is not null && !ExecutionProviderTokens.TryParse(provider, out parsedProvider))
         {
-            error.WriteLine($"Unknown provider '{provider}'. Expected one of: {string.Join(", ", Enum.GetNames<ExecutionProviderKind>())}.");
+            error.WriteLine($"Unknown provider '{provider}'. Expected one of: {ExecutionProviderTokens.FormatSupportedCliTags()}.");
             return false;
+        }
+
+        if (provider is not null)
+        {
+            provider = ExecutionProviderTokens.ToCanonicalTag(parsedProvider);
         }
 
         options = new SeparationEvalOptions(jobs, results, provider, model, modelDirectory, modelCacheDirectory, ffmpeg, ffprobe, ShowHelp: false);
@@ -175,15 +181,21 @@ public static class SeparationEvalRunner
         Dictionary<string, ExecutionProviderKind>? pins = null;
         if (options.Provider is not null)
         {
+            if (!ExecutionProviderTokens.TryParse(options.Provider, out ExecutionProviderKind parsedProvider))
+            {
+                error.WriteLine($"Unknown provider '{options.Provider}'. Expected one of: {ExecutionProviderTokens.FormatSupportedCliTags()}.");
+                return 1;
+            }
+
             pins = new Dictionary<string, ExecutionProviderKind>
             {
-                [RuntimeStage.Separation.ToString()] = Enum.Parse<ExecutionProviderKind>(options.Provider, ignoreCase: true),
+                [RuntimeStage.Separation.ToString()] = parsedProvider,
             };
         }
 
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(options.ResultsPath))!);
+            EnsureParentDirectory(options.ResultsPath);
             await using var results = new StreamWriter(options.ResultsPath, append: false);
             using HeadlessDubbingHost host = HeadlessDubbingHost.Create(new HeadlessTrackdubOptions
             {
@@ -295,8 +307,8 @@ public static class SeparationEvalRunner
         var clock = Stopwatch.StartNew();
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(job.VocalsOutput))!);
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(job.BedOutput))!);
+            EnsureParentDirectory(job.VocalsOutput);
+            EnsureParentDirectory(job.BedOutput);
 
             var request = new StemSeparationRequest(
                 SourceAudioPath: job.Input,
@@ -391,4 +403,7 @@ public static class SeparationEvalRunner
         error.WriteLine($"separation-eval setup failed: {exception.Message}");
         return 1;
     }
+
+    private static void EnsureParentDirectory(string path) =>
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
 }

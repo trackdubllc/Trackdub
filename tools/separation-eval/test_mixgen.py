@@ -1,11 +1,16 @@
 import hashlib
 import json
 import math
+import struct
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
+from scipy.io import wavfile
 
 import audiomath as am
 import ingest
@@ -83,6 +88,27 @@ class AudioMathTests(unittest.TestCase):
         h = rir(1.0, np.random.default_rng(3))
         self.assertAlmostEqual(am.estimate_rt60(h), 1.0, delta=0.15)
 
+    def test_empty_rir_has_undefined_rt60(self):
+        self.assertTrue(math.isnan(am.estimate_rt60(np.empty(0, dtype=np.float32))))
+
+    def test_ffmpeg_and_wav_fallback_use_the_same_channel_adaptation(self):
+        source = np.random.default_rng(3).standard_normal((4096, 6)).astype(np.float32)
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "surround.wav"
+            wavfile.write(path, 32000, source)
+            payload = BytesIO()
+            wavfile.write(payload, 32000, source)
+            pipe_payload = bytearray(payload.getvalue())
+            struct.pack_into("<I", pipe_payload, 4, 0xFFFFFFFF)
+            data_chunk = pipe_payload.index(b"data")
+            struct.pack_into("<I", pipe_payload, data_chunk + 4, 0xFFFFFFFF)
+            with patch.object(am, "have_ffmpeg", return_value=True), patch.object(
+                    am.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=bytes(pipe_payload), stderr=b"")):
+                ffmpeg_result = am.load_audio(path, channels=2, sr=am.SR)
+            with patch.object(am, "have_ffmpeg", return_value=False):
+                scipy_result = am.load_audio(path, channels=2, sr=am.SR)
+        np.testing.assert_array_equal(ffmpeg_result, scipy_result)
+
 
 class LoopToLengthTests(unittest.TestCase):
     def test_empty_source_fails_instead_of_looping_forever(self):
@@ -106,7 +132,40 @@ class LoopToLengthTests(unittest.TestCase):
         np.testing.assert_array_equal(out[: source.shape[0] - crossfade], source[:-crossfade])
 
 
+class ItemPoolCacheTests(MixgenTestBase):
+    def test_lru_cache_evicts_one_old_entry_and_retains_a_hot_entry(self):
+        pool = mixgen.ItemPool(self.items, self.cache, "dev", audio_cache_capacity=2)
+        first, second, third = self.items[:3]
+        calls = []
+
+        def load(path, channels):
+            calls.append(Path(path).name)
+            return np.array([[len(calls)]], dtype=np.float32)
+
+        with patch.object(mixgen.am, "load_audio", side_effect=load):
+            first_audio = pool.load(first, 1)
+            pool.load(second, 1)
+            self.assertIs(pool.load(first, 1), first_audio)
+            pool.load(third, 1)
+            self.assertEqual(len(pool._audio), 2)
+            self.assertEqual(calls.count(ingest.cache_path(self.cache, first).name), 1)
+            pool.load(second, 1)
+            self.assertEqual(calls.count(ingest.cache_path(self.cache, second).name), 2)
+
+
 class RecipeTests(MixgenTestBase):
+    def test_duration_override_must_be_finite_and_positive(self):
+        for duration in (0.0, -1.0, math.nan, math.inf):
+            with self.subTest(duration=duration):
+                ctx = mixgen.Context(self.items, self.cache, 7, duration_override=duration)
+                with self.assertRaisesRegex(mixgen.GenerationError, "finite and positive"):
+                    mixgen.generate_clip(mixgen.RECIPES["A9"], 0, "dev", ctx)
+
+    def test_positive_duration_override_controls_sample_count(self):
+        ctx = mixgen.Context(self.items, self.cache, 7, no_codec=True, duration_override=1.5)
+        arrays, _, _ = mixgen.generate_clip(mixgen.RECIPES["A9"], 0, "dev", ctx)
+        self.assertEqual(arrays["mixture"].shape[0], int(1.5 * am.SR))
+
     def test_mixture_is_exact_sum(self):
         arrays, sr, _ = self.clip("A1")
         np.testing.assert_allclose(arrays["mixture"], arrays["dialogue"] + arrays["bed"], atol=1e-6)

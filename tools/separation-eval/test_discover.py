@@ -1,12 +1,16 @@
 import json
+import sys
 import tempfile
+import types
 import unittest
 import urllib.parse
 from pathlib import Path
+from unittest.mock import patch
 
 import discover
 import ingest
 import recipe_coverage as coverage
+from test_support import running_server
 
 TODAY = "2026-09-30"
 
@@ -84,6 +88,12 @@ class OpenverseTests(unittest.TestCase):
         self.assertEqual(item["license_evidence_url"], "https://example.org/sounds/1")
         self.assertEqual(item["retrieved_at"], TODAY)
 
+    def test_non_latin_creators_keep_distinct_group_keys(self):
+        left = self.candidates(SPEC, {1: [result(1, creator="東京の作者")]})[0]
+        right = self.candidates(SPEC, {1: [result(2, creator="京都の作者")]})[0]
+        self.assertNotEqual(left["group"], right["group"])
+        self.assertIn("東京", left["group"])
+
     def test_range_bytes_only_when_the_file_is_larger(self):
         spec = {**SPEC, "range_bytes": 3000000}
         big = self.candidates(spec, {1: [result(1, filesize=9000000)]})[0]
@@ -153,6 +163,8 @@ class LibriVoxTests(unittest.TestCase):
         self.assertEqual(item["license_spdx"], "LicenseRef-PublicDomain")
         self.assertEqual(item["role"], "dialogue")
         self.assertIn("Treasure Island", item["attribution_text"])
+        self.assertEqual(item["license_evidence_url"], "https://archive.org/details/good_one")
+        self.assertEqual(urllib.parse.urlsplit(item["license_evidence_url"]).scheme, "https")
         self.assertIsNone(ingest.validate_record(item, allow_sharealike=False))
 
     def test_section_index_is_clamped_and_small_files_skipped(self):
@@ -195,7 +207,7 @@ class CacheAndDiscoverTests(unittest.TestCase):
             self.assertEqual(ingest.read_jsonl(path), items)
 
     def test_cached_fetch_reuses_responses_and_survives_without_network(self):
-        import http.server, threading
+        import http.server
         hits = []
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -210,21 +222,16 @@ class CacheAndDiscoverTests(unittest.TestCase):
             def log_message(self, *a):
                 pass
 
-        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        try:
+        with running_server(Handler) as server:
             with tempfile.TemporaryDirectory() as td:
                 fetch = discover.cached_fetch_json(Path(td), pause_s=0)
                 url = f"http://127.0.0.1:{server.server_port}/x"
                 self.assertEqual(fetch(url), {"ok": 1})
                 self.assertEqual(fetch(url), {"ok": 1})
                 self.assertEqual(len(hits), 1)
-        finally:
-            server.shutdown()
-            server.server_close()
 
     def test_rate_limit_raises_quota_error_with_guidance(self):
-        import http.server, threading
+        import http.server
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
@@ -235,16 +242,11 @@ class CacheAndDiscoverTests(unittest.TestCase):
             def log_message(self, *a):
                 pass
 
-        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        try:
+        with running_server(Handler) as server:
             fetch = discover.cached_fetch_json(None, pause_s=0)
             with self.assertRaises(discover.QuotaError) as ctx:
                 fetch(f"http://127.0.0.1:{server.server_port}/x")
             self.assertIn("Retry-After 60", str(ctx.exception))
-        finally:
-            server.shutdown()
-            server.server_close()
 
     def test_shipped_spec_is_well_formed(self):
         spec = json.loads((Path(__file__).parent / "corpus-sources.v1.json").read_text())
@@ -256,7 +258,8 @@ class CacheAndDiscoverTests(unittest.TestCase):
 
 def ingest_ready():
     return {"id": "x-dlg-000000000001", "source": "s", "url": "https://x/a.mp3", "role": "dialogue", "group": "g:1",
-            "license_spdx": "CC0-1.0", "attribution_text": "a", "tags": [], "tag_basis": "none", "retrieved_at": TODAY}
+            "license_spdx": "CC0-1.0", "license_evidence_url": "https://example.org/license",
+            "attribution_text": "a", "tags": [], "tag_basis": "none", "retrieved_at": TODAY}
 
 
 class CoverageTests(unittest.TestCase):
@@ -269,7 +272,9 @@ class CoverageTests(unittest.TestCase):
             split = ingest.assign_split(group)
             if found[split] < per_split:
                 found[split] += 1
-                out.append({"id": f"{group_prefix}-{n:04d}", "role": role, "group": group, "tags": tags})
+                item_id = f"{group_prefix}-{n:04d}"
+                out.append({"id": item_id, "role": role, "group": group, "tags": tags,
+                            "url": f"https://example.org/{item_id}.wav", "ext": "wav"})
         return out
 
     def full_set(self):
@@ -282,7 +287,29 @@ class CoverageTests(unittest.TestCase):
 
     def test_a_complete_set_has_no_gaps(self):
         _, gaps = coverage.check(self.full_set(), min_groups=3)
-        self.assertEqual(gaps, [])
+        self.assertEqual([gap for gap in gaps if not gap.startswith("A3 rir")], [])
+        self.assertEqual(sum("RT60 unverified" in gap for gap in gaps), 2)
+
+    def test_rir_coverage_requires_cached_audio_with_in_range_rt60(self):
+        items = self.full_set()
+        with tempfile.TemporaryDirectory() as td:
+            cache = Path(td)
+            for item in items:
+                if item["role"] == "rir":
+                    path = ingest.cache_path(cache, item)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b"cached")
+            fake_audio = types.ModuleType("audiomath")
+            fake_audio.SR = 48000
+            fake_audio.AudioError = type("AudioError", (Exception,), {})
+            fake_audio.load_audio = lambda *_args, **_kwargs: "cached audio"
+            fake_audio.estimate_rt60 = lambda *_args, **_kwargs: 1.0
+            with patch.dict(sys.modules, {"audiomath": fake_audio}):
+                _, valid_gaps = coverage.check(items, min_groups=3, cache=cache)
+                self.assertEqual(valid_gaps, [])
+                fake_audio.estimate_rt60 = lambda *_args, **_kwargs: 0.2
+                _, invalid_gaps = coverage.check(items, min_groups=3, cache=cache)
+        self.assertTrue(any(gap.startswith("A3 rir") for gap in invalid_gaps))
 
     def test_missing_tags_are_reported_per_recipe_and_split(self):
         items = [i for i in self.full_set() if "whisper" not in i["tags"]]
@@ -301,7 +328,7 @@ class CoverageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "items.jsonl"
             path.write_text("\n".join(json.dumps(i) for i in self.full_set()))
-            self.assertEqual(coverage.main(["--items", str(path)]), 0)
+            self.assertEqual(coverage.main(["--items", str(path)]), 1)
             path.write_text(json.dumps(self.full_set()[0]))
             self.assertEqual(coverage.main(["--items", str(path)]), 1)
 

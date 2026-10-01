@@ -130,7 +130,7 @@ class EvaluateTests(EvalTestBase):
         self.assertTrue(a10["ok"], a10["error"])
         self.assertIn("skipped", a10["leakage"])
         a9 = self.clip(result, "a9-dev-000")
-        self.assertIsNone(a9["leakage"]["leakage_to_bed_db"])
+        self.assertAlmostEqual(a9["leakage"]["leakage_to_bed_db"], 0.0, delta=0.5)
         self.assertIsNone(a9["damage"]["si_sdr_db"])
 
     def test_failed_and_missing_jobs_are_recorded_per_clip(self):
@@ -185,6 +185,13 @@ class EvaluateTests(EvalTestBase):
         with self.assertRaises(run_eval.EvalError):
             evaluate(self.root, self.corpus, sep)
 
+    def test_clip_limit_must_be_positive_and_none_keeps_full_scope(self):
+        sep = fake_separator(lambda mono: (np.zeros_like(mono), mono))
+        self.assertEqual(evaluate(self.root, self.corpus, sep, clip_limit=None)["summary"]["clips_total"], 3)
+        for limit in (0, -1):
+            with self.subTest(limit=limit), self.assertRaisesRegex(run_eval.EvalError, "clip_limit must be positive"):
+                evaluate(self.root, self.corpus, sep, clip_limit=limit)
+
 
 class VariantTests(unittest.TestCase):
     def test_all_a11_formats_round_trip_through_the_pipeline(self):
@@ -193,13 +200,15 @@ class VariantTests(unittest.TestCase):
             corpus = build_corpus(root, recipes=("A11",), count=4)
             sep = fake_separator(lambda mono: (np.zeros_like(mono), mono))
             result = evaluate(root, corpus, sep, gate={"output_bits": 16, "output_rounding": "nearest"})
-            for clip in result["clips"]:
-                self.assertTrue(clip["ok"], f"{clip['variant']}: {clip['error']}")
-                # PCM16 outputs cost up to half an LSB of error, which on a quiet 8 kHz clip sits
-                # right at the -60 dB gate; the fake re-quantises a mean of two quantised samples.
-                self.assertLess(clip["reconstruction"]["residual_db"], -55.0, clip["variant"])
-                self.assertLessEqual(clip["reconstruction"]["max_abs_residual"], 1.6e-5)
-            self.assertEqual({c["variant"] for c in result["clips"]}, {"mono", "sr8000", "sr16000", "5.1"})
+            by_variant = {clip["variant"]: clip for clip in result["clips"]}
+            self.assertEqual(set(by_variant), {"mono", "sr8000", "sr16000", "5.1"})
+            for variant in ("mono", "sr16000", "5.1"):
+                self.assertTrue(by_variant[variant]["ok"], f"{variant}: {by_variant[variant]['error']}")
+                self.assertLessEqual(by_variant[variant]["reconstruction"]["max_abs_residual"], 1.6e-5)
+            # Strict full-band -60 dB acceptance exposes the 8 kHz PCM16 round-trip residual;
+            # the declared quantization allowance is diagnostic and does not make this pass.
+            self.assertFalse(by_variant["sr8000"]["ok"])
+            self.assertIn("full-band residual", by_variant["sr8000"]["error"])
 
 
 class GateConfigTests(EvalTestBase):

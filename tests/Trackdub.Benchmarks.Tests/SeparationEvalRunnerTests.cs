@@ -57,8 +57,24 @@ public sealed class SeparationEvalRunnerTests
     }
 
     [Theory]
+    [InlineData("dml", "directml")]
+    [InlineData("migraphx", "migraphx")]
+    [InlineData("trt-rtx", "trt-rtx")]
+    [InlineData("directml", "directml")]
+    public void TryParse_AcceptsCanonicalProviderTokensAndAliases(string token, string canonical)
+    {
+        bool ok = SeparationEvalOptions.TryParse(
+            ["--jobs", "j", "--results", "r", "--provider", token],
+            TextWriter.Null, out SeparationEvalOptions options);
+
+        Assert.True(ok);
+        Assert.Equal(canonical, options.Provider);
+    }
+
+    [Theory]
     [InlineData("--jobs", "j.jsonl")]
     [InlineData("--jobs", "j", "--results", "r", "--provider", "warp-drive")]
+    [InlineData("--jobs", "j", "--results", "r", "--provider", "999")]
     [InlineData("--jobs", "j", "--results", "r", "--bogus", "x")]
     [InlineData("--jobs")]
     public void TryParse_RejectsBadArguments(params string[] args)
@@ -67,6 +83,20 @@ public sealed class SeparationEvalRunnerTests
 
         Assert.False(SeparationEvalOptions.TryParse(args, error, out _));
         Assert.NotEmpty(error.ToString());
+    }
+
+    [Fact]
+    public async Task ProgramRunAsync_DispatchesSeparationEvalHelpCaseInsensitively()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await Program.RunAsync(
+            ["Separation-Eval", "--help"], TextReader.Null, output, error, CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains(SeparationEvalOptions.Usage, output.ToString());
+        Assert.Empty(error.ToString());
     }
 
     [Fact]
@@ -91,7 +121,7 @@ public sealed class SeparationEvalRunnerTests
         Assert.Equal(12.0, results[0].AudioSeconds);
         Assert.True(results[0].Rtf > 0);
         Assert.Equal("Cpu", results[0].SelectedProvider);
-        Assert.All(results.Where(r => r.Ok), r => Assert.NotNull(r.PeakWorkingSetBytes));
+        Assert.True(results[0].PeakWorkingSetBytes >= 150);
         Assert.Equal("cpu", engine.Requests[0].PreferredExecutionProvider);
         Assert.True(engine.Requests[0].RequirePreferredExecutionProvider);
         Assert.Equal("spleeter", engine.Requests[0].PreferredModelAlias);
