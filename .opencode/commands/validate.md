@@ -1,6 +1,6 @@
 ---
 description: "Full CI-equivalent gate: restore, Release build with warnings-as-errors, tests, plus architecture bounds audit"
-agent: validation-gate
+agent: subagents/validation-gate
 ---
 
 Run the Trackdub core CI-equivalent validation gate.

@@ -67,7 +67,7 @@ Subject-matter facts. Read-only reference; changes here need evidence from code.
 
 Repeatable multi-step procedures.
 
-- `context/processes/submodule-pin-bump.md` — the canonical core-pin bump procedure. Lives in the **gated** repo; `/pin` points here when invoked from core.
+- `context/processes/submodule-pin-bump.md` — the canonical core-pin bump procedure. Lives in the **gated** repo; `/pin` points here when invoked from core. From core, follow the pointer to a verified `Trackdub-gated` checkout and invoke `/pin` there; the core checkout has no submodule gitlink to mutate.
 
 ### `context/standards/` — what "correct" means
 

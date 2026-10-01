@@ -1,6 +1,6 @@
 ---
 description: "Run DubBench/Benchmarks, diff against a baseline, and attribute any regression"
-agent: benchmark-perf
+agent: subagents/benchmark-perf
 ---
 
 Benchmark run + baseline diff + regression attribution.

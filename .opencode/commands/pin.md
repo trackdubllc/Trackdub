@@ -1,6 +1,6 @@
 ---
 description: "Bump the pinned Trackdub core submodule in Trackdub-gated and verify both repos"
-agent: pipeline-inference
+agent: subagents/pipeline-inference
 ---
 
 Bump the pinned Trackdub core submodule and verify both repos still build.
@@ -17,6 +17,7 @@ This command lives in the core repo's `.opencode`, but the submodule it bumps li
 - If the current working directory is **Trackdub core** → **do not attempt a bump.** State that the submodule lives in the gated repo, and point at the canonical process doc:
   - `../Trackdub-gated/.opencode/context/processes/submodule-pin-bump.md`
   - and `../Trackdub-gated/.opencode/navigation.md` for the gated system's context index.
+  Then change into that verified checkout and invoke `/pin` there; this core-installed command is the entry-point pointer, not a request to mutate the core checkout.
 
 Detect this, do not assume. `git rev-parse --show-toplevel` and the presence of `.gitmodules` tell you.
 
