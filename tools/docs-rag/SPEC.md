@@ -282,6 +282,30 @@ Streamable HTTP at `/mcp`; initialize handshake returns serverInfo
 `trackdub-docs-rag` v0.2.0. Any client that speaks
 `Authorization` headers + streamable HTTP works. Raw HTTP alternative:
 `POST /v1/search` and `POST /v1/ask` (`{"query","scope","limit"}`).
+### Test validation with project configuration
+
+To verify that an agent correctly loads the `.mcp.json` entry and discovers the three tools with `DOCS_RAG_TOKEN` set:
+
+**Claude Code (project context):**
+```bash
+# From Trackdub repo root, with DOCS_RAG_TOKEN exported
+claude mcp list --context project
+```
+
+Expected output includes:
+```
+trackdub-docs-rag (http)
+  Tools: search_trackdub_docs, ask_trackdub_docs, get_trackdub_doc
+```
+
+**Cursor IDE:**
+Open MCP panel in Cursor settings; the trackdub-docs-rag server should appear with status "Connected" and show 3 tools after environment variable substitution succeeds.
+
+**Direct HTTP initialization (any client):**
+```bash
+curl -X POST https://trackdub-docs-rag.trackdub.workers.dev/mcp -H "Authorization: Bearer ${DOCS_RAG_TOKEN}" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}'
+```
+
 
 ### Adding a *new agent identity* (per-agent tokens)
 
