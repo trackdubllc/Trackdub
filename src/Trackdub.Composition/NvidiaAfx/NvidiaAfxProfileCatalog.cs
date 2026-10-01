@@ -2,19 +2,99 @@ using Trackdub.Contracts;
 
 namespace Trackdub.Composition.NvidiaAfx;
 
+/// <summary>
+/// One Maxine feature-folder model requirement. Resolved on disk via
+/// <see cref="Infrastructure.Components.NvidiaAfx.NvidiaAfxRuntimeLayout"/>.
+/// </summary>
+public sealed record NvidiaAfxRequiredModel(
+    string FeatureFolder,
+    string ModelStem);
+
+/// <summary>
+/// Maxine ships rate-specific model payloads (for example <c>denoiser_16k</c> vs
+/// <c>denoiser_48k</c>). Session create must bind the stem that matches the input rate.
+/// </summary>
+public sealed record NvidiaAfxSampleRateModels(
+    int InputSampleRate,
+    NvidiaAfxRequiredModel[] Models);
+
 public sealed record NvidiaAfxProfileDefinition(
     NvidiaAfxProfile Profile,
     string DisplayName,
     string Selector,
     bool IsChainedEffect,
+    /// <summary>Supported input sample rates for this effect.</summary>
     int[] SupportedSampleRates,
     int MaxChannels,
-    string[] RequiredModelRelativePaths,
+    /// <summary>Per-input-rate Maxine feature+stem requirements (NGC download_features layout).</summary>
+    NvidiaAfxSampleRateModels[] ModelsBySampleRate,
     bool RequiresFarEndReference,
-    bool SupportsIntensityRatio);
+    bool SupportsIntensityRatio,
+    /// <summary>
+    /// Explicit output sample rate when it differs from the selected input rate
+    /// (for example telephony upscale 8 kHz → 16 kHz). Null means output matches input.
+    /// </summary>
+    int? OutputSampleRate = null)
+{
+    public int ResolveOutputSampleRate(int inputSampleRate) =>
+        OutputSampleRate ?? inputSampleRate;
+
+    /// <summary>
+    /// Preferred probe rate: 48 kHz when supported (shipping quality), else the highest listed rate.
+    /// </summary>
+    public int PreferredProbeSampleRate =>
+        SupportedSampleRates.Contains(48000)
+            ? 48000
+            : SupportedSampleRates.Max();
+
+    /// <summary>Union of every rate-specific model (full-package readiness / manifests).</summary>
+    public IReadOnlyList<NvidiaAfxRequiredModel> AllRequiredModels =>
+        ModelsBySampleRate
+            .SelectMany(entry => entry.Models)
+            .DistinctBy(model => (
+                model.FeatureFolder.ToLowerInvariant(),
+                model.ModelStem.ToLowerInvariant()))
+            .ToArray();
+
+    /// <summary>Distinct Maxine feature folders required by this profile.</summary>
+    public IReadOnlyList<string> RequiredFeatureFolders =>
+        AllRequiredModels
+            .Select(model => model.FeatureFolder)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    public NvidiaAfxRequiredModel[] ResolveRequiredModels(int inputSampleRate)
+    {
+        NvidiaAfxSampleRateModels? match = ModelsBySampleRate
+            .FirstOrDefault(entry => entry.InputSampleRate == inputSampleRate);
+        if (match is null)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(inputSampleRate),
+                inputSampleRate,
+                $"Profile '{Selector}' has no Maxine model set for {inputSampleRate} Hz. " +
+                $"Supported: {string.Join(", ", ModelsBySampleRate.Select(entry => entry.InputSampleRate))}.");
+        }
+
+        return match.Models;
+    }
+
+    /// <summary>
+    /// Preferred relative paths for manifests / diagnostics (Maxine 3.x features layout).
+    /// Actual resolution accepts additional arch folders and extensions.
+    /// </summary>
+    public IReadOnlyList<string> PreferredModelRelativePaths =>
+        AllRequiredModels
+            .Select(model => Path.Join("features", model.FeatureFolder, "models", model.ModelStem + ".trtpkg"))
+            .ToArray();
+}
 
 public static class NvidiaAfxProfileCatalog
 {
+    /// <summary>
+    /// First-class discovery surface for AFX profiles. Profiles are listed even while the
+    /// integration is stubbed so planners/settings can enumerate them without implying readiness.
+    /// </summary>
     public static IReadOnlyList<NvidiaAfxProfileDefinition> Definitions { get; } =
     [
         new(
@@ -24,7 +104,11 @@ public static class NvidiaAfxProfileCatalog
             IsChainedEffect: false,
             SupportedSampleRates: [16000, 48000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/denoiser_48k.nvam"],
+            ModelsBySampleRate:
+            [
+                new(16000, [new("nvafxdenoiser", "denoiser_16k")]),
+                new(48000, [new("nvafxdenoiser", "denoiser_48k")]),
+            ],
             RequiresFarEndReference: false,
             SupportsIntensityRatio: true),
         new(
@@ -34,7 +118,11 @@ public static class NvidiaAfxProfileCatalog
             IsChainedEffect: false,
             SupportedSampleRates: [16000, 48000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/dereverb_48k.nvam"],
+            ModelsBySampleRate:
+            [
+                new(16000, [new("nvafxdereverb", "dereverb_16k")]),
+                new(48000, [new("nvafxdereverb", "dereverb_48k")]),
+            ],
             RequiresFarEndReference: false,
             SupportsIntensityRatio: true),
         new(
@@ -44,27 +132,47 @@ public static class NvidiaAfxProfileCatalog
             IsChainedEffect: false,
             SupportedSampleRates: [16000, 48000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/dereverb_denoiser_48k.nvam"],
+            ModelsBySampleRate:
+            [
+                new(16000, [new("nvafxdereverbdenoiser", "dereverb_denoiser_16k")]),
+                new(48000, [new("nvafxdereverbdenoiser", "dereverb_denoiser_48k")]),
+            ],
             RequiresFarEndReference: false,
             SupportsIntensityRatio: true),
         new(
             NvidiaAfxProfile.TelephonyUpscale,
             "Telephony Upscale",
-            Selector: "superres_denoiser",
+            // Matches NVIDIA Maxine chained selector (8 kHz → 16 kHz + denoise).
+            Selector: "superres8kto16k_denoiser16k",
             IsChainedEffect: true,
-            SupportedSampleRates: [16000],
+            SupportedSampleRates: [8000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/superres_48k.nvam", "models/denoiser_48k.nvam"],
+            ModelsBySampleRate:
+            [
+                new(
+                    8000,
+                    [
+                        new("nvafxsuperres", "superres_8k_to_16k"),
+                        new("nvafxdenoiser", "denoiser_16k"),
+                    ]),
+            ],
             RequiresFarEndReference: false,
-            SupportsIntensityRatio: true),
+            SupportsIntensityRatio: true,
+            OutputSampleRate: 16000),
         new(
             NvidiaAfxProfile.AcousticEchoCancellation,
             "Acoustic Echo Cancellation",
+            // Not listed in Maxine AFX 3.x public effect selectors; kept for discovery.
+            // Readiness/model resolution will fail until NVIDIA ships a matching feature package.
             Selector: "aec",
             IsChainedEffect: false,
             SupportedSampleRates: [16000, 48000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/aec_48k.nvam"],
+            ModelsBySampleRate:
+            [
+                new(16000, [new("nvafxaec", "aec_16k")]),
+                new(48000, [new("nvafxaec", "aec_48k")]),
+            ],
             RequiresFarEndReference: true,
             SupportsIntensityRatio: false)
     ];
