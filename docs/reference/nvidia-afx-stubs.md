@@ -36,11 +36,15 @@ Never treat component registration, settings fields, or profile catalog entries 
 
 - Real NVIDIA AFX SDK redistributable download URLs, checksums (NVIDIA installer / Trackdub-hosted packages)
 - Architecture-bucket package selection against a verified install with live download
-- Native `NvAudioEffects.dll` create/run validated on shipping GPUs
+- Native `NVAudioEffects.dll` create/run validated on shipping GPUs
 - Flipping `NvidiaAfxIntegration.IsStubbed()` and registering `NvidiaAfxRuntimeReadinessService` instead of the stub
+- AEC: not in Maxine AFX 3.x public selectors; profile stays discoverable only
 
 ## Wired but gated
 
 - Packaging validation gates and license-gated installer scaffolding
+- Maxine 3.x `features/` layout resolution (+ legacy models fallback)
+- Rate-specific Maxine models (`ModelsBySampleRate` / `ResolveRequiredModels`) + feature bin DLL gates
+- Native DllImport resolver for `NVAudioEffects.dll` (Windows DLL directory for feature loads)
 - Corrected native Run signature and AEC far-end reference path
 - Settings → `SpeechAudioEnhancementOptions` through the enhancement stage

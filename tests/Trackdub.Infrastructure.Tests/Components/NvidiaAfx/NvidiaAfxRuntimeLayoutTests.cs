@@ -81,4 +81,26 @@ public sealed class NvidiaAfxRuntimeLayoutTests
             Path.Join("features", "nvafxstudiovoicelowlatency", "bin", "nvafxstudiovoicelowlatency.dll"),
             NvidiaAfxRuntimeLayout.FeatureNativeLibraryRelativePath("nvafxstudiovoicelowlatency"));
     }
+
+    [Fact]
+    public void ResolveFeatureNativeLibraryPath_FindsFeaturesBinLayout()
+    {
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-feature-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            string binDir = Path.Join(tempRoot, "features", "nvafxdenoiser", "bin");
+            Directory.CreateDirectory(binDir);
+            string dll = Path.Join(binDir, "nvafxdenoiser.dll");
+            File.WriteAllBytes(dll, [0x00]);
+
+            Assert.True(NvidiaAfxRuntimeLayout.HasFeaturesDirectory(tempRoot));
+            Assert.Equal(dll, NvidiaAfxRuntimeLayout.ResolveFeatureNativeLibraryPath(tempRoot, "nvafxdenoiser"));
+            Assert.True(NvidiaAfxRuntimeLayout.HasRequiredFeatureLibraries(tempRoot, ["nvafxdenoiser"]));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
 }

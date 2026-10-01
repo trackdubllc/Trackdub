@@ -78,6 +78,79 @@ public static class NvidiaAfxRuntimeLayout
     }
 
     /// <summary>
+    /// True when the tree looks like a Maxine 3.x SDK root (<c>features/</c> present).
+    /// Legacy flat <c>models/</c>-only fixtures skip feature-DLL presence checks.
+    /// </summary>
+    public static bool HasFeaturesDirectory(string runtimeRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
+        return Directory.Exists(Path.Join(runtimeRoot, "features"));
+    }
+
+    /// <summary>
+    /// Resolves a Maxine feature DLL under <c>features/&lt;folder&gt;/bin/</c>, or next to the core DLL.
+    /// </summary>
+    public static string? ResolveFeatureNativeLibraryPath(string runtimeRoot, string featureFolder)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(featureFolder);
+
+        string folder = featureFolder.Trim().TrimStart('/', '\\');
+        string relative = FeatureNativeLibraryRelativePath(folder);
+        string primary = Path.Join(runtimeRoot, relative);
+        if (File.Exists(primary))
+        {
+            return primary;
+        }
+
+        // Maxine docs also allow the feature DLL beside the core library.
+        string sidecar = Path.Join(runtimeRoot, folder + ".dll");
+        if (File.Exists(sidecar))
+        {
+            return sidecar;
+        }
+
+        if (!Directory.Exists(runtimeRoot))
+        {
+            return null;
+        }
+
+        string expectedName = folder + ".dll";
+        foreach (string path in Directory.EnumerateFiles(runtimeRoot, "*.dll"))
+        {
+            if (string.Equals(Path.GetFileName(path), expectedName, StringComparison.OrdinalIgnoreCase))
+            {
+                return path;
+            }
+        }
+
+        string featureBin = Path.Join(runtimeRoot, "features", folder, "bin");
+        if (Directory.Exists(featureBin))
+        {
+            foreach (string path in Directory.EnumerateFiles(featureBin, "*.dll"))
+            {
+                if (string.Equals(Path.GetFileName(path), expectedName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return path;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static bool HasFeatureNativeLibrary(string runtimeRoot, string featureFolder) =>
+        ResolveFeatureNativeLibraryPath(runtimeRoot, featureFolder) is not null;
+
+    public static bool HasRequiredFeatureLibraries(
+        string runtimeRoot,
+        IEnumerable<string> featureFolders)
+    {
+        ArgumentNullException.ThrowIfNull(featureFolders);
+        return featureFolders.All(folder => HasFeatureNativeLibrary(runtimeRoot, folder));
+    }
+
+    /// <summary>
     /// Resolves a model file for <paramref name="modelStem"/> under Maxine 3.x and legacy layouts.
     /// </summary>
     public static string? ResolveModelFile(

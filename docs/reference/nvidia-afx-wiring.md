@@ -22,7 +22,7 @@ Runtime root (`NvidiaAfxRuntimeDirectory` / `TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT` /
 
 Resolution is in `NvidiaAfxRuntimeLayout` (Infrastructure). Legacy flat `models/<stem>.nvam` is still accepted as a fallback for older staged trees.
 
-Model requirements are feature+stem pairs on `NvidiaAfxProfileDefinition.RequiredModels`, not hard-coded `.nvam` paths.
+Model requirements are rate-specific feature+stem pairs on `NvidiaAfxProfileDefinition.ModelsBySampleRate` (for example `denoiser_16k` vs `denoiser_48k`). Session create binds the stem for the active input rate; readiness requires models for every supported rate plus Maxine feature bin DLLs when a `features/` tree is present.
 
 **AEC:** Maxine AFX 3.x public selectors do not list `aec`. The AcousticEchoCancellation profile remains discoverable; model/feature resolution will fail until NVIDIA ships a matching package or we drop the profile with evidence.
 
@@ -34,7 +34,9 @@ Model requirements are feature+stem pairs on `NvidiaAfxProfileDefinition.Require
 | License UX field | `StudioSettings.NvidiaAfxLicenseAccepted` + installer refuses without acceptance |
 | Local runtime override | Settings / env / ComponentStore via `NvidiaAfxRuntimePathResolver` |
 | Installer scaffolding | Stub seam + license/manifest/download gates; DI registered |
-| Native P/Invoke | Maxine `float**` `NvAFX_Run`, exact 1/2 input channels, rate-change trim |
+| Rate-specific models | `ResolveRequiredModels(sampleRate)`; probe prefers 48 kHz when supported |
+| Feature DLL gate | `features/<nvafx*>/bin/*.dll` required when `features/` exists |
+| Native P/Invoke | Maxine `float**` `NvAFX_Run`, DllImport resolver + Windows DLL directory |
 | Native probe before Ready | `INvidiaAfxEffectProbe` create/load after DLL+model presence |
 | Settings → stage | Studio settings map into enhancement options (incl. headless preserve) |
 | DeepFilterNet fallback | Live enhancement path while stubbed / not ready |

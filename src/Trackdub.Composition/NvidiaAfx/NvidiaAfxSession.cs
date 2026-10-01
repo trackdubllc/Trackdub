@@ -67,9 +67,10 @@ internal sealed class NvidiaAfxSession : IDisposable
         var safeHandle = new NvidiaAfxEffectHandle(effectHandle);
         try
         {
-            if (profile.RequiredModels.Length > 0)
+            NvidiaAfxRequiredModel[] requiredModels = profile.ResolveRequiredModels(sampleRate);
+            if (requiredModels.Length > 0)
             {
-                string[] modelPaths = profile.RequiredModels
+                string[] modelPaths = requiredModels
                     .Select(model =>
                     {
                         string? resolved = NvidiaAfxRuntimeLayout.ResolveModelFile(
@@ -82,7 +83,8 @@ internal sealed class NvidiaAfxSession : IDisposable
                             throw new FileNotFoundException(
                                 $"NVIDIA AFX model '{model.ModelStem}' was not found under feature " +
                                 $"'{model.FeatureFolder}' in runtime root '{runtimeRoot}' " +
-                                $"(architecture bucket '{architectureBucket ?? "any"}').");
+                                $"(architecture bucket '{architectureBucket ?? "any"}', " +
+                                $"input rate {sampleRate} Hz).");
                         }
 
                         return resolved;

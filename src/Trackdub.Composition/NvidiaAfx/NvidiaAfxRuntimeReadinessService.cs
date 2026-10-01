@@ -60,9 +60,26 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
         }
 
         NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
+
+        // Maxine 3.x feature DLLs are required when a features/ tree is present. Legacy flat
+        // models/-only fixtures (unit tests / older stages) skip this gate.
+        if (NvidiaAfxRuntimeLayout.HasFeaturesDirectory(runtimeRoot)
+            && !NvidiaAfxRuntimeLayout.HasRequiredFeatureLibraries(
+                runtimeRoot,
+                definition.RequiredFeatureFolders))
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "Missing feature libraries",
+                runtimeRoot,
+                $"Required Maxine feature DLLs are missing for profile '{profile}'. " +
+                "Expected features/<nvafx*>/bin/<nvafx*>.dll (or beside NVAudioEffects.dll).");
+        }
+
+        // Require models for every supported input rate so Ready is not rate-specific luck.
         bool hasRequiredModels = NvidiaAfxRuntimeLayout.HasRequiredModels(
             runtimeRoot,
-            definition.RequiredModels.Select(model => (model.FeatureFolder, model.ModelStem)),
+            definition.AllRequiredModels.Select(model => (model.FeatureFolder, model.ModelStem)),
             architecture);
         if (!hasRequiredModels)
         {
@@ -71,10 +88,11 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
                 "Missing model files",
                 runtimeRoot,
                 $"Required Maxine feature models are missing for profile '{profile}' " +
-                $"(architecture '{architecture}'). Expected under features/<nvafx*>/models/.");
+                $"(architecture '{architecture}'). Expected under features/<nvafx*>/models/ " +
+                "for each supported sample rate (for example denoiser_16k and denoiser_48k).");
         }
 
-        int inputSampleRate = definition.SupportedSampleRates[0];
+        int inputSampleRate = definition.PreferredProbeSampleRate;
         NvidiaAfxEffectProbeResult probe = effectProbe.Probe(
             runtimeRoot,
             definition,

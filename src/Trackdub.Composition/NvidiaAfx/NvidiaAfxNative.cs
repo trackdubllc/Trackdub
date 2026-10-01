@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 using Trackdub.Infrastructure.Components.NvidiaAfx;
@@ -10,7 +11,7 @@ namespace Trackdub.Composition.NvidiaAfx;
 /// </summary>
 internal static class NvidiaAfxNative
 {
-    private const string LibraryName = "NVAudioEffects";
+    internal const string LibraryName = "NVAudioEffects";
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern int NvAFX_CreateEffect(
@@ -94,7 +95,9 @@ internal static class NvidiaAfxNativeLoader
 {
     private static readonly object SyncRoot = new();
     private static bool _loaded;
+    private static bool _resolverRegistered;
     private static string? _loadedFrom;
+    private static string? _libraryPath;
 
     public static void EnsureLoaded(string runtimeRoot)
     {
@@ -115,6 +118,17 @@ internal static class NvidiaAfxNativeLoader
                     Path.Join(runtimeRoot, "NVAudioEffects.dll"));
             }
 
+            _libraryPath = libraryPath;
+            EnsureDllImportResolverRegistered();
+
+            // Maxine CreateEffect loads features/<nvafx*>/bin/*.dll from the runtime root.
+            // SetDllDirectory is process-wide on Windows; leave it set for subsequent feature loads.
+            string runtimeDirectory = Path.GetFullPath(runtimeRoot);
+            if (OperatingSystem.IsWindows())
+            {
+                _ = SetDllDirectory(runtimeDirectory);
+            }
+
             NativeLibrary.Load(libraryPath);
             _loaded = true;
             _loadedFrom = runtimeRoot;
@@ -122,6 +136,48 @@ internal static class NvidiaAfxNativeLoader
     }
 
     public static string? LoadedFrom => _loadedFrom;
+
+    private static void EnsureDllImportResolverRegistered()
+    {
+        if (_resolverRegistered)
+        {
+            return;
+        }
+
+        try
+        {
+            NativeLibrary.SetDllImportResolver(typeof(NvidiaAfxNative).Assembly, ResolveNativeLibrary);
+        }
+        catch (InvalidOperationException)
+        {
+            // Another owner already installed a resolver for this assembly.
+        }
+
+        _resolverRegistered = true;
+    }
+
+    private static IntPtr ResolveNativeLibrary(
+        string libraryName,
+        Assembly assembly,
+        DllImportSearchPath? searchPath)
+    {
+        if (!IsNvidiaAfxLibraryName(libraryName) || string.IsNullOrWhiteSpace(_libraryPath))
+        {
+            return IntPtr.Zero;
+        }
+
+        return NativeLibrary.Load(_libraryPath);
+    }
+
+    private static bool IsNvidiaAfxLibraryName(string libraryName) =>
+        libraryName.Equals(NvidiaAfxNative.LibraryName, StringComparison.OrdinalIgnoreCase)
+        || libraryName.Equals(NvidiaAfxNative.LibraryName + ".dll", StringComparison.OrdinalIgnoreCase)
+        || libraryName.Equals("NvAudioEffects", StringComparison.OrdinalIgnoreCase)
+        || libraryName.Equals("NvAudioEffects.dll", StringComparison.OrdinalIgnoreCase);
+
+    [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetDllDirectory(string? lpPathName);
 }
 
 internal sealed class NvidiaAfxEffectHandle : SafeHandleZeroOrMinusOneIsInvalid
