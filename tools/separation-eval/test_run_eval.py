@@ -81,6 +81,14 @@ class HelperTests(unittest.TestCase):
             np.testing.assert_allclose(back, q, atol=1e-6)
             self.assertLessEqual(float(q.max()), 1.0)
 
+    def test_reconstruction_scores_the_written_pcm16_stems(self):
+        sep = fake_separator(lambda mono: (0.5 * mono, 0.5 * mono))
+        result = evaluate(self.root, self.corpus, sep, gate={"threshold_db": -120.0})
+        a1 = self.clip(result, "a1-dev-000")
+        self.assertGreater(a1["reconstruction"]["max_abs_residual"], 0.0)
+        self.assertIsNotNone(a1["reconstruction"]["residual_db"])
+        self.assertFalse(a1["reconstruction"]["passed"])
+
     def test_length_adjustment_within_and_beyond_tolerance(self):
         est = np.zeros((44100, 1), np.float32)
         out, adj = run_eval.to_reference_domain(est, 48000, 48000)
@@ -177,7 +185,7 @@ class EvaluateTests(EvalTestBase):
         strata = result["summary"]["strata"]
         self.assertEqual(set(strata), {"all", "A1", "A9", "A10"})
         self.assertEqual(strata["all"]["reconstruction_gate_pass"], 3)
-        self.assertEqual(strata["all"]["bed_leakage_accounting"]["scored_clips"], 2)
+        self.assertEqual(strata["all"]["bed_leakage_accounting"]["scored_clips"], 1)
         self.assertEqual(strata["all"]["bed_leakage_accounting"]["skipped_clips"], 1)
         self.assertEqual(result["corpus"]["items_sha256"], "0" * 64)
         self.assertEqual(len(result["corpus"]["manifest_sha256"]), 64)

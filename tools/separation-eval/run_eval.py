@@ -215,12 +215,17 @@ def score_clip(clip: dict, corpus: Path, job: dict, timing: dict, mixture44: np.
     return record
 
 
-def _dig(record: dict, path: tuple[str, ...]):
+def _at(record: dict, path: tuple[str, ...]):
     for key in path:
         if not isinstance(record, dict) or key not in record:
             return None
         record = record[key]
-    return record if isinstance(record, (int, float)) and not isinstance(record, bool) else None
+    return record
+
+
+def _dig(record: dict, path: tuple[str, ...]):
+    value = _at(record, path)
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
 def summarise(values: list[float], higher_is_better: bool) -> dict | None:
@@ -252,10 +257,10 @@ def aggregate(records: list[dict]) -> dict:
             "metrics": {m: summarise([v for r in rows if (v := _dig(r, path)) is not None], hib)
                         for m, (path, hib) in TRACKED_METRICS.items()},
             "bed_leakage_accounting": {
-                "scored_clips": sum(1 for r in rows if _dig(r, ("leakage", "status")) == "scored"),
+                "scored_clips": sum(1 for r in rows if _at(r, ("leakage", "status")) == "scored"),
                 "not_applicable_reference_bed_below_floor": sum(
-                    1 for r in rows if _dig(r, ("leakage", "status")) == "not_applicable_reference_bed_below_floor"),
-                "skipped_clips": sum(1 for r in rows if _dig(r, ("leakage", "skipped")) is not None),
+                    1 for r in rows if _at(r, ("leakage", "status")) == "not_applicable_reference_bed_below_floor"),
+                "skipped_clips": sum(1 for r in rows if _at(r, ("leakage", "skipped")) is not None),
                 "not_computed_clips": sum(1 for r in rows if "leakage" not in r),
                 "estimated_bed_active_rms_dbfs": summarise_diagnostic(
                     [v for r in rows if (v := _dig(r, ("leakage", "estimated_bed_active_rms_dbfs"))) is not None]),
