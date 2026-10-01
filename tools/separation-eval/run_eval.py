@@ -267,7 +267,9 @@ def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candid
              hardware_label: str, clip_limit: int | None = None, gate: dict | None = None) -> dict:
     manifest_path = corpus / "corpus.manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    clips = manifest["clips"][:clip_limit] if clip_limit else manifest["clips"]
+    if clip_limit is not None and clip_limit <= 0:
+        raise EvalError("clip_limit must be positive")
+    clips = manifest["clips"][:clip_limit] if clip_limit is not None else manifest["clips"]
     if not clips:
         raise EvalError("corpus has no clips")
     verify_clip_files(corpus, clips)
