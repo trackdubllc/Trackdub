@@ -115,9 +115,27 @@ class BedLeakageTests(unittest.TestCase):
         s = 3 * SR
         leak[s:s + SR] = 0.5 * d[s:s + SR]
         r = metrics.bed_leakage(d, b, b + leak, SR)
-        self.assertGreater(r.worst_window_leakage_db, r.leakage_to_bed_db + 6.0)
+        self.assertGreater(r.worst_window_leakage_db, r.dialogue_residual_db + 6.0)
         window = metrics.bed_leakage(d[s:s + SR], b[s:s + SR], b[s:s + SR] + leak[s:s + SR], SR)
-        self.assertAlmostEqual(r.worst_window_leakage_db, window.leakage_to_bed_db, delta=0.5)
+        self.assertAlmostEqual(r.worst_window_leakage_db, window.dialogue_residual_db, delta=0.5)
+        self.assertAlmostEqual(r.worst_window_leakage_db, 20 * np.log10(0.5), delta=0.5)
+
+    def test_worst_window_is_bounded_when_the_reference_bed_is_near_silent(self):
+        d, b = signals(seed=7, seconds=8.0)
+        quiet = b.copy()
+        s = 3 * SR
+        quiet[s:s + SR] *= 1e-4
+        leak = np.zeros_like(d)
+        leak[s:s + SR] = 0.2 * d[s:s + SR]
+        r = metrics.bed_leakage(d, quiet, quiet + leak, SR)
+        self.assertAlmostEqual(r.worst_window_leakage_db, 20 * np.log10(0.2), delta=0.5)
+        self.assertLessEqual(r.worst_window_leakage_db, 0.5)
+
+    def test_worst_window_is_reported_when_the_whole_reference_bed_is_below_the_floor(self):
+        d, _ = signals(seed=6)
+        r = metrics.bed_leakage(d, np.zeros_like(d), 0.1 * d, SR)
+        self.assertEqual(r.status, "not_applicable_reference_bed_below_floor")
+        self.assertAlmostEqual(r.worst_window_leakage_db, -20.0, delta=0.5)
 
     def test_mono_and_multichannel(self):
         for ch in (1, 6):
