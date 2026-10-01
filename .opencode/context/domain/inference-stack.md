@@ -128,7 +128,7 @@ From `.mcp.json`:
 
 | Server | Transport | Use for |
 |---|---|---|
-| `trackdub-gpu-docs` | stdio, `uv --directory D:/Dev/Trackdub_Workspace/Trackdub/tools/mcp-trackdub-gpu-docs run trackdub-gpu-docs-mcp` | offline TRT-RTX / EP ABI lookup; tools `list_corpus`, `search_trackdub_gpu_docs`, `get_doc`. **Disabled by default** in `.mcp.json` — enable before use. |
+| `trackdub-gpu-docs` | stdio, `uv --directory tools/mcp-trackdub-gpu-docs run trackdub-gpu-docs-mcp` | offline TRT-RTX / EP ABI lookup; tools `list_corpus`, `search_trackdub_gpu_docs`, `get_doc`. **Disabled by default** in `.mcp.json` — enable before use. |
 | `nvidia-cuda-docs` | HTTP, NVIDIA endpoint | CUDA toolkit/driver internals outside the corpus |
 | `trackdub-docs-rag` | HTTP + bearer `${DOCS_RAG_TOKEN}` | Trackdub implementation facts, pin policy, provider wiring. Tools `search_trackdub_docs`, `ask_trackdub_docs`, `get_trackdub_doc`. **Disabled by default**; needs the token env var. |
 | `serena` | stdio | symbol-aware code navigation when installed and configured with the REPL interface |
