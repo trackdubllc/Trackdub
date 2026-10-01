@@ -173,11 +173,48 @@ public static class Program
         {
             throw;
         }
-        catch (Exception ex)
+        catch (IOException ex)
         {
-            error.WriteLine(ex.ToString());
-            return 1;
+            return ReportSeparationEvalFailure(error, ex);
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (ArgumentException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (TimeoutException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            return ReportSeparationEvalFailure(error, ex);
+        }
+    }
+
+    private static int ReportSeparationEvalFailure(TextWriter error, Exception exception)
+    {
+        error.WriteLine(exception.ToString());
+        return 1;
     }
 
     private static async Task<int> RunControlledAsync(

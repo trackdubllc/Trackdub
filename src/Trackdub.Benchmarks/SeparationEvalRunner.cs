@@ -379,6 +379,10 @@ public static class SeparationEvalRunner
         {
             return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
         }
+        finally
+        {
+            monitor?.Stop();
+        }
     }
 
     private static SeparationEvalResult CreateFailedResult(
