@@ -25,6 +25,8 @@ LSD_EPS = 1e-10
 LSD_BATCH_FRAMES = 2048
 DEFAULT_WINDOW_SECONDS = 1.0
 MIN_ACTIVE_WINDOW_FRACTION = 0.25
+REFERENCE_BED_ENERGY_RATIO_FLOOR = 1e-12
+SILENT_RECONSTRUCTION_RMS_TOLERANCE = 1e-8
 
 
 class MetricError(Exception):
@@ -35,10 +37,11 @@ class MetricError(Exception):
 class LeakageResult:
     """Dialogue-correlated error in the estimated bed, measured on dialogue-active frames.
 
-    leakage_to_bed_db: energy of the dialogue-explained part of the estimated bed, relative to
-        estimated-bed energy. Lower is better. None when the estimated bed is silent.
-    dialogue_residual_db: the same leaked energy relative to the reference dialogue energy
-        (how much of the dialogue survives in the bed). Lower is better.
+    leakage_to_bed_db: energy of the dialogue-explained part of (estimated bed - reference bed),
+        relative to reference-bed energy. Lower is better. None when reference-bed energy is below
+        the measurement floor.
+    dialogue_residual_db: the same error energy relative to reference-dialogue energy. Lower is
+        better. estimated_bed_active_rms_dbfs independently reports output-bed level.
     worst_window_leakage_db: worst analysis window of leakage_to_bed_db; None when no window qualifies.
     """
     leakage_to_bed_db: float | None
@@ -47,6 +50,8 @@ class LeakageResult:
     active_fraction: float
     max_lag_samples: int
     window_seconds: float
+    status: str
+    estimated_bed_active_rms_dbfs: float
 
     def as_dict(self) -> dict:
         return {
@@ -56,6 +61,8 @@ class LeakageResult:
             "active_fraction": self.active_fraction,
             "max_lag_samples": self.max_lag_samples,
             "window_seconds": self.window_seconds,
+            "status": self.status,
+            "estimated_bed_active_rms_dbfs": self.estimated_bed_active_rms_dbfs,
         }
 
 
@@ -153,18 +160,21 @@ def _window_bounds(n: int, win: int) -> list[tuple[int, int]]:
 def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarray, sr: int,
                 max_lag_ms: float = DEFAULT_MAX_LAG_MS,
                 window_s: float = DEFAULT_WINDOW_SECONDS) -> LeakageResult:
-    """Measure how much reference dialogue remains in the estimated bed.
+    """Measure dialogue-correlated error in the estimated bed.
 
-    The estimated bed is projected onto the reference dialogue with a short multichannel FIR
-    (tolerating small delays and filtering), fitted independently in each `window_s` window so
-    leakage that comes and goes is not averaged away. The primary ratio is dialogue-explained
-    estimated-bed energy divided by estimated-bed energy, both summed over dialogue-active frames.
-    The second ratio uses reference-dialogue energy as its denominator.
+    The error (estimated bed minus reference bed) is projected onto the reference dialogue with a
+    short multichannel FIR (tolerating small delays and filtering), fitted independently in each
+    `window_s` window so leakage that comes and goes is not averaged away. The primary ratio divides
+    projected error energy by reference-bed energy on dialogue-active frames; the second divides by
+    reference-dialogue energy. Exact reference-bed output therefore has zero leakage even when the
+    bed itself contains speech-like content. When reference-bed energy is no more than 1e-12 of
+    dialogue energy, the primary ratio is not applicable and is returned as null; output-bed RMS
+    remains available as a separate diagnostic.
 
     Known limits: leakage whose gain changes within a window is under-measured (by up to about
     3 dB for a burst covering half a window), and the fit has a chance-capture floor of roughly
-    10*log10(unknowns / samples per window) dB relative to estimated-bed energy (about -21 dB at
-    the defaults), so very small dialogue components approach a nonzero capture floor.
+    10*log10(unknowns / samples per window) dB relative to reference-bed energy (about -21 dB at
+    the defaults), so very small dialogue-correlated errors approach a nonzero capture floor.
     """
     _validate_triplet(ref_dialogue, ref_bed, est_bed)
     max_lag = max(1, int(max_lag_ms * sr / 1000.0))
@@ -175,34 +185,41 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
     sample_mask, _ = _activity_masks(ref_dialogue, sr)
 
     bounds = _window_bounds(ref_dialogue.shape[0], win)
-    leak = np.zeros_like(est_bed, dtype=np.float64)
+    bed_error = est_bed.astype(np.float64) - ref_bed.astype(np.float64)
+    leak = np.zeros_like(bed_error)
     for lo, hi in bounds:
         if sample_mask[lo:hi].any():
-            leak[lo:hi] = project_onto_dialogue(ref_dialogue[lo:hi], est_bed[lo:hi], max_lag)
+            leak[lo:hi] = project_onto_dialogue(ref_dialogue[lo:hi], bed_error[lo:hi], max_lag)
 
     leak_e = float((leak[sample_mask] ** 2).sum())
-    bed_e = float((est_bed[sample_mask].astype(np.float64) ** 2).sum())
+    reference_bed_e = float((ref_bed[sample_mask].astype(np.float64) ** 2).sum())
+    estimated_bed_e = float((est_bed[sample_mask].astype(np.float64) ** 2).sum())
     dlg_e = float((ref_dialogue[sample_mask].astype(np.float64) ** 2).sum())
+    estimated_bed_active_rms_dbfs = _db(estimated_bed_e, int(sample_mask.sum()) * est_bed.shape[1])
+    has_reference_bed = reference_bed_e > dlg_e * REFERENCE_BED_ENERGY_RATIO_FLOOR
 
     worst: float | None = None
-    if bed_e > 0.0:
+    if has_reference_bed:
         for lo, hi in bounds:
             m = sample_mask[lo:hi]
             if m.sum() < MIN_ACTIVE_WINDOW_FRACTION * (hi - lo):
                 continue
-            w_bed = float((est_bed[lo:hi][m].astype(np.float64) ** 2).sum())
-            if w_bed <= 0.0:
+            w_reference_bed = float((ref_bed[lo:hi][m].astype(np.float64) ** 2).sum())
+            w_dialogue = float((ref_dialogue[lo:hi][m].astype(np.float64) ** 2).sum())
+            if w_reference_bed <= w_dialogue * REFERENCE_BED_ENERGY_RATIO_FLOOR:
                 continue
-            value = _db(float((leak[lo:hi][m] ** 2).sum()), w_bed)
+            value = _db(float((leak[lo:hi][m] ** 2).sum()), w_reference_bed)
             worst = value if worst is None else max(worst, value)
 
     return LeakageResult(
-        leakage_to_bed_db=_db(leak_e, bed_e) if bed_e > 0.0 else None,
+        leakage_to_bed_db=_db(leak_e, reference_bed_e) if has_reference_bed else None,
         dialogue_residual_db=_db(leak_e, dlg_e),
         worst_window_leakage_db=worst,
         active_fraction=float(sample_mask.mean()),
         max_lag_samples=max_lag,
         window_seconds=window_s,
+        status="scored" if has_reference_bed else "not_applicable_reference_bed_below_floor",
+        estimated_bed_active_rms_dbfs=estimated_bed_active_rms_dbfs,
     )
 
 
@@ -333,6 +350,8 @@ class ReconstructionResult:
         energy there (0 = all kept, very negative = dropped). Reported, never gated.
     mixture_above_band_db: share of the mixture's energy above the declared band, in dB of the total.
     worst_channel_db / max_abs_residual / lag_samples: diagnostics; lag is estimated only on failure.
+    silent_judged_residual_rms: absolute residual RMS in full-scale units when the mixture is
+        digitally silent; the pass/fail limit is SILENT_RECONSTRUCTION_RMS_TOLERANCE.
     None is used wherever a figure is undefined (shape mismatch, silent mixture, no band declared).
     """
     passed: bool
@@ -350,6 +369,7 @@ class ReconstructionResult:
     lag_samples: int | None
     threshold_db: float
     reasons: tuple[str, ...]
+    silent_judged_residual_rms: float | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -368,6 +388,7 @@ class ReconstructionResult:
             "lag_samples": self.lag_samples,
             "threshold_db": self.threshold_db,
             "reasons": list(self.reasons),
+            "silent_judged_residual_rms": self.silent_judged_residual_rms,
         }
 
 
@@ -424,8 +445,10 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
 
     Without `band_limit_hz` the full-band residual is compared against `threshold_db`. With it, only the
     residual below the declared band limit is judged; the energy the separator keeps above the limit is
-    reported as `bandwidth_retained_db` and never changes pass/fail. Output precision only adds the
-    expected output-rounding noise as a diagnostic.
+    reported as `bandwidth_retained_db` and never changes pass/fail. For a digitally silent mixture,
+    relative dB is undefined, so the absolute RMS residual in the judged band (or full band) must be at
+    most `SILENT_RECONSTRUCTION_RMS_TOLERANCE`. Output precision only adds the expected output-rounding
+    noise as a diagnostic.
     Never raises for bad separator output; it fails the gate.
     """
     def fail(reasons: list[str]) -> ReconstructionResult:
@@ -472,10 +495,14 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
                             * ROUNDING_VARIANCE_LSB2[output_rounding])
 
     if mix_e <= 0.0:
-        passed = (res_in <= res_e * BAND_ENERGY_FLOOR) if band_limit_hz is not None else res_e == 0.0
+        silent_judged_residual_rms = math.sqrt(res_in / residual.size) if residual.size else 0.0
+        passed = silent_judged_residual_rms <= SILENT_RECONSTRUCTION_RMS_TOLERANCE
         return ReconstructionResult(
             passed, None, None, threshold_db, None, None, None, band_limit_hz, output_bits, output_rounding, None, max_abs, None,
-            threshold_db, () if passed else ("mixture is silent but outputs are not within the judged band",))
+            threshold_db,
+            () if passed else (f"silent mixture judged-band residual RMS {silent_judged_residual_rms:.3g} exceeds absolute tolerance "
+                               f"{SILENT_RECONSTRUCTION_RMS_TOLERANCE:.3g}",),
+            silent_judged_residual_rms)
 
     threshold_energy = mix_e * 10.0 ** (threshold_db / 10.0)
     residual_db = _db(res_e, mix_e)

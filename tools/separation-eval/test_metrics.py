@@ -25,60 +25,56 @@ def expected_db(leak, bed, d):
 
 class BedLeakageTests(unittest.TestCase):
     def test_no_separation_leaks_the_whole_dialogue(self):
-        d, _ = signals()
-        b = np.zeros_like(d)
+        d, b = signals()
         r = metrics.bed_leakage(d, b, d + b, SR)
         self.assertAlmostEqual(r.dialogue_residual_db, 0.0, delta=0.2)
-        self.assertAlmostEqual(r.leakage_to_bed_db, 0.0, delta=0.2)
+        self.assertGreater(r.leakage_to_bed_db, -3.0)
 
-    def test_estimated_bed_dialogue_counts_even_when_it_matches_reference_bed(self):
+    def test_exact_estimated_bed_does_not_count_speech_like_reference_bed_as_leakage(self):
         d, _ = signals()
-        r = metrics.bed_leakage(d, d.copy(), d.copy(), SR)
-        self.assertAlmostEqual(r.leakage_to_bed_db, 0.0, delta=0.2)
-        self.assertAlmostEqual(r.dialogue_residual_db, 0.0, delta=0.2)
+        speech_like_reference_bed = d.copy()
+        r = metrics.bed_leakage(d, speech_like_reference_bed, speech_like_reference_bed.copy(), SR)
+        self.assertEqual(r.leakage_to_bed_db, metrics.DB_FLOOR)
+        self.assertEqual(r.dialogue_residual_db, metrics.DB_FLOOR)
+        self.assertEqual(r.status, "scored")
 
     def test_scaled_leak_matches_expected_level(self):
-        d, _ = signals(seed=1)
-        b = np.zeros_like(d)
+        d, b = signals(seed=1)
         for alpha in (0.3, 0.05):
             estimated_bed = b + alpha * d
             r = metrics.bed_leakage(d, b, estimated_bed, SR)
-            self.assertAlmostEqual(r.leakage_to_bed_db, expected_db(alpha * d, estimated_bed, d), delta=0.3)
+            self.assertAlmostEqual(r.leakage_to_bed_db, expected_db(alpha * d, b, d), delta=0.3)
             self.assertAlmostEqual(r.dialogue_residual_db, 20 * np.log10(alpha), delta=0.3)
 
-    def test_primary_ratio_is_normalized_by_estimated_bed_energy(self):
+    def test_primary_ratio_is_normalized_by_reference_bed_energy(self):
         d, b = signals(seed=11)
         est_bed = b + 0.2 * d
         r = metrics.bed_leakage(d, b, est_bed, SR)
         active, _ = metrics._activity_masks(d, SR)
         dialogue_energy = float((d[active].astype(np.float64) ** 2).sum())
-        estimated_bed_energy = float((est_bed[active].astype(np.float64) ** 2).sum())
-        expected = r.dialogue_residual_db + 10 * np.log10(dialogue_energy / estimated_bed_energy)
+        reference_bed_energy = float((b[active].astype(np.float64) ** 2).sum())
+        expected = r.dialogue_residual_db + 10 * np.log10(dialogue_energy / reference_bed_energy)
         self.assertAlmostEqual(r.leakage_to_bed_db, expected, delta=0.01)
 
-    def test_primary_ratio_is_invariant_to_uniform_estimated_bed_scaling(self):
+    def test_primary_ratio_uses_reference_denominator_when_estimated_bed_gain_changes(self):
         d, b = signals(seed=12)
-        est_bed = b + 0.2 * d
-        original = metrics.bed_leakage(d, b, est_bed, SR)
-        scaled = metrics.bed_leakage(d, b, 3.0 * est_bed, SR)
-        self.assertAlmostEqual(scaled.leakage_to_bed_db, original.leakage_to_bed_db, delta=0.01)
-        self.assertAlmostEqual(scaled.dialogue_residual_db, original.dialogue_residual_db + 20 * np.log10(3.0), delta=0.01)
+        lower = metrics.bed_leakage(d, b, b + 0.2 * d, SR)
+        higher = metrics.bed_leakage(d, b, b + 0.4 * d, SR)
+        self.assertAlmostEqual(higher.leakage_to_bed_db - lower.leakage_to_bed_db, 20 * np.log10(2.0), delta=0.1)
 
     def test_filtered_and_delayed_leak_is_fully_captured(self):
-        d, _ = signals(seed=2)
-        b = np.zeros_like(d)
+        d, b = signals(seed=2)
         fir = np.array([0.0, 0.0, 0.3, -0.2, 0.1, 0.05])
         shifted = np.stack([np.convolve(d[:, c], fir)[: d.shape[0]] for c in range(2)], axis=1).astype(np.float32)
         r = metrics.bed_leakage(d, b, b + shifted, SR)
-        self.assertAlmostEqual(r.leakage_to_bed_db, 0.0, delta=0.5)
+        self.assertAlmostEqual(r.leakage_to_bed_db, expected_db(shifted, b, d), delta=0.5)
         self.assertAlmostEqual(r.dialogue_residual_db, expected_db(shifted, d, d), delta=0.5)
 
     def test_leak_via_opposite_channel_is_captured(self):
-        d, _ = signals(seed=3)
-        b = np.zeros_like(d)
+        d, b = signals(seed=3)
         swapped = 0.2 * d[:, ::-1]
         r = metrics.bed_leakage(d, b, b + swapped, SR)
-        self.assertAlmostEqual(r.leakage_to_bed_db, 0.0, delta=0.5)
+        self.assertAlmostEqual(r.leakage_to_bed_db, expected_db(swapped, b, d), delta=0.5)
         self.assertAlmostEqual(r.dialogue_residual_db, 20 * np.log10(0.2), delta=0.5)
 
     def test_uncorrelated_estimated_bed_has_only_chance_capture(self):
@@ -101,15 +97,17 @@ class BedLeakageTests(unittest.TestCase):
         d, _ = signals(seed=6)
         zero = np.zeros_like(d)
         r = metrics.bed_leakage(d, zero, 0.1 * d, SR)
-        self.assertAlmostEqual(r.leakage_to_bed_db, 0.0, delta=0.2)
+        self.assertIsNone(r.leakage_to_bed_db)
+        self.assertEqual(r.status, "not_applicable_reference_bed_below_floor")
         self.assertAlmostEqual(r.dialogue_residual_db, -20.0, delta=0.3)
+        self.assertGreater(r.estimated_bed_active_rms_dbfs, -45.0)
 
-    def test_silent_estimated_bed_has_no_primary_ratio(self):
+    def test_muted_estimated_bed_remains_scored_against_non_silent_reference(self):
         d, b = signals(seed=6)
         r = metrics.bed_leakage(d, b, np.zeros_like(b), SR)
-        self.assertIsNone(r.leakage_to_bed_db)
-        self.assertIsNone(r.worst_window_leakage_db)
-        self.assertEqual(r.dialogue_residual_db, metrics.DB_FLOOR)
+        self.assertIsNotNone(r.leakage_to_bed_db)
+        self.assertEqual(r.status, "scored")
+        self.assertEqual(r.estimated_bed_active_rms_dbfs, metrics.DB_FLOOR)
 
     def test_worst_window_finds_a_burst(self):
         d, b = signals(seed=7, seconds=8.0)
@@ -123,20 +121,18 @@ class BedLeakageTests(unittest.TestCase):
 
     def test_mono_and_multichannel(self):
         for ch in (1, 6):
-            d, _ = signals(seed=8, channels=ch, seconds=4.0)
-            b = np.zeros_like(d)
+            d, b = signals(seed=8, channels=ch, seconds=4.0)
             leak = 0.2 * d
             r = metrics.bed_leakage(d, b, b + leak, SR, max_lag_ms=1.0)
-            self.assertAlmostEqual(r.leakage_to_bed_db, 0.0, delta=0.5, msg=f"{ch} ch")
+            self.assertAlmostEqual(r.leakage_to_bed_db, expected_db(leak, b, d), delta=0.5, msg=f"{ch} ch")
             self.assertAlmostEqual(r.dialogue_residual_db, 20 * np.log10(0.2), delta=0.5, msg=f"{ch} ch")
 
     def test_misaligned_output_beyond_lag_window_is_reported_as_error_energy_not_hidden(self):
-        d, _ = signals(seed=9)
-        b = np.zeros_like(d)
+        d, b = signals(seed=9)
         late = np.roll(d, 400, axis=0) * 0.3
-        r = metrics.bed_leakage(d, b, late, SR, max_lag_ms=5.0)
+        r = metrics.bed_leakage(d, b, b + late, SR, max_lag_ms=5.0)
         self.assertLess(r.dialogue_residual_db, -20.0)
-        r_wide = metrics.bed_leakage(d, b, late, SR, max_lag_ms=40.0)
+        r_wide = metrics.bed_leakage(d, b, b + late, SR, max_lag_ms=40.0)
         self.assertAlmostEqual(r_wide.dialogue_residual_db, 20 * np.log10(0.3), delta=0.5)
 
     def test_input_validation(self):
@@ -357,9 +353,33 @@ class ReconstructionTests(unittest.TestCase):
 
     def test_silent_mixture(self):
         z = np.zeros_like(self.d)
-        self.assertTrue(metrics.check_reconstruction(z, z, z, SR).passed)
+        exact = metrics.check_reconstruction(z, z, z, SR)
+        self.assertTrue(exact.passed)
+        self.assertEqual(exact.silent_judged_residual_rms, 0.0)
         r = metrics.check_reconstruction(z, z, z + 0.01, SR)
         self.assertFalse(r.passed)
+        self.assertAlmostEqual(r.silent_judged_residual_rms, 0.01, delta=1e-8)
+
+    def test_silent_mixture_uses_absolute_residual_tolerance_inside_declared_band(self):
+        z = np.zeros_like(self.d)
+        below = metrics.check_reconstruction(z, z, z + 5e-9, SR, band_limit_hz=6000.0)
+        self.assertTrue(below.passed)
+        self.assertLessEqual(below.silent_judged_residual_rms, metrics.SILENT_RECONSTRUCTION_RMS_TOLERANCE)
+
+        above = metrics.check_reconstruction(z, z, z + 1e-7, SR, band_limit_hz=6000.0)
+        self.assertFalse(above.passed)
+        self.assertGreater(above.silent_judged_residual_rms, metrics.SILENT_RECONSTRUCTION_RMS_TOLERANCE)
+        self.assertIn("absolute tolerance", above.reasons[0])
+
+    def test_silent_declared_band_does_not_gate_out_of_band_residual(self):
+        z = np.zeros_like(self.d)
+        time = np.arange(self.d.shape[0], dtype=np.float64) / SR
+        out_of_band = (1e-3 * np.sin(2.0 * np.pi * 7000.0 * time)).astype(np.float32)[:, None]
+        out_of_band = np.repeat(out_of_band, self.d.shape[1], axis=1)
+        result = metrics.check_reconstruction(z, z, out_of_band, SR, band_limit_hz=6000.0)
+        self.assertTrue(result.passed)
+        self.assertGreater(result.max_abs_residual, 1e-4)
+        self.assertLessEqual(result.silent_judged_residual_rms, metrics.SILENT_RECONSTRUCTION_RMS_TOLERANCE)
 
     def test_as_dict_is_json_serialisable(self):
         import json

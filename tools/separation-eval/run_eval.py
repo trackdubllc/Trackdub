@@ -35,7 +35,7 @@ import audiomath as am
 import metrics
 
 SEPARATOR_SR = 44100
-RESULTS_SCHEMA_VERSION = 1
+RESULTS_SCHEMA_VERSION = 2
 LENGTH_TOLERANCE_SAMPLES = 4
 
 
@@ -232,6 +232,13 @@ def summarise(values: list[float], higher_is_better: bool) -> dict | None:
             "min": float(a.min()), "max": float(a.max())}
 
 
+def summarise_diagnostic(values: list[float]) -> dict | None:
+    if not values:
+        return None
+    a = np.array(values, dtype=np.float64)
+    return {"n": len(values), "median": float(np.median(a)), "min": float(a.min()), "max": float(a.max())}
+
+
 def aggregate(records: list[dict]) -> dict:
     scored = [r for r in records if "reconstruction" in r]
     groups = {"all": scored}
@@ -244,6 +251,15 @@ def aggregate(records: list[dict]) -> dict:
             "reconstruction_gate_pass": sum(1 for r in rows if r["reconstruction"].get("passed")),
             "metrics": {m: summarise([v for r in rows if (v := _dig(r, path)) is not None], hib)
                         for m, (path, hib) in TRACKED_METRICS.items()},
+            "bed_leakage_accounting": {
+                "scored_clips": sum(1 for r in rows if _dig(r, ("leakage", "status")) == "scored"),
+                "not_applicable_reference_bed_below_floor": sum(
+                    1 for r in rows if _dig(r, ("leakage", "status")) == "not_applicable_reference_bed_below_floor"),
+                "skipped_clips": sum(1 for r in rows if _dig(r, ("leakage", "skipped")) is not None),
+                "not_computed_clips": sum(1 for r in rows if "leakage" not in r),
+                "estimated_bed_active_rms_dbfs": summarise_diagnostic(
+                    [v for r in rows if (v := _dig(r, ("leakage", "estimated_bed_active_rms_dbfs"))) is not None]),
+            },
         }
     timed = [r["timing"] for r in records if r["timing"].get("wall_ms") is not None]
     warm = [t["rtf"] for t in timed if t["job_index"] and t.get("rtf") is not None]

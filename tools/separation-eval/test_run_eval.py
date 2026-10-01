@@ -112,6 +112,8 @@ class EvaluateTests(EvalTestBase):
         self.assertTrue(a1["separator_ok"])
         self.assertTrue(a1["reconstruction"]["passed"])
         self.assertLess(a1["damage"]["si_sdr_db"], -20.0)
+        self.assertEqual(a1["leakage"]["status"], "scored")
+        self.assertEqual(a1["leakage"]["estimated_bed_active_rms_dbfs"], run_eval.metrics.DB_FLOOR)
 
     def test_muted_output_fails_reconstruction(self):
         sep = fake_separator(lambda mono: (np.zeros_like(mono), np.zeros_like(mono)))
@@ -130,8 +132,13 @@ class EvaluateTests(EvalTestBase):
         self.assertTrue(a10["ok"], a10["error"])
         self.assertIn("skipped", a10["leakage"])
         a9 = self.clip(result, "a9-dev-000")
-        self.assertAlmostEqual(a9["leakage"]["leakage_to_bed_db"], 0.0, delta=0.5)
+        self.assertIsNone(a9["leakage"]["leakage_to_bed_db"])
+        self.assertEqual(a9["leakage"]["status"], "not_applicable_reference_bed_below_floor")
+        self.assertGreater(a9["leakage"]["estimated_bed_active_rms_dbfs"], -40.0)
         self.assertIsNone(a9["damage"]["si_sdr_db"])
+        accounting = result["summary"]["strata"]["A9"]["bed_leakage_accounting"]
+        self.assertEqual(accounting["not_applicable_reference_bed_below_floor"], 1)
+        self.assertEqual(accounting["estimated_bed_active_rms_dbfs"]["n"], 1)
 
     def test_failed_and_missing_jobs_are_recorded_per_clip(self):
         sep = fake_separator(lambda mono: (np.zeros_like(mono), mono), fail_ids={"a9-dev-000"})
@@ -170,6 +177,8 @@ class EvaluateTests(EvalTestBase):
         strata = result["summary"]["strata"]
         self.assertEqual(set(strata), {"all", "A1", "A9", "A10"})
         self.assertEqual(strata["all"]["reconstruction_gate_pass"], 3)
+        self.assertEqual(strata["all"]["bed_leakage_accounting"]["scored_clips"], 2)
+        self.assertEqual(strata["all"]["bed_leakage_accounting"]["skipped_clips"], 1)
         self.assertEqual(result["corpus"]["items_sha256"], "0" * 64)
         self.assertEqual(len(result["corpus"]["manifest_sha256"]), 64)
         self.assertEqual(result["hardware_label"], "unit-test")
