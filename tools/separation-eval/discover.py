@@ -248,7 +248,7 @@ def discover_librivox(config: dict, fetch_json: FetchJson, retrieved_at: str,
             "license_spdx": "LicenseRef-PublicDomain",
             "attribution_text": f'LibriVox recording of "{title}" by {doc.get("creator", "unknown")} (public domain), '
                                 f"https://archive.org/details/{identifier}",
-            "license_evidence_url": f"https://archive.org/details/{identifier} (licenseurl {doc.get('licenseurl')})",
+            "license_evidence_url": f"https://archive.org/details/{identifier}",
             "tags": [],
             "tag_basis": "none",
             "ext": "mp3",
