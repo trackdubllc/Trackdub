@@ -9,6 +9,7 @@ using Trackdub.Inference.Onnx.ParakeetTdt;
 using Trackdub.Inference.Onnx.CosyVoice;
 using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.SortFormer;
+using Trackdub.Inference.Onnx.Spleeter;
 using Trackdub.Inference.Onnx.Whisper;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
@@ -909,7 +910,10 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
     private static int[] ResolveSeparationSmokeInputDimensions(IReadOnlyList<int> modelDimensions)
     {
-        if (modelDimensions.Count == 4) return [2, 1, 512, 1024];
+        if (modelDimensions.Count == 4)
+        {
+            return SpleeterOnnxSeparator.ResolveBlockDimensions(modelDimensions);
+        }
 
         int[] dimensions = modelDimensions.Count switch
         {
