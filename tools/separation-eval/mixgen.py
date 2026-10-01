@@ -126,9 +126,13 @@ class ItemPool:
 def loop_to_length(a: np.ndarray, n: int, rng: np.random.Generator) -> tuple[np.ndarray, int]:
     """Random excerpt of length n; loops with a short crossfade when the source is shorter."""
     m = a.shape[0]
+    if m == 0:
+        raise GenerationError("cannot loop an empty audio source")
     if m >= n:
         off = int(rng.integers(0, m - n + 1))
         return a[off:off + n], off
+    if m == 1:
+        return np.repeat(a, n, axis=0), 0
     xf = max(1, min(2400, m // 4))
     ramp = np.linspace(0.0, 1.0, xf, dtype=np.float32)[:, None]
     out = a
