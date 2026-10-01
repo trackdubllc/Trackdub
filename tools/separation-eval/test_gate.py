@@ -63,13 +63,14 @@ class BandLimitTests(unittest.TestCase):
         self.band_limited = lowpass(self.mix)
         self.zero = np.zeros_like(self.mix)
 
-    def test_a_declared_band_judges_only_the_residual_inside_it(self):
+    def test_a_declared_band_reports_in_band_diagnostics_without_relaxing_the_gate(self):
         undeclared = metrics.check_reconstruction(self.mix, self.zero, self.band_limited, SR)
         self.assertFalse(undeclared.passed)
         self.assertAlmostEqual(undeclared.residual_db, -3.0, delta=0.5)
 
         declared = metrics.check_reconstruction(self.mix, self.zero, self.band_limited, SR, band_limit_hz=LIMIT)
-        self.assertTrue(declared.passed, declared.reasons)
+        self.assertFalse(declared.passed, declared.reasons)
+        self.assertIn("full-band residual", declared.reasons[0])
         self.assertAlmostEqual(declared.residual_db, undeclared.residual_db, delta=0.01)
         self.assertLess(declared.in_band_residual_db, -60.0)
         self.assertAlmostEqual(declared.mixture_above_band_db, -3.0, delta=0.6)
@@ -80,7 +81,7 @@ class BandLimitTests(unittest.TestCase):
         damaged = self.band_limited + lowpass(noise(0.01, seed=2))
         r = metrics.check_reconstruction(self.mix, self.zero, damaged, SR, band_limit_hz=LIMIT)
         self.assertFalse(r.passed)
-        self.assertIn("in-band residual", r.reasons[0])
+        self.assertIn("full-band residual", r.reasons[0])
         self.assertGreater(r.in_band_residual_db, -40.0)
 
     def test_full_band_output_reports_full_retention(self):
@@ -91,7 +92,8 @@ class BandLimitTests(unittest.TestCase):
     def test_content_kept_above_the_band_is_reported_and_not_gated(self):
         r = metrics.check_reconstruction(self.mix, self.zero, self.band_limited + 0.5 * (self.mix - self.band_limited),
                                          SR, band_limit_hz=LIMIT)
-        self.assertTrue(r.passed, r.reasons)
+        self.assertFalse(r.passed, r.reasons)
+        self.assertIn("full-band residual", r.reasons[0])
         self.assertAlmostEqual(r.bandwidth_retained_db, -6.0, delta=0.6)
 
     def test_no_declaration_keeps_the_original_semantics(self):
