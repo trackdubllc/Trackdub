@@ -38,6 +38,50 @@ internal static class CliModelOverrides
         return result;
     }
 
+    /// <summary>
+    /// Accepts a bare alias (<c>madlad400</c>) or the dub-style <c>stage:alias</c> form
+    /// for a single <c>run-stage</c> invocation. A stage prefix that does not match
+    /// <paramref name="stageName"/> is rejected: passing it through would match no
+    /// model and silently fall back to the default route.
+    /// </summary>
+    /// <returns>
+    /// A one-entry preference map keyed by <paramref name="stageName"/>, or <see langword="null"/>
+    /// after a validation error has been reported.
+    /// </returns>
+    internal static Dictionary<string, string>? TryBuildRunStageModelPreferences(string stageName, string modelAlias)
+    {
+        string normalizedAlias = modelAlias.Trim();
+        int colonIndex = normalizedAlias.IndexOf(':');
+        if (colonIndex >= 0)
+        {
+            string prefix = normalizedAlias[..colonIndex].Trim();
+            if (!string.Equals(prefix, stageName, StringComparison.OrdinalIgnoreCase))
+            {
+                CliErrorReporter.ReportValidationError(
+                    ErrorCode.InvalidArgument,
+                    $"Invalid --model value: '{modelAlias}'. Expected a bare alias for stage '{stageName}' (e.g., madlad400) or '{stageName}:alias'.",
+                    "--model");
+                return null;
+            }
+
+            normalizedAlias = normalizedAlias[(colonIndex + 1)..].Trim();
+        }
+
+        if (string.IsNullOrEmpty(normalizedAlias))
+        {
+            CliErrorReporter.ReportValidationError(
+                ErrorCode.InvalidArgument,
+                $"Invalid --model value: '{modelAlias}'. Model alias must be non-empty.",
+                "--model");
+            return null;
+        }
+
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [stageName] = normalizedAlias,
+        };
+    }
+
     internal static Dictionary<string, string>? ParseVoiceOverrides(string[] voiceOverrides)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
