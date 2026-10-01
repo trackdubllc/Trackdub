@@ -69,7 +69,7 @@ local weights, the runner also honors `TRACKDUB_SPLEETER_ONNX_PATH` when it poin
 
 - Inputs are prepared the way the pipeline feeds Spleeter: stereo (5.1 is downmixed), 44.1 kHz, PCM16. The engine writes mono 44.1 kHz stems.
 - Two domains are scored. The reconstruction gate runs in the separator domain (44.1 kHz mono: does `vocals + bed` equal the mono input?). Bed leakage, bed damage and dialogue SI-SDR run in the reference domain (stems resampled to the clip rate and tiled to stereo), so the stereo-to-mono collapse and resampling are part of what is measured.
-- The reconstruction gate checks the full-band residual against the fixed threshold. When a candidate declares a band limit (`--band-limit-hz`, 11025 for Spleeter), only the residual below that limit is judged, and the energy the separator keeps above it is reported separately as `bandwidth_retained_db`; it never changes pass/fail. Stem precision/rounding (`--output-bits`, `--output-rounding`) only record `quantization_allowance_db` as a diagnostic, next to `in_band_residual_db`.
+- The reconstruction gate checks the residual against the fixed threshold. When a candidate declares a band limit (`--band-limit-hz`, 11025 for Spleeter), only residual energy inside that band is judged; above-band residual is reported through `bandwidth_retained_db` and does not change pass/fail. Without a declared limit, the gate uses the full band. If there is no measurable reference energy inside a declared band, the gate uses the full-band mixture energy as the -60 dB reference floor. A silent mixture must produce silence inside the judged band. Stem precision/rounding (`--output-bits`, `--output-rounding`) only record `quantization_allowance_db` as a diagnostic, next to `in_band_residual_db`.
 - Undefined metrics (for example bed leakage when no dialogue exists) are recorded as skipped, not as failures. A failed or missing job fails only its own clip.
 - The results JSON records the corpus manifest hash, hardware label, per-clip metrics, per-recipe median and worst-decile aggregates, and cold versus warm RTF.
 - The weights under test must be the pinned revision in `bundled-models.manifest.json`; check their sha256 before trusting a baseline.
@@ -87,7 +87,7 @@ python tools/separation-eval/recipe_coverage.py --items tools/separation-eval/it
 the RIR cache is missing, or no cached RIR has an estimated RT60 in A3's 0.4–2.0 second range.
 
 Caveats that affect what the corpus can show:
-- Freesound items are 128 kbps MP3 previews (lossy, band-limited near 16 to 19 kHz); LibriVox is 64 kbps read speech truncated to `range_bytes`. Neither is film-grade audio, so full-band behaviour is only partly exercised.
+- Freesound items are 128 kbps MP3 previews (lossy, band-limited near 16 to 19 kHz); LibriVox is 64 kbps read speech truncated to `range_bytes`. Neither is film-grade audio, so above-band retention is only partly exercised.
 - Music, SFX, ambience and whisper tags come from the search query (`tag_basis: search-query`). Listen to a sample of each tag before trusting the A2, A4, A5 and A8 strata.
 - Impulse responses are checked for RT60 (0.4 to 2.0 s) from the audio cache before recipe coverage passes; mixgen applies the same range when generating A3.
 - CC BY items carry their attribution text in the manifest; keep it with any redistributed copy.

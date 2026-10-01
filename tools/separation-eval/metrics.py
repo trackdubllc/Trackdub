@@ -306,6 +306,8 @@ LAG_SEARCH_SECONDS = 10
 BAND_GUARD_HZ = 250.0
 BAND_FFT_SIZE = 8192
 BAND_BATCH_FRAMES = 256
+# Treat window sidelobes below this relative energy as numerical leakage when a band has no reference energy.
+BAND_ENERGY_FLOOR = 1e-12
 QUANTIZATION_MARGIN = 2.0
 # Per-stem rounding error variance in LSB^2: rounding to nearest is uniform on +-0.5 LSB (1/12);
 # truncation toward zero, as the shipped PCM16 writer does, is uniform on one LSB of the opposite sign (1/3).
@@ -470,21 +472,24 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
                             * ROUNDING_VARIANCE_LSB2[output_rounding])
 
     if mix_e <= 0.0:
-        passed = res_e == 0.0
+        passed = (res_in <= res_e * BAND_ENERGY_FLOOR) if band_limit_hz is not None else res_e == 0.0
         return ReconstructionResult(
             passed, None, None, threshold_db, None, None, None, band_limit_hz, output_bits, output_rounding, None, max_abs, None,
-            threshold_db, () if passed else ("mixture is silent but outputs are not",))
+            threshold_db, () if passed else ("mixture is silent but outputs are not within the judged band",))
 
     threshold_energy = mix_e * 10.0 ** (threshold_db / 10.0)
     residual_db = _db(res_e, mix_e)
-    in_band_db = _db(res_in, mix_in) if mix_in > 0.0 else None
+    in_band_db = _db(res_in, mix_in) if mix_in > mix_e * BAND_ENERGY_FLOOR else None
     allowance_db = _db(allowance_energy, mix_e) if output_bits is not None else None
     effective_db = threshold_db
 
     reasons: list[str] = []
-    if band_limit_hz is not None and mix_in > 0.0:
-        if res_in > mix_in * 10.0 ** (threshold_db / 10.0):
-            reasons.append(f"in-band residual {in_band_db:.1f} dB exceeds gate {effective_db:.1f} dB")
+    if band_limit_hz is not None:
+        if mix_in > mix_e * BAND_ENERGY_FLOOR:
+            if res_in > mix_in * 10.0 ** (threshold_db / 10.0):
+                reasons.append(f"in-band residual {in_band_db:.1f} dB exceeds gate {effective_db:.1f} dB")
+        elif res_in > mix_e * 10.0 ** (threshold_db / 10.0):
+            reasons.append(f"in-band residual energy exceeds {effective_db:.1f} dB of full-band mixture energy")
     elif res_e > threshold_energy:
         reasons.append(f"full-band residual {residual_db:.1f} dB exceeds gate {effective_db:.1f} dB")
     lag = _estimate_lag(mixture, summed, sr) if reasons else None

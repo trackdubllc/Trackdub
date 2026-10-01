@@ -150,13 +150,28 @@ class QuantisationTests(unittest.TestCase):
         one_lsb = z + LSB16
         self.assertFalse(metrics.check_reconstruction(z, z, one_lsb, SR, output_bits=16).passed)
 
-    def test_silent_mixture_still_gates_full_band_output_above_declared_band(self):
+    def test_silent_mixture_ignores_output_above_declared_band(self):
         t = np.arange(SR, dtype=np.float64) / SR
         above_band = (0.01 * np.sin(2 * np.pi * 18_000 * t)).astype(np.float32)[:, None]
         z = np.zeros_like(above_band)
         result = metrics.check_reconstruction(z, z, above_band, SR, band_limit_hz=LIMIT)
+        self.assertTrue(result.passed, result.reasons)
+
+    def test_silent_mixture_still_gates_output_inside_declared_band(self):
+        t = np.arange(SR, dtype=np.float64) / SR
+        in_band = (0.01 * np.sin(2 * np.pi * 1_000 * t)).astype(np.float32)[:, None]
+        z = np.zeros_like(in_band)
+        result = metrics.check_reconstruction(z, z, in_band, SR, band_limit_hz=LIMIT)
         self.assertFalse(result.passed)
-        self.assertIn("mixture is silent", result.reasons[0])
+        self.assertIn("judged band", result.reasons[0])
+
+    def test_declared_band_with_no_reference_energy_only_gates_residual_in_band(self):
+        t = np.arange(SR, dtype=np.float64) / SR
+        mix = (0.01 * np.sin(2 * np.pi * 18_000 * t)).astype(np.float32)[:, None]
+        z = np.zeros_like(mix)
+        result = metrics.check_reconstruction(mix, z, z, SR, band_limit_hz=LIMIT)
+        self.assertTrue(result.passed, result.reasons)
+        self.assertIsNone(result.in_band_residual_db)
 
     def test_quiet_quantised_mixture_still_fails_with_declarations(self):
         mix = noise(0.002, seed=8)
