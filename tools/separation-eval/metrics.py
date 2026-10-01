@@ -418,10 +418,9 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
                          output_bits: int | None = None, output_rounding: str = "nearest") -> ReconstructionResult:
     """Gate: the dialogue and bed outputs must have exactly the mixture's shape and sum back to it.
 
-    Without `band_limit_hz` the full-band residual is compared against `threshold_db`. With it, only the
-    residual below the declared band limit is judged; the energy the separator keeps above the limit is
-    reported as `bandwidth_retained_db` and never changes pass/fail. Output precision only adds the
-    expected output-rounding noise as a diagnostic.
+    Pass/fail always uses the full-band residual against `threshold_db`. A declared `band_limit_hz` only
+    adds in-band diagnostics and `bandwidth_retained_db`; it does not relax the gate. Output precision
+    is reported as `quantization_allowance_db` and also does not relax the gate.
     Never raises for bad separator output; it fails the gate.
     """
     def fail(reasons: list[str]) -> ReconstructionResult:
@@ -480,10 +479,7 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
     effective_db = threshold_db
 
     reasons: list[str] = []
-    if band_limit_hz is not None and mix_in > 0.0:
-        if res_in > mix_in * 10.0 ** (threshold_db / 10.0):
-            reasons.append(f"in-band residual {in_band_db:.1f} dB exceeds gate {effective_db:.1f} dB")
-    elif res_e > threshold_energy:
+    if res_e > threshold_energy:
         reasons.append(f"full-band residual {residual_db:.1f} dB exceeds gate {effective_db:.1f} dB")
     lag = _estimate_lag(mixture, summed, sr) if reasons else None
     if lag:
