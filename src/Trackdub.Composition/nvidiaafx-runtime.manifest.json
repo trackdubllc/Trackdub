@@ -1,5 +1,8 @@
 {
   "manifestVersion": "1.0.0",
+  "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
+  "developerResourcesUrl": "https://www.nvidia.com/broadcast-sdk-resources",
+  "notes": "Packages remain placeholders until Trackdub hosts Maxine AFX 3.x redistributables (core NVAudioEffects.dll + features/nvafx*/bin + rate-specific models from NGC download_features.ps1) with verified SHA-256/size. Ready requires both 16k and 48k models for dual-rate profiles plus feature bin DLLs. Layout: see docs/reference/nvidia-afx-wiring.md. Local installs via NvidiaAfxRuntimeDirectory or TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT are supported for probing after IsStubbed() flips. Do not treat this manifest as downloadable.",
   "packages": [
     {
       "architecture": "turing",
@@ -9,11 +12,13 @@
       "runtimeVersion": "0.0.0",
       "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
       "modelRelativePaths": [
-        "models/denoiser_48k.nvam",
-        "models/dereverb_48k.nvam",
-        "models/dereverb_denoiser_48k.nvam",
-        "models/superres_48k.nvam",
-        "models/aec_48k.nvam"
+        "features/nvafxdenoiser/models/turing/denoiser_16k.trtpkg",
+        "features/nvafxdenoiser/models/turing/denoiser_48k.trtpkg",
+        "features/nvafxdereverb/models/turing/dereverb_16k.trtpkg",
+        "features/nvafxdereverb/models/turing/dereverb_48k.trtpkg",
+        "features/nvafxdereverbdenoiser/models/turing/dereverb_denoiser_16k.trtpkg",
+        "features/nvafxdereverbdenoiser/models/turing/dereverb_denoiser_48k.trtpkg",
+        "features/nvafxsuperres/models/turing/superres_8k_to_16k.trtpkg"
       ]
     },
     {
@@ -24,11 +29,13 @@
       "runtimeVersion": "0.0.0",
       "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
       "modelRelativePaths": [
-        "models/denoiser_48k.nvam",
-        "models/dereverb_48k.nvam",
-        "models/dereverb_denoiser_48k.nvam",
-        "models/superres_48k.nvam",
-        "models/aec_48k.nvam"
+        "features/nvafxdenoiser/models/ampere/denoiser_16k.trtpkg",
+        "features/nvafxdenoiser/models/ampere/denoiser_48k.trtpkg",
+        "features/nvafxdereverb/models/ampere/dereverb_16k.trtpkg",
+        "features/nvafxdereverb/models/ampere/dereverb_48k.trtpkg",
+        "features/nvafxdereverbdenoiser/models/ampere/dereverb_denoiser_16k.trtpkg",
+        "features/nvafxdereverbdenoiser/models/ampere/dereverb_denoiser_48k.trtpkg",
+        "features/nvafxsuperres/models/ampere/superres_8k_to_16k.trtpkg"
       ]
     },
     {
@@ -39,11 +46,13 @@
       "runtimeVersion": "0.0.0",
       "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
       "modelRelativePaths": [
-        "models/denoiser_48k.nvam",
-        "models/dereverb_48k.nvam",
-        "models/dereverb_denoiser_48k.nvam",
-        "models/superres_48k.nvam",
-        "models/aec_48k.nvam"
+        "features/nvafxdenoiser/models/ada/denoiser_16k.trtpkg",
+        "features/nvafxdenoiser/models/ada/denoiser_48k.trtpkg",
+        "features/nvafxdereverb/models/ada/dereverb_16k.trtpkg",
+        "features/nvafxdereverb/models/ada/dereverb_48k.trtpkg",
+        "features/nvafxdereverbdenoiser/models/ada/dereverb_denoiser_16k.trtpkg",
+        "features/nvafxdereverbdenoiser/models/ada/dereverb_denoiser_48k.trtpkg",
+        "features/nvafxsuperres/models/ada/superres_8k_to_16k.trtpkg"
       ]
     },
     {
@@ -54,11 +63,13 @@
       "runtimeVersion": "0.0.0",
       "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
       "modelRelativePaths": [
-        "models/denoiser_48k.nvam",
-        "models/dereverb_48k.nvam",
-        "models/dereverb_denoiser_48k.nvam",
-        "models/superres_48k.nvam",
-        "models/aec_48k.nvam"
+        "features/nvafxdenoiser/models/blackwell/denoiser_16k.trtpkg",
+        "features/nvafxdenoiser/models/blackwell/denoiser_48k.trtpkg",
+        "features/nvafxdereverb/models/blackwell/dereverb_16k.trtpkg",
+        "features/nvafxdereverb/models/blackwell/dereverb_48k.trtpkg",
+        "features/nvafxdereverbdenoiser/models/blackwell/dereverb_denoiser_16k.trtpkg",
+        "features/nvafxdereverbdenoiser/models/blackwell/dereverb_denoiser_48k.trtpkg",
+        "features/nvafxsuperres/models/blackwell/superres_8k_to_16k.trtpkg"
       ]
     }
   ]

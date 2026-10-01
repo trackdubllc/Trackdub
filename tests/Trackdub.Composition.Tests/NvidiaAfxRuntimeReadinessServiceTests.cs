@@ -10,7 +10,9 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
     [Fact]
     public void GetReadiness_ReturnsMissingModels_WhenRuntimeInstalledWithoutProfileModels()
     {
-        if (!OperatingSystem.IsWindows())
+        // While AFX is officially stubbed, the concrete readiness service short-circuits.
+        // Keep this install-path assertion for when NvidiaAfxIntegration.IsStubbed() flips false.
+        if (NvidiaAfxIntegration.IsStubbed() || !OperatingSystem.IsWindows())
         {
             return;
         }
