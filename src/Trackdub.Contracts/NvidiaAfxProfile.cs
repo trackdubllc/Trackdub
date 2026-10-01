@@ -15,7 +15,7 @@ public enum NvidiaAfxProfile
     /// <summary>Combined noise and reverb removal (dereverb_denoiser). Default.</summary>
     NoiseAndReverb = 2,
 
-    /// <summary>Telephony upscale with combined denoiser (superres_denoiser).</summary>
+    /// <summary>Telephony upscale with combined denoiser (superres8kto16k_denoiser16k).</summary>
     TelephonyUpscale = 3,
 
     /// <summary>Acoustic echo cancellation (aec). Requires far-end reference audio.</summary>

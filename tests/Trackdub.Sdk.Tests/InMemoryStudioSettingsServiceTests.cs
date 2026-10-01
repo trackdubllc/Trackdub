@@ -46,4 +46,27 @@ public sealed class InMemoryStudioSettingsServiceTests
         Assert.True(settings.NvidiaTensorRtRtxLicenseAccepted);
         Assert.Empty(settings.HardwareOverrides!);
     }
+
+    [Fact]
+    public async Task LoadAsync_preserves_nvidia_afx_settings_from_persisted_settings()
+    {
+        var service = new InMemoryStudioSettingsService(
+            new HeadlessTrackdubOptions(),
+            StudioSettings.Default with
+            {
+                EnableNvidiaAfx = true,
+                NvidiaAfxProfile = NvidiaAfxProfile.TelephonyUpscale,
+                NvidiaAfxIntensityRatio = 0.75f,
+                NvidiaAfxLicenseAccepted = true,
+                NvidiaAfxRuntimeDirectory = @"C:\afx-runtime",
+            });
+
+        StudioSettings settings = await service.LoadAsync(CancellationToken.None);
+
+        Assert.True(settings.EnableNvidiaAfx);
+        Assert.Equal(NvidiaAfxProfile.TelephonyUpscale, settings.NvidiaAfxProfile);
+        Assert.Equal(0.75f, settings.NvidiaAfxIntensityRatio);
+        Assert.True(settings.NvidiaAfxLicenseAccepted);
+        Assert.Equal(@"C:\afx-runtime", settings.NvidiaAfxRuntimeDirectory);
+    }
 }

@@ -400,8 +400,9 @@ public static class CompositionRoot
         services.TryAddSingleton<IAudioQualityAnalyzer, PcmAudioQualityAnalyzer>();
         services.TryAddSingleton<ISpeechAudioPreparationPlanner, SpeechAudioPreparationPlanner>();
         services.TryAddSingleton<ISpeechAudioProcessingService>(_ => new FfmpegSpeechAudioProcessingService(ffmpegPath: null));
-        // NVIDIA AFX is discoverable but stubbed: readiness never reports Ready, and the wrapper
-        // falls through to DeepFilterNet until NvidiaAfxIntegration.IsStubbed() is flipped.
+        // NVIDIA AFX is discoverable but stubbed for readiness: IsStubbed() stays true until
+        // Trackdub-hosted redistributable URLs/checksums exist and native create/run is verified.
+        // Packaging gates, installer scaffolding, AEC far-end, and settings→stage options are wired.
         services.TryAddSingleton<INvidiaAfxRuntimeReadinessService, StubNvidiaAfxRuntimeReadinessService>();
         services.TryAddSingleton<INvidiaAfxArchitectureDetector, NvidiaAfxArchitectureDetector>();
         services.AddSingleton<ISpeechAudioEnhancementService>(sp =>
@@ -410,6 +411,17 @@ public static class CompositionRoot
                 new Trackdub.Composition.DeepFilterNet.ResolvingSpeechAudioEnhancementService(
                     sp.GetService<BundledModelManifestRegistry>(),
                     sp.GetService<IModelCacheInventory>())));
+        services.TryAddSingleton<NvidiaAfxRuntimeDownloader>(sp =>
+            new NvidiaAfxRuntimeDownloader(
+                sp.GetRequiredService<ComponentStore>(),
+                sp.GetRequiredService<IHttpClientFactory>().CreateClient("NvidiaAfxRuntimeDownloader"),
+                sp.GetRequiredService<IApplicationLogger>()));
+        services.TryAddSingleton<NvidiaAfxRuntimeInstaller>(sp =>
+            new NvidiaAfxRuntimeInstaller(
+                sp.GetRequiredService<NvidiaAfxRuntimeDownloader>(),
+                sp.GetRequiredService<IStudioSettingsService>(),
+                sp.GetRequiredService<INvidiaAfxArchitectureDetector>(),
+                Path.Join(AppContext.BaseDirectory, "nvidiaafx-runtime.manifest.json")));
         services.TryAddSingleton<IWaveformSummaryGenerator, WaveformSummaryGenerator>();
         services.TryAddSingleton<IReferenceClipAnalyzer, Pcm16ReferenceClipAnalyzer>();
         services.TryAddSingleton<IReferenceClipTrimmer, Pcm16ReferenceClipTrimmer>();
@@ -863,6 +875,15 @@ public static class CompositionRoot
         {
             client.Timeout = TimeSpan.FromMinutes(10);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Trackdub-OpenVinoDownloader/1.0");
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
+        });
+
+        services.AddHttpClient("NvidiaAfxRuntimeDownloader", client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Trackdub-NvidiaAfxDownloader/1.0");
         }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
         {
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli
