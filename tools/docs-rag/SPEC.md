@@ -1,6 +1,6 @@
 # Trackdub Docs RAG — Spec
 
-Version: 1.3 (2026-09-21)
+Version: 1.4 (2026-10-01)
 Status: Live
 Endpoint: `https://trackdub-docs-rag.trackdub.workers.dev`
 Owner: Tony Thompson
@@ -239,7 +239,9 @@ Auth: `Authorization: Bearer <DOCS_RAG_TOKEN>` on every request.
 
 ### Cursor (project, committed)
 
-`Trackdub/.mcp.json` and `Trackdub-gated/.mcp.json` already contain:
+`Trackdub/.mcp.json` (Claude Code: `Bearer ${DOCS_RAG_TOKEN}`),
+`Trackdub/.cursor/mcp.json` (Cursor IDE: `Bearer ${env:DOCS_RAG_TOKEN}`),
+and `Trackdub-gated/.mcp.json` register:
 
 ```json
 "trackdub-docs-rag": {
@@ -248,6 +250,17 @@ Auth: `Authorization: Bearer <DOCS_RAG_TOKEN>` on every request.
   "headers": { "Authorization": "Bearer <DOCS_RAG_TOKEN>" }
 }
 ```
+
+Set `DOCS_RAG_TOKEN` in the local environment (or Cursor Secrets) to the Worker
+bearer value. Do not commit the literal token.
+
+### Cursor Cloud Agents
+
+A committed project `mcp.json` does **not** reach Cloud Agents by itself. Add the
+same HTTP server under [cursor.com/agents](https://cursor.com/agents) (personal
+MCP dropdown) or **Dashboard → Integrations & MCP** (team), with header
+`Authorization: Bearer <DOCS_RAG_TOKEN>`. Streamable HTTP only; SSE/`mcp-remote`
+are unsupported. Tool calls are proxied; the bearer stays out of the VM.
 
 ### Cursor (global)
 

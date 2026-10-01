@@ -19,8 +19,7 @@
       "url": "https://trackdub-docs-rag.trackdub.workers.dev/mcp",
       "headers": {
         "Authorization": "Bearer ${DOCS_RAG_TOKEN}"
-      },
-      "disabled": true
+      }
     },
     "trackdub-gpu-docs": {
       "command": "uv",
