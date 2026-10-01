@@ -46,11 +46,14 @@ permission:
     Fixture manifest: `%LOCALAPPDATA%\Trackdub\benchmark-fixtures\baseline-v1\manifest.json`
     (machine-local, not checked in).
 
-    Helper scripts, all Windows PowerShell, all driving `src/Trackdub.Benchmarks.DevHost`:
+    Benchmark helper scripts, all Windows PowerShell and driving `src/Trackdub.Benchmarks.DevHost`:
     `tools/bench-per-stage.ps1` (per-stage matrix across `vad`, `asr`, `translation`, `tts`
     on two models, modes `fresh-process` and `warm-host`, CPU-pinned, writes
     `per-stage-matrix.csv`), `tools/bench-smoke-verdict-ab.ps1` (BEFORE/AFTER A-B on the smoke-verdict
-    store, writes `summary.csv`), `tools/trackdub-optimize.ps1` / `tools/trackdub-optimize.sh`
+    store, writes `summary.csv`).
+
+    Cross-platform optimization tools:
+    `tools/trackdub-optimize.ps1` / `tools/trackdub-optimize.sh`
     (Microsoft Olive optimization via an isolated venv and `Trackdub.Tools` modellab — this is
     tooling, not an end-user runtime dependency).
 
