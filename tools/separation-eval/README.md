@@ -73,6 +73,7 @@ local weights, the runner also honors `TRACKDUB_SPLEETER_ONNX_PATH` when it poin
 - Undefined metrics (for example bed leakage when no dialogue exists) are recorded as skipped, not as failures. A failed or missing job fails only its own clip.
 - The results JSON records the corpus manifest hash, hardware label, per-clip metrics, per-recipe median and worst-decile aggregates, and cold versus warm RTF.
 - The weights under test must be the pinned revision in `bundled-models.manifest.json`; check their sha256 before trusting a baseline.
+- Known failure, Spleeter dev baseline: `a11-dev-002` (16 kHz variant) fails the reconstruction gate at -51.7 dB in-band. The Spleeter engine writes exactly zero for the first samples of every clip (24 samples, 0.54 ms, on most clips; 43 on this one), and this mixture starts mid-signal, so 96.5% of its residual falls in the first 10 ms. Excluding the first 50 ms it would pass at -64.5 dB. The gate is deliberately not relaxed for a start edge, because the shipped pipeline loses the same samples. Three other dev clips (`a4-dev-002`, `a7-dev-004`, `a10-dev-001`) miss by under 2 dB for reasons not yet established.
 
 ## Finding and listing real items
 
