@@ -121,13 +121,9 @@ internal static class NvidiaAfxNativeLoader
             _libraryPath = libraryPath;
             EnsureDllImportResolverRegistered();
 
-            // Maxine CreateEffect loads features/<nvafx*>/bin/*.dll from the runtime root.
-            // SetDllDirectory is process-wide on Windows; leave it set for subsequent feature loads.
-            string runtimeDirectory = Path.GetFullPath(runtimeRoot);
-            if (OperatingSystem.IsWindows())
-            {
-                _ = SetDllDirectory(runtimeDirectory);
-            }
+            // Preload Maxine feature DLLs by absolute path so CreateEffect can resolve them
+            // without mutating the process-wide DLL search directory (CodeQL / SetDllDirectory).
+            PreloadWindowsNativeDependencies(runtimeRoot);
 
             NativeLibrary.Load(libraryPath);
             _loaded = true;
@@ -136,6 +132,31 @@ internal static class NvidiaAfxNativeLoader
     }
 
     public static string? LoadedFrom => _loadedFrom;
+
+    /// <summary>
+    /// Loads <c>features/*/bin/*.dll</c> (and sidecar <c>nvafx*.dll</c>) via managed
+    /// <see cref="NativeLibrary.Load(string)"/> before the core AFX library. Already-mapped
+    /// modules remain available when Maxine later LoadLibrary's them by basename.
+    /// </summary>
+    private static void PreloadWindowsNativeDependencies(string runtimeRoot)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        foreach (string dependencyPath in NvidiaAfxRuntimeLayout.EnumerateFeatureNativeLibraryPaths(runtimeRoot))
+        {
+            try
+            {
+                NativeLibrary.Load(dependencyPath);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
+            {
+                // Best-effort: invalid/missing feature payloads are reported by CreateEffect/Load.
+            }
+        }
+    }
 
     private static void EnsureDllImportResolverRegistered()
     {
@@ -174,10 +195,6 @@ internal static class NvidiaAfxNativeLoader
         || libraryName.Equals(NvidiaAfxNative.LibraryName + ".dll", StringComparison.OrdinalIgnoreCase)
         || libraryName.Equals("NvAudioEffects", StringComparison.OrdinalIgnoreCase)
         || libraryName.Equals("NvAudioEffects.dll", StringComparison.OrdinalIgnoreCase);
-
-    [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetDllDirectory(string? lpPathName);
 }
 
 internal sealed class NvidiaAfxEffectHandle : SafeHandleZeroOrMinusOneIsInvalid

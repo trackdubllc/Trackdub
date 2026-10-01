@@ -103,4 +103,31 @@ public sealed class NvidiaAfxRuntimeLayoutTests
             Directory.Delete(tempRoot, recursive: true);
         }
     }
+
+    [Fact]
+    public void EnumerateFeatureNativeLibraryPaths_IncludesBinAndSidecar()
+    {
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-preload-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            string binDir = Path.Join(tempRoot, "features", "nvafxdereverb", "bin");
+            Directory.CreateDirectory(binDir);
+            string featureDll = Path.Join(binDir, "nvafxdereverb.dll");
+            string sidecarDll = Path.Join(tempRoot, "nvafxdenoiser.dll");
+            File.WriteAllBytes(featureDll, [0x00]);
+            File.WriteAllBytes(sidecarDll, [0x00]);
+
+            string[] enumerated = NvidiaAfxRuntimeLayout.EnumerateFeatureNativeLibraryPaths(tempRoot)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            Assert.Contains(featureDll, enumerated);
+            Assert.Contains(sidecarDll, enumerated);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
 }

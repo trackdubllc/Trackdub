@@ -34,13 +34,12 @@ public static class NvidiaAfxRuntimeLayout
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
 
-        foreach (string fileName in NativeLibraryFileNames)
+        string? existing = NativeLibraryFileNames
+            .Select(fileName => Path.Join(runtimeRoot, fileName))
+            .FirstOrDefault(File.Exists);
+        if (existing is not null)
         {
-            string candidate = Path.Join(runtimeRoot, fileName);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
+            return existing;
         }
 
         // Case-insensitive fallback for Linux-hosted fixtures / wine-style trees.
@@ -49,17 +48,10 @@ public static class NvidiaAfxRuntimeLayout
             return null;
         }
 
-        foreach (string path in Directory.EnumerateFiles(runtimeRoot, "*.dll"))
-        {
-            string name = Path.GetFileName(path);
-            if (NativeLibraryFileNames.Any(expected =>
-                    string.Equals(expected, name, StringComparison.OrdinalIgnoreCase)))
-            {
-                return path;
-            }
-        }
-
-        return null;
+        return Directory.EnumerateFiles(runtimeRoot, "*.dll")
+            .FirstOrDefault(path =>
+                NativeLibraryFileNames.Any(expected =>
+                    string.Equals(expected, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)));
     }
 
     public static bool HasNativeLibrary(string runtimeRoot) =>
@@ -151,6 +143,43 @@ public static class NvidiaAfxRuntimeLayout
     }
 
     /// <summary>
+    /// Enumerates Maxine feature native libraries under <c>features/*/bin/*.dll</c> plus
+    /// sidecar <c>nvafx*.dll</c> next to the core library (for managed preload).
+    /// </summary>
+    public static IEnumerable<string> EnumerateFeatureNativeLibraryPaths(string runtimeRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
+
+        string featuresRoot = Path.Join(runtimeRoot, "features");
+        if (Directory.Exists(featuresRoot))
+        {
+            foreach (string featureDirectory in Directory.EnumerateDirectories(featuresRoot))
+            {
+                string binDirectory = Path.Join(featureDirectory, "bin");
+                if (!Directory.Exists(binDirectory))
+                {
+                    continue;
+                }
+
+                foreach (string dllPath in Directory.EnumerateFiles(binDirectory, "*.dll"))
+                {
+                    yield return dllPath;
+                }
+            }
+        }
+
+        if (!Directory.Exists(runtimeRoot))
+        {
+            yield break;
+        }
+
+        foreach (string sidecar in Directory.EnumerateFiles(runtimeRoot, "nvafx*.dll"))
+        {
+            yield return sidecar;
+        }
+    }
+
+    /// <summary>
     /// Resolves a model file for <paramref name="modelStem"/> under Maxine 3.x and legacy layouts.
     /// </summary>
     public static string? ResolveModelFile(
@@ -163,15 +192,8 @@ public static class NvidiaAfxRuntimeLayout
         ArgumentException.ThrowIfNullOrWhiteSpace(featureFolder);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelStem);
 
-        foreach (string candidate in EnumerateModelCandidates(runtimeRoot, featureFolder, modelStem, architectureBucket))
-        {
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
+        return EnumerateModelCandidates(runtimeRoot, featureFolder, modelStem, architectureBucket)
+            .FirstOrDefault(File.Exists);
     }
 
     public static bool HasRequiredModels(

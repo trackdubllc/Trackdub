@@ -36,7 +36,7 @@ Model requirements are rate-specific feature+stem pairs on `NvidiaAfxProfileDefi
 | Installer scaffolding | Stub seam + license/manifest/download gates; DI registered |
 | Rate-specific models | `ResolveRequiredModels(sampleRate)`; probe prefers 48 kHz when supported |
 | Feature DLL gate | `features/<nvafx*>/bin/*.dll` required when `features/` exists |
-| Native P/Invoke | Maxine `float**` `NvAFX_Run`, DllImport resolver + Windows DLL directory |
+| Native P/Invoke | Maxine `float**` `NvAFX_Run`, DllImport resolver + managed feature-DLL preload |
 | Native probe before Ready | `INvidiaAfxEffectProbe` create/load after DLL+model presence |
 | Settings → stage | Studio settings map into enhancement options (incl. headless preserve) |
 | DeepFilterNet fallback | Live enhancement path while stubbed / not ready |

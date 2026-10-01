@@ -45,6 +45,6 @@ Never treat component registration, settings fields, or profile catalog entries 
 - Packaging validation gates and license-gated installer scaffolding
 - Maxine 3.x `features/` layout resolution (+ legacy models fallback)
 - Rate-specific Maxine models (`ModelsBySampleRate` / `ResolveRequiredModels`) + feature bin DLL gates
-- Native DllImport resolver for `NVAudioEffects.dll` (Windows DLL directory for feature loads)
+- Native DllImport resolver for `NVAudioEffects.dll` + managed preload of `features/*/bin/*.dll`
 - Corrected native Run signature and AEC far-end reference path
 - Settings → `SpeechAudioEnhancementOptions` through the enhancement stage
