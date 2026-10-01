@@ -144,7 +144,7 @@ Do NOT use for:
   1. Run the stage end to end on the fixture. Verify the exact command surface with `dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- --help`.
   2. Drive the pipeline so the stage is genuinely selected, not merely registered.
   3. Capture the produced artifact and its path. Confirm the artifact is a real, non-empty output — not a placeholder.
-  4. Capture `actualProvider` and `actualModel` from the benchmark report (`stages[].actualProvider`, `stages[].actualModel`); report what actually executed, not what was configured.
+  4. Capture `ActualProvider` and `ActualModel` from the benchmark report (`Stages[].ActualProvider`, `Stages[].ActualModel`); report what actually executed, not what was configured.
   5. Record explicit skip or failure reasons if the stage did not run.
 - **Exit criteria**: Stage ran, produced an artifact, and the report names the real provider and model.
 - **Failure handling**: Stage skipped, produced nothing, or silently no-op'd → treat as **not ready**; route to `core-diagnostics`.
