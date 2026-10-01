@@ -88,40 +88,11 @@ internal static class RunStageHandler
         Dictionary<string, string>? modelPreferences = null;
         if (modelAlias is not null)
         {
-            // Accept both the bare alias (madlad400) and the dub-style stage:alias
-            // form (translation:madlad400). A bare stage prefix that does not match
-            // this stage is rejected: passing it through would silently match no
-            // model and fall back to the default route.
-            string normalizedAlias = modelAlias.Trim();
-            int colonIndex = normalizedAlias.IndexOf(':');
-            if (colonIndex >= 0)
+            modelPreferences = CliModelOverrides.TryBuildRunStageModelPreferences(stageName, modelAlias);
+            if (modelPreferences is null)
             {
-                string prefix = normalizedAlias[..colonIndex].Trim();
-                if (!string.Equals(prefix, stageName, StringComparison.OrdinalIgnoreCase))
-                {
-                    CliErrorReporter.ReportValidationError(
-                        ErrorCode.InvalidArgument,
-                        $"Invalid --model value: '{modelAlias}'. Expected a bare alias for stage '{stageName}' (e.g., madlad400) or '{stageName}:alias'.",
-                        "--model");
-                    return Program.ExitArgumentError;
-                }
-
-                normalizedAlias = normalizedAlias[(colonIndex + 1)..].Trim();
-            }
-
-            if (string.IsNullOrEmpty(normalizedAlias))
-            {
-                CliErrorReporter.ReportValidationError(
-                    ErrorCode.InvalidArgument,
-                    $"Invalid --model value: '{modelAlias}'. Model alias must be non-empty.",
-                    "--model");
                 return Program.ExitArgumentError;
             }
-
-            modelPreferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                [stageName] = normalizedAlias,
-            };
         }
 
         var engine = new TrackdubDubbingEngine(factory);
