@@ -34,7 +34,7 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
                 false,
                 "Missing native library",
                 runtimeRoot,
-                $"NvAudioEffects.dll was not found under '{runtimeRoot}'.");
+                $"NVAudioEffects.dll was not found under '{runtimeRoot}'.");
         }
 
         NvidiaAfxRuntimeManifest manifest;
@@ -60,19 +60,26 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
         }
 
         NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
-        bool hasRequiredModels = definition.RequiredModelRelativePaths.All(model =>
-            File.Exists(Path.Join(runtimeRoot, model)));
+        bool hasRequiredModels = NvidiaAfxRuntimeLayout.HasRequiredModels(
+            runtimeRoot,
+            definition.RequiredModels.Select(model => (model.FeatureFolder, model.ModelStem)),
+            architecture);
         if (!hasRequiredModels)
         {
             return new NvidiaAfxRuntimeReadiness(
                 false,
                 "Missing model files",
                 runtimeRoot,
-                $"Required model files are missing for profile '{profile}'.");
+                $"Required Maxine feature models are missing for profile '{profile}' " +
+                $"(architecture '{architecture}'). Expected under features/<nvafx*>/models/.");
         }
 
         int inputSampleRate = definition.SupportedSampleRates[0];
-        NvidiaAfxEffectProbeResult probe = effectProbe.Probe(runtimeRoot, definition, inputSampleRate);
+        NvidiaAfxEffectProbeResult probe = effectProbe.Probe(
+            runtimeRoot,
+            definition,
+            inputSampleRate,
+            architecture);
         if (!probe.Succeeded)
         {
             return new NvidiaAfxRuntimeReadiness(

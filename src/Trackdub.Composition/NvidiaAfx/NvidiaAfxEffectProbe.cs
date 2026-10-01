@@ -11,7 +11,8 @@ public interface INvidiaAfxEffectProbe
     NvidiaAfxEffectProbeResult Probe(
         string runtimeRoot,
         NvidiaAfxProfileDefinition profile,
-        int inputSampleRate);
+        int inputSampleRate,
+        string? architectureBucket = null);
 }
 
 public sealed record NvidiaAfxEffectProbeResult(
@@ -29,7 +30,8 @@ public sealed class NvidiaAfxSessionEffectProbe : INvidiaAfxEffectProbe
     public NvidiaAfxEffectProbeResult Probe(
         string runtimeRoot,
         NvidiaAfxProfileDefinition profile,
-        int inputSampleRate)
+        int inputSampleRate,
+        string? architectureBucket = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
         ArgumentNullException.ThrowIfNull(profile);
@@ -40,7 +42,8 @@ public sealed class NvidiaAfxSessionEffectProbe : INvidiaAfxEffectProbe
                 profile,
                 runtimeRoot,
                 inputSampleRate,
-                intensityRatio: profile.SupportsIntensityRatio ? 1.0f : 0f);
+                intensityRatio: profile.SupportsIntensityRatio ? 1.0f : 0f,
+                architectureBucket);
             return new NvidiaAfxEffectProbeResult(true, null, session.OutputSampleRate);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

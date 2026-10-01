@@ -123,7 +123,8 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluatorTests
         public NvidiaAfxEffectProbeResult Probe(
             string runtimeRoot,
             NvidiaAfxProfileDefinition profile,
-            int inputSampleRate) =>
+            int inputSampleRate,
+            string? architectureBucket = null) =>
             new(false, reason, null);
     }
 
@@ -132,7 +133,8 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluatorTests
         public NvidiaAfxEffectProbeResult Probe(
             string runtimeRoot,
             NvidiaAfxProfileDefinition profile,
-            int inputSampleRate) =>
+            int inputSampleRate,
+            string? architectureBucket = null) =>
             new(true, null, outputSampleRate);
     }
 }

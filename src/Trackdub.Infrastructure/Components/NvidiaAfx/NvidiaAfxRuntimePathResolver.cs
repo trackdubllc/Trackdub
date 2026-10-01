@@ -7,7 +7,9 @@ namespace Trackdub.Infrastructure.Components.NvidiaAfx;
 public static class NvidiaAfxRuntimePathResolver
 {
     public const string RuntimeRootEnvironmentVariable = "TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT";
-    public const string NativeLibraryFileName = "NvAudioEffects.dll";
+
+    /// <summary>Canonical Maxine docs spelling; also accepts <c>NvAudioEffects.dll</c>.</summary>
+    public const string NativeLibraryFileName = "NVAudioEffects.dll";
 
     public static string? ResolveRuntimeRoot(
         ComponentStore componentStore,
@@ -33,7 +35,10 @@ public static class NvidiaAfxRuntimePathResolver
     }
 
     public static bool HasNativeLibrary(string runtimeRoot) =>
-        File.Exists(Path.Join(runtimeRoot, NativeLibraryFileName));
+        NvidiaAfxRuntimeLayout.HasNativeLibrary(runtimeRoot);
+
+    public static string? ResolveNativeLibraryPath(string runtimeRoot) =>
+        NvidiaAfxRuntimeLayout.ResolveNativeLibraryPath(runtimeRoot);
 
     private static string? NormalizeExistingDirectory(string? path)
     {

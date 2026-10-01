@@ -14,10 +14,10 @@ public static class NvidiaAfxIntegration
     public const string StubStatusLabel = "Stub";
 
     public const string StubReason =
-        "NVIDIA AFX remains stubbed for readiness: Trackdub-hosted redistributable URLs/checksums " +
-        "are not published yet, and NvAudioEffects.dll create/run has not been verified on shipping GPUs. " +
-        "Native API bindings, AEC far-end wiring, settings→stage options, and packaging gates are in place; " +
-        "install NVIDIA Maxine AFX via the developer installer or set TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT " +
+        "NVIDIA AFX remains stubbed for readiness: Trackdub-hosted Maxine 3.x redistributable URLs/checksums " +
+        "are not published yet, and NVAudioEffects.dll create/run has not been verified on shipping GPUs. " +
+        "Native API bindings, Maxine features/ layout resolution, settings→stage options, and packaging gates " +
+        "are in place; install NVIDIA Maxine AFX (core + NGC features) or set TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT " +
         "for local probing only after IsStubbed() flips.";
 
     public const string LicenseUrl =

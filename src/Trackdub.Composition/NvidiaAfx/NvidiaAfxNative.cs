@@ -1,15 +1,16 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
+using Trackdub.Infrastructure.Components.NvidiaAfx;
 
 namespace Trackdub.Composition.NvidiaAfx;
 
 /// <summary>
-/// P/Invoke bindings for NVIDIA Maxine AFX (<c>NvAudioEffects.dll</c>), matching
-/// <c>nvAudioEffects.h</c> from NVIDIA-Maxine/Maxine-AFX-SDK.
+/// P/Invoke bindings for NVIDIA Maxine AFX (<c>NVAudioEffects.dll</c>), matching
+/// <c>nvAudioEffects.h</c> from the Maxine AFX Windows SDK.
 /// </summary>
 internal static class NvidiaAfxNative
 {
-    private const string LibraryName = "NvAudioEffects";
+    private const string LibraryName = "NVAudioEffects";
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern int NvAFX_CreateEffect(
@@ -106,10 +107,12 @@ internal static class NvidiaAfxNativeLoader
                 return;
             }
 
-            string libraryPath = Path.Join(runtimeRoot, "NvAudioEffects.dll");
-            if (!File.Exists(libraryPath))
+            string? libraryPath = NvidiaAfxRuntimeLayout.ResolveNativeLibraryPath(runtimeRoot);
+            if (libraryPath is null)
             {
-                throw new FileNotFoundException("NVIDIA AFX native library not found in runtime package.", libraryPath);
+                throw new FileNotFoundException(
+                    "NVIDIA AFX native library (NVAudioEffects.dll) not found in runtime package.",
+                    Path.Join(runtimeRoot, "NVAudioEffects.dll"));
             }
 
             NativeLibrary.Load(libraryPath);

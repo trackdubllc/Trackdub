@@ -2,6 +2,14 @@ using Trackdub.Contracts;
 
 namespace Trackdub.Composition.NvidiaAfx;
 
+/// <summary>
+/// One Maxine feature-folder model requirement. Resolved on disk via
+/// <see cref="Infrastructure.Components.NvidiaAfx.NvidiaAfxRuntimeLayout"/>.
+/// </summary>
+public sealed record NvidiaAfxRequiredModel(
+    string FeatureFolder,
+    string ModelStem);
+
 public sealed record NvidiaAfxProfileDefinition(
     NvidiaAfxProfile Profile,
     string DisplayName,
@@ -10,7 +18,7 @@ public sealed record NvidiaAfxProfileDefinition(
     /// <summary>Supported input sample rates for this effect.</summary>
     int[] SupportedSampleRates,
     int MaxChannels,
-    string[] RequiredModelRelativePaths,
+    NvidiaAfxRequiredModel[] RequiredModels,
     bool RequiresFarEndReference,
     bool SupportsIntensityRatio,
     /// <summary>
@@ -21,6 +29,15 @@ public sealed record NvidiaAfxProfileDefinition(
 {
     public int ResolveOutputSampleRate(int inputSampleRate) =>
         OutputSampleRate ?? inputSampleRate;
+
+    /// <summary>
+    /// Preferred relative paths for manifests / diagnostics (Maxine 3.x features layout).
+    /// Actual resolution accepts additional arch folders and extensions.
+    /// </summary>
+    public IReadOnlyList<string> PreferredModelRelativePaths =>
+        RequiredModels
+            .Select(model => Path.Join("features", model.FeatureFolder, "models", model.ModelStem + ".trtpkg"))
+            .ToArray();
 }
 
 public static class NvidiaAfxProfileCatalog
@@ -38,7 +55,10 @@ public static class NvidiaAfxProfileCatalog
             IsChainedEffect: false,
             SupportedSampleRates: [16000, 48000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/denoiser_48k.nvam"],
+            RequiredModels:
+            [
+                new("nvafxdenoiser", "denoiser_48k"),
+            ],
             RequiresFarEndReference: false,
             SupportsIntensityRatio: true),
         new(
@@ -48,7 +68,10 @@ public static class NvidiaAfxProfileCatalog
             IsChainedEffect: false,
             SupportedSampleRates: [16000, 48000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/dereverb_48k.nvam"],
+            RequiredModels:
+            [
+                new("nvafxdereverb", "dereverb_48k"),
+            ],
             RequiresFarEndReference: false,
             SupportsIntensityRatio: true),
         new(
@@ -58,7 +81,10 @@ public static class NvidiaAfxProfileCatalog
             IsChainedEffect: false,
             SupportedSampleRates: [16000, 48000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/dereverb_denoiser_48k.nvam"],
+            RequiredModels:
+            [
+                new("nvafxdereverbdenoiser", "dereverb_denoiser_48k"),
+            ],
             RequiresFarEndReference: false,
             SupportsIntensityRatio: true),
         new(
@@ -69,18 +95,27 @@ public static class NvidiaAfxProfileCatalog
             IsChainedEffect: true,
             SupportedSampleRates: [8000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/superres_16k.nvam", "models/denoiser_16k.nvam"],
+            RequiredModels:
+            [
+                new("nvafxsuperres", "superres_8k_to_16k"),
+                new("nvafxdenoiser", "denoiser_16k"),
+            ],
             RequiresFarEndReference: false,
             SupportsIntensityRatio: true,
             OutputSampleRate: 16000),
         new(
             NvidiaAfxProfile.AcousticEchoCancellation,
             "Acoustic Echo Cancellation",
+            // Not listed in Maxine AFX 3.x public effect selectors; kept for discovery.
+            // Readiness/model resolution will fail until NVIDIA ships a matching feature package.
             Selector: "aec",
             IsChainedEffect: false,
             SupportedSampleRates: [16000, 48000],
             MaxChannels: 1,
-            RequiredModelRelativePaths: ["models/aec_48k.nvam"],
+            RequiredModels:
+            [
+                new("nvafxaec", "aec_48k"),
+            ],
             RequiresFarEndReference: true,
             SupportsIntensityRatio: false)
     ];

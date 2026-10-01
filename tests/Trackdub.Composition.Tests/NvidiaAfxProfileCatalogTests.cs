@@ -23,7 +23,8 @@ public sealed class NvidiaAfxProfileCatalogTests
             Assert.Equal(profile, definition.Profile);
             Assert.False(string.IsNullOrWhiteSpace(definition.Selector));
             Assert.NotEmpty(definition.SupportedSampleRates);
-            Assert.NotEmpty(definition.RequiredModelRelativePaths);
+            Assert.NotEmpty(definition.RequiredModels);
+            Assert.NotEmpty(definition.PreferredModelRelativePaths);
         }
     }
 

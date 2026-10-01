@@ -26,6 +26,7 @@ Never treat component registration, settings fields, or profile catalog entries 
 | Profile catalog | `src/Trackdub.Composition/NvidiaAfx/NvidiaAfxProfileCatalog.cs` |
 | Stub readiness | `StubNvidiaAfxRuntimeReadinessService` |
 | Native seams | `NvidiaAfxNative`, `NvidiaAfxSession` (Maxine `float**` Run + AEC dual input) |
+| On-disk layout | `NvidiaAfxRuntimeLayout` (Maxine 3.x `NVAudioEffects.dll` + `features/nvafx*/`; legacy `models/*.nvam` fallback) |
 | Packaging gates | `NvidiaAfxRuntimePackageGates`, `NvidiaAfxRuntimePathResolver`, `NvidiaAfxRuntimeInstaller` |
 | Runtime manifest | `src/Trackdub.Composition/nvidiaafx-runtime.manifest.json` |
 | DI | `CompositionRoot.AddApplication`, `HeadlessCompositionRoot` |

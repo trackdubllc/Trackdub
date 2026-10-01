@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Trackdub.Contracts;
+using Trackdub.Infrastructure.Components.NvidiaAfx;
 
 namespace Trackdub.Composition.NvidiaAfx;
 
@@ -47,7 +48,8 @@ internal sealed class NvidiaAfxSession : IDisposable
         NvidiaAfxProfileDefinition profile,
         string runtimeRoot,
         int sampleRate,
-        float intensityRatio)
+        float intensityRatio,
+        string? architectureBucket = null)
     {
         NvidiaAfxNativeLoader.EnsureLoaded(runtimeRoot);
         IntPtr effectHandle;
@@ -65,10 +67,26 @@ internal sealed class NvidiaAfxSession : IDisposable
         var safeHandle = new NvidiaAfxEffectHandle(effectHandle);
         try
         {
-            if (profile.RequiredModelRelativePaths.Length > 0)
+            if (profile.RequiredModels.Length > 0)
             {
-                string[] modelPaths = profile.RequiredModelRelativePaths
-                    .Select(relative => Path.Join(runtimeRoot, relative))
+                string[] modelPaths = profile.RequiredModels
+                    .Select(model =>
+                    {
+                        string? resolved = NvidiaAfxRuntimeLayout.ResolveModelFile(
+                            runtimeRoot,
+                            model.FeatureFolder,
+                            model.ModelStem,
+                            architectureBucket);
+                        if (resolved is null)
+                        {
+                            throw new FileNotFoundException(
+                                $"NVIDIA AFX model '{model.ModelStem}' was not found under feature " +
+                                $"'{model.FeatureFolder}' in runtime root '{runtimeRoot}' " +
+                                $"(architecture bucket '{architectureBucket ?? "any"}').");
+                        }
+
+                        return resolved;
+                    })
                     .ToArray();
                 if (modelPaths.Length == 1)
                 {

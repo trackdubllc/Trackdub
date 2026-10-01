@@ -42,6 +42,22 @@ public sealed class NvidiaAfxRuntimePathResolverTests
         }
     }
 
+    [Fact]
+    public void HasNativeLibrary_True_ForEitherDllSpelling()
+    {
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-lib-ok-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            File.WriteAllBytes(Path.Join(tempRoot, "NvAudioEffects.dll"), [0x00]);
+            Assert.True(NvidiaAfxRuntimePathResolver.HasNativeLibrary(tempRoot));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private sealed class NoopLogger : IApplicationLogger
     {
         public void LogDebug(string message) { }
