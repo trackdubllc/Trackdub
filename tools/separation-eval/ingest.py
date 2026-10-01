@@ -38,6 +38,7 @@ MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 ROLES = ("dialogue", "music", "sfx", "ambience", "rir")
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+EXT_PATTERN = re.compile(r"^[a-z0-9]{1,5}$")
 
 # SPDX id (or LicenseRef) -> share-alike flag. Anything not listed is rejected.
 ALLOWED_LICENSES: dict[str, bool] = {
@@ -88,6 +89,9 @@ def validate_record(rec: dict, allow_sharealike: bool) -> str | None:
         return f"role must be one of {ROLES}"
     if not rec["url"].startswith("https://"):
         return "url must be https"
+    ext = rec.get("ext")
+    if ext is not None and (not isinstance(ext, str) or not EXT_PATTERN.fullmatch(ext)):
+        return f"ext, when given, must match {EXT_PATTERN.pattern}"
     expected = rec.get("sha256")
     if expected is not None and not SHA256_PATTERN.match(str(expected)):
         return "sha256, when given, must be 64 lowercase hex characters"
@@ -237,6 +241,10 @@ def ingest_items(
             continue
         seen_ids.add(item_id)
         dest = cache_path(cache, rec)
+        cache_root = cache.resolve()
+        if cache_root not in dest.resolve().parents:
+            rejected.append(Rejection(item_id, "destination escapes cache"))
+            continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         valid.append((rec, dest))
 
