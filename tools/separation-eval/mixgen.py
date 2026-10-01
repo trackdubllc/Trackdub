@@ -340,6 +340,8 @@ def generate_corpus(items: list[dict], cache: Path, out_dir: Path, *, split: str
             raise GenerationError(f"unknown recipe '{rid}'")
         recipe = RECIPES[rid]
         count = count_override if count_override is not None else split_counts(recipe.count)[split]
+        if count <= 0:
+            raise GenerationError("clip count must be positive")
         for index in range(count):
             arrays, sr, meta = generate_clip(recipe, index, split, ctx)
             clips.append(write_clip(out_dir, arrays, sr, meta))
