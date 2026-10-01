@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -267,6 +268,39 @@ class RunnerDefaultsTests(unittest.TestCase):
             self.assertEqual(run_eval.default_runner()[5], "net10.0")
         with patch.object(run_eval.platform, "system", return_value="Windows"):
             self.assertEqual(run_eval.default_runner()[5], "net10.0-windows10.0.19041.0")
+
+
+class ModelProvenanceTests(unittest.TestCase):
+    def test_no_metadata_reports_no_executed_roots(self):
+        provenance = run_eval.model_provenance([{"id": "a"}])
+        self.assertEqual(provenance["executed"], [])
+        self.assertIn("vocals.onnx", provenance["pinned_file_sha256"])
+
+    def test_reports_roots_and_validates_hashes_against_pinned_manifest(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "vocals.onnx").write_bytes(b"vocals")
+            (root / "accompaniment.onnx").write_bytes(b"accompaniment")
+            timings = [{"id": "a", "metadata": {"model_root": str(root)}}]
+            provenance = run_eval.model_provenance(timings)
+            self.assertEqual(len(provenance["executed"]), 1)
+            self.assertEqual(provenance["executed"][0]["model_root"], str(root))
+            self.assertEqual(provenance["executed"][0]["file_sha256"]["vocals.onnx"],
+                             hashlib.sha256(b"vocals").hexdigest())
+            self.assertFalse(provenance["executed"][0]["matches_pinned"])
+            self.assertIsInstance(provenance["pinned_file_sha256"], dict)
+            self.assertIn("vocals.onnx", provenance["pinned_file_sha256"])
+
+    def test_deduplicates_identical_roots_and_skips_missing_files(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "vocals.onnx").write_bytes(b"v")
+            timings = [{"id": "a", "metadata": {"model_root": str(root)}},
+                       {"id": "b", "metadata": {"model_root": str(root)}},
+                       {"id": "c", "metadata": {}}]
+            provenance = run_eval.model_provenance(timings)
+            self.assertEqual(len(provenance["executed"]), 1)
+            self.assertNotIn("accompaniment.onnx", provenance["executed"][0]["file_sha256"])
 
 
 def lowpass_to(mono, cutoff):

@@ -224,7 +224,8 @@ class ProbeAndJsonlTests(unittest.TestCase):
         )
         for payload in payloads:
             with self.subTest(payload=payload), patch.object(
-                    ingest.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=payload)):
+                    ingest.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=payload)), \
+                    patch.object(ingest.shutil, "which", return_value="/usr/bin/ffprobe"):
                 with self.assertRaisesRegex(ingest.IngestError, "invalid ffprobe output"):
                     ingest.probe_audio(Path("invalid.wav"))
 

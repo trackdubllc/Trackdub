@@ -107,6 +107,27 @@ class BandLimitTests(unittest.TestCase):
         self.assertFalse(r.passed)
         self.assertEqual(r.lag_samples, 50)
 
+    def test_an_in_band_error_confined_to_the_signal_tail_is_not_dropped(self):
+        nfft = metrics.BAND_FFT_SIZE
+        hop = nfft // 2
+        starts = np.arange(0, self.mix.shape[0] - nfft + 1, hop)
+        tail = self.mix.shape[0] - (starts[-1] + nfft)
+        self.assertGreater(tail, 0)
+        dialogue = self.mix.copy()
+        dialogue[-tail:] = 0.0
+        r = metrics.check_reconstruction(self.mix, dialogue, self.zero, SR, band_limit_hz=LIMIT)
+        self.assertFalse(r.passed)
+        self.assertIn("in-band residual", r.reasons[0])
+
+    def test_no_reference_energy_in_band_fails_when_residual_appears_in_band(self):
+        t = np.arange(SR * 3, dtype=np.float64) / SR
+        mix = (0.1 * np.sin(2 * np.pi * 15_000 * t)).astype(np.float32)[:, None]
+        err = (0.001 * np.sin(2 * np.pi * 1_000 * t)).astype(np.float32)[:, None]
+        zero = np.zeros_like(mix)
+        r = metrics.check_reconstruction(mix, zero, mix + err, SR, band_limit_hz=LIMIT)
+        self.assertFalse(r.passed)
+        self.assertIn("full-band mixture energy", r.reasons[0])
+
 
 class QuantisationTests(unittest.TestCase):
     def split_and_quantise(self, mix):

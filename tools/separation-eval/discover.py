@@ -47,6 +47,9 @@ PUBLIC_DOMAIN_URLS = (
     "creativecommons.org/publicdomain/zero/1.0",
 )
 NON_SOLO_TITLE = re.compile(r"collection|anthology|dramatic|poetry|poems|\bvol(ume|\.)?\b|short stor", re.IGNORECASE)
+# LibriVox collaborative (multi-reader) readings carry "collab" or "multivoice" in the archive identifier
+# even when the title gives no hint (e.g. "The Wind in the Willows"), so the identifier must be checked too.
+NON_SOLO_IDENTIFIER = re.compile(r"collab|multivoice", re.IGNORECASE)
 
 FetchJson = Callable[[str], dict]
 
@@ -230,6 +233,7 @@ def discover_librivox(config: dict, fetch_json: FetchJson, retrieved_at: str,
     eligible = [d for d in docs
                 if any(u in str(d.get("licenseurl", "")) for u in PUBLIC_DOMAIN_URLS)
                 and not NON_SOLO_TITLE.search(str(d.get("title", "")))
+                and not NON_SOLO_IDENTIFIER.search(str(d.get("identifier", "")))
                 and long_enough(d)]
     random.Random(int(config.get("seed", 1))).shuffle(eligible)
 

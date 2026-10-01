@@ -38,6 +38,10 @@ SEPARATOR_SR = 44100
 RESULTS_SCHEMA_VERSION = 2
 LENGTH_TOLERANCE_SAMPLES = 4
 
+PINNED_MANIFEST = (Path(__file__).resolve().parents[2] / "src" / "Trackdub.Inference" / "Runtime"
+                   / "ModelManifest" / "bundled-models.manifest.json")
+PINNED_SPLEETER_FILES = ("vocals.onnx", "accompaniment.onnx")
+
 
 def default_runner() -> list[str]:
     framework = "net10.0-windows10.0.19041.0" if platform.system() == "Windows" else "net10.0"
@@ -170,6 +174,37 @@ def read_jsonl(path: Path) -> list[dict]:
     if not path.is_file():
         raise EvalError(f"separator produced no results file at {path}")
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def model_provenance(timings: list[dict]) -> dict:
+    """Record which model root the runner actually executed and whether its ONNX files match the
+    pinned revision hashes in bundled-models.manifest.json. The engine's per-job metadata carries
+    `model_root`; TRACKDUB_SPLEETER_ONNX_PATH can override the planned model, so this makes the
+    executed weights (not just the candidate name) part of the report."""
+    roots = sorted({t.get("metadata", {}).get("model_root") for t in timings
+                    if isinstance(t.get("metadata"), dict) and t["metadata"].get("model_root")})
+    pinned: dict = {}
+    try:
+        manifest = json.loads(PINNED_MANIFEST.read_text(encoding="utf-8"))
+        for model in manifest.get("models", []):
+            if model.get("engine_family") == "spleeter":
+                pinned = dict(model.get("download_file_hashes") or {})
+                break
+    except OSError:
+        pinned = {}
+    executed = []
+    for root in roots:
+        hashes = {}
+        for name in PINNED_SPLEETER_FILES:
+            path = Path(root) / name
+            if path.is_file():
+                try:
+                    hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+                except OSError:
+                    hashes[name] = None
+        executed.append({"model_root": root, "file_sha256": hashes,
+                         "matches_pinned": bool(pinned) and hashes == pinned})
+    return {"pinned_file_sha256": pinned or None, "executed": executed}
 
 
 def score_clip(clip: dict, corpus: Path, job: dict, timing: dict, mixture44: np.ndarray,
@@ -320,6 +355,7 @@ def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candid
         "provider_requested": provider,
         "hardware_label": hardware_label,
         "gate_config": {"threshold_db": metrics.RECONSTRUCTION_GATE_DB, **(gate or {})},
+        "model_provenance": model_provenance(list(timings.values())),
         "host": {"platform": platform.platform(), "python": sys.version.split()[0]},
         "corpus": {"manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
                    "items_sha256": manifest.get("items_sha256"), "split": manifest.get("split"),

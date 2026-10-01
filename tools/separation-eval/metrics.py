@@ -414,7 +414,8 @@ def band_energy_fractions(x: np.ndarray, sr: int, band_limit_hz: float,
                           guard_hz: float = BAND_GUARD_HZ) -> tuple[float, float]:
     """Fractions of the signal's spectral energy below (band_limit - guard) and above (band_limit + guard),
     from Hann-windowed 50%-overlap frames summed over channels. The guard band is excluded from both.
-    Frames lie wholly inside the signal, so its edges do not leak broadband energy into the band."""
+    Frames lie wholly inside the signal, so its edges do not leak broadband energy into the band; the
+    final frame is aligned to the signal end so trailing samples are not dropped from the estimate."""
     nfft = BAND_FFT_SIZE
     hop = nfft // 2
     freqs = np.fft.rfftfreq(nfft, 1.0 / sr)
@@ -427,6 +428,9 @@ def band_energy_fractions(x: np.ndarray, sr: int, band_limit_hz: float,
         if padded.size < nfft:
             padded = np.concatenate([padded, np.zeros(nfft - padded.size)])
         starts = np.arange(0, padded.size - nfft + 1, hop)
+        last = padded.size - nfft
+        if last >= 0 and starts.size and starts[-1] != last:
+            starts = np.concatenate([starts, [last]])
         for b in range(0, starts.size, BAND_BATCH_FRAMES):
             idx = starts[b:b + BAND_BATCH_FRAMES][:, None] + np.arange(nfft)[None, :]
             power = np.abs(np.fft.rfft(padded[idx] * window, axis=1)) ** 2
@@ -500,7 +504,7 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
         return ReconstructionResult(
             passed, None, None, threshold_db, None, None, None, band_limit_hz, output_bits, output_rounding, None, max_abs, None,
             threshold_db,
-            () if passed else (f"silent mixture judged-band residual RMS {silent_judged_residual_rms:.3g} exceeds absolute tolerance "
+            () if passed else (f"silent mixture judged band residual RMS {silent_judged_residual_rms:.3g} exceeds absolute tolerance "
                                f"{SILENT_RECONSTRUCTION_RMS_TOLERANCE:.3g}",),
             silent_judged_residual_rms)
 

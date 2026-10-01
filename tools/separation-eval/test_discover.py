@@ -150,11 +150,19 @@ class LibriVoxTests(unittest.TestCase):
     def test_selects_public_domain_solo_long_books(self):
         docs = [book("good_one"), book("good_two"), book("nc", licenseurl="http://creativecommons.org/licenses/by-nc/3.0/"),
                 book("collection", title="Short Story Collection 001"), book("short", runtime="0:10:00"),
-                book("dramatic", title="Dramatic Reading Hour"), book("no_mp3")]
+                book("dramatic", title="Dramatic Reading Hour"), book("no_mp3"),
+                book("wind_in_the_willows_collab_librivox", title="The Wind in the Willows")]
         files = {d["identifier"]: mp3s() for d in docs if d["identifier"] != "no_mp3"}
         files["no_mp3"] = [{"name": "x.ogg", "format": "Ogg Vorbis", "size": "9000000"}]
         items = self.run_librivox(docs, files)
         self.assertEqual(sorted(i["group"] for i in items), ["librivox:good_one", "librivox:good_two"])
+
+    def test_collab_identifier_is_filtered_even_when_title_is_plain(self):
+        docs = [book("wind_in_the_willows_collab_librivox", title="The Wind in the Willows"),
+                book("wind_in_the_willows_solo", title="The Wind in the Willows")]
+        files = {d["identifier"]: mp3s() for d in docs}
+        items = self.run_librivox(docs, files)
+        self.assertEqual([i["group"] for i in items], ["librivox:wind_in_the_willows_solo"])
 
     def test_item_fields(self):
         item = self.run_librivox([book("good_one", title="Treasure Island")], {"good_one": mp3s()})[0]
