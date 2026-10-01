@@ -75,7 +75,7 @@ the tokenizer or metadata schema requires full reindexing.
 | `first-party/trackdub/` | Public core docs, AGENTS.md, TRT-RTX pin manifest, olive-recipe NvTensorRtRtx READMEs |
 | `first-party/trackdub-gated/` | Gated repo docs |
 | `first-party/api/` | api.trackdub docs |
-| `vendor/nvidia/` | TRT-RTX docs (arch, AOT/JIT, support matrix, best practices, troubleshooting, APIs) + EP ABI releases + Sortformer/Nemotron model cards |
+| `vendor/nvidia/` | TRT-RTX docs (arch, AOT/JIT, support matrix, best practices, troubleshooting, APIs) + EP ABI releases + Sortformer/Nemotron model cards + Maxine Audio Effects (current AFX user guide: Windows/Linux setup, effects, application flow, API) |
 | `vendor/microsoft/` | Windows ML (overview, EP selection, initialization), DirectML |
 | `vendor/onnxruntime/` | EP docs (TRT-RTX, plugin EP, CUDA, DirectML, OpenVINO, QNN, MIGraphX), ORT GenAI, performance tuning, quantization |
 | `vendor/olive/` | Microsoft Olive docs (the pinned Olive 0.13.0 recipe engine) |
