@@ -18,6 +18,11 @@ permission:
     "git checkout*": allow
     "git add*": allow
     "git commit*": allow
+    "git -C external/Trackdub fetch*": allow
+    "git -C external/Trackdub checkout*": allow
+    "git -C external/Trackdub tag*": allow
+    "git -C external/Trackdub log*": allow
+    "git -C external/Trackdub rev-parse*": allow
     "pwsh*": allow
 ---
 

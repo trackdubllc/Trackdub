@@ -9,7 +9,7 @@ permission:
     "dotnet build*": allow
     "dotnet test*": allow
     "dotnet restore*": allow
-    "dotnet format*": allow
+    "dotnet format Trackdub.slnx --verify-no-changes*": allow
     "dotnet list*": allow
     "git status": allow
     "git diff*": allow
@@ -17,8 +17,9 @@ permission:
     "git show*": allow
     "git rev-parse*": allow
     "git ls-files*": allow
-    "pwsh*": allow
-    "python*": allow
+    "python3 scripts/ci/check-repository-boundary.py": allow
+    "python3 scripts/ci/check-audit-mirrors.py": allow
+    "python3 scripts/ci/check_controlled_matrix_cpu_budget.py": allow
 ---
 
 # Validation Gate
@@ -63,7 +64,8 @@ permission:
     <action>Establish what is being validated and from what state.</action>
     <process>
       <step>Capture `git status` and `git rev-parse HEAD`. The commit SHA and dirty/clean state belong in the report header — an uncommitted tree has no reproducible verdict.</step>
-      <step>Capture the touched surface from `git diff --name-only`: which `src/*` projects, which `tests/*` projects, whether `Directory.Packages.props`, any `packages.lock.json`, or the AGENTS.md diagram is in the diff.</step>
+      <step>Resolve the PR base ref or use the explicitly supplied base ref. Verify it with `git rev-parse --verify "$BASE_REF^{commit}"`. Capture committed changes with `git diff --name-only "$BASE_REF"...HEAD` and worktree changes with `git diff --name-only HEAD`; inspect their union. If the base cannot be resolved, report committed-change checks as NOT VERIFIED rather than substituting HEAD.</step>
+      <step>From the union of changed paths, identify which `src/*` projects, which `tests/*` projects, whether `Directory.Packages.props`, any `packages.lock.json`, or the AGENTS.md diagram is in the diff.</step>
       <step>Decide scope. Narrow scope (single test project) is legitimate when the diff touches one area. A change to `Directory.Packages.props`, the AGENTS.md diagram, `Directory.Build.props`, `BannedSymbols.txt`, or any `packages.lock.json` forces the FULL gate.</step>
       <step>State the scope and the reason for it before running anything.</step>
     </process>
@@ -120,7 +122,7 @@ permission:
       <step>`StageNameConsistencyTests` — both directions: no `StageRunRecord.Start` call site takes an inline stage-name literal, and every `StageNames` constant value appears in `KnownStageNameValues`.</step>
       <step>`LicensingIsolationTests` — zero `ProjectReference`, no third-party crypto packages (BouncyCastle, jose-jwt, IdentityModel JWT, NSec, libsodium), single-target `net10.0` with no `<TargetFrameworks>`.</step>
       <step>`WorkflowTriggerTests` — no `branches:` filter on `pull_request` in `ci.yml`, `codeql.yml`, `model-audit.yml`, `benchmark-report-validation.yml`. A `paths:` filter is allowed and deliberate.</step>
-      <step>Banned-symbol audit over the diff: any new or modified `Path.Combine` call is a finding even though RS0030 does not fail the build.</step>
+      <step>Banned-API audit over both `git diff -U0 "$BASE_REF"...HEAD -- '*.cs'` and `git diff -U0 HEAD -- '*.cs'`: any new or modified `Path.Combine` call is a finding even though RS0030 does not fail the build.</step>
       <step>Analyzer rules: `Trackdub.Analyzers` ships `WavePcm16MultiSourceMixOptInAnalyzer`; audio work must satisfy it rather than route around it.</step>
     </process>
     <checkpoint>Every architecture test listed above ran and passed, and each is named in the report.</checkpoint>
@@ -129,13 +131,13 @@ permission:
   <stage id="6" name="RepoHygiene">
     <action>Run the repo's own CI checks that are not part of the .NET build.</action>
     <process>
-      <step>`dotnet format Trackdub.slnx --verify-no-changes` — full solution when no base SHA is available; otherwise `--include` the changed `*.cs` files, matching CI.</step>
+      <step>`dotnet format Trackdub.slnx --verify-no-changes` — use `--include` with the union of changed `*.cs` files from the committed base-to-HEAD diff and the worktree-to-HEAD diff, matching CI. If the base is unavailable, use full-solution format validation and report committed-change checks as NOT VERIFIED.</step>
       <step>`python3 scripts/ci/check-repository-boundary.py` — stale license and desktop-boundary claims.</step>
       <step>`python3 scripts/ci/check-audit-mirrors.py` — the concatenated dead-code audit must match its standalone copies.</step>
-      <step>If the diff touches the benchmark host, build `src/Trackdub.Benchmarks.DevHost -c Release --no-restore -f net10.0 -m:1` and run `python3 scripts/ci/check_controlled_matrix_cpu_budget.py`. Do not run BenchmarkDotNet here — BDN is never on PR CI.</step>
+      <step>Always build `src/Trackdub.Benchmarks.DevHost -c Release --no-restore -f net10.0 -m:1` and run `python3 scripts/ci/check_controlled_matrix_cpu_budget.py`, matching the required CI job. Do not run BenchmarkDotNet here — BDN is never on PR CI.</step>
       <step>Report each script's exit code and output. A script that cannot run in this environment is NOT VERIFIED.</step>
     </process>
-    <checkpoint>Format, boundary, and mirror checks all clean.</checkpoint>
+    <checkpoint>Format, boundary, audit-mirror, and controlled-matrix CPU-budget checks all clean.</checkpoint>
   </stage>
 
   <stage id="7" name="Verdict">
@@ -180,6 +182,8 @@ SDK: <version>   Host: <os>   Scope: <narrow|full> — <reason>
 | Format | dotnet format --verify-no-changes | 0 | PASS |
 | Repository boundary | scripts/ci/check-repository-boundary.py | 0 | PASS |
 | Audit mirrors | scripts/ci/check-audit-mirrors.py | 0 | PASS |
+| Controlled-matrix CPU budget | build Benchmarks.DevHost; run scripts/ci/check_controlled_matrix_cpu_budget.py | 0 | PASS |
+| CI platform matrix | Windows, Linux, macOS jobs | — | NOT VERIFIED unless matching CI evidence is available |
 
 OVERALL: PASS | FAIL | NOT VERIFIED
 

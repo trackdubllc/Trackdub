@@ -23,7 +23,7 @@ Format gate (`CONTRIBUTING.md`, and job `format` in `.github/workflows/ci.yml`):
 dotnet format Trackdub.slnx --verify-no-changes
 ```
 
-CI runs format over changed C# files only (`--include` with `git diff --name-only --diff-filter=ACMR <base>...HEAD -- '*.cs'`); the whole-solution form above is the local equivalent.
+Resolve and verify `BASE_REF` from PR metadata or the supplied base ref before running diff-dependent checks. CI formats changed C# files with `--include` from the committed base-to-HEAD diff; validation must also include worktree changes from `git diff --name-only HEAD -- '*.cs'`. If no base ref is available, report committed-branch checks as `NOT VERIFIED`; full-solution formatting does not replace those checks.
 
 ### Why each flag
 
@@ -69,7 +69,8 @@ dotnet test tests/Trackdub.Architecture.Tests --no-restore -m:1
 `Microsoft.CodeAnalysis.BannedApiAnalyzers` is wired repo-wide through `Directory.Build.props` (`AdditionalFiles`) with `BannedSymbols.txt` listing the four `System.IO.Path.Combine` overloads. Use `Path.Join` in new or changed code. `Path.Combine` silently drops earlier segments when a later argument is rooted; `Path.Join` has no reset behavior.
 
 ```bash
-git diff --name-only HEAD -- '*.cs' | xargs -r grep -c "Path\.Combine"
+git diff -U0 "$BASE_REF"...HEAD -- '*.cs'
+git diff -U0 HEAD -- '*.cs'
 ```
 
 Report the count in touched files. New occurrences in changed code = FAIL the gate; existing untouched occurrences = expected, report as informational.
@@ -85,7 +86,9 @@ Report: analyzer diagnostics active for the touched projects, and no **new** dia
 ### 4e — `packages.lock.json` integrity
 
 ```bash
+git diff --name-only "$BASE_REF"...HEAD -- '*packages.lock.json'
 git diff --name-only HEAD -- '*packages.lock.json'
+git diff --check "$BASE_REF"...HEAD -- '*packages.lock.json'
 git diff --check HEAD -- '*packages.lock.json'
 ```
 
@@ -98,15 +101,23 @@ git diff --check HEAD -- '*packages.lock.json'
   ```
 - Portable RID graphs must remain intact: `net10.0/{win-x64,win-arm64,linux-x64,linux-arm64,osx-x64,osx-arm64}` in `src/Trackdub.Contracts`, `src/Trackdub.Domain`, `src/Trackdub.Inference`; plus `net10.0-windows10.0.19041/{rid}` for `src/Trackdub.Inference.Onnx`. Asserted by `OnnxLockFilePreservesPortableRuntimeIdentifierGraphs` (Windows-only).
 
-### 4f — Repository boundary and audit mirrors (CI jobs)
+### 4f — Repository boundary and audit mirrors (required CI jobs)
 
 ```bash
 python3 scripts/ci/check-repository-boundary.py    # stale license / desktop-boundary claims
 python3 scripts/ci/check-audit-mirrors.py         # concatenated audit matches its copies
-python3 scripts/ci/check_controlled_matrix_cpu_budget.py   # needs a Release Benchmarks.DevHost build
 ```
 
-### 4g — Model manifest (when models changed)
+### 4g — Controlled-matrix CPU budget (required CI job)
+
+```bash
+dotnet build src/Trackdub.Benchmarks.DevHost -c Release --no-restore -f net10.0 -m:1
+python3 scripts/ci/check_controlled_matrix_cpu_budget.py
+```
+
+Run this job for every validation, not only when benchmark files changed.
+
+### 4h — Model manifest (when models changed)
 
 ```bash
 python tools/ci/validate-manifest-schema.py
@@ -139,11 +150,12 @@ Also gated by `tools/validation/validate-repo.ts` (Deno; targets `all`, `manifes
 | 3 | Release tests | `dotnet test Trackdub.slnx --configuration Release --no-build -m:1` | | passed/failed/skipped counts |
 | 4a | dependency direction | `python tools/ci/verify-dependency-graph.py` | | offending edges |
 | 4b | Architecture.Tests | `dotnet test tests/Trackdub.Architecture.Tests --no-restore -m:1` | | failing test names |
-| 4c | BannedSymbols | `grep -c "Path\.Combine"` on touched files | | new-hit count |
+| 4c | BannedSymbols | `git diff -U0 "$BASE_REF"...HEAD -- '*.cs'` plus `git diff -U0 HEAD -- '*.cs'` | | new/modified `Path.Combine` lines |
 | 4d | Analyzers | Gate 2 output | | new diagnostic IDs |
-| 4e | `packages.lock.json` integrity | `git diff --name-only HEAD -- '*packages.lock.json'` | | conflicting paths |
-| 4f | repo boundary / audit mirrors | `python3 scripts/ci/check-repository-boundary.py` | | offending lines |
-| 4g | model manifest (if applicable) | 3 python validators | | error/warning counts |
+| 4e | `packages.lock.json` integrity | committed and worktree diff commands above | | conflicting paths |
+| 4f | repository boundary / audit mirrors | `python3 scripts/ci/check-repository-boundary.py`; `python3 scripts/ci/check-audit-mirrors.py` | | offending lines |
+| 4g | controlled-matrix CPU budget | build Benchmarks.DevHost; run `python3 scripts/ci/check_controlled_matrix_cpu_budget.py` | | budget result |
+| 4h | model manifest (if applicable) | 3 python validators | | error/warning counts |
 | 5 | format | `dotnet format Trackdub.slnx --verify-no-changes` | | changed files |
 
 **Verdict line:** `VALIDATION: PASS` or `VALIDATION: FAIL (first failing gate: <N>)`, or `VALIDATION: NOT VERIFIED (gates: <list>)`.

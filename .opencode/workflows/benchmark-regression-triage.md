@@ -104,7 +104,7 @@ Do NOT use for:
 - **Actions**:
   1. Walk the decision tree below. Stop at the first branch the evidence supports.
   2. Confirm `actualProvider`/`actualModel` from the report. A silent provider fallback is a frequent root cause and is invisible unless read.
-  3. For a suspected host artifact, re-run on the same machine with the change reverted. If the delta disappears, it is the change. If it persists, it is the host.
+  3. Do not revert changes or prepare a worktree as the read-only benchmark agent. For BenchmarkDotNet, use `scripts/ci/run_benchmarkdotnet_baseline.py` when a saved-commit comparison applies. For controlled runs, ask an authorized actor to prepare the baseline worktree; otherwise report `ATTRIBUTION NOT VERIFIED`.
   4. State the attribution as a hypothesis with the measurement that supports it, plus the measurement that would falsify it.
 - **Exit criteria**: One primary attribution with supporting evidence.
 - **Failure handling**: Evidence supports no single cause ⇒ report all live hypotheses; do not collapse to the most likely-sounding one.

@@ -17,8 +17,9 @@ permission:
     "git rev-parse*": allow
     "gh run*": allow
     "gh api*": allow
-    "pwsh*": allow
-    "python*": allow
+    "pwsh -File tools/bench-per-stage.ps1*": allow
+    "pwsh -File tools/bench-smoke-verdict-ab.ps1*": allow
+    "python3 scripts/ci/run_benchmarkdotnet_baseline.py*": allow
 ---
 
 # Benchmark / Performance Analyst

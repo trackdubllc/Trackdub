@@ -58,10 +58,11 @@ Format:
 
 **Rule: prefer `Path.Join` over `Path.Combine` in all new or changed code.** `Path.Combine` silently drops earlier segments when a later argument is rooted; CodeQL/CodeFactor flag it on every call whose argument cannot be proven non-rooted, which in practice is almost every call. `Path.Join` has no reset behavior and is a drop-in replacement throughout this codebase.
 
-Diagnostics surface as **warnings**, not errors, today. A green build does not mean zero `Path.Combine` hits. Count them in the files you touched:
+Diagnostics surface as **warnings**, not errors, today. A green build does not mean zero `Path.Combine` hits. Inspect the union of these committed-diff and worktree-diff paths for changed `Path.Combine` lines:
 
 ```bash
-git diff --name-only HEAD -- '*.cs' | xargs -r grep -c "Path\.Combine"
+git diff --name-only "$BASE_REF"...HEAD -- '*.cs'
+git diff --name-only HEAD -- '*.cs'
 ```
 
 To add a ban, append a line to `BannedSymbols.txt` in the same format. Verify the signature is correct first — an unmatched signature silently bans nothing.

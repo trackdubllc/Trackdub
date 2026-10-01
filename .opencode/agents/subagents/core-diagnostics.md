@@ -22,8 +22,8 @@ permission:
     "git worktree list": allow
     "git branch*": allow
     "git merge-base*": allow
-    "pwsh*": allow
-    "python*": allow
+    "python3 tools/ci/validate-manifest-schema.py*": allow
+    "python3 tools/ci/verify-manifest-hashes.py*": allow
 ---
 
 # Core Repository Diagnostics

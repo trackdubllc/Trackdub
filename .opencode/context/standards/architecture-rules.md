@@ -101,7 +101,7 @@ Portable .NET 10 APIs by default. Windows-specific surface needs an explicit Win
 | Dropped portable RID graph | a required `net10.0/{rid}` entry missing from a lock file | `OnnxLockFilePreservesPortableRuntimeIdentifierGraphs` (Windows-only) | `dotnet restore Trackdub.slnx --force-evaluate -m:1` on Windows |
 | Licensing coupling | a `ProjectReference` or a crypto package in `Trackdub.Licensing`, or multi-targeting | `LicensingIsolationTests` | keep it standalone, BCL-only, `net10.0` |
 | Stacked PRs dropped from CI | a `branches:` filter on a `pull_request:` trigger | `WorkflowTriggerTests` | remove the filter (a `paths:` filter is fine) |
-| Hand-merged lock file | conflict markers or a lock diff no restore reproduces | `git diff --check HEAD -- '*packages.lock.json'` + reproducibility | take a side, then `dotnet restore Trackdub.slnx --force-evaluate -m:1` |
+| Hand-merged lock file | conflict markers or a lock diff no restore reproduces | `git diff --check "$BASE_REF"...HEAD -- '*packages.lock.json'` plus `git diff --check HEAD -- '*packages.lock.json'` + reproducibility | take a side, then `dotnet restore Trackdub.slnx --force-evaluate -m:1` |
 | New `Path.Combine` sites | `RS0030` count grows in touched files | `grep -c "Path\.Combine"` (warning-only by design) | use `Path.Join` |
 | Silent EP swap | a "GPU" claim that actually ran on CPU | `StageRuntimePlan.RequirePreferredExecutionProvider`, reported EP | set a hard pin, or report the EP actually used |
 

@@ -38,12 +38,6 @@ permission:
     subagents/benchmark-perf: allow
     core-diagnostics: allow
     subagents/core-diagnostics: allow
-    context-retriever: allow
-    subagents/core/context-retriever: allow
-    externalscout: allow
-    subagents/core/externalscout: allow
-    documentation: allow
-    subagents/core/documentation: allow
 ---
 
 # Trackdub Core Orchestrator
@@ -140,7 +134,7 @@ permission:
       <step>Level 3 (process): `context/processes/adding-pipeline-stage.md`, `context/processes/submodule-pin-bump.md`, `context/processes/pr-lifecycle.md`.</step>
       <step>Level 3 (reporting): `context/standards/validation-gates.md`, `context/templates/evidence-report.md`.</step>
       <step>For implementation facts, pin policy, provider wiring, and repo-specific operational guidance, prefer the `trackdub-docs-rag` MCP tools (`search_trackdub_docs`, `ask_trackdub_docs`, `get_trackdub_doc`; spec at `tools/docs-rag/SPEC.md`). Treat vendor hits as upstream reference, not pin policy.</step>
-      <step>For third-party libraries outside the corpus, delegate to @externalscout (Context7) and verify retrieved docs against live code.</step>
+      <step>For third-party libraries outside the corpus, retrieve upstream documentation with Context7 and verify it against live code. Context retrieval is handled in-house; do not route it to an undefined subagent.</step>
       <step>Do not load context the request does not need. Context is a budget, not a ritual.</step>
     </process>
     <checkpoint>Each loaded file maps to a decision the task actually requires. Drop the rest.</checkpoint>
@@ -172,18 +166,6 @@ permission:
     <route to="@core-diagnostics" when="build or test fails, packages.lock.json conflicts, warnings-as-errors fires, native/ONNX/CUDA/TensorRT loading fails, a submodule pin moved, or a test looks flaky">
       <context_level>1 — AGENTS.md plus the failing output</context_level>
       <expects>Ranked hypothesis list, each with the single command that discriminates it. Read-only. Does not fix by guessing.</expects>
-    </route>
-    <route to="@context-retriever" when="the needed context file is not already loaded or is stale relative to source">
-      <context_level>2</context_level>
-      <expects>The exact context file paths that govern the area, ranked.</expects>
-    </route>
-    <route to="@externalscout" when="a third-party API, package, or CLI outside the Trackdub corpus is blocking the work">
-      <context_level>1</context_level>
-      <expects>Version-specific upstream documentation with the source noted. Not a substitute for reading live code.</expects>
-    </route>
-    <route to="@documentation" when="a user-facing doc update is separable from code and purely descriptive">
-      <context_level>2 — context/standards/coding-standards.md, context/templates/evidence-report.md</context_level>
-      <expects>Draft against the documented taxonomy in `docs/repository-policy.md`.</expects>
     </route>
   </routing_table>
 

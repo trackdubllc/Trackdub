@@ -162,7 +162,7 @@ Rules that apply when the human does apply it:
 | `gh-stack` skill + `gh stack` | stacked PRs |
 | GitKraken MCP | workspace-aware `git_push`, workspace listing |
 | cubic MCP | repo wiki, review, codebase scan findings |
-| Context7 via `externalscout` | third-party library docs outside the Trackdub corpus |
+| Context7 | third-party library docs outside the Trackdub corpus; verify against live code |
 | `trackdub-docs-rag` / `trackdub-gpu-docs` / `nvidia-cuda-docs` MCP | implementation facts, GPU/TRT-RTX docs, CUDA internals |
 | Linear | **manual only** — see above |
 

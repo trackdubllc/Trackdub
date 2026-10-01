@@ -104,8 +104,8 @@ Two more workflows are planned (`feature-change`, `release-and-pin`) but are **n
 | Release notes, ops docs, CI policy, PR descriptions, commits | **orchestrator** (kept in-house) | `context/standards/`, `context/processes/` |
 | Linear issue read/update | **manual — human** | see Known gaps |
 | Avalonia desktop shell, UI, playback UX, mpv, subtitle pipeline | *out of scope* — use the gated repo system | `../Trackdub-gated/.opencode/` |
-| Third-party library docs (non-Trackdub) | `externalscout` | none — Context7 |
-| Trackdub implementation facts / pin policy / provider wiring | `context-retriever` | `trackdub-docs-rag` MCP; spec `tools/docs-rag/SPEC.md` |
+| Third-party library docs (non-Trackdub) | **orchestrator** | Context7; verify retrieved docs against live code |
+| Trackdub implementation facts / pin policy / provider wiring | **orchestrator** | `trackdub-docs-rag` MCP; spec `tools/docs-rag/SPEC.md` |
 
 ## Context allocation strategy
 

@@ -139,7 +139,7 @@ Do NOT use for:
 
 - **Goal**: Demonstrate the stage actually ran and produced output.
 - **Actor**: subagent `pipeline-inference`
-- **Context to load**: `.opencode/context/processes/adding-pipeline-stage.md`, `.opencode/templates/evidence-report.md`
+- **Context to load**: `.opencode/context/processes/adding-pipeline-stage.md`, `.opencode/context/templates/evidence-report.md`
 - **Actions**:
   1. Run the stage end to end on the fixture. Verify the exact command surface with `dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- --help`.
   2. Drive the pipeline so the stage is genuinely selected, not merely registered.

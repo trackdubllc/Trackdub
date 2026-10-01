@@ -47,7 +47,7 @@ git commit -m "Bump core pin"
 
 Core:
 ```bash
-dotnet build Trackdub.slnx -m:1
+dotnet build external/Trackdub/Trackdub.slnx -m:1
 ```
 
 Gated:

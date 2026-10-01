@@ -133,7 +133,7 @@ From `.mcp.json`:
 | `trackdub-docs-rag` | HTTP + bearer `${DOCS_RAG_TOKEN}` | Trackdub implementation facts, pin policy, provider wiring. Tools `search_trackdub_docs`, `ask_trackdub_docs`, `get_trackdub_doc`. **Disabled by default**; needs the token env var. |
 | `serena` | stdio | symbol-aware code navigation when installed and configured with the REPL interface |
 
-Prefer `trackdub-docs-rag` for Trackdub facts, Context7 (via `externalscout`) for third-party libraries outside the corpus, and live code over both.
+Prefer `trackdub-docs-rag` for Trackdub facts, Context7 for third-party libraries outside the corpus, and live code over both.
 
 ## Related
 

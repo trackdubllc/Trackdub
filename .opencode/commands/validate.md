@@ -7,12 +7,17 @@ Run the Trackdub core CI-equivalent validation gate.
 
 **Scope hint:** `$1` (optional). Examples: `core`, `inference`, `media`, `Application`, a full test project name like `Trackdub.Application.Tests`, or empty for the whole solution. If empty, treat as whole-solution scope.
 
+**Base ref:** `$2` (optional). For a PR, resolve the target base ref from PR metadata when available; otherwise use the supplied ref. Verify it resolves to a commit. If no base ref can be resolved, report committed-branch diff checks as `NOT VERIFIED`; never substitute `HEAD`.
+Set `BASE_REF` to that resolved or supplied ref before running the commands below.
+
 **State at invocation:**
 
 ```
 $ git status --short
 $ git diff --stat HEAD
 ```
+
+When `BASE_REF` is available, verify it with `git rev-parse --verify "$BASE_REF^{commit}"` and inspect `git diff --stat "$BASE_REF"...HEAD`. Changed paths are the union of `git diff --name-only "$BASE_REF"...HEAD` and `git diff --name-only HEAD`. The first includes commits already on the branch; the second includes staged and unstaged worktree changes.
 
 ## Procedure
 
@@ -40,12 +45,14 @@ Four sub-checks. Report each separately:
    ```
    dotnet test tests/Trackdub.Architecture.Tests --no-restore -m:1
    ```
-3. **`BannedSymbols.txt`** — `Path.Combine` is a banned API via `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`BannedSymbols.txt` + `Directory.Build.props`). Currently a **warning**, not an error, because ~337 existing files still use it. New or changed code must not add occurrences. Report the count of `Path.Combine` hits in files touched by this change.
-4. **`Trackdub.Analyzers`** — confirm analyzer diagnostics are active for the touched projects and that no new diagnostic IDs appear in Gate 2 output. Optional corroboration: `python tools/ci/verify-dependency-graph.py`.
+3. **`BannedSymbols.txt`** — `Path.Combine` is a banned API via `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`BannedSymbols.txt` + `Directory.Build.props`). Currently a **warning**, not an error, because ~337 existing files still use it. Inspect `git diff -U0 "$BASE_REF"...HEAD -- '*.cs'` and `git diff -U0 HEAD -- '*.cs'`; any new or modified `Path.Combine` line is a finding.
+4. **`Trackdub.Analyzers`** — confirm analyzer diagnostics are active for the touched projects and that no new diagnostic IDs appear in Gate 2 output.
 
 ### Gate 5 — `packages.lock.json` integrity
 ```
+git diff --name-only "$BASE_REF"...HEAD -- '*packages.lock.json'
 git diff --name-only HEAD -- '*packages.lock.json'
+git diff --check "$BASE_REF"...HEAD -- '*packages.lock.json'
 git diff --check HEAD -- '*packages.lock.json'
 ```
 - A hand-merged lock file is a hard FAIL. `packages.lock.json` must never be conflict-resolved by hand.
@@ -62,10 +69,21 @@ git diff --check HEAD -- '*packages.lock.json'
   ```
 - Portable RID restore graphs must remain intact: `net10.0/{win-x64,win-arm64,linux-x64,linux-arm64,osx-x64,osx-arm64}` in `Trackdub.Contracts`, `Trackdub.Domain`, `Trackdub.Inference`; plus the `net10.0-windows10.0.19041` graphs for `Trackdub.Inference.Onnx`.
 
+### Gate 6 — required CI checks outside the build and test jobs
+
+Run every check below, regardless of the changed files:
+
+1. `dotnet format Trackdub.slnx --verify-no-changes`; with a base ref, use `--include` for the union of committed and worktree changed `*.cs` paths. Without a base ref, format the full solution and report committed-branch checks as `NOT VERIFIED`.
+2. `python3 scripts/ci/check-repository-boundary.py`
+3. `python3 scripts/ci/check-audit-mirrors.py`
+4. `dotnet build src/Trackdub.Benchmarks.DevHost -c Release --no-restore -f net10.0 -m:1`, then `python3 scripts/ci/check_controlled_matrix_cpu_budget.py`
+
+The Windows, Linux, and macOS CI matrix is not proven by a single-host run. Report any platform without CI evidence as `NOT VERIFIED`.
+
 ## Scoping rules
 
-- **Whole-solution scope (default):** run Gates 1–5.
-- **User explicitly scoped to a single test project** (e.g. `/validate Trackdub.Application.Tests`): Gates 1–3 may be narrowed to that project — but you MUST state in the output, verbatim, that the solution-wide Release gate was skipped and why. Gates 4 and 5 still run at solution scope.
+- **Whole-solution scope (default):** run Gates 1–6.
+- **User explicitly scoped to a single test project** (e.g. `/validate Trackdub.Application.Tests`): Gates 1–3 may be narrowed to that project — but you MUST state in the output, verbatim, that the solution-wide Release gate was skipped and why. Gates 4–6 still run at solution scope.
 
 ## Reporting
 
@@ -76,13 +94,18 @@ Emit a table:
 | 1 | restore | `dotnet restore Trackdub.slnx -m:1` | PASS / FAIL / NOT VERIFIED | exit code |
 | 2 | Release build -warnaserror | ... | ... | warning/error count |
 | 3 | Release tests | ... | ... | passed/failed/skipped counts |
-| 4a | dependency direction | `tools/ci/verify-dependency-graph.py` | ... | offending edges |
+| 4a | dependency direction | `DependencyGraphTests` in `tests/Trackdub.Architecture.Tests` | ... | offending edges |
 | 4b | Architecture.Tests | ... | ... | failing test names |
 | 4c | BannedSymbols | ... | ... | new `Path.Combine` count |
 | 4d | Analyzers | ... | ... | new diagnostic IDs |
-| 5 | packages.lock.json integrity | `git diff --name-only HEAD -- '*packages.lock.json'` | ... | conflicting paths |
+| 5 | packages.lock.json integrity | committed and worktree diff commands above | ... | conflicting paths |
+| 6a | Format | `dotnet format Trackdub.slnx --verify-no-changes` | ... | changed C# paths |
+| 6b | Repository boundary | `python3 scripts/ci/check-repository-boundary.py` | ... | output |
+| 6c | Audit mirrors | `python3 scripts/ci/check-audit-mirrors.py` | ... | output |
+| 6d | Controlled-matrix CPU budget | build Benchmarks.DevHost; run `python3 scripts/ci/check_controlled_matrix_cpu_budget.py` | ... | output |
+| 7 | CI platform matrix | Windows, Linux, macOS jobs | ... | CI run or NOT VERIFIED |
 
-**Final verdict line:** `VALIDATION: PASS` or `VALIDATION: FAIL (first failing gate: <N>)`.
+**Final verdict line:** `VALIDATION: PASS`, `VALIDATION: FAIL (first failing gate: <N>)`, or `VALIDATION: NOT VERIFIED (gates: <N...>)`.
 
 ## Rules
 
