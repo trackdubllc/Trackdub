@@ -272,6 +272,19 @@ def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candid
         raise EvalError("corpus has no clips")
     verify_clip_files(corpus, clips)
     work.mkdir(parents=True, exist_ok=True)
+    for clip in clips:
+        clip_id = clip["clip_id"]
+        for stem in ("mixture", "dialogue", "bed"):
+            path = corpus / clip_id / f"{stem}.wav"
+            expected = clip.get("files", {}).get(stem)
+            if expected is None or not path.is_file():
+                raise EvalError(f"{clip_id}: missing manifest hash or file for {stem}")
+            digest = hashlib.sha256()
+            with path.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if digest.hexdigest() != expected:
+                raise EvalError(f"{clip_id}: {stem} hash differs from the corpus manifest")
     jobs, mixtures = prepare_jobs(corpus, work, clips)
     jobs_path, results_path = work / "jobs.jsonl", work / "separator-results.jsonl"
     jobs_path.write_text("".join(json.dumps(j) + "\n" for j in jobs), encoding="utf-8")
