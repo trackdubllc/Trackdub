@@ -316,12 +316,14 @@ ROUNDING_VARIANCE_LSB2 = {"nearest": 1.0 / 12.0, "truncate": 1.0 / 3.0}
 class ReconstructionResult:
     """Hard-gate check that a separator's outputs add back to its input.
 
-    The gate uses the full-band `residual_db` relative to `threshold_db`. Candidate band limits and
-    output precision never relax this hard gate.
+    Without a declared band the gate compares the full-band `residual_db` with `threshold_db`. With a
+    declared band limit it compares `in_band_residual_db` instead; content above the limit is reported
+    as `bandwidth_retained_db` and never gated. Output precision never relaxes the gate.
 
-    residual_db: full-band residual relative to the full-band mixture; this is the gated value.
-    in_band_residual_db: residual inside the declared band, reported as a diagnostic only.
-    effective_threshold_db: the threshold applied to the full-band gate (equal to threshold_db).
+    residual_db: full-band residual relative to the full-band mixture.
+    in_band_residual_db: residual inside the declared band relative to the mixture's energy there; this
+        is the gated value when a band is declared (equal to residual_db otherwise).
+    effective_threshold_db: the threshold applied to the gated residual (equal to threshold_db).
     quantization_allowance_db: estimated rounding noise for `output_bits` output written with
         `output_rounding` ("nearest" or "truncate"), with a 2x margin, relative to the full-band
         mixture. It is a diagnostic only and does not relax the gate.
@@ -418,9 +420,10 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
                          output_bits: int | None = None, output_rounding: str = "nearest") -> ReconstructionResult:
     """Gate: the dialogue and bed outputs must have exactly the mixture's shape and sum back to it.
 
-    Pass/fail always uses the full-band residual against `threshold_db`. A declared `band_limit_hz` only
-    adds in-band diagnostics and `bandwidth_retained_db`; it does not relax the gate. Output precision
-    is reported as `quantization_allowance_db` and also does not relax the gate.
+    Without `band_limit_hz` the full-band residual is compared against `threshold_db`. With it, only the
+    residual below the declared band limit is judged; the energy the separator keeps above the limit is
+    reported as `bandwidth_retained_db` and never changes pass/fail. Output precision only adds the
+    expected output-rounding noise as a diagnostic.
     Never raises for bad separator output; it fails the gate.
     """
     def fail(reasons: list[str]) -> ReconstructionResult:
@@ -479,7 +482,10 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
     effective_db = threshold_db
 
     reasons: list[str] = []
-    if res_e > threshold_energy:
+    if band_limit_hz is not None and mix_in > 0.0:
+        if res_in > mix_in * 10.0 ** (threshold_db / 10.0):
+            reasons.append(f"in-band residual {in_band_db:.1f} dB exceeds gate {effective_db:.1f} dB")
+    elif res_e > threshold_energy:
         reasons.append(f"full-band residual {residual_db:.1f} dB exceeds gate {effective_db:.1f} dB")
     lag = _estimate_lag(mixture, summed, sr) if reasons else None
     if lag:
