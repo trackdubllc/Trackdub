@@ -29,7 +29,7 @@ from scipy import signal
 
 import audiomath as am
 import ingest
-from recipe_data import Layer, Recipe, RECIPES
+from recipe_data import Recipe, RECIPES
 
 GENERATOR_VERSION = "0.1"
 TARGET_LUFS = -23.0
