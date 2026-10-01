@@ -74,6 +74,25 @@ public static class Program
         }
 
         if (args.Length > 0 &&
+            args[0].Equals("separation-eval", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!SeparationEvalOptions.TryParse(args.Skip(1).ToArray(), error, out SeparationEvalOptions separationOptions))
+            {
+                error.WriteLine(SeparationEvalOptions.Usage);
+                return 1;
+            }
+
+            if (separationOptions.ShowHelp)
+            {
+                output.WriteLine(SeparationEvalOptions.Usage);
+                return 0;
+            }
+
+            return await SeparationEvalRunner.RunAsync(separationOptions, output, error, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (args.Length > 0 &&
             args[0].Equals("audio-prep", StringComparison.OrdinalIgnoreCase))
         {
             return await RunAudioPrepAsync(args.Skip(1).ToArray(), output, error, cancellationToken).ConfigureAwait(false);

@@ -1,0 +1,3 @@
+# One JSON object per line. '#' lines are ignored. Verify each item's license at its
+# license_evidence_url before adding it; the values below are placeholders.
+{"id": "example-dialogue-0001", "source": "librivox", "url": "https://example.org/placeholder.wav", "role": "dialogue", "group": "librivox:reader-0001", "license_spdx": "LicenseRef-PublicDomain", "attribution_text": "LibriVox volunteer recording", "license_evidence_url": "https://librivox.org/pages/public-domain/"}

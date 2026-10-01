@@ -308,13 +308,17 @@ Entries mirror `src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.mani
 ### csukuangfj/sherpa-onnx-spleeter-2stems (Spleeter separation)
 
 - name: Sherpa-ONNX Spleeter 2-stem separation (`csukuangfj/sherpa-onnx-spleeter-2stems`)
-- version / revision: `main` (Trackdub manifest pin)
+- version / revision: `3e5a4dd68259675ab0ddc38269fdae1d0c41f20c` (Trackdub manifest pin)
 - source URL: https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems
-- license: MIT
+- file hashes (sha256): `vocals.onnx` `932fff35af1ded8eedc501031bfd6dc12cb0024a3dfa8e2c4537fd0aee9eb149`; `accompaniment.onnx` `79ee6096c9fdac9f6df781fea97035f0ffda48f73441d053b131cf220d8a7d73`
+- license: MIT (upstream Deezer Spleeter model; the HF repository itself ships no license file or model card)
+- upstream notices preserved:
+  - Spleeter: MIT License, Copyright (c) 2019-present, Deezer SA. https://github.com/deezer/spleeter/blob/master/LICENSE
+  - sherpa-onnx (ONNX export and `scripts/spleeter` reference implementation): Apache License 2.0, Copyright Xiaomi Corp. https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE
 - commercial use allowed? yes
-- redistribution allowed? yes
+- redistribution allowed? yes (ONNX conversion is a modification; retain both notices)
 - attribution required? yes
-- notes: Optional vocals/accompaniment separation (`engine_family`: `spleeter`).
+- notes: Optional vocals/accompaniment separation (`engine_family`: `spleeter`). Revision `3e5a4dd` replaced the previously shipped `main` snapshot (`7001ba3`); the weight bytes differ.
 
 ### tonythethompson/sepformer-whamr16k-onnx (SepFormer + overlap speech detection)
 

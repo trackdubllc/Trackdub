@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+"""Score a separation candidate on a generated corpus and write a results JSON.
+
+The candidate runs out of process: this script prepares 44.1 kHz stereo PCM16 inputs (what the
+shipped pipeline feeds Spleeter), writes a jobs file, runs the separator command, then scores the
+outputs with metrics.py. The Spleeter command is `Trackdub.Benchmarks separation-eval`, which drives
+the real engine and records wall time, RTF and peak working set per job.
+
+Two domains are scored, on purpose:
+  * separator domain (44.1 kHz mono, what the engine saw and wrote): the reconstruction gate;
+  * reference domain (clip sample rate, stereo): bed leakage, bed damage, dialogue SI-SDR.
+Stems are resampled back to the clip rate and mono stems are tiled to stereo, so the stereo-to-mono
+collapse and the resampling the pipeline really does are part of what is measured.
+
+    python run_eval.py --corpus D:/corpus-dev --work D:/work --out results.json \
+        --hardware-label "RTX 4090 / 7950X" --provider cpu
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import platform
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+from typing import Callable
+
+import numpy as np
+from scipy.io import wavfile
+
+import audiomath as am
+import metrics
+
+SEPARATOR_SR = 44100
+RESULTS_SCHEMA_VERSION = 1
+LENGTH_TOLERANCE_SAMPLES = 4
+DEFAULT_RUNNER = ["dotnet", "run", "--project", "src/Trackdub.Benchmarks.DevHost", "-f", "net10.0-windows10.0.19041.0", "-c", "Release", "--"]
+
+# (json path into a clip record, higher_is_better)
+TRACKED_METRICS: dict[str, tuple[tuple[str, ...], bool]] = {
+    "bed_leakage_to_bed_db": (("leakage", "leakage_to_bed_db"), False),
+    "bed_dialogue_residual_db": (("leakage", "dialogue_residual_db"), False),
+    "bed_worst_window_leakage_db": (("leakage", "worst_window_leakage_db"), False),
+    "bed_si_sdr_db": (("damage", "si_sdr_db"), True),
+    "bed_si_sdr_inactive_db": (("damage", "si_sdr_inactive_db"), True),
+    "bed_lsd_inactive_db": (("damage", "lsd_inactive_db"), False),
+    "dialogue_si_sdr_db": (("dialogue_si_sdr_db",), True),
+    "reconstruction_residual_db": (("reconstruction", "residual_db"), False),
+    "reconstruction_in_band_residual_db": (("reconstruction", "in_band_residual_db"), False),
+    "bandwidth_retained_db": (("reconstruction", "bandwidth_retained_db"), True),
+}
+
+SeparatorRunner = Callable[[Path, Path], None]
+
+# What each candidate declares about its own output, used by the reconstruction gate. band_limit_hz is
+# the highest frequency it processes (Spleeter keeps bins 0..1023 of a 4096-point STFT at 44.1 kHz =
+# 11025 Hz and zeroes the rest); output_bits is the precision of the stems it writes and output_rounding
+# how WaveAudioWriter reduces to it (Spleeter's writer casts toward zero, which has 4x the noise power
+# of rounding to nearest).
+CANDIDATE_PROFILES: dict[str, dict] = {
+    "spleeter": {"band_limit_hz": 11025.0, "output_bits": 16, "output_rounding": "truncate"},
+}
+
+
+class EvalError(Exception):
+    pass
+
+
+def to_stereo(x: np.ndarray) -> np.ndarray:
+    """Stereo view of a clip: mono is tiled, 5.1 (FL FR FC LFE BL BR) is downmixed, stereo is kept."""
+    if x.shape[1] == 2:
+        return x
+    if x.shape[1] == 1:
+        return np.repeat(x, 2, axis=1)
+    if x.shape[1] == 6:
+        g = 10.0 ** (-3.0 / 20.0)
+        left = x[:, 0] + g * x[:, 2] + g * x[:, 4]
+        right = x[:, 1] + g * x[:, 2] + g * x[:, 5]
+        return np.stack([left, right], axis=1).astype(np.float32)
+    raise EvalError(f"unsupported channel count {x.shape[1]}")
+
+
+def write_pcm16(path: Path, x: np.ndarray, sr: int) -> np.ndarray:
+    """Write PCM16 and return the quantised signal as float, i.e. exactly what the engine will read."""
+    q = np.round(np.clip(x, -1.0, 1.0) * 32767.0).astype(np.int16)
+    wavfile.write(str(path), sr, q)
+    return q.astype(np.float32) / 32768.0
+
+
+def to_reference_domain(est_mono: np.ndarray, n_ref: int, sr_ref: int) -> tuple[np.ndarray, int]:
+    """Resample a 44.1 kHz mono stem to the clip rate and tile to stereo. Returns (stereo, length
+    adjustment in samples). Differences beyond a few samples are an error, not something to hide."""
+    est = am.resample(est_mono, SEPARATOR_SR, sr_ref)
+    adjust = est.shape[0] - n_ref
+    if abs(adjust) > LENGTH_TOLERANCE_SAMPLES:
+        raise EvalError(f"stem length differs from the reference by {adjust} samples after resampling")
+    est = est[:n_ref] if adjust >= 0 else np.concatenate(
+        [est, np.zeros((-adjust, est.shape[1]), dtype=np.float32)], axis=0)
+    return np.repeat(est, 2, axis=1), adjust
+
+
+def prepare_jobs(corpus: Path, work: Path, clips: list[dict]) -> tuple[list[dict], dict[str, np.ndarray]]:
+    jobs, mixtures = [], {}
+    for clip in clips:
+        cid = clip["clip_id"]
+        mix = am.load_audio(corpus / cid / "mixture.wav", channels=clip["channels"], sr=clip["sample_rate"])
+        stereo = am.resample(to_stereo(mix), clip["sample_rate"], SEPARATOR_SR)
+        src = work / "input" / f"{cid}.wav"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        mixtures[cid] = write_pcm16(src, stereo, SEPARATOR_SR)
+        jobs.append({"id": cid, "input": str(src.resolve()),
+                     "vocals_output": str((work / "output" / f"{cid}.vocals.wav").resolve()),
+                     "bed_output": str((work / "output" / f"{cid}.bed.wav").resolve())})
+    return jobs, mixtures
+
+
+def dotnet_runner(runner_cmd: list[str], provider: str | None, model_directory: str | None,
+                  model: str = "spleeter", model_cache_directory: str | None = None) -> SeparatorRunner:
+    def run(jobs_path: Path, results_path: Path) -> None:
+        cmd = [*runner_cmd, "separation-eval", "--jobs", str(jobs_path), "--results", str(results_path),
+               "--model", model]
+        if provider:
+            cmd += ["--provider", provider]
+        if model_directory:
+            cmd += ["--model-directory", model_directory]
+        if model_cache_directory:
+            cmd += ["--model-cache-directory", model_cache_directory]
+        proc = subprocess.run(cmd, check=False)
+        if proc.returncode not in (0, 2):  # 2 = some jobs failed; those are recorded per clip
+            raise EvalError(f"separator command failed with exit code {proc.returncode}")
+    return run
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    if not path.is_file():
+        raise EvalError(f"separator produced no results file at {path}")
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def score_clip(clip: dict, corpus: Path, job: dict, timing: dict, mixture44: np.ndarray,
+               gate: dict | None = None) -> dict:
+    record = {"clip_id": clip["clip_id"], "recipe": clip["recipe"], "variant": clip.get("variant"),
+              "codec": clip.get("codec"), "ok": False, "error": None,
+              "timing": {k: timing.get(k) for k in ("job_index", "wall_ms", "rtf", "audio_seconds",
+                                                     "working_set_before_bytes", "peak_working_set_bytes",
+                                                     "selected_provider")}}
+    if not timing.get("ok"):
+        record["error"] = f"separator failed: {timing.get('error')}"
+        return record
+    try:
+        vocals = am.load_audio(job["vocals_output"], channels=1, sr=SEPARATOR_SR)
+        bed = am.load_audio(job["bed_output"], channels=1, sr=SEPARATOR_SR)
+        record["reconstruction"] = metrics.check_reconstruction(
+            mixture44.mean(axis=1, keepdims=True), vocals, bed, SEPARATOR_SR, **(gate or {})).as_dict()
+
+        sr, n = clip["sample_rate"], None
+        ref_d = to_stereo(am.load_audio(corpus / clip["clip_id"] / "dialogue.wav", clip["channels"], sr))
+        ref_b = to_stereo(am.load_audio(corpus / clip["clip_id"] / "bed.wav", clip["channels"], sr))
+        n = ref_d.shape[0]
+        est_d, adj_d = to_reference_domain(vocals, n, sr)
+        est_b, adj_b = to_reference_domain(bed, n, sr)
+        record["length_adjust_samples"] = {"dialogue": adj_d, "bed": adj_b}
+
+        try:
+            record["leakage"] = metrics.bed_leakage(ref_d, ref_b, est_b, sr).as_dict()
+        except metrics.MetricError as exc:
+            record["leakage"] = {"skipped": str(exc)}
+        try:
+            record["damage"] = metrics.bed_damage(ref_d, ref_b, est_b, sr).as_dict()
+        except metrics.MetricError as exc:
+            record["damage"] = {"skipped": str(exc)}
+        record["dialogue_si_sdr_db"] = metrics.si_sdr(ref_d, est_d)
+        record["ok"] = True
+    except (EvalError, am.AudioError, metrics.MetricError, OSError) as exc:
+        record["error"] = str(exc)
+    return record
+
+
+def _dig(record: dict, path: tuple[str, ...]):
+    for key in path:
+        if not isinstance(record, dict) or key not in record:
+            return None
+        record = record[key]
+    return record if isinstance(record, (int, float)) and not isinstance(record, bool) else None
+
+
+def summarise(values: list[float], higher_is_better: bool) -> dict | None:
+    if not values:
+        return None
+    a = np.array(values, dtype=np.float64)
+    worst_q = 10 if higher_is_better else 90
+    return {"n": len(values), "median": float(np.median(a)), "worst_decile": float(np.percentile(a, worst_q)),
+            "min": float(a.min()), "max": float(a.max())}
+
+
+def aggregate(records: list[dict]) -> dict:
+    scored = [r for r in records if r["ok"]]
+    groups = {"all": scored}
+    for r in scored:
+        groups.setdefault(r["recipe"], []).append(r)
+    per_group = {}
+    for name, rows in sorted(groups.items()):
+        per_group[name] = {
+            "clips": len(rows),
+            "reconstruction_gate_pass": sum(1 for r in rows if r["reconstruction"]["passed"]),
+            "metrics": {m: summarise([v for r in rows if (v := _dig(r, path)) is not None], hib)
+                        for m, (path, hib) in TRACKED_METRICS.items()},
+        }
+    timed = [r["timing"] for r in records if r["timing"].get("wall_ms") is not None]
+    warm = [t["rtf"] for t in timed if t["job_index"] and t.get("rtf") is not None]
+    cold = [t["rtf"] for t in timed if t["job_index"] == 0 and t.get("rtf") is not None]
+    peaks = [t["peak_working_set_bytes"] for t in timed if t.get("peak_working_set_bytes") is not None]
+    return {
+        "clips_total": len(records), "clips_scored": len(scored),
+        "clips_failed": [{"clip_id": r["clip_id"], "error": r["error"]} for r in records if not r["ok"]],
+        "strata": per_group,
+        "resources": {
+            "rtf_cold_first_job": cold[0] if cold else None,
+            "rtf_warm_median": float(np.median(warm)) if warm else None,
+            "rtf_warm_p95": float(np.percentile(warm, 95)) if warm else None,
+            "peak_working_set_bytes_max": max(peaks) if peaks else None,
+            "selected_providers": sorted({t["selected_provider"] for t in timed if t.get("selected_provider")}),
+        },
+    }
+
+
+def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candidate: str, provider: str | None,
+             hardware_label: str, clip_limit: int | None = None, gate: dict | None = None) -> dict:
+    manifest_path = corpus / "corpus.manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    clips = manifest["clips"][:clip_limit] if clip_limit else manifest["clips"]
+    if not clips:
+        raise EvalError("corpus has no clips")
+    work.mkdir(parents=True, exist_ok=True)
+    jobs, mixtures = prepare_jobs(corpus, work, clips)
+    jobs_path, results_path = work / "jobs.jsonl", work / "separator-results.jsonl"
+    jobs_path.write_text("".join(json.dumps(j) + "\n" for j in jobs), encoding="utf-8")
+    results_path.unlink(missing_ok=True)
+    run_separator(jobs_path, results_path)
+
+    timings = {t["id"]: t for t in read_jsonl(results_path)}
+    by_id = {j["id"]: j for j in jobs}
+    records = []
+    for clip in clips:
+        cid = clip["clip_id"]
+        if cid not in timings:
+            records.append({"clip_id": cid, "recipe": clip["recipe"], "variant": clip.get("variant"),
+                            "codec": clip.get("codec"), "ok": False, "error": "no result from separator",
+                            "timing": {}})
+            continue
+        records.append(score_clip(clip, corpus, by_id[cid], timings[cid], mixtures[cid], gate))
+
+    return {
+        "results_schema_version": RESULTS_SCHEMA_VERSION,
+        "candidate": candidate,
+        "provider_requested": provider,
+        "hardware_label": hardware_label,
+        "gate_config": {"threshold_db": metrics.RECONSTRUCTION_GATE_DB, **(gate or {})},
+        "host": {"platform": platform.platform(), "python": sys.version.split()[0]},
+        "corpus": {"manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                   "items_sha256": manifest.get("items_sha256"), "split": manifest.get("split"),
+                   "seed": manifest.get("seed"), "generator_version": manifest.get("generator_version")},
+        "summary": aggregate(records),
+        "clips": records,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--corpus", type=Path, required=True, help="directory with corpus.manifest.json (from mixgen.py)")
+    p.add_argument("--work", type=Path, required=True, help="scratch directory for inputs and stems")
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--hardware-label", required=True, help="free-text machine description recorded in the results")
+    p.add_argument("--provider", help="execution provider to pin (e.g. cpu, directml, tensorrtrtx)")
+    p.add_argument("--model-directory", help="model root passed to the separator")
+    p.add_argument("--model-cache-directory", help="machine-local model cache root holding the pinned weights and model-cache-records.json")
+    p.add_argument("--runner", default=" ".join(DEFAULT_RUNNER),
+                   help="command prefix for Trackdub.Benchmarks, as one quoted string")
+    p.add_argument("--band-limit-hz", type=float, help="override the candidate profile's declared processing band")
+    p.add_argument("--output-bits", type=int, help="override the candidate profile's stem precision")
+    p.add_argument("--output-rounding", choices=("nearest", "truncate"), help="override the profile's stem rounding")
+    p.add_argument("--limit", type=int, help="score only the first N clips (development)")
+    args = p.parse_args(argv)
+    gate = dict(CANDIDATE_PROFILES["spleeter"])
+    if args.band_limit_hz is not None:
+        gate["band_limit_hz"] = args.band_limit_hz
+    if args.output_bits is not None:
+        gate["output_bits"] = args.output_bits
+    if args.output_rounding is not None:
+        gate["output_rounding"] = args.output_rounding
+    try:
+        result = evaluate(args.corpus, args.work, dotnet_runner(shlex.split(args.runner), args.provider, args.model_directory,
+                                                      model_cache_directory=args.model_cache_directory),
+                          candidate="spleeter", provider=args.provider, hardware_label=args.hardware_label,
+                          clip_limit=args.limit, gate=gate)
+    except EvalError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    s = result["summary"]
+    print(f"scored {s['clips_scored']}/{s['clips_total']} clips; results in {args.out}")
+    return 0 if not s["clips_failed"] else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

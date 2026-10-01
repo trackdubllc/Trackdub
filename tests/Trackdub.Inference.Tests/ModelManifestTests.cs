@@ -1694,7 +1694,7 @@ public sealed class ModelManifestLoaderTests
             manifest.EngineFamily.Equals("spleeter", StringComparison.Ordinal) &&
             manifest.Capabilities.Contains("speech-music-sfx-separation", StringComparer.OrdinalIgnoreCase) &&
             string.Equals(manifest.SourceUrl, "https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems", StringComparison.Ordinal) &&
-            string.Equals(manifest.Revision, "main", StringComparison.Ordinal) &&
+            string.Equals(manifest.Revision, "3e5a4dd68259675ab0ddc38269fdae1d0c41f20c", StringComparison.Ordinal) &&
             string.Equals(manifest.BenchmarkEntry, "vocals.onnx", StringComparison.Ordinal) &&
             manifest.DownloadFiles.Contains("vocals.onnx", StringComparer.OrdinalIgnoreCase) &&
             manifest.DownloadFiles.Contains("accompaniment.onnx", StringComparer.OrdinalIgnoreCase) &&
@@ -1702,7 +1702,7 @@ public sealed class ModelManifestLoaderTests
             manifest.License is ModelLicenseKind.Mit &&
             manifest.CommercialAllowed &&
             manifest.CommercialSafeMode &&
-            string.Equals(manifest.Sha256, "bdc16ab6bf6117ddd4842c19e80e40e2be188fc555295064d424616b0224ac97", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(manifest.Sha256, "932fff35af1ded8eedc501031bfd6dc12cb0024a3dfa8e2c4537fd0aee9eb149", StringComparison.OrdinalIgnoreCase) &&
             manifest.Aliases.Contains("spleeter", StringComparer.OrdinalIgnoreCase) &&
             !manifest.Aliases.Contains("spleeter-2stems", StringComparer.OrdinalIgnoreCase));
         Assert.DoesNotContain(catalog.Models, manifest =>

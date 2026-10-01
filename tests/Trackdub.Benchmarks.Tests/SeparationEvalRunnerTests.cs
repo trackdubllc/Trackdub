@@ -1,0 +1,168 @@
+using System.Text.Json;
+using Trackdub.Benchmarks;
+using Trackdub.Contracts.Benchmarking;
+using Trackdub.Contracts.Pipeline;
+using Trackdub.Inference.Onnx.Runtime.Routing;
+using Trackdub.Inference.Runtime.Planning;
+
+namespace Trackdub.Benchmarks.Tests;
+
+public sealed class SeparationEvalRunnerTests
+{
+    [Fact]
+    public void ReadJobs_ParsesSnakeCaseLinesAndSkipsCommentsAndBlanks()
+    {
+        using var reader = new StringReader("""
+            # comment
+
+            {"id":"a1","input":"in.wav","vocals_output":"v.wav","bed_output":"b.wav"}
+            """);
+
+        SeparationEvalJob job = Assert.Single(SeparationEvalRunner.ReadJobs(reader));
+
+        Assert.Equal(new SeparationEvalJob("a1", "in.wav", "v.wav", "b.wav"), job);
+    }
+
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("""{"id":"a","input":"x"}""")]
+    [InlineData("""{"id":" ","input":"x","vocals_output":"v","bed_output":"b"}""")]
+    public void ReadJobs_RejectsMalformedLines(string line)
+    {
+        Assert.Throws<InvalidDataException>(() => SeparationEvalRunner.ReadJobs(new StringReader(line)));
+    }
+
+    [Fact]
+    public void ReadJobs_RejectsDuplicateIds()
+    {
+        const string line = """{"id":"a","input":"x","vocals_output":"v","bed_output":"b"}""";
+        Assert.Throws<InvalidDataException>(
+            () => SeparationEvalRunner.ReadJobs(new StringReader(line + "\n" + line)));
+    }
+
+    [Fact]
+    public void TryParse_AcceptsRequiredAndOptionalArguments()
+    {
+        bool ok = SeparationEvalOptions.TryParse(
+            ["--jobs", "j.jsonl", "--results", "r.jsonl", "--provider", "cpu", "--model-directory", "m", "--model-cache-directory", "c"],
+            TextWriter.Null, out SeparationEvalOptions options);
+
+        Assert.True(ok);
+        Assert.Equal("j.jsonl", options.JobsPath);
+        Assert.Equal("cpu", options.Provider);
+        Assert.Equal("spleeter", options.Model);
+        Assert.Equal("m", options.ModelDirectory);
+        Assert.Equal("c", options.ModelCacheDirectory);
+    }
+
+    [Theory]
+    [InlineData("--jobs", "j.jsonl")]
+    [InlineData("--jobs", "j", "--results", "r", "--provider", "warp-drive")]
+    [InlineData("--jobs", "j", "--results", "r", "--bogus", "x")]
+    [InlineData("--jobs")]
+    public void TryParse_RejectsBadArguments(params string[] args)
+    {
+        var error = new StringWriter();
+
+        Assert.False(SeparationEvalOptions.TryParse(args, error, out _));
+        Assert.NotEmpty(error.ToString());
+    }
+
+    [Fact]
+    public async Task RunJobsAsync_RecordsTimingMemoryAndProviderPerJobAndContinuesAfterFailure()
+    {
+        var engine = new FakeEngine { FailOn = "b.wav" };
+        var sampler = new SequenceSampler(100, 150, 120, 120, 130, 140);
+        var jobs = new[]
+        {
+            new SeparationEvalJob("ok1", "a.wav", Out("v1"), Out("b1")),
+            new SeparationEvalJob("bad", "b.wav", Out("v2"), Out("b2")),
+            new SeparationEvalJob("ok2", "c.wav", Out("v3"), Out("b3")),
+        };
+        var lines = new StringWriter();
+
+        IReadOnlyList<SeparationEvalResult> results = await SeparationEvalRunner.RunJobsAsync(
+            jobs, engine, sampler, "spleeter", "cpu", lines, CancellationToken.None);
+
+        Assert.Equal([true, false, true], results.Select(r => r.Ok));
+        Assert.Equal([0, 1, 2], results.Select(r => r.JobIndex));
+        Assert.Equal("boom", results[1].Error);
+        Assert.Equal(12.0, results[0].AudioSeconds);
+        Assert.True(results[0].Rtf > 0);
+        Assert.Equal("Cpu", results[0].SelectedProvider);
+        Assert.All(results.Where(r => r.Ok), r => Assert.True(r.PeakWorkingSetBytes >= r.WorkingSetBeforeBytes));
+        Assert.Equal("cpu", engine.Requests[0].PreferredExecutionProvider);
+        Assert.True(engine.Requests[0].RequirePreferredExecutionProvider);
+        Assert.Equal("spleeter", engine.Requests[0].PreferredModelAlias);
+
+        string[] written = lines.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(3, written.Length);
+        using JsonDocument first = JsonDocument.Parse(written[0]);
+        Assert.Equal("ok1", first.RootElement.GetProperty("id").GetString());
+        Assert.True(first.RootElement.TryGetProperty("wall_ms", out _));
+        Assert.True(first.RootElement.TryGetProperty("peak_working_set_bytes", out _));
+    }
+
+    [Fact]
+    public async Task RunJobsAsync_WithoutProviderDoesNotRequireOne()
+    {
+        var engine = new FakeEngine();
+
+        await SeparationEvalRunner.RunJobsAsync(
+            [new SeparationEvalJob("x", "a.wav", Out("v"), Out("b"))],
+            engine, new SequenceSampler(1), "spleeter", provider: null, TextWriter.Null, CancellationToken.None);
+
+        Assert.False(engine.Requests[0].RequirePreferredExecutionProvider);
+        Assert.Null(engine.Requests[0].PreferredExecutionProvider);
+    }
+
+    [Fact]
+    public async Task RunJobsAsync_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => SeparationEvalRunner.RunJobsAsync(
+            [new SeparationEvalJob("x", "a.wav", Out("v"), Out("b"))],
+            new FakeEngine(), new SequenceSampler(1), "spleeter", null, TextWriter.Null, cts.Token));
+    }
+
+    private static string Out(string name) =>
+        Path.Join(Path.GetTempPath(), "trackdub-separation-eval-tests", name + ".wav");
+
+    private sealed class SequenceSampler(params long[] values) : IWorkingSetSampler
+    {
+        private int next;
+
+        public long CaptureWorkingSetBytes() => values[Math.Min(next++, values.Length - 1)];
+    }
+
+    private sealed class FakeEngine : IStemSeparationEngineAdapter, IStageRuntimeExecutionReporter
+    {
+        public string? FailOn { get; init; }
+
+        public List<StemSeparationRequest> Requests { get; } = [];
+
+        public string EngineFamily => "spleeter";
+
+        public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
+
+        public Task<StemSeparationResult> SeparateAsync(
+            StemSeparationRequest request, IProgress<StemSeparationProgress>? progress, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Requests.Add(request);
+            if (FailOn is not null && string.Equals(request.SourceAudioPath, FailOn, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("boom");
+            }
+
+            LastExecutionSummary = new StageRuntimeExecutionSummary("Cpu", "Cpu");
+            return Task.FromResult(new StemSeparationResult(12.0, 44100, 1));
+        }
+
+        public Task<StemSeparationResult> SeparateAsync(
+            StemSeparationRequest request, StageRuntimePlan plan, IProgress<StemSeparationProgress>? progress,
+            CancellationToken cancellationToken) => SeparateAsync(request, progress, cancellationToken);
+    }
+}

@@ -1265,11 +1265,11 @@ public sealed class RuntimePlannerTests
         Assert.Contains("speech-music-sfx-separation", entry.Capabilities);
         Assert.True(entry.RequiresAttribution);
         Assert.Equal("https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems", entry.SourceUrl);
-        Assert.Equal("main", entry.Revision);
+        Assert.Equal("3e5a4dd68259675ab0ddc38269fdae1d0c41f20c", entry.Revision);
         Assert.Contains("spleeter", entry.Aliases);
         Assert.DoesNotContain("spleeter-2stems", entry.Aliases);
         Assert.Equal(
-            "https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems/resolve/main/vocals.onnx",
+            "https://huggingface.co/csukuangfj/sherpa-onnx-spleeter-2stems/resolve/3e5a4dd68259675ab0ddc38269fdae1d0c41f20c/vocals.onnx",
             entry.DownloadFileSources["vocals.onnx"]);
         Assert.Equal(
             "vocals.onnx",

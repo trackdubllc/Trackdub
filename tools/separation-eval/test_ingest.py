@@ -1,0 +1,260 @@
+import json
+import struct
+import tempfile
+import unittest
+import wave
+from pathlib import Path
+
+import ingest
+
+
+def write_wav(path: Path, seconds: float = 0.5, rate: int = 16000, tone: int = 1) -> None:
+    n = int(seconds * rate)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"".join(struct.pack("<h", (i * tone) % 2000) for i in range(n)))
+
+
+def rec(item_id="dlg-0001", **over):
+    base = {
+        "id": item_id, "source": "librivox", "url": "https://example.org/a.wav",
+        "role": "dialogue", "group": "librivox:r1", "license_spdx": "CC0-1.0",
+        "attribution_text": "x",
+    }
+    base.update(over)
+    return base
+
+
+def fetcher(tone_by_url=None):
+    def fetch(url, dest, range_bytes=None):
+        write_wav(dest, tone=(tone_by_url or {}).get(url, 1))
+    return fetch
+
+
+class LicenseTests(unittest.TestCase):
+    def test_allowed(self):
+        self.assertIsNone(ingest.check_license("CC-BY-4.0", False))
+
+    def test_noncommercial_and_noderivs_rejected(self):
+        for spdx in ("CC-BY-NC-4.0", "CC-BY-ND-4.0", "CC-BY-NC-SA-4.0"):
+            self.assertIn("noncommercial", ingest.check_license(spdx, True))
+
+    def test_unknown_rejected(self):
+        self.assertIn("allow-list", ingest.check_license("Proprietary", True))
+
+    def test_sharealike_needs_flag(self):
+        self.assertIn("share-alike", ingest.check_license("CC-BY-SA-4.0", False))
+        self.assertIsNone(ingest.check_license("CC-BY-SA-4.0", True))
+
+
+class IngestTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_ingest(self, records, **kw):
+        return ingest.ingest_items(records, self.cache, fetch=kw.pop("fetch", fetcher()), **kw)
+
+    def test_accepts_and_records_fields(self):
+        items, rejected = self.run_ingest([rec()])
+        self.assertEqual(rejected, [])
+        self.assertEqual(items[0]["sample_rate"], 16000)
+        self.assertEqual(items[0]["channels"], 1)
+        self.assertTrue(items[0]["excluded_from_training"])
+        self.assertEqual(len(items[0]["sha256"]), 64)
+
+    def test_rejects_bad_records(self):
+        bad = [rec("Bad_ID"), rec("dlg-0002", url="http://x/a.wav"), rec("dlg-0003", role="vocals"),
+               rec("dlg-0004", license_spdx="CC-BY-NC-4.0"), rec("dlg-0005", group="")]
+        items, rejected = self.run_ingest(bad)
+        self.assertEqual(items, [])
+        self.assertEqual(len(rejected), 5)
+
+    def test_hash_mismatch_rejected(self):
+        items, rejected = self.run_ingest([rec(sha256="0" * 64)])
+        self.assertEqual(items, [])
+        self.assertIn("sha256 mismatch", rejected[0].reason)
+
+    def test_duplicate_bytes_and_ids_rejected(self):
+        items, rejected = self.run_ingest([rec("dlg-0001"), rec("dlg-0002"), rec("dlg-0001")])
+        self.assertEqual([i["id"] for i in items], ["dlg-0001"])
+        self.assertEqual(len(rejected), 2)
+
+    def test_download_failure_is_per_item(self):
+        def boom(url, dest, range_bytes=None):
+            raise OSError("offline")
+        items, rejected = self.run_ingest([rec()], fetch=boom)
+        self.assertEqual(items, [])
+        self.assertIn("download failed", rejected[0].reason)
+
+    def test_split_is_group_level_and_deterministic(self):
+        self.assertEqual(ingest.assign_split("g1"), ingest.assign_split("g1"))
+        splits = {ingest.assign_split(f"group-{i}") for i in range(200)}
+        self.assertEqual(splits, {"dev", "test"})
+
+    def test_same_group_same_split(self):
+        urls = {"https://example.org/b.wav": 2}
+        items, _ = self.run_ingest(
+            [rec("dlg-0001"), rec("dlg-0002", url="https://example.org/b.wav")],
+            fetch=fetcher(urls))
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["split"], items[1]["split"])
+
+
+class RangeTests(unittest.TestCase):
+    def test_range_bytes_is_passed_to_the_fetcher_and_kept_in_the_manifest(self):
+        seen = []
+
+        def fetch(url, dest, range_bytes=None):
+            seen.append(range_bytes)
+            write_wav(dest)
+
+        with tempfile.TemporaryDirectory() as td:
+            items, rejected = ingest.ingest_items([rec(range_bytes=3000000, tags=["Loud"], tag_basis="search-query",
+                                                       title="t", creator="c")], Path(td), fetch=fetch)
+        self.assertEqual(rejected, [])
+        self.assertEqual(seen, [3000000])
+        self.assertEqual(items[0]["range_bytes"], 3000000)
+        self.assertEqual(items[0]["tags"], ["loud"])
+        self.assertEqual(items[0]["tag_basis"], "search-query")
+
+    def test_bad_range_bytes_rejected(self):
+        for bad in (10, "100000", True, 1.5):
+            self.assertIn("range_bytes", ingest.validate_record(rec(range_bytes=bad), False))
+
+    def test_http_fetch_truncates_to_the_range_even_if_the_server_ignores_it(self):
+        import http.server, threading
+        payload = bytes(range(256)) * 40
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *a):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                dest = Path(td) / "a.bin"
+                ingest.http_fetch(f"http://127.0.0.1:{server.server_port}/a", dest, range_bytes=2048)
+                self.assertEqual(dest.read_bytes(), payload[:2048])
+                ingest.http_fetch(f"http://127.0.0.1:{server.server_port}/a", dest)
+                self.assertEqual(dest.read_bytes(), payload)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
+class ParallelTests(unittest.TestCase):
+    def records(self, n, hosts=("a.example", "b.example")):
+        return [rec(f"dlg-{i:04d}", url=f"https://{hosts[i % len(hosts)]}/{i}.wav", group=f"g{i}") for i in range(n)]
+
+    @staticmethod
+    def tone_for(url):
+        return int(url.rsplit("/", 1)[1].split(".")[0]) + 1
+
+    def run_parallel(self, records, fetch, **kw):
+        with tempfile.TemporaryDirectory() as td:
+            return ingest.ingest_items(records, Path(td), fetch=fetch, **kw)
+
+    def tracking_fetch(self, delay=0.05):
+        import threading
+        import time
+        lock, active, peak = threading.Lock(), [0], [0]
+
+        def fetch(url, dest, range_bytes=None):
+            with lock:
+                active[0] += 1
+                peak[0] = max(peak[0], active[0])
+            time.sleep(delay)
+            write_wav(dest, tone=self.tone_for(url))
+            with lock:
+                active[0] -= 1
+        return fetch, peak
+
+    def test_results_match_the_sequential_run_and_are_ordered(self):
+        def fetch(url, dest, range_bytes=None):
+            write_wav(dest, tone=self.tone_for(url))
+        seq, _ = self.run_parallel(self.records(12), fetch, workers=1)
+        par, _ = self.run_parallel(self.records(12), fetch, workers=6)
+        self.assertEqual(seq, par)
+        self.assertEqual([i["id"] for i in par], sorted(i["id"] for i in par))
+
+    def test_actually_runs_downloads_concurrently(self):
+        fetch, peak = self.tracking_fetch()
+        self.run_parallel(self.records(12), fetch, workers=6, per_host=3)
+        self.assertGreater(peak[0], 1)
+        self.assertLessEqual(peak[0], 6)
+
+    def test_per_host_limit_is_respected(self):
+        fetch, peak = self.tracking_fetch()
+        self.run_parallel(self.records(8, hosts=("only.example",)), fetch, workers=8, per_host=2)
+        self.assertLessEqual(peak[0], 2)
+
+    def test_one_failure_does_not_stop_the_others_and_progress_is_reported(self):
+        seen = []
+
+        def fetch(url, dest, range_bytes=None):
+            if "/3." in url:
+                raise OSError("reset")
+            write_wav(dest, tone=self.tone_for(url))
+        items, rejected = self.run_parallel(self.records(6), fetch, workers=4,
+                                            progress=lambda d, t, i: seen.append((d, t)))
+        self.assertEqual(len(items), 5)
+        self.assertEqual([r.item_id for r in rejected], ["dlg-0003"])
+        self.assertIn("download failed", rejected[0].reason)
+        self.assertEqual(sorted(seen), [(i, 6) for i in range(1, 7)])
+
+    def test_cached_files_are_not_fetched_again(self):
+        calls = []
+
+        def fetch(url, dest, range_bytes=None):
+            calls.append(url)
+            write_wav(dest, tone=self.tone_for(url))
+        with tempfile.TemporaryDirectory() as td:
+            ingest.ingest_items(self.records(5), Path(td), fetch=fetch, workers=3)
+            first = len(calls)
+            ingest.ingest_items(self.records(5), Path(td), fetch=fetch, workers=3)
+        self.assertEqual(first, 5)
+        self.assertEqual(len(calls), 5)
+
+
+class VerifyTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cache = Path(self.tmp.name)
+        items, _ = ingest.ingest_items([rec()], self.cache, fetch=fetcher())
+        self.manifest = ingest.build_manifest(items)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_clean_manifest_verifies(self):
+        self.assertEqual(ingest.verify_manifest(self.manifest, self.cache), [])
+
+    def test_edited_manifest_detected(self):
+        m = json.loads(json.dumps(self.manifest))
+        m["items"][0]["attribution_text"] = "changed"
+        self.assertTrue(any("edited" in p for p in ingest.verify_manifest(m, self.cache)))
+
+    def test_corrupted_cache_detected(self):
+        ingest.cache_path(self.cache, rec()).write_bytes(b"corrupt")
+        self.assertTrue(any("hash differs" in p for p in ingest.verify_manifest(self.manifest, self.cache)))
+
+    def test_missing_cache_detected(self):
+        ingest.cache_path(self.cache, rec()).unlink()
+        self.assertTrue(any("missing" in p for p in ingest.verify_manifest(self.manifest, self.cache)))
+
+
+if __name__ == "__main__":
+    unittest.main()

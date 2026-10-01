@@ -51,16 +51,12 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
             using SpleeterStftBlock block = stftProcessor.ForwardBlock(
                 request.Left, request.Right, split * SpleeterModelConstants.TimePad,
                 SpleeterModelConstants.TimePad);
-            var inputTensor = new DenseTensor<float>(
-                block.Magnitudes,
-                [2, 1, SpleeterModelConstants.TimePad, SpleeterModelConstants.MaxFreqBins]);
-
             StemMaskResult vocalsResult = await RunStemMaskAsync(
                 "spleeter-vocals",
                 vocalsModelPath,
                 provider,
                 allowTrtInitFallback,
-                inputTensor,
+                block.Magnitudes,
                 cancellationToken).ConfigureAwait(false);
             if (selectedProvider is null)
             {
@@ -81,7 +77,7 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
                 accModelPath,
                 provider,
                 allowTrtInitFallback,
-                inputTensor,
+                block.Magnitudes,
                 cancellationToken).ConfigureAwait(false);
             EnsureConsistentProvider(selectedProvider, accResult.SelectedProvider);
 
@@ -135,7 +131,7 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
         string modelPath,
         ExecutionProviderKind provider,
         bool allowTrtInitFallback,
-        DenseTensor<float> inputTensor,
+        Memory<float> magnitudes,
         CancellationToken cancellationToken)
     {
         using OnnxExecutionSessionFactory.SingleSessionLease sessionLease = await OnnxExecutionSessionFactory
@@ -150,6 +146,9 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
         // Bind by the model's actual input name: the sherpa-onnx spleeter export names its
         // input "x", not "input". Read it from session metadata so any single-input variant works.
         string inputName = ResolveSingleInputName(sessionLease.Session);
+        var inputTensor = new DenseTensor<float>(
+            magnitudes,
+            ResolveBlockDimensions(sessionLease.Session.InputMetadata[inputName].Dimensions));
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs = sessionLease.Session.RunWithRetry(
             [NamedOnnxValue.CreateFromTensor(inputName, inputTensor)],
             cancellationToken: cancellationToken);
@@ -159,6 +158,40 @@ internal sealed class SpleeterOnnxSeparator : ISpleeterSeparator
             sessionLease.SelectedProvider,
             sessionLease.BootstrapDetail);
     }
+
+    /// <summary>
+    /// Dimensions for one 512-frame block. The block holds two channels and a single split, so its
+    /// memory is identical whichever way the export orders them: the original sherpa-onnx export
+    /// declares [2, num_splits, 512, 1024], the later one [num_splits, 2, 512, 1024]. The dynamic
+    /// axis tells them apart.
+    /// </summary>
+    internal static int[] ResolveBlockDimensions(IReadOnlyList<int> modelDimensions)
+    {
+        ArgumentNullException.ThrowIfNull(modelDimensions);
+        string declared = $"[{string.Join(", ", modelDimensions)}]";
+        if (modelDimensions.Count != 4
+            || !IsFixedOrDynamic(modelDimensions[2], SpleeterModelConstants.TimePad)
+            || !IsFixedOrDynamic(modelDimensions[3], SpleeterModelConstants.MaxFreqBins))
+        {
+            throw new InvalidOperationException(
+                $"Spleeter ONNX input must be 4-D with trailing dimensions "
+                + $"[{SpleeterModelConstants.TimePad}, {SpleeterModelConstants.MaxFreqBins}], but declares {declared}.");
+        }
+
+        bool splitsFirst = modelDimensions[1] == 2 && modelDimensions[0] != 2;
+        bool channelsFirst = modelDimensions[0] == 2 && modelDimensions[1] != 2;
+        if (splitsFirst == channelsFirst)
+        {
+            throw new InvalidOperationException(
+                $"Cannot tell the channel axis from the split axis in Spleeter ONNX input {declared}.");
+        }
+
+        return splitsFirst
+            ? [1, 2, SpleeterModelConstants.TimePad, SpleeterModelConstants.MaxFreqBins]
+            : [2, 1, SpleeterModelConstants.TimePad, SpleeterModelConstants.MaxFreqBins];
+    }
+
+    private static bool IsFixedOrDynamic(int dimension, int expected) => dimension <= 0 || dimension == expected;
 
     private static string ResolveSingleInputName(InferenceSession session)
     {
