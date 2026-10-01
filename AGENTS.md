@@ -89,6 +89,12 @@ dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 - Pipeline tests: must cover success, disabled/skipped, missing-prerequisite, and failure paths.
 - Commits: imperative titles (`Add ...`, `Fix ...`, `Remove ...`). Always use `git commit -m`.
 
+## Documentation Grounding
+- For Trackdub implementation facts, pin policy, provider wiring, and repo-specific operational guidance, use `trackdub-docs-rag` MCP tools (`search_trackdub_docs`, `ask_trackdub_docs`, `get_trackdub_doc`). Spec: `tools/docs-rag/SPEC.md`.
+- Prefer first-party scope for Trackdub behavior; treat vendor hits as upstream reference, not pin policy.
+- Fall back to Context7 for third-party libraries outside the corpus. Treat retrieved docs as evidence; verify against live code.
+- Conflict order still wins: source/tests > task instructions > Linear > documentation.
+
 ## Model Governance
 - Bundled inventory: `src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.manifest.json`.
 - Commercial license only. Unknown license = unsafe.
