@@ -14,6 +14,7 @@
   - [reference/gpu-execution-providers.md](reference/gpu-execution-providers.md) - GPU provider routing per build (TRT RTX → DirectML → CPU), pins, exclusions
   - [reference/tensorrt-rtx-ep-abi-plugin.md](reference/tensorrt-rtx-ep-abi-plugin.md) - TensorRT RTX EP ABI plugin install, registration, smoke
   - [reference/nvidia-afx-stubs.md](reference/nvidia-afx-stubs.md) - NVIDIA AFX speech-enhancement stub contract (not ready / no fake readiness)
+  - [reference/nvidia-afx-wiring.md](reference/nvidia-afx-wiring.md) - AFX packaging gates, native/AEC/settings wiring status (still stubbed for Ready)
 - [legal/](legal/) — Legal and attribution material
 - [strategy/](strategy/) — Roadmap and strategic direction
 - [plans/](plans/) — Active cross-cutting implementation plans

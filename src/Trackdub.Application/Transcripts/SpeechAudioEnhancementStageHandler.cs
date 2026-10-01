@@ -14,6 +14,7 @@ public sealed class SpeechAudioEnhancementStageHandler(
     IFileFingerprintService fileFingerprintService,
     IMediaAssetRepository mediaAssetRepository,
     IProjectStageRunStore stageRunStore,
+    IStudioSettingsService? studioSettingsService = null,
     IApplicationLogger? logger = null,
     PipelineDegradationWriter? degradationWriter = null)
 {
@@ -38,11 +39,15 @@ public sealed class SpeechAudioEnhancementStageHandler(
 
         try
         {
+            SpeechAudioEnhancementOptions options = await ResolveOptionsAsync(request, cancellationToken)
+                .ConfigureAwait(false);
+
             SpeechAudioEnhancementResult result = await speechAudioEnhancementService
                 .EnhanceAsync(
                     new SpeechAudioEnhancementRequest(
                         artifactStore.GetPath(request.SourceAudioArtifact.RelativePath),
-                        enhancedHandle.TemporaryPath),
+                        enhancedHandle.TemporaryPath,
+                        options),
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -113,6 +118,45 @@ public sealed class SpeechAudioEnhancementStageHandler(
         }
     }
 
+    private async Task<SpeechAudioEnhancementOptions> ResolveOptionsAsync(
+        SpeechAudioEnhancementStageRequest request,
+        CancellationToken cancellationToken)
+    {
+        SpeechAudioEnhancementOptions options;
+        if (request.Options is not null)
+        {
+            options = request.Options;
+        }
+        else if (studioSettingsService is not null)
+        {
+            try
+            {
+                StudioSettings settings = await studioSettingsService.LoadAsync(cancellationToken).ConfigureAwait(false);
+                options = SpeechAudioEnhancementOptions.FromStudioSettings(settings);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not TaskCanceledException)
+            {
+                // Settings are optional for the live DeepFilterNet path. Never fail the stage
+                // because AFX preference loading broke.
+                logger?.LogWarning(
+                    "Failed to load studio settings for speech enhancement options; using defaults.",
+                    ex);
+                options = SpeechAudioEnhancementOptions.Default;
+            }
+        }
+        else
+        {
+            options = SpeechAudioEnhancementOptions.Default;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.FarEndReferenceAudioPath))
+        {
+            options = options with { FarEndReferenceAudioPath = request.FarEndReferenceAudioPath };
+        }
+
+        return options;
+    }
+
     private static ProjectArtifact CreateArtifact(
         SpeechAudioEnhancementStageRequest request,
         StageRunRecord stageRun,
@@ -168,7 +212,9 @@ public sealed record SpeechAudioEnhancementStageRequest(
     Guid ProjectId,
     MediaAsset MediaAsset,
     ProjectArtifact SourceAudioArtifact,
-    IReadOnlyList<ProjectArtifact> ExistingArtifacts);
+    IReadOnlyList<ProjectArtifact> ExistingArtifacts,
+    SpeechAudioEnhancementOptions? Options = null,
+    string? FarEndReferenceAudioPath = null);
 
 public sealed record SpeechAudioEnhancementStageResult(
     StageRunRecord StageRun,
