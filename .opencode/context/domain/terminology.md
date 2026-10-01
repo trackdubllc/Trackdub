@@ -26,7 +26,7 @@ Canonical constants live in `src/Trackdub.Domain/StageRuns/StageNames.cs`. **Eve
 | `SpeechEnhancement` | `speech-enhancement` | denoise/enhance; degrades in place to FFmpeg/AFX |
 | `SpeakerAssignment` | `speaker-assignment` | speaker-to-voice binding |
 
-Also defined but not in the runner orders: `StageNames.SpeechEnhancement`, `StageNames.PreviewMix`.
+Also defined but not in the runner orders: `StageNames.SpeechEnhancement`, `StageNames.PreviewMix`, `StageNames.SpeakerAssignment`, `StageNames.TextRefinementTranslation`.
 
 ### Stage order and gating
 
