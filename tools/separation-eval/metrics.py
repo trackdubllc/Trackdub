@@ -181,7 +181,8 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
 
     sample_mask, _ = _activity_masks(ref_dialogue, sr)
 
-    err = est_bed.astype(np.float64) - ref_bed.astype(np.float64)
+    # Measure dialogue projected from the estimated bed, normalized by its energy.
+    err = est_bed.astype(np.float64)
     bounds = _window_bounds(ref_dialogue.shape[0], win)
     leak = np.zeros_like(err)
     for lo, hi in bounds:
@@ -189,7 +190,7 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
             leak[lo:hi] = project_onto_dialogue(ref_dialogue[lo:hi], err[lo:hi], max_lag)
 
     leak_e = float((leak[sample_mask] ** 2).sum())
-    bed_e = float((ref_bed[sample_mask].astype(np.float64) ** 2).sum())
+    bed_e = float((est_bed[sample_mask].astype(np.float64) ** 2).sum())
     dlg_e = float((ref_dialogue[sample_mask].astype(np.float64) ** 2).sum())
 
     worst: float | None = None
@@ -198,7 +199,7 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
             m = sample_mask[lo:hi]
             if m.sum() < MIN_ACTIVE_WINDOW_FRACTION * (hi - lo):
                 continue
-            w_bed = float((ref_bed[lo:hi][m].astype(np.float64) ** 2).sum())
+            w_bed = float((est_bed[lo:hi][m].astype(np.float64) ** 2).sum())
             if w_bed <= 0.0:
                 continue
             value = _db(float((leak[lo:hi][m] ** 2).sum()), w_bed)
