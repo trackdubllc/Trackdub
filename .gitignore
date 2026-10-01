@@ -180,7 +180,7 @@ MagicPaths/
 .claude/context/
 .devin/
 .kiro/
-.opencode/
+# .opencode/ is intentionally tracked - shared agent system, committed via PR
 .codex/
 .bob/
 .oac.json
