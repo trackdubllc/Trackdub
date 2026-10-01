@@ -102,7 +102,7 @@ Rules: commercial license only, verified; unknown license is unsafe. Attribution
 ```bash
 python tools/ci/validate-manifest-schema.py
 python tools/ci/audit-bundled-model-manifest.py
-python tools/ci/verify-manifest-hashes.py --structural --all-families
+python tools/ci/verify-manifest-hashes.py --structural --all-audited
 dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~ModelManifest" -m:1
 ```
 
