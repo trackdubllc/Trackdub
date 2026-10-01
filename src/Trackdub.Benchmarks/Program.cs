@@ -88,8 +88,20 @@ public static class Program
                 return 0;
             }
 
-            return await SeparationEvalRunner.RunAsync(separationOptions, output, error, cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                return await SeparationEvalRunner.RunAsync(separationOptions, output, error, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                error.WriteLine(ex.ToString());
+                return 1;
+            }
         }
 
         if (args.Length > 0 &&
