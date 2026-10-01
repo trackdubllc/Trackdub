@@ -153,14 +153,13 @@ public static class NvidiaAfxRuntimeLayout
         string featuresRoot = Path.Join(runtimeRoot, "features");
         if (Directory.Exists(featuresRoot))
         {
-            foreach (string featureDirectory in Directory.EnumerateDirectories(featuresRoot))
-            {
-                string binDirectory = Path.Join(featureDirectory, "bin");
-                if (!Directory.Exists(binDirectory))
-                {
-                    continue;
-                }
+            IEnumerable<string> featureBinDirectories = Directory
+                .EnumerateDirectories(featuresRoot)
+                .Select(featureDirectory => Path.Join(featureDirectory, "bin"))
+                .Where(Directory.Exists);
 
+            foreach (string binDirectory in featureBinDirectories)
+            {
                 foreach (string dllPath in Directory.EnumerateFiles(binDirectory, "*.dll"))
                 {
                     yield return dllPath;
