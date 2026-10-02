@@ -43,6 +43,7 @@ dotnet test Trackdub.slnx --configuration Release --no-build -m:1
 ### Gate 4 — architecture bounds audit
 Four sub-checks. Report each separately:
 1. **Dependency direction** — every edge in the `AGENTS.md` "Dependency Architecture" graph must match the actual `<ProjectReference>` set in `src/**.csproj`. `Trackdub.Domain`, `Trackdub.Licensing`, `Trackdub.Analyzers`, `Trackdub.OnnxRuntime.Dnnl.Native` reference nothing. `Trackdub.Contracts` references only `Trackdub.Domain`. No inference type may leak upward into Domain/Contracts. Cross-check with `.opencode/ARCHITECTURE.md`.
+   Authoritative check: `DependencyGraphTests` (Gate 3, or item 2 below). Optional fast pre-check: `python3 tools/ci/verify-dependency-graph.py`. Run the test either way — if `python3` is not on `PATH` here the pre-check is `NOT VERIFIED` and that is acceptable; the test is not. If script and test disagree, the test wins and the disagreement is a finding to report.
 2. **`tests/Trackdub.Architecture.Tests`** — `DependencyGraphTests` (diagram/csproj parity, acyclicity, ADR-0011 Contracts isolation, ONNX/WinML/DNNL asset invariants, portable RID lock graphs), `LicensingIsolationTests`, `StageNameConsistencyTests`, `WorkflowTriggerTests`. These run inside Gate 3; if Gate 3 was skipped, run them explicitly:
    ```
    dotnet test tests/Trackdub.Architecture.Tests --no-restore -m:1

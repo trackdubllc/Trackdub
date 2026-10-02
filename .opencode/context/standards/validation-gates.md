@@ -45,9 +45,21 @@ These are not part of the `dotnet` chain but are part of CI and must be reported
 
 Every edge in the `AGENTS.md` "Dependency Architecture" graph must match the real `<ProjectReference>` sets under `src/**.csproj`. `Domain`, `Licensing`, `Analyzers`, and `OnnxRuntime.Dnnl.Native` reference nothing. `Contracts` references only `Domain` (ADR-0011). No inference type may leak upward into Domain or Contracts.
 
+Run this **and** 4b. `DependencyGraphTests` is the authoritative gate — it compares the
+`AGENTS.md` diagram against every csproj in both directions and fails CI on a mismatch. The
+script below is a fast standalone pre-check; it does not replace the test, and a passing
+script with a failing `DependencyGraphTests` is a FAIL, not a pass.
+
 ```bash
-python tools/ci/verify-dependency-graph.py
+python3 tools/ci/verify-dependency-graph.py
 ```
+
+`python3` may not be on `PATH` on Windows (`python` may be the only alias, or neither). If
+neither works, skip the script and run `DependencyGraphTests` from 4b — the test is the
+authoritative gate, so skipping the pre-check is acceptable while skipping the test is not.
+
+If the two disagree, trust `DependencyGraphTests` and treat it as a script or diagram bug to
+report. Never reconcile them by editing the diagram to match whatever passed.
 
 ### 4b — Architecture tests
 

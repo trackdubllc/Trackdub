@@ -96,10 +96,18 @@ Mark each `OK` (no impact, with the check that showed it), `IMPACT` (what breaks
 Resolved SHA: <sha>
 
 ## Builds
-| Repo | Command | Result |
-|---|---|---|
-| core | `dotnet build Trackdub.slnx -m:1` | PASS / FAIL / NOT VERIFIED |
-| gated | `dotnet build Trackdub.slnx -m:1` | PASS / FAIL / NOT VERIFIED |
+Both rows name the same solution on purpose — `Trackdub.slnx` exists in each repo. What
+differs is the working directory, so record it explicitly. A `dotnet build Trackdub.slnx`
+row with no root is not attributable to a repo.
+
+| Repo | Run from | Command | Result |
+|---|---|---|---|
+| core | `external/Trackdub` (the submodule root) | `dotnet build external/Trackdub/Trackdub.slnx -m:1` | PASS / FAIL / NOT VERIFIED |
+| gated | the gated repo root | `dotnet build Trackdub.slnx -m:1` | PASS / FAIL / NOT VERIFIED |
+
+Confirm each root with `git rev-parse --show-toplevel` before its build and record both. If
+only one ran, the other is `NOT VERIFIED` — do not fill the row with the command you did not
+execute.
 
 ## Submodule integrity
 - files edited inside external/Trackdub: none (required)
