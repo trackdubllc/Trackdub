@@ -15,6 +15,7 @@ permission:
     "git diff*": allow
     "git log*": allow
     "git show*": allow
+    "git rev-parse*": allow
     "git checkout*": allow
     "git add*": allow
     "git commit*": allow
