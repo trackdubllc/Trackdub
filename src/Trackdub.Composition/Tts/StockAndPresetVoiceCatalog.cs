@@ -16,7 +16,11 @@ public sealed class StockAndPresetVoiceCatalog(IVoiceCatalog stockCatalog, param
     private readonly IVoiceCatalog[] presetCatalogs = presetCatalogs ?? [];
 
     public IReadOnlyList<VoiceCatalogEntry> GetVoices(string? languageCode = null) =>
-        stockCatalog.GetVoices(languageCode);
+        stockCatalog.GetVoices(languageCode)
+            .Concat(presetCatalogs.SelectMany(catalog => catalog.GetVoices(languageCode)))
+            .GroupBy(voice => voice.VoiceId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
 
     public bool TryGetVoice(string voiceId, [NotNullWhen(true)] out VoiceCatalogEntry? entry)
     {
