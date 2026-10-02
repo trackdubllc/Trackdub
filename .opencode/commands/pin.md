@@ -114,7 +114,7 @@ to its consumer.
 
 - **Dependency graph changes** — new/removed/renamed projects, changed `ProjectReference` sets. The gated app references core `Application`, `Composition`, `Domain`, `Licensing`, `Media.Playback`, and `Sdk`; test projects additionally reference `Contracts`. `Trackdub.App.Avalonia` **also** references `Trackdub.Benchmarks` and `Trackdub.DubBench` beyond that list — confirm all eight resolve, and check those two explicitly since `AGENTS.md` does not name them.
   ```bash
-  grep -rhoP '(?<=ProjectReference Include=")[^"]+' "$GATED_ROOT"/src/Trackdub.App.Avalonia/*.csproj | tr '\134' '/' | awk -F/ '{print $NF}' | sed 's/\.csproj$//' | sort -u
+  grep -rho 'ProjectReference Include="[^"]*"' "$GATED_ROOT"/src/Trackdub.App.Avalonia/*.csproj | sed 's/ProjectReference Include="//; s/"$//' | tr '\134' '/' | awk -F/ '{print $NF}' | sed 's/\.csproj$//' | sort -u
   ```
   `ProjectReference` paths are relative and backslash-separated on Windows
   (`..\..\external\Trackdub\src\Trackdub.Application\...`), so normalise to the project name
