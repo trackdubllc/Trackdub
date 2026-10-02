@@ -8,12 +8,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
-    <PackageReference Include="FsCheck" />
+    <PackageReference Include="coverlet.collector">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="xunit.v3" />
-    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -71,7 +76,7 @@
     <Compile Include="..\Trackdub.TestDoubles\FakeHardwareCapabilities.cs" Link="TestDoubles\FakeHardwareCapabilities.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeModelInventoryService.cs" Link="TestDoubles\FakeModelInventoryService.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeTtsCandidateGroupRepository.cs" Link="TestDoubles\FakeTtsCandidateGroupRepository.cs" />
-    <Compile Include="..\\Trackdub.TestDoubles\\FakeRuntimePlanningPreferences.cs" Link="TestDoubles\\FakeRuntimePlanningPreferences.cs" />
+    <Compile Include="..\Trackdub.TestDoubles\FakeRuntimePlanningPreferences.cs" Link="TestDoubles\FakeRuntimePlanningPreferences.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakePipelinePreFlightChecker.cs" Link="TestDoubles\FakePipelinePreFlightChecker.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeModelCacheRegistrar.cs" Link="TestDoubles\FakeModelCacheRegistrar.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeForcedAligner.cs" Link="TestDoubles\FakeForcedAligner.cs" />
