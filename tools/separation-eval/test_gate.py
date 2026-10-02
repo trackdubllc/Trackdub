@@ -303,6 +303,51 @@ class EdgeExclusionTests(unittest.TestCase):
             self.assertEqual(r.edge_excluded_samples, 0, seconds)
             self.assertFalse(r.passed, seconds)
 
+    def test_dropping_the_excluded_edges_outright_fails_the_backstop(self):
+        mix, d, b = self.outputs()
+        d[:self.EDGE] = 0.0
+        b[:self.EDGE] = 0.0
+        d[-self.EDGE:] = 0.0
+        b[-self.EDGE:] = 0.0
+        r = self.gate(mix, d, b)
+        self.assertFalse(r.passed)
+        self.assertIn("edge backstop", r.reasons[-1])
+        self.assertGreater(r.edge_residual_db, metrics.RECONSTRUCTION_EDGE_BACKSTOP_DB)
+
+    def test_a_few_zeroed_edge_samples_stay_well_inside_the_backstop(self):
+        mix, d, b = self.outputs()
+        d[:200] = 0.0
+        b[:200] = 0.0
+        r = self.gate(mix, d, b)
+        self.assertTrue(r.passed)
+        self.assertLess(r.edge_residual_db, metrics.RECONSTRUCTION_EDGE_BACKSTOP_DB)
+
+    def test_the_backstop_does_not_depend_on_the_clip_length(self):
+        for seconds in (1.5, 3.0, 30.0):
+            mix, d, b = self.outputs(seconds=seconds)
+            d[:30] = 0.0
+            b[:30] = 0.0
+            self.assertTrue(self.gate(mix, d, b).passed, seconds)
+            d[:self.EDGE] = 0.0
+            b[:self.EDGE] = 0.0
+            self.assertFalse(self.gate(mix, d, b).passed, seconds)
+
+    def test_output_in_a_silent_excluded_edge_fails_the_backstop(self):
+        mix, d, b = self.outputs()
+        mix[:self.EDGE] = 0.0
+        d[:self.EDGE] = 0.1
+        r = self.gate(mix, d, b)
+        self.assertFalse(r.passed)
+
+    def test_a_silent_start_edge_is_not_masked_by_energy_at_the_end(self):
+        mix, d, b = self.outputs()
+        mix[:self.EDGE] = 0.0
+        b[:self.EDGE] = 0.0
+        d[:self.EDGE] = 0.01
+        r = metrics.check_reconstruction(mix, d, b, SR)
+        self.assertFalse(r.passed)
+        self.assertIn("silent tolerance", r.reasons[-1])
+
     def test_a_clip_with_energy_only_in_the_edges_is_judged_whole(self):
         z = np.zeros((int(3 * SR), 1), dtype=np.float32)
         mix = z.copy()
@@ -344,9 +389,10 @@ class EdgeExclusionTests(unittest.TestCase):
         d = z.copy()
         d[:5] = 0.01
         r = self.gate(z, d, z)
-        self.assertTrue(r.passed)
+        self.assertFalse(r.passed)
         self.assertEqual(r.silent_judged_residual_rms, 0.0)
         self.assertGreater(r.silent_residual_rms_with_edges, 0.0)
+        self.assertIn("silent excluded edges", r.reasons[-1])
 
     def test_the_exclusion_is_at_most_a_tenth_of_a_clip(self):
         mix, d, b = self.outputs(seconds=1.2)

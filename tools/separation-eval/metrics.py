@@ -332,6 +332,15 @@ RECONSTRUCTION_GATE_DB = -60.0
 RECONSTRUCTION_EDGE_EXCLUSION_S = 0.05
 # Clips of at most this many seconds are judged whole, so the exclusion stays at most 10% of a clip.
 RECONSTRUCTION_EDGE_MIN_CLIP_S = 1.0
+# The excluded edges are not free: across the two excluded regions the full-band residual must stay below this
+# fraction of the mixture's energy there (inside the declared band when one is declared), so a candidate that
+# drops or replaces the edges outright (0 dB, or more when replaced) fails while a few zeroed samples (about -20 dB) do not. It is
+# relative to the edges, not the clip, so it does not depend on the clip length.
+RECONSTRUCTION_EDGE_BACKSTOP_DB = -6.0
+EDGE_BACKSTOP_FILTER_TAPS = 257
+# Silent excluded edges tolerate this much filtered residual RMS (-80 dBFS): the band filter's stopband leaks more
+# than the strict absolute tolerance used for a silent mixture.
+EDGE_BACKSTOP_SILENT_RMS = 1e-4
 LAG_SEARCH_SAMPLES = 4800
 LAG_SEARCH_SECONDS = 10
 BAND_GUARD_HZ = 250.0
@@ -394,6 +403,7 @@ class ReconstructionResult:
     residual_with_edges_db: float | None = None
     in_band_residual_with_edges_db: float | None = None
     silent_residual_rms_with_edges: float | None = None
+    edge_residual_db: float | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -417,6 +427,7 @@ class ReconstructionResult:
             "residual_with_edges_db": self.residual_with_edges_db,
             "in_band_residual_with_edges_db": self.in_band_residual_with_edges_db,
             "silent_residual_rms_with_edges": self.silent_residual_rms_with_edges,
+            "edge_residual_db": self.edge_residual_db,
         }
 
 
@@ -476,7 +487,8 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
                          edge_exclusion_s: float = RECONSTRUCTION_EDGE_EXCLUSION_S) -> ReconstructionResult:
     """Judge the reconstruction gate on the clip without its first and last `edge_exclusion_s` seconds.
 
-    The exclusion applies to every candidate alike. Clips of at most RECONSTRUCTION_EDGE_MIN_CLIP_S
+    The exclusion applies to every candidate alike, and the residual inside the two excluded regions must stay
+    below RECONSTRUCTION_EDGE_BACKSTOP_DB of the mixture energy there, so the edges cannot be dropped wholesale. Clips of at most RECONSTRUCTION_EDGE_MIN_CLIP_S
     seconds, any clip where the two excluded edges would be more than 10% of it, and any non-silent clip whose
     interior is digitally silent (its energy lies only in the edges) are judged whole. On longer clips, `_check_reconstruction` runs on the full clip and again
     on the trimmed interior: whole-clip in-band diagnostics cannot be derived from the trimmed segment
@@ -502,9 +514,55 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
     n = mixture.shape[0]
     judged = _check_reconstruction(mixture[edge:n - edge], est_dialogue[edge:n - edge], est_bed[edge:n - edge], sr,
                                    threshold_db, band_limit_hz, output_bits, output_rounding)
-    return replace(judged, edge_excluded_samples=edge, residual_with_edges_db=whole.residual_db,
-                   in_band_residual_with_edges_db=whole.in_band_residual_db,
-                   silent_residual_rms_with_edges=whole.silent_judged_residual_rms)
+    result = replace(judged, edge_excluded_samples=edge, residual_with_edges_db=whole.residual_db,
+                     in_band_residual_with_edges_db=whole.in_band_residual_db,
+                     silent_residual_rms_with_edges=whole.silent_judged_residual_rms)
+    edge_db, edge_reason = _edge_backstop(mixture, est_dialogue, est_bed, edge, sr, band_limit_hz)
+    result = replace(result, edge_residual_db=edge_db)
+    if edge_reason is not None:
+        return replace(result, passed=False, reasons=(*result.reasons, edge_reason))
+    return result
+
+
+def _edge_region(x: np.ndarray, start: bool, edge: int, taps: np.ndarray | None) -> np.ndarray:
+    """The first or last `edge` samples of `x`, low-passed with `taps` using reflected padding when given."""
+    if taps is None:
+        return x[:edge] if start else x[x.shape[0] - edge:]
+    pad = taps.size
+    seg = x[:edge + pad] if start else x[x.shape[0] - edge - pad:]
+    padded = np.pad(seg, ((pad, pad), (0, 0)), mode="reflect")
+    out = np.stack([signal.fftconvolve(padded[:, c], taps, mode="same") for c in range(x.shape[1])], axis=1)
+    out = out[pad:pad + seg.shape[0]]
+    return out[:edge] if start else out[out.shape[0] - edge:]
+
+
+def _edge_backstop(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed: np.ndarray, edge: int, sr: int,
+                   band_limit_hz: float | None) -> tuple[float | None, str | None]:
+    taps = None
+    if band_limit_hz is not None:
+        taps = signal.firwin(EDGE_BACKSTOP_FILTER_TAPS, band_limit_hz - BAND_GUARD_HZ, fs=sr)
+    mix_e = res_e = 0.0
+    for start in (True, False):
+        m = _edge_region(mixture.astype(np.float64), start, edge, taps)
+        residual = _edge_region(mixture.astype(np.float64) - est_dialogue.astype(np.float64)
+                                - est_bed.astype(np.float64), start, edge, taps)
+        me = float((m ** 2).sum())
+        re = float((residual ** 2).sum())
+        if me <= 0.0:
+            rms = math.sqrt(re / (edge * mixture.shape[1]))
+            if rms > EDGE_BACKSTOP_SILENT_RMS:
+                return None, (f"output energy in silent excluded edges (RMS {rms:.3g}) "
+                              f"exceeds the silent tolerance")
+            continue
+        mix_e += me
+        res_e += re
+    if mix_e <= 0.0:
+        return None, None
+    edge_db = _db(res_e, mix_e)
+    if edge_db > RECONSTRUCTION_EDGE_BACKSTOP_DB:
+        return edge_db, (f"excluded-edge residual {edge_db:.1f} dB exceeds the edge backstop "
+                         f"{RECONSTRUCTION_EDGE_BACKSTOP_DB:.1f} dB")
+    return edge_db, None
 
 
 def _check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed: np.ndarray, sr: int,
