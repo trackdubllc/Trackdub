@@ -78,7 +78,7 @@ public static class VoiceCloningDefaults
     {
         string normalized = string.IsNullOrWhiteSpace(targetLanguage)
             ? "en"
-            : targetLanguage.Trim().Split('-')[0].ToLowerInvariant();
+            : targetLanguage.Trim().Replace('_', '-').Split('-')[0].ToLowerInvariant();
 
         if (normalized == "zh")
         {
@@ -96,7 +96,7 @@ public static class VoiceCloningDefaults
     {
         string normalized = string.IsNullOrWhiteSpace(targetLanguage)
             ? "en"
-            : targetLanguage.Trim().Split('-')[0].ToLowerInvariant();
+            : targetLanguage.Trim().Replace('_', '-').Split('-')[0].ToLowerInvariant();
 
         return normalized == "en"
             ? ChatterboxPrimaryAlias

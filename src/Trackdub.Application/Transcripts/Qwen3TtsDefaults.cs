@@ -15,7 +15,12 @@ public static class Qwen3TtsDefaults
     public static bool IsPresetVoiceId(string? voiceId) =>
         !string.IsNullOrWhiteSpace(voiceId) &&
         voiceId.Trim().StartsWith(PresetVoicePrefix, StringComparison.OrdinalIgnoreCase) &&
-        voiceId.Trim().Length > PresetVoicePrefix.Length;
+        PresetSpeakers.Contains(voiceId.Trim()[PresetVoicePrefix.Length..]);
+
+    private static readonly HashSet<string> PresetSpeakers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "vivian", "serena", "uncle_fu", "dylan", "eric", "ryan", "aiden", "ono_anna", "sohee",
+    };
 
     /// <summary>
     /// Default CustomVoice preset for a target language: a preset whose native language matches
@@ -26,7 +31,7 @@ public static class Qwen3TtsDefaults
     {
         string normalized = string.IsNullOrWhiteSpace(targetLanguage)
             ? string.Empty
-            : targetLanguage.Trim().Split('-')[0].ToLowerInvariant();
+            : targetLanguage.Trim().Replace('_', '-').Split('-')[0].ToLowerInvariant();
         return normalized switch
         {
             "zh" => PresetVoicePrefix + "vivian",
@@ -44,7 +49,7 @@ public static class Qwen3TtsDefaults
     /// <summary>True when Qwen3-TTS speaks the language (its ten supported languages).</summary>
     public static bool SupportsLanguage(string? targetLanguage) =>
         !string.IsNullOrWhiteSpace(targetLanguage) &&
-        SupportedLanguages.Contains(targetLanguage.Trim().Split('-')[0]);
+        SupportedLanguages.Contains(targetLanguage.Trim().Replace('_', '-').Split('-')[0]);
 
     public static string ResolveCustomVoiceAlias(string? tier) =>
         IsQualityTier(tier) ? CustomVoice17Alias : CustomVoice06Alias;
