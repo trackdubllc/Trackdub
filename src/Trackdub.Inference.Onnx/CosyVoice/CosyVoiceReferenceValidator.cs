@@ -12,6 +12,11 @@ public static class CosyVoiceReferenceValidator
 {
     private const int MinimumDurationMs = 3000; // 3 seconds
     private const int MaximumDurationMs = 10000; // 10 seconds
+
+    // The reference clip builder cuts clips to exactly ReferenceClipPolicy.RecommendedMaximumActiveSpeechSeconds
+    // (10.0 s), and WAV muxing rounds the result up to a whole audio frame, so a clip the pipeline
+    // just built can read as 10.0004 s. Allow that rounding instead of failing a clip we cut ourselves.
+    private const int MaximumDurationToleranceMs = 100;
     private const int TargetSampleRate = 22050; // CosyVoice native rate
 
     /// <summary>
@@ -38,7 +43,7 @@ public static class CosyVoiceReferenceValidator
                 "Use a 3-10 second clip for best voice cloning results.");
         }
 
-        if (durationSeconds * 1000 > MaximumDurationMs)
+        if (durationSeconds * 1000 > MaximumDurationMs + MaximumDurationToleranceMs)
         {
             throw new ArgumentException(
                 $"Reference clip too long ({durationSeconds:F2}s). " +
