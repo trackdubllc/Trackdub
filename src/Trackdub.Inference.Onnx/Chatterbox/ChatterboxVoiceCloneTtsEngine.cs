@@ -426,6 +426,11 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         return positionIds;
     }
 
+    // The translation matrix is wider than the Chatterbox multilingual model card (it also lists
+    // Chinese), so languages the model cannot speak are excluded explicitly.
+    internal static readonly IReadOnlySet<string> UnsupportedMultilingualLanguages =
+        new HashSet<string>(StringComparer.Ordinal) { "zh" };
+
     /// <summary>
     /// Conditions the input text for the Chatterbox multilingual model by prepending the
     /// <c>[xx]</c> language token it expects (mirrors <c>prepare_language</c> in the model
@@ -433,10 +438,6 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
     /// multilingual synthesis is requested without a supported language code, rather than
     /// silently synthesizing in the wrong language.
     /// </summary>
-    // The translation matrix is wider than the Chatterbox multilingual model card (it also lists
-    // Chinese), so languages the model cannot speak are excluded explicitly.
-    internal static readonly HashSet<string> UnsupportedMultilingualLanguages = new(StringComparer.Ordinal) { "zh" };
-
     private static string ApplyMultilingualLanguagePrefix(
         string text,
         string languageCode,

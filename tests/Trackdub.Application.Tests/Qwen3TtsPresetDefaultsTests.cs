@@ -52,4 +52,18 @@ public sealed class Qwen3TtsPresetDefaultsTests
 
         Assert.Empty(warnings);
     }
+
+    [Fact]
+    public void BuildWarnings_StillFlagsQwen3PresetAssignmentsForUnsupportedTargets()
+    {
+        VoiceAssignment assignment = VoiceAssignment.Create(Guid.NewGuid(), Guid.NewGuid(), "qwen3-tts-0.6b-customvoice", "qwen3:ryan");
+        var service = new VoiceAssignmentService(new FakeVoiceAssignmentRepository(), new FakeTtsTakeRepository(), new FakeVoiceCatalog());
+
+        IReadOnlyList<VoiceAssignmentWarning> warnings = service.BuildWarnings(
+            [assignment],
+            [new VoiceCatalogEntry("qwen3:ryan", "mul", "male", "Ryan (English)")],
+            "nl");
+
+        Assert.Single(warnings);
+    }
 }
