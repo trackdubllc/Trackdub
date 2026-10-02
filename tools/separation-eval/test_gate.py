@@ -303,6 +303,14 @@ class EdgeExclusionTests(unittest.TestCase):
             self.assertEqual(r.edge_excluded_samples, 0, seconds)
             self.assertFalse(r.passed, seconds)
 
+    def test_a_clip_with_energy_only_in_the_edges_is_judged_whole(self):
+        z = np.zeros((int(3 * SR), 1), dtype=np.float32)
+        mix = z.copy()
+        mix[:10] = 0.1
+        r = self.gate(mix, z, z)
+        self.assertEqual(r.edge_excluded_samples, 0)
+        self.assertFalse(r.passed)
+
     def test_an_oversized_exclusion_never_empties_the_judged_region(self):
         mix, d, b = self.outputs(seconds=1.2)
         d[:] = 0.0
