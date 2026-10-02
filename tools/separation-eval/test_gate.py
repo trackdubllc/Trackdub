@@ -347,6 +347,50 @@ class EdgeExclusionTests(unittest.TestCase):
         self.assertFalse(r.passed)
         self.assertIn("end edge", r.reasons[-1])
 
+    def test_the_start_edge_backstop_tracks_the_clip_relative_threshold(self):
+        # Constant levels keep the ratio exact: 0.625 of the clip amplitude is -4.1 dB (passes -3 dB)
+        # and 0.75 is -2.5 dB (fails). A regression that stops judging the start edge, or that moves
+        # the threshold across that bracket, is caught by the policy assertion below, not by these two cases.
+        n = int(3 * SR)
+        mix = np.full((n, 1), np.float32(0.25))
+        dialogue = np.full_like(mix, np.float32(0.125))
+        bed = np.full_like(mix, np.float32(0.125))
+
+        under_d, under_b = dialogue.copy(), bed.copy()
+        under_d[:self.EDGE] = np.float32(0.09375)
+        under_b[:self.EDGE] = 0.0
+        passed = metrics.check_reconstruction(mix, under_d, under_b, SR)
+        self.assertTrue(passed.passed, passed.reasons)
+        self.assertAlmostEqual(passed.edge_residual_db, 20 * np.log10(0.625), delta=0.05)
+        self.assertEqual(metrics.RECONSTRUCTION_EDGE_BACKSTOP_DB, -3.0)
+        self.assertLess(passed.edge_residual_db, metrics.RECONSTRUCTION_EDGE_BACKSTOP_DB)
+
+        over_d, over_b = dialogue.copy(), bed.copy()
+        over_d[:self.EDGE] = np.float32(0.0625)
+        over_b[:self.EDGE] = 0.0
+        failed = metrics.check_reconstruction(mix, over_d, over_b, SR)
+        self.assertFalse(failed.passed)
+        self.assertIn("start edge", failed.reasons[-1])
+        self.assertAlmostEqual(failed.edge_residual_db, 20 * np.log10(0.75), delta=0.05)
+        self.assertGreater(failed.edge_residual_db, metrics.RECONSTRUCTION_EDGE_BACKSTOP_DB)
+
+    def test_silent_edge_tolerance_uses_joint_channel_rms_and_checks_the_end(self):
+        # _edge_backstop compares sqrt(residual_power / n_channels) to EDGE_BACKSTOP_SILENT_RMS, not per-channel max.
+        n = int(3 * SR)
+        under = np.float32(metrics.EDGE_BACKSTOP_SILENT_RMS * 0.9)
+        stereo = np.zeros((n, 2), dtype=np.float32)
+        dialogue = stereo.copy()
+        dialogue[:self.EDGE, :] = under
+        passed = metrics.check_reconstruction(stereo, dialogue, stereo, SR)
+        self.assertTrue(passed.passed, passed.reasons)
+
+        mono = np.zeros((n, 1), dtype=np.float32)
+        end = mono.copy()
+        end[-self.EDGE:] = np.float32(metrics.EDGE_BACKSTOP_SILENT_RMS * 2)
+        failed = metrics.check_reconstruction(mono, end, mono, SR)
+        self.assertFalse(failed.passed)
+        self.assertIn("end edge", failed.reasons[-1])
+
     def test_a_quiet_edge_is_judged_against_the_clip_level_not_its_own(self):
         mix, d, b = self.outputs()
         mix[:self.EDGE] *= 0.02
