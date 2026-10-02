@@ -339,6 +339,15 @@ class EdgeExclusionTests(unittest.TestCase):
         r = self.gate(mix, d, b)
         self.assertFalse(r.passed)
 
+    def test_a_silent_start_edge_is_not_masked_by_energy_at_the_end(self):
+        mix, d, b = self.outputs()
+        mix[:self.EDGE] = 0.0
+        b[:self.EDGE] = 0.0
+        d[:self.EDGE] = 0.01
+        r = metrics.check_reconstruction(mix, d, b, SR)
+        self.assertFalse(r.passed)
+        self.assertIn("silent tolerance", r.reasons[-1])
+
     def test_a_clip_with_energy_only_in_the_edges_is_judged_whole(self):
         z = np.zeros((int(3 * SR), 1), dtype=np.float32)
         mix = z.copy()

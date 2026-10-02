@@ -546,12 +546,17 @@ def _edge_backstop(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed: np.nd
         m = _edge_region(mixture.astype(np.float64), start, edge, taps)
         residual = _edge_region(mixture.astype(np.float64) - est_dialogue.astype(np.float64)
                                 - est_bed.astype(np.float64), start, edge, taps)
-        mix_e += float((m ** 2).sum())
-        res_e += float((residual ** 2).sum())
+        me = float((m ** 2).sum())
+        re = float((residual ** 2).sum())
+        if me <= 0.0:
+            rms = math.sqrt(re / (edge * mixture.shape[1]))
+            if rms > EDGE_BACKSTOP_SILENT_RMS:
+                return None, (f"output energy in silent excluded edges (RMS {rms:.3g}) "
+                              f"exceeds the silent tolerance")
+            continue
+        mix_e += me
+        res_e += re
     if mix_e <= 0.0:
-        rms = math.sqrt(res_e / (2 * edge * mixture.shape[1]))
-        if rms > EDGE_BACKSTOP_SILENT_RMS:
-            return None, f"output energy in silent excluded edges (RMS {rms:.3g}) exceeds the silent tolerance"
         return None, None
     edge_db = _db(res_e, mix_e)
     if edge_db > RECONSTRUCTION_EDGE_BACKSTOP_DB:
