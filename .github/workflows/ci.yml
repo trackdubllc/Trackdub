@@ -168,7 +168,7 @@ jobs:
 
       - name: Test
         shell: bash
-        run: dotnet test Trackdub.slnx -c Release --no-build -m:1
+        run: bash scripts/ci/dotnet-test-with-retry.sh test Trackdub.slnx -c Release --no-build -m:1
 
   build-linux:
     name: Build & Test (Linux)

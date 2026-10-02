@@ -180,7 +180,7 @@ MagicPaths/
 .claude/context/
 .devin/
 .kiro/
-.opencode/
+# .opencode/ is intentionally tracked - shared agent system, committed via PR
 .codex/
 .bob/
 .oac.json
@@ -231,6 +231,9 @@ MagicPaths/
 /.kiro
 /sourcery
 output/unused-code-audit/
+# .opencode/ is tracked (see line ~183), with these two exceptions kept
+# deliberately: per-developer local config and local skill installs stay
+# out of version control. The project config is at the repo root.
 .opencode/opencode.jsonc
 /.opencode/skills
 .codex/config.toml
