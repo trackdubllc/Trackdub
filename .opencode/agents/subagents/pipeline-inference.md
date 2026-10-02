@@ -24,7 +24,6 @@ permission:
     "git -C external/Trackdub tag*": allow
     "git -C external/Trackdub log*": allow
     "git -C external/Trackdub rev-parse*": allow
-    "pwsh*": allow
 ---
 
 # Pipeline / Inference Stage Engineer

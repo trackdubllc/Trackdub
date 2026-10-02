@@ -16,7 +16,6 @@ permission:
     "git show*": allow
     "git rev-parse*": allow
     "gh run*": allow
-    "gh api*": allow
     "pwsh -File tools/bench-per-stage.ps1*": allow
     "pwsh -File tools/bench-smoke-verdict-ab.ps1*": allow
     "python3 scripts/ci/run_benchmarkdotnet_baseline.py*": allow
