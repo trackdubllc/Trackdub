@@ -25,7 +25,8 @@ LSD_EPS = 1e-10
 LSD_BATCH_FRAMES = 2048
 DEFAULT_WINDOW_SECONDS = 1.0
 MIN_ACTIVE_WINDOW_FRACTION = 0.25
-WORST_WINDOW_MIN_DIALOGUE_POWER_RATIO = 0.01  # window dialogue power vs clip dialogue-active power (-20 dB)
+# A window must have mean dialogue power per dialogue-active sample of at least this fraction (-20 dB) of the clip's.
+WORST_WINDOW_MIN_DIALOGUE_POWER_RATIO = 0.01
 REFERENCE_BED_ENERGY_RATIO_FLOOR = 1e-12
 SILENT_RECONSTRUCTION_RMS_TOLERANCE = 1e-8
 
@@ -46,10 +47,11 @@ class LeakageResult:
     worst_window_leakage_db: worst analysis window of dialogue_residual_db, that is projected error energy
         relative to reference-dialogue energy in the same window. Bounded, and independent of how quiet
         the reference bed is (a window with a near-silent bed would otherwise dominate any ratio against
-        the bed). A window is skipped when its dialogue-active samples carry less than
-        WORST_WINDOW_MIN_DIALOGUE_POWER_RATIO of the clip's dialogue-active power, because error that
-        does not scale with a barely audible dialogue segment would otherwise dominate the ratio. None
-        when no window qualifies.
+        the bed). A window is skipped when its mean dialogue power per dialogue-active sample is below
+        WORST_WINDOW_MIN_DIALOGUE_POWER_RATIO of the clip's, because error that does not scale with a
+        barely audible dialogue segment would otherwise dominate the ratio. The value is therefore the
+        worst qualifying window; None when no window qualifies. It is relative to dialogue energy, so
+        it is not comparable in units with leakage_to_bed_db.
     """
     leakage_to_bed_db: float | None
     dialogue_residual_db: float
