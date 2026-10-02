@@ -109,12 +109,12 @@ public sealed class StartTtsStageHandler(
             throw;
         }
 
-        await WriteCloneModelSubstitutedDegradationAsync(request, voice, isVoiceCloning, stageRun.Id, cancellationToken)
-            .ConfigureAwait(false);
-
         var takes = new ConcurrentBag<TtsTake>();
         try
         {
+            await WriteCloneModelSubstitutedDegradationAsync(request, voice, isVoiceCloning, stageRun.Id, cancellationToken)
+                .ConfigureAwait(false);
+
             ConcurrentDictionary<string, byte> reservedArtifactRelativePaths
                 = await BuildReservedArtifactRelativePathsAsync(request, cancellationToken).ConfigureAwait(false);
             Dictionary<int, TranscriptSegment> transcriptSegmentsByIndex = request.TranscriptSegments
