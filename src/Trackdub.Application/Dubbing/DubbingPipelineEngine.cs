@@ -1925,9 +1925,10 @@ public sealed class DubbingPipelineEngine(
     /// Unattended runs have no voice-assignment step, so speakers without a deliberate
     /// (non-fallback) voice assignment would fail TTS outright. Mirrors the shell's fallback
     /// behavior: picks the first catalog voice whose language matches the dub target language,
-    /// ordered by display name like the shell's voice picker. Speakers stay unassigned when no
-    /// language-matching voice exists, so TTS fails with the explicit assignment error instead
-    /// of dubbing with a wrong-language voice.
+    /// ordered by display name like the shell's voice picker. Languages Kokoro does not cover use
+    /// the Qwen3 CustomVoice default preset when Qwen3 speaks the language. Speakers stay
+    /// unassigned otherwise, so TTS fails with the explicit assignment error instead of dubbing
+    /// with a wrong-language voice.
     /// </summary>
     internal static Dictionary<Guid, string>? BuildUnattendedFallbackVoiceIds(
         TranscriptProjectState state,

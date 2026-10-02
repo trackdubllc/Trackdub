@@ -480,6 +480,8 @@ public sealed class OrchestrationServiceTests
         // Production's IVoiceCatalog is Kokoro-only; it does NOT contain the Qwen3 custom-voice
         // alias. On this non-Kokoro target the substitution routes through the synthetic
         // native Qwen3 preset voice (no catalog lookup), so the catalog deliberately omits the alias.
+        // This fake catalog also omits the Qwen3 presets, exercising the synthetic-entry fallback;
+        // production's composite catalog resolves those IDs.
         TtsServiceContext context = CreateTtsServiceContext(
             ttsEngine,
             voiceCatalog: new FakeVoiceCatalog(

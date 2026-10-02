@@ -363,6 +363,8 @@ public sealed class StartTtsStageHandler(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Degradation write is best-effort; failure must not abort the stock-voice fallback.
+            logger?.LogWarning(
+                $"Failed to record clone-model substitution degradation for project {request.ProjectId}.", ex);
         }
     }
 
