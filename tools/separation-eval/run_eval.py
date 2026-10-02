@@ -35,7 +35,7 @@ import audiomath as am
 import metrics
 
 SEPARATOR_SR = 44100
-RESULTS_SCHEMA_VERSION = 2
+RESULTS_SCHEMA_VERSION = 3
 LENGTH_TOLERANCE_SAMPLES = 4
 
 PINNED_MANIFEST = (Path(__file__).resolve().parents[2] / "src" / "Trackdub.Inference" / "Runtime"
@@ -55,7 +55,7 @@ DEFAULT_RUNNER = default_runner()
 TRACKED_METRICS: dict[str, tuple[tuple[str, ...], bool]] = {
     "bed_leakage_to_bed_db": (("leakage", "leakage_to_bed_db"), False),
     "bed_dialogue_residual_db": (("leakage", "dialogue_residual_db"), False),
-    "bed_worst_window_leakage_db": (("leakage", "worst_window_leakage_db"), False),
+    "bed_worst_window_leakage_db": (("leakage", "worst_window_leakage_db"), False),  # relative to dialogue energy, not bed energy
     "bed_si_sdr_db": (("damage", "si_sdr_db"), True),
     "bed_si_sdr_inactive_db": (("damage", "si_sdr_inactive_db"), True),
     "bed_lsd_inactive_db": (("damage", "lsd_inactive_db"), False),

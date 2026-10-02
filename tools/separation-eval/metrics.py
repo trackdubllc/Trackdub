@@ -25,6 +25,8 @@ LSD_EPS = 1e-10
 LSD_BATCH_FRAMES = 2048
 DEFAULT_WINDOW_SECONDS = 1.0
 MIN_ACTIVE_WINDOW_FRACTION = 0.25
+# A window must have mean dialogue power per dialogue-active sample of at least this fraction (-20 dB) of the clip's.
+WORST_WINDOW_MIN_DIALOGUE_POWER_RATIO = 0.01
 REFERENCE_BED_ENERGY_RATIO_FLOOR = 1e-12
 SILENT_RECONSTRUCTION_RMS_TOLERANCE = 1e-8
 
@@ -42,7 +44,14 @@ class LeakageResult:
         the measurement floor.
     dialogue_residual_db: the same error energy relative to reference-dialogue energy. Lower is
         better. estimated_bed_active_rms_dbfs independently reports output-bed level.
-    worst_window_leakage_db: worst analysis window of leakage_to_bed_db; None when no window qualifies.
+    worst_window_leakage_db: worst analysis window of dialogue_residual_db, that is projected error energy
+        relative to reference-dialogue energy in the same window. Bounded, and independent of how quiet
+        the reference bed is (a window with a near-silent bed would otherwise dominate any ratio against
+        the bed). A window is skipped when its mean dialogue power per dialogue-active sample is below
+        WORST_WINDOW_MIN_DIALOGUE_POWER_RATIO of the clip's, because error that does not scale with a
+        barely audible dialogue segment would otherwise dominate the ratio. The value is therefore the
+        worst qualifying window; None when no window qualifies. It is relative to dialogue energy, so
+        it is not comparable in units with leakage_to_bed_db.
     """
     leakage_to_bed_db: float | None
     dialogue_residual_db: float
@@ -166,7 +175,8 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
     short multichannel FIR (tolerating small delays and filtering), fitted independently in each
     `window_s` window so leakage that comes and goes is not averaged away. The primary ratio divides
     projected error energy by reference-bed energy on dialogue-active frames; the second divides by
-    reference-dialogue energy. Exact reference-bed output therefore has zero leakage even when the
+    reference-dialogue energy, and its worst analysis window is reported as `worst_window_leakage_db`.
+    Exact reference-bed output therefore has zero leakage even when the
     bed itself contains speech-like content. When reference-bed energy is no more than 1e-12 of
     dialogue energy, the primary ratio is not applicable and is returned as null; output-bed RMS
     remains available as a separate diagnostic.
@@ -199,17 +209,16 @@ def bed_leakage(ref_dialogue: np.ndarray, ref_bed: np.ndarray, est_bed: np.ndarr
     has_reference_bed = reference_bed_e > dlg_e * REFERENCE_BED_ENERGY_RATIO_FLOOR
 
     worst: float | None = None
-    if has_reference_bed:
-        for lo, hi in bounds:
-            m = sample_mask[lo:hi]
-            if m.sum() < MIN_ACTIVE_WINDOW_FRACTION * (hi - lo):
-                continue
-            w_reference_bed = float((ref_bed[lo:hi][m].astype(np.float64) ** 2).sum())
-            w_dialogue = float((ref_dialogue[lo:hi][m].astype(np.float64) ** 2).sum())
-            if w_reference_bed <= w_dialogue * REFERENCE_BED_ENERGY_RATIO_FLOOR:
-                continue
-            value = _db(float((leak[lo:hi][m] ** 2).sum()), w_reference_bed)
-            worst = value if worst is None else max(worst, value)
+    min_window_dialogue_power = WORST_WINDOW_MIN_DIALOGUE_POWER_RATIO * dlg_e / max(1, int(sample_mask.sum()))
+    for lo, hi in bounds:
+        m = sample_mask[lo:hi]
+        if m.sum() < MIN_ACTIVE_WINDOW_FRACTION * (hi - lo):
+            continue
+        w_dialogue = float((ref_dialogue[lo:hi][m].astype(np.float64) ** 2).sum())
+        if w_dialogue <= 0.0 or w_dialogue / m.sum() < min_window_dialogue_power:
+            continue
+        value = _db(float((leak[lo:hi][m] ** 2).sum()), w_dialogue)
+        worst = value if worst is None else max(worst, value)
 
     return LeakageResult(
         leakage_to_bed_db=_db(leak_e, reference_bed_e) if has_reference_bed else None,
