@@ -362,6 +362,7 @@ class EdgeExclusionTests(unittest.TestCase):
         passed = metrics.check_reconstruction(mix, under_d, under_b, SR)
         self.assertTrue(passed.passed, passed.reasons)
         self.assertAlmostEqual(passed.edge_residual_db, 20 * np.log10(0.625), delta=0.05)
+        self.assertEqual(metrics.RECONSTRUCTION_EDGE_BACKSTOP_DB, -3.0)
         self.assertLess(passed.edge_residual_db, metrics.RECONSTRUCTION_EDGE_BACKSTOP_DB)
 
         over_d, over_b = dialogue.copy(), bed.copy()
