@@ -151,7 +151,7 @@ permission:
       <step>Provider tests: `tests/Trackdub.Inference.Tests` and `tests/Trackdub.Inference.Onnx.Tests` for planning, bootstrapper, and session-pool behaviour.</step>
       <step>Composition wiring: `tests/Trackdub.Composition.Tests`. SDK/CLI surface: `tests/Trackdub.Sdk.Tests`.</step>
       <step>New stage in the pipeline? `DubbingPipelineStages` ordering is exercised in `tests/Trackdub.Benchmarks.Tests` through the controlled-matrix path — add the stage to the catalog there or the matrix will not know about it.</step>
-      <step>Run the narrowest target first, then the whole project: `dotnet test tests/Trackdub.Application.Tests --filter "FullyQualifiedName~TestName" --no-restore -m:1`.</newString>
+      <step>Run the narrowest target first, then the whole project: `dotnet test tests/Trackdub.Application.Tests --filter "FullyQualifiedName~TestName" --no-restore -m:1`.</step>
     </process>
     <checkpoint>Four paths asserted with reason codes. No test asserts only that nothing threw.</checkpoint>
   </stage>
