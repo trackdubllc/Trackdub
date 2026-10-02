@@ -426,6 +426,11 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         return positionIds;
     }
 
+    // The translation matrix is wider than the Chatterbox multilingual model card (it also lists
+    // Chinese), so languages the model cannot speak are excluded explicitly.
+    internal static readonly IReadOnlySet<string> UnsupportedMultilingualLanguages =
+        new HashSet<string>(StringComparer.Ordinal) { "zh" };
+
     /// <summary>
     /// Conditions the input text for the Chatterbox multilingual model by prepending the
     /// <c>[xx]</c> language token it expects (mirrors <c>prepare_language</c> in the model
@@ -447,7 +452,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             ? null
             : languageCode.Trim().ToLowerInvariant();
 
-        if (normalized is null || !TranslationLanguageCoverageMatrix.TryGetLanguage(normalized, out _))
+        if (normalized is null || UnsupportedMultilingualLanguages.Contains(normalized) || !TranslationLanguageCoverageMatrix.TryGetLanguage(normalized, out _))
         {
             throw new NotSupportedException(
                 $"Chatterbox multilingual synthesis requires a supported language code; '{languageCode}' is not in the supported set.");
@@ -1263,6 +1268,25 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
         }
     }
 
+    /// <summary>
+    /// Picks the BPE unknown token a Chatterbox tokenizer.json actually declares. Turbo ships a GPT-2
+    /// style tokenizer whose unknown token is <c>&lt;|endoftext|&gt;</c>; the base and multilingual
+    /// tokenizers declare <c>[UNK]</c> and have no <c>&lt;|endoftext|&gt;</c>, so a hard-coded value
+    /// made loading them throw "Unknown Token ... was not present in 'Vocabulary'".
+    /// </summary>
+    internal static string? ResolveUnknownToken(JsonElement model, IReadOnlyDictionary<string, int> vocabulary)
+    {
+        if (model.TryGetProperty("unk_token", out JsonElement declared) &&
+            declared.ValueKind is JsonValueKind.String &&
+            declared.GetString() is { Length: > 0 } declaredToken &&
+            vocabulary.ContainsKey(declaredToken))
+        {
+            return declaredToken;
+        }
+
+        return vocabulary.ContainsKey("<|endoftext|>") ? "<|endoftext|>" : null;
+    }
+
     private sealed class ChatterboxTokenizer
     {
         private readonly BpeTokenizer tokenizer;
@@ -1311,7 +1335,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             {
                 Merges = merges,
                 SpecialTokens = specialTokens,
-                UnknownToken = "<|endoftext|>",
+                UnknownToken = ResolveUnknownToken(model, vocabulary),
                 ByteLevel = true
             };
 

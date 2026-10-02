@@ -219,15 +219,20 @@ public sealed class TtsOrchestrationService(
         string languageCode = string.IsNullOrWhiteSpace(request.LanguageCode)
             ? voice.LanguageCode
             : request.LanguageCode.Trim();
+        string? trimmedAlias = request.PreferredModelAlias?.Trim();
+        bool isQwen3PresetVoice = Qwen3TtsDefaults.IsPresetVoiceId(voice.VoiceId);
+        string preferredAlias = isQwen3PresetVoice && !Qwen3TtsDefaults.IsCustomVoiceAlias(trimmedAlias)
+            ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null)
+            : string.IsNullOrWhiteSpace(trimmedAlias)
+                ? StockTtsDefaults.KokoroPrimaryAlias
+                : trimmedAlias;
         TtsSynthesisResult result = await ttsEngine.SynthesizeAsync(
             new TtsSynthesisRequest(
                 request.SampleText.Trim(),
                 languageCode,
                 voice,
                 Options: new InferenceRequestOptions(
-                    string.IsNullOrWhiteSpace(request.PreferredModelAlias)
-                        ? StockTtsDefaults.KokoroPrimaryAlias
-                        : request.PreferredModelAlias.Trim(),
+                    preferredAlias,
                     RequirePreferredModelAlias: true,
                     PreferredExecutionProvider: request.PreferredExecutionProvider?.ToString(),
                     RequirePreferredExecutionProvider: request.RequirePreferredExecutionProvider,
@@ -592,11 +597,11 @@ public sealed class TtsOrchestrationService(
                 ? VoiceAssignment.Create(
                     currentState.ProjectState.Project.Id,
                     speakerId,
-                    "kokoro-onnx",
+                    ResolveVoiceModelId(normalizedVoiceId),
                     normalizedVoiceId)
                 : existing with
                 {
-                    VoiceModelId = "kokoro-onnx",
+                    VoiceModelId = ResolveVoiceModelId(normalizedVoiceId),
                     VoiceVariant = normalizedVoiceId,
                     RequiresConsent = false,
                     IsFallback = false,
@@ -624,7 +629,7 @@ public sealed class TtsOrchestrationService(
             VoiceAssignment assignment = VoiceAssignment.CreateFallback(
                 currentState.ProjectState.Project.Id,
                 speakerId,
-                "kokoro-onnx",
+                ResolveVoiceModelId(normalizedVoiceId),
                 normalizedVoiceId);
             await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
             return assignment;
@@ -632,6 +637,11 @@ public sealed class TtsOrchestrationService(
 
         return null;
     }
+
+    private static string ResolveVoiceModelId(string voiceId) =>
+        Qwen3TtsDefaults.IsPresetVoiceId(voiceId)
+            ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null)
+            : StockTtsDefaults.KokoroPrimaryAlias;
 
     private static string BuildSpeakerProgressLabel(ProjectSpeaker speaker, int speakerNumber, int speakerCount) =>
         string.IsNullOrWhiteSpace(speaker.DisplayName)

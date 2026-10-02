@@ -70,6 +70,25 @@ public static class VoiceCloningDefaults
         IsF5VoiceCloningModelAlias(alias);
 
     /// <summary>
+    /// Picks the default clone-model alias for a target language: Chatterbox turbo for English,
+    /// Chatterbox multilingual for its supported languages, and CosyVoice for Chinese, which the
+    /// Chatterbox models do not speak.
+    /// </summary>
+    public static string ResolveDefaultCloneModelAlias(string? targetLanguage)
+    {
+        string normalized = string.IsNullOrWhiteSpace(targetLanguage)
+            ? "en"
+            : targetLanguage.Trim().Replace('_', '-').Split('-')[0].ToLowerInvariant();
+
+        if (normalized == "zh")
+        {
+            return CosyVoicePrimaryAlias;
+        }
+
+        return ResolveDefaultChatterboxAlias(normalized);
+    }
+
+    /// <summary>
     /// Picks the default clone-model alias for a target language: the English-only turbo
     /// model for English, the multilingual model otherwise.
     /// </summary>
@@ -77,7 +96,7 @@ public static class VoiceCloningDefaults
     {
         string normalized = string.IsNullOrWhiteSpace(targetLanguage)
             ? "en"
-            : targetLanguage.Trim().Split('-')[0].ToLowerInvariant();
+            : targetLanguage.Trim().Replace('_', '-').Split('-')[0].ToLowerInvariant();
 
         return normalized == "en"
             ? ChatterboxPrimaryAlias

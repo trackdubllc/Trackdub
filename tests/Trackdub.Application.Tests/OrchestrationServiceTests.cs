@@ -479,7 +479,9 @@ public sealed class OrchestrationServiceTests
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1000 };
         // Production's IVoiceCatalog is Kokoro-only; it does NOT contain the Qwen3 custom-voice
         // alias. On this non-Kokoro target the substitution routes through the synthetic
-        // qwen3:ryan voice (no catalog lookup), so the catalog deliberately omits the alias.
+        // native Qwen3 preset voice (no catalog lookup), so the catalog deliberately omits the alias.
+        // This fake catalog also omits the Qwen3 presets, exercising the synthetic-entry fallback;
+        // production's composite catalog resolves those IDs.
         TtsServiceContext context = CreateTtsServiceContext(
             ttsEngine,
             voiceCatalog: new FakeVoiceCatalog(
@@ -522,9 +524,9 @@ public sealed class OrchestrationServiceTests
         Assert.Equal(TtsTakeStatus.Completed, take.Status);
         Assert.Equal(TtsTakeKind.Stock, take.Kind);
         // The non-Kokoro clone-only substitution leaves PreferredModelAlias blank so
-        // StartTtsStageHandler routes to the synthetic qwen3:ryan voice rather than a
-        // Kokoro-only catalog lookup that would throw for the Qwen3 custom-voice alias.
-        Assert.Equal("qwen3:ryan", take.VoiceId);
+        // StartTtsStageHandler routes to the Qwen3 preset whose native language matches the
+        // Japanese target (Ono Anna) rather than a Kokoro-only catalog lookup that would throw.
+        Assert.Equal("qwen3:ono_anna", take.VoiceId);
     }
 
     [Fact]
@@ -1013,7 +1015,9 @@ public sealed class OrchestrationServiceTests
         Assert.Null(assignment.VoiceVariant);
         TtsTake take = Assert.Single(context.TtsTakeRepository.All);
         Assert.Equal(TtsTakeKind.Stock, take.Kind);
-        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, take.VoiceId);
+        // The take is voiced by a real Qwen3 preset (the native Japanese speaker), not the model
+        // alias string, which the Qwen3 engine would reject as an unknown speaker.
+        Assert.Equal("qwen3:ono_anna", take.VoiceId);
     }
 
     [Fact]
@@ -1471,6 +1475,45 @@ public sealed class OrchestrationServiceTests
         Assert.Empty(context.TtsTakeRepository.All);
         Assert.Empty(context.MediaAssetRepository.Artifacts);
         Assert.Empty(context.StageRunStore.All);
+    }
+
+    [Fact]
+    public async Task TtsOrchestrationService_PreviewVoiceAsync_routes_qwen3_presets_to_custom_voice_without_an_alias()
+    {
+        var ttsEngine = new FakeTtsEngine();
+        var catalog = new FakeVoiceCatalog(
+        [
+            new("af_heart", "mul", "female", "Heart"),
+            new("qwen3:vivian", "mul", "female", "Vivian (Chinese)"),
+        ]);
+        TtsServiceContext context = CreateTtsServiceContext(ttsEngine, voiceCatalog: catalog);
+
+        await context.Service.PreviewVoiceAsync(
+            new PreviewVoiceRequest("qwen3:vivian", "zh", "Preview text."),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("qwen3:vivian", ttsEngine.LastVoicepack?.VoiceId);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, ttsEngine.LastOptions?.PreferredModelAlias);
+        Assert.True(ttsEngine.LastOptions?.RequirePreferredModelAlias);
+    }
+
+    [Fact]
+    public async Task TtsOrchestrationService_PreviewVoiceAsync_defaults_qwen3_custom_voice_alias_for_preset_voices()
+    {
+        var ttsEngine = new FakeTtsEngine();
+        TtsServiceContext context = CreateTtsServiceContext(
+            ttsEngine,
+            voiceCatalog: new FakeVoiceCatalog(
+            [
+                new("qwen3:ono_anna", "ja", "female", "Ono Anna"),
+            ]));
+
+        await context.Service.PreviewVoiceAsync(
+            new PreviewVoiceRequest("qwen3:ono_anna", "ja", "Preview text."),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null), ttsEngine.LastOptions!.PreferredModelAlias);
+        Assert.True(ttsEngine.LastOptions.RequirePreferredModelAlias);
     }
 
     private static TranslationServiceContext CreateTranslationServiceContext(

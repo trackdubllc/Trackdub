@@ -599,10 +599,12 @@ public static class CompositionRoot
                 sp.GetRequiredService<ICloudApiKeyProvider>()));
         services.TryAddSingleton<IGraphemeToPhoneme>(_ => new EspeakNgPhonemizer());
         services.TryAddScoped<IVoiceCatalog>(sp =>
-            CreateKokoroVoiceCatalog(
-                sp.GetRequiredService<BenchmarkModelPathResolver>(),
-                sp.GetRequiredService<IApplicationLogger>())
-            .GetAwaiter().GetResult());
+            new StockAndPresetVoiceCatalog(
+                CreateKokoroVoiceCatalog(
+                    sp.GetRequiredService<BenchmarkModelPathResolver>(),
+                    sp.GetRequiredService<IApplicationLogger>())
+                .GetAwaiter().GetResult(),
+                Qwen3TtsVoiceCatalog.KnownAvailable()));
 
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ISpeechRegionDetectorAdapter, SileroVadSpeechRegionDetector>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAudioTranscriptionEngineAdapter, WhisperGenAiAudioTranscriptionEngine>());

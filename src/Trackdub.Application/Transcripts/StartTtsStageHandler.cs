@@ -88,6 +88,10 @@ public sealed class StartTtsStageHandler(
         {
             voice = ResolveVoice(request, isVoiceCloning);
 
+            // Inside the guarded block so cancellation here still records a Canceled stage run.
+            await WriteCloneModelSubstitutedDegradationAsync(request, voice, isVoiceCloning, stageRun.Id, cancellationToken)
+                .ConfigureAwait(false);
+
             // Resolve and validate the reference clip once for the entire batch so that the
             // audio analysis is not repeated for every synthesized segment.
             voiceCloneReference = isVoiceCloning
@@ -311,6 +315,59 @@ public sealed class StartTtsStageHandler(
         ReportProgress(completed, $"Segment {completed} of {ctx.TotalSegments}");
     }
 
+    /// <summary>
+    /// A clone-only TTS model (Chatterbox, CosyVoice, ...) requested on a run without voice
+    /// cloning is swapped for a stock voice so the run still produces audio. Say so: the request
+    /// named a model the run did not use.
+    /// </summary>
+    private async Task WriteCloneModelSubstitutedDegradationAsync(
+        StartTtsStageRequest request,
+        VoiceCatalogEntry voice,
+        bool isVoiceCloning,
+        Guid stageRunId,
+        CancellationToken cancellationToken)
+    {
+        string? requestedAlias = request.PreferredModelAlias?.Trim();
+        if (isVoiceCloning ||
+            string.IsNullOrWhiteSpace(requestedAlias) ||
+            !ShouldForceStockTtsAlias(requestedAlias))
+        {
+            return;
+        }
+
+        string message =
+            $"TTS model '{requestedAlias}' needs voice cloning, which is off for this run; " +
+            $"used stock voice '{voice.DisplayName}' instead.";
+        logger?.LogWarning(message);
+        if (degradationWriter is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await degradationWriter.WriteAsync(
+                new PipelineDegradationRecord(
+                    StageNames.Tts,
+                    "TTS_CLONE_MODEL_SUBSTITUTED",
+                    message,
+                    Detail: null,
+                    SelectedFallback: voice.VoiceId,
+                    RecommendedAction: "Enable voice cloning (--voice-clone) to use this model, or choose a stock TTS model.",
+                    DateTimeOffset.UtcNow,
+                    stageRunId),
+                request.ProjectId,
+                request.MediaAsset.Id,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Degradation write is best-effort; failure must not abort the stock-voice fallback.
+            logger?.LogWarning(
+                $"Failed to record clone-model substitution degradation for project {request.ProjectId}.", ex);
+        }
+    }
+
     private async Task WriteMissingReferenceTextDegradationAsync(
         int segmentIndex,
         Guid projectId,
@@ -357,7 +414,7 @@ public sealed class StartTtsStageHandler(
         ConcurrentDictionary<string, byte> reservedArtifactRelativePaths,
         CancellationToken cancellationToken)
     {
-        InferenceRequestOptions options = CreateTtsRequestOptions(request, voiceCloneReference is not null);
+        InferenceRequestOptions options = CreateTtsRequestOptions(request, voice, voiceCloneReference is not null);
         string inputFingerprint = ComputeInputFingerprint(
             translatedSegment.Id,
             translatedSegment.Text,
@@ -735,17 +792,33 @@ public sealed class StartTtsStageHandler(
                 "Voice clone");
         }
 
-        if (ShouldForceStockTtsAlias(request.PreferredModelAlias) &&
-            IsNonEnglishSpanishLanguage(request.TargetLanguage))
+        string voiceId = ResolveVoiceId(request.VoiceAssignment);
+
+        // Qwen3 CustomVoice serves stock voices for languages Kokoro does not cover, and any run
+        // that names a CustomVoice model. Keep an explicitly assigned preset (qwen3:<speaker>);
+        // otherwise use the preset whose native language matches the target.
+        bool usesQwen3StockVoices =
+            (ShouldForceStockTtsAlias(request.PreferredModelAlias) &&
+             IsNonEnglishSpanishLanguage(request.TargetLanguage)) ||
+            Qwen3TtsDefaults.IsCustomVoiceAlias(request.PreferredModelAlias?.Trim());
+        if (usesQwen3StockVoices)
         {
+            string presetVoiceId = Qwen3TtsDefaults.IsPresetVoiceId(voiceId)
+                ? voiceId.Trim()
+                : Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(request.TargetLanguage);
+            if (voiceCatalog.TryGetVoice(presetVoiceId, out VoiceCatalogEntry? preset))
+            {
+                return preset;
+            }
+
+            string speaker = presetVoiceId[Qwen3TtsDefaults.PresetVoicePrefix.Length..];
             return new VoiceCatalogEntry(
-                "qwen3:ryan",
+                presetVoiceId,
                 request.TargetLanguage,
                 "synthetic",
-                "Ryan");
+                char.ToUpperInvariant(speaker[0]) + speaker[1..]);
         }
 
-        string voiceId = ResolveVoiceId(request.VoiceAssignment);
         if (voiceCatalog.TryGetVoice(voiceId, out VoiceCatalogEntry? voice))
         {
             return voice;
@@ -834,13 +907,14 @@ public sealed class StartTtsStageHandler(
 
     private static InferenceRequestOptions CreateTtsRequestOptions(
         StartTtsStageRequest request,
+        VoiceCatalogEntry voice,
         bool isVoiceCloning)
     {
         if (isVoiceCloning)
         {
             return new InferenceRequestOptions(
                 string.IsNullOrWhiteSpace(request.PreferredModelAlias)
-                    ? VoiceCloningDefaults.ResolveDefaultChatterboxAlias(request.TargetLanguage)
+                    ? VoiceCloningDefaults.ResolveDefaultCloneModelAlias(request.TargetLanguage)
                     : request.PreferredModelAlias.Trim(),
                 RequirePreferredModelAlias: true,
                 PreferredExecutionProvider: request.PreferredExecutionProvider?.ToString(),
@@ -860,14 +934,19 @@ public sealed class StartTtsStageHandler(
         // so it must stay on a stock text-only model. CosyVoice is a voice-cloning model
         // that requires a reference clip (see CosyVoiceTtsEngine), so it cannot serve this
         // path; routing a non-en/es language to it would fail at inference.
-        string? preferredAlias = shouldForceStockTtsAlias
-            ? IsNonEnglishSpanishLanguage(request.TargetLanguage)
-                ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null)
-                : StockTtsDefaults.KokoroPrimaryAlias
-            : trimmedAlias;
+        // A Qwen3 preset voice (qwen3:<speaker>) can only be spoken by a Qwen3 CustomVoice model,
+        // so route to one even on English/Spanish targets that would otherwise default to Kokoro.
+        bool isQwen3PresetVoice = Qwen3TtsDefaults.IsPresetVoiceId(voice.VoiceId);
+        string? preferredAlias = isQwen3PresetVoice && !Qwen3TtsDefaults.IsCustomVoiceAlias(trimmedAlias)
+            ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null)
+            : shouldForceStockTtsAlias
+                ? IsNonEnglishSpanishLanguage(request.TargetLanguage)
+                    ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null)
+                    : StockTtsDefaults.KokoroPrimaryAlias
+                : trimmedAlias;
         return new InferenceRequestOptions(
             preferredAlias,
-            RequirePreferredModelAlias: shouldRequireExplicitAlias,
+            RequirePreferredModelAlias: shouldRequireExplicitAlias || isQwen3PresetVoice,
             PreferredExecutionProvider: request.PreferredExecutionProvider?.ToString(),
             RequirePreferredExecutionProvider: request.RequirePreferredExecutionProvider,
             PreferredModelVariantAlias: request.PreferredModelVariantAlias);
@@ -884,9 +963,7 @@ public sealed class StartTtsStageHandler(
     {
         string? trimmedAlias = alias?.Trim();
         return string.IsNullOrWhiteSpace(trimmedAlias) ||
-               (IsVoiceCloningAlias(trimmedAlias) &&
-                !TtsModelOverrideSettings.IsCosyVoiceAlias(trimmedAlias) &&
-                !Qwen3TtsDefaults.IsAnyQwen3Alias(trimmedAlias));
+               IsVoiceCloningAlias(trimmedAlias);
     }
 
     /// <summary>

@@ -1925,15 +1925,16 @@ public sealed class DubbingPipelineEngine(
     /// Unattended runs have no voice-assignment step, so speakers without a deliberate
     /// (non-fallback) voice assignment would fail TTS outright. Mirrors the shell's fallback
     /// behavior: picks the first catalog voice whose language matches the dub target language,
-    /// ordered by display name like the shell's voice picker. Speakers stay unassigned when no
-    /// language-matching voice exists, so TTS fails with the explicit assignment error instead
-    /// of dubbing with a wrong-language voice.
+    /// ordered by display name like the shell's voice picker. Languages Kokoro does not cover use
+    /// the Qwen3 CustomVoice default preset when Qwen3 speaks the language. Speakers stay
+    /// unassigned otherwise, so TTS fails with the explicit assignment error instead of dubbing
+    /// with a wrong-language voice.
     /// </summary>
     internal static Dictionary<Guid, string>? BuildUnattendedFallbackVoiceIds(
         TranscriptProjectState state,
         string? targetLanguageCode)
     {
-        if (state.Speakers.Count == 0 || state.AvailableVoices.Count == 0)
+        if (state.Speakers.Count == 0)
         {
             return null;
         }
@@ -1943,11 +1944,20 @@ public sealed class DubbingPipelineEngine(
             .Select(static assignment => assignment.SpeakerId)
             .ToHashSet();
 
-        string? defaultVoiceId = state.AvailableVoices
-            .Where(voice => IsVoiceLanguageMatch(voice.LanguageCode, targetLanguageCode))
-            .OrderBy(static voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .Select(static voice => voice.VoiceId)
-            .FirstOrDefault();
+        // Languages Kokoro does not cover use the Qwen3 CustomVoice preset whose native language
+        // matches. The picker list can contain every preset for these languages, so take the
+        // language default instead of the alphabetically first preset (Aiden is English).
+        // Otherwise pick the first matching stock voice.
+        string? defaultVoiceId = !string.IsNullOrWhiteSpace(targetLanguageCode) &&
+                                 !StockTtsVoiceMatcher.SupportsKokoro(targetLanguageCode)
+            ? (Qwen3TtsDefaults.SupportsLanguage(targetLanguageCode)
+                ? Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguageCode)
+                : null)
+            : state.AvailableVoices
+                .Where(voice => IsVoiceLanguageMatch(voice.LanguageCode, targetLanguageCode))
+                .OrderBy(static voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(static voice => voice.VoiceId)
+                .FirstOrDefault();
         if (defaultVoiceId is null)
         {
             return null;
@@ -1998,11 +2008,11 @@ public sealed class DubbingPipelineEngine(
                 return options with { ModelPreferences = preferences };
             }
 
-            preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
+            preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultCloneModelAlias(options.TargetLanguageCode);
             return options with { ModelPreferences = preferences };
         }
 
-        preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
+        preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultCloneModelAlias(options.TargetLanguageCode);
         return options with { ModelPreferences = preferences };
     }
 
@@ -2056,7 +2066,7 @@ public sealed class DubbingPipelineEngine(
         string? preferredModelAlias = ttsModelAlias;
         if (RequestsVoiceCloning(options) && string.IsNullOrWhiteSpace(preferredModelAlias))
         {
-            preferredModelAlias = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
+            preferredModelAlias = VoiceCloningDefaults.ResolveDefaultCloneModelAlias(options.TargetLanguageCode);
         }
 
         return new GenerateTtsForAllSpeakersRequest(
