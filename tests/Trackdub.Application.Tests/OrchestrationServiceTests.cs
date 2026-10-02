@@ -468,6 +468,65 @@ public sealed class OrchestrationServiceTests
         Assert.Equal(stageRun.Id, take.StageRunId);
     }
 
+    [Theory]
+    [InlineData("zh", true)]
+    [InlineData("es", false)]
+    public void ApplyPresetVoiceModelSelection_points_preflight_at_qwen3_custom_voice_only_for_preset_runs(
+        string targetLanguage,
+        bool expectCustomVoice)
+    {
+        TranscriptProjectState state = CreateTranslatedProjectState() with { VoiceAssignments = [] };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = targetLanguage,
+            AutoAssignFallbackVoices = true,
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: "kokoro-onnx");
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal(
+            expectCustomVoice ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) : "kokoro-onnx",
+            result.TtsModelAlias);
+    }
+
+    [Fact]
+    public async Task TtsOrchestrationService_GenerateTtsForSpeakerAsync_refuses_clone_only_substitution_when_qwen3_cannot_speak_the_target()
+    {
+        TtsServiceContext context = CreateTtsServiceContext(
+            new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1000 },
+            voiceCatalog: new FakeVoiceCatalog([new("af_heart", "mul", "female", "Heart")]));
+        TranscriptProjectState spanishState = CreateTranslatedProjectState();
+        TranslationRevision dutchRevision = spanishState.CurrentTranslationRevision! with { TargetLanguage = "nl" };
+        Guid speakerId = spanishState.Speakers[0].Id;
+        VoiceAssignment persistedClone = VoiceAssignment.Create(
+            spanishState.ProjectState.Project.Id,
+            speakerId,
+            Qwen3TtsDefaults.Base06Alias,
+            voiceVariant: null,
+            requiresConsent: true,
+            isFallback: false,
+            referenceClipArtifactId: Guid.NewGuid());
+        TranscriptProjectState state = spanishState with
+        {
+            CurrentTranslationRevision = dutchRevision,
+            SelectedTranslationTargetLanguage = "nl",
+            VoiceAssignments = [persistedClone]
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => context.Service.GenerateTtsForSpeakerAsync(
+            state,
+            new GenerateTtsForSpeakerRequest(speakerId, UseReferenceClipForVoiceCloning: false),
+            TestContext.Current.CancellationToken));
+        Assert.Empty(context.VoiceAssignmentRepository.All);
+    }
+
     [Fact]
     public async Task TtsOrchestrationService_GenerateTtsForSpeakerAsync_substitutes_qwen3_stock_for_persisted_qwen3_base_clone_on_non_kokoro_target()
     {

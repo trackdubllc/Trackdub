@@ -1243,6 +1243,11 @@ public sealed class TtsOrchestrationService(
     {
         if (!StockTtsVoiceMatcher.SupportsKokoro(targetLanguage))
         {
+            if (!Qwen3TtsDefaults.SupportsLanguage(targetLanguage))
+            {
+                throw new InvalidOperationException(noKokoroMatchError());
+            }
+
             VoiceAssignment stockAssignment = currentAssignment with
             {
                 VoiceModelId = StockTtsVoiceMatcher.ResolveFallbackModelAlias(targetLanguage),

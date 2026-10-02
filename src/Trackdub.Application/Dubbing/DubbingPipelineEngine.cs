@@ -2200,6 +2200,7 @@ public sealed class DubbingPipelineEngine(
                 // matching the precedence the settings path applies via
                 // CreateSelectionsFromSettings.
                 selections = ApplyModelPreferenceAliases(provided, preferences);
+                selections = ApplyPresetVoiceModelSelection(selections, options, state);
                 return ApplyExecutionProviderPins(selections, options, preferences);
             }
         }
@@ -2214,7 +2215,45 @@ public sealed class DubbingPipelineEngine(
         selections = RuntimeModelRequestFactory.CreateSelectionsFromSettings(
             settings,
             preferences);
+        selections = ApplyPresetVoiceModelSelection(selections, options, state);
         return ApplyExecutionProviderPins(selections, options, preferences);
+    }
+
+    /// <summary>
+    /// When every voice this run will synthesize with is a Qwen3 preset (explicit overrides plus
+    /// unattended fallbacks), synthesis switches to Qwen3 CustomVoice regardless of the selected
+    /// TTS model. Readiness and provisioning only inspect the selected alias, so point them at
+    /// CustomVoice too; otherwise the run passes preflight and then fails with "Model setup required".
+    /// </summary>
+    internal static RuntimeModelSelections ApplyPresetVoiceModelSelection(
+        RuntimeModelSelections selections,
+        DubbingSessionOptions options,
+        TranscriptProjectState? state)
+    {
+        if (state is null ||
+            RequestsVoiceCloning(options) ||
+            Qwen3TtsDefaults.IsAnyQwen3Alias(selections.TtsModelAlias) ||
+            VoiceCloningDefaults.IsCloneOnlyModelAlias(selections.TtsModelAlias))
+        {
+            return selections;
+        }
+
+        IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
+            state,
+            options.VoiceAssignmentOverrides);
+        IEnumerable<string> voiceIds = explicitVoiceIds.Values;
+        if (options.AutoAssignFallbackVoices &&
+            BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode) is { } fallbackVoiceIds)
+        {
+            voiceIds = voiceIds.Concat(fallbackVoiceIds
+                .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
+                .Select(static pair => pair.Value));
+        }
+
+        List<string> allVoiceIds = voiceIds.ToList();
+        return allVoiceIds.Count > 0 && allVoiceIds.All(Qwen3TtsDefaults.IsPresetVoiceId)
+            ? selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) }
+            : selections;
     }
 
     /// <summary>
