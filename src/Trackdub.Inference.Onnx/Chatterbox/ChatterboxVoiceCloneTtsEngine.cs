@@ -447,7 +447,8 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             ? null
             : languageCode.Trim().ToLowerInvariant();
 
-        if (normalized is null || !TranslationLanguageCoverageMatrix.TryGetLanguage(normalized, out _))
+        // The translation matrix also lists Chinese, which Chatterbox multilingual does not speak.
+        if (normalized is null or "zh" || !TranslationLanguageCoverageMatrix.TryGetLanguage(normalized, out _))
         {
             throw new NotSupportedException(
                 $"Chatterbox multilingual synthesis requires a supported language code; '{languageCode}' is not in the supported set.");

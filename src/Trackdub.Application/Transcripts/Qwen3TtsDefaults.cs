@@ -36,6 +36,16 @@ public static class Qwen3TtsDefaults
         };
     }
 
+    private static readonly HashSet<string> SupportedLanguages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "zh", "en", "ja", "ko", "de", "fr", "ru", "pt", "es", "it",
+    };
+
+    /// <summary>True when Qwen3-TTS speaks the language (its ten supported languages).</summary>
+    public static bool SupportsLanguage(string? targetLanguage) =>
+        !string.IsNullOrWhiteSpace(targetLanguage) &&
+        SupportedLanguages.Contains(targetLanguage.Trim().Split('-')[0]);
+
     public static string ResolveCustomVoiceAlias(string? tier) =>
         IsQualityTier(tier) ? CustomVoice17Alias : CustomVoice06Alias;
 

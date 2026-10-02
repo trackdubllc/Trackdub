@@ -47,7 +47,7 @@ public static class CosyVoiceReferenceValidator
         {
             throw new ArgumentException(
                 $"Reference clip too long ({durationSeconds:F2}s). " +
-                $"Maximum duration: {MaximumDurationMs / 1000.0:F1}s. " +
+                $"Maximum duration: {(MaximumDurationMs + MaximumDurationToleranceMs) / 1000.0:F1}s. " +
                 "Use a 3-10 second clip for best voice cloning results.");
         }
 

@@ -70,16 +70,6 @@ public static class VoiceCloningDefaults
         IsF5VoiceCloningModelAlias(alias);
 
     /// <summary>
-    /// Target languages the Chatterbox multilingual clone model supports (its model card set).
-    /// Chinese is not among them.
-    /// </summary>
-    private static readonly HashSet<string> ChatterboxMultilingualLanguages = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "ar", "da", "de", "el", "en", "es", "fi", "fr", "he", "hi", "it",
-        "ja", "ko", "ms", "nl", "no", "pl", "pt", "ru", "sv", "sw", "tr",
-    };
-
-    /// <summary>
     /// Picks the default clone-model alias for a target language: Chatterbox turbo for English,
     /// Chatterbox multilingual for its supported languages, and CosyVoice for Chinese, which the
     /// Chatterbox models do not speak.
@@ -95,9 +85,7 @@ public static class VoiceCloningDefaults
             return CosyVoicePrimaryAlias;
         }
 
-        return ChatterboxMultilingualLanguages.Contains(normalized)
-            ? ResolveDefaultChatterboxAlias(normalized)
-            : ChatterboxMultilingualAlias;
+        return ResolveDefaultChatterboxAlias(normalized);
     }
 
     /// <summary>

@@ -1949,7 +1949,9 @@ public sealed class DubbingPipelineEngine(
         // Otherwise pick the first matching stock voice.
         string? defaultVoiceId = !string.IsNullOrWhiteSpace(targetLanguageCode) &&
                                  !StockTtsVoiceMatcher.SupportsKokoro(targetLanguageCode)
-            ? Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguageCode)
+            ? (Qwen3TtsDefaults.SupportsLanguage(targetLanguageCode)
+                ? Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguageCode)
+                : null)
             : state.AvailableVoices
                 .Where(voice => IsVoiceLanguageMatch(voice.LanguageCode, targetLanguageCode))
                 .OrderBy(static voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)

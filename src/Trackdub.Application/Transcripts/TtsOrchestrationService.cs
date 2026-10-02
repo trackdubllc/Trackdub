@@ -597,11 +597,11 @@ public sealed class TtsOrchestrationService(
                 ? VoiceAssignment.Create(
                     currentState.ProjectState.Project.Id,
                     speakerId,
-                    "kokoro-onnx",
+                    ResolveVoiceModelId(normalizedVoiceId),
                     normalizedVoiceId)
                 : existing with
                 {
-                    VoiceModelId = "kokoro-onnx",
+                    VoiceModelId = ResolveVoiceModelId(normalizedVoiceId),
                     VoiceVariant = normalizedVoiceId,
                     RequiresConsent = false,
                     IsFallback = false,
@@ -629,7 +629,7 @@ public sealed class TtsOrchestrationService(
             VoiceAssignment assignment = VoiceAssignment.CreateFallback(
                 currentState.ProjectState.Project.Id,
                 speakerId,
-                "kokoro-onnx",
+                ResolveVoiceModelId(normalizedVoiceId),
                 normalizedVoiceId);
             await voiceAssignmentRepository.SaveAsync(assignment, cancellationToken).ConfigureAwait(false);
             return assignment;
@@ -637,6 +637,11 @@ public sealed class TtsOrchestrationService(
 
         return null;
     }
+
+    private static string ResolveVoiceModelId(string voiceId) =>
+        Qwen3TtsDefaults.IsPresetVoiceId(voiceId)
+            ? Qwen3TtsDefaults.CustomVoice06Alias
+            : "kokoro-onnx";
 
     private static string BuildSpeakerProgressLabel(ProjectSpeaker speaker, int speakerNumber, int speakerCount) =>
         string.IsNullOrWhiteSpace(speaker.DisplayName)
