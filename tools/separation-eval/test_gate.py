@@ -350,7 +350,7 @@ class EdgeExclusionTests(unittest.TestCase):
     def test_the_start_edge_backstop_tracks_the_clip_relative_threshold(self):
         # Constant levels keep the ratio exact: 0.625 of the clip amplitude is -4.1 dB (passes -3 dB)
         # and 0.75 is -2.5 dB (fails). A regression that stops judging the start edge, or that moves
-        # the threshold across that bracket, fails one of the two cases.
+        # the threshold across that bracket, is caught by the policy assertion below, not by these two cases.
         n = int(3 * SR)
         mix = np.full((n, 1), np.float32(0.25))
         dialogue = np.full_like(mix, np.float32(0.125))
