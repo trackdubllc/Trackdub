@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 
 import numpy as np
 
@@ -130,6 +131,19 @@ class BedLeakageTests(unittest.TestCase):
         r = metrics.bed_leakage(d, quiet, quiet + leak, SR)
         self.assertAlmostEqual(r.worst_window_leakage_db, 20 * np.log10(0.2), delta=0.5)
         self.assertLessEqual(r.worst_window_leakage_db, 0.5)
+
+    def test_worst_window_ignores_a_barely_audible_dialogue_window(self):
+        d, b = signals(seed=7, seconds=8.0)
+        s = 3 * SR
+        d[s:s + SR] *= 0.03
+        noise = np.random.default_rng(3).standard_normal(b.shape).astype(np.float32)
+        error = np.zeros_like(b)
+        error[s:s + SR] = 0.3 * noise[s:s + SR]
+        r = metrics.bed_leakage(d, b, b + error, SR)
+        self.assertLess(r.worst_window_leakage_db, -10.0)
+        with unittest.mock.patch.object(metrics, "WORST_WINDOW_MIN_DIALOGUE_POWER_RATIO", 0.0):
+            unguarded = metrics.bed_leakage(d, b, b + error, SR)
+        self.assertGreater(unguarded.worst_window_leakage_db, 10.0)
 
     def test_worst_window_is_reported_when_the_whole_reference_bed_is_below_the_floor(self):
         d, _ = signals(seed=6)
