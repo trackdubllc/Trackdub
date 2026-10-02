@@ -2220,7 +2220,7 @@ public sealed class DubbingPipelineEngine(
     }
 
     /// <summary>
-    /// When every voice this run will synthesize with is a Qwen3 preset (explicit overrides plus
+    /// When any voice this run will synthesize with is a Qwen3 preset (explicit overrides plus
     /// unattended fallbacks), synthesis switches to Qwen3 CustomVoice regardless of the selected
     /// TTS model. Readiness and provisioning only inspect the selected alias, so point them at
     /// CustomVoice too; otherwise the run passes preflight and then fails with "Model setup required".
@@ -2251,7 +2251,7 @@ public sealed class DubbingPipelineEngine(
         }
 
         List<string> allVoiceIds = voiceIds.ToList();
-        return allVoiceIds.Count > 0 && allVoiceIds.All(Qwen3TtsDefaults.IsPresetVoiceId)
+        return allVoiceIds.Any(Qwen3TtsDefaults.IsPresetVoiceId)
             ? selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) }
             : selections;
     }
