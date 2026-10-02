@@ -433,6 +433,10 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
     /// multilingual synthesis is requested without a supported language code, rather than
     /// silently synthesizing in the wrong language.
     /// </summary>
+    // The translation matrix is wider than the Chatterbox multilingual model card (it also lists
+    // Chinese), so languages the model cannot speak are excluded explicitly.
+    internal static readonly HashSet<string> UnsupportedMultilingualLanguages = new(StringComparer.Ordinal) { "zh" };
+
     private static string ApplyMultilingualLanguagePrefix(
         string text,
         string languageCode,
@@ -447,8 +451,7 @@ public sealed class ChatterboxVoiceCloneTtsEngine(
             ? null
             : languageCode.Trim().ToLowerInvariant();
 
-        // The translation matrix also lists Chinese, which Chatterbox multilingual does not speak.
-        if (normalized is null or "zh" || !TranslationLanguageCoverageMatrix.TryGetLanguage(normalized, out _))
+        if (normalized is null || UnsupportedMultilingualLanguages.Contains(normalized) || !TranslationLanguageCoverageMatrix.TryGetLanguage(normalized, out _))
         {
             throw new NotSupportedException(
                 $"Chatterbox multilingual synthesis requires a supported language code; '{languageCode}' is not in the supported set.");

@@ -640,8 +640,8 @@ public sealed class TtsOrchestrationService(
 
     private static string ResolveVoiceModelId(string voiceId) =>
         Qwen3TtsDefaults.IsPresetVoiceId(voiceId)
-            ? Qwen3TtsDefaults.CustomVoice06Alias
-            : "kokoro-onnx";
+            ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null)
+            : StockTtsDefaults.KokoroPrimaryAlias;
 
     private static string BuildSpeakerProgressLabel(ProjectSpeaker speaker, int speakerNumber, int speakerCount) =>
         string.IsNullOrWhiteSpace(speaker.DisplayName)

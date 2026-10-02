@@ -120,7 +120,7 @@ public sealed class VoiceAssignmentService(
             }
 
             string voiceLanguage = NormalizeVoiceLanguageForComparison(voice.LanguageCode);
-            if (!string.Equals(voiceLanguage, targetLanguage, StringComparison.Ordinal))
+            if (!Qwen3TtsDefaults.IsPresetVoiceId(voice.VoiceId) && !string.Equals(voiceLanguage, targetLanguage, StringComparison.Ordinal))
             {
                 warnings.Add(new VoiceAssignmentWarning(
                     assignment.SpeakerId,

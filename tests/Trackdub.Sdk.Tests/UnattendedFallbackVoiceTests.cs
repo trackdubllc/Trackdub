@@ -126,6 +126,20 @@ public sealed class UnattendedFallbackVoiceTests
         Assert.Equal(expectedVoiceId, fallbackVoiceIds[speaker.Id]);
     }
 
+    [Theory]
+    [InlineData("nl")]
+    [InlineData("tr")]
+    public void Leaves_speakers_unassigned_when_neither_kokoro_nor_qwen3_speaks_the_language(string targetLanguage)
+    {
+        ProjectSpeaker speaker = CreateSpeaker("Speaker 1");
+        TranscriptProjectState state = BuildState(
+            speakers: [speaker],
+            availableVoices: [new VoiceCatalogEntry("am_adam", "en-us", "male", "Adam")],
+            voiceAssignments: []);
+
+        Assert.Null(TrackdubDubbingEngine.BuildUnattendedFallbackVoiceIds(state, targetLanguage));
+    }
+
     [Fact]
     public void Returns_null_when_every_speaker_already_has_a_deliberate_assignment()
     {
