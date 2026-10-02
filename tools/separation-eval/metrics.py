@@ -475,8 +475,10 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
     """Judge the reconstruction gate on the clip without its first and last `edge_exclusion_s` seconds.
 
     The exclusion applies to every candidate alike. Clips of at most RECONSTRUCTION_EDGE_MIN_CLIP_S
-    seconds are judged whole. The whole-clip residuals are kept as diagnostics. See
-    `_check_reconstruction` for the gate itself.
+    seconds are judged whole. On longer clips, `_check_reconstruction` runs on the full clip and again
+    on the trimmed interior: whole-clip in-band diagnostics cannot be derived from the trimmed segment
+    alone, and the extra pass is acceptable for eval throughput. The whole-clip residuals are kept as
+    diagnostics. See `_check_reconstruction` for the gate itself.
     """
     edge = int(round(edge_exclusion_s * sr))
     arrays = (mixture, est_dialogue, est_bed)
