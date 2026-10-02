@@ -114,7 +114,7 @@ to its consumer.
 
 - **Dependency graph changes** — new/removed/renamed projects, changed `ProjectReference` sets. The gated app references core `Application`, `Composition`, `Domain`, `Licensing`, `Media.Playback`, and `Sdk`; test projects additionally reference `Contracts`. `Trackdub.App.Avalonia` **also** references `Trackdub.Benchmarks` and `Trackdub.DubBench` beyond that list — confirm all eight resolve, and check those two explicitly since `AGENTS.md` does not name them.
   ```bash
-  grep -rhoP '(?<=ProjectReference Include=")[^"]+' "$GATED_ROOT"/src/Trackdub.App.Avalonia/*.csproj | tr '\134' '/' | awk -F/ '{print $NF}' | sed 's/\.csproj$//' | sort -u
+  grep -rho 'ProjectReference Include="[^"]*"' "$GATED_ROOT"/src/Trackdub.App.Avalonia/*.csproj | sed 's/.*ProjectReference Include="//;s/"$//' | tr '\134' '/' | awk -F/ '{print $NF}' | sed 's/\.csproj$//' | sort -u
   ```
   `ProjectReference` paths are relative and backslash-separated on Windows
   (`..\..\external\Trackdub\src\Trackdub.Application\...`), so normalise to the project name
@@ -124,8 +124,8 @@ to its consumer.
   `Trackdub.DubBench`, `Trackdub.Licensing`, `Trackdub.Media.Playback`, `Trackdub.Sdk`.
 - **Desktop stage order** — `PipelineExecutionCoordinator` in the gated app defines its own `stageOrder` from `StageNames.*`, and it deliberately differs from core's `DubbingPipelineStages.ExtendedStageOrder` (it interleaves `Diarization` after `TextRefinementAsr`; core runs `Diarization` before `Asr`). A core change that adds or reorders a stage leaves that array untouched and the stage **silently never runs in the desktop app** while core and CLI stay green. Both compile, so nothing catches it but this check:
   ```bash
-  grep -oP '(?<=StageNames\.)[A-Za-z]+' "$GATED_ROOT"/src/Trackdub.App.Avalonia/Services/PipelineExecutionCoordinator.cs | sort
-  git -C "$GATED_ROOT/external/Trackdub" show HEAD:src/Trackdub.Domain/StageRuns/StageNames.cs | grep -oP '(?<=const string )[A-Za-z]+' | sort
+  grep -o 'StageNames\.[A-Za-z][A-Za-z]*' "$GATED_ROOT"/src/Trackdub.App.Avalonia/Services/PipelineExecutionCoordinator.cs | sed 's/^StageNames\.//' | sort
+  git -C "$GATED_ROOT/external/Trackdub" show HEAD:src/Trackdub.Domain/StageRuns/StageNames.cs | grep -o 'const string [A-Za-z][A-Za-z]*' | sed 's/^const string //' | sort
   ```
   A core constant with no desktop counterpart is `IMPACT`. Do not "fix" it by editing the submodule.
 - **Domain and contract type changes** — moved/renamed types, changed records, signature changes on `Application`/`Sdk` entry points.

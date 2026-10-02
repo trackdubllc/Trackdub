@@ -43,13 +43,13 @@ permission:
     # "$GATED_ROOT/external/Trackdub". A glob cannot match across a quoted shell
     # variable, so the resolved-prefix forms are allow-listed explicitly. These are
     # the same verbs as the relative forms above; /pin is the only caller.
-    "git -C ${GATED_ROOT}*": allow
-    "git -C \"${GATED_ROOT}\"*": allow
-    "git -C \"${GATED_ROOT}/external/Trackdub\"*": allow
+    "git -C $GATED_ROOT*": allow
+    "git -C \"$GATED_ROOT\"*": allow
+    "git -C \"$GATED_ROOT/external/Trackdub\"*": allow
+    "python3 \"$GATED_ROOT/external/Trackdub/tools/ci/*\"*": allow
     "grep *": allow
     "ls *": allow
     "cat *": allow
-    "find *": allow
     "awk *": allow
     "sed *": allow
     "tr *": allow

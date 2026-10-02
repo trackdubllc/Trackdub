@@ -9,6 +9,10 @@ if (($# == 0)); then
 fi
 
 max_attempts="${DOTNET_TEST_MAX_ATTEMPTS:-2}"
+if ! [[ "$max_attempts" =~ ^[1-9][0-9]*$ ]] || ((max_attempts > 5)); then
+  echo "DOTNET_TEST_MAX_ATTEMPTS must be an integer from 1 to 5, got: $max_attempts" >&2
+  exit 2
+fi
 attempt=1
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
