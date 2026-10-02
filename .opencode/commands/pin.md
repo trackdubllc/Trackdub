@@ -102,7 +102,7 @@ row with no root is not attributable to a repo.
 
 | Repo | Run from | Command | Result |
 |---|---|---|---|
-| core | `external/Trackdub` (the submodule root) | `dotnet build external/Trackdub/Trackdub.slnx -m:1` | PASS / FAIL / NOT VERIFIED |
+| core | `external/Trackdub` (the submodule root) | `dotnet build Trackdub.slnx -m:1` | PASS / FAIL / NOT VERIFIED |
 | gated | the gated repo root | `dotnet build Trackdub.slnx -m:1` | PASS / FAIL / NOT VERIFIED |
 
 Confirm each root with `git rev-parse --show-toplevel` before its build and record both. If
