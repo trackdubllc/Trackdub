@@ -120,4 +120,15 @@ public sealed class VoiceCloningDefaultsTests
     [InlineData("   ")]
     public void IsCloneOnlyModelAlias_ForStockOrCustomVoiceAliases_ReturnsFalse(string? alias) =>
         Assert.False(VoiceCloningDefaults.IsCloneOnlyModelAlias(alias));
+
+    [Theory]
+    [InlineData("en", VoiceCloningDefaults.ChatterboxPrimaryAlias)]
+    [InlineData("en-US", VoiceCloningDefaults.ChatterboxPrimaryAlias)]
+    [InlineData("es", VoiceCloningDefaults.ChatterboxMultilingualAlias)]
+    [InlineData("ja", VoiceCloningDefaults.ChatterboxMultilingualAlias)]
+    [InlineData("zh", VoiceCloningDefaults.CosyVoicePrimaryAlias)]
+    [InlineData("zh-Hans", VoiceCloningDefaults.CosyVoicePrimaryAlias)]
+    [InlineData(null, VoiceCloningDefaults.ChatterboxPrimaryAlias)]
+    public void ResolveDefaultCloneModelAlias_PicksAModelThatSpeaksTheTarget(string? targetLanguage, string expectedAlias) =>
+        Assert.Equal(expectedAlias, VoiceCloningDefaults.ResolveDefaultCloneModelAlias(targetLanguage));
 }

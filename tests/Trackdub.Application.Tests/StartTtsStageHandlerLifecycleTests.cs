@@ -146,19 +146,121 @@ public sealed class StartTtsStageHandlerLifecycleTests
         Assert.Single(ttsTakeRepository.Inner.All);
     }
 
+    [Fact]
+    public async Task HandleAsync_ChineseTarget_UsesNativeMandarinQwen3Preset()
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        var ttsEngine = new FakeTtsEngine();
+        using var handler = CreateHandler(stageRunStore, ttsEngine);
+        StartTtsStageRequest request = CreateRequest(targetLanguage: "zh");
+
+        StartTtsStageResult result = await handler.HandleAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StageRunStatus.Completed, result.StageRun.Status);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, ttsEngine.LastOptions?.PreferredModelAlias);
+        Assert.Equal("qwen3:vivian", ttsEngine.LastVoicepack?.VoiceId);
+    }
+
+    [Fact]
+    public async Task HandleAsync_AssignedQwen3Preset_OnSpanishTarget_RoutesToCustomVoice()
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        var ttsEngine = new FakeTtsEngine();
+        var catalog = new FakeVoiceCatalog(
+        [
+            new("af_heart", "mul", "female", "Heart"),
+            new("qwen3:serena", "mul", "female", "Serena (Chinese)"),
+        ]);
+        using var handler = CreateHandler(stageRunStore, ttsEngine, voiceCatalog: catalog);
+        StartTtsStageRequest request = CreateRequest(voiceId: "qwen3:serena", targetLanguage: "es");
+
+        StartTtsStageResult result = await handler.HandleAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StageRunStatus.Completed, result.StageRun.Status);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, ttsEngine.LastOptions?.PreferredModelAlias);
+        Assert.True(ttsEngine.LastOptions?.RequirePreferredModelAlias);
+        Assert.Equal("qwen3:serena", ttsEngine.LastVoicepack?.VoiceId);
+    }
+
+    [Fact]
+    public async Task HandleAsync_CustomVoiceAlias_WithKokoroAssignment_UsesDefaultPresetInsteadOfFailing()
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        var ttsEngine = new FakeTtsEngine();
+        using var handler = CreateHandler(stageRunStore, ttsEngine);
+        StartTtsStageRequest request = CreateRequest(targetLanguage: "es") with
+        {
+            PreferredModelAlias = Qwen3TtsDefaults.CustomVoice06Alias,
+        };
+
+        StartTtsStageResult result = await handler.HandleAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StageRunStatus.Completed, result.StageRun.Status);
+        Assert.Equal("qwen3:ryan", ttsEngine.LastVoicepack?.VoiceId);
+    }
+
+    [Fact]
+    public async Task HandleAsync_CloneOnlyAliasWithoutCloning_WarnsAboutStockSubstitution()
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        var ttsEngine = new FakeTtsEngine();
+        var logger = new WarningCapturingLogger();
+        using var handler = CreateHandler(stageRunStore, ttsEngine, logger: logger);
+        StartTtsStageRequest request = CreateRequest(targetLanguage: "es") with
+        {
+            PreferredModelAlias = VoiceCloningDefaults.ChatterboxMultilingualAlias,
+        };
+
+        StartTtsStageResult result = await handler.HandleAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StageRunStatus.Completed, result.StageRun.Status);
+        string warning = Assert.Single(logger.Warnings);
+        Assert.Contains(VoiceCloningDefaults.ChatterboxMultilingualAlias, warning, StringComparison.Ordinal);
+        Assert.Contains("needs voice cloning", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HandleAsync_StockRunWithoutRequestedAlias_DoesNotWarn()
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        var logger = new WarningCapturingLogger();
+        using var handler = CreateHandler(stageRunStore, logger: logger);
+        StartTtsStageRequest request = CreateRequest(targetLanguage: "es");
+
+        await handler.HandleAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Empty(logger.Warnings);
+    }
+
     private static StartTtsStageHandler CreateHandler(
         IProjectStageRunStore stageRunStore,
         FakeTtsEngine? ttsEngine = null,
-        ITtsTakeRepository? ttsTakeRepository = null)
+        ITtsTakeRepository? ttsTakeRepository = null,
+        IVoiceCatalog? voiceCatalog = null,
+        IApplicationLogger? logger = null)
     {
         return new StartTtsStageHandler(
             ttsEngine ?? new FakeTtsEngine(),
-            new FakeVoiceCatalog(),
+            voiceCatalog ?? new FakeVoiceCatalog(),
             new FakeArtifactStore(),
             new FakeFileFingerprintService(new FileFingerprint("tts-hash", 42, DateTimeOffset.UtcNow)),
             new FakeMediaAssetRepository(),
             ttsTakeRepository ?? new FakeTtsTakeRepository(),
-            stageRunStore);
+            stageRunStore,
+            logger: logger);
+    }
+
+    private sealed class WarningCapturingLogger : IApplicationLogger
+    {
+        public List<string> Warnings { get; } = [];
+
+        public void LogDebug(string message) { }
+
+        public void LogInformation(string message) { }
+
+        public void LogWarning(string message, Exception? exception = null) => Warnings.Add(message);
+
+        public void LogError(string message, Exception? exception = null) { }
     }
 
     [Fact]

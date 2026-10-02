@@ -7,18 +7,20 @@ internal sealed record TranslationLanguageDefinition(
 
 internal static class TranslationLanguageCoverageMatrix
 {
-    // Coverage tracks the Chatterbox multilingual TTS language set (22 languages).
+    // Coverage tracks the Chatterbox multilingual TTS language set (22 languages) plus Chinese.
     // `MadladTag` is the token MADLAD-400 expects in its <2xx> target prefix; it was
     // verified against the model's SentencePiece vocab (jbochi/madlad400-3b-mt/spiece.model)
     // and equals the 2-letter ISO 639-1 code for every language in this set. Do NOT use
     // 3-letter codes here: MADLAD's vocab has no <2eng>/<2por>/... tokens, so a 3-letter
     // tag silently degrades translation to an unknown-token prefix.
     //
-    // Chinese (zh) is intentionally excluded: it is disabled in the Chatterbox multilingual
-    // model, so advertising it for dubbing would fake TTS readiness.
+    // Chinese (zh) is covered even though the Chatterbox multilingual model does not speak it:
+    // Chinese dubs use Qwen3 CustomVoice presets for stock voices (native Mandarin speakers) and
+    // CosyVoice for voice cloning. MADLAD's vocab has the <2zh> target tag.
     private static readonly TranslationLanguageDefinition[] Definitions =
     [
         new("ar", "Arabic", "ar"),
+        new("zh", "Chinese", "zh"),
         new("da", "Danish", "da"),
         new("de", "German", "de"),
         new("el", "Greek", "el"),

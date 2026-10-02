@@ -479,7 +479,7 @@ public sealed class OrchestrationServiceTests
         var ttsEngine = new FakeTtsEngine { SampleRate = 1000, DurationSamples = 1000 };
         // Production's IVoiceCatalog is Kokoro-only; it does NOT contain the Qwen3 custom-voice
         // alias. On this non-Kokoro target the substitution routes through the synthetic
-        // qwen3:ryan voice (no catalog lookup), so the catalog deliberately omits the alias.
+        // native Qwen3 preset voice (no catalog lookup), so the catalog deliberately omits the alias.
         TtsServiceContext context = CreateTtsServiceContext(
             ttsEngine,
             voiceCatalog: new FakeVoiceCatalog(
@@ -522,9 +522,9 @@ public sealed class OrchestrationServiceTests
         Assert.Equal(TtsTakeStatus.Completed, take.Status);
         Assert.Equal(TtsTakeKind.Stock, take.Kind);
         // The non-Kokoro clone-only substitution leaves PreferredModelAlias blank so
-        // StartTtsStageHandler routes to the synthetic qwen3:ryan voice rather than a
-        // Kokoro-only catalog lookup that would throw for the Qwen3 custom-voice alias.
-        Assert.Equal("qwen3:ryan", take.VoiceId);
+        // StartTtsStageHandler routes to the Qwen3 preset whose native language matches the
+        // Japanese target (Ono Anna) rather than a Kokoro-only catalog lookup that would throw.
+        Assert.Equal("qwen3:ono_anna", take.VoiceId);
     }
 
     [Fact]
@@ -1013,7 +1013,9 @@ public sealed class OrchestrationServiceTests
         Assert.Null(assignment.VoiceVariant);
         TtsTake take = Assert.Single(context.TtsTakeRepository.All);
         Assert.Equal(TtsTakeKind.Stock, take.Kind);
-        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, take.VoiceId);
+        // The take is voiced by a real Qwen3 preset (the native Japanese speaker), not the model
+        // alias string, which the Qwen3 engine would reject as an unknown speaker.
+        Assert.Equal("qwen3:ono_anna", take.VoiceId);
     }
 
     [Fact]

@@ -1933,7 +1933,7 @@ public sealed class DubbingPipelineEngine(
         TranscriptProjectState state,
         string? targetLanguageCode)
     {
-        if (state.Speakers.Count == 0 || state.AvailableVoices.Count == 0)
+        if (state.Speakers.Count == 0)
         {
             return null;
         }
@@ -1943,11 +1943,16 @@ public sealed class DubbingPipelineEngine(
             .Select(static assignment => assignment.SpeakerId)
             .ToHashSet();
 
+        // Stock (Kokoro) voices first. For languages Kokoro does not cover, fall back to the Qwen3
+        // CustomVoice preset whose native language matches, which the TTS stage routes to Qwen3.
         string? defaultVoiceId = state.AvailableVoices
             .Where(voice => IsVoiceLanguageMatch(voice.LanguageCode, targetLanguageCode))
             .OrderBy(static voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
             .Select(static voice => voice.VoiceId)
-            .FirstOrDefault();
+            .FirstOrDefault()
+            ?? (StockTtsVoiceMatcher.SupportsKokoro(targetLanguageCode)
+                ? null
+                : Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguageCode));
         if (defaultVoiceId is null)
         {
             return null;
@@ -1998,11 +2003,11 @@ public sealed class DubbingPipelineEngine(
                 return options with { ModelPreferences = preferences };
             }
 
-            preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
+            preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultCloneModelAlias(options.TargetLanguageCode);
             return options with { ModelPreferences = preferences };
         }
 
-        preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
+        preferences[StageNames.Tts] = VoiceCloningDefaults.ResolveDefaultCloneModelAlias(options.TargetLanguageCode);
         return options with { ModelPreferences = preferences };
     }
 
@@ -2056,7 +2061,7 @@ public sealed class DubbingPipelineEngine(
         string? preferredModelAlias = ttsModelAlias;
         if (RequestsVoiceCloning(options) && string.IsNullOrWhiteSpace(preferredModelAlias))
         {
-            preferredModelAlias = VoiceCloningDefaults.ResolveDefaultChatterboxAlias(options.TargetLanguageCode);
+            preferredModelAlias = VoiceCloningDefaults.ResolveDefaultCloneModelAlias(options.TargetLanguageCode);
         }
 
         return new GenerateTtsForAllSpeakersRequest(

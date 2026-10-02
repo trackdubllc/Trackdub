@@ -75,7 +75,7 @@ public sealed class UnattendedFallbackVoiceTests
     }
 
     [Fact]
-    public void Returns_null_when_no_voice_matches_the_target_language()
+    public void Returns_null_when_no_stock_voice_matches_a_kokoro_language()
     {
         ProjectSpeaker speaker = CreateSpeaker("Speaker 1");
         TranscriptProjectState state = BuildState(
@@ -83,7 +83,26 @@ public sealed class UnattendedFallbackVoiceTests
             availableVoices: [new VoiceCatalogEntry("am_adam", "en-us", "male", "Adam")],
             voiceAssignments: []);
 
-        Assert.Null(TrackdubDubbingEngine.BuildUnattendedFallbackVoiceIds(state, "ja"));
+        Assert.Null(TrackdubDubbingEngine.BuildUnattendedFallbackVoiceIds(state, "es"));
+    }
+
+    [Theory]
+    [InlineData("zh", "qwen3:vivian")]
+    [InlineData("ja", "qwen3:ono_anna")]
+    [InlineData("fr", "qwen3:ryan")]
+    public void Uses_native_qwen3_preset_when_kokoro_has_no_voice_for_the_language(string targetLanguage, string expectedVoiceId)
+    {
+        ProjectSpeaker speaker = CreateSpeaker("Speaker 1");
+        TranscriptProjectState state = BuildState(
+            speakers: [speaker],
+            availableVoices: [new VoiceCatalogEntry("am_adam", "en-us", "male", "Adam")],
+            voiceAssignments: []);
+
+        Dictionary<Guid, string>? fallbackVoiceIds =
+            TrackdubDubbingEngine.BuildUnattendedFallbackVoiceIds(state, targetLanguage);
+
+        Assert.NotNull(fallbackVoiceIds);
+        Assert.Equal(expectedVoiceId, fallbackVoiceIds[speaker.Id]);
     }
 
     [Fact]

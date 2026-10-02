@@ -51,23 +51,43 @@ public sealed class Qwen3TtsVoiceCatalog : IVoiceCatalog
         var entries = new List<VoiceCatalogEntry>();
         foreach (JsonProperty property in document.RootElement.EnumerateObject())
         {
-            string speaker = property.Name;
-            entries.Add(new VoiceCatalogEntry(
-                $"qwen3:{speaker}",
-                "mul",
-                "unknown",
-                ToDisplayName(speaker)));
+            entries.Add(CreateEntry(property.Name));
         }
 
         return entries.Count == 0 ? KnownAvailable() : new Qwen3TtsVoiceCatalog(entries);
     }
 
+    /// <summary>
+    /// The nine CustomVoice presets shipped in both the 0.6B and 1.7B CustomVoice checkpoints,
+    /// with the gender and native language published on the upstream model card
+    /// (https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice). Every preset can speak all
+    /// ten supported languages, so entries keep the "mul" language code and carry their native
+    /// language in the display name.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, (string Gender, string NativeLanguage)> PresetMetadata =
+        new Dictionary<string, (string Gender, string NativeLanguage)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["vivian"] = ("female", "Chinese"),
+            ["serena"] = ("female", "Chinese"),
+            ["uncle_fu"] = ("male", "Chinese"),
+            ["dylan"] = ("male", "Chinese, Beijing dialect"),
+            ["eric"] = ("male", "Chinese, Sichuan dialect"),
+            ["ryan"] = ("male", "English"),
+            ["aiden"] = ("male", "English"),
+            ["ono_anna"] = ("female", "Japanese"),
+            ["sohee"] = ("female", "Korean"),
+        };
+
     public static Qwen3TtsVoiceCatalog KnownAvailable() =>
-        new([
-            new VoiceCatalogEntry("qwen3:ryan", "mul", "unknown", "Ryan"),
-            new VoiceCatalogEntry("qwen3:serena", "mul", "unknown", "Serena"),
-            new VoiceCatalogEntry("qwen3:vivian", "mul", "unknown", "Vivian"),
-        ]);
+        new(PresetMetadata.Keys.Select(CreateEntry).ToArray());
+
+    private static VoiceCatalogEntry CreateEntry(string speaker)
+    {
+        string displayName = ToDisplayName(speaker);
+        return PresetMetadata.TryGetValue(speaker, out (string Gender, string NativeLanguage) metadata)
+            ? new VoiceCatalogEntry($"qwen3:{speaker}", "mul", metadata.Gender, $"{displayName} ({metadata.NativeLanguage})")
+            : new VoiceCatalogEntry($"qwen3:{speaker}", "mul", "unknown", displayName);
+    }
 
     private static string ToDisplayName(string speaker) =>
         string.Join(' ', speaker.Split('_', StringSplitOptions.RemoveEmptyEntries)
