@@ -9,7 +9,7 @@ permission:
     "dotnet build*": allow
     "dotnet test*": allow
     "dotnet restore*": allow
-    "dotnet format*": allow
+    "dotnet format Trackdub.slnx --verify-no-changes*": allow
     "dotnet list*": allow
     "git status": allow
     "git diff*": allow
@@ -17,8 +17,9 @@ permission:
     "git show*": allow
     "git rev-parse*": allow
     "git ls-files*": allow
-    "pwsh*": allow
-    "python*": allow
+    "python3 scripts/ci/check-repository-boundary.py": allow
+    "python3 scripts/ci/check-audit-mirrors.py": allow
+    "python3 scripts/ci/check_controlled_matrix_cpu_budget.py": allow
 ---
 
 # Validation Gate
