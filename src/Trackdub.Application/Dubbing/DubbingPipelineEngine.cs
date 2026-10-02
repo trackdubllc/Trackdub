@@ -2220,8 +2220,9 @@ public sealed class DubbingPipelineEngine(
     }
 
     /// <summary>
-    /// When every voice this run will synthesize with is a Qwen3 preset (explicit overrides plus
-    /// unattended fallbacks), synthesis switches to Qwen3 CustomVoice regardless of the selected
+    /// When every voice this run will synthesize with is a Qwen3 preset (explicit overrides,
+    /// persisted deliberate assignments, plus unattended fallbacks), synthesis switches to Qwen3
+    /// CustomVoice regardless of the selected
     /// TTS model. Readiness and provisioning only inspect the selected alias, so point them at
     /// CustomVoice too; otherwise the run passes preflight and then fails with "Model setup required".
     /// </summary>
@@ -2241,14 +2242,26 @@ public sealed class DubbingPipelineEngine(
         IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
             state,
             options.VoiceAssignmentOverrides);
+        HashSet<Guid> coveredSpeakerIds = [.. explicitVoiceIds.Keys];
         IEnumerable<string> voiceIds = explicitVoiceIds.Values;
         if (options.AutoAssignFallbackVoices &&
             BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode) is { } fallbackVoiceIds)
         {
+            foreach (KeyValuePair<Guid, string> pair in fallbackVoiceIds.Where(pair => !explicitVoiceIds.ContainsKey(pair.Key)))
+            {
+                coveredSpeakerIds.Add(pair.Key);
+            }
+
             voiceIds = voiceIds.Concat(fallbackVoiceIds
                 .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
                 .Select(static pair => pair.Value));
         }
+
+        voiceIds = voiceIds.Concat(state.VoiceAssignments
+            .Where(assignment => !assignment.IsFallback && !coveredSpeakerIds.Contains(assignment.SpeakerId))
+            .Select(static assignment => assignment.VoiceVariant)
+            .Where(static voiceVariant => !string.IsNullOrWhiteSpace(voiceVariant))
+            .Select(static voiceVariant => voiceVariant!.Trim()));
 
         List<string> allVoiceIds = voiceIds.ToList();
         return allVoiceIds.Count > 0 && allVoiceIds.All(Qwen3TtsDefaults.IsPresetVoiceId)

@@ -468,6 +468,34 @@ public sealed class OrchestrationServiceTests
         Assert.Equal(stageRun.Id, take.StageRunId);
     }
 
+    [Fact]
+    public void ApplyPresetVoiceModelSelection_points_preflight_at_qwen3_for_persisted_preset_assignments_without_overrides()
+    {
+        TranscriptProjectState state = CreateTranslatedProjectState();
+        VoiceAssignment presetAssignment = state.VoiceAssignments[0] with
+        {
+            VoiceModelId = Qwen3TtsDefaults.CustomVoice06Alias,
+            VoiceVariant = Qwen3TtsDefaults.PresetVoicePrefix + "ryan",
+        };
+        state = state with { VoiceAssignments = [presetAssignment] };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            AutoAssignFallbackVoices = true,
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: "kokoro-onnx");
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal(Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null), result.TtsModelAlias);
+    }
+
     [Theory]
     [InlineData("zh", true)]
     [InlineData("es", false)]
