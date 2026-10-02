@@ -77,6 +77,12 @@ SeparatorRunner = Callable[[Path, Path], None]
 # of rounding to nearest).
 CANDIDATE_PROFILES: dict[str, dict] = {
     "spleeter": {"band_limit_hz": 11025.0, "output_bits": 16, "output_rounding": "truncate"},
+    # Bandit v2 (multilingual DnR v3 checkpoint, 48 kHz STFT, full band) is run by candidates/bandit_v2_runner.py,
+    # which writes float32 stems, so nothing is declared and nothing is relaxed. The two names differ only
+    # in how the bed is formed: `sum` is music + sfx as the model estimated them (the reconstruction gate
+    # then measures the model's own additivity), `residual` is mixture - dialogue computed in the separator domain.
+    "bandit-v2-multi-sum": {"band_limit_hz": None, "output_bits": 32, "output_rounding": "nearest"},
+    "bandit-v2-multi-residual": {"band_limit_hz": None, "output_bits": 32, "output_rounding": "nearest"},
 }
 
 
@@ -208,6 +214,17 @@ def model_provenance(timings: list[dict]) -> dict:
         executed.append({"model_root": root, "file_sha256": hashes,
                          "matches_pinned": bool(pinned) and hashes == pinned})
     return {"pinned_file_sha256": pinned or None, "executed": executed}
+
+
+def candidate_provenance(timings: list[dict]) -> dict:
+    """What a non-Spleeter runner says it executed: the distinct per-job metadata blocks (checkpoint hash,
+    code revision, resampling and bed construction). Reported as given; there is no pinned manifest to check."""
+    seen: list[dict] = []
+    for t in timings:
+        meta = t.get("metadata")
+        if isinstance(meta, dict) and meta not in seen:
+            seen.append(meta)
+    return {"executed_metadata": seen}
 
 
 def score_clip(clip: dict, corpus: Path, job: dict, timing: dict, mixture44: np.ndarray,
@@ -359,7 +376,8 @@ def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candid
         "hardware_label": hardware_label,
         "gate_config": {"threshold_db": metrics.RECONSTRUCTION_GATE_DB,
                         "edge_exclusion_s": metrics.RECONSTRUCTION_EDGE_EXCLUSION_S, **(gate or {})},
-        "model_provenance": model_provenance(list(timings.values())),
+        "model_provenance": (model_provenance(list(timings.values())) if candidate == "spleeter"
+                             else candidate_provenance(list(timings.values()))),
         "host": {"platform": platform.platform(), "python": sys.version.split()[0]},
         "corpus": {"manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
                    "items_sha256": manifest.get("items_sha256"), "split": manifest.get("split"),
@@ -378,6 +396,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--provider", help="execution provider to pin (e.g. cpu, directml, tensorrtrtx)")
     p.add_argument("--model-directory", help="model root passed to the separator")
     p.add_argument("--model-cache-directory", help="machine-local model cache root holding the pinned weights and model-cache-records.json")
+    p.add_argument("--candidate", choices=sorted(CANDIDATE_PROFILES), default="spleeter",
+                   help="candidate profile (declared band, output precision); also passed to the runner as --model")
     p.add_argument("--runner", default=" ".join(default_runner()),
                    help="command prefix for Trackdub.Benchmarks, as one quoted string")
     p.add_argument("--band-limit-hz", type=float, help="override the candidate profile's declared processing band")
@@ -385,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--output-rounding", choices=("nearest", "truncate"), help="override the profile's stem rounding")
     p.add_argument("--limit", type=int, help="score only the first N clips (development)")
     args = p.parse_args(argv)
-    gate = dict(CANDIDATE_PROFILES["spleeter"])
+    gate = dict(CANDIDATE_PROFILES[args.candidate])
     if args.band_limit_hz is not None:
         gate["band_limit_hz"] = args.band_limit_hz
     if args.output_bits is not None:
@@ -394,8 +414,9 @@ def main(argv: list[str] | None = None) -> int:
         gate["output_rounding"] = args.output_rounding
     try:
         result = evaluate(args.corpus, args.work, dotnet_runner(shlex.split(args.runner), args.provider, args.model_directory,
+                                                      model=args.candidate,
                                                       model_cache_directory=args.model_cache_directory),
-                          candidate="spleeter", provider=args.provider, hardware_label=args.hardware_label,
+                          candidate=args.candidate, provider=args.provider, hardware_label=args.hardware_label,
                           clip_limit=args.limit, gate=gate)
     except EvalError as exc:
         print(f"error: {exc}", file=sys.stderr)
