@@ -487,6 +487,15 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
     n = mixture.shape[0]
     judged = _check_reconstruction(mixture[edge:n - edge], est_dialogue[edge:n - edge], est_bed[edge:n - edge], sr,
                                    threshold_db, band_limit_hz, output_bits, output_rounding)
+    # Keep the frozen whole-clip rubric authoritative until its edge-exclusion update is
+    # coordinated.  In particular, an edge-only residual must not turn a failing clip into
+    # a passing candidate merely because the excluded region was removed from the judged slice.
+    if not whole.passed and judged.passed:
+        judged = replace(
+            judged,
+            passed=False,
+            reasons=judged.reasons + ("whole-clip reconstruction fails the existing gate",),
+        )
     return replace(judged, edge_excluded_samples=edge, residual_with_edges_db=whole.residual_db,
                    in_band_residual_with_edges_db=whole.in_band_residual_db)
 
