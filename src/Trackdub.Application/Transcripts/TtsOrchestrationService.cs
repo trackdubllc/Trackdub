@@ -219,15 +219,20 @@ public sealed class TtsOrchestrationService(
         string languageCode = string.IsNullOrWhiteSpace(request.LanguageCode)
             ? voice.LanguageCode
             : request.LanguageCode.Trim();
+        string? trimmedAlias = string.IsNullOrWhiteSpace(request.PreferredModelAlias)
+            ? null
+            : request.PreferredModelAlias.Trim();
+        bool isQwen3PresetVoice = Qwen3TtsDefaults.IsPresetVoiceId(voice.VoiceId);
+        string preferredAlias = isQwen3PresetVoice && !Qwen3TtsDefaults.IsCustomVoiceAlias(trimmedAlias)
+            ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null)
+            : trimmedAlias ?? StockTtsDefaults.KokoroPrimaryAlias;
         TtsSynthesisResult result = await ttsEngine.SynthesizeAsync(
             new TtsSynthesisRequest(
                 request.SampleText.Trim(),
                 languageCode,
                 voice,
                 Options: new InferenceRequestOptions(
-                    string.IsNullOrWhiteSpace(request.PreferredModelAlias)
-                        ? StockTtsDefaults.KokoroPrimaryAlias
-                        : request.PreferredModelAlias.Trim(),
+                    preferredAlias,
                     RequirePreferredModelAlias: true,
                     PreferredExecutionProvider: request.PreferredExecutionProvider?.ToString(),
                     RequirePreferredExecutionProvider: request.RequirePreferredExecutionProvider,
