@@ -374,7 +374,8 @@ class EdgeExclusionTests(unittest.TestCase):
         self.assertAlmostEqual(failed.edge_residual_db, 20 * np.log10(0.75), delta=0.05)
         self.assertGreater(failed.edge_residual_db, metrics.RECONSTRUCTION_EDGE_BACKSTOP_DB)
 
-    def test_silent_edge_tolerance_is_per_channel_and_checks_the_end(self):
+    def test_silent_edge_tolerance_uses_joint_channel_rms_and_checks_the_end(self):
+        # _edge_backstop compares sqrt(residual_power / n_channels) to EDGE_BACKSTOP_SILENT_RMS, not per-channel max.
         n = int(3 * SR)
         under = np.float32(metrics.EDGE_BACKSTOP_SILENT_RMS * 0.9)
         stereo = np.zeros((n, 2), dtype=np.float32)
