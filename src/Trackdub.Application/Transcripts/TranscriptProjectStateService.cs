@@ -170,7 +170,7 @@ public sealed class TranscriptProjectStateService(
         IReadOnlyList<VoiceAssignment> voiceAssignments = await voiceAssignmentRepository
             .GetAllAsync(openResult.Project.Id, cancellationToken)
             .ConfigureAwait(false);
-        IReadOnlyList<VoiceCatalogEntry> availableVoices = voiceCatalog.GetVoices();
+        IReadOnlyList<VoiceCatalogEntry> availableVoices = voiceCatalog.GetVoices(selectedTranslationTargetLanguage);
         IReadOnlyList<TtsTake> ttsTakes = await ttsTakeRepository
             .GetByProjectAsync(openResult.Project.Id, cancellationToken)
             .ConfigureAwait(false);
