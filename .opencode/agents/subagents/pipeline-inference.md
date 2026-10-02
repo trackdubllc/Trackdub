@@ -11,19 +11,50 @@ permission:
     "dotnet restore*": allow
     "dotnet run*": allow
     "dotnet format*": allow
-    "git status": allow
+    "git status*": allow
     "git diff*": allow
     "git log*": allow
     "git show*": allow
     "git rev-parse*": allow
+    "git ls-files*": allow
+    "git ls-tree*": allow
+    "git submodule status*": allow
+    "git remote*": allow
+    "git tag*": allow
+    "git branch*": allow
+    "git merge-base*": allow
+    "git worktree list*": allow
     "git checkout*": allow
+    "git switch*": allow
     "git add*": allow
-    "git commit*": allow
+    "git commit -m*": allow
     "git -C external/Trackdub fetch*": allow
     "git -C external/Trackdub checkout*": allow
     "git -C external/Trackdub tag*": allow
     "git -C external/Trackdub log*": allow
     "git -C external/Trackdub rev-parse*": allow
+    "git -C external/Trackdub status*": allow
+    "git -C external/Trackdub branch*": allow
+    "git -C external/Trackdub remote*": allow
+    "git -C external/Trackdub show*": allow
+    "git -C ../Trackdub rev-parse*": allow
+    "git -C ../Trackdub-gated rev-parse*": allow
+    # /pin resolves the gated root into $GATED_ROOT and addresses the submodule as
+    # "$GATED_ROOT/external/Trackdub". A glob cannot match across a quoted shell
+    # variable, so the resolved-prefix forms are allow-listed explicitly. These are
+    # the same verbs as the relative forms above; /pin is the only caller.
+    "git -C ${GATED_ROOT}*": allow
+    "git -C \"${GATED_ROOT}\"*": allow
+    "git -C \"${GATED_ROOT}/external/Trackdub\"*": allow
+    "grep *": allow
+    "ls *": allow
+    "cat *": allow
+    "find *": allow
+    "awk *": allow
+    "sed *": allow
+    "tr *": allow
+    "test *": allow
+    "tail *": allow
 ---
 
 # Pipeline / Inference Stage Engineer
@@ -70,6 +101,9 @@ permission:
   <rule>Every `StageRunRecord.Start` call site passes a `StageNames.*` constant, never an inline literal. Adding a constant also requires adding the value to `KnownStageNameValues` in `tests/Trackdub.Architecture.Tests/StageNameConsistencyTests.cs`.</rule>
   <rule>Stage names are wire/persistence identifiers. Once a name ships it is a compatibility surface — changing a value is a migration, not a rename.</rule>
   <rule>Model governance: commercial license verified or the model is unsafe and blocked. Unknown license = unsafe. Manifest changes must update the bundled manifest and carry license metadata plus review evidence.</rule>
+  <rule>This agent has `edit: allow` because `/pin` needs it, which is the one command that mutates git. That authority is not general. Outside `/pin`, stage work edits core source in dependency order and leaves git state alone — no `git checkout`, `git switch`, `git add`, or `git commit` unless `/pin` is the task.</rule>
+  <rule>The submodule is read-only regardless of this agent's edit permission. `external/Trackdub` may be checked out to a new pin and the gitlink committed by `/pin`; its **contents** are never edited. Never `git -C "$GATED_ROOT/external/Trackdub" ...` with a verb that writes files inside it.</rule>
+  <rule>Your bash allow-list matches literal command text, and a wildcard cannot span a shell variable. `/pin` therefore requires the quoted forms `git -C "$GATED_ROOT"` and `git -C "$GATED_ROOT/external/Trackdub"`; do not "clean up" those paths or the allow-list stops matching and the procedure half-runs — potentially after the submodule checkout and before the commit, leaving a moved but uncommitted pin.</rule>
   <rule>No end-user runtime dependency on Python, Conda, Docker, or the CUDA Toolkit. Olive-style optimization stays in `Trackdub.Tools` tooling only.</rule>
   <rule>Preserve original artifacts on skipped or failed stages. Record an explicit skip/failure reason code from `StageSkipReasonCodes`.</rule>
   <rule>Tests must cover four paths: success, disabled/skipped, missing-prerequisite, failure. A stage with three is incomplete.</rule>
