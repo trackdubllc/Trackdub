@@ -339,14 +339,47 @@ class EdgeExclusionTests(unittest.TestCase):
         r = self.gate(mix, d, b)
         self.assertFalse(r.passed)
 
-    def test_a_silent_start_edge_is_not_masked_by_energy_at_the_end(self):
+    def test_dropping_one_loud_edge_fails_even_when_the_other_is_fine(self):
         mix, d, b = self.outputs()
-        mix[:self.EDGE] = 0.0
-        b[:self.EDGE] = 0.0
-        d[:self.EDGE] = 0.01
-        r = metrics.check_reconstruction(mix, d, b, SR)
+        d[-self.EDGE:] = 0.0
+        b[-self.EDGE:] = 0.0
+        r = self.gate(mix, d, b)
         self.assertFalse(r.passed)
-        self.assertIn("silent tolerance", r.reasons[-1])
+        self.assertIn("end edge", r.reasons[-1])
+
+    def test_a_quiet_edge_is_judged_against_the_clip_level_not_its_own(self):
+        mix, d, b = self.outputs()
+        mix[:self.EDGE] *= 0.02
+        d[:self.EDGE] = 0.5 * mix[:self.EDGE]
+        b[:self.EDGE] = 0.5 * mix[:self.EDGE]
+        d[:30] += 0.002
+        r = self.gate(mix, d, b)
+        self.assertTrue(r.passed, r.reasons)
+
+    def test_a_silent_clip_with_output_in_its_edge_fails_the_silent_tolerance_with_and_without_a_band(self):
+        z = np.zeros((int(3 * SR), 1), dtype=np.float32)
+        d = z.copy()
+        d[:self.EDGE] = 0.1
+        for kw in ({}, {"band_limit_hz": LIMIT}):
+            r = metrics.check_reconstruction(z, d, z, SR, **kw)
+            self.assertFalse(r.passed, kw)
+            self.assertIn("start edge", r.reasons[-1])
+
+    def test_a_silent_clip_with_output_in_its_edge_fails_the_silent_tolerance(self):
+        z = np.zeros((int(3 * SR), 1), dtype=np.float32)
+        d = z.copy()
+        d[:self.EDGE] = 0.1
+        r = self.gate(z, d, z)
+        self.assertFalse(r.passed)
+        self.assertIn("silent clip", r.reasons[-1])
+
+    def test_an_edge_with_energy_only_above_the_declared_band_is_not_failed(self):
+        t = np.arange(int(3 * SR)) / SR
+        mix = (0.1 * np.sin(2 * np.pi * 18000 * t)).astype(np.float32)[:, None]
+        mix[self.EDGE + 5: -(self.EDGE + 5)] += (0.05 * np.sin(2 * np.pi * 1000 * t[self.EDGE + 5: -(self.EDGE + 5)])).astype(np.float32)[:, None]
+        d = lowpass(mix)
+        r = self.gate(mix, d, np.zeros_like(mix))
+        self.assertTrue(r.passed, r.reasons)
 
     def test_a_clip_with_energy_only_in_the_edges_is_judged_whole(self):
         z = np.zeros((int(3 * SR), 1), dtype=np.float32)
@@ -392,7 +425,7 @@ class EdgeExclusionTests(unittest.TestCase):
         self.assertFalse(r.passed)
         self.assertEqual(r.silent_judged_residual_rms, 0.0)
         self.assertGreater(r.silent_residual_rms_with_edges, 0.0)
-        self.assertIn("silent excluded edges", r.reasons[-1])
+        self.assertIn("edge", r.reasons[-1])
 
     def test_the_exclusion_is_at_most_a_tenth_of_a_clip(self):
         mix, d, b = self.outputs(seconds=1.2)

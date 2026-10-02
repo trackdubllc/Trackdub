@@ -35,7 +35,7 @@ import audiomath as am
 import metrics
 
 SEPARATOR_SR = 44100
-RESULTS_SCHEMA_VERSION = 4
+RESULTS_SCHEMA_VERSION = 5
 LENGTH_TOLERANCE_SAMPLES = 4
 
 PINNED_MANIFEST = (Path(__file__).resolve().parents[2] / "src" / "Trackdub.Inference" / "Runtime"
@@ -64,6 +64,7 @@ TRACKED_METRICS: dict[str, tuple[tuple[str, ...], bool]] = {
     "reconstruction_in_band_residual_db": (("reconstruction", "in_band_residual_db"), False),
     "reconstruction_in_band_residual_with_edges_db": (("reconstruction", "in_band_residual_with_edges_db"), False),
     "reconstruction_residual_with_edges_db": (("reconstruction", "residual_with_edges_db"), False),
+    "reconstruction_edge_residual_db": (("reconstruction", "edge_residual_db"), False),
     "bandwidth_retained_db": (("reconstruction", "bandwidth_retained_db"), True),
 }
 
