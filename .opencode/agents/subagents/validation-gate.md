@@ -11,7 +11,7 @@ permission:
     "dotnet restore*": allow
     "dotnet format Trackdub.slnx --verify-no-changes*": allow
     "dotnet list*": allow
-    "git status": allow
+    "git status*": allow
     "git diff*": allow
     "git log*": allow
     "git show*": allow
@@ -52,6 +52,7 @@ permission:
   <rule>Never treat a Debug build as the Release gate. Release + `-warnaserror` is the contract.</rule>
   <rule>`--no-restore` and `--no-build` must be honoured once the prior step succeeded; silently dropping them changes what was tested.</rule>
   <rule>Do not edit files, do not fix failures, do not bump pins, do not resolve lock files. Report and hand off.</rule>
+  <rule>`edit: deny` is not the whole boundary. The shell allow-list permits commands that can still write — `dotnet build`, `dotnet test`, `dotnet run`, and the `python3 scripts/ci/*` checks all create build output, and `dotnet build` accepts `/p:` properties. Never use the shell to modify a tracked file, delete a lock file, stage a change, or create a file as a side effect of a diagnostic. Read-only means the repository content is unchanged when you finish; verify with `git status --short` before reporting and say so in the report header.</rule>
   <rule>Report the actual count of tests run. Zero tests discovered is a failure of the gate, not a pass.</rule>
   <rule>A skipped stage, a disabled stage, and a passed stage are different states. A test run that skipped a stage asserts less than one that executed it; call that out when it matters.</rule>
   <rule>Quote real output. No summarising a 400-line log into "clean" without the summary line and any warning/error lines quoted.</rule>
@@ -66,7 +67,8 @@ permission:
       <step>Capture `git status` and `git rev-parse HEAD`. The commit SHA and dirty/clean state belong in the report header — an uncommitted tree has no reproducible verdict.</step>
       <step>Resolve the PR base ref or use the explicitly supplied base ref. Verify it with `git rev-parse --verify "$BASE_REF^{commit}"`. Capture committed changes with `git diff --name-only "$BASE_REF"...HEAD` and worktree changes with `git diff --name-only HEAD`; inspect their union. If the base cannot be resolved, report committed-change checks as NOT VERIFIED rather than substituting HEAD.</step>
       <step>From the union of changed paths, identify which `src/*` projects, which `tests/*` projects, whether `Directory.Packages.props`, any `packages.lock.json`, or the AGENTS.md diagram is in the diff.</step>
-      <step>Decide scope. Narrow scope (single test project) is legitimate when the diff touches one area. A change to `Directory.Packages.props`, the AGENTS.md diagram, `Directory.Build.props`, `BannedSymbols.txt`, or any `packages.lock.json` forces the FULL gate.</step>
+      <step>Decide scope. A change to `Directory.Packages.props`, the AGENTS.md diagram, `Directory.Build.props`, `BannedSymbols.txt`, or any `packages.lock.json` forces the FULL gate, always.</step>
+      <step>When narrow scope is legitimate (diff touches exactly one `src/*` + its `tests/*` project), define it concretely before running anything: replace `Trackdub.slnx` with the project path on every command — `dotnet build &lt;proj&gt; --configuration Release --no-restore -m:1 -warnaserror`, `dotnet test &lt;proj&gt; --configuration Release --no-build -m:1`. Narrow is **not** "run the full gate and label it narrow": either the commands really are project-scoped, or the gate is full. Record which one ran in the report's scope column.</step>
       <step>State the scope and the reason for it before running anything.</step>
     </process>
     <checkpoint>Scope chosen and justified against the diff. No guessing about what was touched.</checkpoint>

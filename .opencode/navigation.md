@@ -2,8 +2,7 @@
 
 Scope: **`trackdubllc/Trackdub` public core only.** This index covers library, inference, media, benchmarks, tooling, and CI for the core repo.
 
-**Desktop/Avalonia shell work is NOT in scope here.** That belongs to the gated repo:
-`D:\Dev\Trackdub_Workspace\Trackdub-gated\.opencode\` → see [../Trackdub-gated/.opencode/navigation.md](../Trackdub-gated/.opencode/navigation.md). Desktop-shell context is deliberately not duplicated in core.
+**Desktop/Avalonia shell work is NOT in scope here.** That belongs to the separate `trackdubllc/Trackdub-gated` repository, which carries its own `.opencode` system. Find a sibling checkout with `git rev-parse --show-toplevel` on that repo, then read `<gated-root>/.opencode/navigation.md`. Desktop-shell context is deliberately not duplicated in core.
 
 Design rationale for every choice below: [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -61,13 +60,25 @@ Grouped by category. Load the minimum that answers the question — do not bulk-
 
 Subject-matter facts. Read-only reference; changes here need evidence from code.
 
+- `context/domain/architecture.md` — the 20-project dependency graph, layer responsibilities, build/test commands, cross-repo relationship to the gated desktop app.
 - `context/domain/inference-stack.md` — providers, execution providers, runtime flavors, model manifests, stage topology and ordering. Referenced by `/ready`.
+- `context/domain/terminology.md` — pipeline stage vocabulary, artifact layout, and the state distinctions the repo treats as different facts.
 
 ### `context/processes/` — how work is *done*
 
 Repeatable multi-step procedures.
 
+- `context/processes/adding-pipeline-stage.md` — the Contracts → Domain → Application → Composition path for a new stage, with per-step verification and common mistakes. Backed by `workflows/new-inference-stage.md`.
+- `context/processes/pr-lifecycle.md` — branch → validate → push → PR → CI → review threads → merge, using `gh`, gh-stack, GitKraken, and cubic.
 - `context/processes/submodule-pin-bump.md` — the canonical core-pin bump procedure. Lives in the **gated** repo; `/pin` points here when invoked from core.
+
+### `context/standards/` — what "correct" means here
+
+The bar a change is measured against. Consult before editing, cite in review.
+
+- `context/standards/validation-gates.md` — the CI-equivalent command sequence, `-m:1` rationale, `--no-restore`/`--no-build` sequencing, the non-build gates, and the PASS/FAIL report template. Backs `/validate`.
+- `context/standards/coding-standards.md` — file-scoped namespaces, `sealed` where extension is not intended, `Async` suffix, immutable `record` in Domain, warnings-as-errors, cross-platform portability.
+- `context/standards/architecture-rules.md` — the readiness ladder as enforceable rules, the boundary-violation catalogue, and dependency-direction rules.
 
 ### `context/standards/` — what "correct" means
 
@@ -87,7 +98,10 @@ Multi-step compositions that chain subagents and gate their transitions. Every s
 
 - **[workflows/new-inference-stage.md](workflows/new-inference-stage.md)** — new dubbing/inference stage from intake to proven readiness. Orchestrator drives; `pipeline-inference` writes layers in dependency order; `core-diagnostics` owns every failure; `validation-gate` renders the final verdict. Exists because the most expensive defect class here is a **faked readiness claim**: a provider registered, a manifest entry present, a stage that compiles, and no proof it downloaded a model, ran inference, and produced an output artifact.
 
-Two more workflows are planned (`feature-change`, `release-and-pin`) but are **not yet written**. Do not reference them as existing.
+- **[workflows/pr-ready-loop.md](workflows/pr-ready-loop.md)** — working tree to merge-ready: audit, dev-loop validation, full Release gate, bounds audit, commit, push, PR, CI polling, review-thread fix loop.
+- **[workflows/benchmark-regression-triage.md](workflows/benchmark-regression-triage.md)** — environment capture, reproduce, diff vs baseline, attribute the delta, decide accept/fix/revert. Measured numbers only.
+
+Two further workflows are planned (`feature-change`, `release-and-pin`) but are **not yet written**. Do not reference them as existing.
 
 ## Routing table
 
@@ -121,5 +135,5 @@ Details and the reasoning: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - **Linear is referenced but not integrated.** `AGENTS.md` points at workspace `trackdubllc`, team **TS**, `repo:core`, and requires "never mark Done without proof". No Linear MCP/tooling is wired into this system. Issue tracking and status updates remain a **manual** step performed by the human — the orchestrator emits the text for Tony to paste.
 - **The desktop repo has its own system.** Core and gated are deliberately separate `.opencode` trees. Cross-repo work — chiefly `/pin` — is the only seam, and it is documented on both sides.
-- **Two of three workflows are unwritten.** Only `new-inference-stage` exists.
+- **Two planned workflows are unwritten.** `feature-change` and `release-and-pin` are named in the routing table but do not exist. The three shipped workflows are `new-inference-stage`, `pr-ready-loop`, and `benchmark-regression-triage`.
 - **`/pin` mutates git from the writer agent.** It is the one command that edits state, so it runs on `pipeline-inference` rather than a read-only judge. A failure mid-procedure can leave the gated submodule checked out but uncommitted — recover with `git -C external/Trackdub checkout <previous-sha>`.

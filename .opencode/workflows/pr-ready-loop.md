@@ -94,17 +94,20 @@ Do NOT use for:
 - **Exit criteria**: No upward or sideways edge introduced.
 - **Failure handling**: Violation → `core-diagnostics`; invert with an interface rather than adding a reference.
 
-### Stage 5 - Cubic Review (read-only)
+### Stage 5 - Pre-PR Self-Review (read-only)
 
-- **Goal**: Surface issues before a human reviewer spends attention.
+- **Goal**: Catch defects before a human reviewer spends attention.
 - **Actor**: `trackdub-orchestrator`
 - **Context to load**: `.opencode/context/processes/pr-lifecycle.md`
 - **Actions**:
-  1. After the PR exists (Stage 8), use the cubic MCP tools: `trigger_pr_review` once per review — it returns immediately without progress, so do not poll it — then `get_pr_issues` to read findings. An empty array means no open issues remain.
-  2. Review is advisory at this point. Triage each finding as real-and-worth-fixing, not-real, or intended-behavior.
-  3. Read-only: do not resolve threads before the fix exists.
-- **Exit criteria**: Findings triaged with a decision per item.
-- **Failure handling**: cubic CLI is not installed in this environment (verified: `cubic --version` → not found); the MCP server path is the working route. If neither is available, record the gap rather than claiming a clean review.
+  1. Review the **local diff** only — `git diff "$BASE_REF"...HEAD` plus `git diff HEAD`. Nothing here is PR-scoped yet, because the PR does not exist until Stage 8.
+  2. Triage each finding as real-and-worth-fixing, not-real, or intended-behavior. Fix what is real now, before the commit and push.
+  3. Read-only in judgement: never dismiss a finding to make the change look clean.
+  4. Record the finding list in the working notes so Stage 10 can compare against it.
+- **Exit criteria**: Every finding has a decision; real ones are fixed and re-validated.
+- **Failure handling**: If a finding cannot be adjudicated without more information, carry it forward to Stage 10 rather than guessing.
+
+> **cubic runs in Stage 10, not here.** `trigger_pr_review` and `get_pr_issues` are PR-scoped: they need a PR number. Triggering a PR review before the PR exists cannot work, so this stage deliberately uses local-diff review only. Cubic review belongs after Stage 8 and is re-run on every fix round in Stage 10.
 
 ### Stage 6 - Commit
 
@@ -163,11 +166,12 @@ Do NOT use for:
 - **Actor**: `trackdub-orchestrator`; fixes by the relevant subagent
 - **Context to load**: `.opencode/context/processes/pr-lifecycle.md`, `.opencode/context/standards/coding-standards.md`
 - **Actions**:
-  1. Read open threads (cubic `get_pr_issues`, plus `gh pr view --comments` for human review).
-  2. Triage each: fix, or reply with the reason it is intended behavior. Never dismiss a thread to make the PR look clean.
-  3. Cubic threads: `update_pr_issue_status` with `resolved` after the fix lands, or `false_positive` / `wont_fix` / `intended_behavior` with a comment when dismissing. Only `get_pr_issues` IDs are valid there — never a codebase-scan issue ID.
-  4. For each fix round: re-run Stage 2, then Stage 3, then push and re-watch Stage 9.
-  5. If a fix must land on the base before this PR, use `gh stack` to model the dependency. `WorkflowTriggerTests` guarantees `pull_request` triggers are not narrowed to a base branch, so stacked PRs do run CI.
+  1. Read open threads: `gh pr view --comments` for human review, and cubic `get_pr_issues` for bot findings.
+  2. Trigger a cubic review if one has not run since the last push: `trigger_pr_review` once — it returns immediately without progress, so do not poll it — then read with `get_pr_issues`. An empty array means no open issues remain. (cubic CLI is not installed here, verified `cubic --version` → not found; the MCP tools are the route. If neither is available, record the gap rather than claiming a clean review.)
+  3. Triage each: fix, or reply with the reason it is intended behavior. Never dismiss a thread to make the PR look clean.
+  4. Cubic threads: `update_pr_issue_status` with `resolved` after the fix lands, or `false_positive` / `wont_fix` / `intended_behavior` with a comment when dismissing. Only `get_pr_issues` IDs are valid there — never a codebase-scan issue ID.
+  5. For each fix round: re-run Stage 2, then Stage 3, then push, re-watch Stage 9, and re-trigger the cubic review in step 2. A review that is never re-triggered will not see the fix.
+  6. If a fix must land on the base before this PR, use `gh stack` to model the dependency. `WorkflowTriggerTests` guarantees `pull_request` triggers are not narrowed to a base branch, so stacked PRs do run CI.
 - **Exit criteria**: Zero open threads; each resolved by fix or documented intent.
 - **Failure handling**: Disagreement with a reviewer → escalate to human. Do not self-approve.
 

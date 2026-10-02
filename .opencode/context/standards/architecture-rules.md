@@ -14,7 +14,7 @@ A capability claim must name exactly one rung and no more. Never collapse two.
 | 4 | checksum verified | hashes match | `ModelHashVerifier`, `tools/ci/verify-manifest-hashes.py` |
 | 5 | license recorded | manifest license metadata present | `bundled-models.manifest.json` fields |
 | 6 | license reviewed | a human/automated review acted on it | review record, `docs/legal/` |
-| 7 | commercial-use decision | `commercial_allowed` + `commercial_use_verified` satisfied | `CommercialSafeEvaluator` |
+| 7 | commercial-use decision | `commercial_allowed` + `commercial_use_verified` satisfied | `ModelManifest.CommercialSafeMode`, `BundledModelManifestRegistry.CommercialSafeMode`, `DeepFilterNetModelPaths.IsCommercialSafe` |
 | 8 | provider available | EP probe succeeded for this stage | `StageRuntimePlanStatus.Verified` |
 | 9 | stage enabled | enabled in this run | `StageReadiness.Status`, run options |
 | 10 | stage ran | execution occurred | `StageRunRecord` terminal state, not a skip |
@@ -27,6 +27,7 @@ Rules:
 - `ReadinessState.Unverified` (model metadata checked, provider path not verified) is non-blocking and must be surfaced, not silently promoted to `Ready`.
 - A manifest entry existing is not a working model.
 - A prior green run is not evidence about the current tree.
+- **Rung 7 is documented but not code-enforced.** `CommercialSafeEvaluator` is named in `docs/architecture/ARCHITECTURE-source.md` and `docs/legal/MODEL_LICENSE_POLICY.md` as the enforcement point, but no such type exists under `src/` or `tests/` at this revision — verify with `grep -rn "CommercialSafeEvaluator" src/ tests/`. The manifest fields (`commercial_allowed`, `commercial_use_verified`) are the only thing that is actually readable today, so a rung-7 pass is a **data** claim, not an enforced gate. If that grep comes back empty, say so rather than reporting commercial safety as enforced by code.
 
 Anything not climbed is stated in the report as `NOT VERIFIED`. Missing evidence is reported in those words.
 
@@ -92,7 +93,7 @@ Portable .NET 10 APIs by default. Windows-specific surface needs an explicit Win
 | Wiring outside Composition | `new`-ing a concrete dependency in Application/Cli/Sdk, or a DI registration anywhere but Composition | review | move the registration to `CompositionRoot.cs`; both hosts must resolve the same one |
 | UI types below Contracts | `Avalonia.*` or view-model shapes in Inference/Infrastructure/Application | review; assembly references | Inference returns DTOs; the shell binds to Contracts |
 | SQL outside Infrastructure | raw SQL or a `Sqlite*` type in Application or a view model | review | repository in Infrastructure behind a Contracts interface |
-| Stage-name literal | `StageRunRecord.Start(store, id, "my-stage", ct)` | `StageNameConsistencyTests.StageRunRecord_never_receives_inline_string_literal` | use the `StageNames.*` constant |
+| Stage-name literal | `StageRunRecord.Start(store, id, "my-stage", ct)` | `StageNameConsistencyTests.StageRunRecord_Start_never_receives_inline_string_literal` | use the `StageNames.*` constant |
 | Incomplete stage-name sync | new constant in `StageNames.cs` not added to `KnownStageNameValues` | `KnownStageNameValues_covers_all_StageNames_constants` | add the value to the test's list |
 | DirectML reintroduced | `Microsoft.ML.OnnxRuntime.DirectML` in `Directory.Packages.props` or any `.csproj`, or `CopyDirectMLAssetsToOutput` / `AddDirectMLAssetsToOutputItems` / `MirrorDirectMLAssetsForProjectReferenceCopy` targets | `WindowsOnnxRuntimePackagesUseWinMlCatalogProvider` | WinML package assets (ADR-0002) |
 | DNNL flavor crossing | DNNL copy targets running outside the DNNL flavor, or WinML/GPU targets running inside it | `CompositionOnlyCopiesDnnlNativeAssetsForDnnlRuntimeFlavor`, `DnnlFlavorStripsStockOrtRuntimeAssetsFromPackageReferences` | gate every asset target on `TrackdubOrtRuntimeFlavor` |

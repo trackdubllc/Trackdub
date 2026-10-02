@@ -117,7 +117,7 @@ Do NOT use for:
 - **Actions**:
   1. Run `tools/bench-per-stage.ps1`. It exercises `vad`, `asr`, `translation`, and `tts` (with `cosyvoice-300m` and `chatterbox-turbo-onnx`) across `fresh-process` and `warm-host` modes on the `Cpu` provider, and writes `per-stage-matrix.csv` under `$env:LOCALAPPDATA\Trackdub\benchmark-smoke-verdict\per-stage`.
   2. The script defaults to fixture `$env:LOCALAPPDATA\Trackdub\benchmark-fixtures\baseline-v1\short.mp4`. Verify it exists before running.
-  3. Compare `fresh-process` against `warm-host`. A regression that appears only in `warm-process` points at caching or state; one in both points at compute.
+  3. Compare `fresh-process` against `warm-host`. A regression that appears only in `warm-host` points at caching or state; one in both points at compute.
   4. For end-to-end evidence prefer `controlled-matrix`, which preserves each stage's evidence separately:
      `dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- controlled-matrix <fixture> --output <dir>`
   5. `Trackdub.Benchmarks` is the source of truth for controlled end-to-end evidence and `BenchmarkEvidenceReport`. Do not merge or replace it with BenchmarkDotNet artifacts.

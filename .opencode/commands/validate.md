@@ -1,9 +1,11 @@
 ---
 description: "Full CI-equivalent gate: restore, Release build with warnings-as-errors, tests, plus architecture bounds audit"
-agent: validation-gate
+agent: subagents/validation-gate
 ---
 
-Run the Trackdub core CI-equivalent validation gate.
+Run the Trackdub core validation gate — **stricter than CI, not identical to it.**
+
+CI (`.github/workflows/ci.yml`) builds Release **without** `-warnaserror`. This gate adds it. So this gate can fail on a warning that CI would accept; passing this gate implies CI passes, but failing it does not necessarily mean CI is red. Report it as the stricter gate and say so rather than calling a `-warnaserror` failure a CI failure.
 
 **Scope hint:** `$1` (optional). Examples: `core`, `inference`, `media`, `Application`, a full test project name like `Trackdub.Application.Tests`, or empty for the whole solution. If empty, treat as whole-solution scope.
 
@@ -45,7 +47,13 @@ Four sub-checks. Report each separately:
    ```
    dotnet test tests/Trackdub.Architecture.Tests --no-restore -m:1
    ```
-3. **`BannedSymbols.txt`** — `Path.Combine` is a banned API via `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`BannedSymbols.txt` + `Directory.Build.props`). Currently a **warning**, not an error, because ~337 existing files still use it. Inspect `git diff -U0 "$BASE_REF"...HEAD -- '*.cs'` and `git diff -U0 HEAD -- '*.cs'`; any new or modified `Path.Combine` line is a finding.
+3. **`BannedSymbols.txt`** — `Path.Combine` is a banned API via `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`BannedSymbols.txt` + `Directory.Build.props`). Currently a **warning**, not an error, so the build will not catch it. Count only **added** lines across both diffs — committed *and* uncommitted:
+   ```bash
+   BASE_REF=origin/main   # or the PR base ref
+   git diff -U0 "$BASE_REF"...HEAD -- '*.cs' | grep -E '^\+' | grep -v '^+++' | grep -c 'Path\.Combine'   # committed
+   git diff -U0 HEAD -- '*.cs'             | grep -E '^\+' | grep -v '^+++' | grep -c 'Path\.Combine'   # uncommitted
+   ```
+   Any count above 0 is a finding; enumerate by dropping the trailing `-c`. Checking only `git diff HEAD` misses everything already committed on the branch, which is the common case on a PR.
 4. **`Trackdub.Analyzers`** — confirm analyzer diagnostics are active for the touched projects and that no new diagnostic IDs appear in Gate 2 output.
 
 ### Gate 5 — `packages.lock.json` integrity

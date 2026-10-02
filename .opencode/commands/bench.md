@@ -1,13 +1,15 @@
 ---
 description: "Run DubBench/Benchmarks, diff against a baseline, and attribute any regression"
-agent: benchmark-perf
+agent: subagents/benchmark-perf
 ---
 
 Benchmark run + baseline diff + regression attribution.
 
 **Baseline identifier:** `$1` — **REQUIRED**. A tag, SHA, saved-commit baseline id, or a path to a stored report set. If `$1` is empty: **stop.** List the candidate baselines you can actually see (tags, recent SHAs, existing report artifacts) and ask which one to use. **Do not invent, guess, or auto-select a baseline.**
 
-**Scope (optional):** `$2` — workload or stage to measure, e.g. `translate`, `tts`, `vad`, `asr`, `separation`, `alignment`, a fixture path, a `--mode`, or `all`.
+**Scope (optional):** `$2` — workload or stage to measure, a fixture path, a `--mode`, or `all`.
+
+`--stages` tokens are validated against `DubbingPipelineStages.ExtendedStageOrder` and anything outside it is rejected with a "Choose from" error, so use only these values: `audio-preparation`, `vad`, `diarization`, `asr`, `overlap-rescue`, `text-refinement-asr`, `translation`, `separation`, `tts`, `lip-sync`, `export`, `lip-synthesis`. Note `alignment` is **not** a valid token. Read the live list with `grep -A 15 "ExtendedStageOrder" src/Trackdub.Application/Dubbing/DubbingPipelineStages.cs` rather than trusting this list to stay current.
 
 ## Record what is being measured
 
@@ -35,7 +37,7 @@ Choose the right harness for the question. Do not mix them.
 
 ```bash
 # Controlled per-stage matrix (comparable per-stage runs; each stage's evidence preserved separately)
-dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- controlled-matrix <fixture> --output <dir>
+dotnet run --project src/Trackdub.Benchmarks.DevHost -c Release -f net10.0 -- controlled-matrix <fixture> --output <dir>
 
 # BDN — Release, deterministic inputs, GlobalSetup; model/tokenizer/file/session init OUTSIDE measured methods
 dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat

@@ -119,7 +119,7 @@ Do NOT use for:
   2. Add the stage to the runtime stage enumeration so readiness and snapshot selection can include it.
   3. If the stage is warmable or resumable, integrate with `IStageReadinessOrchestrator` / `IStageWarmupCoordinator` and the artifact-resume evaluator; do not fork the readiness path.
   4. Keep `src/Trackdub.Sdk` → Application, Composition, Licensing and `src/Trackdub.Cli` → Sdk intact.
-- **Exit criteria**: `dotnet test tests/Trackdub.Composition.Tests --no-restore -m:1` green; `dotnet run --project src/Trackdub.Cli -- --help` runs clean and lists the stage.
+- **Exit criteria**: `dotnet test tests/Trackdub.Composition.Tests --no-restore -m:1` green; `dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help` runs clean and lists the stage.
 - **Failure handling**: DI resolution failure, duplicate registration, or CLI not listing the stage → `core-diagnostics`.
 
 ### Stage 7 - Tests
@@ -254,7 +254,7 @@ Record under `.opencode/context/templates/evidence-report.md`:
 - [ ] Success, disabled/skipped, missing-prerequisite, and failure paths all tested.
 - [ ] Original artifacts preserved on skip/failure with explicit reasons.
 - [ ] Stage registered in `CompositionRoot.AddTrackdub` and the stage enumeration.
-- [ ] CLI lists the stage: `dotnet run --project src/Trackdub.Cli -- --help`.
+- [ ] CLI lists the stage: `dotnet run --project src/Trackdub.Cli --framework net10.0 -- --help`.
 - [ ] Execution proof captured with real artifact, `actualProvider`, `actualModel`.
 - [ ] `validateRuntime` semantics respected — no Ready presented as Verified; Release build passes `-warnaserror` with the full Release test suite green.
 - [ ] No new `Path.Combine` in changed lines; docs updated; Linear left to the human, not marked Done without proof.

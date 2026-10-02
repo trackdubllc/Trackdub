@@ -113,7 +113,7 @@ Resolve each thread in one of three ways: fix it, reply with reasoning, or reply
 
 ## 9. Stacked PRs
 
-`gh-stack` skill at `.claude/skills/gh-stack/` in the gated repo; needs the CLI extension once:
+`gh-stack` skill, which ships at `.claude/skills/gh-stack/` in **this** repo (the gated repo has its own copy); needs the CLI extension once:
 
 ```bash
 gh extension install github/gh-stack

@@ -125,7 +125,7 @@ permission:
       <step>EP resolution is a runtime plan, not a user setting. Requested provider is a preference; the resolved route may fall back and must record why via `RuntimePlanFallbackCode`.</step>
       <step>Manifest: add or update the entry in `bundled-models.manifest.json` with `license`, `commercialUseVerified`, `redistributionAllowed`, `requiresAttribution`, `requiresUserConsent`, `voiceCloning`, `sourceUrl`, `revision`, `sha256`, download files and hashes, variants, aliases, `estimatedVramMb`/`minVramMb`, `supportsPartialOffload`, `expectedRuntime`, `benchmarkEntry`. Validate against `model-manifest.schema.json` and `bundled-models.manifest.schema.json`.</step>
       <step>Licensing: anything requiring attribution or consent routes through `Trackdub.Licensing`, which stays zero-dependency with BCL-only crypto.</step>
-      <step>Run the gate at the end of this stage if it produced manifest or csproj changes. `model-audit.yml` and `benchmark-report-validation.yml` both key off manifest paths.</step>
+      <step>Run the gate at the end of this stage if it touched `src/Trackdub.Inference/Runtime/ModelManifest/**`, `tools/ci/**`, or a `.csproj` — those are the paths `model-audit.yml` filters on, so they are what actually triggers it. Note `benchmark-report-validation.yml` does **not** key off manifest paths; it triggers on `src/Trackdub.Benchmarks/**`, `tests/Trackdub.Benchmarks.Tests/**`, and its own workflow file, so a manifest-only change will not start it.</step>
     </process>
     <checkpoint>No UI types in Inference/Inference.Onnx. `src/Trackdub.Inference` and `src/Trackdub.Inference.Onnx` reference only their legal dependencies.</checkpoint>
   </stage>

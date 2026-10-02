@@ -1,6 +1,6 @@
 # Architecture — Trackdub public core
 
-Repo root: `D:\Dev\Trackdub_Workspace\Trackdub`. Solution `Trackdub.slnx` (plus `Trackdub.Sdk.slnx`, `Trackdub.Inference.slnx`). .NET 10, `TreatWarningsAsErrors=true`, `RestorePackagesWithLockFile=true`, central package management in `Directory.Packages.props`.
+Repo root: the current checkout (`git rev-parse --show-toplevel`). Solution `Trackdub.slnx` (plus `Trackdub.Sdk.slnx`, `Trackdub.Inference.slnx`). .NET 10, `TreatWarningsAsErrors=true`, `RestorePackagesWithLockFile=true`, central package management in `Directory.Packages.props`.
 
 Canonical sources: `AGENTS.md` (graph + commands), `docs/repository-policy.md` (org + doc taxonomy), `docs/architecture/ARCHITECTURE-source.md` (design rationale), `docs/decisions/ADR-0011-contracts-domain-coupling.md` (the one sanctioned coupling).
 
@@ -31,7 +31,7 @@ OnnxRuntime.Dnnl.Native ► (nothing)
 Domain ─────────────► (nothing)
 ```
 
-Project name vs directory name differ for three projects: `DubBench` lives in `src/DubBench/` (assembly `Trackdub.DubBench`), `DubBench.DevHost` in `src/DubBench.DevHost/`.
+Project name vs directory name differ for two projects: `DubBench` lives in `src/DubBench/` (assembly `DubBench` — `AssemblyName` is set explicitly, it is *not* `Trackdub.DubBench`), and `DubBench.DevHost` in `src/DubBench.DevHost/`.
 
 | Project | May depend on |
 |---|---|
@@ -53,8 +53,8 @@ Project name vs directory name differ for three projects: `DubBench` lives in `s
 | `Trackdub.Benchmarks` | `Application`, `Composition`, `Domain`, `Inference`, `Inference.Onnx`, `Infrastructure` |
 | `Trackdub.Benchmarks.DevHost` | `Benchmarks` |
 | `Trackdub.Benchmarks.Micro` | `Inference.Onnx` |
-| `DubBench` (`Trackdub.DubBench`) | `Benchmarks`, `Domain`, `Inference`, `Inference.Onnx` |
-| `DubBench.DevHost` (`Trackdub.DubBench.DevHost`) | `DubBench`, `Infrastructure` |
+| `DubBench` (assembly `DubBench`) | `Benchmarks`, `Domain`, `Inference`, `Inference.Onnx` |
+| `DubBench.DevHost` | `DubBench`, `Infrastructure` |
 
 Verify the graph against reality — it is asserted, not assumed:
 
@@ -94,6 +94,8 @@ dotnet test tests/Trackdub.Architecture.Tests --no-restore -m:1
 
 **Composition is the only wiring root.** Only `Composition` references both the abstractions (`Inference`) and their implementations (`Inference.Onnx`), plus `Infrastructure`, `Media`, `Media.Playback`, and `Licensing`. Every other project sees abstractions only. If `Application` referenced `Inference.Onnx`, no host could substitute a fake or an alternate provider, and `tests/Trackdub.Application.Tests` could not use `tests/Trackdub.TestDoubles/` without dragging ONNX into the test graph. Both the desktop shell and the CLI resolve the *same* registrations.
 
+**Benchmarks reaches past the abstraction boundary, deliberately.** `Trackdub.Benchmarks` directly references both `Inference` and `Inference.Onnx` (see the graph), because it is a measurement harness that must exercise the real provider rather than a fake. That is the documented exception to "production wiring lives only in Composition" — the rule binds `Application`, `Sdk`, `Cli`, and the desktop shell, not the benchmark projects. Do not cite the rule as absolute when reviewing a `Benchmarks` change.
+
 **Inference is provider-neutral.** `Inference` holds descriptors, ranking policy, and planning (`src/Trackdub.Inference/Runtime/Planning/`) but never constructs a session. Per `Runtime/ExecutionProviders/README.md`, session construction lives in `Inference.Onnx` behind `IExecutionProviderSmokeTester` and the session-factory abstractions. Consequence: the provider probe order is data (`Milestone5PlanningPolicy.SupportedProvidersThisMilestone`), not a chain of `if (OperatingSystem.IsWindows())` inside the planner.
 
 **Media.Playback sits apart.** It references only `Application` and `Domain` — deliberately not `Contracts`, and not `Media`. It carries native playback interop (libmpv, LibVLCSharp, Media Foundation), `AllowUnsafeBlocks`, `WinNativeDepsManifest`, and its own multi-targeting (`net10.0;net10.0-windows10.0.19041.0`). Isolating it keeps native-playback dependencies and unsafe code out of the graph that every other consumer walks, and lets `Composition` opt into playback without `Media` dragging it along.
@@ -132,7 +134,7 @@ dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 
 ## Cross-repo relationship
 
-The desktop application is **not** in this repo. It lives at `D:\Dev\Trackdub_Workspace\Trackdub-gated` (`trackdubllc/Trackdub-gated`) and consumes this repo as a **pinned, read-only git submodule** at `external/Trackdub` (`.gitmodules`: `url = https://github.com/trackdubllc/Trackdub.git`, `branch = main`). The gated shell references `Application`, `Composition`, `Domain`, `Licensing`, `Media.Playback`, and `Sdk` from the submodule; nothing may be edited inside `external/Trackdub`.
+The desktop application is **not** in this repo. It lives in the sibling `Trackdub-gated` checkout (`trackdubllc/Trackdub-gated`) and consumes this repo as a **pinned, read-only git submodule** at `external/Trackdub` (`.gitmodules`: `url = https://github.com/trackdubllc/Trackdub.git`, `branch = main`). The gated shell references `Application`, `Composition`, `Domain`, `Licensing`, `Media.Playback`, and `Sdk` from the submodule; nothing may be edited inside `external/Trackdub`.
 
 - Gated-side agent system and desktop boundary: `../Trackdub-gated/.opencode/navigation.md`
 - Gated-side pin bump procedure: `context/processes/submodule-pin-bump.md` in this file's sibling location under `../Trackdub-gated/.opencode/`

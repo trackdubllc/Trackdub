@@ -35,7 +35,7 @@ Resolve and verify `BASE_REF` from PR metadata or the supplied base ref before r
 | `--configuration Release` | Debug is not the shipping configuration. Analyzer and warning coverage differs, and Release-only codegen paths are untested otherwise. |
 | `-warnaserror` | `Directory.Build.props` sets `TreatWarningsAsErrors=true`, but passing `-warnaserror` explicitly makes the gate hold even if a project or an environment overrides the property. |
 
-`WarningsNotAsErrors` carries `RS0030` (the `Path.Combine` banned-API diagnostic) precisely because ~337 existing files still call it. **The build will not fail on `Path.Combine`.** Count it yourself.
+`WarningsNotAsErrors` carries `RS0030` (the `Path.Combine` banned-API diagnostic) precisely because a small number of existing call sites remain. **The build will not fail on `Path.Combine`.** Count it yourself.
 
 ## Non-build gates
 
@@ -68,12 +68,17 @@ dotnet test tests/Trackdub.Architecture.Tests --no-restore -m:1
 
 `Microsoft.CodeAnalysis.BannedApiAnalyzers` is wired repo-wide through `Directory.Build.props` (`AdditionalFiles`) with `BannedSymbols.txt` listing the four `System.IO.Path.Combine` overloads. Use `Path.Join` in new or changed code. `Path.Combine` silently drops earlier segments when a later argument is rooted; `Path.Join` has no reset behavior.
 
+Count only **added** lines (`-U0` makes every hunk line a pure addition), so pre-existing occurrences on untouched lines are never mixed in. `--` before the pathspec keeps a leading-dash ref from being read as an option.
+
 ```bash
-git diff -U0 "$BASE_REF"...HEAD -- '*.cs'
-git diff -U0 HEAD -- '*.cs'
+BASE_REF=origin/main   # or the PR base ref
+git diff -U0 "$BASE_REF"...HEAD -- '*.cs' | grep -E '^\+' | grep -v '^+++' | grep -c 'Path\.Combine'   # committed changes
+git diff -U0 HEAD -- '*.cs'             | grep -E '^\+' | grep -v '^+++' | grep -c 'Path\.Combine'   # uncommitted changes
 ```
 
-Report the count in touched files. New occurrences in changed code = FAIL the gate; existing untouched occurrences = expected, report as informational.
+Any count above 0 = FAIL the gate; each added line is a finding. To enumerate them rather than count them, drop the trailing `-c`.
+
+Grep this way rather than `xargs grep -c`: `xargs` is a GNU extension (unavailable on stock macOS), and batching whole files with `grep -c` mixes new and pre-existing hits in one number and omits the filename.
 
 ### 4d — Analyzers
 

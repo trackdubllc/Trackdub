@@ -42,7 +42,7 @@ Both directions of the async rule matter: no `Async` on a synchronous method, no
 
 Do not suppress warnings casually. A `#pragma warning disable`, a bare `NoWarn`, or a `.editorconfig` suppression is a design conversation, not a build fix. Fix the cause or escalate.
 
-The one sanctioned exception is already configured: `WarningsNotAsErrors` carries `RS0030` (the `Path.Combine` banned-API diagnostic) because ~337 existing files still call it. That is a ratchet, not a licence.
+The one sanctioned exception is already configured: `WarningsNotAsErrors` carries `RS0030` (the `Path.Combine` banned-API diagnostic) because a small number of existing call sites remain. That is a ratchet, not a licence.
 
 Always validate with `-warnaserror` (see `context/standards/validation-gates.md`).
 

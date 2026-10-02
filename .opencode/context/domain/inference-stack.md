@@ -114,7 +114,7 @@ Each rung is a separate claim. Never collapse them.
 | downloaded | are the model files on disk? | manifest-relative file existence |
 | checksummed | do hashes match? | `ModelHashVerifier` / `verify-manifest-hashes.py` |
 | licensed | is license metadata recorded and reviewed? | manifest fields + review record |
-| commercial-use decision | is `commercial_allowed` + `commercial_use_verified` satisfied? | `CommercialSafeEvaluator` outcome |
+| commercial-use decision | is `commercial_allowed` + `commercial_use_verified` satisfied? | `BundledModelManifestRegistry.CommercialSafeMode` outcome |
 | provider available | did the EP probe succeed for this stage? | `StageRuntimePlanStatus.Verified` |
 | enabled | was the stage enabled in this run? | `StageReadiness.Status` / run options |
 | ran | did execution occur? | `StageRunRecord` with a non-skip terminal state |

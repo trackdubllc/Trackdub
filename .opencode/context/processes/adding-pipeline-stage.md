@@ -142,16 +142,33 @@ Do not create a README unless asked.
 
 ## Step 9 — The final gate
 
-Delegate to `@validation-gate`, or run `/validate` (which delegates to it). Full gate order, verbatim from `AGENTS.md`:
+Delegate to `@validation-gate`, or run `/validate` (which delegates to it). Restore/build/test order, verbatim from `AGENTS.md`:
+
+The first three are verbatim from `AGENTS.md`. **The `dotnet format` line is not** — `AGENTS.md` contains no format gate; it is documented in `context/standards/validation-gates.md` and is this system's addition, not a repo-documented command. Do not quote it as an `AGENTS.md` command.
 
 ```bash
+# Verbatim from AGENTS.md
 dotnet restore Trackdub.slnx -m:1
 dotnet build Trackdub.slnx --configuration Release --no-restore -m:1 -warnaserror
 dotnet test Trackdub.slnx --configuration Release --no-build -m:1
+
+# From .opencode/context/standards/validation-gates.md, NOT AGENTS.md
 dotnet format Trackdub.slnx --verify-no-changes
 ```
 
-Plus the non-build gates: dependency direction (`tools/ci/verify-dependency-graph.py` + `tests/Trackdub.Architecture.Tests`), `BannedSymbols.txt` (`Path.Combine` count in touched files), analyzer diagnostics, and `packages.lock.json` integrity. Full detail: `context/standards/validation-gates.md`.
+Plus the non-build gates: dependency direction (`tools/ci/verify-dependency-graph.py` + `tests/Trackdub.Architecture.Tests`), `BannedSymbols.txt` (count **added** `Path.Combine` lines), analyzer diagnostics, and `packages.lock.json` integrity. Full detail: `context/standards/validation-gates.md`.
+
+Also run these, because CI runs them and this gate would otherwise be weaker than CI:
+
+```bash
+python3 scripts/ci/check-repository-boundary.py            # CI job: Verify Repository Boundary
+python3 scripts/ci/check-audit-mirrors.py                  # CI job: Verify Audit Mirrors
+python3 scripts/ci/check_controlled_matrix_cpu_budget.py   # CI job: Controlled Matrix CPU Budget
+```
+
+Note the split: the three CI jobs live in `scripts/ci/`, while the manifest and graph tooling referenced above lives in `tools/ci/` (`verify-dependency-graph.py`, `validate-manifest-schema.py`, `verify-manifest-hashes.py`). Verify a path with `ls` before running it.
+
+CI additionally builds on **Linux and macOS**, not just Windows (`build-linux`, `build-macos`). A local gate covers only the host it ran on — report the other two platforms as `NOT VERIFIED` rather than implying full CI parity.
 
 If a step was narrowed to one test project, the report must say verbatim that the solution-wide Release gate was skipped and why.
 

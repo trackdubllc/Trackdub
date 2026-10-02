@@ -1,6 +1,6 @@
 ---
 description: "Bump the pinned Trackdub core submodule in Trackdub-gated and verify both repos"
-agent: pipeline-inference
+agent: subagents/pipeline-inference
 ---
 
 Bump the pinned Trackdub core submodule and verify both repos still build.
@@ -14,9 +14,15 @@ Bump the pinned Trackdub core submodule and verify both repos still build.
 This command lives in the core repo's `.opencode`, but the submodule it bumps lives in **Trackdub-gated**.
 
 - If the current working directory is **Trackdub-gated** (`.gitmodules` present, `external/Trackdub` present) → run the procedure below.
-- If the current working directory is **Trackdub core** → **do not attempt a bump.** State that the submodule lives in the gated repo, and point at the canonical process doc:
-  - `../Trackdub-gated/.opencode/context/processes/submodule-pin-bump.md`
-  - and `../Trackdub-gated/.opencode/navigation.md` for the gated system's context index.
+- If the current working directory is **Trackdub core** → **do not attempt a bump.** State that the submodule lives in the gated repo, and point at the canonical process doc, resolved from a sibling checkout of that repo:
+  - `<gated-root>/.opencode/context/processes/submodule-pin-bump.md`
+  - and `<gated-root>/.opencode/navigation.md` for the gated system's context index.
+
+  A relative `../Trackdub-gated/...` path only resolves if the sibling happens to be laid out that way, which is a property of one machine, not of the repos. Locate the gated root first:
+  ```bash
+  git -C ../Trackdub-gated rev-parse --show-toplevel   # adjust the path until this succeeds
+  ```
+  If no gated checkout can be found, report the pin procedure as **NOT AVAILABLE HERE** and stop. Do not fabricate the procedure from this file — the gated system owns it.
 
 Detect this, do not assume. `git rev-parse --show-toplevel` and the presence of `.gitmodules` tell you.
 
@@ -45,28 +51,35 @@ git commit -m "Bump core pin"
 
 ## Step 4 — verify BOTH repos
 
-Core:
+The two builds run from **different working directories**. Getting this wrong makes one block silently build the wrong solution and still print PASS, which is exactly the false-verdict this command exists to prevent. Run each from the directory named in its header.
+
+**Core** — from inside the pinned submodule (`external/Trackdub`), which *is* the core repo:
 ```bash
+git -C external/Trackdub rev-parse --show-toplevel   # confirm before building
 dotnet build external/Trackdub/Trackdub.slnx -m:1
 ```
 
-Gated:
+**Gated** — from the gated repo root, the directory you are already in at Step 0:
 ```bash
+git rev-parse --show-toplevel                        # confirm this is the GATED root, not the submodule
 dotnet build Trackdub.slnx -m:1
 ```
 
-Both must succeed. If only one was run, that repo is `NOT VERIFIED`. For a stronger gate, run `/validate` in the core repo afterwards:
+Both must succeed. Verify each root with `rev-parse` before its build, and record both in the report. If only one ran, that repo is `NOT VERIFIED` — do not emit a PASS row for the one you skipped.
+
+For a stronger core gate, run `/validate` inside the submodule afterwards (note the `-C`, since your cwd is the gated root):
 ```
-dotnet restore Trackdub.slnx -m:1
-dotnet build Trackdub.slnx --configuration Release --no-restore -m:1 -warnaserror
-dotnet test Trackdub.slnx --configuration Release --no-build -m:1
+git -C external/Trackdub rev-parse --show-toplevel
+dotnet restore external/Trackdub/Trackdub.slnx -m:1
+dotnet build external/Trackdub/Trackdub.slnx --configuration Release --no-restore -m:1 -warnaserror
+dotnet test external/Trackdub/Trackdub.slnx --configuration Release --no-build -m:1
 ```
 
 ## Step 5 — breaking-change triage
 
 The new pin may carry breaking changes the gated repo must absorb. For each, check whether the gated repo depends on it and report:
 
-- **Dependency graph changes** — new/removed/renamed projects, changed `ProjectReference` sets. The gated app references core `Application`, `Composition`, `Domain`, `Licensing`, `Media.Playback`, `Sdk`; test projects additionally reference `Contracts`. Confirm all still resolve.
+- **Dependency graph changes** — new/removed/renamed projects, changed `ProjectReference` sets. The gated app references core `Application`, `Composition`, `Domain`, `Licensing`, `Media.Playback`, and `Sdk`; test projects additionally reference `Contracts`. `Trackdub.App.Avalonia` **also** references `Trackdub.Benchmarks` and `Trackdub.DubBench` beyond that list — confirm all eight resolve, and check those two explicitly since `AGENTS.md` does not name them. Verify with `grep -oP '(?<=ProjectReference Include=")[^"]+' src/Trackdub.App.Avalonia/*.csproj`.
 - **Domain and contract type changes** — moved/renamed types, changed records, signature changes on `Application`/`Sdk` entry points.
 - **Runtime flavor / EP changes** — `TrackdubOrtRuntimeFlavor` (Ort / Dnnl / WinML), provider selection, native asset layout. Gated packaging depends on this.
 - **Model manifest changes** — added/removed models, license field changes, checksum changes. Commercial-only; unknown license is unsafe. Manifest schema changes must pass `tools/ci/validate-manifest-schema.py` and `tools/ci/verify-manifest-hashes.py`.

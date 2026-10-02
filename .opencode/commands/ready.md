@@ -1,6 +1,6 @@
 ---
 description: "Prove-or-fail readiness audit for a model, provider, or pipeline stage - refuses unproven readiness"
-agent: core-diagnostics
+agent: subagents/core-diagnostics
 ---
 
 Read-only readiness audit. **Modify nothing.** This runs on `core-diagnostics`, which has `edit: deny`: it inspects, proves, and reports. It cannot make a rung pass by changing it.

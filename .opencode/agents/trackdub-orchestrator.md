@@ -46,7 +46,7 @@ permission:
   <system_context>
     Trackdub is a cross-platform, local-first AI dubbing engine. This repo is the public core
     (`trackdubllc/Trackdub`, Apache-2.0): SDK, CLI, pipeline, inference, media, infrastructure,
-    licensing. Repo root: `D:\Dev\Trackdub_Workspace\Trackdub`. Solution: `Trackdub.slnx`
+    licensing. Repo root: the current checkout (`git rev-parse --show-toplevel`). Solution: `Trackdub.slnx`
     (plus `Trackdub.Sdk.slnx`, `Trackdub.Inference.slnx`). .NET 10, `TreatWarningsAsErrors=true`,
     `RestorePackagesWithLockFile=true`, central package management via `Directory.Packages.props`,
     repo-wide banned-API analyzer wired through `Directory.Build.props` + `BannedSymbols.txt`.
@@ -93,7 +93,7 @@ permission:
   <rule>Never mark work complete without a validation-gate report. "Builds locally" is not evidence of Release+warnings-as-errors+tests.</rule>
   <rule>Never infer a result. Missing evidence is reported as `NOT VERIFIED`, in those words.</rule>
   <rule>Domain depends on nothing. Never introduce a reference that violates the AGENTS.md graph; that graph is enforced by `tests/Trackdub.Architecture.Tests` against the real csproj files.</rule>
-  <rule>Prefer `Path.Join` over `Path.Combine` in all new/changed code. RS0030 is warning-only today (~337 existing call sites) — do not add new ones and do not mass-rewrite without asking.</rule>
+  <rule>Prefer `Path.Join` over `Path.Combine` in all new/changed code. RS0030 is warning-only today (a small number of existing call sites) — do not add new ones and do not mass-rewrite without asking.</rule>
   <rule>Model governance: commercial license only, verified; unknown is unsafe. Never claim a stage works because a manifest entry exists.</rule>
   <rule>Cross-platform is required. Portable .NET 10 APIs by default. Extended operations live in `docs/operations/cloud-operations.md`.</rule>
   <rule>Preserve original artifacts on skipped or failed stages; record explicit skip/failure reason codes from `Trackdub.Domain.StageRuns.StageSkipReasonCodes`.</rule>
@@ -118,7 +118,7 @@ permission:
   <stage id="2" name="RepoBoundaryCheck">
     <action>Refuse cross-repo duplication.</action>
     <process>
-      <step>Avalonia desktop shell work — XAML, views, view models, shell composition, playback surface, `Trackdub.App.Avalonia`-shaped code — belongs to the OTHER repo's agent system at `D:\Dev\Trackdub_Workspace\Trackdub-gated\.opencode\`.</step>
+      <step>Avalonia desktop shell work — XAML, views, view models, shell composition, playback surface, `Trackdub.App.Avalonia`-shaped code — belongs to the OTHER repo's agent system at the gated repo sibling checkout, resolved with `git rev-parse --show-toplevel`.</step>
       <step>Do not write shell/UI guidance here. Read `../Trackdub-gated/.opencode/navigation.md` for what that system owns and for where core-repo facts it needs must be published.</step>
       <step>Only layers listed in the domain_context graph above are in scope here.</step>
     </process>

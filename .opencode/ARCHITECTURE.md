@@ -14,7 +14,7 @@ Three problems it solves:
 
 This system governs **`trackdubllc/Trackdub`** — the public core: `src/Trackdub.*`, `src/DubBench*`, `tests/Trackdub.Architecture.Tests`, `tools/`, `scripts/`, and `.github/workflows/`.
 
-It does **not** govern the Avalonia desktop shell. That lives in `D:\Dev\Trackdub_Workspace\Trackdub-gated\` under `App.Avalonia` / `App.Avalonia.Tests` / `UI.Tests`, with its own `.opencode` system at `../Trackdub-gated/.opencode/`.
+It does **not** govern the Avalonia desktop shell. That lives in the `Trackdub-gated` repo under `App.Avalonia` / `App.Avalonia.Tests` / `UI.Tests`, with its own `.opencode` system at `../Trackdub-gated/.opencode/`.
 
 The split is not administrative convenience — see [Cross-repo split](#cross-repo-split) below.
 
@@ -109,5 +109,5 @@ The cost is duplication at the boundary: core and gated each describe the pin pr
 
 - **Linear is referenced but not integrated.** `AGENTS.md` names workspace `trackdubllc`, team **TS**, `repo:core`, requires autonomous tracking, and forbids marking Done without proof. No Linear MCP server or tool is wired into this system. Reading and updating Linear issues stays a **manual human step**. This is the largest gap: the "never mark Done without proof" rule is currently enforced socially, not mechanically.
 - **The desktop repo has its own system.** Core and gated are separate trees with separate context. Cross-cutting reasoning that spans both — anything touching the core/desktop contract — must load two systems. `/pin` and the breaking-change triage are the mitigation, not a solution.
-- **Two of three planned workflows are unwritten.** Only `workflows/new-inference-stage.md` exists. `navigation.md` says so rather than listing them as if they were available.
-- **Context files are not yet populated.** This directory ships the routing layer — index, commands, architecture — plus the agent and workflow files. `context/domain/`, `context/processes/`, `context/standards/`, and `context/templates/` are referenced here and owned elsewhere; a reference to a file that does not yet exist is a `NOT VERIFIED`, and the commands say so rather than proceeding as if it does.
+- **Two planned workflows are unwritten.** `feature-change` and `release-and-pin` are named in the routing table but do not exist. The three shipped workflows are `new-inference-stage`, `pr-ready-loop`, and `benchmark-regression-triage`.
+- **Factual claims decay.** Every grounding statement in `context/` was verified at authoring time against a specific revision. Counts, file paths, test names, and type names drift. Anything asserted here should be re-verified with `verify with: <command>` before being relied on, and this tree will otherwise start lying to its own agents.

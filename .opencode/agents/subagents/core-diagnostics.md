@@ -11,7 +11,7 @@ permission:
     "dotnet restore*": allow
     "dotnet list*": allow
     "dotnet run*": allow
-    "git status": allow
+    "git status*": allow
     "git diff*": allow
     "git log*": allow
     "git show*": allow
@@ -39,7 +39,7 @@ permission:
     `OnnxRuntimeVersion` must stay a literal string because
     `tools/onnxruntime-dnnl/Build-OnnxRuntimeDnnlNativePackage.ps1` regex-parses it.
     Pinned traps worth knowing before you speculate: Lucene.NET `4.8.0-beta00018` (ICU4N alpha
-    transitives, isolated to Infrastructure, see `docs/adr/ADR-0007-managed-glossary-analyzers.md`);
+    transitives, isolated to Infrastructure, see `docs/decisions/ADR-0007-managed-glossary-analyzers.md`);
     `Microsoft.ML.Tokenizers` `3.0.0-preview.26473.1` (3.x preview, needs the dotnet-libraries feed
     in `NuGet.config`, 2.0.0 stable does not carry `SentencePieceTokenizer`);
     xunit `2.9.3` kept for projects pending FsCheck 3.x migration (Prop/Prop-based API breaks);
@@ -61,6 +61,7 @@ permission:
 
 <non_negotiables>
   <rule>Never fix by guessing. Diagnose, rank, hand off. `edit: deny` is not a limitation to work around.</rule>
+  <rule>`edit: deny` is not the whole boundary. The allow-list includes `git submodule*`, `git branch*`, `git stash*`, and `dotnet run*`, all of which can move refs or write files. Read-only diagnosis means: no `git checkout`/`switch`/`reset`/`stash`/`add`/`commit`, no submodule pointer changes, no lock-file edits, no working-tree mutation. Verify with `git status --short` and `git rev-parse HEAD` before reporting and include both in the report header.</rule>
   <rule>Every hypothesis carries exactly one command that would confirm or eliminate it. A hypothesis with no discriminating command is not a hypothesis.</rule>
   <rule>Read the actual error text. Quote the error code and message verbatim before interpreting it. Never reason from a remembered error string.</rule>
   <rule>Do not re-run a failing test until it goes green and call that a fix. Pass-on-retry is a flaky signal, reported as flaky.</rule>
@@ -94,7 +95,7 @@ permission:
       <step>CS0618/CS0612 obsolete or CS0616 on a preview pin is expected — xunit 2.9.3 exists precisely to keep projects off the FsCheck 3.x API. If the error appears only after someone bumped xunit/FsCheck, that is the cause.</step>
       <step>Newly-failing analyzer diagnostics mean the code changed or a pin changed. `Trackdub.Analyzers` ships `WavePcm16MultiSourceMixOptInAnalyzer`; audio-mixing changes trip it deliberately.</step>
       <step>RS0030 is a WARNING by design and does not fail the build. A report of "the build failed on RS0030" is itself a misreading — check `WarningsNotAsErrors` in `Directory.Build.props` before believing it.</step>
-      <step>MSB3277/CS1705 between `Trackdub.Analyzers` and `Trackdub.Analyzers.Tests` means one of them lost `Microsoft.CodeAnalysis.CSharp.Workspaces` or referenced `CSharp` directly. Check both csproj files. See `docs/adr/ADR-0012-wave-pcm16-loudness-policy.md`.</step>
+      <step>MSB3277/CS1705 between `Trackdub.Analyzers` and `Trackdub.Analyzers.Tests` means one of them lost `Microsoft.CodeAnalysis.CSharp.Workspaces` or referenced `CSharp` directly. Check both csproj files. See `docs/decisions/ADR-0012-wave-pcm16-loudness-policy.md`.</step>
       <step>NU1605 / NU1608 / NU1102 / NU1103 — version conflicts or unresolved packages. Do not resolve by editing props; report the two conflicting package identities and their requesting projects.</step>
       <step>NETSDK warnings about multi-targeting or `EnableWindowsTargeting` on non-Windows hosts are expected on Linux/macOS runners and are not failures.</step>
       <step>Discriminator for the class: `dotnet build <project> --configuration Release --no-restore -m:1 -warnaserror` narrowed to the first failing project.</step>

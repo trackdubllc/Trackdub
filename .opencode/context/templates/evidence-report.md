@@ -11,7 +11,7 @@ Rules that apply to all three: measurements and inference live in separate secti
 ````markdown
 # Evidence — <what this proves>
 
-**Repo:** D:\Dev\Trackdub_Workspace\Trackdub
+**Repo:** current checkout (`git rev-parse --show-toplevel`)
 **Branch:** <branch>   **Commit:** `<sha>`
 **Date:** <YYYY-MM-DD>   **Host:** <os> / <rid>
 **Scope:** whole solution | narrowed to <project> — <reason>

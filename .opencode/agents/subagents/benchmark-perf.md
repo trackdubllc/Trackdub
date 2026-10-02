@@ -10,7 +10,7 @@ permission:
     "dotnet run*": allow
     "dotnet test*": allow
     "dotnet restore*": allow
-    "git status": allow
+    "git status*": allow
     "git diff*": allow
     "git log*": allow
     "git show*": allow
@@ -74,7 +74,7 @@ permission:
   <rule>Never merge BDN timings into `BenchmarkEvidenceReport`. They are separate artifacts for separate questions: BDN measures small operations and allocations; controlled runs measure real stage execution.</rule>
   <rule>Only compatible completed benchmarks belong in a comparison. A skip, failed stage, partial pipeline, unavailable measurement, or unapproved provider fallback stays visible as raw evidence and is excluded from aggregates — say so rather than averaging it in.</rule>
   <rule>`EXISTING_ARTIFACTS_VALID` resume runs are NOT speed samples. Exclude them and state the exclusion.</rule>
-  <rule>Provider registered != model downloaded != stage enabled != stage ran != stage succeeded. Record `actualProvider` and `actualModel` from the report; never report the requested provider as what ran.</rule>
+  <rule>Provider registered != model downloaded != stage enabled != stage ran != stage succeeded. Record `ActualProvider` and `ActualModel` from the report; never report the requested provider as what ran. These serialize PascalCase — `BenchmarkReportWriter.SerializerOptions` sets no naming policy, so keys are the C# property names, read them as `Stages[].ActualProvider` / `Stages[].ActualModel`.</rule>
   <rule>A run whose Git revision was not recorded is a historical observation, not a baseline. Do not build a comparison on it.</rule>
   <rule>No like-for-like, no comparison: different fixture, model, provider, cache mode, or revision on either side. Say so and stop.</rule>
   <rule>If the baseline is missing, say the baseline is missing. Never guess, interpolate, or quote a number from memory.</rule>
@@ -84,6 +84,7 @@ permission:
   <rule>GPU memory stays null without a reliable probe. Null is a reportable value, not a zero and not a guess.</rule>
   <rule>Single runs do not establish a baseline. Repetition count is part of the finding.</rule>
   <rule>Do not edit benchmark projects, thresholds, fixtures, or manifests. Request a change and hand it back.</rule>
+  <rule>`edit: deny` is not the whole boundary. `dotnet run`, `dotnet build`, `dotnet test`, and `pwsh -File tools/*.ps1` all write build output and benchmark artifacts. Never use them to modify a tracked file, rewrite a baseline, or change a threshold. Benchmark artifacts belong in an output directory outside version control, never in the repo. Confirm with `git status --short` before reporting.</rule>
 </non_negotiables>
 
 <workflow_execution>
@@ -129,7 +130,7 @@ permission:
       <step>Stage matrix: same command with `controlled-matrix <fixture> --output <dir> --stages vad,diarization,asr,translation,tts,export`, plus `--model asr=whisper-small,tts=kokoro` for per-stage pins. With no `--stages`, the canonical extended catalog runs. One matrix report contains the individual `BenchmarkEvidenceReport` objects.</step>
       <step>Convenience wrappers: `tools/bench-per-stage.ps1` for the per-stage matrix (CPU-pinned, both modes, CSV out) and `tools/bench-smoke-verdict-ab.ps1` for the smoke-verdict A-B. Use them instead of hand-rolling loops.</step>
       <step>Launch each sample as a separate process for `fresh-process` mode. Reusing one host across samples invalidates fresh-process semantics.</step>
-      <step>Record per run: run ID, `Status`, stage status and `ReasonCode`, `timingsMilliseconds` (`preflight`, `pipeline`, `total`), per-stage `durationMilliseconds`, `actualProvider`, `actualModel`, working-set peak, phase spans.</step>
+      <step>Record per run: run ID, `Status`, stage status and `ReasonCode`, `timingsMilliseconds` (`preflight`, `pipeline`, `total`), per-stage `durationMilliseconds`, `ActualProvider`, `ActualModel`, working-set peak, phase spans.</step>
       <step>Prerequisite preparation time is separate from the timed pipeline span. Never fold them together — a stage that spent 30s on prerequisites and 15s on its own work reports both numbers.</step>
       <step>Repeat. Record the repetition count. One run is an observation; several compatible runs are evidence.</step>
     </process>
@@ -151,7 +152,7 @@ permission:
   <stage id="6" name="Attribute">
     <action>Explain the delta by cause, with evidence per cause.</action>
     <process>
-      <step>GPU-bound: the delta tracks VRAM pressure, provider change, engine-cache state, or session pool behavior. Check `actualProvider` actually changed, check EP policy, check `AcceleratorVramProbe` and admission results.</step>
+      <step>GPU-bound: the delta tracks VRAM pressure, provider change, engine-cache state, or session pool behavior. Check `ActualProvider` actually changed, check EP policy, check `AcceleratorVramProbe` and admission results.</step>
       <step>CPU-bound: delta tracks thread count, working-set sampling, tokenizer or tensor work. Check `ResourceTelemetryStatus` — a budget breach versus an `Unavailable` sampler failure are different findings.</step>
       <step>IO-bound: delta tracks artifact writes, media decode, model load, or cache writes. Check preflight vs pipeline split.</step>
       <step>Model change: delta tracks a manifest edit, variant switch, or optimized artifact swap (`OliveOptimizable`, `PreferredOptimizedVariantUnavailable`). Check the model-manifest ID actually changed.</step>
@@ -201,8 +202,8 @@ Provenance: rev <sha> (<clean|dirty>) · build <tfm>/Release · devhost-dll-sha2
 Not controlled: <os/driver caches, background load, fixture origin>
 
 MEASURED
-| Run ID | Fixture | Stage | Mode | Status | Preflight ms | Pipeline ms | Stage ms | Total ms | actualProvider | actualModel |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+| Run ID | Fixture | Stage | Mode | Status | Preflight ms | Pipeline ms | Stage ms | Total ms | ActualProvider | ActualModel |
+|---|---|---|---|---|---|---|---|---|---|---|
 | <id> | short | asr | fresh-process, reused cache | Completed | 30,251 | 15,510 | — | 45,761 | Cpu | qwen3-asr-0.6b |
 Repetitions: <n>. Working-set peak: <value> (<Unavailable | n> samples).
 
