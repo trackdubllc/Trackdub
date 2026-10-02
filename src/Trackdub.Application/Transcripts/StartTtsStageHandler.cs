@@ -88,6 +88,10 @@ public sealed class StartTtsStageHandler(
         {
             voice = ResolveVoice(request, isVoiceCloning);
 
+            // Inside the guarded block so cancellation here still records a Canceled stage run.
+            await WriteCloneModelSubstitutedDegradationAsync(request, voice, isVoiceCloning, stageRun.Id, cancellationToken)
+                .ConfigureAwait(false);
+
             // Resolve and validate the reference clip once for the entire batch so that the
             // audio analysis is not repeated for every synthesized segment.
             voiceCloneReference = isVoiceCloning
@@ -108,9 +112,6 @@ public sealed class StartTtsStageHandler(
                 .ConfigureAwait(false);
             throw;
         }
-
-        await WriteCloneModelSubstitutedDegradationAsync(request, voice, isVoiceCloning, stageRun.Id, cancellationToken)
-            .ConfigureAwait(false);
 
         var takes = new ConcurrentBag<TtsTake>();
         try

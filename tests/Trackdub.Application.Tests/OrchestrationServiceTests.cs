@@ -1475,6 +1475,26 @@ public sealed class OrchestrationServiceTests
         Assert.Empty(context.StageRunStore.All);
     }
 
+    [Fact]
+    public async Task TtsOrchestrationService_PreviewVoiceAsync_routes_qwen3_presets_to_custom_voice_without_an_alias()
+    {
+        var ttsEngine = new FakeTtsEngine();
+        var catalog = new FakeVoiceCatalog(
+        [
+            new("af_heart", "mul", "female", "Heart"),
+            new("qwen3:vivian", "mul", "female", "Vivian (Chinese)"),
+        ]);
+        TtsServiceContext context = CreateTtsServiceContext(ttsEngine, voiceCatalog: catalog);
+
+        await context.Service.PreviewVoiceAsync(
+            new PreviewVoiceRequest("qwen3:vivian", "zh", "Preview text."),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("qwen3:vivian", ttsEngine.LastVoicepack?.VoiceId);
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice06Alias, ttsEngine.LastOptions?.PreferredModelAlias);
+        Assert.True(ttsEngine.LastOptions?.RequirePreferredModelAlias);
+    }
+
     private static TranslationServiceContext CreateTranslationServiceContext(
         FakeTranslationEngine translationEngine,
         FakeGlossaryRepository? glossaryRepository = null,

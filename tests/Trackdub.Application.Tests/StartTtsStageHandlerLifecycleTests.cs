@@ -220,6 +220,36 @@ public sealed class StartTtsStageHandlerLifecycleTests
     }
 
     [Fact]
+    public async Task HandleAsync_WhenCanceledWhileRecordingSubstitution_RecordsCanceledStatus()
+    {
+        var stageRunStore = new FakeProjectStageRunStore();
+        var artifactStore = new CancelingJsonArtifactStore();
+        var degradationWriter = new PipelineDegradationWriter(
+            artifactStore,
+            new FakeFileFingerprintService(new FileFingerprint("tts-hash", 42, DateTimeOffset.UtcNow)),
+            new FakeMediaAssetRepository());
+        using var handler = new StartTtsStageHandler(
+            new FakeTtsEngine(),
+            new FakeVoiceCatalog(),
+            artifactStore,
+            new FakeFileFingerprintService(new FileFingerprint("tts-hash", 42, DateTimeOffset.UtcNow)),
+            new FakeMediaAssetRepository(),
+            new FakeTtsTakeRepository(),
+            stageRunStore,
+            degradationWriter: degradationWriter);
+        StartTtsStageRequest request = CreateRequest(targetLanguage: "es") with
+        {
+            PreferredModelAlias = VoiceCloningDefaults.ChatterboxMultilingualAlias,
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            handler.HandleAsync(request, TestContext.Current.CancellationToken));
+
+        StageRunRecord run = Assert.Single(stageRunStore.All);
+        Assert.Equal(StageRunStatus.Canceled, run.Status);
+    }
+
+    [Fact]
     public async Task HandleAsync_StockRunWithoutRequestedAlias_DoesNotWarn()
     {
         var stageRunStore = new FakeProjectStageRunStore();
@@ -248,6 +278,28 @@ public sealed class StartTtsStageHandlerLifecycleTests
             ttsTakeRepository ?? new FakeTtsTakeRepository(),
             stageRunStore,
             logger: logger);
+    }
+
+    private sealed class CancelingJsonArtifactStore : IArtifactStore
+    {
+        private readonly FakeArtifactStore inner = new();
+
+        public Task EnsureLayoutAsync(CancellationToken cancellationToken) => inner.EnsureLayoutAsync(cancellationToken);
+
+        public ArtifactWriteHandle CreateWriteHandle(string relativePath) => inner.CreateWriteHandle(relativePath);
+
+        public Task CommitAsync(ArtifactWriteHandle handle, CancellationToken cancellationToken) =>
+            inner.CommitAsync(handle, cancellationToken);
+
+        public Task WriteJsonAsync<T>(string relativePath, T value, CancellationToken cancellationToken) =>
+            throw new OperationCanceledException("Canceled while writing a degradation record.");
+
+        public Task<T?> ReadJsonAsync<T>(string relativePath, CancellationToken cancellationToken) =>
+            inner.ReadJsonAsync<T>(relativePath, cancellationToken);
+
+        public string GetPath(string relativePath) => inner.GetPath(relativePath);
+
+        public bool Exists(string relativePath) => inner.Exists(relativePath);
     }
 
     private sealed class WarningCapturingLogger : IApplicationLogger

@@ -226,7 +226,9 @@ public sealed class TtsOrchestrationService(
                 voice,
                 Options: new InferenceRequestOptions(
                     string.IsNullOrWhiteSpace(request.PreferredModelAlias)
-                        ? StockTtsDefaults.KokoroPrimaryAlias
+                        ? Qwen3TtsDefaults.IsPresetVoiceId(voice.VoiceId)
+                            ? Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null)
+                            : StockTtsDefaults.KokoroPrimaryAlias
                         : request.PreferredModelAlias.Trim(),
                     RequirePreferredModelAlias: true,
                     PreferredExecutionProvider: request.PreferredExecutionProvider?.ToString(),
