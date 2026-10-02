@@ -303,6 +303,14 @@ class EdgeExclusionTests(unittest.TestCase):
             self.assertEqual(r.edge_excluded_samples, 0, seconds)
             self.assertFalse(r.passed, seconds)
 
+    def test_an_oversized_exclusion_never_empties_the_judged_region(self):
+        mix, d, b = self.outputs(seconds=1.2)
+        d[:] = 0.0
+        b[:] = 0.0
+        r = self.gate(mix, d, b, edge_exclusion_s=0.6)
+        self.assertFalse(r.passed)
+        self.assertEqual(r.edge_excluded_samples, 0)
+
     def test_a_non_finite_or_negative_exclusion_is_rejected(self):
         mix, d, b = self.outputs()
         for bad in (float("nan"), float("inf"), -0.05):
