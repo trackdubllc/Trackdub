@@ -303,6 +303,12 @@ class EdgeExclusionTests(unittest.TestCase):
             self.assertEqual(r.edge_excluded_samples, 0, seconds)
             self.assertFalse(r.passed, seconds)
 
+    def test_a_non_finite_or_negative_exclusion_is_rejected(self):
+        mix, d, b = self.outputs()
+        for bad in (float("nan"), float("inf"), -0.05):
+            with self.assertRaises(metrics.MetricError):
+                self.gate(mix, d, b, edge_exclusion_s=bad)
+
     def test_a_clip_of_exactly_one_second_is_judged_whole_at_any_rate(self):
         for rate in (8000, 22050, 44100, 48000):
             n = rate

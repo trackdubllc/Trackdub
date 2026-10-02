@@ -62,6 +62,8 @@ TRACKED_METRICS: dict[str, tuple[tuple[str, ...], bool]] = {
     "dialogue_si_sdr_db": (("dialogue_si_sdr_db",), True),
     "reconstruction_residual_db": (("reconstruction", "residual_db"), False),
     "reconstruction_in_band_residual_db": (("reconstruction", "in_band_residual_db"), False),
+    "reconstruction_in_band_residual_with_edges_db": (("reconstruction", "in_band_residual_with_edges_db"), False),
+    "reconstruction_residual_with_edges_db": (("reconstruction", "residual_with_edges_db"), False),
     "bandwidth_retained_db": (("reconstruction", "bandwidth_retained_db"), True),
 }
 

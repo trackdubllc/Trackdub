@@ -480,6 +480,8 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
     alone, and the extra pass is acceptable for eval throughput. The whole-clip residuals are kept as
     diagnostics. See `_check_reconstruction` for the gate itself.
     """
+    if not math.isfinite(edge_exclusion_s) or edge_exclusion_s < 0.0:
+        raise MetricError("edge_exclusion_s must be a finite, non-negative number of seconds")
     edge = int(round(edge_exclusion_s * sr))
     arrays = (mixture, est_dialogue, est_bed)
     if (edge <= 0 or not all(a.ndim == 2 for a in arrays) or not (mixture.shape == est_dialogue.shape == est_bed.shape)
