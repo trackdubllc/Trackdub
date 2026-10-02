@@ -115,7 +115,7 @@ class BandLimitTests(unittest.TestCase):
         self.assertGreater(tail, 0)
         dialogue = self.mix.copy()
         dialogue[-tail:] = 0.0
-        r = metrics.check_reconstruction(self.mix, dialogue, self.zero, SR, band_limit_hz=LIMIT)
+        r = metrics.check_reconstruction(self.mix, dialogue, self.zero, SR, band_limit_hz=LIMIT, edge_exclusion_s=0.0)
         self.assertFalse(r.passed)
         self.assertIn("in-band residual", r.reasons[0])
 
@@ -248,6 +248,65 @@ class ValidationTests(unittest.TestCase):
     def test_results_serialise(self):
         x = noise(0.1)
         json.dumps(metrics.check_reconstruction(x, 0.5 * x, 0.5 * x, SR, band_limit_hz=LIMIT, output_bits=16).as_dict())
+
+
+class EdgeExclusionTests(unittest.TestCase):
+    EDGE = int(round(metrics.RECONSTRUCTION_EDGE_EXCLUSION_S * SR))
+
+    def outputs(self, seconds=3.0):
+        mix = lowpass(noise(0.05, seconds=seconds, seed=11))
+        return mix, 0.5 * mix, 0.5 * mix
+
+    def gate(self, mix, d, b, **kw):
+        return metrics.check_reconstruction(mix, d, b, SR, band_limit_hz=LIMIT, **kw)
+
+    def test_a_zeroed_start_does_not_fail_the_gate_but_is_reported(self):
+        mix, d, b = self.outputs()
+        d[:24] = 0.0
+        b[:24] = 0.0
+        r = self.gate(mix, d, b)
+        self.assertTrue(r.passed)
+        self.assertEqual(r.edge_excluded_samples, self.EDGE)
+        self.assertGreater(r.in_band_residual_with_edges_db, r.in_band_residual_db)
+        self.assertFalse(self.gate(mix, d, b, edge_exclusion_s=0.0).passed)
+
+    def test_an_unfinished_end_does_not_fail_the_gate(self):
+        mix, d, b = self.outputs()
+        d[-30:] = 0.0
+        b[-30:] = 0.0
+        self.assertTrue(self.gate(mix, d, b).passed)
+        self.assertFalse(self.gate(mix, d, b, edge_exclusion_s=0.0).passed)
+
+    def test_an_error_just_inside_the_judged_region_still_fails(self):
+        mix, d, b = self.outputs()
+        d[self.EDGE + 10:self.EDGE + 40] = 0.0
+        b[self.EDGE + 10:self.EDGE + 40] = 0.0
+        self.assertFalse(self.gate(mix, d, b).passed)
+        mix, d, b = self.outputs()
+        d[-(self.EDGE + 40):-(self.EDGE + 10)] = 0.0
+        b[-(self.EDGE + 40):-(self.EDGE + 10)] = 0.0
+        self.assertFalse(self.gate(mix, d, b).passed)
+
+    def test_a_nonfinite_sample_inside_the_excluded_edge_still_fails(self):
+        mix, d, b = self.outputs()
+        d[3] = np.nan
+        r = self.gate(mix, d, b)
+        self.assertFalse(r.passed)
+        self.assertEqual(r.edge_excluded_samples, 0)
+
+    def test_a_short_clip_is_judged_whole(self):
+        mix, d, b = self.outputs(seconds=0.15)
+        d[:24] = 0.0
+        b[:24] = 0.0
+        r = self.gate(mix, d, b)
+        self.assertEqual(r.edge_excluded_samples, 0)
+        self.assertFalse(r.passed)
+
+    def test_the_exclusion_is_reported_in_the_result_dict(self):
+        mix, d, b = self.outputs()
+        out = self.gate(mix, d, b).as_dict()
+        self.assertEqual(out["edge_excluded_samples"], self.EDGE)
+        self.assertIsNotNone(out["in_band_residual_with_edges_db"])
 
 
 if __name__ == "__main__":

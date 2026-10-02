@@ -35,7 +35,7 @@ import audiomath as am
 import metrics
 
 SEPARATOR_SR = 44100
-RESULTS_SCHEMA_VERSION = 3
+RESULTS_SCHEMA_VERSION = 4
 LENGTH_TOLERANCE_SAMPLES = 4
 
 PINNED_MANIFEST = (Path(__file__).resolve().parents[2] / "src" / "Trackdub.Inference" / "Runtime"
@@ -354,7 +354,8 @@ def evaluate(corpus: Path, work: Path, run_separator: SeparatorRunner, *, candid
         "candidate": candidate,
         "provider_requested": provider,
         "hardware_label": hardware_label,
-        "gate_config": {"threshold_db": metrics.RECONSTRUCTION_GATE_DB, **(gate or {})},
+        "gate_config": {"threshold_db": metrics.RECONSTRUCTION_GATE_DB,
+                        "edge_exclusion_s": metrics.RECONSTRUCTION_EDGE_EXCLUSION_S, **(gate or {})},
         "model_provenance": model_provenance(list(timings.values())),
         "host": {"platform": platform.platform(), "python": sys.version.split()[0]},
         "corpus": {"manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
