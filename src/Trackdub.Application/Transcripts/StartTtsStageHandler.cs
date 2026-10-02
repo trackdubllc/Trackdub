@@ -962,7 +962,6 @@ public sealed class StartTtsStageHandler(
         string? trimmedAlias = alias?.Trim();
         return string.IsNullOrWhiteSpace(trimmedAlias) ||
                (IsVoiceCloningAlias(trimmedAlias) &&
-                !TtsModelOverrideSettings.IsCosyVoiceAlias(trimmedAlias) &&
                 !Qwen3TtsDefaults.IsAnyQwen3Alias(trimmedAlias));
     }
 

@@ -170,7 +170,15 @@ public sealed class TranscriptProjectStateService(
         IReadOnlyList<VoiceAssignment> voiceAssignments = await voiceAssignmentRepository
             .GetAllAsync(openResult.Project.Id, cancellationToken)
             .ConfigureAwait(false);
-        IReadOnlyList<VoiceCatalogEntry> availableVoices = voiceCatalog.GetVoices();
+        // The picker list narrows to the target language only where Kokoro does not cover it, so
+        // Qwen3 presets can be offered there. English and Spanish keep the full list, and
+        // assignment warnings always see every voice so a mismatched assignment is still found.
+        IReadOnlyList<VoiceCatalogEntry> allVoices = voiceCatalog.GetVoices();
+        IReadOnlyList<VoiceCatalogEntry> availableVoices =
+            string.IsNullOrWhiteSpace(selectedTranslationTargetLanguage) ||
+            StockTtsVoiceMatcher.SupportsKokoro(selectedTranslationTargetLanguage)
+                ? allVoices
+                : voiceCatalog.GetVoices(selectedTranslationTargetLanguage);
         IReadOnlyList<TtsTake> ttsTakes = await ttsTakeRepository
             .GetByProjectAsync(openResult.Project.Id, cancellationToken)
             .ConfigureAwait(false);
@@ -186,7 +194,7 @@ public sealed class TranscriptProjectStateService(
             stageRuns);
         IReadOnlyList<VoiceAssignmentWarning> voiceAssignmentWarnings = voiceAssignmentService.BuildWarnings(
             voiceAssignments,
-            availableVoices,
+            allVoices.Concat(availableVoices).DistinctBy(static voice => voice.VoiceId).ToArray(),
             selectedTranslationTargetLanguage);
         StemAudioRoute stemAudioRoute = TranscriptWorkflowUtilities.BuildStemAudioRoute(openResult.Artifacts, stageRuns);
         IReadOnlyList<LipSyncSegmentState>? lipSyncSegmentStates = profile.IncludeLipSyncStates

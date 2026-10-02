@@ -1943,16 +1943,18 @@ public sealed class DubbingPipelineEngine(
             .Select(static assignment => assignment.SpeakerId)
             .ToHashSet();
 
-        // Stock (Kokoro) voices first. For languages Kokoro does not cover, fall back to the Qwen3
-        // CustomVoice preset whose native language matches, which the TTS stage routes to Qwen3.
-        string? defaultVoiceId = state.AvailableVoices
-            .Where(voice => IsVoiceLanguageMatch(voice.LanguageCode, targetLanguageCode))
-            .OrderBy(static voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .Select(static voice => voice.VoiceId)
-            .FirstOrDefault()
-            ?? (StockTtsVoiceMatcher.SupportsKokoro(targetLanguageCode)
-                ? null
-                : Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguageCode));
+        // Languages Kokoro does not cover use the Qwen3 CustomVoice preset whose native language
+        // matches. The picker list can contain every preset for these languages, so take the
+        // language default instead of the alphabetically first preset (Aiden is English).
+        // Otherwise pick the first matching stock voice.
+        string? defaultVoiceId = !string.IsNullOrWhiteSpace(targetLanguageCode) &&
+                                 !StockTtsVoiceMatcher.SupportsKokoro(targetLanguageCode)
+            ? Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguageCode)
+            : state.AvailableVoices
+                .Where(voice => IsVoiceLanguageMatch(voice.LanguageCode, targetLanguageCode))
+                .OrderBy(static voice => voice.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(static voice => voice.VoiceId)
+                .FirstOrDefault();
         if (defaultVoiceId is null)
         {
             return null;

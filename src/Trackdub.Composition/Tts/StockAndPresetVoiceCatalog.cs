@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Trackdub.Application.Transcripts;
 using Trackdub.Contracts.Pipeline;
 
 namespace Trackdub.Composition.Tts;
@@ -6,8 +7,10 @@ namespace Trackdub.Composition.Tts;
 /// <summary>
 /// Voice catalog that keeps the stock voice pool (Kokoro) for automatic voice picking while also
 /// resolving explicitly named preset voices from other engines, such as Qwen3 CustomVoice
-/// (<c>qwen3:vivian</c>). Listing stays on the stock pool so default voice selection for
-/// English and Spanish is unchanged; lookups by ID fall through to the preset catalogs.
+/// (<c>qwen3:vivian</c>). Listing stays on the stock pool when no target language is set or when
+/// Kokoro covers the target (English and Spanish). For other languages, preset voices are merged
+/// into the list so interactive pickers can offer Qwen3 stock voices; lookups by ID always fall
+/// through to the preset catalogs.
 /// </summary>
 public sealed class StockAndPresetVoiceCatalog(IVoiceCatalog stockCatalog, params IVoiceCatalog[] presetCatalogs)
     : IVoiceCatalog
@@ -15,8 +18,27 @@ public sealed class StockAndPresetVoiceCatalog(IVoiceCatalog stockCatalog, param
     private readonly IVoiceCatalog stockCatalog = stockCatalog ?? throw new ArgumentNullException(nameof(stockCatalog));
     private readonly IVoiceCatalog[] presetCatalogs = presetCatalogs ?? [];
 
-    public IReadOnlyList<VoiceCatalogEntry> GetVoices(string? languageCode = null) =>
-        stockCatalog.GetVoices(languageCode);
+    public IReadOnlyList<VoiceCatalogEntry> GetVoices(string? languageCode = null)
+    {
+        IReadOnlyList<VoiceCatalogEntry> stock = stockCatalog.GetVoices(languageCode);
+        if (string.IsNullOrWhiteSpace(languageCode) || StockTtsVoiceMatcher.SupportsKokoro(languageCode))
+        {
+            return stock;
+        }
+
+        if (presetCatalogs.Length == 0)
+        {
+            return stock;
+        }
+
+        var merged = new List<VoiceCatalogEntry>(stock);
+        foreach (IVoiceCatalog presetCatalog in presetCatalogs)
+        {
+            merged.AddRange(presetCatalog.GetVoices(languageCode));
+        }
+
+        return merged;
+    }
 
     public bool TryGetVoice(string voiceId, [NotNullWhen(true)] out VoiceCatalogEntry? entry)
     {

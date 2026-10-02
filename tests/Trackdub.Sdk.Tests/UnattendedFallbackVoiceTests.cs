@@ -86,6 +86,27 @@ public sealed class UnattendedFallbackVoiceTests
         Assert.Null(TrackdubDubbingEngine.BuildUnattendedFallbackVoiceIds(state, "es"));
     }
 
+    [Fact]
+    public void Chinese_default_stays_vivian_when_the_list_already_contains_every_qwen3_preset()
+    {
+        ProjectSpeaker speaker = CreateSpeaker("Speaker 1");
+        TranscriptProjectState state = BuildState(
+            speakers: [speaker],
+            availableVoices:
+            [
+                new VoiceCatalogEntry("qwen3:aiden", "mul", "male", "Aiden (English)"),
+                new VoiceCatalogEntry("qwen3:dylan", "mul", "male", "Dylan (Chinese, Beijing dialect)"),
+                new VoiceCatalogEntry("qwen3:vivian", "mul", "female", "Vivian (Chinese)"),
+            ],
+            voiceAssignments: []);
+
+        Dictionary<Guid, string>? fallbackVoiceIds =
+            TrackdubDubbingEngine.BuildUnattendedFallbackVoiceIds(state, "zh");
+
+        Assert.NotNull(fallbackVoiceIds);
+        Assert.Equal("qwen3:vivian", fallbackVoiceIds[speaker.Id]);
+    }
+
     [Theory]
     [InlineData("zh", "qwen3:vivian")]
     [InlineData("ja", "qwen3:ono_anna")]
