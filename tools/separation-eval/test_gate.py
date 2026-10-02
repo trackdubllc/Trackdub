@@ -295,12 +295,42 @@ class EdgeExclusionTests(unittest.TestCase):
         self.assertEqual(r.edge_excluded_samples, 0)
 
     def test_a_short_clip_is_judged_whole(self):
-        mix, d, b = self.outputs(seconds=0.15)
-        d[:24] = 0.0
-        b[:24] = 0.0
+        for seconds in (0.15, 0.25, 1.0):
+            mix, d, b = self.outputs(seconds=seconds)
+            d[:24] = 0.0
+            b[:24] = 0.0
+            r = self.gate(mix, d, b)
+            self.assertEqual(r.edge_excluded_samples, 0, seconds)
+            self.assertFalse(r.passed, seconds)
+
+    def test_a_clip_of_exactly_one_second_is_judged_whole_at_any_rate(self):
+        for rate in (8000, 22050, 44100, 48000):
+            n = rate
+            mix = lowpass(noise(0.05, seconds=1.0, seed=3))[:1, :]
+            mix = np.tile(mix, (n, 1)).astype(np.float32)
+            r = metrics.check_reconstruction(mix, 0.5 * mix, 0.5 * mix, rate)
+            self.assertEqual(r.edge_excluded_samples, 0, rate)
+
+    def test_whole_clip_diagnostics_are_filled_when_the_clip_is_judged_whole(self):
+        mix, d, b = self.outputs(seconds=0.5)
         r = self.gate(mix, d, b)
-        self.assertEqual(r.edge_excluded_samples, 0)
-        self.assertFalse(r.passed)
+        self.assertEqual(r.residual_with_edges_db, r.residual_db)
+        self.assertEqual(r.in_band_residual_with_edges_db, r.in_band_residual_db)
+
+    def test_a_silent_clip_with_output_only_in_an_excluded_edge_reports_the_whole_clip_error(self):
+        z = np.zeros((int(3 * SR), 1), dtype=np.float32)
+        d = z.copy()
+        d[:5] = 0.01
+        r = self.gate(z, d, z)
+        self.assertTrue(r.passed)
+        self.assertEqual(r.silent_judged_residual_rms, 0.0)
+        self.assertGreater(r.silent_residual_rms_with_edges, 0.0)
+
+    def test_the_exclusion_is_at_most_a_tenth_of_a_clip(self):
+        mix, d, b = self.outputs(seconds=1.2)
+        r = self.gate(mix, d, b)
+        self.assertEqual(r.edge_excluded_samples, self.EDGE)
+        self.assertLessEqual(2 * self.EDGE / mix.shape[0], 0.1 + 1e-9)
 
     def test_the_exclusion_is_reported_in_the_result_dict(self):
         mix, d, b = self.outputs()

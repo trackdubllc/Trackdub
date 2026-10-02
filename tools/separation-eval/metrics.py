@@ -330,8 +330,8 @@ RECONSTRUCTION_GATE_DB = -60.0
 # The gate ignores this much of the start and of the end of every clip for every candidate: separators and
 # their writers routinely emit a few zeroed or unfinished samples there, which is not a separation fault.
 RECONSTRUCTION_EDGE_EXCLUSION_S = 0.05
-# Clips of at most this many edge lengths are judged whole, so the exclusion cannot swallow a short clip.
-RECONSTRUCTION_EDGE_MIN_CLIP_EDGES = 4
+# Clips of at most this many seconds are judged whole, so the exclusion stays at most 10% of a clip.
+RECONSTRUCTION_EDGE_MIN_CLIP_S = 1.0
 LAG_SEARCH_SAMPLES = 4800
 LAG_SEARCH_SECONDS = 10
 BAND_GUARD_HZ = 250.0
@@ -368,7 +368,8 @@ class ReconstructionResult:
         digitally silent; the pass/fail limit is SILENT_RECONSTRUCTION_RMS_TOLERANCE.
     edge_excluded_samples: samples dropped from each end before judging (0 when the clip is too short
         or the exclusion is disabled). residual_with_edges_db / in_band_residual_with_edges_db: the same
-        two residuals over the whole clip, reported for transparency and never gated.
+        two residuals over the whole clip, reported for transparency and never gated, and
+        silent_residual_rms_with_edges is the whole-clip residual RMS of a digitally silent mixture.
     None is used wherever a figure is undefined (shape mismatch, silent mixture, no band declared).
     """
     passed: bool
@@ -390,6 +391,7 @@ class ReconstructionResult:
     edge_excluded_samples: int = 0
     residual_with_edges_db: float | None = None
     in_band_residual_with_edges_db: float | None = None
+    silent_residual_rms_with_edges: float | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -412,6 +414,7 @@ class ReconstructionResult:
             "edge_excluded_samples": self.edge_excluded_samples,
             "residual_with_edges_db": self.residual_with_edges_db,
             "in_band_residual_with_edges_db": self.in_band_residual_with_edges_db,
+            "silent_residual_rms_with_edges": self.silent_residual_rms_with_edges,
         }
 
 
@@ -471,24 +474,28 @@ def check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed:
                          edge_exclusion_s: float = RECONSTRUCTION_EDGE_EXCLUSION_S) -> ReconstructionResult:
     """Judge the reconstruction gate on the clip without its first and last `edge_exclusion_s` seconds.
 
-    The exclusion applies to every candidate alike. Clips of at most RECONSTRUCTION_EDGE_MIN_CLIP_EDGES
-    edge lengths are judged whole. The whole-clip residuals are kept as diagnostics. See
+    The exclusion applies to every candidate alike. Clips of at most RECONSTRUCTION_EDGE_MIN_CLIP_S
+    seconds are judged whole. The whole-clip residuals are kept as diagnostics. See
     `_check_reconstruction` for the gate itself.
     """
     edge = int(round(edge_exclusion_s * sr))
     arrays = (mixture, est_dialogue, est_bed)
     if (edge <= 0 or not all(a.ndim == 2 for a in arrays) or not (mixture.shape == est_dialogue.shape == est_bed.shape)
-            or mixture.shape[0] <= RECONSTRUCTION_EDGE_MIN_CLIP_EDGES * edge
+            or mixture.shape[0] <= int(round(RECONSTRUCTION_EDGE_MIN_CLIP_S * sr))
             or not all(np.isfinite(a).all() for a in arrays)):
-        return _check_reconstruction(mixture, est_dialogue, est_bed, sr, threshold_db, band_limit_hz,
-                                     output_bits, output_rounding)
+        whole = _check_reconstruction(mixture, est_dialogue, est_bed, sr, threshold_db, band_limit_hz,
+                                      output_bits, output_rounding)
+        return replace(whole, residual_with_edges_db=whole.residual_db,
+                       in_band_residual_with_edges_db=whole.in_band_residual_db,
+                       silent_residual_rms_with_edges=whole.silent_judged_residual_rms)
     whole = _check_reconstruction(mixture, est_dialogue, est_bed, sr, threshold_db, band_limit_hz,
                                   output_bits, output_rounding)
     n = mixture.shape[0]
     judged = _check_reconstruction(mixture[edge:n - edge], est_dialogue[edge:n - edge], est_bed[edge:n - edge], sr,
                                    threshold_db, band_limit_hz, output_bits, output_rounding)
     return replace(judged, edge_excluded_samples=edge, residual_with_edges_db=whole.residual_db,
-                   in_band_residual_with_edges_db=whole.in_band_residual_db)
+                   in_band_residual_with_edges_db=whole.in_band_residual_db,
+                   silent_residual_rms_with_edges=whole.silent_judged_residual_rms)
 
 
 def _check_reconstruction(mixture: np.ndarray, est_dialogue: np.ndarray, est_bed: np.ndarray, sr: int,
