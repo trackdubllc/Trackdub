@@ -8,13 +8,36 @@ namespace Trackdub.Composition.Tests;
 public sealed class StockAndPresetVoiceCatalogTests
 {
     [Fact]
-    public void GetVoices_lists_only_the_stock_pool()
+    public void GetVoices_without_language_lists_only_the_stock_pool()
     {
         var stock = new StockCatalog();
         var catalog = new StockAndPresetVoiceCatalog(stock, Qwen3TtsVoiceCatalog.KnownAvailable());
 
         Assert.Equal(stock.GetVoices().Count, catalog.GetVoices().Count);
         Assert.DoesNotContain(catalog.GetVoices(), voice => voice.VoiceId.StartsWith("qwen3:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GetVoices_for_kokoro_language_lists_only_the_stock_pool()
+    {
+        var stock = new StockCatalog();
+        var catalog = new StockAndPresetVoiceCatalog(stock, Qwen3TtsVoiceCatalog.KnownAvailable());
+
+        IReadOnlyList<VoiceCatalogEntry> enVoices = catalog.GetVoices("en-us");
+        Assert.Equal(stock.GetVoices("en-us").Count, enVoices.Count);
+        Assert.DoesNotContain(enVoices, voice => voice.VoiceId.StartsWith("qwen3:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void GetVoices_for_non_kokoro_language_merges_qwen3_presets()
+    {
+        var stock = new StockCatalog();
+        var catalog = new StockAndPresetVoiceCatalog(stock, Qwen3TtsVoiceCatalog.KnownAvailable());
+
+        Assert.Empty(stock.GetVoices("zh"));
+        IReadOnlyList<VoiceCatalogEntry> zhVoices = catalog.GetVoices("zh");
+        Assert.Equal(Qwen3TtsVoiceCatalog.KnownAvailable().GetVoices("zh").Count, zhVoices.Count);
+        Assert.All(zhVoices, voice => Assert.StartsWith("qwen3:", voice.VoiceId, StringComparison.Ordinal));
     }
 
     [Fact]
