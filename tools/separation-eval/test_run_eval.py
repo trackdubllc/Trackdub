@@ -237,9 +237,10 @@ class GateConfigTests(EvalTestBase):
         declared = evaluate(self.root, self.corpus, sep, gate={"band_limit_hz": 11025.0, "output_bits": 16, "output_rounding": "truncate"})
         a1 = self.clip(declared, "a1-dev-000")
         self.assertEqual(a1["reconstruction"]["band_limit_hz"], 11025.0)
-        self.assertEqual(declared["gate_config"], {"threshold_db": -60.0, "band_limit_hz": 11025.0, "output_bits": 16,
+        self.assertEqual(declared["gate_config"], {"threshold_db": -60.0, "edge_exclusion_s": 0.05,
+                                                    "band_limit_hz": 11025.0, "output_bits": 16,
                                                     "output_rounding": "truncate"})
-        self.assertEqual(strict["gate_config"], {"threshold_db": -60.0})
+        self.assertEqual(strict["gate_config"], {"threshold_db": -60.0, "edge_exclusion_s": 0.05})
         self.assertLess(self.clip(declared, "a1-dev-000")["reconstruction"]["in_band_residual_db"],
                         self.clip(strict, "a1-dev-000")["reconstruction"]["residual_db"])
         self.assertIn("bandwidth_retained_db", declared["summary"]["strata"]["all"]["metrics"])
