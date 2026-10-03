@@ -35,10 +35,14 @@ public static class DubbingProjectPaths
     /// </remarks>
     public static string ResolveProjectDirectory(string sourceMediaPath, string? projectOutputDirectory)
     {
+        if (!string.IsNullOrWhiteSpace(projectOutputDirectory))
+        {
+            return projectOutputDirectory;
+        }
+
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceMediaPath);
 
-        return projectOutputDirectory
-            ?? Path.Join(
+        return Path.Join(
                 Path.GetDirectoryName(sourceMediaPath) ?? ".",
                 Path.GetFileNameWithoutExtension(sourceMediaPath) + ".trackdub");
     }
