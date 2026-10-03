@@ -559,6 +559,78 @@ public sealed class OrchestrationServiceTests
         Assert.Equal(Qwen3TtsDefaults.CustomVoice17Alias, result.TtsModelAlias);
     }
 
+    [Fact]
+    public void ApplyPresetVoiceModelSelection_ignores_assignments_for_speakers_synthesis_skips()
+    {
+        TranscriptProjectState state = CreateTranslatedProjectState();
+        Guid synthesizingSpeakerId = state.Speakers[0].Id;
+        VoiceAssignment presetAssignment = state.VoiceAssignments[0] with
+        {
+            SpeakerId = synthesizingSpeakerId,
+            VoiceModelId = Qwen3TtsDefaults.CustomVoice06Alias,
+            VoiceVariant = Qwen3TtsDefaults.PresetVoicePrefix + "ryan",
+        };
+        VoiceAssignment unusedKokoro = VoiceAssignment.Create(
+            state.ProjectState.Project.Id,
+            Guid.NewGuid(),
+            "kokoro-onnx",
+            "af_heart");
+        state = state with { VoiceAssignments = [presetAssignment, unusedKokoro] };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: "kokoro-onnx");
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal(Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null), result.TtsModelAlias);
+    }
+
+    [Fact]
+    public void ApplyPresetVoiceModelSelection_keeps_kokoro_when_one_synthesized_speaker_is_not_a_preset()
+    {
+        TranscriptProjectState state = CreateTwoSpeakerTranslatedProjectState();
+        Guid projectId = state.ProjectState.Project.Id;
+        state = state with
+        {
+            VoiceAssignments =
+            [
+                VoiceAssignment.Create(
+                    projectId,
+                    state.Speakers[0].Id,
+                    Qwen3TtsDefaults.CustomVoice06Alias,
+                    Qwen3TtsDefaults.PresetVoicePrefix + "ryan"),
+                VoiceAssignment.Create(projectId, state.Speakers[1].Id, "kokoro-onnx", "af_heart"),
+            ],
+        };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            VoiceAssignmentOverrides = new Dictionary<string, string>
+            {
+                [state.Speakers[0].DisplayName] = Qwen3TtsDefaults.PresetVoicePrefix + "ryan",
+            },
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: "kokoro-onnx");
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal("kokoro-onnx", result.TtsModelAlias);
+    }
+
     [Theory]
     [InlineData("zh", true)]
     [InlineData("es", false)]

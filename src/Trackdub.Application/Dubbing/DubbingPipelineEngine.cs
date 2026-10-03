@@ -2270,22 +2270,39 @@ public sealed class DubbingPipelineEngine(
         TranscriptProjectState state,
         UnattendedVoicePlan plan)
     {
-        foreach (string voiceId in plan.ExplicitVoiceIds.Values)
+        // GenerateTtsForAllSpeakersAsync skips speakers with no transcript segments, then
+        // prefers a request override, then a persisted non-fallback assignment, then the fallback.
+        HashSet<Guid> synthesizingSpeakerIds = state.TranscriptSegments
+            .Select(static segment => segment.SpeakerId)
+            .Where(static speakerId => speakerId is not null)
+            .Select(static speakerId => speakerId!.Value)
+            .ToHashSet();
+
+        foreach ((Guid speakerId, string voiceId) in plan.ExplicitVoiceIds)
         {
-            yield return voiceId;
+            if (synthesizingSpeakerIds.Contains(speakerId) && !string.IsNullOrWhiteSpace(voiceId))
+            {
+                yield return voiceId.Trim();
+            }
         }
 
         if (plan.FallbackVoiceIds is not null)
         {
-            foreach (string voiceId in plan.FallbackVoiceIds.Values)
+            foreach ((Guid speakerId, string voiceId) in plan.FallbackVoiceIds)
             {
-                yield return voiceId;
+                if (synthesizingSpeakerIds.Contains(speakerId) &&
+                    !plan.ExplicitVoiceIds.ContainsKey(speakerId) &&
+                    !string.IsNullOrWhiteSpace(voiceId))
+                {
+                    yield return voiceId.Trim();
+                }
             }
         }
 
         foreach (VoiceAssignment assignment in state.VoiceAssignments)
         {
             if (assignment.IsFallback ||
+                !synthesizingSpeakerIds.Contains(assignment.SpeakerId) ||
                 plan.ExplicitVoiceIds.ContainsKey(assignment.SpeakerId) ||
                 plan.CloneBySpeaker?.GetValueOrDefault(assignment.SpeakerId) == true ||
                 plan.FallbackVoiceIds?.ContainsKey(assignment.SpeakerId) == true ||
