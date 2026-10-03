@@ -23,4 +23,23 @@ public static class DubbingProjectPaths
 
         return File.Exists(Path.Join(projectRootPath, ProjectArtifactPaths.DatabaseFileName));
     }
+
+    /// <summary>
+    /// Resolves the project directory a run writes into: <paramref name="projectOutputDirectory"/>
+    /// when the caller supplied one, otherwise a <c>.trackdub</c> folder beside the source media.
+    /// </summary>
+    /// <remarks>
+    /// Single source of truth for the derivation. Hosts that act on a project directory before
+    /// the run starts — notably acquiring <c>ProjectLock</c> — must resolve it through this method,
+    /// or they guard a different directory than the engine writes to.
+    /// </remarks>
+    public static string ResolveProjectDirectory(string sourceMediaPath, string? projectOutputDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceMediaPath);
+
+        return projectOutputDirectory
+            ?? Path.Join(
+                Path.GetDirectoryName(sourceMediaPath) ?? ".",
+                Path.GetFileNameWithoutExtension(sourceMediaPath) + ".trackdub");
+    }
 }
