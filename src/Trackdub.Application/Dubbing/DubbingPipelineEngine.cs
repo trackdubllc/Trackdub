@@ -2198,7 +2198,9 @@ public sealed class DubbingPipelineEngine(
                 // intent (e.g. the Chatterbox pin ApplyVoiceCloningDefaults installs for
                 // clone runs) and take precedence over the host's UI-side selections,
                 // matching the precedence the settings path applies via
-                // CreateSelectionsFromSettings.
+                // CreateSelectionsFromSettings. ApplyPresetVoiceModelSelection may still
+                // retarget TTS when the voices that will speak are Qwen presets, because
+                // synthesis will not use a non-CustomVoice model for those voices.
                 selections = ApplyModelPreferenceAliases(provided, preferences);
                 selections = ApplyPresetVoiceModelSelection(selections, options, state);
                 return ApplyExecutionProviderPins(selections, options, preferences);
@@ -2238,7 +2240,10 @@ public sealed class DubbingPipelineEngine(
             return selections;
         }
 
-        List<string> allVoiceIds = EnumerateUnattendedStockVoiceIds(state, ResolveUnattendedVoicePlan(state, options)).ToList();
+        List<string> allVoiceIds = EnumerateUnattendedStockVoiceIds(
+            state,
+            ResolveUnattendedVoicePlan(state, options),
+            options.TargetLanguageCode).ToList();
         return allVoiceIds.Count > 0 && allVoiceIds.All(Qwen3TtsDefaults.IsPresetVoiceId)
             ? selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) }
             : selections;
@@ -2260,7 +2265,10 @@ public sealed class DubbingPipelineEngine(
             return false;
         }
 
-        List<string> voiceIds = EnumerateUnattendedStockVoiceIds(state, ResolveUnattendedVoicePlan(state, options)).ToList();
+        List<string> voiceIds = EnumerateUnattendedStockVoiceIds(
+            state,
+            ResolveUnattendedVoicePlan(state, options),
+            options.TargetLanguageCode).ToList();
         return voiceIds.Any(Qwen3TtsDefaults.IsPresetVoiceId) &&
                voiceIds.Any(static voiceId => !Qwen3TtsDefaults.IsPresetVoiceId(voiceId));
     }
@@ -2316,7 +2324,8 @@ public sealed class DubbingPipelineEngine(
 
     private static IEnumerable<string> EnumerateUnattendedStockVoiceIds(
         TranscriptProjectState state,
-        UnattendedVoicePlan plan)
+        UnattendedVoicePlan plan,
+        string? targetLanguage)
     {
         // GenerateTtsForAllSpeakersAsync skips speakers with no transcript segments, then
         // prefers a request override, then a persisted non-fallback assignment, then the fallback.
@@ -2353,9 +2362,23 @@ public sealed class DubbingPipelineEngine(
                 !synthesizingSpeakerIds.Contains(assignment.SpeakerId) ||
                 plan.ExplicitVoiceIds.ContainsKey(assignment.SpeakerId) ||
                 plan.CloneBySpeaker?.GetValueOrDefault(assignment.SpeakerId) == true ||
-                plan.FallbackVoiceIds?.ContainsKey(assignment.SpeakerId) == true ||
-                string.IsNullOrWhiteSpace(assignment.VoiceVariant))
+                plan.FallbackVoiceIds?.ContainsKey(assignment.SpeakerId) == true)
             {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(assignment.VoiceVariant))
+            {
+                // A prior clone run persists a clone-only model with no voice id. Synthesis
+                // substitutes Kokoro where Kokoro speaks, otherwise a Qwen preset.
+                if (!VoiceCloningDefaults.IsCloneOnlyModelAlias(assignment.VoiceModelId))
+                {
+                    continue;
+                }
+
+                yield return StockTtsVoiceMatcher.SupportsKokoro(targetLanguage)
+                    ? StockTtsDefaults.KokoroPrimaryAlias
+                    : Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguage);
                 continue;
             }
 
