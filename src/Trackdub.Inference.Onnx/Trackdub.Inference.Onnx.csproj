@@ -78,6 +78,7 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Managed" />
   </ItemGroup>
 
   <!-- Non-Windows: exclude Windows-specific sources -->
