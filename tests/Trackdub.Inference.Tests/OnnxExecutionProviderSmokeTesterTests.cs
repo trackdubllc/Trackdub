@@ -11,6 +11,48 @@ namespace Trackdub.Inference.Tests;
 public sealed class OnnxExecutionProviderSmokeTesterTests
 {
     [Fact]
+    public void ResolveWhisperEncoderSmokeDimensions_uses_valid_mel_window_for_symbolic_inputs()
+    {
+        // The onnx-community whisper encoder declares input_features as
+        // (batch_size, feature_size, encoder_sequence_length) — all symbolic.
+        // The generic all-ones mapping would yield [1,1,1] and fail the first
+        // Conv, which expects feature_size (80) mel channels.
+        int[] dimensions = OnnxExecutionProviderSmokeTester.ResolveWhisperEncoderSmokeDimensionsForTesting(
+            "input_features",
+            [-1, -1, -1],
+            80);
+
+        Assert.Equal([1, 80, 3000], dimensions);
+    }
+
+    [Fact]
+    public void ResolveWhisperEncoderSmokeDimensions_honours_large_model_mel_bins()
+    {
+        int[] dimensions = OnnxExecutionProviderSmokeTester.ResolveWhisperEncoderSmokeDimensionsForTesting(
+            "input_features",
+            [-1, -1, -1],
+            128);
+
+        Assert.Equal([1, 128, 3000], dimensions);
+    }
+
+    [Fact]
+    public void ResolveWhisperEncoderSmokeDimensions_falls_back_for_non_feature_inputs()
+    {
+        int[] other = OnnxExecutionProviderSmokeTester.ResolveWhisperEncoderSmokeDimensionsForTesting(
+            "attention_mask",
+            [-1, -1],
+            80);
+        int[] unsetMelBins = OnnxExecutionProviderSmokeTester.ResolveWhisperEncoderSmokeDimensionsForTesting(
+            "input_features",
+            [-1, -1, -1],
+            0);
+
+        Assert.Equal([1, 1], other);
+        Assert.Equal([1, 1, 1], unsetMelBins);
+    }
+
+    [Fact]
     public void ResolveSeparationSmokeInputDimensions_SpleeterShape()
     {
         int[] dimensions = OnnxExecutionProviderSmokeTester.ResolveSeparationSmokeInputDimensionsForTesting(

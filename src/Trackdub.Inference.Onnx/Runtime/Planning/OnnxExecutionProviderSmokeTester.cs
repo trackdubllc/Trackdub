@@ -210,6 +210,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         string? onnxDirectory = Path.GetDirectoryName(encoderModelPath);
         string modelRootPath = Path.GetDirectoryName(onnxDirectory ?? string.Empty)
             ?? throw new InvalidOperationException("Whisper smoke test could not resolve model root.");
+        int melBins = WhisperOnnxAudioTranscriptionEngine.ReadMelBins(modelRootPath);
         // Pooled with the same family/TRT profiles WhisperOnnxAudioTranscriptionEngine uses.
         using OnnxExecutionSessionFactory.WhisperSessionLease sessionLease = await OnnxExecutionSessionFactory
             .CreatePooledWhisperAsync(
@@ -218,12 +219,11 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 decoderModelPath,
                 provider,
                 cancellationToken,
-                additionalTrtEncoderOptions: WhisperOnnxAudioTranscriptionEngine.BuildTrtEncoderOptions(
-                    WhisperOnnxAudioTranscriptionEngine.ReadMelBins(modelRootPath)))
+                additionalTrtEncoderOptions: WhisperOnnxAudioTranscriptionEngine.BuildTrtEncoderOptions(melBins))
             .ConfigureAwait(false);
         EnsureSelectedProviderMatchesRequested(provider, sessionLease.SelectedProvider);
 
-        using var encoderInputs = CreateWhisperEncoderInputs(sessionLease.EncoderSession.InputMetadata);
+        using var encoderInputs = CreateWhisperEncoderInputs(sessionLease.EncoderSession.InputMetadata, melBins);
         using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> encoderResults = sessionLease.EncoderSession.RunWithRetry(encoderInputs.Values, maxAttempts: 1, cancellationToken: cancellationToken, provider: provider);
         Tensor<float> hiddenStates = ResolveWhisperEncoderHiddenStates(encoderResults);
 
@@ -774,15 +774,66 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         return new InputSet(values);
     }
 
-    private static InputSet CreateWhisperEncoderInputs(IReadOnlyDictionary<string, NodeMetadata> inputMetadata)
+    // One 30-second mel window, matching the engine's real input and TRT profile shapes.
+    private const int WhisperSmokeFrameCount = 3000;
+
+    private static InputSet CreateWhisperEncoderInputs(
+        IReadOnlyDictionary<string, NodeMetadata> inputMetadata,
+        int melBins)
     {
         var values = new List<NamedOnnxValue>(inputMetadata.Count);
         foreach ((string inputName, NodeMetadata metadata) in inputMetadata)
         {
-            values.Add(CreateSmokeTensorInput(inputName, metadata));
+            values.Add(CreateWhisperEncoderInput(inputName, metadata, melBins));
         }
 
         return new InputSet(values);
+    }
+
+    internal static int[] ResolveWhisperEncoderSmokeDimensionsForTesting(
+        string inputName,
+        IReadOnlyList<int> modelDimensions,
+        int melBins) =>
+        ResolveWhisperEncoderSmokeDimensions(inputName, modelDimensions, melBins);
+
+    private static int[] ResolveWhisperEncoderSmokeDimensions(
+        string inputName,
+        IReadOnlyList<int> modelDimensions,
+        int melBins)
+    {
+        // The encoder declares input_features as (batch_size, feature_size,
+        // encoder_sequence_length) — all symbolic — so the generic all-ones smoke
+        // tensor would be [1,1,1] and fail the first Conv (expects feature_size mel
+        // channels). Feed a valid zero mel window instead.
+        if (inputName.Equals("input_features", StringComparison.OrdinalIgnoreCase)
+            && modelDimensions.Count == 3
+            && melBins > 0)
+        {
+            return [1, melBins, WhisperSmokeFrameCount];
+        }
+
+        return modelDimensions.Select(static dimension => dimension > 0 ? dimension : 1).ToArray();
+    }
+
+    private static NamedOnnxValue CreateWhisperEncoderInput(
+        string inputName,
+        NodeMetadata metadata,
+        int melBins)
+    {
+        if (metadata.IsTensor
+            && metadata.ElementDataType == TensorElementType.Float
+            && metadata.Dimensions.Length == 3
+            && inputName.Equals("input_features", StringComparison.OrdinalIgnoreCase)
+            && melBins > 0)
+        {
+            int[] dimensions = ResolveWhisperEncoderSmokeDimensions(inputName, metadata.Dimensions, melBins);
+            int elementCount = dimensions.Aggregate(1, static (product, dimension) => checked(product * dimension));
+            return NamedOnnxValue.CreateFromTensor(
+                inputName,
+                new DenseTensor<float>(new float[elementCount], dimensions));
+        }
+
+        return CreateSmokeTensorInput(inputName, metadata);
     }
 
     private static InputSet CreateWhisperDecoderInputs(Tensor<float> encoderHiddenStates)
