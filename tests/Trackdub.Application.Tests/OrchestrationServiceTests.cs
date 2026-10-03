@@ -664,6 +664,77 @@ public sealed class OrchestrationServiceTests
     }
 
     [Fact]
+    public void ResolveVoiceAssignmentOverrides_defers_whisper_style_keys_on_fresh_projects_without_speakers()
+    {
+        // Pre-flight resolves the voice plan against the fresh project state, before
+        // diarization has created any speakers. Overrides must defer matching rather
+        // than fail the run; the TTS stage re-resolves once speakers are known.
+        TranscriptProjectState freshState = CreateTranscriptProjectState() with
+        {
+            Speakers = [],
+            TranscriptSegments = [],
+            VoiceAssignments = [],
+        };
+        var overrides = new Dictionary<string, string>
+        {
+            ["SPEAKER_00"] = "af_bella",
+        };
+
+        IReadOnlyDictionary<Guid, string> resolved = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ResolveVoiceAssignmentOverrides(freshState, overrides);
+
+        Assert.Empty(resolved);
+    }
+
+    [Fact]
+    public void ApplyPresetVoiceModelSelection_tolerates_overrides_on_fresh_projects_without_speakers()
+    {
+        TranscriptProjectState freshState = CreateTranscriptProjectState() with
+        {
+            Speakers = [],
+            TranscriptSegments = [],
+            VoiceAssignments = [],
+        };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "fr",
+            VoiceAssignmentOverrides = new Dictionary<string, string>
+            {
+                ["SPEAKER_00"] = "af_bella",
+            },
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: "kokoro-onnx");
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, freshState);
+
+        Assert.Equal("kokoro-onnx", result.TtsModelAlias);
+        Assert.False(Trackdub.Application.Dubbing.DubbingPipelineEngine.RequiresCompanionCustomVoiceModel(
+            selections,
+            options,
+            freshState));
+    }
+
+    [Fact]
+    public void ResolveVoiceAssignmentOverrides_still_rejects_unknown_keys_once_speakers_exist()
+    {
+        TranscriptProjectState state = CreateTranscriptProjectState();
+        var overrides = new Dictionary<string, string>
+        {
+            ["SPEAKER_99"] = "af_bella",
+        };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            Trackdub.Application.Dubbing.DubbingPipelineEngine.ResolveVoiceAssignmentOverrides(state, overrides));
+        Assert.Contains("SPEAKER_99", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ApplyPresetVoiceModelSelection_does_not_treat_a_leftover_clone_assignment_as_a_preset()
     {
         TranscriptProjectState state = CreateTwoSpeakerTranslatedProjectState();

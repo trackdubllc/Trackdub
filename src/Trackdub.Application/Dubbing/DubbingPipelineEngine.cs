@@ -2097,6 +2097,16 @@ public sealed class DubbingPipelineEngine(
                 .ThenBy(static speaker => speaker.Id)
         ];
 
+        // Fresh projects have no speakers yet (diarization hasn't run), and pre-flight
+        // resolves the voice plan against that empty state. Index- and name-based keys
+        // cannot be validated until speakers exist, so defer matching: pre-flight
+        // proceeds on fallback voices and the TTS stage re-resolves — rejecting
+        // genuinely bad keys — once speakers are known.
+        if (speakers.Length == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
         var resolved = new Dictionary<Guid, string>();
         foreach ((string key, string voiceId) in overrides)
         {
