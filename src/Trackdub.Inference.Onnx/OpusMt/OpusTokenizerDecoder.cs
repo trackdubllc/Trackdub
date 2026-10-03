@@ -60,10 +60,10 @@ internal sealed class OpusTokenizerDecoder
             throw new FileNotFoundException("The Opus vocabulary mapping was not found.", vocabPath);
         }
 
-        OpusTokenizerConfig config = await LoadConfigAsync(configPath, generationConfigPath).ConfigureAwait(false);
+        IReadOnlyDictionary<string, int> modelIdByPiece = await LoadVocabularyAsync(vocabPath).ConfigureAwait(false);
+        OpusTokenizerConfig config = await LoadConfigAsync(configPath, generationConfigPath, modelIdByPiece.Count).ConfigureAwait(false);
         using FileStream sourceStream = File.OpenRead(sourceTokenizerPath);
         using FileStream targetStream = File.OpenRead(targetTokenizerPath);
-        IReadOnlyDictionary<string, int> modelIdByPiece = await LoadVocabularyAsync(vocabPath).ConfigureAwait(false);
 
         SentencePieceTokenizer sourceTokenizer = SentencePieceTokenizer.Create(
             sourceStream,
@@ -181,11 +181,20 @@ internal sealed class OpusTokenizerDecoder
         throw new InvalidOperationException($"Target tokenizer did not define an id for Marian token piece '{piece}'.");
     }
 
-    private static async Task<OpusTokenizerConfig> LoadConfigAsync(string configPath, string generationConfigPath)
+    /// <summary>
+    /// Resolves Marian special token ids. Keys missing from <c>config.json</c> fall back to the
+    /// Helsinki convention (<c>decoder_start_token_id == pad_token_id == vocab_size - 1</c>,
+    /// <c>eos_token_id == 0</c>) instead of the legacy hardcoded 65000, which is out of bounds
+    /// for models with smaller vocabularies (e.g. opus-mt-en-fr, vocab 59514) and surfaces as an
+    /// opaque ONNX <c>Gather</c> out-of-bounds failure on the first decoder step. The desktop model
+    /// cache only guarantees the ONNX/spm/vocab files, so <c>config.json</c> is often absent.
+    /// </summary>
+    internal static async Task<OpusTokenizerConfig> LoadConfigAsync(string configPath, string generationConfigPath, int vocabularySize)
     {
-        int decoderStartTokenId = 65000;
-        int endOfSentenceTokenId = 0;
-        int padTokenId = 65000;
+        int fallbackSpecialTokenId = Math.Max(0, vocabularySize - 1);
+        int? decoderStartTokenId = null;
+        int? endOfSentenceTokenId = null;
+        int? padTokenId = null;
         int maxGenerationLength = 256;
 
         if (File.Exists(configPath))
@@ -193,10 +202,10 @@ internal sealed class OpusTokenizerDecoder
             string configText = await File.ReadAllTextAsync(configPath).ConfigureAwait(false);
             using JsonDocument document = JsonDocument.Parse(configText);
             JsonElement root = document.RootElement;
-            decoderStartTokenId = ReadInt32(root, "decoder_start_token_id", decoderStartTokenId);
-            endOfSentenceTokenId = ReadInt32(root, "eos_token_id", endOfSentenceTokenId);
-            padTokenId = ReadInt32(root, "pad_token_id", padTokenId);
-            maxGenerationLength = ReadInt32(root, "max_position_embeddings", maxGenerationLength);
+            decoderStartTokenId = ReadInt32(root, "decoder_start_token_id");
+            endOfSentenceTokenId = ReadInt32(root, "eos_token_id");
+            padTokenId = ReadInt32(root, "pad_token_id");
+            maxGenerationLength = ReadInt32(root, "max_position_embeddings") ?? maxGenerationLength;
         }
 
         if (File.Exists(generationConfigPath))
@@ -204,26 +213,43 @@ internal sealed class OpusTokenizerDecoder
             string genConfigText = await File.ReadAllTextAsync(generationConfigPath).ConfigureAwait(false);
             using JsonDocument document = JsonDocument.Parse(genConfigText);
             JsonElement root = document.RootElement;
-            maxGenerationLength = ReadInt32(root, "max_length", maxGenerationLength);
+            maxGenerationLength = ReadInt32(root, "max_length") ?? maxGenerationLength;
         }
 
+        int resolvedDecoderStartTokenId = decoderStartTokenId ?? fallbackSpecialTokenId;
+        int resolvedEndOfSentenceTokenId = endOfSentenceTokenId ?? 0;
+        int resolvedPadTokenId = padTokenId ?? fallbackSpecialTokenId;
+        ValidateTokenId(resolvedDecoderStartTokenId, nameof(resolvedDecoderStartTokenId), vocabularySize, configPath);
+        ValidateTokenId(resolvedEndOfSentenceTokenId, nameof(resolvedEndOfSentenceTokenId), vocabularySize, configPath);
+        ValidateTokenId(resolvedPadTokenId, nameof(resolvedPadTokenId), vocabularySize, configPath);
+
         return new OpusTokenizerConfig(
-            decoderStartTokenId,
-            endOfSentenceTokenId,
-            padTokenId,
+            resolvedDecoderStartTokenId,
+            resolvedEndOfSentenceTokenId,
+            resolvedPadTokenId,
             Math.Max(32, maxGenerationLength));
     }
 
-    private static int ReadInt32(JsonElement root, string propertyName, int defaultValue)
+    private static int? ReadInt32(JsonElement root, string propertyName)
     {
         if (!root.TryGetProperty(propertyName, out JsonElement element))
         {
-            return defaultValue;
+            return null;
         }
 
         return element.ValueKind is JsonValueKind.Number && element.TryGetInt32(out int value)
             ? value
-            : defaultValue;
+            : null;
+    }
+
+    private static void ValidateTokenId(int tokenId, string tokenName, int vocabularySize, string configPath)
+    {
+        if (tokenId < 0 || tokenId >= vocabularySize)
+        {
+            throw new InvalidOperationException(
+                $"Opus {tokenName} '{tokenId}' is outside the model vocabulary (size {vocabularySize}). " +
+                $"Check 'decoder_start_token_id'/'eos_token_id'/'pad_token_id' in '{configPath}'.");
+        }
     }
 
     private static async Task<IReadOnlyDictionary<string, int>> LoadVocabularyAsync(string vocabPath)
@@ -254,7 +280,7 @@ internal sealed class OpusTokenizerDecoder
             Path.Join(modelRootPath, fileNames[0]));
     }
 
-    private sealed record OpusTokenizerConfig(
+    internal sealed record OpusTokenizerConfig(
         int DecoderStartTokenId,
         int EndOfSentenceTokenId,
         int PadTokenId,
