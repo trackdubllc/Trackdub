@@ -914,6 +914,33 @@ public sealed class DubbingPipelineEngine(
                 executionSnapshot), declinedStages);
         }
 
+        if (enabledStages.Contains(RuntimeStage.Tts) &&
+            RequiresCompanionCustomVoiceModel(selections, options, state))
+        {
+            RuntimeModelSetupCallbacks setupCallbacks =
+                TryResolveService<IPipelineModelSetupInteraction>(session)
+                    ?.CreateCallbacks(progress, cancellationToken)
+                ?? BuildHeadlessCallbacks(cancellationToken);
+            RuntimeModelSetupResult companion = await coordinator
+                .EnsureTtsModelAvailableAsync(
+                    session.Workspace,
+                    selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) },
+                    requiresVoiceClone: false,
+                    setupCallbacks,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!companion.IsReady)
+            {
+                return (BuildErrorResult(
+                    runId,
+                    runStart,
+                    stageOutcomes,
+                    DubbingRunStatus.PreFlightFailed,
+                    ["Model provisioning was cancelled during pre-flight."],
+                    executionSnapshot), declinedStages);
+            }
+        }
+
         return (null, declinedStages);
     }
 
@@ -2193,11 +2220,11 @@ public sealed class DubbingPipelineEngine(
     }
 
     /// <summary>
-    /// When every voice this run will synthesize with is a Qwen3 preset (explicit overrides,
-    /// persisted deliberate assignments, plus unattended fallbacks), synthesis switches to Qwen3
-    /// CustomVoice regardless of the selected
-    /// TTS model. Readiness and provisioning only inspect the selected alias, so point them at
-    /// CustomVoice too; otherwise the run passes preflight and then fails with "Model setup required".
+    /// When every voice this run will synthesize is a Qwen3 preset, point preflight at CustomVoice.
+    /// Clone runs are left unchanged, because that single alias is the clone model. An alias that
+    /// is already CustomVoice is left unchanged, including a larger tier. A mix of preset and stock
+    /// voices keeps the stock alias and is provisioned alongside CustomVoice by
+    /// <see cref="RequiresCompanionCustomVoiceModel"/>.
     /// </summary>
     internal static RuntimeModelSelections ApplyPresetVoiceModelSelection(
         RuntimeModelSelections selections,
@@ -2215,6 +2242,27 @@ public sealed class DubbingPipelineEngine(
         return allVoiceIds.Count > 0 && allVoiceIds.All(Qwen3TtsDefaults.IsPresetVoiceId)
             ? selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) }
             : selections;
+    }
+
+    /// <summary>
+    /// True when synthesis will require CustomVoice for at least one speaker while the selected
+    /// TTS alias stays a different model. Preflight must provision both.
+    /// </summary>
+    internal static bool RequiresCompanionCustomVoiceModel(
+        RuntimeModelSelections selections,
+        DubbingSessionOptions options,
+        TranscriptProjectState? state)
+    {
+        if (state is null ||
+            RequestsVoiceCloning(options) ||
+            Qwen3TtsDefaults.IsCustomVoiceAlias(selections.TtsModelAlias))
+        {
+            return false;
+        }
+
+        List<string> voiceIds = EnumerateUnattendedStockVoiceIds(state, ResolveUnattendedVoicePlan(state, options)).ToList();
+        return voiceIds.Any(Qwen3TtsDefaults.IsPresetVoiceId) &&
+               voiceIds.Any(static voiceId => !Qwen3TtsDefaults.IsPresetVoiceId(voiceId));
     }
 
     private readonly record struct UnattendedVoicePlan(

@@ -793,14 +793,21 @@ public sealed class StartTtsStageHandler(
         }
 
         string voiceId = ResolveVoiceId(request.VoiceAssignment);
+        if (Qwen3TtsDefaults.IsPresetVoiceId(voiceId) &&
+            !Qwen3TtsDefaults.SupportsLanguage(request.TargetLanguage))
+        {
+            throw new InvalidOperationException(
+                $"Qwen3 does not speak target language '{request.TargetLanguage}'.");
+        }
 
         // Qwen3 CustomVoice serves stock voices for languages Kokoro does not cover, and any run
         // that names a CustomVoice model. Keep an explicitly assigned preset (qwen3:<speaker>);
         // otherwise use the preset whose native language matches the target.
         bool usesQwen3StockVoices =
-            (ShouldForceStockTtsAlias(request.PreferredModelAlias) &&
-             IsNonEnglishSpanishLanguage(request.TargetLanguage)) ||
-            Qwen3TtsDefaults.IsCustomVoiceAlias(request.PreferredModelAlias?.Trim());
+            Qwen3TtsDefaults.SupportsLanguage(request.TargetLanguage) &&
+            ((ShouldForceStockTtsAlias(request.PreferredModelAlias) &&
+              IsNonEnglishSpanishLanguage(request.TargetLanguage)) ||
+             Qwen3TtsDefaults.IsCustomVoiceAlias(request.PreferredModelAlias?.Trim()));
         if (usesQwen3StockVoices)
         {
             string presetVoiceId = Qwen3TtsDefaults.IsPresetVoiceId(voiceId)

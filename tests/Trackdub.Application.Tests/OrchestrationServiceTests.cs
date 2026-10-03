@@ -629,6 +629,10 @@ public sealed class OrchestrationServiceTests
             .ApplyPresetVoiceModelSelection(selections, options, state);
 
         Assert.Equal("kokoro-onnx", result.TtsModelAlias);
+        Assert.True(Trackdub.Application.Dubbing.DubbingPipelineEngine.RequiresCompanionCustomVoiceModel(
+            selections,
+            options,
+            state));
     }
 
     [Theory]

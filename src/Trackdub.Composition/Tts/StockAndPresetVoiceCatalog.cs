@@ -21,7 +21,9 @@ public sealed class StockAndPresetVoiceCatalog(IVoiceCatalog stockCatalog, param
     public IReadOnlyList<VoiceCatalogEntry> GetVoices(string? languageCode = null)
     {
         IReadOnlyList<VoiceCatalogEntry> stock = stockCatalog.GetVoices(languageCode);
-        if (string.IsNullOrWhiteSpace(languageCode) || StockTtsVoiceMatcher.SupportsKokoro(languageCode))
+        if (string.IsNullOrWhiteSpace(languageCode) ||
+            StockTtsVoiceMatcher.SupportsKokoro(languageCode) ||
+            !Qwen3TtsDefaults.SupportsLanguage(languageCode))
         {
             return stock;
         }
@@ -31,10 +33,14 @@ public sealed class StockAndPresetVoiceCatalog(IVoiceCatalog stockCatalog, param
             return stock;
         }
 
+        // Preset entries are tagged "mul". Stamp the requested language so a picker that
+        // filters by target language can offer them without treating every mul voice as a match.
+        string stampedLanguage = languageCode.Trim().Replace('_', '-').Split('-')[0].ToLowerInvariant();
         var merged = new List<VoiceCatalogEntry>(stock);
         foreach (IVoiceCatalog presetCatalog in presetCatalogs)
         {
-            merged.AddRange(presetCatalog.GetVoices(languageCode));
+            merged.AddRange(presetCatalog.GetVoices(languageCode)
+                .Select(voice => voice with { LanguageCode = stampedLanguage }));
         }
 
         return merged;
