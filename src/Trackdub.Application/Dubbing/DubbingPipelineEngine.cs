@@ -18,6 +18,7 @@ using Trackdub.Domain.Artifacts;
 using Trackdub.Domain.Pipeline;
 using Trackdub.Domain.Speakers;
 using Trackdub.Domain.StageRuns;
+using Trackdub.Domain.Tts;
 
 namespace Trackdub.Application.Dubbing;
 
@@ -2030,38 +2031,10 @@ public sealed class DubbingPipelineEngine(
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(options);
 
-        IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
-            state,
-            options.VoiceAssignmentOverrides);
-
-        Dictionary<Guid, bool>? cloneBySpeaker = null;
-        if (options.VoiceCloneBySpeakerId is not null)
-        {
-            cloneBySpeaker = new Dictionary<Guid, bool>(options.VoiceCloneBySpeakerId);
-        }
-        else if (options.UseVoiceCloning && state.Speakers.Count > 0)
-        {
-            cloneBySpeaker = state.Speakers.ToDictionary(
-                static speaker => speaker.Id,
-                speaker => !explicitVoiceIds.ContainsKey(speaker.Id));
-        }
-
-        Dictionary<Guid, string>? fallbackVoiceIds = null;
-        if (options.AutoAssignFallbackVoices)
-        {
-            fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode);
-            if (fallbackVoiceIds is not null)
-            {
-                fallbackVoiceIds = fallbackVoiceIds
-                    .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
-                    .Where(pair => cloneBySpeaker?.GetValueOrDefault(pair.Key) != true)
-                    .ToDictionary(static pair => pair.Key, static pair => pair.Value);
-                if (fallbackVoiceIds.Count == 0)
-                {
-                    fallbackVoiceIds = null;
-                }
-            }
-        }
+        UnattendedVoicePlan voicePlan = ResolveUnattendedVoicePlan(state, options);
+        IReadOnlyDictionary<Guid, string> explicitVoiceIds = voicePlan.ExplicitVoiceIds;
+        Dictionary<Guid, bool>? cloneBySpeaker = voicePlan.CloneBySpeaker;
+        Dictionary<Guid, string>? fallbackVoiceIds = voicePlan.FallbackVoiceIds;
 
         string? preferredModelAlias = ttsModelAlias;
         if (RequestsVoiceCloning(options) && string.IsNullOrWhiteSpace(preferredModelAlias))
@@ -2233,41 +2206,97 @@ public sealed class DubbingPipelineEngine(
     {
         if (state is null ||
             RequestsVoiceCloning(options) ||
-            HasExplicitTtsModelPreference(options) ||
-            Qwen3TtsDefaults.IsAnyQwen3Alias(selections.TtsModelAlias))
+            Qwen3TtsDefaults.IsCustomVoiceAlias(selections.TtsModelAlias))
         {
             return selections;
         }
 
-        IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
-            state,
-            options.VoiceAssignmentOverrides);
-        IEnumerable<string> voiceIds = explicitVoiceIds.Values;
-        if (options.AutoAssignFallbackVoices &&
-            BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode) is { } fallbackVoiceIds)
-        {
-            voiceIds = voiceIds.Concat(fallbackVoiceIds
-                .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
-                .Select(static pair => pair.Value));
-        }
-
-        // Fallback ids are speakers with no deliberate assignment, so they never overlap these rows.
-        voiceIds = voiceIds.Concat(state.VoiceAssignments
-            .Where(assignment => !assignment.IsFallback && !explicitVoiceIds.ContainsKey(assignment.SpeakerId))
-            .Select(static assignment => assignment.VoiceVariant)
-            .Where(static voiceVariant => !string.IsNullOrWhiteSpace(voiceVariant))
-            .Select(static voiceVariant => voiceVariant!.Trim()));
-
-        List<string> allVoiceIds = voiceIds.ToList();
+        List<string> allVoiceIds = EnumerateUnattendedStockVoiceIds(state, ResolveUnattendedVoicePlan(state, options)).ToList();
         return allVoiceIds.Count > 0 && allVoiceIds.All(Qwen3TtsDefaults.IsPresetVoiceId)
             ? selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) }
             : selections;
     }
 
-    private static bool HasExplicitTtsModelPreference(DubbingSessionOptions options) =>
-        options.ModelPreferences is { } preferences &&
-        preferences.TryGetValue(StageNames.Tts, out string? alias) &&
-        !string.IsNullOrWhiteSpace(alias);
+    private readonly record struct UnattendedVoicePlan(
+        IReadOnlyDictionary<Guid, string> ExplicitVoiceIds,
+        Dictionary<Guid, string>? FallbackVoiceIds,
+        Dictionary<Guid, bool>? CloneBySpeaker);
+
+    /// <summary>
+    /// Speakers this unattended run will synthesize without cloning, and the voice id each one uses.
+    /// Shared by the TTS request and preset preflight so fallback and clone filters cannot drift.
+    /// </summary>
+    private static UnattendedVoicePlan ResolveUnattendedVoicePlan(
+        TranscriptProjectState state,
+        DubbingSessionOptions options)
+    {
+        IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
+            state,
+            options.VoiceAssignmentOverrides);
+
+        Dictionary<Guid, bool>? cloneBySpeaker = null;
+        if (options.VoiceCloneBySpeakerId is not null)
+        {
+            cloneBySpeaker = new Dictionary<Guid, bool>(options.VoiceCloneBySpeakerId);
+        }
+        else if (options.UseVoiceCloning && state.Speakers.Count > 0)
+        {
+            cloneBySpeaker = state.Speakers.ToDictionary(
+                static speaker => speaker.Id,
+                speaker => !explicitVoiceIds.ContainsKey(speaker.Id));
+        }
+
+        Dictionary<Guid, string>? fallbackVoiceIds = null;
+        if (options.AutoAssignFallbackVoices)
+        {
+            fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode);
+            if (fallbackVoiceIds is not null)
+            {
+                fallbackVoiceIds = fallbackVoiceIds
+                    .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
+                    .Where(pair => cloneBySpeaker?.GetValueOrDefault(pair.Key) != true)
+                    .ToDictionary(static pair => pair.Key, static pair => pair.Value);
+                if (fallbackVoiceIds.Count == 0)
+                {
+                    fallbackVoiceIds = null;
+                }
+            }
+        }
+
+        return new UnattendedVoicePlan(explicitVoiceIds, fallbackVoiceIds, cloneBySpeaker);
+    }
+
+    private static IEnumerable<string> EnumerateUnattendedStockVoiceIds(
+        TranscriptProjectState state,
+        UnattendedVoicePlan plan)
+    {
+        foreach (string voiceId in plan.ExplicitVoiceIds.Values)
+        {
+            yield return voiceId;
+        }
+
+        if (plan.FallbackVoiceIds is not null)
+        {
+            foreach (string voiceId in plan.FallbackVoiceIds.Values)
+            {
+                yield return voiceId;
+            }
+        }
+
+        foreach (VoiceAssignment assignment in state.VoiceAssignments)
+        {
+            if (assignment.IsFallback ||
+                plan.ExplicitVoiceIds.ContainsKey(assignment.SpeakerId) ||
+                plan.CloneBySpeaker?.GetValueOrDefault(assignment.SpeakerId) == true ||
+                plan.FallbackVoiceIds?.ContainsKey(assignment.SpeakerId) == true ||
+                string.IsNullOrWhiteSpace(assignment.VoiceVariant))
+            {
+                continue;
+            }
+
+            yield return assignment.VoiceVariant.Trim();
+        }
+    }
 
     /// <summary>
     /// Overlays per-stage execution-provider pins from <paramref name="preferences"/> onto the

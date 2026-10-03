@@ -497,12 +497,12 @@ public sealed class OrchestrationServiceTests
     }
 
     [Fact]
-    public void ApplyPresetVoiceModelSelection_keeps_an_explicit_tts_model_preference()
+    public void ApplyPresetVoiceModelSelection_rewrites_an_explicit_base_alias_when_voices_are_presets()
     {
         TranscriptProjectState state = CreateTranslatedProjectState();
         VoiceAssignment presetAssignment = state.VoiceAssignments[0] with
         {
-            VoiceModelId = Qwen3TtsDefaults.CustomVoice06Alias,
+            VoiceModelId = Qwen3TtsDefaults.Base06Alias,
             VoiceVariant = Qwen3TtsDefaults.PresetVoicePrefix + "ryan",
         };
         state = state with { VoiceAssignments = [presetAssignment] };
@@ -513,19 +513,50 @@ public sealed class OrchestrationServiceTests
             AutoAssignFallbackVoices = true,
             ModelPreferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                [StageNames.Tts] = "kokoro-onnx",
+                [StageNames.Tts] = Qwen3TtsDefaults.Base06Alias,
             },
         };
         var selections = new RuntimeModelSelections(
             AsrModelOverride.Auto,
             IsDevBuild: false,
             new Dictionary<string, ExecutionProviderKind>(),
-            TtsModelAlias: "kokoro-onnx");
+            TtsModelAlias: Qwen3TtsDefaults.Base06Alias);
 
         RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
             .ApplyPresetVoiceModelSelection(selections, options, state);
 
-        Assert.Equal("kokoro-onnx", result.TtsModelAlias);
+        Assert.Equal(Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null), result.TtsModelAlias);
+    }
+
+    [Fact]
+    public void ApplyPresetVoiceModelSelection_keeps_an_explicit_custom_voice_alias()
+    {
+        TranscriptProjectState state = CreateTranslatedProjectState();
+        VoiceAssignment presetAssignment = state.VoiceAssignments[0] with
+        {
+            VoiceModelId = Qwen3TtsDefaults.CustomVoice17Alias,
+            VoiceVariant = Qwen3TtsDefaults.PresetVoicePrefix + "ryan",
+        };
+        state = state with { VoiceAssignments = [presetAssignment] };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            ModelPreferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [StageNames.Tts] = Qwen3TtsDefaults.CustomVoice17Alias,
+            },
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: Qwen3TtsDefaults.CustomVoice17Alias);
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal(Qwen3TtsDefaults.CustomVoice17Alias, result.TtsModelAlias);
     }
 
     [Theory]
