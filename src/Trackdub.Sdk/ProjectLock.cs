@@ -73,7 +73,15 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
                 // Lock file is held by another process. Check if it's stale.
                 int? holdingPid = TryReadHoldingProcessId(lockFilePath);
 
-                if (holdingPid.HasValue && IsProcessAlive(holdingPid.Value))
+                if (!holdingPid.HasValue)
+                {
+                    // An unreadable lock file may still be held by another process. Do not
+                    // unlink it: on Unix, deleting an open file would allow a replacement
+                    // lock to be acquired while the original holder is still running.
+                    throw new ProjectLockedException(projectDirectory);
+                }
+
+                if (IsProcessAlive(holdingPid.Value))
                 {
                     // The holding process is still running — genuine conflict.
                     throw new ProjectLockedException(projectDirectory, holdingPid.Value);
