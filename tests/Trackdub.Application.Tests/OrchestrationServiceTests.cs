@@ -744,6 +744,46 @@ public sealed class OrchestrationServiceTests
     }
 
     [Theory]
+    [InlineData("zh")]
+    [InlineData("ja")]
+    public void ApplyPresetVoiceModelSelection_retargets_leftover_clone_when_qwen3_speaks_the_language(string targetLanguage)
+    {
+        TranscriptProjectState state = CreateTranslatedProjectState();
+        state = state with
+        {
+            VoiceAssignments =
+            [
+                VoiceAssignment.Create(
+                    state.ProjectState.Project.Id,
+                    state.Speakers[0].Id,
+                    VoiceCloningDefaults.CosyVoicePrimaryAlias,
+                    voiceVariant: null),
+            ],
+        };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = targetLanguage,
+            UseVoiceCloning = false,
+            AutoAssignFallbackVoices = true,
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: VoiceCloningDefaults.CosyVoicePrimaryAlias);
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal(Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null), result.TtsModelAlias);
+        Assert.False(Trackdub.Application.Dubbing.DubbingPipelineEngine.RequiresCompanionCustomVoiceModel(
+            selections,
+            options,
+            state));
+    }
+
+    [Theory]
     [InlineData("zh", true)]
     [InlineData("es", false)]
     public void ApplyPresetVoiceModelSelection_points_preflight_at_qwen3_custom_voice_only_for_preset_runs(
