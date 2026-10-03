@@ -529,6 +529,34 @@ public sealed class OrchestrationServiceTests
     }
 
     [Fact]
+    public void ApplyPresetVoiceModelSelection_rewrites_a_leftover_clone_alias_when_cloning_is_off()
+    {
+        TranscriptProjectState state = CreateTranslatedProjectState();
+        VoiceAssignment presetAssignment = state.VoiceAssignments[0] with
+        {
+            VoiceModelId = Qwen3TtsDefaults.CustomVoice06Alias,
+            VoiceVariant = Qwen3TtsDefaults.PresetVoicePrefix + "vivian",
+        };
+        state = state with { VoiceAssignments = [presetAssignment] };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "zh",
+            UseVoiceCloning = false,
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: VoiceCloningDefaults.CosyVoicePrimaryAlias);
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal(Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null), result.TtsModelAlias);
+    }
+
+    [Fact]
     public void ApplyPresetVoiceModelSelection_keeps_an_explicit_custom_voice_alias()
     {
         TranscriptProjectState state = CreateTranslatedProjectState();
