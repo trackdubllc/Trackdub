@@ -2233,6 +2233,7 @@ public sealed class DubbingPipelineEngine(
     {
         if (state is null ||
             RequestsVoiceCloning(options) ||
+            HasExplicitTtsModelPreference(options) ||
             Qwen3TtsDefaults.IsAnyQwen3Alias(selections.TtsModelAlias))
         {
             return selections;
@@ -2241,23 +2242,18 @@ public sealed class DubbingPipelineEngine(
         IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
             state,
             options.VoiceAssignmentOverrides);
-        HashSet<Guid> coveredSpeakerIds = [.. explicitVoiceIds.Keys];
         IEnumerable<string> voiceIds = explicitVoiceIds.Values;
         if (options.AutoAssignFallbackVoices &&
             BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode) is { } fallbackVoiceIds)
         {
-            foreach (KeyValuePair<Guid, string> pair in fallbackVoiceIds.Where(pair => !explicitVoiceIds.ContainsKey(pair.Key)))
-            {
-                coveredSpeakerIds.Add(pair.Key);
-            }
-
             voiceIds = voiceIds.Concat(fallbackVoiceIds
                 .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
                 .Select(static pair => pair.Value));
         }
 
+        // Fallback ids are speakers with no deliberate assignment, so they never overlap these rows.
         voiceIds = voiceIds.Concat(state.VoiceAssignments
-            .Where(assignment => !assignment.IsFallback && !coveredSpeakerIds.Contains(assignment.SpeakerId))
+            .Where(assignment => !assignment.IsFallback && !explicitVoiceIds.ContainsKey(assignment.SpeakerId))
             .Select(static assignment => assignment.VoiceVariant)
             .Where(static voiceVariant => !string.IsNullOrWhiteSpace(voiceVariant))
             .Select(static voiceVariant => voiceVariant!.Trim()));
@@ -2267,6 +2263,11 @@ public sealed class DubbingPipelineEngine(
             ? selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) }
             : selections;
     }
+
+    private static bool HasExplicitTtsModelPreference(DubbingSessionOptions options) =>
+        options.ModelPreferences is { } preferences &&
+        preferences.TryGetValue(StageNames.Tts, out string? alias) &&
+        !string.IsNullOrWhiteSpace(alias);
 
     /// <summary>
     /// Overlays per-stage execution-provider pins from <paramref name="preferences"/> onto the

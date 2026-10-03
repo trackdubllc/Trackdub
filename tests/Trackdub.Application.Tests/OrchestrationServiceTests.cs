@@ -496,6 +496,38 @@ public sealed class OrchestrationServiceTests
         Assert.Equal(Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null), result.TtsModelAlias);
     }
 
+    [Fact]
+    public void ApplyPresetVoiceModelSelection_keeps_an_explicit_tts_model_preference()
+    {
+        TranscriptProjectState state = CreateTranslatedProjectState();
+        VoiceAssignment presetAssignment = state.VoiceAssignments[0] with
+        {
+            VoiceModelId = Qwen3TtsDefaults.CustomVoice06Alias,
+            VoiceVariant = Qwen3TtsDefaults.PresetVoicePrefix + "ryan",
+        };
+        state = state with { VoiceAssignments = [presetAssignment] };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "es",
+            AutoAssignFallbackVoices = true,
+            ModelPreferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [StageNames.Tts] = "kokoro-onnx",
+            },
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: "kokoro-onnx");
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal("kokoro-onnx", result.TtsModelAlias);
+    }
+
     [Theory]
     [InlineData("zh", true)]
     [InlineData("es", false)]
@@ -548,10 +580,13 @@ public sealed class OrchestrationServiceTests
             VoiceAssignments = [persistedClone]
         };
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.Service.GenerateTtsForSpeakerAsync(
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(() => context.Service.GenerateTtsForSpeakerAsync(
             state,
             new GenerateTtsForSpeakerRequest(speakerId, UseReferenceClipForVoiceCloning: false),
             TestContext.Current.CancellationToken));
+        Assert.Contains("Qwen3 does not speak it", error.Message, StringComparison.Ordinal);
+        Assert.Contains("nl", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("no Kokoro voice matched", error.Message, StringComparison.Ordinal);
         Assert.Empty(context.VoiceAssignmentRepository.All);
     }
 

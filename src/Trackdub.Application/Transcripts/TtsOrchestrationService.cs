@@ -1245,7 +1245,8 @@ public sealed class TtsOrchestrationService(
         {
             if (!Qwen3TtsDefaults.SupportsLanguage(targetLanguage))
             {
-                throw new InvalidOperationException(noKokoroMatchError());
+                throw new InvalidOperationException(
+                    $"No stock voice covers target language '{targetLanguage}' for {speaker.DisplayName}. Kokoro does not support it, and Qwen3 does not speak it.");
             }
 
             VoiceAssignment stockAssignment = currentAssignment with
