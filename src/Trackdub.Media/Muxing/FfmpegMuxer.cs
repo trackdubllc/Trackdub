@@ -79,6 +79,22 @@ public sealed class FfmpegMuxer : IExportRenderer
         string ffmpegPath = toolResolver.ResolveFfmpegPath();
 
         var warnings = new List<string>();
+        // drawtext without an explicit fontfile relies on fontconfig, which fails on
+        // machines without a fontconfig setup (notably Windows) and crashes the mux.
+        if (plan.RequiresWatermark && string.IsNullOrWhiteSpace(plan.WatermarkFontPath))
+        {
+            string? systemFont = WatermarkFontResolver.ResolveFontPath();
+            if (systemFont is null)
+            {
+                warnings.Add(
+                    "No system font was found for the export watermark; ffmpeg falls back to fontconfig and the mux may fail.");
+            }
+            else
+            {
+                plan = plan with { WatermarkFontPath = systemFont };
+            }
+        }
+
         VideoEncodeProfile? encodeProfile = null;
         FfmpegVideoEncoderSnapshot? encoderSnapshot = null;
         bool requiresVideoEncode = !string.IsNullOrWhiteSpace(plan.BurnInSubtitlePath) || plan.RequiresWatermark;
@@ -196,7 +212,7 @@ internal static class FfmpegMuxCommandBuilder
                                              FfmpegVideoEncoderSnapshot.Empty);
 
             arguments.Add("-vf");
-            arguments.Add(BuildVideoFilterChain(plan.BurnInSubtitlePath, plan.RequiresWatermark, plan.OutputHeight, profile.VideoFilterPrefix));
+            arguments.Add(BuildVideoFilterChain(plan.BurnInSubtitlePath, plan.RequiresWatermark, plan.OutputHeight, profile.VideoFilterPrefix, plan.WatermarkFontPath));
             arguments.Add("-c:v");
             arguments.Add(profile.EncoderName);
             arguments.AddRange(profile.EncoderArguments);
@@ -215,7 +231,12 @@ internal static class FfmpegMuxCommandBuilder
         return arguments;
     }
 
-    internal static string BuildVideoFilterChain(string? subtitlePath, bool requiresWatermark, int outputHeight, string? filterPrefix = null)
+    internal static string BuildVideoFilterChain(
+        string? subtitlePath,
+        bool requiresWatermark,
+        int outputHeight,
+        string? filterPrefix = null,
+        string? watermarkFontPath = null)
     {
         var filters = new List<string>();
 
@@ -227,7 +248,7 @@ internal static class FfmpegMuxCommandBuilder
 
         if (requiresWatermark)
         {
-            filters.Add(BuildWatermarkFilter(outputHeight));
+            filters.Add(BuildWatermarkFilter(outputHeight, watermarkFontPath));
         }
 
         string combined = string.Join(",", filters);
@@ -245,11 +266,20 @@ internal static class FfmpegMuxCommandBuilder
             : $"{filterPrefix}{filter}";
     }
 
-    internal static string BuildWatermarkFilter(int outputHeight)
+    internal static string BuildWatermarkFilter(int outputHeight, string? fontPath = null)
     {
         int fontSize = CalculateWatermarkFontSize(outputHeight);
-        return $"drawtext=text='Made with Trackdub':fontsize={fontSize}:fontcolor=white@0.4:x=w-tw-20:y=h-th-20";
+        string fontFile = string.IsNullOrWhiteSpace(fontPath)
+            ? string.Empty
+            : $"fontfile='{EscapeDrawtextFontPath(fontPath)}':";
+        return $"drawtext={fontFile}text='Made with Trackdub':fontsize={fontSize}:fontcolor=white@0.4:x=w-tw-20:y=h-th-20";
     }
+
+    internal static string EscapeDrawtextFontPath(string path) =>
+        path
+            .Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace(":", @"\:", StringComparison.Ordinal)
+            .Replace("'", @"\'", StringComparison.Ordinal);
 
     internal static int CalculateWatermarkFontSize(int outputHeight)
     {

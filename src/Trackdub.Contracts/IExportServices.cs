@@ -23,7 +23,8 @@ public sealed record ExportPlan(
     string? TargetLanguage,
     VideoEncoderPreference VideoEncoder = VideoEncoderPreference.Auto,
     bool RequiresWatermark = false,
-    int OutputHeight = 0);
+    int OutputHeight = 0,
+    string? WatermarkFontPath = null);
 
 public sealed record ExportRenderResult(
     string OutputPath,
