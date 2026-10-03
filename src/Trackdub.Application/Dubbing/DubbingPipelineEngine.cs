@@ -18,6 +18,7 @@ using Trackdub.Domain.Artifacts;
 using Trackdub.Domain.Pipeline;
 using Trackdub.Domain.Speakers;
 using Trackdub.Domain.StageRuns;
+using Trackdub.Domain.Tts;
 
 namespace Trackdub.Application.Dubbing;
 
@@ -911,6 +912,33 @@ public sealed class DubbingPipelineEngine(
                 DubbingRunStatus.PreFlightFailed,
                 failures,
                 executionSnapshot), declinedStages);
+        }
+
+        if (enabledStages.Contains(RuntimeStage.Tts) &&
+            RequiresCompanionCustomVoiceModel(selections, options, state))
+        {
+            RuntimeModelSetupCallbacks setupCallbacks =
+                TryResolveService<IPipelineModelSetupInteraction>(session)
+                    ?.CreateCallbacks(progress, cancellationToken)
+                ?? BuildHeadlessCallbacks(cancellationToken);
+            RuntimeModelSetupResult companion = await coordinator
+                .EnsureTtsModelAvailableAsync(
+                    session.Workspace,
+                    selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) },
+                    requiresVoiceClone: false,
+                    setupCallbacks,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!companion.IsReady)
+            {
+                return (BuildErrorResult(
+                    runId,
+                    runStart,
+                    stageOutcomes,
+                    DubbingRunStatus.PreFlightFailed,
+                    ["Model provisioning was cancelled during pre-flight."],
+                    executionSnapshot), declinedStages);
+            }
         }
 
         return (null, declinedStages);
@@ -2030,38 +2058,10 @@ public sealed class DubbingPipelineEngine(
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(options);
 
-        IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
-            state,
-            options.VoiceAssignmentOverrides);
-
-        Dictionary<Guid, bool>? cloneBySpeaker = null;
-        if (options.VoiceCloneBySpeakerId is not null)
-        {
-            cloneBySpeaker = new Dictionary<Guid, bool>(options.VoiceCloneBySpeakerId);
-        }
-        else if (options.UseVoiceCloning && state.Speakers.Count > 0)
-        {
-            cloneBySpeaker = state.Speakers.ToDictionary(
-                static speaker => speaker.Id,
-                speaker => !explicitVoiceIds.ContainsKey(speaker.Id));
-        }
-
-        Dictionary<Guid, string>? fallbackVoiceIds = null;
-        if (options.AutoAssignFallbackVoices)
-        {
-            fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode);
-            if (fallbackVoiceIds is not null)
-            {
-                fallbackVoiceIds = fallbackVoiceIds
-                    .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
-                    .Where(pair => cloneBySpeaker?.GetValueOrDefault(pair.Key) != true)
-                    .ToDictionary(static pair => pair.Key, static pair => pair.Value);
-                if (fallbackVoiceIds.Count == 0)
-                {
-                    fallbackVoiceIds = null;
-                }
-            }
-        }
+        UnattendedVoicePlan voicePlan = ResolveUnattendedVoicePlan(state, options);
+        IReadOnlyDictionary<Guid, string> explicitVoiceIds = voicePlan.ExplicitVoiceIds;
+        Dictionary<Guid, bool>? cloneBySpeaker = voicePlan.CloneBySpeaker;
+        Dictionary<Guid, string>? fallbackVoiceIds = voicePlan.FallbackVoiceIds;
 
         string? preferredModelAlias = ttsModelAlias;
         if (RequestsVoiceCloning(options) && string.IsNullOrWhiteSpace(preferredModelAlias))
@@ -2198,8 +2198,11 @@ public sealed class DubbingPipelineEngine(
                 // intent (e.g. the Chatterbox pin ApplyVoiceCloningDefaults installs for
                 // clone runs) and take precedence over the host's UI-side selections,
                 // matching the precedence the settings path applies via
-                // CreateSelectionsFromSettings.
+                // CreateSelectionsFromSettings. ApplyPresetVoiceModelSelection may still
+                // retarget TTS when the voices that will speak are Qwen presets, because
+                // synthesis will not use a non-CustomVoice model for those voices.
                 selections = ApplyModelPreferenceAliases(provided, preferences);
+                selections = ApplyPresetVoiceModelSelection(selections, options, state);
                 return ApplyExecutionProviderPins(selections, options, preferences);
             }
         }
@@ -2214,7 +2217,182 @@ public sealed class DubbingPipelineEngine(
         selections = RuntimeModelRequestFactory.CreateSelectionsFromSettings(
             settings,
             preferences);
+        selections = ApplyPresetVoiceModelSelection(selections, options, state);
         return ApplyExecutionProviderPins(selections, options, preferences);
+    }
+
+    /// <summary>
+    /// When every voice this run will synthesize is a Qwen3 preset, point preflight at CustomVoice.
+    /// Clone runs are left unchanged, because that single alias is the clone model. An alias that
+    /// is already CustomVoice is left unchanged, including a larger tier. A mix of preset and stock
+    /// voices keeps the stock alias and is provisioned alongside CustomVoice by
+    /// <see cref="RequiresCompanionCustomVoiceModel"/>.
+    /// </summary>
+    internal static RuntimeModelSelections ApplyPresetVoiceModelSelection(
+        RuntimeModelSelections selections,
+        DubbingSessionOptions options,
+        TranscriptProjectState? state)
+    {
+        if (state is null ||
+            RequestsVoiceCloning(options) ||
+            Qwen3TtsDefaults.IsCustomVoiceAlias(selections.TtsModelAlias))
+        {
+            return selections;
+        }
+
+        List<string> allVoiceIds = EnumerateUnattendedStockVoiceIds(
+            state,
+            ResolveUnattendedVoicePlan(state, options),
+            options.TargetLanguageCode).ToList();
+        return allVoiceIds.Count > 0 && allVoiceIds.All(Qwen3TtsDefaults.IsPresetVoiceId)
+            ? selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) }
+            : selections;
+    }
+
+    /// <summary>
+    /// True when synthesis will require CustomVoice for at least one speaker while the selected
+    /// TTS alias stays a different model. Preflight must provision both.
+    /// </summary>
+    internal static bool RequiresCompanionCustomVoiceModel(
+        RuntimeModelSelections selections,
+        DubbingSessionOptions options,
+        TranscriptProjectState? state)
+    {
+        if (state is null ||
+            RequestsVoiceCloning(options) ||
+            Qwen3TtsDefaults.IsCustomVoiceAlias(selections.TtsModelAlias))
+        {
+            return false;
+        }
+
+        List<string> voiceIds = EnumerateUnattendedStockVoiceIds(
+            state,
+            ResolveUnattendedVoicePlan(state, options),
+            options.TargetLanguageCode).ToList();
+        return voiceIds.Any(Qwen3TtsDefaults.IsPresetVoiceId) &&
+               voiceIds.Any(static voiceId => !Qwen3TtsDefaults.IsPresetVoiceId(voiceId));
+    }
+
+    private readonly record struct UnattendedVoicePlan(
+        IReadOnlyDictionary<Guid, string> ExplicitVoiceIds,
+        Dictionary<Guid, string>? FallbackVoiceIds,
+        Dictionary<Guid, bool>? CloneBySpeaker);
+
+    /// <summary>
+    /// Speakers this unattended run will synthesize without cloning, and the voice id each one uses.
+    /// Shared by the TTS request and preset preflight so fallback and clone filters cannot drift.
+    /// </summary>
+    private static UnattendedVoicePlan ResolveUnattendedVoicePlan(
+        TranscriptProjectState state,
+        DubbingSessionOptions options)
+    {
+        IReadOnlyDictionary<Guid, string> explicitVoiceIds = ResolveVoiceAssignmentOverrides(
+            state,
+            options.VoiceAssignmentOverrides);
+
+        Dictionary<Guid, bool>? cloneBySpeaker = null;
+        if (options.VoiceCloneBySpeakerId is not null)
+        {
+            cloneBySpeaker = new Dictionary<Guid, bool>(options.VoiceCloneBySpeakerId);
+        }
+        else if (options.UseVoiceCloning && state.Speakers.Count > 0)
+        {
+            cloneBySpeaker = state.Speakers.ToDictionary(
+                static speaker => speaker.Id,
+                speaker => !explicitVoiceIds.ContainsKey(speaker.Id));
+        }
+
+        Dictionary<Guid, string>? fallbackVoiceIds = null;
+        if (options.AutoAssignFallbackVoices)
+        {
+            fallbackVoiceIds = BuildUnattendedFallbackVoiceIds(state, options.TargetLanguageCode);
+            if (fallbackVoiceIds is not null)
+            {
+                fallbackVoiceIds = fallbackVoiceIds
+                    .Where(pair => !explicitVoiceIds.ContainsKey(pair.Key))
+                    .Where(pair => cloneBySpeaker?.GetValueOrDefault(pair.Key) != true)
+                    .ToDictionary(static pair => pair.Key, static pair => pair.Value);
+                if (fallbackVoiceIds.Count == 0)
+                {
+                    fallbackVoiceIds = null;
+                }
+            }
+        }
+
+        return new UnattendedVoicePlan(explicitVoiceIds, fallbackVoiceIds, cloneBySpeaker);
+    }
+
+    private static IEnumerable<string> EnumerateUnattendedStockVoiceIds(
+        TranscriptProjectState state,
+        UnattendedVoicePlan plan,
+        string? targetLanguage)
+    {
+        // GenerateTtsForAllSpeakersAsync skips speakers with no transcript segments, then
+        // prefers a request override, then a persisted non-fallback assignment, then the fallback.
+        HashSet<Guid> synthesizingSpeakerIds = state.TranscriptSegments
+            .Select(static segment => segment.SpeakerId)
+            .Where(static speakerId => speakerId is not null)
+            .Select(static speakerId => speakerId!.Value)
+            .ToHashSet();
+
+        foreach ((Guid speakerId, string voiceId) in plan.ExplicitVoiceIds)
+        {
+            if (synthesizingSpeakerIds.Contains(speakerId) && !string.IsNullOrWhiteSpace(voiceId))
+            {
+                yield return voiceId.Trim();
+            }
+        }
+
+        if (plan.FallbackVoiceIds is not null)
+        {
+            foreach ((Guid speakerId, string voiceId) in plan.FallbackVoiceIds)
+            {
+                if (synthesizingSpeakerIds.Contains(speakerId) &&
+                    !plan.ExplicitVoiceIds.ContainsKey(speakerId) &&
+                    !string.IsNullOrWhiteSpace(voiceId))
+                {
+                    yield return voiceId.Trim();
+                }
+            }
+        }
+
+        foreach (VoiceAssignment assignment in state.VoiceAssignments)
+        {
+            if (assignment.IsFallback ||
+                !synthesizingSpeakerIds.Contains(assignment.SpeakerId) ||
+                plan.ExplicitVoiceIds.ContainsKey(assignment.SpeakerId) ||
+                plan.CloneBySpeaker?.GetValueOrDefault(assignment.SpeakerId) == true ||
+                plan.FallbackVoiceIds?.ContainsKey(assignment.SpeakerId) == true)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(assignment.VoiceVariant))
+            {
+                // A prior clone run persists a clone-only model with no voice id. Synthesis
+                // substitutes Kokoro where Kokoro speaks, and a Qwen preset where Qwen speaks.
+                // Languages neither speaks stay unassigned, matching BuildUnattendedFallbackVoiceIds.
+                // KokoroPrimaryAlias is a model alias, not a catalog voice id; it only has to fail
+                // IsPresetVoiceId so this speaker is not counted as a Qwen preset.
+                if (!VoiceCloningDefaults.IsCloneOnlyModelAlias(assignment.VoiceModelId))
+                {
+                    continue;
+                }
+
+                if (StockTtsVoiceMatcher.SupportsKokoro(targetLanguage))
+                {
+                    yield return StockTtsDefaults.KokoroPrimaryAlias;
+                }
+                else if (Qwen3TtsDefaults.SupportsLanguage(targetLanguage))
+                {
+                    yield return Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguage);
+                }
+
+                continue;
+            }
+
+            yield return assignment.VoiceVariant.Trim();
+        }
     }
 
     /// <summary>

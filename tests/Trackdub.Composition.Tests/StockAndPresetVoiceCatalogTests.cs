@@ -38,6 +38,17 @@ public sealed class StockAndPresetVoiceCatalogTests
         IReadOnlyList<VoiceCatalogEntry> zhVoices = catalog.GetVoices("zh");
         Assert.Equal(Qwen3TtsVoiceCatalog.KnownAvailable().GetVoices("zh").Count, zhVoices.Count);
         Assert.All(zhVoices, voice => Assert.StartsWith("qwen3:", voice.VoiceId, StringComparison.Ordinal));
+        Assert.All(zhVoices, voice => Assert.Equal("zh", voice.LanguageCode));
+    }
+
+    [Fact]
+    public void GetVoices_for_language_qwen3_does_not_speak_omits_presets()
+    {
+        var catalog = new StockAndPresetVoiceCatalog(new StockCatalog(), Qwen3TtsVoiceCatalog.KnownAvailable());
+
+        IReadOnlyList<VoiceCatalogEntry> dutchVoices = catalog.GetVoices("nl");
+
+        Assert.DoesNotContain(dutchVoices, voice => voice.VoiceId.StartsWith("qwen3:", StringComparison.Ordinal));
     }
 
     [Fact]
