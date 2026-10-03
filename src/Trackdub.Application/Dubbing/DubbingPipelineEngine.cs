@@ -2233,8 +2233,7 @@ public sealed class DubbingPipelineEngine(
     {
         if (state is null ||
             RequestsVoiceCloning(options) ||
-            Qwen3TtsDefaults.IsAnyQwen3Alias(selections.TtsModelAlias) ||
-            VoiceCloningDefaults.IsCloneOnlyModelAlias(selections.TtsModelAlias))
+            Qwen3TtsDefaults.IsAnyQwen3Alias(selections.TtsModelAlias))
         {
             return selections;
         }
