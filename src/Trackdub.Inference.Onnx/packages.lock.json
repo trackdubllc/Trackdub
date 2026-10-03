@@ -56,9 +56,9 @@
       },
       "Microsoft.ML.Tokenizers": {
         "type": "Direct",
-        "requested": "[3.0.0-preview.26473.1, )",
-        "resolved": "3.0.0-preview.26473.1",
-        "contentHash": "GCz2IZbFXkKjFCaKpd9qQxuPDfkj6yr/3JI71zu274069gZ84QBAY6TP/x8wSRRjfRNJCPyVWqDp/lc7QLg5mw=="
+        "requested": "[3.0.0-preview.26502.1, )",
+        "resolved": "3.0.0-preview.26502.1",
+        "contentHash": "Z+ZFKkR3iRMpSWpuB42vNrR30TxpH24LmHibaKNe27F3qmIF2JO4dzA3RIO0jZsc9nW01r/vDyEZdWy4ET3AvA=="
       },
       "Microsoft.Extensions.AI.Abstractions": {
         "type": "Transitive",
