@@ -34,13 +34,17 @@ public static class DubbingProjectPaths
     /// or they guard a different directory than the engine writes to.
     /// </remarks>
     public static string ResolveProjectDirectory(string sourceMediaPath, string? projectOutputDirectory)
+    public static string ResolveProjectDirectory(string sourceMediaPath, string? projectOutputDirectory)
     {
+        if (!string.IsNullOrWhiteSpace(projectOutputDirectory))
+        {
+            return projectOutputDirectory;
+        }
+
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceMediaPath);
 
-        return string.IsNullOrWhiteSpace(projectOutputDirectory)
-            ? Path.Join(
-                Path.GetDirectoryName(sourceMediaPath) ?? ".",
-                Path.GetFileNameWithoutExtension(sourceMediaPath) + ".trackdub")
-            : projectOutputDirectory;
+        return Path.Join(
+            Path.GetDirectoryName(sourceMediaPath) ?? ".",
+            Path.GetFileNameWithoutExtension(sourceMediaPath) + ".trackdub");
     }
 }
