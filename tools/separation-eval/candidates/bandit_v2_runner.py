@@ -54,6 +54,13 @@ BED_MODES = {"bandit-v2-multi-sum": "sum", "bandit-v2-multi-residual": "residual
 # out of the 12 GB card (about 12 s per batch). Batch size does not change the maths, so 4 (3.8 GB) is used.
 CHUNK_SECONDS, HOP_SECONDS, BATCH = 8.0, 1.0, 4
 LENGTH_FIX_MAX = 4
+# The official handler unfolds a whole file into overlapping 8 s chunks and holds every chunk and every stem
+# estimate at once; for a 20 minute clip that is about 4 GB per tensor and spills out of a 12 GB card. Inputs
+# longer than SEGMENT_THRESHOLD_SECONDS are therefore separated in SEGMENT_SECONDS pieces, each with
+# SEGMENT_CONTEXT_SECONDS of real neighbouring audio on both sides that is discarded afterwards (the same size as
+# a chunk, so every kept sample is inside a full-context chunk as it would be mid-file). Clips at or under the
+# threshold, which is every clip but the 20 minute ones, take the official path unchanged.
+SEGMENT_THRESHOLD_SECONDS, SEGMENT_SECONDS, SEGMENT_CONTEXT_SECONDS = 120.0, 60.0, 8.0
 
 
 class RunnerError(Exception):
@@ -188,16 +195,35 @@ class Separator:
         torch, ta = self.torch, self.ta
         n = stereo44.shape[1]
         x = ta.functional.resample(stereo44.to(self.device), SEPARATOR_SR, NATIVE_SR)
-        with torch.inference_mode(), contextlib.redirect_stdout(io.StringIO()):
-            out = self.handler(x[None, :, :], self.model)["estimates"]
+        per_stem: dict[str, list] = {stem: [] for stem in STEMS}
+        for start, stop, keep_from, keep_to in self.segments(x.shape[1]):
+            with torch.inference_mode(), contextlib.redirect_stdout(io.StringIO()):
+                out = self.handler(x[None, :, start:stop], self.model)["estimates"]
+            for stem, v in out.items():
+                y = v["audio"][0]
+                if y.shape[0] != 2 or y.shape[1] != stop - start or not bool(torch.isfinite(y).all()):
+                    raise RunnerError(f"stem {stem} is not finite stereo output (shape {tuple(y.shape)})")
+                per_stem[stem].append(y[:, keep_from:keep_to].float().cpu())
         result = {}
-        for stem, v in out.items():
-            y = v["audio"][0]
-            if y.shape[0] != 2 or not bool(torch.isfinite(y).all()):
-                raise RunnerError(f"stem {stem} is not finite stereo output (shape {tuple(y.shape)})")
-            back = ta.functional.resample(y.float(), NATIVE_SR, SEPARATOR_SR)
+        for stem, parts in per_stem.items():
+            full = torch.cat(parts, dim=1)
+            back = ta.functional.resample(full.to(self.device), NATIVE_SR, SEPARATOR_SR)
             result[stem] = fix_length(torch, back, n).cpu()
         return result
+
+    @staticmethod
+    def segments(total: int):
+        """(start, stop, keep_from, keep_to): slice of the native-rate input to run, and the part of its output to
+        keep (relative to start). One whole-file segment unless the input exceeds SEGMENT_THRESHOLD_SECONDS."""
+        if total <= int(SEGMENT_THRESHOLD_SECONDS * NATIVE_SR):
+            return [(0, total, 0, total)]
+        seg, ctx = int(SEGMENT_SECONDS * NATIVE_SR), int(SEGMENT_CONTEXT_SECONDS * NATIVE_SR)
+        out = []
+        for keep_start in range(0, total, seg):
+            keep_stop = min(keep_start + seg, total)
+            start, stop = max(0, keep_start - ctx), min(total, keep_stop + ctx)
+            out.append((start, stop, keep_start - start, keep_stop - start))
+        return out
 
 
 def fix_length(torch, x, n: int):
@@ -284,6 +310,8 @@ def main(argv: list[str]) -> int:
             "resample": "torchaudio.functional.resample sinc, 44100->48000 on input and 48000->44100 on every stem",
             "chunk_seconds": str(CHUNK_SECONDS), "hop_seconds": str(HOP_SECONDS), "inference_batch": str(BATCH),
             "channels": "each input channel separated independently as mono",
+            "segmentation": (f"inputs over {SEGMENT_THRESHOLD_SECONDS:.0f} s are separated in {SEGMENT_SECONDS:.0f} s pieces "
+                             f"with {SEGMENT_CONTEXT_SECONDS:.0f} s of discarded context each side; shorter inputs run whole"),
             "output": "float32 stereo WAV", "device": sep.device_name,
             "selected_provider": sep.device.type,
             "versions": json.dumps(sep.versions, sort_keys=True)}
