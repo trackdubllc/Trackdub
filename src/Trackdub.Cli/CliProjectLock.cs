@@ -23,6 +23,15 @@ internal static class CliProjectLock
             CliErrorReporter.ReportError(ErrorCode.ProjectLocked, DescribeProjectLocked(ex));
             return null;
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The lock file lives in the project directory, so an unwritable or unreachable
+            // directory surfaces here rather than as a lock conflict.
+            CliErrorReporter.ReportError(
+                ErrorCode.RuntimeUnavailable,
+                $"Cannot access the project directory '{UserPathText.Normalize(projectDirectory)}': {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>
@@ -33,7 +42,7 @@ internal static class CliProjectLock
         exception.HoldingProcessId switch
         {
             int processId when processId == Environment.ProcessId =>
-                "A run is already in progress for this project in this process. Wait for it to finish, then try again.",
+                "A run is already in progress for this project in this app. Wait for it to finish, then try again.",
             int processId =>
                 $"This project is in use by another Trackdub process (PID {processId}). Close it or wait for its run to finish, then try again.",
             _ => "This project is in use by another Trackdub process. Close it or wait for its run to finish, then try again."

@@ -53,6 +53,7 @@ public sealed class CliProjectLockTests : IDisposable
         string message = CliProjectLock.DescribeProjectLocked(exception);
 
         Assert.Contains("already in progress", message, StringComparison.Ordinal);
+        Assert.Contains("in this app", message, StringComparison.Ordinal);
         Assert.DoesNotContain("PID", message, StringComparison.Ordinal);
     }
 
@@ -107,6 +108,31 @@ public sealed class CliProjectLockTests : IDisposable
     }
 
     [Fact]
+    public async Task RunPipeline_WhenProjectIsLocked_FailsCleanlyWithProjectLocked()
+    {
+        string project = CreateProjectDirectory();
+        _held.Add(ProjectLock.Acquire(project));
+
+        (int exitCode, string stderr) = await InvokeRunPipelineAsync(project);
+
+        Assert.Equal(Program.ExitPipelineFailure, exitCode);
+        Assert.Contains("projectLocked", stderr, StringComparison.Ordinal);
+        Assert.Contains("already in progress", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryAcquire_ProjectDirectoryUnreachable_ReportsRuntimeUnavailableInsteadOfThrowing()
+    {
+        string blockingFile = Path.Join(_root, Guid.NewGuid().ToString("N") + ".mp4");
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(blockingFile, string.Empty);
+
+        // A path whose parent is a regular file cannot be created, so Acquire fails on I/O
+        // rather than on a lock conflict. The CLI must still exit with a structured error.
+        Assert.Null(CliProjectLock.TryAcquire(Path.Join(blockingFile, "clip.trackdub")));
+    }
+
+    [Fact]
     public void ResolveProjectDirectory_WithoutExplicitOutput_DerivesTrackdubFolderBesideTheMedia()
     {
         var request = new RunPipelineHandler.RunPipelineRequest
@@ -150,6 +176,39 @@ public sealed class CliProjectLockTests : IDisposable
                 project,
                 StageNames.Vad,
                 modelAlias: null,
+                progress: null,
+                TextWriter.Null,
+                CancellationToken.None).ConfigureAwait(false);
+
+            return (exitCode, stderr.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+    }
+
+    private static async Task<(int ExitCode, string Stderr)> InvokeRunPipelineAsync(string project)
+    {
+        using TrackdubSessionFactory factory =
+            new TrackdubSessionFactory(new ServiceCollection().BuildServiceProvider());
+
+        var request = new RunPipelineHandler.RunPipelineRequest
+        {
+            SourceMediaPath = Path.Join(Path.GetDirectoryName(project)!, "clip.mp4"),
+            ProjectOutputDirectory = project,
+            TargetLanguageCode = "fr",
+        };
+
+        TextWriter originalError = Console.Error;
+        using var stderr = new StringWriter();
+        Console.SetError(stderr);
+
+        try
+        {
+            int exitCode = await RunPipelineHandler.ExecuteAsync(
+                factory,
+                request,
                 progress: null,
                 TextWriter.Null,
                 CancellationToken.None).ConfigureAwait(false);
