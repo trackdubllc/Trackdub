@@ -192,6 +192,20 @@ public sealed class CompositionRootTests : IDisposable
     }
 
     /// <summary>
+    /// Regression guard for hosts that offer a "warm caches" action outside the CLI. The desktop
+    /// shell resolves <see cref="IEpContextWarmupService"/> from this same graph, so a DI change
+    /// that dropped it — or left one of its dependencies unregistered — would surface only when a
+    /// user clicked warm, not at build time.
+    /// </summary>
+    [Fact]
+    public void AddTrackdub_registers_ep_context_warmup_service()
+    {
+        using ServiceProvider provider = BuildProvider();
+
+        Assert.NotNull(provider.GetRequiredService<IEpContextWarmupService>());
+    }
+
+    /// <summary>
     /// Regression test for P0-5: IHardwareInfoService and IFfmpegVideoEncoderCapabilities were
     /// unregistered, causing SettingsWindowViewModel's real constructor to be unsatisfiable. DI
     /// silently fell back to the parameterless ctor (LocalModels = null!) → blank Model Manager tab.
