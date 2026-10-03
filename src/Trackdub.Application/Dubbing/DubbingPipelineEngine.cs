@@ -2370,15 +2370,24 @@ public sealed class DubbingPipelineEngine(
             if (string.IsNullOrWhiteSpace(assignment.VoiceVariant))
             {
                 // A prior clone run persists a clone-only model with no voice id. Synthesis
-                // substitutes Kokoro where Kokoro speaks, otherwise a Qwen preset.
+                // substitutes Kokoro where Kokoro speaks, and a Qwen preset where Qwen speaks.
+                // Languages neither speaks stay unassigned, matching BuildUnattendedFallbackVoiceIds.
+                // KokoroPrimaryAlias is a model alias, not a catalog voice id; it only has to fail
+                // IsPresetVoiceId so this speaker is not counted as a Qwen preset.
                 if (!VoiceCloningDefaults.IsCloneOnlyModelAlias(assignment.VoiceModelId))
                 {
                     continue;
                 }
 
-                yield return StockTtsVoiceMatcher.SupportsKokoro(targetLanguage)
-                    ? StockTtsDefaults.KokoroPrimaryAlias
-                    : Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguage);
+                if (StockTtsVoiceMatcher.SupportsKokoro(targetLanguage))
+                {
+                    yield return StockTtsDefaults.KokoroPrimaryAlias;
+                }
+                else if (Qwen3TtsDefaults.SupportsLanguage(targetLanguage))
+                {
+                    yield return Qwen3TtsDefaults.ResolveDefaultPresetVoiceId(targetLanguage);
+                }
+
                 continue;
             }
 

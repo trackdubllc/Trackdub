@@ -706,6 +706,43 @@ public sealed class OrchestrationServiceTests
             state));
     }
 
+    [Fact]
+    public void ApplyPresetVoiceModelSelection_leaves_stock_alias_when_leftover_clone_language_is_unsupported()
+    {
+        TranscriptProjectState state = CreateTranslatedProjectState();
+        state = state with
+        {
+            VoiceAssignments =
+            [
+                VoiceAssignment.Create(
+                    state.ProjectState.Project.Id,
+                    state.Speakers[0].Id,
+                    VoiceCloningDefaults.CosyVoicePrimaryAlias,
+                    voiceVariant: null),
+            ],
+        };
+        var options = new Trackdub.Contracts.Dubbing.DubbingSessionOptions
+        {
+            SourceMediaPath = "source.mp4",
+            TargetLanguageCode = "nl",
+            UseVoiceCloning = false,
+        };
+        var selections = new RuntimeModelSelections(
+            AsrModelOverride.Auto,
+            IsDevBuild: false,
+            new Dictionary<string, ExecutionProviderKind>(),
+            TtsModelAlias: "kokoro-onnx");
+
+        RuntimeModelSelections result = Trackdub.Application.Dubbing.DubbingPipelineEngine
+            .ApplyPresetVoiceModelSelection(selections, options, state);
+
+        Assert.Equal("kokoro-onnx", result.TtsModelAlias);
+        Assert.False(Trackdub.Application.Dubbing.DubbingPipelineEngine.RequiresCompanionCustomVoiceModel(
+            selections,
+            options,
+            state));
+    }
+
     [Theory]
     [InlineData("zh", true)]
     [InlineData("es", false)]
