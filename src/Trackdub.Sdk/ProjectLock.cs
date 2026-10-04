@@ -169,6 +169,10 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Link resolution is best-effort: it only sharpens the registry key, it is not what
+            // enforces exclusion. Falling back to the caller's spelling costs us the in-process
+            // guard (the conflict is then blamed on another process), but the file handle in
+            // Acquire still excludes the second run, so locking correctness is unaffected.
             return fullPath;
         }
     }
