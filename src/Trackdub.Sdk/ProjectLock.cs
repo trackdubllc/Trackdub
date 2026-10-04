@@ -139,15 +139,11 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             // Best-effort close; the OS will release the handle on process exit regardless.
         }
 
-        try
-        {
-            File.Delete(_lockFilePath);
-        }
-        catch
-        {
-            // Best-effort delete; another process may have already removed it,
-            // or the directory may have been deleted.
-        }
+        // The lock file is deliberately left in place. Deleting it here is unsafe on Unix: the
+        // handle above is already gone, so another process can Acquire in the gap and create its
+        // own file, which our delete would then unlink out from under that holder. A third run
+        // would OpenOrCreate a fresh lock and two runs would write the same project. The leftover
+        // is harmless because the next Acquire opens and overwrites it.
     }
 
     /// <summary>
