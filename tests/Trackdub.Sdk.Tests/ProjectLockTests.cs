@@ -216,6 +216,10 @@ public sealed class ProjectLockTests : IDisposable
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, string.Empty);
 
+        // Age the file past the settle delay so it reads as a crashed run's leftover instead
+        // of a holder that has not written its PID yet.
+        File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(5));
+
         // Deny exclusive access while still allowing the production code to inspect the
         // holderless file. FileShare.None also denies that diagnostic read on macOS.
         using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -245,6 +249,10 @@ public sealed class ProjectLockTests : IDisposable
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, """{"pid":12345,"machineN""");
 
+        // Age the file past the settle delay so it reads as a crashed run's leftover instead
+        // of a holder that has not written its PID yet.
+        File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(5));
+
         // Deny exclusive access while still allowing the production code to inspect the
         // corrupt file. FileShare.None also denies that diagnostic read on macOS.
         using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -259,6 +267,27 @@ public sealed class ProjectLockTests : IDisposable
 
         // Assert
         Assert.NotNull(lockHandle);
+    }
+
+    [UnixOnlyFact]
+    public void Acquire_EmptyLockFileWrittenJustNowHeldByAnotherHandle_FailsClosed()
+    {
+        // Arrange — an empty lock file that was written moments ago is indistinguishable
+        // from a live holder that has not flushed its PID yet, and the file is held, so the
+        // exclusive open in Acquire is refused and the holderless branch is reached.
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, string.Empty);
+
+        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Assert.False(CanOpenExclusively(lockPath));
+
+        // Act — the holder may still be live, so unlinking its file must not happen.
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
+        Assert.Null(ex.HoldingProcessId);
+
+        // Assert — the lock file was not deleted.
+        Assert.True(File.Exists(lockPath));
     }
 
     [UnixOnlyFact]

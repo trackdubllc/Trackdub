@@ -15,6 +15,13 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 {
     private const string LockFileName = ".trackdub.lock";
 
+    /// <summary>
+    /// How long a lock file without a readable PID is treated as still being written by a live
+    /// holder that has not flushed its PID yet. Comfortably longer than the create-then-write
+    /// window it guards, and short enough that a crashed run's leftover file clears quickly.
+    /// </summary>
+    private static readonly TimeSpan LockFileSettleDelay = TimeSpan.FromSeconds(2);
+
     private static readonly object s_globalLock = new();
 
     /// <summary>
@@ -94,7 +101,15 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
                 }
 
                 // Stale lock (holder gone) or holderless file (crash between open and write).
-                // Attempt to delete and re-acquire.
+                // A holderless file that was written moments ago is more likely a live holder
+                // that has not flushed its PID yet than a crashed run — the lock file is
+                // created by the exclusive open and only then filled in — so fail closed until
+                // the file has settled.
+                if (read.HoldingPid is null && IsStillBeingWritten(lockFilePath))
+                {
+                    throw new ProjectLockedException(projectDirectory);
+                }
+
                 TryDeleteStaleLockFile(lockFilePath);
 
                 stream = TryOpenExclusive(lockFilePath);
@@ -390,6 +405,29 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             // as stale: on Unix unlink succeeds on a file another process holds open, so
             // reclaiming here would let a second run overwrite a live lock.
             return new LockFileRead(ReadFailed: true, HoldingPid: null);
+        }
+    }
+
+    /// <summary>
+    /// Reports whether the lock file was written so recently that its missing or unreadable
+    /// content is better explained by a holder that has not written its PID yet than by a
+    /// crashed run. Age is the only signal that tells the two apart, and being wrong in the
+    /// reclaiming direction unlinks a live holder's file, so an unreadable timestamp also
+    /// reports true.
+    /// </summary>
+    private static bool IsStillBeingWritten(string lockFilePath)
+    {
+        try
+        {
+            return DateTime.UtcNow - File.GetLastWriteTimeUtc(lockFilePath) < LockFileSettleDelay;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
         }
     }
 
