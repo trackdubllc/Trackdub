@@ -1,3 +1,5 @@
+using System.Security;
+
 using Microsoft.Extensions.DependencyInjection;
 
 using Trackdub.Cli;
@@ -152,6 +154,39 @@ public sealed class CliProjectLockTests : IDisposable
         Assert.Contains("Cannot acquire the project lock for", reported, StringComparison.Ordinal);
         Assert.Contains("clip.trackdub", reported, StringComparison.Ordinal);
         Assert.DoesNotContain("projectLocked", reported, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("security")]
+    [InlineData("unsupported")]
+    public void TryAcquire_DefensiveFilesystemFailures_ReportsRuntimeUnavailableInsteadOfThrowing(string failureKind)
+    {
+        Exception failure = failureKind switch
+        {
+            "security" => new SecurityException("simulated security policy denial"),
+            "unsupported" => new NotSupportedException("simulated unsupported filesystem operation"),
+            _ => throw new ArgumentOutOfRangeException(nameof(failureKind)),
+        };
+
+        TextWriter originalError = Console.Error;
+        using var stderr = new StringWriter();
+        Console.SetError(stderr);
+
+        ProjectLock? acquired;
+        try
+        {
+            acquired = CliProjectLock.TryAcquire(_root, _ => throw failure);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        string reported = stderr.ToString();
+
+        Assert.Null(acquired);
+        Assert.Contains("runtimeUnavailable", reported, StringComparison.Ordinal);
+        Assert.Contains("Cannot acquire the project lock for", reported, StringComparison.Ordinal);
     }
 
     [Fact]

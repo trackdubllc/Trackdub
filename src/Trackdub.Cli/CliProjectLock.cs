@@ -13,16 +13,20 @@ internal static class CliProjectLock
     /// to stderr and returns <see langword="null"/>.
     /// </summary>
     public static ProjectLock? TryAcquire(string projectDirectory)
+        => TryAcquire(projectDirectory, ProjectLock.Acquire);
+
+    internal static ProjectLock? TryAcquire(string projectDirectory, Func<string, ProjectLock> acquire)
     {
         try
         {
-            return ProjectLock.Acquire(projectDirectory);
+            return acquire(projectDirectory);
         }
         catch (ProjectLockedException ex)
         {
             CliErrorReporter.ReportError(ErrorCode.ProjectLocked, DescribeProjectLocked(ex));
             return null;
         }
+        // SecurityException is defensive for providers/hosts that can still surface policy denials.
         catch (Exception ex) when (
             ex is IOException
                 or UnauthorizedAccessException

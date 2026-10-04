@@ -46,15 +46,14 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// Thrown when the project directory is already locked by another active process.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="projectDirectory"/> is null or whitespace.
+    /// Thrown when <paramref name="projectDirectory"/> is null, whitespace, or invalid.
+    /// </exception>
+    /// <exception cref="IOException">
+    /// Thrown when the project directory cannot be created or resolved, or lock information cannot be written.
     /// </exception>
     /// <exception cref="UnauthorizedAccessException">
     /// Thrown when permissions, ownership, or a read-only filesystem prevents creating or accessing
     /// the project directory, lock sidecar, or case-sensitivity probe.
-    /// </exception>
-    /// <exception cref="System.Security.SecurityException">
-    /// Thrown when security policy denies access to the project directory, lock sidecar, or
-    /// case-sensitivity probe.
     /// </exception>
     /// <exception cref="NotSupportedException">
     /// Thrown when the filesystem does not support a required directory or file operation.
