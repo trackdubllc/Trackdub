@@ -28,6 +28,16 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// are the same lock file there; Linux paths are case-sensitive and <c>Ordinal</c> is right.
     /// Without this a case-variant spelling misses the registry and the conflict is reported
     /// without our own PID — exclusion still holds, only the diagnosis degrades.
+    /// <para>
+    /// Case folding is chosen per host OS, not per volume, so it is wrong on a case-sensitive
+    /// macOS volume (APFS or HFS+ formatted as such, or a case-sensitive SMB share) and on an
+    /// NTFS directory with the per-directory case-sensitivity flag set. There
+    /// <c>/Dub</c> and <c>/dub</c> are two free directories with two free lock files, but they
+    /// share one registry key, so the second <see cref="Acquire"/> reports this process as the
+    /// holder of a lock it never took. That conflict clears when the first lock is disposed.
+    /// Probing the volume would cost an extra file-system call on every acquisition; the host-OS
+    /// rule keeps the common case correct instead.
+    /// </para>
     /// </summary>
     private static readonly StringComparer s_pathComparer =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
