@@ -174,6 +174,11 @@ public sealed class ProjectLockTests : IDisposable
         // Act & Assert — a held lock is a conflict, not something to clean up.
         ProjectLockedException ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
         Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+
+        // The holder's FileShare.None denies the PID read, so no holder is named. That relies on
+        // the file system enforcing share modes; on a mount that ignores them the sentinel is
+        // readable and the exception names a PID, so "cross-process reports no PID" is a
+        // property of local volumes, not a guarantee of the API.
         Assert.Null(ex.HoldingProcessId);
 
         // The holder's record must survive: deleting a live lock lets two runs write one project.
