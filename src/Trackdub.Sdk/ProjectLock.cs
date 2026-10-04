@@ -309,7 +309,11 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             {
                 File.Delete(probeFile);
             }
-            catch
+            catch (IOException)
+            {
+                // Best-effort cleanup; a leftover probe file is inert and uniquely named.
+            }
+            catch (UnauthorizedAccessException)
             {
                 // Best-effort cleanup; a leftover probe file is inert and uniquely named.
             }
