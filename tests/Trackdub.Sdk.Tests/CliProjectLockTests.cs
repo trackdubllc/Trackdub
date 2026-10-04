@@ -69,7 +69,7 @@ public sealed class CliProjectLockTests : IDisposable
     }
 
     [Fact]
-    public void TryAcquire_UncontendedProject_ReturnsLockAndReleasesItOnDispose()
+    public void TryAcquire_UncontendedProject_KeepsSidecarAndAllowsReacquire()
     {
         string project = CreateProjectDirectory();
 
@@ -78,7 +78,7 @@ public sealed class CliProjectLockTests : IDisposable
         Assert.True(File.Exists(Path.Join(project, ".trackdub.lock")));
 
         acquired.Dispose();
-        Assert.False(File.Exists(Path.Join(project, ".trackdub.lock")));
+        Assert.True(File.Exists(Path.Join(project, ".trackdub.lock")));
 
         ProjectLock? reacquired = CliProjectLock.TryAcquire(project);
         Assert.NotNull(reacquired);

@@ -122,22 +122,24 @@ public sealed class ProjectLockTests : IDisposable
         Assert.True(Directory.Exists(subDir));
     }
 
-    [Fact]
-    public void Acquire_StaleLockFile_ReclaimsLock()
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-json")]
+    public void Acquire_UnheldLockFileFromPreviousRun_ReusesAndOverwritesDiagnostics(string priorContents)
     {
-        // Arrange — simulate a stale lock by writing a lock file with a non-existent PID.
+        // Arrange — a previous run left a sidecar without a usable holder PID.
         string dir = CreateTempDirectory();
         string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, priorContents);
 
-        // Use a PID that almost certainly doesn't exist (max int).
-        string staleLockContent = """{"pid":2147483647,"timestamp":"2024-01-01T00:00:00Z","machineName":"STALE"}""";
-        File.WriteAllText(lockPath, staleLockContent);
+        // Act — no process owns the file handle, so the OS lock is available regardless
+        // of what diagnostic data remains on disk.
+        using (ProjectLock.Acquire(dir))
+        {
+            Assert.True(File.Exists(lockPath));
+        }
 
-        // Act — should reclaim the stale lock
-        using var lockHandle = ProjectLock.Acquire(dir);
-
-        // Assert
-        Assert.NotNull(lockHandle);
+        Assert.Contains($"\"pid\":{Environment.ProcessId}", File.ReadAllText(lockPath), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -207,17 +209,15 @@ public sealed class ProjectLockTests : IDisposable
     }
 
     [UnixOnlyFact]
-    public void Acquire_EmptyLockFileHeldByAnotherHandle_IsReclaimable()
+    public void Acquire_EmptyLockFileHeldByAnotherHandle_FailsClosed()
     {
-        // Arrange — an empty lock file left behind by a crash between open and write must
-        // not permanently block acquisition. The file has to be *held*, otherwise the
-        // exclusive open in Acquire succeeds and the holderless branch is never reached.
+        // Arrange — another handle owns an empty lock file whose timestamp looks stale.
+        // The active OS lock, not its diagnostic contents or age, determines ownership.
         string dir = CreateTempDirectory();
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, string.Empty);
 
-        // Age the file past the settle delay so it reads as a crashed run's leftover instead
-        // of a holder that has not written its PID yet.
+        // Make it old enough that age-based stale reclamation would incorrectly unlink it.
         File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(5));
 
         // The lock file keeps its default mode, so the exclusive probe below is refused by the
@@ -233,25 +233,24 @@ public sealed class ProjectLockTests : IDisposable
         Assert.False(CanOpenExclusively(lockPath));
         Assert.True(CanReadShared(lockPath));
 
-        // Act
-        using var lockHandle = ProjectLock.Acquire(dir);
+        // Act — an open handle is authoritative even if its contents still look stale.
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
 
-        // Assert
-        Assert.NotNull(lockHandle);
+        // Assert — do not unlink and replace a lock file that another handle still owns.
+        Assert.Null(ex.HoldingProcessId);
+        Assert.True(File.Exists(lockPath));
     }
 
     [UnixOnlyFact]
-    public void Acquire_CorruptLockFileHeldByAnotherHandle_IsReclaimable()
+    public void Acquire_CorruptLockFileHeldByAnotherHandle_FailsClosed()
     {
-        // Arrange — a readable lock file whose contents are truncated JSON. A parse failure
-        // carries no PID, so it must stay on the reclaim path instead of reporting a lock
-        // conflict that nothing can ever clear.
+        // Arrange — another handle owns a lock file with malformed diagnostic contents.
+        // A parse failure must not authorize unlinking a file that is still actively held.
         string dir = CreateTempDirectory();
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, """{"pid":12345,"machineN""");
 
-        // Age the file past the settle delay so it reads as a crashed run's leftover instead
-        // of a holder that has not written its PID yet.
+        // Make it old enough that age-based stale reclamation would incorrectly unlink it.
         File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(5));
 
         // The lock file keeps its default mode, so the exclusive probe below is refused by the
@@ -267,12 +266,14 @@ public sealed class ProjectLockTests : IDisposable
         Assert.False(CanOpenExclusively(lockPath));
         Assert.True(CanReadShared(lockPath));
 
-        // Act
-        using var lockHandle = ProjectLock.Acquire(dir);
+        // Act — an open handle is authoritative even if its contents still look stale.
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
 
-        // Assert
-        Assert.NotNull(lockHandle);
+        // Assert — do not unlink and replace a lock file that another handle still owns.
+        Assert.Null(ex.HoldingProcessId);
+        Assert.True(File.Exists(lockPath));
     }
+
 
     [UnixOnlyFact]
     public void Acquire_EmptyLockFileWrittenJustNowHeldByAnotherHandle_FailsClosed()
@@ -471,6 +472,7 @@ public sealed class ProjectLockTests : IDisposable
         // Act & Assert — the sibling must not be mistaken for a case-insensitive volume,
         // because folding case would report a conflict between two real projects.
         Assert.False(ProjectLock.FileSystemIsCaseInsensitive(lower));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(lower));
     }
 
     /// <summary>
