@@ -231,6 +231,27 @@ public sealed class ProjectLockTests : IDisposable
     }
 
     [UnixOnlyFact]
+    public void Acquire_CorruptLockFileHeldByAnotherHandle_IsReclaimable()
+    {
+        // Arrange — a readable lock file whose contents are truncated JSON. A parse failure
+        // carries no PID, so it must stay on the reclaim path instead of reporting a lock
+        // conflict that nothing can ever clear.
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, """{"pid":12345,"machineN""");
+
+        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
+        Assert.False(CanOpenExclusively(lockPath));
+
+        // Act
+        using var lockHandle = ProjectLock.Acquire(dir);
+
+        // Assert
+        Assert.NotNull(lockHandle);
+    }
+
+    [UnixOnlyFact]
     public void Acquire_UnreadableLockFile_DoesNotDeleteAndFailsClosed()
     {
         // Arrange — a lock file whose content cannot be read (mode 000).

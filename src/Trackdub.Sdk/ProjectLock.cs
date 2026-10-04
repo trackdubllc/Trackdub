@@ -282,6 +282,25 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
             return new LockFileRead(ReadFailed: false, HoldingPid: null);
         }
+        catch (JsonException)
+        {
+            // The file is readable but its contents are not lock info — for example a crash
+            // left partial JSON. There is no PID to act on and nothing was held that we can
+            // observe, so keep it reclaimable rather than blocking the project until someone
+            // deletes the lock file by hand.
+            return new LockFileRead(ReadFailed: false, HoldingPid: null);
+        }
+        catch (FileNotFoundException)
+        {
+            // The holder released and deleted the lock file between our failed exclusive open
+            // and this read, so there is nothing left to protect.
+            return new LockFileRead(ReadFailed: false, HoldingPid: null);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // The lock file's directory is gone, so there is no live holder either.
+            return new LockFileRead(ReadFailed: false, HoldingPid: null);
+        }
         catch
         {
             // The file could not be read, so the holder is unknown. This must not be treated
