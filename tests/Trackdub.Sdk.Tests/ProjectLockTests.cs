@@ -181,22 +181,15 @@ public sealed class ProjectLockTests : IDisposable
         Assert.Equal(sentinel, File.ReadAllText(lockPath));
     }
 
-    [Fact]
+    [SymlinkFact]
     public void Acquire_ThroughASymlinkToALockedDirectory_ReportsThisProcess()
     {
         // Arrange — a symlink and its target must share one registry entry, otherwise the aliased
         // path misses the in-process guard and the conflict is blamed on another process.
+        // Hosts that cannot create links are skipped by [SymlinkFact], never silently passed.
         string real = CreateTempDirectory();
         string link = Path.Join(Path.GetDirectoryName(real)!, Guid.NewGuid().ToString("N") + "-link");
-
-        try
-        {
-            Directory.CreateSymbolicLink(link, real);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return; // The file system or the account cannot create links; nothing to assert.
-        }
+        Directory.CreateSymbolicLink(link, real);
 
         try
         {
