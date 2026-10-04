@@ -286,6 +286,7 @@ public sealed class ProjectLockTests : IDisposable
 
         using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         Assert.False(CanOpenExclusively(lockPath));
+        Assert.True(CanReadShared(lockPath));
 
         // Act — the holder may still be live, so unlinking its file must not happen.
         var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
