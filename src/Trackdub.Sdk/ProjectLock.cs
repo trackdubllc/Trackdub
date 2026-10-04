@@ -216,8 +216,9 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Returns whether a process with the given id is running on this machine. A PID recorded on
-    /// another machine, or recycled onto an unrelated process, cannot be resolved here and is
-    /// treated as not alive so it is never reported as the holder.
+    /// another machine is usually absent here and treated as not alive. A PID that has been
+    /// recycled onto an unrelated live process cannot be distinguished from the original holder,
+    /// so it is reported as alive and may be named as the holder even though it is unrelated.
     /// </summary>
     private static bool IsProcessAlive(int processId)
     {
