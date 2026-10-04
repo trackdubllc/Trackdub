@@ -363,6 +363,24 @@ public sealed class ProjectLockTests : IDisposable
     }
 
     [Fact]
+    public void BuildRegistryKey_FoldsCaseOnlyOnCaseInsensitiveVolumes()
+    {
+        // Arrange — one project named two ways, without relying on how the host volume spells
+        // case: the leaf carries letters, so the upper-cased spelling always differs.
+        string dir = CreateTempDirectory();
+        string flippedDir = Path.Join(Path.GetDirectoryName(dir)!, Path.GetFileName(dir) + "project".ToUpperInvariant());
+
+        // Act & Assert — on a case-insensitive volume both spellings name one project and must
+        // share a key; on a case-sensitive volume they name two projects and must not.
+        Assert.Equal(
+            ProjectLock.BuildRegistryKey(dir, caseInsensitiveFileSystem: true),
+            ProjectLock.BuildRegistryKey(flippedDir, caseInsensitiveFileSystem: true));
+        Assert.NotEqual(
+            ProjectLock.BuildRegistryKey(dir, caseInsensitiveFileSystem: false),
+            ProjectLock.BuildRegistryKey(flippedDir, caseInsensitiveFileSystem: false));
+    }
+
+    [Fact]
     public void Acquire_SameDirectory_WithDifferentCase_SharesOneRegistryKey()
     {
         // Arrange — a GUID name contains hex letters, so flipping the case of the leaf

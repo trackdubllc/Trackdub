@@ -234,13 +234,17 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// leave case-sensitive volumes untouched, where <c>Foo</c> and <c>foo</c> really are
     /// two directories and folding would report a false conflict.
     /// </summary>
-    private static string BuildRegistryKey(string canonicalPath)
-    {
-        string lockFilePath = Path.Join(canonicalPath, LockFileName);
-        return FileSystemIsCaseInsensitive(canonicalPath)
-            ? lockFilePath.ToUpperInvariant()
-            : lockFilePath;
-    }
+    private static string BuildRegistryKey(string canonicalPath) =>
+        BuildRegistryKey(canonicalPath, FileSystemIsCaseInsensitive(canonicalPath));
+
+    /// <summary>
+    /// Key-building half of <see cref="BuildRegistryKey(string)"/>, taking the case-sensitivity
+    /// answer from the caller so both volume kinds can be exercised on any host.
+    /// </summary>
+    internal static string BuildRegistryKey(string canonicalPath, bool caseInsensitiveFileSystem) =>
+        caseInsensitiveFileSystem
+            ? Path.Join(canonicalPath, LockFileName).ToUpperInvariant()
+            : Path.Join(canonicalPath, LockFileName);
 
     /// <summary>
     /// Reports whether upper-casing a name still reaches the same entry, which is exactly the
