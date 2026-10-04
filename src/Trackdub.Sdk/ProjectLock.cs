@@ -275,7 +275,11 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             {
                 File.Delete(probeFile);
             }
-            catch
+            catch (IOException)
+            {
+                // Cleanup is best-effort; the unique probe cannot affect lock identity.
+            }
+            catch (UnauthorizedAccessException)
             {
                 // Cleanup is best-effort; the unique probe cannot affect lock identity.
             }
