@@ -7,7 +7,11 @@ namespace Trackdub.Sdk;
 /// <summary>
 /// File-based project directory lock that prevents concurrent runs targeting the same project.
 /// Uses an exclusive <see cref="FileStream"/> on a <c>.trackdub.lock</c> file to detect conflicts.
-/// Stale locks from crashed processes are automatically reclaimed.
+/// The sidecar persists between runs and its diagnostic metadata is overwritten after acquisition;
+/// the open file handle, rather than the contents or age of the file, determines lock ownership.
+/// Do not manually remove the sidecar while a run may hold its handle.
+/// Lock identity follows symlinks (and case on case-insensitive file systems) so alternate paths
+/// naming the same project still conflict.
 /// </summary>
 public sealed class ProjectLock : IDisposable, IAsyncDisposable
 {
@@ -16,20 +20,20 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     private static readonly object s_globalLock = new();
 
     /// <summary>
-    /// In-process registry of currently held lock paths (canonical, lower-case on
+    /// In-process registry of currently held lock paths (canonical, and case-folded on
     /// case-insensitive file systems).  On Linux, <c>FileShare.None</c> is not
     /// enforced for intra-process opens, so we need this secondary guard to stop the
     /// same process from acquiring the same directory lock twice.
     /// </summary>
     private static readonly HashSet<string> s_heldPaths = new(StringComparer.Ordinal);
 
-    private readonly string _lockFilePath;
+    private readonly string _registryKey;
     private FileStream? _lockStream;
     private volatile bool _disposed;
 
-    private ProjectLock(string lockFilePath, FileStream lockStream)
+    private ProjectLock(string registryKey, FileStream lockStream)
     {
-        _lockFilePath = lockFilePath;
+        _registryKey = registryKey;
         _lockStream = lockStream;
     }
 
@@ -42,17 +46,29 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// Thrown when the project directory is already locked by another active process.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// Thrown when <paramref name="projectDirectory"/> is null or whitespace.
+    /// Thrown when <paramref name="projectDirectory"/> is null, whitespace, or invalid.
+    /// </exception>
+    /// <exception cref="IOException">
+    /// Thrown when the project directory cannot be created or resolved, or lock information cannot be written.
+    /// </exception>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when permissions, ownership, or a read-only filesystem prevents creating or accessing
+    /// the project directory, lock sidecar, or case-sensitivity probe.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the filesystem does not support a required directory or file operation.
     /// </exception>
     public static ProjectLock Acquire(string projectDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
 
         string fullPath = Path.GetFullPath(projectDirectory);
-        string lockFilePath = Path.Join(fullPath, LockFileName);
+        string canonicalPath = CanonicalizeDirectoryPath(fullPath);
+        string lockFilePath = Path.Join(canonicalPath, LockFileName);
 
         // Ensure the directory exists so we can create the lock file.
-        Directory.CreateDirectory(fullPath);
+        Directory.CreateDirectory(canonicalPath);
+        string registryKey = BuildRegistryKey(canonicalPath);
 
         // Serialize lock acquisition within this process to prevent races
         // between threads trying to lock the same directory.
@@ -60,7 +76,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         {
             // Intra-process guard: on Linux FileShare.None is not enforced between
             // FileStream instances within the same process, so we maintain our own set.
-            if (s_heldPaths.Contains(lockFilePath))
+            if (s_heldPaths.Contains(registryKey))
             {
                 throw new ProjectLockedException(projectDirectory, Environment.ProcessId);
             }
@@ -70,23 +86,21 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
             if (stream is null)
             {
-                // Lock file is held by another process. Check if it's stale.
-                int? holdingPid = TryReadHoldingProcessId(lockFilePath);
-
-                if (holdingPid.HasValue && IsProcessAlive(holdingPid.Value))
-                {
-                    // The holding process is still running — genuine conflict.
-                    throw new ProjectLockedException(projectDirectory, holdingPid.Value);
-                }
-
-                // Stale lock: the process that created it is no longer running.
-                // Attempt to delete and re-acquire.
-                TryDeleteStaleLockFile(lockFilePath);
-
+                // The exclusive-open failure is authoritative: a file handle still owns the
+                // lock even if its diagnostic contents are empty, corrupt, or stale. Read its
+                // PID for diagnostics, then retry once in case the holder released the handle
+                // while we were checking. Never unlink the path: another process could acquire
+                // a replacement between our stale check and delete, causing both runs to hold
+                // different files under the same lock name.
+                LockFileRead read = TryReadHoldingProcessId(lockFilePath);
                 stream = TryOpenExclusive(lockFilePath);
                 if (stream is null)
                 {
-                    // Another process grabbed it between our delete and re-open.
+                    if (!read.ReadFailed && read.HoldingPid is { } holdingPid && IsProcessAlive(holdingPid))
+                    {
+                        throw new ProjectLockedException(projectDirectory, holdingPid);
+                    }
+
                     throw new ProjectLockedException(projectDirectory);
                 }
             }
@@ -94,8 +108,8 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             // Write diagnostic info (PID + timestamp) to the lock file.
             WriteLockInfo(stream);
 
-            s_heldPaths.Add(lockFilePath);
-            return new ProjectLock(lockFilePath, stream);
+            s_heldPaths.Add(registryKey);
+            return new ProjectLock(registryKey, stream);
         }
     }
 
@@ -128,7 +142,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         // the file lock is gone.
         lock (s_globalLock)
         {
-            s_heldPaths.Remove(_lockFilePath);
+            s_heldPaths.Remove(_registryKey);
         }
 
         try
@@ -142,20 +156,156 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             // Best-effort close; the OS will release the handle on process exit regardless.
         }
 
+        // Keep the sidecar file in place after releasing its handle. Deleting by path here
+        // races with a new Acquire: it can acquire the same file between Dispose and Delete,
+        // then have its live lock unlinked underneath it on Unix. The next Acquire safely
+        // reuses the persistent file and overwrites the diagnostic metadata after locking it.
+    }
+
+    /// <summary>
+    /// Resolves a path to its physical form, following symlinks in every component, so that two
+    /// paths naming the same directory through different links produce the same identity for the
+    /// in-process registry. On Windows the OS enforces <see cref="FileShare.None"/> between
+    /// <see cref="FileStream"/> instances in one process, so the registry key only needs the
+    /// lexical normalization that <see cref="Path.GetFullPath"/> already provides.
+    /// </summary>
+    private static string CanonicalizeDirectoryPath(string fullPath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return fullPath;
+        }
+
+        string root = Path.GetPathRoot(fullPath) ?? Path.DirectorySeparatorChar.ToString();
+
+        // Path.GetFullPath preserves a trailing separator. Left in place it makes the first
+        // component below empty, the walk stops before collecting anything, and the whole
+        // path collapses to the root — so the lock would be placed in the file system root
+        // instead of the project directory. Trim it, keeping the root itself intact.
+        string trimmed = fullPath;
+        while (trimmed.Length > root.Length && trimmed[^1] == Path.DirectorySeparatorChar)
+        {
+            trimmed = trimmed[..^1];
+        }
+
+        // Collect the components beneath the root so each can be checked for being a symlink.
+        var parts = new List<string>();
+        string remaining = trimmed;
+        while (remaining.Length > root.Length)
+        {
+            string name = Path.GetFileName(remaining);
+            if (name.Length == 0)
+            {
+                break;
+            }
+
+            parts.Insert(0, name);
+            remaining = Path.GetDirectoryName(remaining) ?? root;
+        }
+
+        string resolved = root;
+        foreach (string part in parts)
+        {
+            resolved = Path.Join(resolved, part);
+            if (Directory.Exists(resolved) &&
+                new DirectoryInfo(resolved).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+            {
+                // Resolve links in the target's ancestors as well. A link target may use
+                // another alias for the same filesystem path (for example /var vs
+                // /private/var on macOS), otherwise two spellings can still get different
+                // registry keys after this component is followed.
+                resolved = CanonicalizeDirectoryPath(target.FullName);
+            }
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
+    /// Builds the in-process registry key for a canonical project path. Symlink resolution
+    /// alone leaves case unnormalized, so on a case-insensitive file system — where the OS
+    /// file lock is advisory and this registry is the only intra-process guard — two paths
+    /// differing only in case would name one project under two keys. Case-fold there and
+    /// leave case-sensitive volumes untouched, where <c>Foo</c> and <c>foo</c> really are
+    /// two directories and folding would report a false conflict.
+    /// </summary>
+    private static string BuildRegistryKey(string canonicalPath) =>
+        BuildRegistryKey(canonicalPath, FileSystemIsCaseInsensitive(canonicalPath));
+
+    /// <summary>
+    /// Key-building half of <see cref="BuildRegistryKey(string)"/>, taking the case-sensitivity
+    /// answer from the caller so both volume kinds can be exercised on any host.
+    /// </summary>
+    internal static string BuildRegistryKey(string canonicalPath, bool caseInsensitiveFileSystem) =>
+        caseInsensitiveFileSystem
+            ? Path.Join(canonicalPath, LockFileName).ToUpperInvariant()
+            : Path.Join(canonicalPath, LockFileName);
+
+    /// <summary>
+    /// Reports whether upper-casing a name still reaches the same entry, which is exactly the
+    /// question the registry key depends on. The project directory is created before this probe,
+    /// so the temporary entry stays inside the project instead of touching a shared ancestor.
+    /// The probe creates one uniquely named entry there and asks the file system for that same
+    /// entry under an upper-cased spelling: mere existence of the upper-cased spelling would also
+    /// be answered by a case-variant *sibling* on a case-sensitive volume, which would report
+    /// such a volume as case-insensitive and fold two distinct projects onto one registry key.
+    /// A volume that cannot be probed reports false, which keeps the previous behaviour rather
+    /// than guessing.
+    /// </summary>
+    internal static bool FileSystemIsCaseInsensitive(string directoryPath)
+    {
+        DirectoryInfo probe = new(directoryPath);
+        if (!probe.Exists)
+        {
+            return false;
+        }
+
+        string probeName = $".trackdub-case-probe-{Guid.NewGuid():N}";
+        string probeFile = Path.Join(probe.FullName, probeName);
+
         try
         {
-            File.Delete(_lockFilePath);
+            File.WriteAllText(probeFile, string.Empty);
+
+            return File.Exists(Path.Join(probe.FullName, probeName.ToUpperInvariant()));
         }
-        catch
+        catch (IOException)
         {
-            // Best-effort delete; another process may have already removed it,
-            // or the directory may have been deleted.
+            // Cannot create the probe here, so the question stays unanswered.
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(probeFile);
+            }
+            catch (IOException)
+            {
+                // Best-effort cleanup; the unique probe cannot affect lock identity.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Best-effort cleanup; the unique probe cannot affect lock identity.
+            }
+            catch (NotSupportedException)
+            {
+                // Best-effort cleanup for filesystems that do not support this operation.
+            }
+            catch (System.Security.SecurityException)
+            {
+                // Best-effort cleanup when filesystem security policy denies deletion.
+            }
         }
     }
 
     /// <summary>
     /// Attempts to open the lock file with exclusive access (no sharing).
-    /// Returns null if the file is already locked by another process.
+    /// Returns null if the file is already in use; permission failures propagate to the caller.
     /// </summary>
     private static FileStream? TryOpenExclusive(string lockFilePath)
     {
@@ -173,17 +323,15 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             // File is locked by another process.
             return null;
         }
-        catch (UnauthorizedAccessException)
-        {
-            // Permission denied — treat as locked.
-            return null;
-        }
     }
 
     /// <summary>
     /// Attempts to read the PID from an existing lock file (best-effort, non-exclusive read).
+    /// Distinguishes "the file could not be read at all" from "the file is readable but carries
+    /// no PID" so diagnostics can report a holder only when the data supports one. Acquisition
+    /// itself is decided by the exclusive file handle, never by stale or missing metadata.
     /// </summary>
-    private static int? TryReadHoldingProcessId(string lockFilePath)
+    private static LockFileRead TryReadHoldingProcessId(string lockFilePath)
     {
         try
         {
@@ -200,22 +348,45 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             string content = sr.ReadToEnd();
 
             if (string.IsNullOrWhiteSpace(content))
-                return null;
+            {
+                // A lock file without a PID has an unknown holder; acquisition still follows
+                // the file handle, not its diagnostic contents.
+                return new LockFileRead(ReadFailed: false, HoldingPid: null);
+            }
 
             // Parse the JSON lock info.
             using var doc = JsonDocument.Parse(content);
             if (doc.RootElement.TryGetProperty("pid", out JsonElement pidElement) &&
                 pidElement.TryGetInt32(out int pid))
             {
-                return pid;
+                return new LockFileRead(ReadFailed: false, HoldingPid: pid);
             }
+
+            return new LockFileRead(ReadFailed: false, HoldingPid: null);
+        }
+        catch (JsonException)
+        {
+            // The file is readable but its contents are not lock info. Keep the holder unknown;
+            // the exclusive handle retry below still decides whether the lock is available.
+            return new LockFileRead(ReadFailed: false, HoldingPid: null);
+        }
+        catch (FileNotFoundException)
+        {
+            // The path disappeared while reading the diagnostic data. The exclusive-open retry
+            // below determines whether another holder acquired it or the path is free.
+            return new LockFileRead(ReadFailed: false, HoldingPid: null);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // The lock file's directory is gone, so there is no live holder either.
+            return new LockFileRead(ReadFailed: false, HoldingPid: null);
         }
         catch
         {
-            // Any failure reading the lock file — we can't determine the PID.
+            // The holder is unknown. Do not report a PID without readable diagnostic data;
+            // acquisition still fails closed if the exclusive-open retry is denied.
+            return new LockFileRead(ReadFailed: true, HoldingPid: null);
         }
-
-        return null;
     }
 
     /// <summary>
@@ -241,22 +412,6 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Attempts to delete a stale lock file. Failures are silently ignored.
-    /// </summary>
-    private static void TryDeleteStaleLockFile(string lockFilePath)
-    {
-        try
-        {
-            File.Delete(lockFilePath);
-        }
-        catch
-        {
-            // Best-effort; if we can't delete it, TryOpenExclusive will fail
-            // and we'll throw ProjectLockedException.
-        }
-    }
-
-    /// <summary>
     /// Writes diagnostic information (PID and timestamp) to the lock file.
     /// </summary>
     private static void WriteLockInfo(FileStream stream)
@@ -274,6 +429,15 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         JsonSerializer.Serialize(stream, lockInfo);
         stream.Flush();
     }
+
+    /// <summary>
+    /// Result of reading a lock file's holder PID. <see cref="ReadFailed"/> is set when the file
+    /// could not be read at all (the holder is unknown); a readable file without a PID — such as
+    /// one left empty by a crash between open and write — reports <c>ReadFailed = false</c> with a
+    /// null PID. In either case, the exclusive file handle, not its contents, determines whether
+    /// the lock is available.
+    /// </summary>
+    private readonly record struct LockFileRead(bool ReadFailed, int? HoldingPid);
 
     /// <summary>
     /// JSON structure written to the lock file for diagnostics.

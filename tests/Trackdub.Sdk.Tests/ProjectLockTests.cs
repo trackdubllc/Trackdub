@@ -122,22 +122,24 @@ public sealed class ProjectLockTests : IDisposable
         Assert.True(Directory.Exists(subDir));
     }
 
-    [Fact]
-    public void Acquire_StaleLockFile_ReclaimsLock()
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-json")]
+    public void Acquire_UnheldLockFileFromPreviousRun_ReusesAndOverwritesDiagnostics(string priorContents)
     {
-        // Arrange — simulate a stale lock by writing a lock file with a non-existent PID.
+        // Arrange — a previous run left a sidecar without a usable holder PID.
         string dir = CreateTempDirectory();
         string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, priorContents);
 
-        // Use a PID that almost certainly doesn't exist (max int).
-        string staleLockContent = """{"pid":2147483647,"timestamp":"2024-01-01T00:00:00Z","machineName":"STALE"}""";
-        File.WriteAllText(lockPath, staleLockContent);
+        // Act — no process owns the file handle, so the OS lock is available regardless
+        // of what diagnostic data remains on disk.
+        using (ProjectLock.Acquire(dir))
+        {
+            Assert.True(File.Exists(lockPath));
+        }
 
-        // Act — should reclaim the stale lock
-        using var lockHandle = ProjectLock.Acquire(dir);
-
-        // Assert
-        Assert.NotNull(lockHandle);
+        Assert.Contains($"\"pid\":{Environment.ProcessId}", File.ReadAllText(lockPath), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -193,6 +195,300 @@ public sealed class ProjectLockTests : IDisposable
         Assert.Contains("12345", ex.Message);
     }
 
+    [UnixOnlyFact]
+    public void Acquire_DirectoryWithTrailingSeparator_LocksTheProjectDirectory()
+    {
+        // Arrange — a caller-supplied output directory can arrive with a trailing separator.
+        string dir = CreateTempDirectory();
+
+        // Act
+        using var lockHandle = ProjectLock.Acquire(dir + Path.DirectorySeparatorChar);
+
+        // Assert — the lock file lands in the project directory, not in the file system root.
+        Assert.True(File.Exists(Path.Join(dir, ".trackdub.lock")));
+    }
+
+    [UnixOnlyFact]
+    public void Acquire_EmptyLockFileHeldByAnotherHandle_FailsClosed()
+    {
+        // Arrange — another handle owns an empty lock file whose timestamp looks stale.
+        // The active OS lock, not its diagnostic contents or age, determines ownership.
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, string.Empty);
+
+        // The lock file keeps its default mode, so the exclusive probe below is refused by the
+        // holder's share mode alone and not by file permissions, which would make the premise
+        // hold for the wrong reason. The holder shares the file so the production read for its
+        // diagnostic still works: on Unix the holder takes a shared lock for any FileShare other
+        // than None.
+        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+        // The premises of the test: the exclusive open must be refused and the shared read
+        // must succeed. If either fails the branch under test is skipped and this test would
+        // pass against any code.
+        Assert.False(CanOpenExclusively(lockPath));
+        Assert.True(CanReadShared(lockPath));
+
+        // Act — an open handle is authoritative even if its contents still look stale.
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
+
+        // Assert — do not unlink and replace a lock file that another handle still owns.
+        Assert.Null(ex.HoldingProcessId);
+        Assert.True(File.Exists(lockPath));
+    }
+
+    [UnixOnlyFact]
+    public void Acquire_CorruptLockFileHeldByAnotherHandle_FailsClosed()
+    {
+        // Arrange — another handle owns a lock file with malformed diagnostic contents.
+        // A parse failure must not authorize unlinking a file that is still actively held.
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, """{"pid":12345,"machineN""");
+
+        // The lock file keeps its default mode, so the exclusive probe below is refused by the
+        // holder's share mode alone and not by file permissions, which would make the premise
+        // hold for the wrong reason. The holder shares the file so the production read for its
+        // diagnostic still works: on Unix the holder takes a shared lock for any FileShare other
+        // than None.
+        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+        // The premises of the test: the exclusive open must be refused and the shared read
+        // must succeed. If either fails the branch under test is skipped and this test would
+        // pass against any code.
+        Assert.False(CanOpenExclusively(lockPath));
+        Assert.True(CanReadShared(lockPath));
+
+        // Act — an open handle is authoritative even if its contents still look stale.
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
+
+        // Assert — do not unlink and replace a lock file that another handle still owns.
+        Assert.Null(ex.HoldingProcessId);
+        Assert.True(File.Exists(lockPath));
+    }
+
+    [UnixOnlyFact]
+    public void Acquire_UnreadableLockFile_ReportsPermissionFailureWithoutDeleting()
+    {
+        // Arrange — a lock file whose content cannot be read (mode 000).
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, """{"pid":2147483647,"timestamp":"2024-01-01T00:00:00Z","machineName":"STALE"}""");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(lockPath, UnixFileMode.None);
+        }
+
+        // If the environment can still read the file (for example running as root), the
+        // premise of the test — an unreadable lock file — does not hold, so there is
+        // nothing to assert.
+        try
+        {
+            using var probe = new FileStream(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (probe.CanRead)
+            {
+                return;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Expected — the file is unreadable; proceed with the assertion.
+        }
+        catch (IOException)
+        {
+            // Expected — the file is unreadable; proceed with the assertion.
+        }
+
+        // Act — permissions prevent acquiring the sidecar. Report the permission failure,
+        // not a fictitious active holder, and leave the existing file untouched.
+        Assert.Throws<UnauthorizedAccessException>(() => ProjectLock.Acquire(dir));
+
+        // Assert
+        Assert.True(File.Exists(lockPath));
+    }
+
+    [UnixOnlyFact]
+    public void Acquire_SamePhysicalDirectory_ViaSymlink_ThrowsProjectLockedException()
+    {
+        // Arrange — a symlink naming the same directory as the real path.
+        string parent = CreateTempDirectory();
+        string realProject = Path.Join(parent, "real");
+        Directory.CreateDirectory(realProject);
+        string link = Path.Join(parent, "alias");
+        Directory.CreateSymbolicLink(link, realProject);
+
+        using var firstLock = ProjectLock.Acquire(realProject);
+
+        // Act & Assert — the symlink path resolves to the same lock identity, so the
+        // in-process registry reports a conflict rather than allowing a second run.
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(link));
+        Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+        Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
+    }
+
+    [UnixOnlyFact]
+    public void Acquire_SamePhysicalDirectory_ViaSymlinkedAncestor_ThrowsProjectLockedException()
+    {
+        // Arrange — a symlinked ancestor: "/parent/alias/proj" names the same directory
+        // as "/parent/real/proj".
+        string parent = CreateTempDirectory();
+        string realRoot = Path.Join(parent, "real");
+        string realProject = Path.Join(realRoot, "proj");
+        Directory.CreateDirectory(realProject);
+        string linkRoot = Path.Join(parent, "alias");
+        Directory.CreateSymbolicLink(linkRoot, realRoot);
+
+        using var firstLock = ProjectLock.Acquire(realProject);
+
+        // Act & Assert
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(Path.Join(linkRoot, "proj")));
+        Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+        Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
+    }
+
+    [UnixOnlyFact]
+    public void Dispose_ReleaseViaRealPath_AllowsAcquireViaSymlink()
+    {
+        // Arrange — a symlink naming the same directory as the real path.
+        string parent = CreateTempDirectory();
+        string realProject = Path.Join(parent, "real");
+        Directory.CreateDirectory(realProject);
+        string link = Path.Join(parent, "alias");
+        Directory.CreateSymbolicLink(link, realProject);
+
+        // Act — release the lock acquired through the real path...
+        var firstLock = ProjectLock.Acquire(realProject);
+        firstLock.Dispose();
+
+        // Assert — ...then re-acquire through the symlink succeeds because both resolve
+        // to the same registry key.
+        using var secondLock = ProjectLock.Acquire(link);
+        Assert.NotNull(secondLock);
+    }
+
+    [Fact]
+    public void BuildRegistryKey_FoldsCaseOnlyOnCaseInsensitiveVolumes()
+    {
+        // Arrange — one project named two ways, without relying on how the host volume spells
+        // case: the leaf carries letters, so the upper-cased spelling always differs.
+        string dir = CreateTempDirectory();
+        string flippedDir = Path.Join(Path.GetDirectoryName(dir)!, Path.GetFileName(dir).ToUpperInvariant());
+
+        // Act & Assert — on a case-insensitive volume both spellings name one project and must
+        // share a key; on a case-sensitive volume they name two projects and must not.
+        Assert.Equal(
+            ProjectLock.BuildRegistryKey(dir, caseInsensitiveFileSystem: true),
+            ProjectLock.BuildRegistryKey(flippedDir, caseInsensitiveFileSystem: true));
+        Assert.NotEqual(
+            ProjectLock.BuildRegistryKey(dir, caseInsensitiveFileSystem: false),
+            ProjectLock.BuildRegistryKey(flippedDir, caseInsensitiveFileSystem: false));
+    }
+
+    [Fact]
+    public void Acquire_SameDirectory_WithDifferentCase_SharesOneRegistryKey()
+    {
+        // Arrange — a GUID name contains hex letters, so flipping the case of the leaf
+        // either names the same directory (case-insensitive file system) or a different
+        // one (case-sensitive file system). The registry key must follow suit.
+        string dir = CreateTempDirectory();
+        string flippedDir = Path.Join(Path.GetDirectoryName(dir)!, Path.GetFileName(dir).ToUpperInvariant());
+        bool sameDirectory = flippedDir == dir || Directory.Exists(flippedDir);
+
+        if (!sameDirectory)
+        {
+            _tempDirs.Add(flippedDir);
+        }
+
+        using var firstLock = ProjectLock.Acquire(dir);
+
+        if (sameDirectory)
+        {
+            // Act & Assert — one project under two spellings, so the registry reports the
+            // conflict instead of letting a second run share it.
+            var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(flippedDir));
+            Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+            Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
+        }
+        else
+        {
+            // Act & Assert — two distinct directories, so folding case would report a
+            // false conflict for a project nobody holds.
+            using var secondLock = ProjectLock.Acquire(flippedDir);
+            Assert.NotNull(secondLock);
+        }
+    }
+
+    [UnixOnlyFact]
+    public void FileSystemIsCaseInsensitive_CaseVariantSibling_ReportsCaseSensitive()
+    {
+        // Arrange — a case-sensitive volume holding two directories that differ only in case.
+        // The upper-cased spelling exists, but it is a different directory.
+        string parent = CreateTempDirectory();
+        string lower = Path.Join(parent, "project");
+        string upper = Path.Join(parent, "PROJECT");
+        Directory.CreateDirectory(lower);
+        if (Directory.Exists(upper))
+        {
+            // Case-insensitive volume: both spellings are one directory, so there is
+            // nothing to prove here.
+            return;
+        }
+
+        Directory.CreateDirectory(upper);
+        _tempDirs.Add(upper);
+
+        // Act & Assert — the sibling must not be mistaken for a case-insensitive volume,
+        // because folding case would report a conflict between two real projects.
+        Assert.False(ProjectLock.FileSystemIsCaseInsensitive(lower));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(lower));
+    }
+
+    /// <summary>
+    /// Reports whether the lock file can be opened the way <see cref="ProjectLock"/> opens
+    /// it. Used to prove that a test's premise — the exclusive open fails — actually holds
+    /// on this platform, so the branch under test is reached.
+    /// </summary>
+    private static bool CanOpenExclusively(string lockPath)
+    {
+        try
+        {
+            using FileStream probe = new(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reports whether the lock file's contents can be read the way <see cref="ProjectLock"/>
+    /// reads them. Used to prove a test's premise — the holder does not block the diagnostic
+    /// read — so the branch under test is reached.
+    /// </summary>
+    private static bool CanReadShared(string lockPath)
+    {
+        try
+        {
+            using FileStream probe = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            _ = probe.ReadByte();
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     private string CreateTempDirectory()
     {
         string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
@@ -207,6 +503,22 @@ public sealed class ProjectLockTests : IDisposable
         {
             try { Directory.Delete(dir, recursive: true); }
             catch { /* best-effort cleanup */ }
+        }
+    }
+}
+
+/// <summary>
+/// Marks a test whose reproduction depends on Unix file, permission and symlink semantics.
+/// Reports as skipped on Windows instead of returning early and reporting as passed.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public sealed class UnixOnlyFactAttribute : FactAttribute
+{
+    public UnixOnlyFactAttribute()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Skip = "Unix-only test: the reproduction depends on Unix file, permission and symlink semantics.";
         }
     }
 }
