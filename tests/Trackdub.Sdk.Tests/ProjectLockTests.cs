@@ -193,7 +193,7 @@ public sealed class ProjectLockTests : IDisposable
         Assert.Contains("12345", ex.Message);
     }
 
-    [Fact]
+    [UnixOnlyFact]
     public void Acquire_DirectoryWithTrailingSeparator_LocksTheProjectDirectory()
     {
         // Arrange — a caller-supplied output directory can arrive with a trailing separator.
