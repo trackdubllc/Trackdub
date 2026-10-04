@@ -217,7 +217,10 @@ public sealed class ProjectLockTests : IDisposable
         File.WriteAllText(lockPath, string.Empty);
 
         using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.None);
-        File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
+        }
 
         // The premise of the test: an exclusive open must be refused. If it is not, the
         // branch under test is skipped and this test would pass against any code.
@@ -241,7 +244,10 @@ public sealed class ProjectLockTests : IDisposable
         File.WriteAllText(lockPath, """{"pid":12345,"machineN""");
 
         using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.None);
-        File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
+        }
         Assert.False(CanOpenExclusively(lockPath));
 
         // Act
@@ -258,7 +264,10 @@ public sealed class ProjectLockTests : IDisposable
         string dir = CreateTempDirectory();
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, """{"pid":2147483647,"timestamp":"2024-01-01T00:00:00Z","machineName":"STALE"}""");
-        File.SetUnixFileMode(lockPath, UnixFileMode.None);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(lockPath, UnixFileMode.None);
+        }
 
         // If the environment can still read the file (for example running as root), the
         // premise of the test — an unreadable lock file — does not hold, so there is
