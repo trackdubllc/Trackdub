@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 
@@ -200,14 +201,44 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Builds the conflict exception, enriched with the holder's PID when that PID can be read.
-    /// The read is best-effort: a holder that opened the file with <see cref="FileShare.None"/>
-    /// refuses it on both Windows and Unix, so a cross-process conflict normally reports no PID.
+    /// Builds the conflict exception, enriched with the holder's PID when the lock file names a
+    /// process that is still running. The read is best-effort and the liveness check is required:
+    /// a holder that opened the file with <see cref="FileShare.None"/> refuses the read on both
+    /// Windows and Unix, so a cross-process conflict normally reports no PID; and when the read
+    /// does succeed the PID is only the last writer, which may have exited, or may not be a
+    /// Trackdub process at all (an editor or scanner holding the file share-compatible). Reporting
+    /// it unconditionally would blame a process that is not holding anything.
     /// </summary>
     private static ProjectLockedException CreateLockedException(string projectDirectory, string lockFilePath) =>
-        TryReadHoldingProcessId(lockFilePath) is int holdingProcessId
+        TryReadHoldingProcessId(lockFilePath) is int holdingProcessId && IsProcessAlive(holdingProcessId)
             ? new ProjectLockedException(projectDirectory, holdingProcessId)
             : new ProjectLockedException(projectDirectory);
+
+    /// <summary>
+    /// Returns whether a process with the given id is running on this machine. A PID recorded on
+    /// another machine, or recycled onto an unrelated process, cannot be resolved here and is
+    /// treated as not alive so it is never reported as the holder.
+    /// </summary>
+    private static bool IsProcessAlive(int processId)
+    {
+        if (processId <= 0) return false;
+
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            // No process with that id on this machine.
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            // The id exists but its process has already exited.
+            return false;
+        }
+    }
 
     /// <summary>
     /// Attempts to open the lock file with exclusive access (no sharing).
