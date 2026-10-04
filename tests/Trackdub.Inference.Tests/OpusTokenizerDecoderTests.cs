@@ -36,6 +36,8 @@ public sealed class OpusTokenizerDecoderTests
         Assert.Equal(59513, config.DecoderStartTokenId);
         Assert.Equal(59513, config.PadTokenId);
         Assert.Equal(0, config.EndOfSentenceTokenId);
+        Assert.False(config.ConfigFilePresent);
+        Assert.False(config.GenerationConfigFilePresent);
     }
 
     [Fact]
@@ -54,6 +56,8 @@ public sealed class OpusTokenizerDecoderTests
         Assert.Equal(100, config.DecoderStartTokenId);
         Assert.Equal(2, config.EndOfSentenceTokenId);
         Assert.Equal(100, config.PadTokenId);
+        Assert.True(config.ConfigFilePresent);
+        Assert.False(config.GenerationConfigFilePresent);
     }
 
     [Fact]
@@ -72,6 +76,7 @@ public sealed class OpusTokenizerDecoderTests
         Assert.Equal(59513, config.DecoderStartTokenId);
         Assert.Equal(2, config.EndOfSentenceTokenId);
         Assert.Equal(59513, config.PadTokenId);
+        Assert.True(config.ConfigFilePresent);
     }
 
     [Fact]

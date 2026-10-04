@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Reflection;
+using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx;
@@ -1072,6 +1073,60 @@ public sealed class OnnxTranscriptEnginesTests
         });
     }
 
+    [RequiresBundledModelFact("opus/onnx-community-opus-mt-en-fr")]
+    public async Task OpusMtTranslationEngine_ConfiglessModelRoot_TranslatesWithVocabDerivedSpecialTokens()
+    {
+        // Regression for the desktop model cache shape: the manifest only downloads the ONNX and
+        // tokenizer files, so config.json and generation_config.json are absent. The legacy
+        // hardcoded 65000 decoder-start/pad token was out of range for this model's 59514-entry
+        // vocabulary and surfaced as an opaque ONNX Gather out-of-bounds failure on the first
+        // decoder step. The engine must derive the ids from the vocabulary and translate normally.
+        string bundledRoot = Path.GetFullPath(Path.Join(
+            TestRepoRootResolver.FindRepoRoot(), "models", "opus", "onnx-community-opus-mt-en-fr"));
+        string configlessRoot = StageConfiglessModelRoot(bundledRoot);
+        try
+        {
+            var logger = new RecordingApplicationLogger();
+            var engine = new OpusMtTranslationEngine(
+                new StubRuntimePlanner(new StageRuntimePlan
+                {
+                    Stage = RuntimeStage.Translation,
+                    Status = StageRuntimePlanStatus.Ready,
+                    ModelId = "onnx-community/opus-mt-en-fr",
+                    ModelAlias = "opus-en-fr",
+                    Variant = "merged-decoder",
+                    ExecutionProvider = ExecutionProviderKind.Cpu
+                }),
+                BenchmarkModelPathResolver.CreateDefault(),
+                applicationLogger: logger);
+
+            IReadOnlyList<TranslatedTextSegment> segments = await engine.TranslateAsync(
+                new TranslationRequest(
+                    "en",
+                    "fr",
+                    [new TranslationInputSegment(0, 0.0, 1.0, "Hello, how are you today?")],
+                    PreferredModelAlias: "opus-en-fr",
+                    ResolvedModelEntryPath: Path.Join(configlessRoot, "onnx", "encoder_model.onnx")),
+                CancellationToken.None);
+
+            TranslatedTextSegment segment = Assert.Single(segments);
+            Assert.False(string.IsNullOrWhiteSpace(segment.Text));
+            Assert.Equal("cpu", engine.LastExecutionSummary!.SelectedProvider);
+
+            string provenance = Assert.Single(
+                logger.InformationMessages,
+                message => message.Contains("Opus tokenizer provenance", StringComparison.Ordinal));
+            Assert.Contains("config.json=absent", provenance);
+            Assert.Contains("generation_config.json=absent", provenance);
+            Assert.Contains("decoder_start=59513", provenance);
+            Assert.Contains("pad=59513", provenance);
+        }
+        finally
+        {
+            TryDeleteDirectory(configlessRoot);
+        }
+    }
+
     [Fact]
     public void MadladTranslationEngine_ResolveEncoderModelPath_prefers_planner_model_entry_path()
     {
@@ -1159,6 +1214,52 @@ public sealed class OnnxTranscriptEnginesTests
         }
     }
 
+    /// <summary>
+    /// Copies the bundled model into a staging directory that mirrors the desktop model cache:
+    /// the ONNX and tokenizer files only, never <c>config.json</c>/<c>generation_config.json</c>.
+    /// </summary>
+    private static string StageConfiglessModelRoot(string bundledModelRoot)
+    {
+        string stagedRoot = Path.Join(Path.GetTempPath(), "trackdub-opus-configless-model");
+        // A prior run can leave the staged copy behind when pooled sessions still hold the files,
+        // so clear the fixed staging path before writing a fresh copy.
+        TryDeleteDirectory(stagedRoot);
+        Directory.CreateDirectory(stagedRoot);
+        foreach (string sourcePath in Directory.EnumerateFiles(bundledModelRoot, "*", SearchOption.AllDirectories))
+        {
+            string fileName = Path.GetFileName(sourcePath);
+            if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Equals("generation_config.json", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string destinationPath = Path.Join(stagedRoot, Path.GetRelativePath(bundledModelRoot, sourcePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.Copy(sourcePath, destinationPath);
+        }
+
+        return stagedRoot;
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+        catch (IOException)
+        {
+            // Pooled ONNX sessions may still hold the staged model files; cleanup is best-effort.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     private static string RequireFixtureRoot(string environmentVariableName)
     {
         string? fixtureRoot = Environment.GetEnvironmentVariable(environmentVariableName);
@@ -1198,6 +1299,25 @@ public sealed class OnnxTranscriptEnginesTests
             {
                 Skip = $"Fixture file '{requiredRelativePath}' was not found under '{fixtureRoot}'.";
             }
+        }
+    }
+
+    private sealed class RecordingApplicationLogger : IApplicationLogger
+    {
+        public List<string> InformationMessages { get; } = [];
+
+        public void LogDebug(string message)
+        {
+        }
+
+        public void LogInformation(string message) => InformationMessages.Add(message);
+
+        public void LogWarning(string message, Exception? exception = null)
+        {
+        }
+
+        public void LogError(string message, Exception? exception = null)
+        {
         }
     }
 

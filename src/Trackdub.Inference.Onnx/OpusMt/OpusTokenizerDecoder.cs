@@ -22,7 +22,9 @@ internal sealed class OpusTokenizerDecoder
         int decoderStartTokenId,
         int endOfSentenceTokenId,
         int padTokenId,
-        int maxGenerationLength)
+        int maxGenerationLength,
+        bool configFilePresent,
+        bool generationConfigFilePresent)
     {
         this.sourceTokenizer = sourceTokenizer;
         this.targetTokenizer = targetTokenizer;
@@ -34,6 +36,9 @@ internal sealed class OpusTokenizerDecoder
         EndOfSentenceTokenId = endOfSentenceTokenId;
         PadTokenId = padTokenId;
         MaxGenerationLength = maxGenerationLength;
+        ConfigFilePresent = configFilePresent;
+        GenerationConfigFilePresent = generationConfigFilePresent;
+        VocabularySize = modelIdByPiece.Count;
         RequiresTargetLanguagePrefix = modelIdByPiece.Keys
             .Any(static piece => piece.StartsWith(">>", StringComparison.Ordinal) &&
                                  piece.EndsWith("<<", StringComparison.Ordinal));
@@ -46,6 +51,24 @@ internal sealed class OpusTokenizerDecoder
     public int PadTokenId { get; }
 
     public int MaxGenerationLength { get; }
+
+    /// <summary>
+    /// True when <c>config.json</c> was present in the model root at load time. The desktop model
+    /// cache only guarantees the manifest's ONNX/tokenizer files, so when this is false the special
+    /// token ids are derived from the vocabulary instead of the model config.
+    /// </summary>
+    public bool ConfigFilePresent { get; }
+
+    /// <summary>
+    /// True when <c>generation_config.json</c> was present in the model root at load time.
+    /// </summary>
+    public bool GenerationConfigFilePresent { get; }
+
+    /// <summary>
+    /// Number of Marian vocabulary entries loaded from <c>vocab.json</c>. Fallback special token
+    /// ids are derived from this count.
+    /// </summary>
+    public int VocabularySize { get; }
 
     public static async Task<OpusTokenizerDecoder> LoadAsync(string modelRootPath)
     {
@@ -88,7 +111,9 @@ internal sealed class OpusTokenizerDecoder
             config.DecoderStartTokenId,
             config.EndOfSentenceTokenId,
             config.PadTokenId,
-            config.MaxGenerationLength);
+            config.MaxGenerationLength,
+            config.ConfigFilePresent,
+            config.GenerationConfigFilePresent);
     }
 
     public long[] EncodeSourceText(string text, string? targetLanguagePrefix = null)
@@ -196,8 +221,10 @@ internal sealed class OpusTokenizerDecoder
         int? endOfSentenceTokenId = null;
         int? padTokenId = null;
         int maxGenerationLength = 256;
+        bool configFilePresent = File.Exists(configPath);
+        bool generationConfigFilePresent = File.Exists(generationConfigPath);
 
-        if (File.Exists(configPath))
+        if (configFilePresent)
         {
             string configText = await File.ReadAllTextAsync(configPath).ConfigureAwait(false);
             using JsonDocument document = JsonDocument.Parse(configText);
@@ -208,7 +235,7 @@ internal sealed class OpusTokenizerDecoder
             maxGenerationLength = ReadInt32(root, "max_position_embeddings") ?? maxGenerationLength;
         }
 
-        if (File.Exists(generationConfigPath))
+        if (generationConfigFilePresent)
         {
             string genConfigText = await File.ReadAllTextAsync(generationConfigPath).ConfigureAwait(false);
             using JsonDocument document = JsonDocument.Parse(genConfigText);
@@ -227,7 +254,9 @@ internal sealed class OpusTokenizerDecoder
             resolvedDecoderStartTokenId,
             resolvedEndOfSentenceTokenId,
             resolvedPadTokenId,
-            Math.Max(32, maxGenerationLength));
+            Math.Max(32, maxGenerationLength),
+            configFilePresent,
+            generationConfigFilePresent);
     }
 
     private static int? ReadInt32(JsonElement root, string propertyName)
@@ -284,5 +313,7 @@ internal sealed class OpusTokenizerDecoder
         int DecoderStartTokenId,
         int EndOfSentenceTokenId,
         int PadTokenId,
-        int MaxGenerationLength);
+        int MaxGenerationLength,
+        bool ConfigFilePresent,
+        bool GenerationConfigFilePresent);
 }

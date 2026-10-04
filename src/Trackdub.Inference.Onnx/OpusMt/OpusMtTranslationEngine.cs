@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Pool;
@@ -13,13 +14,15 @@ namespace Trackdub.Inference.Onnx.OpusMt;
 
 public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
     BenchmarkModelPathResolver modelPathResolver,
-    IRuntimePlanningPreferences? runtimePlanningPreferences = null)
+    IRuntimePlanningPreferences? runtimePlanningPreferences = null,
+    IApplicationLogger? applicationLogger = null)
     : IStreamingTranslationEngineAdapter, IStageRuntimeExecutionReporter
 {
     public const string EngineFamilyName = "opus-mt";
 
     private readonly IRuntimePlanner runtimePlanner = runtimePlanner ?? throw new ArgumentNullException(nameof(runtimePlanner));
     private readonly BenchmarkModelPathResolver modelPathResolver = modelPathResolver ?? throw new ArgumentNullException(nameof(modelPathResolver));
+    private readonly IApplicationLogger? applicationLogger = applicationLogger;
 
     public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
 
@@ -51,7 +54,7 @@ public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
         string encoderModelPath = ResolveEncoderModelPath(plan, request.ResolvedModelEntryPath);
         string decoderModelPath = ResolveDecoderModelPath(plan, encoderModelPath);
         string modelRootPath = ResolveModelRootPath(encoderModelPath);
-        OpusTokenizerDecoder tokenizer = await OpusTokenizerDecoder.LoadAsync(modelRootPath).ConfigureAwait(false);
+        OpusTokenizerDecoder tokenizer = await LoadTokenizerAsync(modelRootPath).ConfigureAwait(false);
         string? targetPrefix = tokenizer.ResolveTargetLanguagePrefix(request.TargetLanguage);
 
         if (tokenizer.RequiresTargetLanguagePrefix && targetPrefix is null)
@@ -127,7 +130,7 @@ public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
         string encoderModelPath = ResolveEncoderModelPath(plan, request.ResolvedModelEntryPath);
         string decoderModelPath = ResolveDecoderModelPath(plan, encoderModelPath);
         string modelRootPath = ResolveModelRootPath(encoderModelPath);
-        OpusTokenizerDecoder tokenizer = await OpusTokenizerDecoder.LoadAsync(modelRootPath).ConfigureAwait(false);
+        OpusTokenizerDecoder tokenizer = await LoadTokenizerAsync(modelRootPath).ConfigureAwait(false);
         string? targetPrefix = tokenizer.ResolveTargetLanguagePrefix(request.TargetLanguage);
 
         if (tokenizer.RequiresTargetLanguagePrefix && targetPrefix is null)
@@ -167,6 +170,25 @@ public sealed class OpusMtTranslationEngine(IRuntimePlanner runtimePlanner,
             yield return PipelineStreamItemFactory.CreateTranslation(
                 translated, runId, snapshotId, sourceRevisionId, sequence++);
         }
+    }
+
+    /// <summary>
+    /// Loads the Opus tokenizer and records provenance for troubleshooting: the resolved special
+    /// token ids and whether the optional Marian config files were present. The desktop model cache
+    /// only guarantees the manifest's ONNX/tokenizer files, so a missing <c>config.json</c> is the
+    /// normal shape and the ids are derived from the vocabulary instead.
+    /// </summary>
+    private async Task<OpusTokenizerDecoder> LoadTokenizerAsync(string modelRootPath)
+    {
+        OpusTokenizerDecoder tokenizer = await OpusTokenizerDecoder.LoadAsync(modelRootPath).ConfigureAwait(false);
+        applicationLogger?.LogInformation(
+            $"Opus tokenizer provenance: root='{modelRootPath}'; " +
+            $"config.json={(tokenizer.ConfigFilePresent ? "present" : "absent")}; " +
+            $"generation_config.json={(tokenizer.GenerationConfigFilePresent ? "present" : "absent")}; " +
+            $"vocab={tokenizer.VocabularySize}; decoder_start={tokenizer.DecoderStartTokenId}; " +
+            $"pad={tokenizer.PadTokenId}; eos={tokenizer.EndOfSentenceTokenId}; " +
+            $"max_generation_length={tokenizer.MaxGenerationLength}.");
+        return tokenizer;
     }
 
     private static async Task<string> TranslateSegmentAsync(
