@@ -220,14 +220,12 @@ public sealed class ProjectLockTests : IDisposable
         // of a holder that has not written its PID yet.
         File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(5));
 
-        // Refuse the exclusive open while still letting the production code read the file for
-        // its diagnostic. On Unix the holder takes a shared lock for any FileShare other than
-        // None, so sharing here is what keeps that read working.
+        // The lock file keeps its default mode, so the exclusive probe below is refused by the
+        // holder's share mode alone and not by file permissions, which would make the premise
+        // hold for the wrong reason. The holder shares the file so the production read for its
+        // diagnostic still works: on Unix the holder takes a shared lock for any FileShare other
+        // than None.
         using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
-        }
 
         // The premises of the test: the exclusive open must be refused and the shared read
         // must succeed. If either fails the branch under test is skipped and this test would
@@ -256,14 +254,12 @@ public sealed class ProjectLockTests : IDisposable
         // of a holder that has not written its PID yet.
         File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(5));
 
-        // Refuse the exclusive open while still letting the production code read the file for
-        // its diagnostic. On Unix the holder takes a shared lock for any FileShare other than
-        // None, so sharing here is what keeps that read working.
+        // The lock file keeps its default mode, so the exclusive probe below is refused by the
+        // holder's share mode alone and not by file permissions, which would make the premise
+        // hold for the wrong reason. The holder shares the file so the production read for its
+        // diagnostic still works: on Unix the holder takes a shared lock for any FileShare other
+        // than None.
         using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
-        }
 
         // The premises of the test: the exclusive open must be refused and the shared read
         // must succeed. If either fails the branch under test is skipped and this test would
