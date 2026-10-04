@@ -48,6 +48,12 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="projectDirectory"/> is null or whitespace.
     /// </exception>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when permissions, ownership, or a read-only filesystem prevents opening the lock sidecar.
+    /// </exception>
+    /// <exception cref="System.Security.SecurityException">
+    /// Thrown when security policy denies access to the lock sidecar.
+    /// </exception>
     public static ProjectLock Acquire(string projectDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
@@ -281,10 +287,6 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             catch (UnauthorizedAccessException)
             {
                 // Best-effort cleanup; the unique probe cannot affect lock identity.
-            }
-            catch (ArgumentException)
-            {
-                // The generated path can still be rejected by a platform-specific path limit.
             }
             catch (NotSupportedException)
             {
