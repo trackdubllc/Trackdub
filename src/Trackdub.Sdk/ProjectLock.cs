@@ -279,8 +279,9 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Attempts to read the PID from an existing lock file (best-effort, non-exclusive read).
-    /// Returns <see langword="null"/> whenever the content cannot be read or parsed, which is the
-    /// normal outcome while a holder has the file open exclusively.
+    /// Returns <see langword="null"/> whenever the content cannot be read or parsed, or was
+    /// written by another machine, which is the normal outcome while a holder has the file open
+    /// exclusively.
     /// </summary>
     private static int? TryReadHoldingProcessId(string lockFilePath)
     {
@@ -303,6 +304,17 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
             // Parse the JSON lock info.
             using var doc = JsonDocument.Parse(content);
+
+            // A PID only means something on the host that wrote it. Another host numbers its
+            // processes independently, so on a shared lock file a small id collides with a local
+            // one often, and naming that local process would blame a run that holds nothing.
+            if (doc.RootElement.TryGetProperty("machineName", out JsonElement machineElement) &&
+                machineElement.GetString() is string machineName &&
+                !string.Equals(machineName, Environment.MachineName, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
             if (doc.RootElement.TryGetProperty("pid", out JsonElement pidElement) &&
                 pidElement.TryGetInt32(out int pid))
             {
