@@ -193,14 +193,22 @@ public sealed class ProjectLockTests : IDisposable
         Assert.Contains("12345", ex.Message);
     }
 
-    [Fact]
-    public void Acquire_EmptyLockFileFromCrash_IsReclaimable()
+    [UnixOnlyFact]
+    public void Acquire_EmptyLockFileHeldByAnotherHandle_IsReclaimable()
     {
-        // Arrange — an empty lock file left behind by a crash between open and write
-        // must not permanently block acquisition.
+        // Arrange — an empty lock file left behind by a crash between open and write must
+        // not permanently block acquisition. The file has to be *held*, otherwise the
+        // exclusive open in Acquire succeeds and the holderless branch is never reached.
         string dir = CreateTempDirectory();
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, string.Empty);
+
+        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
+
+        // The premise of the test: an exclusive open must be refused. If it is not, the
+        // branch under test is skipped and this test would pass against any code.
+        Assert.False(CanOpenExclusively(lockPath));
 
         // Act
         using var lockHandle = ProjectLock.Acquire(dir);
@@ -209,15 +217,9 @@ public sealed class ProjectLockTests : IDisposable
         Assert.NotNull(lockHandle);
     }
 
-    [Fact]
+    [UnixOnlyFact]
     public void Acquire_UnreadableLockFile_DoesNotDeleteAndFailsClosed()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            // chmod 000 does not block reads on Windows; the defect is Unix-only.
-            return;
-        }
-
         // Arrange — a lock file whose content cannot be read (mode 000).
         string dir = CreateTempDirectory();
         string lockPath = Path.Join(dir, ".trackdub.lock");
@@ -254,15 +256,9 @@ public sealed class ProjectLockTests : IDisposable
         Assert.True(File.Exists(lockPath));
     }
 
-    [Fact]
+    [UnixOnlyFact]
     public void Acquire_SamePhysicalDirectory_ViaSymlink_ThrowsProjectLockedException()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            // Creating symlinks requires admin/developer mode on Windows.
-            return;
-        }
-
         // Arrange — a symlink naming the same directory as the real path.
         string parent = CreateTempDirectory();
         string realProject = Path.Join(parent, "real");
@@ -279,15 +275,9 @@ public sealed class ProjectLockTests : IDisposable
         Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
     }
 
-    [Fact]
+    [UnixOnlyFact]
     public void Acquire_SamePhysicalDirectory_ViaSymlinkedAncestor_ThrowsProjectLockedException()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            // Creating symlinks requires admin/developer mode on Windows.
-            return;
-        }
-
         // Arrange — a symlinked ancestor: "/parent/alias/proj" names the same directory
         // as "/parent/real/proj".
         string parent = CreateTempDirectory();
@@ -305,15 +295,9 @@ public sealed class ProjectLockTests : IDisposable
         Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
     }
 
-    [Fact]
+    [UnixOnlyFact]
     public void Dispose_ReleaseViaRealPath_AllowsAcquireViaSymlink()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            // Creating symlinks requires admin/developer mode on Windows.
-            return;
-        }
-
         // Arrange — a symlink naming the same directory as the real path.
         string parent = CreateTempDirectory();
         string realProject = Path.Join(parent, "real");
@@ -331,6 +315,28 @@ public sealed class ProjectLockTests : IDisposable
         Assert.NotNull(secondLock);
     }
 
+    /// <summary>
+    /// Reports whether the lock file can be opened the way <see cref="ProjectLock"/> opens
+    /// it. Used to prove that a test's premise — the exclusive open fails — actually holds
+    /// on this platform, so the branch under test is reached.
+    /// </summary>
+    private static bool CanOpenExclusively(string lockPath)
+    {
+        try
+        {
+            using FileStream probe = new(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     private string CreateTempDirectory()
     {
         string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));
@@ -345,6 +351,22 @@ public sealed class ProjectLockTests : IDisposable
         {
             try { Directory.Delete(dir, recursive: true); }
             catch { /* best-effort cleanup */ }
+        }
+    }
+}
+
+/// <summary>
+/// Marks a test whose reproduction depends on Unix file, permission and symlink semantics.
+/// Reports as skipped on Windows instead of returning early and reporting as passed.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+internal sealed class UnixOnlyFactAttribute : FactAttribute
+{
+    public UnixOnlyFactAttribute()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Skip = "Unix-only test: the reproduction depends on Unix file, permission and symlink semantics.";
         }
     }
 }
