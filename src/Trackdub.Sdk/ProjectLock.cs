@@ -22,6 +22,18 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     private static readonly object s_globalLock = new();
 
     /// <summary>
+    /// Compares registry keys the way the host file system spells them. Windows and macOS
+    /// volumes are case-insensitive by default, so <c>C:\Projects\Dub</c> and <c>c:\projects\dub</c>
+    /// are the same lock file there; Linux paths are case-sensitive and <c>Ordinal</c> is right.
+    /// Without this a case-variant spelling misses the registry and the conflict is reported
+    /// without our own PID — exclusion still holds, only the diagnosis degrades.
+    /// </summary>
+    private static readonly StringComparer s_pathComparer =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+
+    /// <summary>
     /// In-process registry of currently held lock paths, keyed by the resolved physical path so a
     /// symlink and its target share one entry. The exclusive open in <see cref="Acquire"/> is what
     /// enforces exclusion — <c>FileShare.None</c> is honoured both between processes and between
@@ -34,7 +46,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// exclusion does not hold. Local Windows and Unix volumes do enforce it.
     /// </para>
     /// </summary>
-    private static readonly HashSet<string> s_heldPaths = new(StringComparer.Ordinal);
+    private static readonly HashSet<string> s_heldPaths = new(s_pathComparer);
 
     private readonly string _lockFilePath;
     private FileStream? _lockStream;
