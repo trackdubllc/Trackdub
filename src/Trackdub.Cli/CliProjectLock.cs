@@ -25,11 +25,11 @@ internal static class CliProjectLock
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // The lock file lives in the project directory, so an unwritable or unreachable
-            // directory surfaces here rather than as a lock conflict.
+            // Covers both an unreachable project directory and a failure writing the lock file
+            // after it was opened, so the message must not commit to either cause.
             CliErrorReporter.ReportError(
                 ErrorCode.RuntimeUnavailable,
-                $"Cannot access the project directory '{UserPathText.Normalize(projectDirectory)}': {ex.Message}");
+                $"Cannot acquire the project lock for '{UserPathText.Normalize(projectDirectory)}': {ex.Message}");
             return null;
         }
     }
