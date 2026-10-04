@@ -10,8 +10,10 @@ namespace Trackdub.Sdk;
 /// <remarks>
 /// A lock file left behind by a crashed run never blocks a later run: the operating system
 /// releases the file when its holder exits, so the next <see cref="Acquire"/> opens it and
-/// overwrites the record. A failed exclusive open therefore means a live holder, and is reported
-/// as a conflict rather than treated as something to clean up.
+/// overwrites the record. An exclusive open that fails with a sharing violation therefore means
+/// a live holder, and is reported as a conflict rather than treated as something to clean up.
+/// A lock file that cannot be opened at all for permissions reasons propagates that error
+/// instead, so the caller can tell "someone is running" from "you may not write here".
 /// </remarks>
 public sealed class ProjectLock : IDisposable, IAsyncDisposable
 {
@@ -48,6 +50,10 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// </exception>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="projectDirectory"/> is null or whitespace.
+    /// </exception>
+    /// <exception cref="UnauthorizedAccessException">
+    /// Thrown when the lock file exists but cannot be opened for writing because of file
+    /// permissions or a read-only directory. That is not a conflict, so it is not reported as one.
     /// </exception>
     public static ProjectLock Acquire(string projectDirectory)
     {
@@ -185,7 +191,9 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Attempts to open the lock file with exclusive access (no sharing).
-    /// Returns null if the file is already locked by another process.
+    /// Returns null only when the file is already locked by another holder;
+    /// <see cref="UnauthorizedAccessException"/> propagates so a permissions problem
+    /// surfaces as a permissions error instead of a conflict.
     /// </summary>
     private static FileStream? TryOpenExclusive(string lockFilePath)
     {
@@ -200,12 +208,9 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         }
         catch (IOException)
         {
-            // File is locked by another process.
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Permission denied — treat as locked.
+            // The file is locked by another holder. Sharing violations are IOExceptions, and no
+            // permission problem is: a read-only file, a denying ACL or a read-only directory all
+            // raise UnauthorizedAccessException, which must not be reported as a live holder.
             return null;
         }
     }
