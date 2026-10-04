@@ -215,7 +215,11 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             if (Directory.Exists(resolved) &&
                 new DirectoryInfo(resolved).ResolveLinkTarget(returnFinalTarget: true) is { } target)
             {
-                resolved = target.FullName;
+                // Resolve links in the target's ancestors as well. A link target may use
+                // another alias for the same filesystem path (for example /var vs
+                // /private/var on macOS), otherwise two spellings can still get different
+                // registry keys after this component is followed.
+                resolved = CanonicalizeDirectoryPath(target.FullName);
             }
         }
 

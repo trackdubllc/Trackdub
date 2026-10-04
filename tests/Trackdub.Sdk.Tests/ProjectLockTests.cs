@@ -216,7 +216,9 @@ public sealed class ProjectLockTests : IDisposable
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, string.Empty);
 
-        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        // Deny exclusive access while still allowing the production code to inspect the
+        // holderless file. FileShare.None also denies that diagnostic read on macOS.
+        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
@@ -243,7 +245,9 @@ public sealed class ProjectLockTests : IDisposable
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, """{"pid":12345,"machineN""");
 
-        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        // Deny exclusive access while still allowing the production code to inspect the
+        // corrupt file. FileShare.None also denies that diagnostic read on macOS.
+        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(lockPath, UnixFileMode.UserRead);
