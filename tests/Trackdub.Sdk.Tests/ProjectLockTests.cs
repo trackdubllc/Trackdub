@@ -193,6 +193,144 @@ public sealed class ProjectLockTests : IDisposable
         Assert.Contains("12345", ex.Message);
     }
 
+    [Fact]
+    public void Acquire_EmptyLockFileFromCrash_IsReclaimable()
+    {
+        // Arrange — an empty lock file left behind by a crash between open and write
+        // must not permanently block acquisition.
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, string.Empty);
+
+        // Act
+        using var lockHandle = ProjectLock.Acquire(dir);
+
+        // Assert
+        Assert.NotNull(lockHandle);
+    }
+
+    [Fact]
+    public void Acquire_UnreadableLockFile_DoesNotDeleteAndFailsClosed()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // chmod 000 does not block reads on Windows; the defect is Unix-only.
+            return;
+        }
+
+        // Arrange — a lock file whose content cannot be read (mode 000).
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, """{"pid":2147483647,"timestamp":"2024-01-01T00:00:00Z","machineName":"STALE"}""");
+        File.SetUnixFileMode(lockPath, UnixFileMode.None);
+
+        // If the environment can still read the file (for example running as root), the
+        // premise of the test — an unreadable lock file — does not hold, so there is
+        // nothing to assert.
+        try
+        {
+            using var probe = new FileStream(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (probe.CanRead)
+            {
+                return;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Expected — the file is unreadable; proceed with the assertion.
+        }
+        catch (IOException)
+        {
+            // Expected — the file is unreadable; proceed with the assertion.
+        }
+
+        // Act — the holder is unknown, so it must fail closed instead of unlinking the
+        // lock (on Unix unlink succeeds on a file another process holds open) and running
+        // alongside the existing holder.
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
+        Assert.Null(ex.HoldingProcessId);
+
+        // Assert — the lock file was not deleted.
+        Assert.True(File.Exists(lockPath));
+    }
+
+    [Fact]
+    public void Acquire_SamePhysicalDirectory_ViaSymlink_ThrowsProjectLockedException()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Creating symlinks requires admin/developer mode on Windows.
+            return;
+        }
+
+        // Arrange — a symlink naming the same directory as the real path.
+        string parent = CreateTempDirectory();
+        string realProject = Path.Join(parent, "real");
+        Directory.CreateDirectory(realProject);
+        string link = Path.Join(parent, "alias");
+        Directory.CreateSymbolicLink(link, realProject);
+
+        using var firstLock = ProjectLock.Acquire(realProject);
+
+        // Act & Assert — the symlink path resolves to the same lock identity, so the
+        // in-process registry reports a conflict rather than allowing a second run.
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(link));
+        Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+        Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
+    }
+
+    [Fact]
+    public void Acquire_SamePhysicalDirectory_ViaSymlinkedAncestor_ThrowsProjectLockedException()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Creating symlinks requires admin/developer mode on Windows.
+            return;
+        }
+
+        // Arrange — a symlinked ancestor: "/parent/alias/proj" names the same directory
+        // as "/parent/real/proj".
+        string parent = CreateTempDirectory();
+        string realRoot = Path.Join(parent, "real");
+        string realProject = Path.Join(realRoot, "proj");
+        Directory.CreateDirectory(realProject);
+        string linkRoot = Path.Join(parent, "alias");
+        Directory.CreateSymbolicLink(linkRoot, realRoot);
+
+        using var firstLock = ProjectLock.Acquire(realProject);
+
+        // Act & Assert
+        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(Path.Join(linkRoot, "proj")));
+        Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+        Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
+    }
+
+    [Fact]
+    public void Dispose_ReleaseViaRealPath_AllowsAcquireViaSymlink()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Creating symlinks requires admin/developer mode on Windows.
+            return;
+        }
+
+        // Arrange — a symlink naming the same directory as the real path.
+        string parent = CreateTempDirectory();
+        string realProject = Path.Join(parent, "real");
+        Directory.CreateDirectory(realProject);
+        string link = Path.Join(parent, "alias");
+        Directory.CreateSymbolicLink(link, realProject);
+
+        // Act — release the lock acquired through the real path...
+        var firstLock = ProjectLock.Acquire(realProject);
+        firstLock.Dispose();
+
+        // Assert — ...then re-acquire through the symlink succeeds because both resolve
+        // to the same registry key.
+        using var secondLock = ProjectLock.Acquire(link);
+        Assert.NotNull(secondLock);
+    }
+
     private string CreateTempDirectory()
     {
         string dir = Path.Join(Path.GetTempPath(), "TrackdubTests", Guid.NewGuid().ToString("N"));

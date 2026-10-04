@@ -7,7 +7,8 @@ namespace Trackdub.Sdk;
 /// <summary>
 /// File-based project directory lock that prevents concurrent runs targeting the same project.
 /// Uses an exclusive <see cref="FileStream"/> on a <c>.trackdub.lock</c> file to detect conflicts.
-/// Stale locks from crashed processes are automatically reclaimed.
+/// Stale locks from crashed processes are automatically reclaimed, and lock identity follows
+/// symlinks so that two paths naming the same directory conflict.
 /// </summary>
 public sealed class ProjectLock : IDisposable, IAsyncDisposable
 {
@@ -49,10 +50,11 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
 
         string fullPath = Path.GetFullPath(projectDirectory);
-        string lockFilePath = Path.Join(fullPath, LockFileName);
+        string canonicalPath = CanonicalizeDirectoryPath(fullPath);
+        string lockFilePath = Path.Join(canonicalPath, LockFileName);
 
         // Ensure the directory exists so we can create the lock file.
-        Directory.CreateDirectory(fullPath);
+        Directory.CreateDirectory(canonicalPath);
 
         // Serialize lock acquisition within this process to prevent races
         // between threads trying to lock the same directory.
@@ -71,15 +73,23 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             if (stream is null)
             {
                 // Lock file is held by another process. Check if it's stale.
-                int? holdingPid = TryReadHoldingProcessId(lockFilePath);
+                LockFileRead read = TryReadHoldingProcessId(lockFilePath);
 
-                if (holdingPid.HasValue && IsProcessAlive(holdingPid.Value))
+                if (read.ReadFailed)
                 {
-                    // The holding process is still running — genuine conflict.
-                    throw new ProjectLockedException(projectDirectory, holdingPid.Value);
+                    // The holder is unknown. Do not unlink a possibly-live lock: on Unix
+                    // unlink succeeds on a file another process holds open, so deleting it
+                    // would let this run acquire a replacement lock alongside the existing run.
+                    throw new ProjectLockedException(projectDirectory);
                 }
 
-                // Stale lock: the process that created it is no longer running.
+                if (read.HoldingPid is { } holdingPid && IsProcessAlive(holdingPid))
+                {
+                    // The holding process is still running — genuine conflict.
+                    throw new ProjectLockedException(projectDirectory, holdingPid);
+                }
+
+                // Stale lock (holder gone) or holderless file (crash between open and write).
                 // Attempt to delete and re-acquire.
                 TryDeleteStaleLockFile(lockFilePath);
 
@@ -154,6 +164,51 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
+    /// Resolves a path to its physical form, following symlinks in every component, so that two
+    /// paths naming the same directory through different links produce the same identity for the
+    /// in-process registry. On Windows the OS enforces <see cref="FileShare.None"/> between
+    /// <see cref="FileStream"/> instances in one process, so the registry key only needs the
+    /// lexical normalization that <see cref="Path.GetFullPath"/> already provides.
+    /// </summary>
+    private static string CanonicalizeDirectoryPath(string fullPath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return fullPath;
+        }
+
+        string root = Path.GetPathRoot(fullPath) ?? Path.DirectorySeparatorChar.ToString();
+
+        // Collect the components beneath the root so each can be checked for being a symlink.
+        var parts = new List<string>();
+        string remaining = fullPath;
+        while (remaining.Length > root.Length)
+        {
+            string name = Path.GetFileName(remaining);
+            if (name.Length == 0)
+            {
+                break;
+            }
+
+            parts.Insert(0, name);
+            remaining = Path.GetDirectoryName(remaining) ?? root;
+        }
+
+        string resolved = root;
+        foreach (string part in parts)
+        {
+            resolved = Path.Join(resolved, part);
+            if (Directory.Exists(resolved) &&
+                new DirectoryInfo(resolved).ResolveLinkTarget(returnFinalTarget: true) is { } target)
+            {
+                resolved = target.FullName;
+            }
+        }
+
+        return resolved;
+    }
+
+    /// <summary>
     /// Attempts to open the lock file with exclusive access (no sharing).
     /// Returns null if the file is already locked by another process.
     /// </summary>
@@ -182,8 +237,10 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Attempts to read the PID from an existing lock file (best-effort, non-exclusive read).
+    /// Distinguishes "the file could not be read at all" from "the file is readable but carries
+    /// no PID" because only the former must block stale-lock reclamation.
     /// </summary>
-    private static int? TryReadHoldingProcessId(string lockFilePath)
+    private static LockFileRead TryReadHoldingProcessId(string lockFilePath)
     {
         try
         {
@@ -200,22 +257,28 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             string content = sr.ReadToEnd();
 
             if (string.IsNullOrWhiteSpace(content))
-                return null;
+            {
+                // Holderless lock file (for example a crash between open and write).
+                return new LockFileRead(ReadFailed: false, HoldingPid: null);
+            }
 
             // Parse the JSON lock info.
             using var doc = JsonDocument.Parse(content);
             if (doc.RootElement.TryGetProperty("pid", out JsonElement pidElement) &&
                 pidElement.TryGetInt32(out int pid))
             {
-                return pid;
+                return new LockFileRead(ReadFailed: false, HoldingPid: pid);
             }
+
+            return new LockFileRead(ReadFailed: false, HoldingPid: null);
         }
         catch
         {
-            // Any failure reading the lock file — we can't determine the PID.
+            // The file could not be read, so the holder is unknown. This must not be treated
+            // as stale: on Unix unlink succeeds on a file another process holds open, so
+            // reclaiming here would let a second run overwrite a live lock.
+            return new LockFileRead(ReadFailed: true, HoldingPid: null);
         }
-
-        return null;
     }
 
     /// <summary>
@@ -274,6 +337,14 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         JsonSerializer.Serialize(stream, lockInfo);
         stream.Flush();
     }
+
+    /// <summary>
+    /// Result of reading a lock file's holder PID. <see cref="ReadFailed"/> is set when the file
+    /// could not be read at all (the holder is unknown); a readable file without a PID — such as
+    /// one left empty by a crash between open and write — reports <c>ReadFailed = false</c> with a
+    /// null PID and remains reclaimable.
+    /// </summary>
+    private readonly record struct LockFileRead(bool ReadFailed, int? HoldingPid);
 
     /// <summary>
     /// JSON structure written to the lock file for diagnostics.
