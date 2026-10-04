@@ -23,7 +23,11 @@ internal static class CliProjectLock
             CliErrorReporter.ReportError(ErrorCode.ProjectLocked, DescribeProjectLocked(ex));
             return null;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (
+            ex is IOException
+                or UnauthorizedAccessException
+                or System.Security.SecurityException
+                or NotSupportedException)
         {
             // Covers both an unreachable project directory and a failure writing the lock file
             // after it was opened, so the message must not commit to either cause.
