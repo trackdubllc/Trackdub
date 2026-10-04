@@ -349,6 +349,40 @@ public sealed class ProjectLockTests : IDisposable
         Assert.NotNull(secondLock);
     }
 
+    [Fact]
+    public void Acquire_SameDirectory_WithDifferentCase_SharesOneRegistryKey()
+    {
+        // Arrange — a GUID name contains hex letters, so flipping the case of the leaf
+        // either names the same directory (case-insensitive file system) or a different
+        // one (case-sensitive file system). The registry key must follow suit.
+        string dir = CreateTempDirectory();
+        string flippedDir = Path.Join(Path.GetDirectoryName(dir)!, Path.GetFileName(dir).ToUpperInvariant());
+        bool sameDirectory = flippedDir == dir || Directory.Exists(flippedDir);
+
+        if (!sameDirectory)
+        {
+            _tempDirs.Add(flippedDir);
+        }
+
+        using var firstLock = ProjectLock.Acquire(dir);
+
+        if (sameDirectory)
+        {
+            // Act & Assert — one project under two spellings, so the registry reports the
+            // conflict instead of letting a second run share it.
+            var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(flippedDir));
+            Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+            Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
+        }
+        else
+        {
+            // Act & Assert — two distinct directories, so folding case would report a
+            // false conflict for a project nobody holds.
+            using var secondLock = ProjectLock.Acquire(flippedDir);
+            Assert.NotNull(secondLock);
+        }
+    }
+
     /// <summary>
     /// Reports whether the lock file can be opened the way <see cref="ProjectLock"/> opens
     /// it. Used to prove that a test's premise — the exclusive open fails — actually holds
@@ -394,7 +428,7 @@ public sealed class ProjectLockTests : IDisposable
 /// Reports as skipped on Windows instead of returning early and reporting as passed.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
-internal sealed class UnixOnlyFactAttribute : FactAttribute
+public sealed class UnixOnlyFactAttribute : FactAttribute
 {
     public UnixOnlyFactAttribute()
     {

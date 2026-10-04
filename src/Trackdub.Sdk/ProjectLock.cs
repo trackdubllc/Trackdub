@@ -8,7 +8,8 @@ namespace Trackdub.Sdk;
 /// File-based project directory lock that prevents concurrent runs targeting the same project.
 /// Uses an exclusive <see cref="FileStream"/> on a <c>.trackdub.lock</c> file to detect conflicts.
 /// Stale locks from crashed processes are automatically reclaimed, and lock identity follows
-/// symlinks so that two paths naming the same directory conflict.
+/// symlinks (and case on case-insensitive file systems) so that two paths naming the same
+/// project conflict.
 /// </summary>
 public sealed class ProjectLock : IDisposable, IAsyncDisposable
 {
@@ -17,7 +18,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     private static readonly object s_globalLock = new();
 
     /// <summary>
-    /// In-process registry of currently held lock paths (canonical, lower-case on
+    /// In-process registry of currently held lock paths (canonical, and case-folded on
     /// case-insensitive file systems).  On Linux, <c>FileShare.None</c> is not
     /// enforced for intra-process opens, so we need this secondary guard to stop the
     /// same process from acquiring the same directory lock twice.
@@ -25,12 +26,14 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     private static readonly HashSet<string> s_heldPaths = new(StringComparer.Ordinal);
 
     private readonly string _lockFilePath;
+    private readonly string _registryKey;
     private FileStream? _lockStream;
     private volatile bool _disposed;
 
-    private ProjectLock(string lockFilePath, FileStream lockStream)
+    private ProjectLock(string lockFilePath, string registryKey, FileStream lockStream)
     {
         _lockFilePath = lockFilePath;
+        _registryKey = registryKey;
         _lockStream = lockStream;
     }
 
@@ -52,6 +55,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         string fullPath = Path.GetFullPath(projectDirectory);
         string canonicalPath = CanonicalizeDirectoryPath(fullPath);
         string lockFilePath = Path.Join(canonicalPath, LockFileName);
+        string registryKey = BuildRegistryKey(canonicalPath);
 
         // Ensure the directory exists so we can create the lock file.
         Directory.CreateDirectory(canonicalPath);
@@ -62,7 +66,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         {
             // Intra-process guard: on Linux FileShare.None is not enforced between
             // FileStream instances within the same process, so we maintain our own set.
-            if (s_heldPaths.Contains(lockFilePath))
+            if (s_heldPaths.Contains(registryKey))
             {
                 throw new ProjectLockedException(projectDirectory, Environment.ProcessId);
             }
@@ -104,8 +108,8 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             // Write diagnostic info (PID + timestamp) to the lock file.
             WriteLockInfo(stream);
 
-            s_heldPaths.Add(lockFilePath);
-            return new ProjectLock(lockFilePath, stream);
+            s_heldPaths.Add(registryKey);
+            return new ProjectLock(lockFilePath, registryKey, stream);
         }
     }
 
@@ -138,7 +142,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         // the file lock is gone.
         lock (s_globalLock)
         {
-            s_heldPaths.Remove(_lockFilePath);
+            s_heldPaths.Remove(_registryKey);
         }
 
         try
@@ -216,6 +220,47 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         }
 
         return resolved;
+    }
+
+    /// <summary>
+    /// Builds the in-process registry key for a canonical project path. Symlink resolution
+    /// alone leaves case unnormalized, so on a case-insensitive file system — where the OS
+    /// file lock is advisory and this registry is the only intra-process guard — two paths
+    /// differing only in case would name one project under two keys. Case-fold there and
+    /// leave case-sensitive volumes untouched, where <c>Foo</c> and <c>foo</c> really are
+    /// two directories and folding would report a false conflict.
+    /// </summary>
+    private static string BuildRegistryKey(string canonicalPath)
+    {
+        string lockFilePath = Path.Join(canonicalPath, LockFileName);
+        return FileSystemIsCaseInsensitive(canonicalPath)
+            ? lockFilePath.ToUpperInvariant()
+            : lockFilePath;
+    }
+
+    /// <summary>
+    /// Reports whether upper-casing a path under <paramref name="directoryPath"/> still names
+    /// the same directory, which is exactly the question the registry key depends on. Probed on
+    /// the nearest existing ancestor, creating nothing to do so. A path that is already
+    /// upper-case cannot answer the question and reports false, which keeps the previous
+    /// behaviour rather than guessing.
+    /// </summary>
+    private static bool FileSystemIsCaseInsensitive(string directoryPath)
+    {
+        DirectoryInfo? probe = new(directoryPath);
+        while (probe is { Exists: false })
+        {
+            probe = probe.Parent;
+        }
+
+        if (probe is null)
+        {
+            return false;
+        }
+
+        string upper = probe.FullName.ToUpperInvariant();
+        return !string.Equals(upper, probe.FullName, StringComparison.Ordinal)
+            && Directory.Exists(upper);
     }
 
     /// <summary>
