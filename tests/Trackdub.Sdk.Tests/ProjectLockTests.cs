@@ -402,7 +402,7 @@ public sealed class ProjectLockTests : IDisposable
         // Arrange — one project named two ways, without relying on how the host volume spells
         // case: the leaf carries letters, so the upper-cased spelling always differs.
         string dir = CreateTempDirectory();
-        string flippedDir = Path.Join(Path.GetDirectoryName(dir)!, Path.GetFileName(dir) + "project".ToUpperInvariant());
+        string flippedDir = Path.Join(Path.GetDirectoryName(dir)!, Path.GetFileName(dir).ToUpperInvariant());
 
         // Act & Assert — on a case-insensitive volume both spellings name one project and must
         // share a key; on a case-sensitive volume they name two projects and must not.
