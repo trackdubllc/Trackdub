@@ -25,8 +25,14 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// In-process registry of currently held lock paths, keyed by the resolved physical path so a
     /// symlink and its target share one entry. The exclusive open in <see cref="Acquire"/> is what
     /// enforces exclusion — <c>FileShare.None</c> is honoured both between processes and between
-    /// handles in one process, on Windows and Unix alike — so this registry exists to recognise a
-    /// same-process conflict and report our own PID instead of blaming another process.
+    /// handles in one process — so this registry exists to recognise a same-process conflict and
+    /// report our own PID instead of blaming another process.
+    /// <para>
+    /// Sharing is enforced by the file system, not by the contract of the API, and some network
+    /// or FUSE mounts do not enforce it (an SMB/CIFS share without byte-range locking is the
+    /// common case). On such a mount two <see cref="Acquire"/> calls can both succeed, and
+    /// exclusion does not hold. Local Windows and Unix volumes do enforce it.
+    /// </para>
     /// </summary>
     private static readonly HashSet<string> s_heldPaths = new(StringComparer.Ordinal);
 
@@ -156,9 +162,11 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// Resolves the project directory to its physical path so that a symlink and its target produce
     /// one registry key. Only the final component's link chain is resolved — .NET exposes no API
     /// for intermediate components — so a project reached through a symlinked parent keeps that
-    /// parent's spelling. Exclusion still holds in that case, because the operating system locks
-    /// the file's identity rather than the path used to reach it; only the reported holder degrades
-    /// from "this app" to "another process".
+    /// parent's spelling. Where the file system enforces sharing the exclusion still holds, because
+    /// the operating system locks the file's identity rather than the path used to reach it; only
+    /// the reported holder degrades from "this app" to "another process". On a mount that does not
+    /// enforce sharing (see <see cref="s_heldPaths"/>) neither spelling can dedupe the registry, so
+    /// a project reached that way can be locked twice in one process.
     /// </summary>
     private static string ResolvePhysicalDirectory(string projectDirectory)
     {
