@@ -396,6 +396,30 @@ public sealed class ProjectLockTests : IDisposable
         }
     }
 
+    [UnixOnlyFact]
+    public void FileSystemIsCaseInsensitive_CaseVariantSibling_ReportsCaseSensitive()
+    {
+        // Arrange — a case-sensitive volume holding two directories that differ only in case.
+        // The upper-cased spelling exists, but it is a different directory.
+        string parent = CreateTempDirectory();
+        string lower = Path.Join(parent, "project");
+        string upper = Path.Join(parent, "PROJECT");
+        Directory.CreateDirectory(lower);
+        if (Directory.Exists(upper))
+        {
+            // Case-insensitive volume: both spellings are one directory, so there is
+            // nothing to prove here.
+            return;
+        }
+
+        Directory.CreateDirectory(upper);
+        _tempDirs.Add(upper);
+
+        // Act & Assert — the sibling must not be mistaken for a case-insensitive volume,
+        // because folding case would report a conflict between two real projects.
+        Assert.False(ProjectLock.FileSystemIsCaseInsensitive(lower));
+    }
+
     /// <summary>
     /// Reports whether the lock file can be opened the way <see cref="ProjectLock"/> opens
     /// it. Used to prove that a test's premise — the exclusive open fails — actually holds

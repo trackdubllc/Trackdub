@@ -243,13 +243,17 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
-    /// Reports whether upper-casing a path under <paramref name="directoryPath"/> still names
-    /// the same directory, which is exactly the question the registry key depends on. Probed on
-    /// the nearest existing ancestor, creating nothing to do so. A path that is already
-    /// upper-case cannot answer the question and reports false, which keeps the previous
-    /// behaviour rather than guessing.
+    /// Reports whether upper-casing a name still reaches the same entry, which is exactly the
+    /// question the registry key depends on. Probed on the nearest existing ancestor, so a
+    /// project directory that does not exist yet is never created just to answer the question.
+    /// The probe creates one uniquely named entry there and asks the file system for that same
+    /// entry under an upper-cased spelling: mere existence of the upper-cased spelling would also
+    /// be answered by a case-variant *sibling* on a case-sensitive volume, which would report
+    /// such a volume as case-insensitive and fold two distinct projects onto one registry key.
+    /// A volume that cannot be probed reports false, which keeps the previous behaviour rather
+    /// than guessing.
     /// </summary>
-    private static bool FileSystemIsCaseInsensitive(string directoryPath)
+    internal static bool FileSystemIsCaseInsensitive(string directoryPath)
     {
         DirectoryInfo? probe = new(directoryPath);
         while (probe is { Exists: false })
@@ -262,9 +266,35 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             return false;
         }
 
-        string upper = probe.FullName.ToUpperInvariant();
-        return !string.Equals(upper, probe.FullName, StringComparison.Ordinal)
-            && Directory.Exists(upper);
+        string probeName = $".trackdub-case-probe-{Guid.NewGuid():N}";
+        string probeFile = Path.Join(probe.FullName, probeName);
+
+        try
+        {
+            File.WriteAllText(probeFile, string.Empty);
+
+            return File.Exists(Path.Join(probe.FullName, probeName.ToUpperInvariant()));
+        }
+        catch (IOException)
+        {
+            // Cannot create the probe here, so the question stays unanswered.
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(probeFile);
+            }
+            catch
+            {
+                // Best-effort cleanup; a leftover probe file is inert and uniquely named.
+            }
+        }
     }
 
     /// <summary>
