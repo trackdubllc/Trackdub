@@ -207,7 +207,11 @@ public sealed class ProjectLockTests : IDisposable
         }
         finally
         {
-            try { Directory.Delete(link); } catch { /* best-effort cleanup */ }
+            try { Directory.Delete(link); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                /* best-effort cleanup */
+            }
         }
     }
 
