@@ -179,9 +179,19 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
         string root = Path.GetPathRoot(fullPath) ?? Path.DirectorySeparatorChar.ToString();
 
+        // Path.GetFullPath preserves a trailing separator. Left in place it makes the first
+        // component below empty, the walk stops before collecting anything, and the whole
+        // path collapses to the root — so the lock would be placed in the file system root
+        // instead of the project directory. Trim it, keeping the root itself intact.
+        string trimmed = fullPath;
+        while (trimmed.Length > root.Length && trimmed[^1] == Path.DirectorySeparatorChar)
+        {
+            trimmed = trimmed[..^1];
+        }
+
         // Collect the components beneath the root so each can be checked for being a symlink.
         var parts = new List<string>();
-        string remaining = fullPath;
+        string remaining = trimmed;
         while (remaining.Length > root.Length)
         {
             string name = Path.GetFileName(remaining);

@@ -193,6 +193,19 @@ public sealed class ProjectLockTests : IDisposable
         Assert.Contains("12345", ex.Message);
     }
 
+    [Fact]
+    public void Acquire_DirectoryWithTrailingSeparator_LocksTheProjectDirectory()
+    {
+        // Arrange — a caller-supplied output directory can arrive with a trailing separator.
+        string dir = CreateTempDirectory();
+
+        // Act
+        using var lockHandle = ProjectLock.Acquire(dir + Path.DirectorySeparatorChar);
+
+        // Assert — the lock file lands in the project directory, not in the file system root.
+        Assert.True(File.Exists(Path.Join(dir, ".trackdub.lock")));
+    }
+
     [UnixOnlyFact]
     public void Acquire_EmptyLockFileHeldByAnotherHandle_IsReclaimable()
     {
