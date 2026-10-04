@@ -9,6 +9,7 @@ namespace Trackdub.Sdk;
 /// Uses an exclusive <see cref="FileStream"/> on a <c>.trackdub.lock</c> file to detect conflicts.
 /// The sidecar persists between runs and its diagnostic metadata is overwritten after acquisition;
 /// the open file handle, rather than the contents or age of the file, determines lock ownership.
+/// Do not manually remove the sidecar while a run may hold its handle.
 /// Lock identity follows symlinks (and case on case-insensitive file systems) so alternate paths
 /// naming the same project still conflict.
 /// </summary>
@@ -26,14 +27,12 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// </summary>
     private static readonly HashSet<string> s_heldPaths = new(StringComparer.Ordinal);
 
-    private readonly string _lockFilePath;
     private readonly string _registryKey;
     private FileStream? _lockStream;
     private volatile bool _disposed;
 
-    private ProjectLock(string lockFilePath, string registryKey, FileStream lockStream)
+    private ProjectLock(string registryKey, FileStream lockStream)
     {
-        _lockFilePath = lockFilePath;
         _registryKey = registryKey;
         _lockStream = lockStream;
     }
@@ -100,7 +99,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             WriteLockInfo(stream);
 
             s_heldPaths.Add(registryKey);
-            return new ProjectLock(lockFilePath, registryKey, stream);
+            return new ProjectLock(registryKey, stream);
         }
     }
 
@@ -277,18 +276,30 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             }
             catch (IOException)
             {
-                // Cleanup is best-effort; the unique probe cannot affect lock identity.
+                // Best-effort cleanup; the unique probe cannot affect lock identity.
             }
             catch (UnauthorizedAccessException)
             {
-                // Cleanup is best-effort; the unique probe cannot affect lock identity.
+                // Best-effort cleanup; the unique probe cannot affect lock identity.
+            }
+            catch (ArgumentException)
+            {
+                // The generated path can still be rejected by a platform-specific path limit.
+            }
+            catch (NotSupportedException)
+            {
+                // Best-effort cleanup for filesystems that do not support this operation.
+            }
+            catch (System.Security.SecurityException)
+            {
+                // Best-effort cleanup when filesystem security policy denies deletion.
             }
         }
     }
 
     /// <summary>
     /// Attempts to open the lock file with exclusive access (no sharing).
-    /// Returns null if the file is already locked by another process.
+    /// Returns null if the file is already in use; permission failures propagate to the caller.
     /// </summary>
     private static FileStream? TryOpenExclusive(string lockFilePath)
     {
@@ -304,11 +315,6 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         catch (IOException)
         {
             // File is locked by another process.
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Permission denied — treat as locked.
             return null;
         }
     }

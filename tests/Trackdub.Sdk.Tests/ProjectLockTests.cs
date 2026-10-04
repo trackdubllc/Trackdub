@@ -217,9 +217,6 @@ public sealed class ProjectLockTests : IDisposable
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, string.Empty);
 
-        // Make it old enough that age-based stale reclamation would incorrectly unlink it.
-        File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(5));
-
         // The lock file keeps its default mode, so the exclusive probe below is refused by the
         // holder's share mode alone and not by file permissions, which would make the premise
         // hold for the wrong reason. The holder shares the file so the production read for its
@@ -250,9 +247,6 @@ public sealed class ProjectLockTests : IDisposable
         string lockPath = Path.Join(dir, ".trackdub.lock");
         File.WriteAllText(lockPath, """{"pid":12345,"machineN""");
 
-        // Make it old enough that age-based stale reclamation would incorrectly unlink it.
-        File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(5));
-
         // The lock file keeps its default mode, so the exclusive probe below is refused by the
         // holder's share mode alone and not by file permissions, which would make the premise
         // hold for the wrong reason. The holder shares the file so the production read for its
@@ -275,29 +269,7 @@ public sealed class ProjectLockTests : IDisposable
     }
 
     [UnixOnlyFact]
-    public void Acquire_EmptyLockFileWrittenJustNowHeldByAnotherHandle_FailsClosed()
-    {
-        // Arrange — an empty lock file that was written moments ago is indistinguishable
-        // from a live holder that has not flushed its PID yet, and the file is held, so the
-        // exclusive open in Acquire is refused and the holderless branch is reached.
-        string dir = CreateTempDirectory();
-        string lockPath = Path.Join(dir, ".trackdub.lock");
-        File.WriteAllText(lockPath, string.Empty);
-
-        using FileStream holder = new(lockPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        Assert.False(CanOpenExclusively(lockPath));
-        Assert.True(CanReadShared(lockPath));
-
-        // Act — the holder may still be live, so unlinking its file must not happen.
-        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
-        Assert.Null(ex.HoldingProcessId);
-
-        // Assert — the lock file was not deleted.
-        Assert.True(File.Exists(lockPath));
-    }
-
-    [UnixOnlyFact]
-    public void Acquire_UnreadableLockFile_DoesNotDeleteAndFailsClosed()
+    public void Acquire_UnreadableLockFile_ReportsPermissionFailureWithoutDeleting()
     {
         // Arrange — a lock file whose content cannot be read (mode 000).
         string dir = CreateTempDirectory();
@@ -328,13 +300,11 @@ public sealed class ProjectLockTests : IDisposable
             // Expected — the file is unreadable; proceed with the assertion.
         }
 
-        // Act — the holder is unknown, so it must fail closed instead of unlinking the
-        // lock (on Unix unlink succeeds on a file another process holds open) and running
-        // alongside the existing holder.
-        var ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
-        Assert.Null(ex.HoldingProcessId);
+        // Act — permissions prevent acquiring the sidecar. Report the permission failure,
+        // not a fictitious active holder, and leave the existing file untouched.
+        Assert.Throws<UnauthorizedAccessException>(() => ProjectLock.Acquire(dir));
 
-        // Assert — the lock file was not deleted.
+        // Assert
         Assert.True(File.Exists(lockPath));
     }
 
