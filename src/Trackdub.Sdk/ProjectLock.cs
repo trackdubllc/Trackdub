@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 
@@ -7,8 +6,13 @@ namespace Trackdub.Sdk;
 /// <summary>
 /// File-based project directory lock that prevents concurrent runs targeting the same project.
 /// Uses an exclusive <see cref="FileStream"/> on a <c>.trackdub.lock</c> file to detect conflicts.
-/// Stale locks from crashed processes are automatically reclaimed.
 /// </summary>
+/// <remarks>
+/// A lock file left behind by a crashed run never blocks a later run: the operating system
+/// releases the file when its holder exits, so the next <see cref="Acquire"/> opens it and
+/// overwrites the record. A failed exclusive open therefore means a live holder, and is reported
+/// as a conflict rather than treated as something to clean up.
+/// </remarks>
 public sealed class ProjectLock : IDisposable, IAsyncDisposable
 {
     private const string LockFileName = ".trackdub.lock";
@@ -16,10 +20,11 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     private static readonly object s_globalLock = new();
 
     /// <summary>
-    /// In-process registry of currently held lock paths (canonical, lower-case on
-    /// case-insensitive file systems).  On Linux, <c>FileShare.None</c> is not
-    /// enforced for intra-process opens, so we need this secondary guard to stop the
-    /// same process from acquiring the same directory lock twice.
+    /// In-process registry of currently held lock paths, keyed by the resolved physical path so a
+    /// symlink and its target share one entry. The exclusive open in <see cref="Acquire"/> is what
+    /// enforces exclusion — <c>FileShare.None</c> is honoured both between processes and between
+    /// handles in one process, on Windows and Unix alike — so this registry exists to recognise a
+    /// same-process conflict and report our own PID instead of blaming another process.
     /// </summary>
     private static readonly HashSet<string> s_heldPaths = new(StringComparer.Ordinal);
 
@@ -39,7 +44,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     /// <param name="projectDirectory">The project directory to lock.</param>
     /// <returns>A <see cref="ProjectLock"/> that must be disposed to release the lock.</returns>
     /// <exception cref="ProjectLockedException">
-    /// Thrown when the project directory is already locked by another active process.
+    /// Thrown when the project directory is already locked by another active process or session.
     /// </exception>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="projectDirectory"/> is null or whitespace.
@@ -48,7 +53,7 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
 
-        string fullPath = Path.GetFullPath(projectDirectory);
+        string fullPath = ResolvePhysicalDirectory(projectDirectory);
         string lockFilePath = Path.Join(fullPath, LockFileName);
 
         // Ensure the directory exists so we can create the lock file.
@@ -58,41 +63,33 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         // between threads trying to lock the same directory.
         lock (s_globalLock)
         {
-            // Intra-process guard: on Linux FileShare.None is not enforced between
-            // FileStream instances within the same process, so we maintain our own set.
             if (s_heldPaths.Contains(lockFilePath))
             {
                 throw new ProjectLockedException(projectDirectory, Environment.ProcessId);
             }
 
-            // Attempt to open the lock file with exclusive access.
             FileStream? stream = TryOpenExclusive(lockFilePath);
 
             if (stream is null)
             {
-                // Lock file is held by another process. Check if it's stale.
-                int? holdingPid = TryReadHoldingProcessId(lockFilePath);
-
-                if (holdingPid.HasValue && IsProcessAlive(holdingPid.Value))
-                {
-                    // The holding process is still running — genuine conflict.
-                    throw new ProjectLockedException(projectDirectory, holdingPid.Value);
-                }
-
-                // Stale lock: the process that created it is no longer running.
-                // Attempt to delete and re-acquire.
-                TryDeleteStaleLockFile(lockFilePath);
-
-                stream = TryOpenExclusive(lockFilePath);
-                if (stream is null)
-                {
-                    // Another process grabbed it between our delete and re-open.
-                    throw new ProjectLockedException(projectDirectory);
-                }
+                // The file is held, so a run is in progress. Deleting it would not stop that run:
+                // POSIX unlink succeeds on an open file and only removes the directory entry, so we
+                // would create a replacement lock and two runs would write the same project. The
+                // delete fails on Windows, which is why this went unnoticed where it was written.
+                throw CreateLockedException(projectDirectory, lockFilePath);
             }
 
-            // Write diagnostic info (PID + timestamp) to the lock file.
-            WriteLockInfo(stream);
+            try
+            {
+                // Write diagnostic info (PID + timestamp) to the lock file.
+                WriteLockInfo(stream);
+            }
+            catch
+            {
+                // The handle is not registered yet, so nothing else can release it.
+                stream.Dispose();
+                throw;
+            }
 
             s_heldPaths.Add(lockFilePath);
             return new ProjectLock(lockFilePath, stream);
@@ -154,6 +151,39 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
     }
 
     /// <summary>
+    /// Resolves the project directory to its physical path so that a symlink and its target produce
+    /// one registry key. Only the final component's link chain is resolved — .NET exposes no API
+    /// for intermediate components — so a project reached through a symlinked parent keeps that
+    /// parent's spelling. Exclusion still holds in that case, because the operating system locks
+    /// the file's identity rather than the path used to reach it; only the reported holder degrades
+    /// from "this app" to "another process".
+    /// </summary>
+    private static string ResolvePhysicalDirectory(string projectDirectory)
+    {
+        string fullPath = Path.GetFullPath(projectDirectory);
+
+        try
+        {
+            FileSystemInfo? resolved = new DirectoryInfo(fullPath).ResolveLinkTarget(returnFinalTarget: true);
+            return resolved is null ? fullPath : Path.GetFullPath(resolved.FullName);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return fullPath;
+        }
+    }
+
+    /// <summary>
+    /// Builds the conflict exception, enriched with the holder's PID when that PID can be read.
+    /// The read is best-effort: a holder that opened the file with <see cref="FileShare.None"/>
+    /// refuses it on both Windows and Unix, so a cross-process conflict normally reports no PID.
+    /// </summary>
+    private static ProjectLockedException CreateLockedException(string projectDirectory, string lockFilePath) =>
+        TryReadHoldingProcessId(lockFilePath) is int holdingProcessId
+            ? new ProjectLockedException(projectDirectory, holdingProcessId)
+            : new ProjectLockedException(projectDirectory);
+
+    /// <summary>
     /// Attempts to open the lock file with exclusive access (no sharing).
     /// Returns null if the file is already locked by another process.
     /// </summary>
@@ -182,6 +212,8 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
 
     /// <summary>
     /// Attempts to read the PID from an existing lock file (best-effort, non-exclusive read).
+    /// Returns <see langword="null"/> whenever the content cannot be read or parsed, which is the
+    /// normal outcome while a holder has the file open exclusively.
     /// </summary>
     private static int? TryReadHoldingProcessId(string lockFilePath)
     {
@@ -216,44 +248,6 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// Checks whether a process with the given PID is still running.
-    /// </summary>
-    private static bool IsProcessAlive(int processId)
-    {
-        try
-        {
-            using Process process = Process.GetProcessById(processId);
-            return !process.HasExited;
-        }
-        catch (ArgumentException)
-        {
-            // Process does not exist.
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            // Process has exited.
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Attempts to delete a stale lock file. Failures are silently ignored.
-    /// </summary>
-    private static void TryDeleteStaleLockFile(string lockFilePath)
-    {
-        try
-        {
-            File.Delete(lockFilePath);
-        }
-        catch
-        {
-            // Best-effort; if we can't delete it, TryOpenExclusive will fail
-            // and we'll throw ProjectLockedException.
-        }
     }
 
     /// <summary>

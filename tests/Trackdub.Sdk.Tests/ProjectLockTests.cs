@@ -141,6 +141,77 @@ public sealed class ProjectLockTests : IDisposable
     }
 
     [Fact]
+    public void Acquire_LeftoverLockFileNamingALiveProcess_IsStillReclaimed()
+    {
+        // Arrange — a leftover lock file that names a process which is still running.
+        // Reclamation depends on the file not being held, never on the recorded PID being dead:
+        // the operating system drops the handle when its holder exits, so an unheld file is free.
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        File.WriteAllText(lockPath, $$"""{"pid":{{Environment.ProcessId}},"timestamp":"2024-01-01T00:00:00Z","machineName":"LEFTOVER"}""");
+
+        // Act
+        using var lockHandle = ProjectLock.Acquire(dir);
+
+        // Assert
+        Assert.NotNull(lockHandle);
+    }
+
+    [Fact]
+    public void Acquire_WhenTheLockFileIsHeld_ThrowsAndLeavesTheHolderIntact()
+    {
+        // Arrange — a foreign handle holding the lock file exclusively. It is deliberately not
+        // registered in ProjectLock's in-process registry, so the code path under test is the one
+        // that a real second process takes. FileShare.None is enforced per file rather than per
+        // process, so this handle is indistinguishable from an out-of-process holder here.
+        string dir = CreateTempDirectory();
+        string lockPath = Path.Join(dir, ".trackdub.lock");
+        const string sentinel = """{"pid":424242,"timestamp":"2024-01-01T00:00:00Z","machineName":"HOLDER"}""";
+        File.WriteAllText(lockPath, sentinel);
+
+        using var holder = new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None, bufferSize: 256);
+
+        // Act & Assert — a held lock is a conflict, not something to clean up.
+        ProjectLockedException ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
+        Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+
+        // The holder's record must survive: deleting a live lock lets two runs write one project.
+        holder.Dispose();
+        Assert.Equal(sentinel, File.ReadAllText(lockPath));
+    }
+
+    [Fact]
+    public void Acquire_ThroughASymlinkToALockedDirectory_ReportsThisProcess()
+    {
+        // Arrange — a symlink and its target must share one registry entry, otherwise the aliased
+        // path misses the in-process guard and the conflict is blamed on another process.
+        string real = CreateTempDirectory();
+        string link = Path.Join(Path.GetDirectoryName(real)!, Guid.NewGuid().ToString("N") + "-link");
+
+        try
+        {
+            Directory.CreateSymbolicLink(link, real);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return; // The file system or the account cannot create links; nothing to assert.
+        }
+
+        try
+        {
+            using ProjectLock first = ProjectLock.Acquire(real);
+
+            // Act & Assert
+            ProjectLockedException ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(link));
+            Assert.Equal(Environment.ProcessId, ex.HoldingProcessId);
+        }
+        finally
+        {
+            try { Directory.Delete(link); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
     public void Acquire_ConcurrentThreads_OnlyOneSucceeds()
     {
         // Arrange
