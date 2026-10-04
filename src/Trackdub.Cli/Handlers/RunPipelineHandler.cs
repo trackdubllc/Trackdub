@@ -33,6 +33,14 @@ internal static class RunPipelineHandler
             return timingExitCode;
         }
 
+        string projectOutputDirectory = ResolveProjectDirectory(request);
+
+        using ProjectLock? projectLock = CliProjectLock.TryAcquire(projectOutputDirectory);
+        if (projectLock is null)
+        {
+            return Program.ExitPipelineFailure;
+        }
+
         var dubbingOptions = new DubbingSessionOptions
         {
             SourceMediaPath = request.SourceMediaPath,
@@ -66,11 +74,6 @@ internal static class RunPipelineHandler
             CliErrorReporter.ReportError(ErrorCode.Cancelled, "Pipeline execution was cancelled.");
             return Program.ExitPipelineFailure;
         }
-
-        string projectOutputDirectory = request.ProjectOutputDirectory
-            ?? Path.Join(
-                Path.GetDirectoryName(request.SourceMediaPath) ?? ".",
-                Path.GetFileNameWithoutExtension(request.SourceMediaPath) + ".trackdub");
 
         var manifestWriter = new RunManifestWriter();
         await manifestWriter.WriteAsync(result, projectOutputDirectory, cancellationToken).ConfigureAwait(false);
@@ -169,6 +172,11 @@ internal static class RunPipelineHandler
         public string? ManifestPath { get; init; }
         public string? Status { get; init; }
     }
+
+    internal static string ResolveProjectDirectory(RunPipelineRequest request) =>
+        TrackdubProjectPaths.ResolveProjectDirectory(
+            request.SourceMediaPath,
+            request.ProjectOutputDirectory);
 
     internal static bool IsGoalAchieved(
         DubbingRunResult result,

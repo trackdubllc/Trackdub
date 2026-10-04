@@ -47,6 +47,12 @@ internal static class RunStageHandler
             return Program.ExitPipelineFailure;
         }
 
+        using ProjectLock? projectLock = CliProjectLock.TryAcquire(resolvedProjectPath);
+        if (projectLock is null)
+        {
+            return Program.ExitPipelineFailure;
+        }
+
         TrackdubProjectContext? projectContext = await TrackdubProjectContextResolver
             .TryOpenAsync(factory, resolvedProjectPath, cancellationToken)
             .ConfigureAwait(false);

@@ -275,10 +275,9 @@ public sealed class DubbingPipelineEngine(
 
     private static string EnsureProjectDirectory(DubbingSessionOptions options)
     {
-        string projectOutputDirectory = options.ProjectOutputDirectory
-            ?? Path.Join(
-                Path.GetDirectoryName(options.SourceMediaPath) ?? ".",
-                Path.GetFileNameWithoutExtension(options.SourceMediaPath) + ".trackdub");
+        string projectOutputDirectory = DubbingProjectPaths.ResolveProjectDirectory(
+            options.SourceMediaPath,
+            options.ProjectOutputDirectory);
 
         if (!Directory.Exists(projectOutputDirectory))
         {
