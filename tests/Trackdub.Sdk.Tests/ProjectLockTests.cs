@@ -274,7 +274,6 @@ public sealed class ProjectLockTests : IDisposable
         Assert.True(File.Exists(lockPath));
     }
 
-
     [UnixOnlyFact]
     public void Acquire_EmptyLockFileWrittenJustNowHeldByAnotherHandle_FailsClosed()
     {

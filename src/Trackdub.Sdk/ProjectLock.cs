@@ -373,7 +373,6 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
         }
     }
 
-
     /// <summary>
     /// Checks whether a process with the given PID is still running.
     /// </summary>
@@ -395,7 +394,6 @@ public sealed class ProjectLock : IDisposable, IAsyncDisposable
             return false;
         }
     }
-
 
     /// <summary>
     /// Writes diagnostic information (PID and timestamp) to the lock file.
