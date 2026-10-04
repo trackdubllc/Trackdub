@@ -174,6 +174,7 @@ public sealed class ProjectLockTests : IDisposable
         // Act & Assert — a held lock is a conflict, not something to clean up.
         ProjectLockedException ex = Assert.Throws<ProjectLockedException>(() => ProjectLock.Acquire(dir));
         Assert.Equal(ErrorCode.ProjectLocked, ex.ErrorCode);
+        Assert.Null(ex.HoldingProcessId);
 
         // The holder's record must survive: deleting a live lock lets two runs write one project.
         holder.Dispose();
