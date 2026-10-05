@@ -271,7 +271,7 @@ internal static class DeepFilterNetOnnxInference
             {
                 Buffer.BlockCopy(
                     flat, ((c * expectedFrames) + f) * band * sizeof(float),
-                    frameMajor, (f * frameSize + (c * band)) * sizeof(float),
+                    frameMajor, ((f * frameSize) + (c * band)) * sizeof(float),
                     band * sizeof(float));
             }
         }

@@ -52,7 +52,6 @@ internal static class DeepFilterNetStreamingEnhancer
     // threshold is scale-sensitive, so match native's scale before gating and featuring.
     private const float NativeInputScale = 32768f / 32767f;
 
-
     /// <summary>
     /// Classifies one frame's decoder stages from its encoder local-SNR estimate, mirroring
     /// native <c>apply_stages</c> (strict comparisons: equality takes full processing).
@@ -273,8 +272,8 @@ internal static class DeepFilterNetStreamingEnhancer
                     int hopIndex = ordinalToHop[j];
                     for (int i = 0; i < hop; i++)
                     {
-                        hopOut[hopIndex * hop + i] = timeDomain[j * fft + i] + synthesisMemory[i];
-                        synthesisMemory[i] = timeDomain[j * fft + hop + i];
+                        hopOut[(hopIndex * hop) + i] = timeDomain[(j * fft) + i] + synthesisMemory[i];
+                        synthesisMemory[i] = timeDomain[(j * fft) + hop + i];
                     }
                 }
 

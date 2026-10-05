@@ -8,7 +8,7 @@ public sealed class StreamingMonoPcm16WaveWriterTests
     public async Task WritesBoundedBlocksWithTheExistingPcmEncodingAndHeader()
     {
         float[] samples = Enumerable.Range(0, 20000)
-            .Select(static i => (i % 17 - 8) / 7f).ToArray();
+            .Select(static i => ((i % 17) - 8) / 7f).ToArray();
         await using var stream = new BoundedWriteStream();
         var writer = await StreamingMonoPcm16WaveWriter.CreateAsync(
             stream, samples.Length, 48000, CancellationToken.None);

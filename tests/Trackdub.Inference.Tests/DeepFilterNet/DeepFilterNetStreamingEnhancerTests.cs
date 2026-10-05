@@ -315,7 +315,7 @@ public sealed class DeepFilterNetStreamingEnhancerTests
         var random = new Random(seed);
         for (int i = 0; i < length; i++)
         {
-            signal[i] += 0.05f * (float)(random.NextDouble() * 2.0 - 1.0);
+            signal[i] += 0.05f * (float)((random.NextDouble() * 2.0) - 1.0);
         }
 
         return signal;
