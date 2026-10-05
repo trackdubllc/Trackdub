@@ -38,5 +38,5 @@ Never treat component registration, settings fields or profile catalog entries a
 
 - No Trackdub-hosted redistributable: NVIDIA's license decides whether one can ship. Until then the runtime is user-installed.
 - AEC needs a far-end reference that dubbing never has, so it is hidden from the UI and untested live.
-- Speaker Focus (Early Access) is in the catalog but gated: it is hidden from `SelectableDefinitions` and readiness refuses it ("Early Access disabled") unless `TRACKDUB_AFX_ALLOW_EARLY_ACCESS=1` is set, because it ships under NVIDIA's evaluation license.
+- Speaker Focus (Early Access) is in the catalog but gated: it is hidden from `SelectableDefinitions` and readiness refuses it ("Early Access disabled") unless `TRACKDUB_AFX_ALLOW_EARLY_ACCESS=1` is set, because it ships under NVIDIA's evaluation license, which permits internal testing and evaluation only, not production use.
 - Live proofs need a Windows NVIDIA RTX machine and never run in default CI.

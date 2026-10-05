@@ -167,7 +167,7 @@ Each entry should include:
 - commercial use allowed? not determined; governed by NVIDIA's terms and the user's own agreement with NVIDIA. Do not treat as commercial-safe until reviewed
 - redistribution allowed? Trackdub does not bundle, host or redistribute any AFX file; the user installs the SDK and features themselves
 - attribution required? yes; NVIDIA's branding guidelines apply when AFX is integrated (https://www.nvidia.com/maxine-sdk-guidelines)
-- notes: Optional and off by default. Readiness requires the user to accept the NVIDIA AFX license in Settings (`NvidiaAfxLicenseAccepted`) and to point Trackdub at a local SDK folder (`NvidiaAfxRuntimeDirectory`). Early Access effects (Speaker Focus) are evaluation-licensed and must not be shipped to end users until NVIDIA's terms allow it. NVIDIA's 3.0.0 documentation marks Acoustic Echo Cancellation and Voice Font as deprecated. The commercial-safe mode impact of an optional, user-installed NVIDIA runtime is an open review item.
+- notes: Optional and off by default. Readiness requires the user to accept the NVIDIA AFX license in Settings (`NvidiaAfxLicenseAccepted`) and to point Trackdub at a local SDK folder (`NvidiaAfxRuntimeDirectory`). Early Access effects (Speaker Focus) are licensed by NVIDIA for internal testing and evaluation only, not for production use, and must not be shipped to end users unless NVIDIA grants that in writing. NVIDIA's 3.0.0 documentation marks Acoustic Echo Cancellation and Voice Font as deprecated. The commercial-safe mode impact of an optional, user-installed NVIDIA runtime is an open review item.
 
 ## OpenVINO (Intel Windows ML execution provider)
 

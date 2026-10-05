@@ -50,7 +50,7 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
 
         var failures = new List<string>();
         foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
-                     .Where(definition => !definition.RequiresFarEndReference))
+                     .Where(definition => !definition.RequiresFarEndReference && !definition.IsEarlyAccess))
         {
             foreach (int sampleRate in definition.SupportedSampleRates)
             {
@@ -204,7 +204,7 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
 
         var notReady = new List<string>();
         foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
-                     .Where(definition => !definition.RequiresFarEndReference))
+                     .Where(definition => !definition.RequiresFarEndReference && !definition.IsEarlyAccess))
         {
             NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(definition.Profile);
             output.WriteLine(

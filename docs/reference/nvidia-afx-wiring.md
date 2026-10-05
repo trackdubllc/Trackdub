@@ -4,7 +4,7 @@ NVIDIA AFX works end to end for a **locally installed** runtime. `NvidiaAfxInteg
 
 ## Verified
 
-On an RTX 5070 (Blackwell), every profile selectable in the UI (all but Acoustic Echo Cancellation, which needs a far-end reference dubbing never has) creates, loads and processes audio with NVIDIA Audio Effects SDK **3.0.0.51** (the current release) and its 3.0.0 Blackwell models from NGC, and, except for Speaker Focus, also with SDK **2.1.0.9** and the 2.1.0 models. Feature versions must match the core SDK version. The same code runs on both with no version switches:
+On an RTX 5070 (Blackwell), every profile selectable in the UI (all but Acoustic Echo Cancellation, which needs a far-end reference dubbing never has, and the Early Access Speaker Focus) creates, loads and processes audio with NVIDIA Audio Effects SDK **3.0.0.51** (the current release) and its 3.0.0 Blackwell models from NGC, and also with SDK **2.1.0.9** and the 2.1.0 models. Speaker Focus is covered separately below. Feature versions must match the core SDK version. The same code runs on both with no version switches:
 
 | Profile | Selector | Rates |
 |---------|----------|-------|
@@ -69,7 +69,7 @@ Place model files under `features/nvafx<effect>/models/<arch>/` and the DLL unde
 - A Trackdub-hosted redistributable (license-dependent); until then the runtime is user-installed.
 - Multi-GPU machines are handled by trying each architecture candidate, but a mixed-generation machine has not been verified on hardware.
 - End-to-end AEC with a real far-end reference.
-- Speaker Focus is an NVIDIA Early Access effect under NVIDIA's evaluation license, so it must not be shipped to end users until NVIDIA's terms allow it. Studio Voice is in the SDK but not in the profile catalog. NVIDIA's 3.0.0 docs mark Acoustic Echo Cancellation and Voice Font as deprecated, so they are not planned.
+- Speaker Focus is an NVIDIA Early Access effect under NVIDIA's evaluation license, so it is licensed for internal testing and evaluation only, not for production use, and must not be shipped to end users unless NVIDIA grants that in writing. Studio Voice is in the SDK but not in the profile catalog. NVIDIA's 3.0.0 docs mark Acoustic Echo Cancellation and Voice Font as deprecated, so they are not planned.
 - Denoiser v2 (`effect_version`) is an experimental preview that cannot be chained and enables voice-activity gating by default, so it is not used.
 - No GPU CI tier.
 

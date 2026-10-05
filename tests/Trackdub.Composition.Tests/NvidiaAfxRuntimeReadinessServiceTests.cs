@@ -377,7 +377,8 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
             INvidiaAfxEffectProbe probe,
             INvidiaAfxArchitectureDetector? detector = null,
             bool licenseAccepted = true,
-            Func<StudioSettings>? settingsProvider = null) =>
+            Func<StudioSettings>? settingsProvider = null,
+            bool allowEarlyAccess = false) =>
             new(
                 new ComponentStore(_tempRoot, new TestLogger()),
                 detector ?? new MutableArchitectureDetector("ada"),
@@ -387,7 +388,8 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
                     NvidiaAfxRuntimeDirectory = RuntimePath,
                     NvidiaAfxLicenseAccepted = licenseAccepted,
                 }),
-                effectProbe: probe);
+                effectProbe: probe,
+                allowEarlyAccess: () => allowEarlyAccess);
 
         public void Dispose()
         {
