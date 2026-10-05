@@ -46,6 +46,13 @@ internal static class NvidiaAfxNative
         float value);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+    public static extern int NvAFX_SetFloatList(
+        IntPtr effectHandle,
+        string parameter,
+        [In] float[] values,
+        uint count);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern int NvAFX_SetU32(
         IntPtr effectHandle,
         string parameter,
@@ -106,17 +113,32 @@ internal static class NvidiaAfxNativeLoader
 
         lock (SyncRoot)
         {
-            if (_loaded)
-            {
-                return;
-            }
-
-            string? libraryPath = NvidiaAfxRuntimeLayout.ResolveNativeLibraryPath(runtimeRoot);
-            if (libraryPath is null)
+            string? resolvedLibraryPath = NvidiaAfxRuntimeLayout.ResolveNativeLibraryPath(runtimeRoot);
+            if (resolvedLibraryPath is null)
             {
                 throw new FileNotFoundException(
                     "NVIDIA AFX native library (NVAudioEffects.dll) not found in runtime package.",
                     Path.Join(runtimeRoot, "NVAudioEffects.dll"));
+            }
+
+            // AFX is process-global: once the P/Invoke resolver is bound, loading another
+            // runtime would pair the first SDK binary with models from the second runtime.
+            string libraryPath = Path.GetFullPath(resolvedLibraryPath);
+            if (_loaded)
+            {
+                if (!string.Equals(
+                        _libraryPath,
+                        libraryPath,
+                        OperatingSystem.IsWindows()
+                            ? StringComparison.OrdinalIgnoreCase
+                            : StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"NVIDIA AFX is already loaded from '{_libraryPath}', but the requested " +
+                        $"runtime uses '{libraryPath}'. Runtime changes require a new process.");
+                }
+
+                return;
             }
 
             _libraryPath = libraryPath;
