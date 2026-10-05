@@ -28,12 +28,14 @@ public class DeepFilterNetSignalBenchmarks
 
         int frameCount = Math.Max(1, (SampleCount + DeepFilterNetSignalProcessor.HopSize - 1) /
             DeepFilterNetSignalProcessor.HopSize);
-        stftFrames = new Complex32[frameCount, DeepFilterNetSignalProcessor.FreqBins];
+        // Window synthesis needs 4 lookback spectra ahead of the window frames.
+        const int lookbackFrames = 4;
+        stftFrames = new Complex32[frameCount + lookbackFrames, DeepFilterNetSignalProcessor.FreqBins];
         erbGains = new float[1, 1, frameCount, DeepFilterNetSignalProcessor.ErbBands];
         dfCoefs = new float[1, frameCount, DeepFilterNetSignalProcessor.DfOrder,
             DeepFilterNetSignalProcessor.NbDf, 2];
 
-        for (int frame = 0; frame < frameCount; frame++)
+        for (int frame = 0; frame < frameCount + lookbackFrames; frame++)
         {
             for (int bin = 0; bin < stftFrames.GetLength(1); bin++)
             {
@@ -82,7 +84,7 @@ public class DeepFilterNetSignalBenchmarks
     public int Synthesize()
     {
         float[] output = DeepFilterNetSignalProcessor.Synthesize(
-            stftFrames, erbGains, dfCoefs, SampleCount);
+            stftFrames, erbGains, dfCoefs);
         return output.Length;
     }
 }
