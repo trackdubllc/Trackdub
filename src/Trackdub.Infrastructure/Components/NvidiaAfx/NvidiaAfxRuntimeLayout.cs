@@ -144,6 +144,33 @@ public static class NvidiaAfxRuntimeLayout
     }
 
     /// <summary>
+    /// Enumerates the third-party DLLs (CUDA, TensorRT, OpenSSL) the Maxine 2.x SDK keeps under
+    /// <c>bin/external/*/bin</c>. Feature DLLs depend on them but those folders are not on the
+    /// default DLL search path, so they must be preloaded by absolute path.
+    /// </summary>
+    public static IEnumerable<string> EnumerateExternalDependencyPaths(string runtimeRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
+
+        foreach (string externalRoot in new[]
+                 {
+                     Path.Join(runtimeRoot, "bin", "external"),
+                     Path.Join(runtimeRoot, "external"),
+                 })
+        {
+            if (!Directory.Exists(externalRoot))
+            {
+                continue;
+            }
+
+            foreach (string dllPath in Directory.EnumerateFiles(externalRoot, "*.dll", SearchOption.AllDirectories))
+            {
+                yield return dllPath;
+            }
+        }
+    }
+
+    /// <summary>
     /// Enumerates Maxine feature native libraries under <c>features/*/bin/*.dll</c> plus
     /// sidecar <c>nvafx*.dll</c> next to the core library (for managed preload).
     /// </summary>

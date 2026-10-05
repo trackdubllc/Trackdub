@@ -18,7 +18,7 @@
         "features/nvafxdereverb/models/turing/dereverb_48k.trtpkg",
         "features/nvafxdereverbdenoiser/models/turing/dereverb_denoiser_16k.trtpkg",
         "features/nvafxdereverbdenoiser/models/turing/dereverb_denoiser_48k.trtpkg",
-        "features/nvafxsuperres/models/turing/superres_8k_to_16k.trtpkg"
+        "features/nvafxsuperres/models/turing/superres_8kto16k.trtpkg"
       ]
     },
     {
@@ -35,7 +35,7 @@
         "features/nvafxdereverb/models/ampere/dereverb_48k.trtpkg",
         "features/nvafxdereverbdenoiser/models/ampere/dereverb_denoiser_16k.trtpkg",
         "features/nvafxdereverbdenoiser/models/ampere/dereverb_denoiser_48k.trtpkg",
-        "features/nvafxsuperres/models/ampere/superres_8k_to_16k.trtpkg"
+        "features/nvafxsuperres/models/ampere/superres_8kto16k.trtpkg"
       ]
     },
     {
@@ -52,7 +52,7 @@
         "features/nvafxdereverb/models/ada/dereverb_48k.trtpkg",
         "features/nvafxdereverbdenoiser/models/ada/dereverb_denoiser_16k.trtpkg",
         "features/nvafxdereverbdenoiser/models/ada/dereverb_denoiser_48k.trtpkg",
-        "features/nvafxsuperres/models/ada/superres_8k_to_16k.trtpkg"
+        "features/nvafxsuperres/models/ada/superres_8kto16k.trtpkg"
       ]
     },
     {
@@ -69,7 +69,7 @@
         "features/nvafxdereverb/models/blackwell/dereverb_48k.trtpkg",
         "features/nvafxdereverbdenoiser/models/blackwell/dereverb_denoiser_16k.trtpkg",
         "features/nvafxdereverbdenoiser/models/blackwell/dereverb_denoiser_48k.trtpkg",
-        "features/nvafxsuperres/models/blackwell/superres_8k_to_16k.trtpkg"
+        "features/nvafxsuperres/models/blackwell/superres_8kto16k.trtpkg"
       ]
     }
   ]

@@ -135,9 +135,11 @@ internal static class NvidiaAfxNativeLoader
     public static string? LoadedFrom => _loadedFrom;
 
     /// <summary>
-    /// Loads <c>features/*/bin/*.dll</c> (and sidecar <c>nvafx*.dll</c>) via managed
-    /// <see cref="NativeLibrary.Load(string)"/> before the core AFX library. Already-mapped
-    /// modules remain available when Maxine later LoadLibrary's them by basename.
+    /// Loads the SDK's third-party DLLs (<c>bin/external</c>) and then <c>features/*/bin/*.dll</c>
+    /// (plus sidecar <c>nvafx*.dll</c>) via managed <see cref="NativeLibrary.Load(string)"/> before
+    /// the core AFX library. Already-mapped modules remain available when Maxine later
+    /// LoadLibrary's them by basename; feature DLLs only resolve their CUDA/TensorRT dependencies
+    /// this way because <c>bin/external/*/bin</c> is not on the DLL search path.
     /// </summary>
     private static void PreloadWindowsNativeDependencies(string runtimeRoot)
     {
@@ -146,16 +148,37 @@ internal static class NvidiaAfxNativeLoader
             return;
         }
 
-        foreach (string dependencyPath in NvidiaAfxRuntimeLayout.EnumerateFeatureNativeLibraryPaths(runtimeRoot))
+        PreloadAll(NvidiaAfxRuntimeLayout.EnumerateExternalDependencyPaths(runtimeRoot));
+        PreloadAll(NvidiaAfxRuntimeLayout.EnumerateFeatureNativeLibraryPaths(runtimeRoot));
+    }
+
+    // Retries until a pass makes no progress, because the DLLs depend on each other (cuBLAS needs
+    // cuBLASLt) and the enumeration order is not a dependency order.
+    private static void PreloadAll(IEnumerable<string> dependencyPaths)
+    {
+        List<string> pending = [.. dependencyPaths];
+        while (pending.Count > 0)
         {
-            try
+            int before = pending.Count;
+            pending.RemoveAll(TryPreload);
+            if (pending.Count == before)
             {
-                NativeLibrary.Load(dependencyPath);
+                return;
             }
-            catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
-            {
-                // Best-effort: invalid/missing feature payloads are reported by CreateEffect/Load.
-            }
+        }
+    }
+
+    private static bool TryPreload(string dependencyPath)
+    {
+        try
+        {
+            NativeLibrary.Load(dependencyPath);
+            return true;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
+        {
+            // Best-effort: invalid/missing feature payloads are reported by CreateEffect/Load.
+            return false;
         }
     }
 

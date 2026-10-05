@@ -152,12 +152,13 @@ public static class NvidiaAfxProfileCatalog
                 new(
                     8000,
                     [
-                        new("nvafxsuperres", "superres_8k_to_16k"),
+                        new("nvafxsuperres", "superres_8kto16k"),
                         new("nvafxdenoiser", "denoiser_16k"),
                     ]),
             ],
             RequiresFarEndReference: false,
-            SupportsIntensityRatio: true,
+            // SDK 2.x rejects intensity_ratio on chained selectors with NVAFX_STATUS_INVALID_PARAM.
+            SupportsIntensityRatio: false,
             OutputSampleRate: 16000),
         new(
             NvidiaAfxProfile.AcousticEchoCancellation,
