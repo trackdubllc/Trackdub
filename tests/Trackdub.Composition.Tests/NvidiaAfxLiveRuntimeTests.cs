@@ -150,6 +150,15 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
     }
 
     [NvidiaAfxLiveRuntimeFact]
+    public void Architecture_detector_finds_the_installed_nvidia_gpu()
+    {
+        IReadOnlyList<string> buckets = new NvidiaAfxArchitectureDetector().DetectArchitectureBuckets();
+        output.WriteLine("candidate architectures: " + string.Join(", ", buckets));
+
+        Assert.NotEmpty(buckets);
+    }
+
+    [NvidiaAfxLiveRuntimeFact]
     public void Intensity_changes_the_output_for_every_profile_that_advertises_it()
     {
         string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
@@ -273,7 +282,11 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
             store,
             new NvidiaAfxArchitectureDetector(),
             ResolveManifestPath(),
-            settingsProvider: () => StudioSettings.Default with { NvidiaAfxRuntimeDirectory = runtimeRoot });
+            settingsProvider: () => StudioSettings.Default with
+            {
+                NvidiaAfxRuntimeDirectory = runtimeRoot,
+                NvidiaAfxLicenseAccepted = true,
+            });
 
     private static string ResolveManifestPath()
     {
@@ -341,8 +354,8 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
         for (int index = 0; index < signal.Length; index++)
         {
             double time = (double)index / sampleRate;
-            double tone = 0.25 * Math.Sin(2 * Math.PI * 220 * time) + 0.15 * Math.Sin(2 * Math.PI * 660 * time);
-            double noise = 0.08 * (random.NextDouble() * 2 - 1);
+            double tone = (0.25 * Math.Sin(2 * Math.PI * 220 * time)) + (0.15 * Math.Sin(2 * Math.PI * 660 * time));
+            double noise = 0.08 * ((random.NextDouble() * 2) - 1);
             signal[index] = (float)(tone + noise);
         }
 

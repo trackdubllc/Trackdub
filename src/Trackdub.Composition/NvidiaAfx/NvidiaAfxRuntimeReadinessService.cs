@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Text.Json;
 using Trackdub.Contracts;
 using Trackdub.Infrastructure.Components;
 using Trackdub.Infrastructure.Components.NvidiaAfx;
@@ -49,7 +49,36 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
             return new NvidiaAfxRuntimeReadiness(false, "Manifest error", runtimeRoot, ex.Message);
         }
 
-        string architecture = architectureDetector.DetectArchitectureBucket();
+        // A stale adapter entry or two installed generations give several candidate architectures,
+        // and the registry cannot say which one CUDA device 0 is. The first candidate whose models
+        // exist and whose effects run on this machine wins; otherwise report the first failure.
+        IReadOnlyList<string> candidates = architectureDetector.DetectArchitectureBuckets();
+        if (candidates.Count == 0)
+        {
+            candidates = ["unsupported"];
+        }
+
+        NvidiaAfxRuntimeReadiness? firstFailure = null;
+        foreach (string architecture in candidates)
+        {
+            NvidiaAfxRuntimeReadiness result = EvaluateArchitecture(profile, runtimeRoot, manifest, architecture);
+            if (result.IsReady)
+            {
+                return result;
+            }
+
+            firstFailure ??= result;
+        }
+
+        return firstFailure!;
+    }
+
+    private NvidiaAfxRuntimeReadiness EvaluateArchitecture(
+        NvidiaAfxProfile profile,
+        string runtimeRoot,
+        NvidiaAfxRuntimeManifest manifest,
+        string architecture)
+    {
         NvidiaAfxRuntimePackage? package = manifest.Packages
             .FirstOrDefault(candidate => string.Equals(candidate.Architecture, architecture, StringComparison.OrdinalIgnoreCase));
         if (package is null)
@@ -63,8 +92,8 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
 
         NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
 
-        // Maxine 3.x feature DLLs are required when a features/ tree is present. Legacy flat
-        // models/-only fixtures (unit tests / older stages) skip this gate.
+        // Maxine 2.x/3.x feature DLLs are required when a features/ tree is present. Flat
+        // models/-only installs (SDK 1.6, unit tests) have no feature DLLs to check.
         if (NvidiaAfxRuntimeLayout.HasFeaturesDirectory(runtimeRoot)
             && !NvidiaAfxRuntimeLayout.HasRequiredFeatureLibraries(
                 runtimeRoot,
@@ -94,19 +123,24 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
                 "for each supported sample rate (for example denoiser_16k and denoiser_48k).");
         }
 
-        int inputSampleRate = definition.PreferredProbeSampleRate;
-        NvidiaAfxEffectProbeResult probe = effectProbe.Probe(
-            runtimeRoot,
-            definition,
-            inputSampleRate,
-            architecture);
-        if (!probe.Succeeded)
+        // Probe every supported rate: a corrupt or mismatched model for one rate would otherwise
+        // report Ready and then fall back silently when that rate is used.
+        foreach (int inputSampleRate in definition.SupportedSampleRates)
         {
-            return new NvidiaAfxRuntimeReadiness(
-                false,
-                "Native probe failed",
+            NvidiaAfxEffectProbeResult probe = effectProbe.Probe(
                 runtimeRoot,
-                probe.FailureReason ?? "AFX native library/effect probe failed.");
+                definition,
+                inputSampleRate,
+                architecture);
+            if (!probe.Succeeded)
+            {
+                return new NvidiaAfxRuntimeReadiness(
+                    false,
+                    "Native probe failed",
+                    runtimeRoot,
+                    (probe.FailureReason ?? "AFX native library/effect probe failed.") +
+                    $" (architecture '{architecture}', {inputSampleRate} Hz)");
+            }
         }
 
         return new NvidiaAfxRuntimeReadiness(true, "Ready", runtimeRoot, null, architecture);
@@ -123,14 +157,13 @@ public sealed class NvidiaAfxRuntimeReadinessService(
 {
     private readonly Func<bool> _isStubbed = isStubbed ?? NvidiaAfxIntegration.IsStubbed;
 
-    // Only Ready results are cached: they are the ones that cost a native GPU probe. A cached
-    // runtime that later breaks falls back to DeepFilterNet when the enhancement run fails.
-    private readonly ConcurrentDictionary<(NvidiaAfxProfile Profile, string RuntimeRoot), NvidiaAfxRuntimeReadiness> _readyCache = new();
-
+    // The native probe is the expensive part (it creates a GPU effect), so only successful probes
+    // are cached. Every call still re-checks the files and the detected architecture, so a removed
+    // model or library, or a GPU change, is noticed immediately.
     private readonly NvidiaAfxInstalledRuntimeEvaluator _evaluator = new(
         architectureDetector,
         manifestPath,
-        effectProbe ?? NvidiaAfxSessionEffectProbe.Instance);
+        new CachingNvidiaAfxEffectProbe(effectProbe ?? NvidiaAfxSessionEffectProbe.Instance));
 
     public NvidiaAfxRuntimeReadiness GetReadiness(NvidiaAfxProfile profile)
     {
@@ -148,31 +181,44 @@ public sealed class NvidiaAfxRuntimeReadinessService(
             return new NvidiaAfxRuntimeReadiness(false, "Unsupported OS", null, "NVIDIA AFX is Windows-only.");
         }
 
-        StudioSettings? settings = settingsProvider?.Invoke();
+        StudioSettings? settings;
+        try
+        {
+            settings = settingsProvider?.Invoke();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "Settings unavailable",
+                null,
+                $"Trackdub settings could not be read: {ex.Message}");
+        }
+
+        // Local runtimes are used under NVIDIA's license, so using one requires the same explicit
+        // acceptance the installer asks for. Nothing is bundled or redistributed by Trackdub.
+        if (settings is not { NvidiaAfxLicenseAccepted: true })
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "License not accepted",
+                null,
+                "Accept the NVIDIA AFX license in Settings before using NVIDIA AFX.");
+        }
+
         string? runtimeRoot = NvidiaAfxRuntimePathResolver.ResolveRuntimeRoot(
             componentStore,
-            settings?.NvidiaAfxRuntimeDirectory);
+            settings.NvidiaAfxRuntimeDirectory);
         if (string.IsNullOrWhiteSpace(runtimeRoot))
         {
             return new NvidiaAfxRuntimeReadiness(
                 false,
                 "Not installed",
                 null,
-                "Runtime package is not installed. Accept the AFX license and install a verified package, " +
-                "or set NvidiaAfxRuntimeDirectory / TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT to a local Maxine AFX install.");
+                "Runtime package is not installed. Install a verified package, or set " +
+                "NvidiaAfxRuntimeDirectory / TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT to a local Maxine AFX install.");
         }
 
-        if (_readyCache.TryGetValue((profile, runtimeRoot), out NvidiaAfxRuntimeReadiness? cached))
-        {
-            return cached;
-        }
-
-        NvidiaAfxRuntimeReadiness readiness = _evaluator.Evaluate(profile, runtimeRoot);
-        if (readiness.IsReady)
-        {
-            _readyCache[(profile, runtimeRoot)] = readiness;
-        }
-
-        return readiness;
+        return _evaluator.Evaluate(profile, runtimeRoot);
     }
 }

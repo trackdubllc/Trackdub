@@ -32,13 +32,21 @@ public static class NvidiaGpuArchitectureClassifier
         }
 
         if (gpuName.Contains("RTX 40", StringComparison.OrdinalIgnoreCase) ||
+            gpuName.Contains("L40", StringComparison.OrdinalIgnoreCase) ||
             gpuName.Contains("Ada", StringComparison.OrdinalIgnoreCase))
         {
             return NvidiaGpuArchitectureBucket.Ada;
         }
 
+        // RTX A-series workstation cards (A2000..A6000) and the A10/A16/A30/A40/A100 data-center
+        // cards are Ampere even though their names carry no "RTX 30" marker.
         if (gpuName.Contains("RTX 30", StringComparison.OrdinalIgnoreCase) ||
+            gpuName.Contains("RTX A", StringComparison.OrdinalIgnoreCase) ||
+            gpuName.Contains("A100", StringComparison.OrdinalIgnoreCase) ||
+            gpuName.Contains("A40", StringComparison.OrdinalIgnoreCase) ||
             gpuName.Contains("A30", StringComparison.OrdinalIgnoreCase) ||
+            gpuName.Contains("A16", StringComparison.OrdinalIgnoreCase) ||
+            gpuName.Contains("A10", StringComparison.OrdinalIgnoreCase) ||
             gpuName.Contains("Ampere", StringComparison.OrdinalIgnoreCase))
         {
             return NvidiaGpuArchitectureBucket.Ampere;
