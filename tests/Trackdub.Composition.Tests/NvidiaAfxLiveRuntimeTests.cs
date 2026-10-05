@@ -136,7 +136,7 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
             definition,
             root,
             inputRate,
-            intensityRatio: 1.0f,
+            intensityRatio: 0.5f,
             architecture);
         float[] processed = session.Process(input);
 

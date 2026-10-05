@@ -51,7 +51,7 @@ Place model files under `features/nvafx<effect>/models/<arch>/` and the DLL unde
 ## Native behavior worth knowing
 
 - The core DLL loads on its own, but feature DLLs depend on CUDA, TensorRT and OpenSSL under `bin/external`. Those folders are not on the DLL search path, so `NvidiaAfxNativeLoader` preloads them (in repeated passes, because they depend on each other) before the feature DLLs. Without that, `CreateEffect` returns `NVAFX_STATUS_LIBRARY_ERROR` (20).
-- Chained effects reject `input_sample_rate` and `intensity_ratio` (`NVAFX_STATUS_INVALID_PARAM`) and answer every `Get*` call with `NVAFX_STATUS_FAILED`. Trackdub skips those parameters and derives frame sizes from the fixed 10 ms framing (80 / 160 / 480 samples at 8 / 16 / 48 kHz). Telephony Upscale therefore has no intensity control.
+- Chained effects reject `input_sample_rate` (their rates are encoded in the selector) and the scalar `intensity_ratio` setter (`NVAFX_STATUS_INVALID_PARAM`). Intensity goes through `NvAFX_SetFloatList` with one ratio per effect; Trackdub keeps super-resolution at 1.0 and applies the user's ratio to the denoiser. Every `Get*` call on a chained handle returns `NVAFX_STATUS_FAILED`, and the SDK documents only a 10 ms frame for chains, so Trackdub derives frame sizes from the sample rates (80 / 160 / 480 samples at 8 / 16 / 48 kHz).
 - Frame-size parameters are `num_samples_per_input_frame` / `num_samples_per_output_frame`; the older `num_samples_per_frame` is the fallback for SDK 1.x.
 - The GPU architecture bucket comes from the display adapter, not a default. No NVIDIA adapter reports `unsupported`.
 

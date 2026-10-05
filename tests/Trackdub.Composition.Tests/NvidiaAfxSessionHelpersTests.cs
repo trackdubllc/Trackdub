@@ -57,6 +57,18 @@ public sealed class NvidiaAfxSessionHelpersTests
     }
 
     [Fact]
+    public void BuildChainedIntensityRatios_KeepsSuperresAtFullStrengthAndAppliesTheRatioToTheDenoiser()
+    {
+        NvidiaAfxRequiredModel[] models = NvidiaAfxProfileCatalog
+            .GetDefinition(NvidiaAfxProfile.TelephonyUpscale)
+            .ResolveRequiredModels(8000);
+
+        float[] ratios = NvidiaAfxSession.BuildChainedIntensityRatios(models, 0.4f);
+
+        Assert.Equal([1.0f, 0.4f], ratios);
+    }
+
+    [Fact]
     public void ComputeTrimmedOutputLength_SameRate_MatchesNearSampleCount()
     {
         Assert.Equal(100, NvidiaAfxSession.ComputeTrimmedOutputLength(100, inputFrame: 480, outputFrame: 480));

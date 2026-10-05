@@ -5,6 +5,7 @@ using Trackdub.Application.Projects;
 using Trackdub.Application.Runtime;
 using Trackdub.Application.Transcripts;
 using Trackdub.Composition;
+using Trackdub.Composition.NvidiaAfx;
 using Trackdub.Contracts.Diagnostics;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Infrastructure.FileSystem;
@@ -320,6 +321,31 @@ public sealed class CompositionRootTests : IDisposable
 
         Assert.Equal(1, firstEngine.DisposeCount);
         Assert.Equal(0, secondEngine.DisposeCount);
+    }
+
+    [Fact]
+    public async Task AddTrackdub_resolves_the_probe_based_afx_readiness_service_with_saved_settings()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string runtimeDirectory = CreateTempDirectory();
+        var settings = new FakeStudioSettingsService();
+        await settings.SaveAsync(
+            StudioSettings.Default with { NvidiaAfxRuntimeDirectory = runtimeDirectory },
+            CancellationToken.None);
+        using ServiceProvider provider = BuildProvider(services =>
+            services.AddSingleton<IStudioSettingsService>(settings));
+
+        INvidiaAfxRuntimeReadinessService readiness = provider.GetRequiredService<INvidiaAfxRuntimeReadinessService>();
+        NvidiaAfxRuntimeReadiness result = readiness.GetReadiness(NvidiaAfxProfile.NoiseAndReverb);
+
+        Assert.IsType<NvidiaAfxRuntimeReadinessService>(readiness);
+        Assert.False(result.IsReady);
+        Assert.Equal("Missing native library", result.StatusLabel);
+        Assert.Equal(runtimeDirectory, result.RuntimeRoot);
     }
 
     public void Dispose()

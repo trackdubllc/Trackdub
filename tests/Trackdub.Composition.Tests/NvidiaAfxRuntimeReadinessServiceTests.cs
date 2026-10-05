@@ -43,7 +43,13 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
             }
             """);
 
-            var service = new NvidiaAfxRuntimeReadinessService(componentStore, new FixedArchitectureDetector("ada"), manifestPath);
+            // Settings outrank TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT, so this stays deterministic when a
+            // developer has the variable set for the live GPU tests.
+            var service = new NvidiaAfxRuntimeReadinessService(
+                componentStore,
+                new FixedArchitectureDetector("ada"),
+                manifestPath,
+                settingsProvider: () => StudioSettings.Default with { NvidiaAfxRuntimeDirectory = runtimePath });
             NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.NoiseAndReverb);
 
             Assert.False(readiness.IsReady);

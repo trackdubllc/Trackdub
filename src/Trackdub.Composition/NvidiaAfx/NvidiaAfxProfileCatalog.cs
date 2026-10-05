@@ -157,8 +157,7 @@ public static class NvidiaAfxProfileCatalog
                     ]),
             ],
             RequiresFarEndReference: false,
-            // SDK 2.x rejects intensity_ratio on chained selectors with NVAFX_STATUS_INVALID_PARAM.
-            SupportsIntensityRatio: false,
+            SupportsIntensityRatio: true,
             OutputSampleRate: 16000),
         new(
             NvidiaAfxProfile.AcousticEchoCancellation,
