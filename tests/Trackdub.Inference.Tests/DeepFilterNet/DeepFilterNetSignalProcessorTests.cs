@@ -241,6 +241,40 @@ public sealed class DeepFilterNetSignalProcessorTests
     }
 
     [Fact]
+    public void Synthesize_DeepFilterSkipped_PreservesLowBandWithUnityGains()
+    {
+        // 1 kHz sits inside the deep-filter bins. With DF skipped (Clean / GainsOnly gates) the
+        // unity-masked delayed spectrum must pass through; applying zero taps would silence it.
+        int length = DeepFilterNetSignalProcessor.SampleRate / 10;
+        float[] sine = BuildSine(length, frequencyHz: 1000f, amplitude: 0.5f);
+        float[] padded = PrependHopZeros(sine, 4);
+
+        DeepFilterNetSignalProcessor.ComputeFeatures(
+            padded,
+            DeepFilterNetFeatureNormState.CreateInitial(),
+            out _,
+            out _,
+            out MathNet.Numerics.Complex32[,] stft);
+
+        int windowFrames = stft.GetLength(0) - 4;
+        float[,,,] erbGains = BuildUnityGains(windowFrames);
+        var dfCoefs = new float[1, windowFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2];
+
+        float[] withDf = DeepFilterNetSignalProcessor.Synthesize(stft, erbGains, dfCoefs);
+        float[] skipDf = DeepFilterNetSignalProcessor.Synthesize(
+            stft, erbGains, dfCoefs, applyDeepFilter: new bool[windowFrames]);
+
+        int hop = DeepFilterNetSignalProcessor.HopSize;
+        float[] withDfSteady = OverlapHops(withDf, windowFrames)[(4 * hop)..^hop];
+        float[] skipSteady = OverlapHops(skipDf, windowFrames)[(4 * hop)..^hop];
+        float sineRms = ComputeRms(sine[(4 * hop)..(sine.Length - hop)]);
+
+        Assert.True(ComputeRms(withDfSteady) < 0.01f * sineRms, "Zero taps should silence the DF band.");
+        float ratio = ComputeRms(skipSteady) / sineRms;
+        Assert.True(ratio is > 0.9f and < 1.1f, $"Skipped-DF RMS ratio {ratio:F3} lost the low band.");
+    }
+
+    [Fact]
     public void Synthesize_FullAttenuationLimit_ReturnsDelayedSourceDespiteZeroMask()
     {
         // attenuationLimit = 1 mixes back the full delayed noisy spectrum, so a zero mask and

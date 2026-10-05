@@ -288,16 +288,18 @@ public sealed class DeepFilterNetOnnxGraphTransformTests
         byte[] graphBytes = modelFields.Single(static f => f.Field == 7).Value;
         List<ProtoField> graphFields = Parse(graphBytes);
 
-        var nodes = new List<Node>();
-        foreach (ProtoField field in graphFields.Where(static f => f.Field == 1))
-        {
-            List<ProtoField> nodeFields = Parse(field.Value);
-            string? op = DecodeString(nodeFields.Where(static f => f.Field == 4).Select(static f => f.Value).FirstOrDefault());
-            nodes.Add(new Node(
-                nodeFields.Where(static f => f.Field == 1).Select(static f => DecodeString(f.Value)).ToArray(),
-                nodeFields.Where(static f => f.Field == 2).Select(static f => DecodeString(f.Value)).ToArray(),
-                op));
-        }
+        List<Node> nodes = graphFields
+            .Where(static f => f.Field == 1)
+            .Select(static field =>
+            {
+                List<ProtoField> nodeFields = Parse(field.Value);
+                string? op = DecodeString(nodeFields.Where(static f => f.Field == 4).Select(static f => f.Value).FirstOrDefault());
+                return new Node(
+                    nodeFields.Where(static f => f.Field == 1).Select(static f => DecodeString(f.Value)).ToArray(),
+                    nodeFields.Where(static f => f.Field == 2).Select(static f => DecodeString(f.Value)).ToArray(),
+                    op);
+            })
+            .ToList();
 
         var inputs = graphFields.Where(static f => f.Field == 11).Select(static f => ParseValueInfo(f.Value)).ToArray();
         var outputs = graphFields.Where(static f => f.Field == 12).Select(static f => ParseValueInfo(f.Value)).ToArray();

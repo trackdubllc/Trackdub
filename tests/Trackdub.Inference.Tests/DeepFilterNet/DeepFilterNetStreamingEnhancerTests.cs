@@ -41,120 +41,92 @@ public sealed class DeepFilterNetStreamingEnhancerTests
     [DfModelFact]
     public async Task EnhanceAsync_AllQuietInput_ReturnsZerosOfNativeLength()
     {
-        DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
-        try
-        {
-            const int totalSamples = 48000 * 2;
-            float[] output = await EnhanceToArrayAsync(
-                new InMemoryAudioSamples(new float[totalSamples]),
-                sessions,
-                attenuationLimit: 0f,
-                CancellationToken.None);
+        using DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
+        const int totalSamples = 48000 * 2;
+        float[] output = await EnhanceToArrayAsync(
+            new InMemoryAudioSamples(new float[totalSamples]),
+            sessions,
+            attenuationLimit: 0f,
+            CancellationToken.None);
 
-            // Native -D semantics: one output hop per input hop, minus the 3-hop system delay.
-            Assert.Equal(totalSamples - DeepFilterNetStreamingEnhancer.LatencyTrimSamples, output.Length);
-            Assert.All(output, static sample => Assert.Equal(0f, sample));
-        }
-        finally
-        {
-            sessions.Dispose();
-        }
+        // Native -D semantics: one output hop per input hop, minus the 3-hop system delay.
+        Assert.Equal(totalSamples - DeepFilterNetStreamingEnhancer.LatencyTrimSamples, output.Length);
+        Assert.All(output, static sample => Assert.Equal(0f, sample));
     }
 
     [DfModelFact]
     public async Task EnhanceAsync_WindowSize_DoesNotChangeOutput()
     {
-        DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
-        try
+        using DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
+        float[] voiced = BuildVoiced(48000 * 12);
+
+        float[] wide = await EnhanceToArrayAsync(
+            new InMemoryAudioSamples(voiced),
+            sessions,
+            attenuationLimit: ToLinearLimitDb(35),
+            CancellationToken.None,
+            windowFrames: 600);
+        float[] narrow = await EnhanceToArrayAsync(
+            new InMemoryAudioSamples(voiced),
+            sessions,
+            attenuationLimit: ToLinearLimitDb(35),
+            CancellationToken.None,
+            windowFrames: 37);
+
+        Assert.Equal(wide.Length, narrow.Length);
+        float peak = 0f;
+        for (int i = 0; i < wide.Length; i++)
         {
-            float[] voiced = BuildVoiced(48000 * 12);
-
-            float[] wide = await EnhanceToArrayAsync(
-                new InMemoryAudioSamples(voiced),
-                sessions,
-                attenuationLimit: ToLinearLimitDb(35),
-                CancellationToken.None,
-                windowFrames: 600);
-            float[] narrow = await EnhanceToArrayAsync(
-                new InMemoryAudioSamples(voiced),
-                sessions,
-                attenuationLimit: ToLinearLimitDb(35),
-                CancellationToken.None,
-                windowFrames: 37);
-
-            Assert.Equal(wide.Length, narrow.Length);
-            float peak = 0f;
-            for (int i = 0; i < wide.Length; i++)
-            {
-                peak = MathF.Max(peak, MathF.Abs(wide[i] - narrow[i]));
-            }
-
-            // One PCM16 quantization step of headroom; the old chunked engine diverged by
-            // orders of magnitude more at every 5.5 s boundary.
-            Assert.True(peak <= (2f / 32768f), $"Window-size peak divergence {peak:E3} exceeds one PCM step.");
+            peak = MathF.Max(peak, MathF.Abs(wide[i] - narrow[i]));
         }
-        finally
-        {
-            sessions.Dispose();
-        }
+
+        // One PCM16 quantization step of headroom; the old chunked engine diverged by
+        // orders of magnitude more at every 5.5 s boundary.
+        Assert.True(peak <= (2f / 32768f), $"Window-size peak divergence {peak:E3} exceeds one PCM step.");
     }
 
     [DfModelFact]
     public async Task EnhanceAsync_AttenuationLimit_ChangesOutputOnNoisyInput()
     {
-        DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
-        try
+        using DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
+        float[] noisy = BuildNoisyVoiced(48000 * 6, seed: 7);
+
+        float[] limited = await EnhanceToArrayAsync(
+            new InMemoryAudioSamples(noisy),
+            sessions,
+            attenuationLimit: ToLinearLimitDb(35),
+            CancellationToken.None,
+            windowFrames: 200);
+        float[] unlimited = await EnhanceToArrayAsync(
+            new InMemoryAudioSamples(noisy),
+            sessions,
+            attenuationLimit: 0f,
+            CancellationToken.None,
+            windowFrames: 200);
+
+        Assert.Equal(limited.Length, unlimited.Length);
+        float peak = 0f;
+        for (int i = 0; i < limited.Length; i++)
         {
-            float[] noisy = BuildNoisyVoiced(48000 * 6, seed: 7);
-
-            float[] limited = await EnhanceToArrayAsync(
-                new InMemoryAudioSamples(noisy),
-                sessions,
-                attenuationLimit: ToLinearLimitDb(35),
-                CancellationToken.None,
-                windowFrames: 200);
-            float[] unlimited = await EnhanceToArrayAsync(
-                new InMemoryAudioSamples(noisy),
-                sessions,
-                attenuationLimit: 0f,
-                CancellationToken.None,
-                windowFrames: 200);
-
-            Assert.Equal(limited.Length, unlimited.Length);
-            float peak = 0f;
-            for (int i = 0; i < limited.Length; i++)
-            {
-                peak = MathF.Max(peak, MathF.Abs(limited[i] - unlimited[i]));
-            }
-
-            Assert.True(peak > 1e-4f, $"Attenuation limit had no effect (peak {peak:E3}).");
+            peak = MathF.Max(peak, MathF.Abs(limited[i] - unlimited[i]));
         }
-        finally
-        {
-            sessions.Dispose();
-        }
+
+        Assert.True(peak > 1e-4f, $"Attenuation limit had no effect (peak {peak:E3}).");
     }
 
     [DfModelFact]
     public async Task EnhanceAsync_CanceledToken_Throws()
     {
-        DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
-        try
-        {
-            using var cts = new CancellationTokenSource();
-            cts.Cancel();
+        using DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-            await Assert.ThrowsAsync<OperationCanceledException>(() =>
-                EnhanceToArrayAsync(
-                    new InMemoryAudioSamples(BuildVoiced(48000)),
-                    sessions,
-                    attenuationLimit: 0f,
-                    cts.Token));
-        }
-        finally
-        {
-            sessions.Dispose();
-        }
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            EnhanceToArrayAsync(
+                new InMemoryAudioSamples(BuildVoiced(48000)),
+                sessions,
+                attenuationLimit: 0f,
+                cts.Token));
     }
 
     [DfModelFact]

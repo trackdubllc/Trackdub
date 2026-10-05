@@ -84,7 +84,7 @@ public class DeepFilterNetSignalBenchmarks
     public int Synthesize()
     {
         float[] output = DeepFilterNetSignalProcessor.Synthesize(
-            stftFrames, erbGains, dfCoefs, SampleCount);
+            stftFrames, erbGains, dfCoefs);
         return output.Length;
     }
 }
