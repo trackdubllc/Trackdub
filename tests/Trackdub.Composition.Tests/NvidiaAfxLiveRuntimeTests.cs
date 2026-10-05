@@ -286,7 +286,8 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
             {
                 NvidiaAfxRuntimeDirectory = runtimeRoot,
                 NvidiaAfxLicenseAccepted = true,
-            });
+            },
+            allowEarlyAccess: () => true);
 
     private static string ResolveManifestPath()
     {

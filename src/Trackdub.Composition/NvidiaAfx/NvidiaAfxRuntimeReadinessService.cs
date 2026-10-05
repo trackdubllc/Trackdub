@@ -153,8 +153,11 @@ public sealed class NvidiaAfxRuntimeReadinessService(
     string manifestPath,
     Func<StudioSettings>? settingsProvider = null,
     INvidiaAfxEffectProbe? effectProbe = null,
-    Func<bool>? isStubbed = null) : INvidiaAfxRuntimeReadinessService
+    Func<bool>? isStubbed = null,
+    Func<bool>? allowEarlyAccess = null) : INvidiaAfxRuntimeReadinessService
 {
+    private readonly Func<bool> _allowEarlyAccess = allowEarlyAccess ?? NvidiaAfxIntegration.AllowEarlyAccessEffects;
+
     private readonly Func<bool> _isStubbed = isStubbed ?? NvidiaAfxIntegration.IsStubbed;
 
     // The native probe is the expensive part (it creates a GPU effect), so only successful probes
@@ -179,6 +182,15 @@ public sealed class NvidiaAfxRuntimeReadinessService(
         if (!OperatingSystem.IsWindows())
         {
             return new NvidiaAfxRuntimeReadiness(false, "Unsupported OS", null, "NVIDIA AFX is Windows-only.");
+        }
+
+        if (NvidiaAfxProfileCatalog.GetDefinition(profile).IsEarlyAccess && !_allowEarlyAccess())
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "Early Access disabled",
+                null,
+                "This NVIDIA Early Access effect is under an evaluation license and is disabled in this build.");
         }
 
         StudioSettings? settings;

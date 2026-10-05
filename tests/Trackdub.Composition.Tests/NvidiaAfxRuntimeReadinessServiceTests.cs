@@ -28,6 +28,25 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
     }
 
     [Fact]
+    public void GetReadiness_RefusesAnEarlyAccessEffect_UnlessItIsExplicitlyAllowed()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        var probe = new CountingProbe();
+        var service = fixture.CreateService(probe);
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.False(readiness.IsReady);
+        Assert.Equal("Early Access disabled", readiness.StatusLabel);
+        Assert.Equal(0, probe.CallCount);
+    }
+
+    [Fact]
     public void GetReadiness_RequiresTheLicenseToBeAccepted()
     {
         if (!OperatingSystem.IsWindows())

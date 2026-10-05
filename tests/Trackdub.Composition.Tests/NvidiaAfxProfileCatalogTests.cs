@@ -106,6 +106,22 @@ public sealed class NvidiaAfxProfileCatalogTests
     }
 
     [Fact]
+    public void SpeakerFocus_IsEarlyAccess_AndHiddenFromSelectionUnlessAllowed()
+    {
+        Assert.True(NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.SpeakerFocus).IsEarlyAccess);
+        Assert.DoesNotContain(
+            NvidiaAfxProfileCatalog.Definitions.Where(definition => definition.Profile != NvidiaAfxProfile.SpeakerFocus),
+            definition => definition.IsEarlyAccess);
+
+        if (!NvidiaAfxIntegration.AllowEarlyAccessEffects())
+        {
+            Assert.DoesNotContain(
+                NvidiaAfxProfileCatalog.SelectableDefinitions,
+                definition => definition.Profile == NvidiaAfxProfile.SpeakerFocus);
+        }
+    }
+
+    [Fact]
     public void SpeakerFocus_DoesNotAdvertiseIntensity_BecauseTheSdkIgnoresIt()
     {
         Assert.False(NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.SpeakerFocus).SupportsIntensityRatio);
