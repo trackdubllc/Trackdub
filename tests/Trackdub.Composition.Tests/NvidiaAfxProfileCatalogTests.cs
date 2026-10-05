@@ -81,12 +81,12 @@ public sealed class NvidiaAfxProfileCatalogTests
     }
 
     [Fact]
-    public void TelephonyUpscale_AdvertisesIntensity_ThroughTheChainedRatioList()
+    public void TelephonyUpscale_DoesNotAdvertiseIntensity_BecauseChainedIntensityHasNoEffect()
     {
         NvidiaAfxProfileDefinition definition =
             NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.TelephonyUpscale);
 
-        Assert.True(definition.SupportsIntensityRatio);
+        Assert.False(definition.SupportsIntensityRatio);
     }
 
     [Fact]

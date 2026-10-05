@@ -143,20 +143,7 @@ internal sealed class NvidiaAfxSession : IDisposable
                     "Set output sample rate");
             }
 
-            if (profile.SupportsIntensityRatio && profile.IsChainedEffect)
-            {
-                // A chained handle rejects the scalar setter; intensity_ratio is a list with one
-                // ratio per constituent effect (NvAFX_SetFloatList).
-                EnsureSuccess(
-                    NvidiaAfxNative.NvAFX_SetFloatList(
-                        safeHandle.DangerousGetHandle(),
-                        NvidiaAfxNativeParameters.IntensityRatio,
-                        BuildChainedIntensityRatios(requiredModels, intensityRatio),
-                        (uint)requiredModels.Length),
-                    profile.Selector,
-                    "Set intensity ratios");
-            }
-            else if (profile.SupportsIntensityRatio)
+            if (profile.SupportsIntensityRatio)
             {
                 EnsureSuccess(
                     NvidiaAfxNative.NvAFX_SetFloat(
@@ -442,21 +429,6 @@ internal sealed class NvidiaAfxSession : IDisposable
             NvidiaAfxNativeParameters.NumOutputSamplesPerFrame,
             fallbackParameter: NvidiaAfxNativeParameters.SamplesPerFrameLegacy,
             defaultValue: numInputSamples);
-    }
-
-    /// <summary>
-    /// One intensity ratio per effect in a chain. Super-resolution always runs at full strength;
-    /// the user's ratio applies to the denoise/dereverb effect.
-    /// </summary>
-    internal static float[] BuildChainedIntensityRatios(NvidiaAfxRequiredModel[] models, float intensityRatio)
-    {
-        ArgumentNullException.ThrowIfNull(models);
-
-        return models
-            .Select(model => string.Equals(model.FeatureFolder, "nvafxsuperres", StringComparison.OrdinalIgnoreCase)
-                ? 1.0f
-                : intensityRatio)
-            .ToArray();
     }
 
     /// <summary>

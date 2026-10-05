@@ -46,13 +46,6 @@ internal static class NvidiaAfxNative
         float value);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-    public static extern int NvAFX_SetFloatList(
-        IntPtr effectHandle,
-        string parameter,
-        [In] float[] values,
-        uint count);
-
-    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern int NvAFX_SetU32(
         IntPtr effectHandle,
         string parameter,

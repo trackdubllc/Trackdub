@@ -136,7 +136,7 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
             definition,
             root,
             inputRate,
-            intensityRatio: 0.5f,
+            intensityRatio: 1.0f,
             architecture);
         float[] processed = session.Process(input);
 
@@ -147,6 +147,43 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
         Assert.Equal(16000, session.OutputSampleRate);
         Assert.Equal(input.Length * 2, processed.Length);
         Assert.All(processed, sample => Assert.True(float.IsFinite(sample)));
+    }
+
+    [NvidiaAfxLiveRuntimeFact]
+    public void Intensity_changes_the_output_for_every_profile_that_advertises_it()
+    {
+        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
+        string architecture = new NvidiaAfxArchitectureDetector().DetectArchitectureBucket();
+
+        var ignored = new List<string>();
+        foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
+                     .Where(definition => definition.SupportsIntensityRatio && !definition.RequiresFarEndReference))
+        {
+            int sampleRate = definition.SupportedSampleRates.Max();
+            float[] input = BuildNoisySpeechLikeSignal(sampleRate, seconds: 2);
+
+            float[] Run(float intensity)
+            {
+                using NvidiaAfxSession session = NvidiaAfxSession.Create(
+                    definition,
+                    root,
+                    sampleRate,
+                    intensity,
+                    architecture);
+                return session.Process(input);
+            }
+
+            float[] none = Run(0.0f);
+            float[] full = Run(1.0f);
+            double difference = none.Zip(full, (a, b) => Math.Abs(a - b)).Average();
+            output.WriteLine($"{definition.Profile} @ {sampleRate} Hz: mean |intensity 0 - intensity 1| = {difference:F5}");
+            if (difference <= 1e-3)
+            {
+                ignored.Add($"{definition.Profile}: output does not depend on intensity (difference {difference:F6})");
+            }
+        }
+
+        Assert.True(ignored.Count == 0, string.Join(Environment.NewLine, ignored));
     }
 
     [NvidiaAfxLiveRuntimeFact]
