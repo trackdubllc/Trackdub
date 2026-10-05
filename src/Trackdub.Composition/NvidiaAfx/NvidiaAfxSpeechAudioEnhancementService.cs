@@ -27,13 +27,18 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
+        NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(options.NvidiaAfxProfile);
+        if (definition.IsEarlyAccess && !NvidiaAfxProfileCatalog.IsEarlyAccessOptedIn)
+        {
+            return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         NvidiaAfxRuntimeReadiness readiness = readinessService.GetReadiness(options.NvidiaAfxProfile);
         if (!readiness.IsReady)
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
-        NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(options.NvidiaAfxProfile);
         if (definition.RequiresFarEndReference && string.IsNullOrWhiteSpace(options.FarEndReferenceAudioPath))
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);

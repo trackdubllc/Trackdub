@@ -62,6 +62,15 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
         }
 
         NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
+        if (definition.IsEarlyAccess && !NvidiaAfxProfileCatalog.IsEarlyAccessOptedIn)
+        {
+            return new NvidiaAfxRuntimeReadiness(
+                false,
+                "Early Access disabled",
+                runtimeRoot,
+                $"NVIDIA AFX profile '{profile}' is restricted to NVIDIA Early Access/development use. " +
+                "Set TRACKDUB_NVIDIA_AFX_ENABLE_EARLY_ACCESS=true only in an authorized development environment.");
+        }
 
         // Maxine 3.x feature DLLs are required when a features/ tree is present. Legacy flat
         // models/-only fixtures (unit tests / older stages) skip this gate.

@@ -30,6 +30,8 @@ public sealed record NvidiaAfxProfileDefinition(
     NvidiaAfxSampleRateModels[] ModelsBySampleRate,
     bool RequiresFarEndReference,
     bool SupportsIntensityRatio,
+    /// <summary>Whether this profile is restricted to NVIDIA Early Access/development use.</summary>
+    bool IsEarlyAccess = false,
     /// <summary>
     /// Explicit output sample rate when it differs from the selected input rate
     /// (for example telephony upscale 8 kHz → 16 kHz). Null means output matches input.
@@ -91,6 +93,21 @@ public sealed record NvidiaAfxProfileDefinition(
 
 public static class NvidiaAfxProfileCatalog
 {
+    /// <summary>
+    /// Early Access effects are never enabled for end users by default. This opt-in is
+    /// intentionally environment-based so development/live tests can exercise the effect
+    /// without making it part of the production desktop experience.
+    /// </summary>
+    public static bool IsEarlyAccessOptedIn =>
+        string.Equals(
+            Environment.GetEnvironmentVariable("TRACKDUB_NVIDIA_AFX_ENABLE_EARLY_ACCESS"),
+            "true",
+            StringComparison.OrdinalIgnoreCase)
+        || string.Equals(
+            Environment.GetEnvironmentVariable("TRACKDUB_NVIDIA_AFX_ENABLE_EARLY_ACCESS"),
+            "1",
+            StringComparison.Ordinal);
+
     /// <summary>
     /// First-class discovery surface for AFX profiles. Profiles are listed even while the
     /// integration is stubbed so planners/settings can enumerate them without implying readiness.
@@ -177,7 +194,8 @@ public static class NvidiaAfxProfileCatalog
             RequiresFarEndReference: false,
             // The SDK accepts intensity_ratio on this effect but the output does not change
             // (verified live on SDK 3.0.0), so no control is offered.
-            SupportsIntensityRatio: false),
+            SupportsIntensityRatio: false,
+            IsEarlyAccess: true),
         new(
             NvidiaAfxProfile.AcousticEchoCancellation,
             "Acoustic Echo Cancellation",
