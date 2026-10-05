@@ -8,6 +8,13 @@ internal static class ResourceTelemetryOptionsParser
     public const string Usage = "[--max-cpu-percent <0..100>] [--max-working-set-bytes <bytes>] [--max-allocated-bytes <bytes>] [--min-available-vram-mb <mb>]";
     public const string Description = "Resource limits are optional: normalized CPU percent (0..100), sampled peak working-set bytes (25 ms cadence), managed allocated bytes, and a minimum free-VRAM floor in MB. The VRAM floor is adapter-wide headroom, not this process's allocation, so it detects memory pressure rather than attributing bytes to a stage. Byte and VRAM limits must be nonnegative integers; omitted limits are unbounded.";
 
+    public static bool IsResourceOption(string option) => option is
+        "--max-cpu-percent" or
+        "--max-working-set-bytes" or
+        "--max-allocated-bytes" or
+        "--min-available-vram-mb" or
+        "--max-gpu-bytes";
+
     public static bool TryApply(
         string option,
         string value,
