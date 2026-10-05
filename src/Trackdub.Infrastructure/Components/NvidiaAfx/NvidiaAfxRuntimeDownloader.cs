@@ -8,8 +8,11 @@ namespace Trackdub.Infrastructure.Components.NvidiaAfx;
 public sealed class NvidiaAfxRuntimeDownloader(
     ComponentStore componentStore,
     HttpClient httpClient,
-    IApplicationLogger logger)
+    IApplicationLogger logger,
+    Func<bool>? isStubbed = null)
 {
+    private readonly Func<bool> _isStubbed = isStubbed ?? NvidiaAfxIntegration.IsStubbed;
+
     public const string ComponentId = "nvidia-afx-runtime";
     private const string TempSuffix = ".downloading";
     private const string StagingSuffix = ".staging";
@@ -21,7 +24,7 @@ public sealed class NvidiaAfxRuntimeDownloader(
     {
         ArgumentNullException.ThrowIfNull(package);
 
-        if (NvidiaAfxIntegration.IsStubbed())
+        if (_isStubbed())
         {
             throw new InvalidOperationException(NvidiaAfxIntegration.StubReason);
         }

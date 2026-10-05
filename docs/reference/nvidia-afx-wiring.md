@@ -1,59 +1,65 @@
 # NVIDIA AFX wiring status
 
-Trackdub public core AFX integration is past pure stubs for **API surface and plumbing**, but still **not ready** for shipping AFX enhancement. `NvidiaAfxIntegration.IsStubbed()` remains `true`.
+NVIDIA AFX works end to end for a **locally installed** runtime. `NvidiaAfxIntegration.IsStubbed()` is `false` and only acts as a kill switch; readiness is decided by probing the native runtime. Trackdub does not host the AFX redistributables, so the installer still refuses and users point Trackdub at their own SDK.
 
-## Maxine 3.x runtime layout (implemented)
+## Verified
 
-Runtime root (`NvidiaAfxRuntimeDirectory` / `TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT` / ComponentStore install):
+On an RTX 5070 (Blackwell) with NVIDIA Audio Effects SDK **2.1.0.9** and the `nvidia/maxine/afx_win_*:2.1.0-*` Blackwell models from NGC, every selectable profile creates, loads and processes audio:
+
+| Profile | Selector | Rates |
+|---------|----------|-------|
+| Noise Removal | `denoiser` | 16 kHz, 48 kHz |
+| Reverb Removal | `dereverb` | 16 kHz, 48 kHz |
+| Noise + Reverb Removal | `dereverb_denoiser` | 16 kHz, 48 kHz |
+| Telephony Upscale | `superres8kto16k_denoiser16k` (chained) | 8 kHz in, 16 kHz out |
+
+The same-rate profiles also run on the flat SDK 1.6.1.2 layout. Acoustic Echo Cancellation is not covered (needs a far-end reference).
+
+Run the live proofs (skipped unless the variable is set):
+
+```powershell
+$env:TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT = "<SDK root>"
+dotnet test tests/Trackdub.Composition.Tests -f net10.0-windows10.0.19041.0 --filter "FullyQualifiedName~NvidiaAfxLiveRuntime"
+```
+
+## Runtime layout
+
+The runtime root is the SDK root (`NvidiaAfxRuntimeDirectory` setting, `TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT`, or a component-store install):
 
 ```text
 <runtime-root>/
-  NVAudioEffects.dll                 # also accepts NvAudioEffects.dll
-  external/                          # bundled CUDA/TRT deps from SDK
+  bin/NVAudioEffects.dll             # SDK 2.x; flat installs keep it at the root
+  bin/external/{cuda,nvtrt,openssl}/bin/*.dll
   features/
-    nvafxdenoiser/
-      bin/nvafxdenoiser.dll
-      models/<turing|ampere|ada|blackwell>/denoiser_*.trtpkg
-    nvafxdereverb/
-    nvafxdereverbdenoiser/
-    nvafxsuperres/
-  features-download-manifest.json    # NGC download receipt (publish gate)
+    nvafxdenoiser/        bin/nvafxdenoiser.dll        models/<turing|ampere|ada|blackwell>/denoiser_{16k,48k}.trtpkg
+    nvafxdereverb/        bin/nvafxdereverb.dll        models/<arch>/dereverb_{16k,48k}.trtpkg
+    nvafxdereverbdenoiser/ bin/nvafxdereverbdenoiser.dll models/<arch>/dereverb_denoiser_{16k,48k}.trtpkg
+    nvafxsuperres/        bin/nvafxsuperres.dll        models/<arch>/superres_8kto16k.trtpkg
 ```
 
-Resolution is in `NvidiaAfxRuntimeLayout` (Infrastructure). Legacy flat `models/<stem>.nvam` is still accepted as a fallback for older staged trees.
+Resolution is in `NvidiaAfxRuntimeLayout`. A flat `models/<stem>.trtpkg` (SDK 1.6) or legacy `.nvam` tree is still accepted.
 
-Model requirements are rate-specific feature+stem pairs on `NvidiaAfxProfileDefinition.ModelsBySampleRate` (for example `denoiser_16k` vs `denoiser_48k`). Session create binds the stem for the active input rate; readiness requires models for every supported rate plus Maxine feature bin DLLs when a `features/` tree is present.
+Get the features with `features/download_features.ps1` (needs an NGC API key) or the NGC CLI, one package per variant:
 
-**AEC:** Maxine AFX 3.x public selectors do not list `aec`. The AcousticEchoCancellation profile remains discoverable; model/feature resolution will fail until NVIDIA ships a matching package or we drop the profile with evidence.
+```text
+ngc registry model download-version nvidia/maxine/afx_win_denoiser:2.1.0-48k-blackwell --dest <dir>
+ngc registry model download-version nvidia/maxine/afx_win_denoiser:2.1.0-dynamic-library --dest <dir>
+```
 
-## What works now
+Place model files under `features/nvafx<effect>/models/<arch>/` and the DLL under `features/nvafx<effect>/bin/`. Readiness requires the models for every supported rate of the selected profile.
 
-| Area | Status |
-|------|--------|
-| Packaging gates | Placeholder `example.invalid` / zero-hash / non-hex SHA-256 packages rejected |
-| License UX field | `StudioSettings.NvidiaAfxLicenseAccepted` + installer refuses without acceptance |
-| Local runtime override | Settings / env / ComponentStore via `NvidiaAfxRuntimePathResolver` |
-| Installer scaffolding | Stub seam + license/manifest/download gates; DI registered |
-| Rate-specific models | `ResolveRequiredModels(sampleRate)`; probe prefers 48 kHz when supported |
-| Feature DLL gate | `features/<nvafx*>/bin/*.dll` required when `features/` exists |
-| Native P/Invoke | Maxine `float**` `NvAFX_Run`, DllImport resolver + managed feature-DLL preload |
-| Native probe before Ready | `INvidiaAfxEffectProbe` create/load after DLL+model presence |
-| Settings → stage | Studio settings map into enhancement options (incl. headless preserve) |
-| DeepFilterNet fallback | Live enhancement path while stubbed / not ready |
+## Native behavior worth knowing
 
-## Still blocked (honest)
+- The core DLL loads on its own, but feature DLLs depend on CUDA, TensorRT and OpenSSL under `bin/external`. Those folders are not on the DLL search path, so `NvidiaAfxNativeLoader` preloads them (in repeated passes, because they depend on each other) before the feature DLLs. Without that, `CreateEffect` returns `NVAFX_STATUS_LIBRARY_ERROR` (20).
+- Chained effects reject `input_sample_rate` and `intensity_ratio` (`NVAFX_STATUS_INVALID_PARAM`) and answer every `Get*` call with `NVAFX_STATUS_FAILED`. Trackdub skips those parameters and derives frame sizes from the fixed 10 ms framing (80 / 160 / 480 samples at 8 / 16 / 48 kHz). Telephony Upscale therefore has no intensity control.
+- Frame-size parameters are `num_samples_per_input_frame` / `num_samples_per_output_frame`; the older `num_samples_per_frame` is the fallback for SDK 1.x.
+- The GPU architecture bucket comes from the display adapter, not a default. No NVIDIA adapter reports `unsupported`.
 
-- Trackdub-hosted Maxine AFX redistributable ZIP URLs + verified SHA-256/size (NGC/installer, not a public CDN)
-- Flipping `IsStubbed()` / registering real readiness in DI
-- Verified `NVAudioEffects.dll` create/load/run on Turing+ GPU with Tensor Cores
-- End-to-end AEC with a real far-end reference (selector not in Maxine 3.x public docs)
-- Desktop UI for AFX license accept / runtime directory
+## Still open
 
-## Local probing (after stub flip only)
+- A Trackdub-hosted redistributable (license-dependent); until then the runtime is user-installed.
+- End-to-end AEC with a real far-end reference.
+- Speaker Focus (Early Access) and Studio Voice are in the SDK but not in the profile catalog.
+- No GPU CI tier.
 
-1. Install Maxine AFX core ZIP; run `features/download_features.ps1` for the target GPU arch.
-2. Point `NvidiaAfxRuntimeDirectory` or `TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT` at the SDK root.
-3. Accept `NvidiaAfxLicenseAccepted` before any Trackdub download path is used.
-4. Prove create/load/run on Windows+NVIDIA, then flip `IsStubbed()` and swap DI from `StubNvidiaAfxRuntimeReadinessService` to `NvidiaAfxRuntimeReadinessService`.
-
-Repo reference: `docs/reference/nvidia-afx-stubs.md`.
+See [nvidia-afx-stubs.md](nvidia-afx-stubs.md) for the readiness contract.

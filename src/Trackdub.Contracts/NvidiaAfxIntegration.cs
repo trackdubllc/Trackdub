@@ -1,9 +1,10 @@
 namespace Trackdub.Contracts;
 
 /// <summary>
-/// Discoverability and honesty markers for the NVIDIA Audio Effects (AFX) integration.
-/// While <see cref="IsStubbed"/> is true, readiness must never report Ready and downloads
-/// must refuse to install packages (placeholder or otherwise).
+/// Markers for the NVIDIA Audio Effects (AFX) integration. Readiness is probe-based: it only
+/// reports Ready for a runtime whose native library, feature DLLs and models are present and
+/// that creates and loads an effect on this machine. <see cref="IsStubbed"/> is the kill switch:
+/// while it is true, readiness never reports Ready and downloads refuse to install packages.
 /// </summary>
 public static class NvidiaAfxIntegration
 {
@@ -11,21 +12,16 @@ public static class NvidiaAfxIntegration
 
     public const string DisplayName = "NVIDIA Audio Effects (AFX)";
 
-    public const string StubStatusLabel = "Stub";
+    public const string StubStatusLabel = "Disabled";
 
     public const string StubReason =
-        "NVIDIA AFX remains stubbed for readiness: Trackdub-hosted Maxine 3.x redistributable URLs/checksums " +
-        "are not published yet, and NVAudioEffects.dll create/run has not been verified on shipping GPUs. " +
-        "Native API bindings, Maxine features/ layout resolution, settings→stage options, and packaging gates " +
-        "are in place; install NVIDIA Maxine AFX (core + NGC features) or set TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT " +
-        "for local probing only after IsStubbed() flips.";
+        "NVIDIA AFX is switched off by the integration kill switch (NvidiaAfxIntegration.IsStubbed()).";
 
     public const string LicenseUrl =
         "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/";
 
     public const string DeveloperResourcesUrl = "https://www.nvidia.com/broadcast-sdk-resources";
 
-    // Method (not const) so stub gates do not create CS0162 unreachable-code failures while
-    // the real install/readiness bodies remain compiled for the future live flip.
-    public static bool IsStubbed() => true;
+    // Method (not const) so the kill-switch gates do not create CS0162 unreachable-code failures.
+    public static bool IsStubbed() => false;
 }

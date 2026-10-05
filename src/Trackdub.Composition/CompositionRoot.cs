@@ -400,11 +400,20 @@ public static class CompositionRoot
         services.TryAddSingleton<IAudioQualityAnalyzer, PcmAudioQualityAnalyzer>();
         services.TryAddSingleton<ISpeechAudioPreparationPlanner, SpeechAudioPreparationPlanner>();
         services.TryAddSingleton<ISpeechAudioProcessingService>(_ => new FfmpegSpeechAudioProcessingService(ffmpegPath: null));
-        // NVIDIA AFX is discoverable but stubbed for readiness: IsStubbed() stays true until
-        // Trackdub-hosted redistributable URLs/checksums exist and native create/run is verified.
-        // Packaging gates, installer scaffolding, AEC far-end, and settings→stage options are wired.
-        services.TryAddSingleton<INvidiaAfxRuntimeReadinessService, StubNvidiaAfxRuntimeReadinessService>();
+        // NVIDIA AFX readiness is probe-based: Ready only for a local runtime (settings folder,
+        // TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT or a component-store install) that creates and loads an
+        // effect on this machine. Downloads stay gated by the packaging checks in the manifest.
         services.TryAddSingleton<INvidiaAfxArchitectureDetector, NvidiaAfxArchitectureDetector>();
+        services.TryAddSingleton<INvidiaAfxRuntimeReadinessService>(sp =>
+            new NvidiaAfxRuntimeReadinessService(
+                sp.GetRequiredService<ComponentStore>(),
+                sp.GetRequiredService<INvidiaAfxArchitectureDetector>(),
+                Path.Join(AppContext.BaseDirectory, "nvidiaafx-runtime.manifest.json"),
+                () => sp.GetRequiredService<IStudioSettingsService>()
+                    .LoadAsync(CancellationToken.None)
+                    .ConfigureAwait(false)
+                    .GetAwaiter()
+                    .GetResult()));
         services.AddSingleton<ISpeechAudioEnhancementService>(sp =>
             new NvidiaAfxSpeechAudioEnhancementService(
                 sp.GetRequiredService<INvidiaAfxRuntimeReadinessService>(),

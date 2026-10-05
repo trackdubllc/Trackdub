@@ -149,6 +149,154 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
         Assert.All(processed, sample => Assert.True(float.IsFinite(sample)));
     }
 
+    [NvidiaAfxLiveRuntimeFact]
+    public void Readiness_service_reports_ready_for_every_selectable_profile()
+    {
+        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
+        using var tempStore = new TempComponentStore();
+        var service = CreateReadinessService(tempStore.Store, root);
+
+        var notReady = new List<string>();
+        foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
+                     .Where(definition => !definition.RequiresFarEndReference))
+        {
+            NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(definition.Profile);
+            output.WriteLine(
+                $"{definition.Profile}: ready={readiness.IsReady} status='{readiness.StatusLabel}' " +
+                $"arch={readiness.ArchitectureBucket} reason={readiness.FailureReason}");
+            if (!readiness.IsReady)
+            {
+                notReady.Add($"{definition.Profile}: {readiness.StatusLabel} - {readiness.FailureReason}");
+            }
+        }
+
+        Assert.True(notReady.Count == 0, string.Join(Environment.NewLine, notReady));
+    }
+
+    [NvidiaAfxLiveRuntimeFact]
+    public async Task Enhancement_service_runs_afx_end_to_end_on_a_wav_file()
+    {
+        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
+        using var tempStore = new TempComponentStore();
+        var service = new NvidiaAfxSpeechAudioEnhancementService(
+            CreateReadinessService(tempStore.Store, root),
+            new FailingFallback());
+
+        string sourcePath = Path.Join(tempStore.Directory, "source.wav");
+        string destinationPath = Path.Join(tempStore.Directory, "enhanced.wav");
+        const int sampleRate = 48000;
+        WriteMonoPcm16Wav(sourcePath, BuildNoisySpeechLikeSignal(sampleRate, seconds: 2), sampleRate);
+
+        SpeechAudioEnhancementResult result = await service.EnhanceAsync(
+            new SpeechAudioEnhancementRequest(
+                sourcePath,
+                destinationPath,
+                new SpeechAudioEnhancementOptions(true, NvidiaAfxProfile.NoiseAndReverb, 1.0f)),
+            CancellationToken.None);
+
+        output.WriteLine(
+            $"backend={result.Backend} profile={result.BackendProfile} rate={result.SampleRate} " +
+            $"frames={result.SampleFrames} seconds={result.DurationSeconds:F2}");
+
+        Assert.Equal(SpeechAudioEnhancementBackend.NvidiaAfx, result.Backend);
+        Assert.Equal("dereverb_denoiser", result.BackendProfile);
+        Assert.Equal(sampleRate, result.SampleRate);
+        Assert.True(File.Exists(destinationPath));
+        Assert.True(new FileInfo(destinationPath).Length > 44, "Enhanced WAV has no audio payload.");
+    }
+
+    private static void WriteMonoPcm16Wav(string path, float[] samples, int sampleRate)
+    {
+        const short bitsPerSample = 16;
+        int dataBytes = samples.Length * sizeof(short);
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+        writer.Write("RIFF"u8);
+        writer.Write(36 + dataBytes);
+        writer.Write("WAVEfmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)1);
+        writer.Write(sampleRate);
+        writer.Write(sampleRate * bitsPerSample / 8);
+        writer.Write((short)(bitsPerSample / 8));
+        writer.Write(bitsPerSample);
+        writer.Write("data"u8);
+        writer.Write(dataBytes);
+        foreach (float sample in samples)
+        {
+            writer.Write((short)(Math.Clamp(sample, -1f, 1f) * short.MaxValue));
+        }
+    }
+
+    private static NvidiaAfxRuntimeReadinessService CreateReadinessService(
+        Trackdub.Infrastructure.Components.ComponentStore store,
+        string runtimeRoot) =>
+        new(
+            store,
+            new NvidiaAfxArchitectureDetector(),
+            ResolveManifestPath(),
+            settingsProvider: () => StudioSettings.Default with { NvidiaAfxRuntimeDirectory = runtimeRoot });
+
+    private static string ResolveManifestPath()
+    {
+        string packaged = Path.Join(AppContext.BaseDirectory, "nvidiaafx-runtime.manifest.json");
+        if (File.Exists(packaged))
+        {
+            return packaged;
+        }
+
+        for (DirectoryInfo? directory = new(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            string candidate = Path.Join(directory.FullName, "src", "Trackdub.Composition", "nvidiaafx-runtime.manifest.json");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new FileNotFoundException("nvidiaafx-runtime.manifest.json was not found next to the tests or in the repo.");
+    }
+
+    private sealed class TempComponentStore : IDisposable
+    {
+        public TempComponentStore()
+        {
+            Directory = Path.Join(Path.GetTempPath(), $"trackdub-afx-live-{Guid.NewGuid():N}");
+            System.IO.Directory.CreateDirectory(Directory);
+            Store = new Trackdub.Infrastructure.Components.ComponentStore(Directory, new SilentLogger());
+        }
+
+        public string Directory { get; }
+
+        public Trackdub.Infrastructure.Components.ComponentStore Store { get; }
+
+        public void Dispose()
+        {
+            if (System.IO.Directory.Exists(Directory))
+            {
+                System.IO.Directory.Delete(Directory, recursive: true);
+            }
+        }
+    }
+
+    private sealed class SilentLogger : IApplicationLogger
+    {
+        public void LogDebug(string message) { }
+        public void LogInformation(string message) { }
+        public void LogWarning(string message, Exception? exception = null) { }
+        public void LogError(string message, Exception? exception = null) { }
+    }
+
+    private sealed class FailingFallback : ISpeechAudioEnhancementService
+    {
+        public Task<SpeechAudioEnhancementResult> EnhanceAsync(
+            SpeechAudioEnhancementRequest request,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                "The DeepFilterNet fallback ran, so AFX did not produce the output.");
+    }
+
     private static float[] BuildNoisySpeechLikeSignal(int sampleRate, int seconds)
     {
         var random = new Random(1234);

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Trackdub.Contracts;
 using Trackdub.Infrastructure.Components;
 using Trackdub.Infrastructure.Components.NvidiaAfx;
@@ -8,7 +9,8 @@ public sealed record NvidiaAfxRuntimeReadiness(
     bool IsReady,
     string StatusLabel,
     string? RuntimeRoot,
-    string? FailureReason);
+    string? FailureReason,
+    string? ArchitectureBucket = null);
 
 public interface INvidiaAfxRuntimeReadinessService
 {
@@ -17,7 +19,7 @@ public interface INvidiaAfxRuntimeReadinessService
 
 /// <summary>
 /// Post-stub readiness evaluation for an already-resolved runtime root (DLL/models/native probe).
-/// Separated so unit tests can cover the gate without flipping <see cref="NvidiaAfxIntegration.IsStubbed"/>.
+/// Separated so unit tests can cover the gate without a real GPU runtime.
 /// </summary>
 public sealed class NvidiaAfxInstalledRuntimeEvaluator(
     INvidiaAfxArchitectureDetector architectureDetector,
@@ -107,7 +109,7 @@ public sealed class NvidiaAfxInstalledRuntimeEvaluator(
                 probe.FailureReason ?? "AFX native library/effect probe failed.");
         }
 
-        return new NvidiaAfxRuntimeReadiness(true, "Ready", runtimeRoot, null);
+        return new NvidiaAfxRuntimeReadiness(true, "Ready", runtimeRoot, null, architecture);
     }
 }
 
@@ -116,8 +118,15 @@ public sealed class NvidiaAfxRuntimeReadinessService(
     INvidiaAfxArchitectureDetector architectureDetector,
     string manifestPath,
     Func<StudioSettings>? settingsProvider = null,
-    INvidiaAfxEffectProbe? effectProbe = null) : INvidiaAfxRuntimeReadinessService
+    INvidiaAfxEffectProbe? effectProbe = null,
+    Func<bool>? isStubbed = null) : INvidiaAfxRuntimeReadinessService
 {
+    private readonly Func<bool> _isStubbed = isStubbed ?? NvidiaAfxIntegration.IsStubbed;
+
+    // Only Ready results are cached: they are the ones that cost a native GPU probe. A cached
+    // runtime that later breaks falls back to DeepFilterNet when the enhancement run fails.
+    private readonly ConcurrentDictionary<(NvidiaAfxProfile Profile, string RuntimeRoot), NvidiaAfxRuntimeReadiness> _readyCache = new();
+
     private readonly NvidiaAfxInstalledRuntimeEvaluator _evaluator = new(
         architectureDetector,
         manifestPath,
@@ -125,10 +134,7 @@ public sealed class NvidiaAfxRuntimeReadinessService(
 
     public NvidiaAfxRuntimeReadiness GetReadiness(NvidiaAfxProfile profile)
     {
-        // Defense in depth: even if this concrete service is constructed while the integration
-        // is still stubbed, never claim Ready. Flip NvidiaAfxIntegration.IsStubbed() only after
-        // real packaging URLs/checksums land AND NvAudioEffects create/run is verified on GPU.
-        if (NvidiaAfxIntegration.IsStubbed())
+        if (_isStubbed())
         {
             return new NvidiaAfxRuntimeReadiness(
                 false,
@@ -156,6 +162,17 @@ public sealed class NvidiaAfxRuntimeReadinessService(
                 "or set NvidiaAfxRuntimeDirectory / TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT to a local Maxine AFX install.");
         }
 
-        return _evaluator.Evaluate(profile, runtimeRoot);
+        if (_readyCache.TryGetValue((profile, runtimeRoot), out NvidiaAfxRuntimeReadiness? cached))
+        {
+            return cached;
+        }
+
+        NvidiaAfxRuntimeReadiness readiness = _evaluator.Evaluate(profile, runtimeRoot);
+        if (readiness.IsReady)
+        {
+            _readyCache[(profile, runtimeRoot)] = readiness;
+        }
+
+        return readiness;
     }
 }
