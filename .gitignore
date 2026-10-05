@@ -268,11 +268,11 @@ output/unused-code-audit/
 .githooks/
 /.adal/skills
 /.agents/skills
-# Agent skill caches stay local, but the gh-stack skill is committed backing
-# for CLAUDE.md's stacked-PR workflow (Claude Code only loads project skills
-# from .claude/skills/).
+# Agent skill caches stay local; explicitly maintained repository skills
+# are committed exceptions (Claude Code loads from .claude/skills/).
 /.claude/skills/*
 !/.claude/skills/gh-stack
+!/.claude/skills/trackdub-media-cleanup
 /.claude/settings.local.json
 /.openclaude/
 /.codeartsdoer/skills
@@ -343,3 +343,4 @@ __pycache__/
 
 # Local agent/tooling state (never part of the source tree)
 /.freebuff/
+/docs/Video Cleanup-1.0.1-v1
