@@ -12,7 +12,7 @@ The file keeps its original name for existing links; the integration is no longe
 | `NvidiaAfxIntegration.IsStubbed()` | Kill switch, `false`. While `true`, readiness never reports Ready, the installer and downloader refuse, and enhancement falls through to DeepFilterNet. |
 | `NvidiaAfxSpeechAudioEnhancementService` | Falls through to DeepFilterNet when disabled, not ready, missing an AEC far-end reference, when the readiness check throws, or when the native run fails. |
 | `NvidiaAfxRuntimeDownloader` / `NvidiaAfxRuntimeInstaller` | Still refuse placeholder packages, missing license acceptance and missing manifests. No hosted redistributable exists, so Trackdub does not download AFX; users point it at a local SDK. |
-| `nvidiaafx-runtime.manifest.json` | Placeholder `example.invalid` URLs and zero hashes. It is only used as an architecture whitelist for readiness and is never downloadable (`NvidiaAfxRuntimePackageGates`). |
+| `nvidiaafx-runtime.manifest.json` | Placeholder `example.invalid` URLs and zero hashes. Readiness uses it only as an architecture whitelist; the installer reads it to gate downloads and pick the architecture-matched package. It is never downloadable (`NvidiaAfxRuntimePackageGates`). |
 
 Never treat component registration, settings fields or profile catalog entries as proof that AFX ran. The stage result's `Backend` is `NvidiaAfx` only when the native effect actually produced the audio.
 

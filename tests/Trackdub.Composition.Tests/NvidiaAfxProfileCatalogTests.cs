@@ -14,7 +14,8 @@ public sealed class NvidiaAfxProfileCatalogTests
             NvidiaAfxProfile.ReverbOnly,
             NvidiaAfxProfile.NoiseAndReverb,
             NvidiaAfxProfile.TelephonyUpscale,
-            NvidiaAfxProfile.AcousticEchoCancellation
+            NvidiaAfxProfile.AcousticEchoCancellation,
+            NvidiaAfxProfile.SpeakerFocus
         };
 
         foreach (NvidiaAfxProfile profile in expected)

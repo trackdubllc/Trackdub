@@ -35,6 +35,7 @@ public sealed class NvidiaAfxStubContractTests
             Assert.False(readiness.IsReady);
             Assert.Equal(NvidiaAfxIntegration.StubStatusLabel, readiness.StatusLabel);
             Assert.Equal(NvidiaAfxIntegration.StubReason, readiness.FailureReason);
+            Assert.Null(readiness.RuntimeRoot);
         }
         finally
         {
