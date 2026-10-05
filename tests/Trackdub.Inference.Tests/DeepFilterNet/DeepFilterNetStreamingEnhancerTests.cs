@@ -29,7 +29,7 @@ public sealed class DeepFilterNetStreamingEnhancerTests
     [Fact]
     public async Task EnhanceAsync_EmptyInput_ReturnsEmptyWithoutTouchingSessions()
     {
-        float[] output = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+        float[] output = await EnhanceToArrayAsync(
             new InMemoryAudioSamples([]),
             sessions: null!,
             attenuationLimit: 0f,
@@ -45,7 +45,7 @@ public sealed class DeepFilterNetStreamingEnhancerTests
         try
         {
             const int totalSamples = 48000 * 2;
-            float[] output = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+            float[] output = await EnhanceToArrayAsync(
                 new InMemoryAudioSamples(new float[totalSamples]),
                 sessions,
                 attenuationLimit: 0f,
@@ -69,13 +69,13 @@ public sealed class DeepFilterNetStreamingEnhancerTests
         {
             float[] voiced = BuildVoiced(48000 * 12);
 
-            float[] wide = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+            float[] wide = await EnhanceToArrayAsync(
                 new InMemoryAudioSamples(voiced),
                 sessions,
                 attenuationLimit: ToLinearLimitDb(35),
                 CancellationToken.None,
                 windowFrames: 600);
-            float[] narrow = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+            float[] narrow = await EnhanceToArrayAsync(
                 new InMemoryAudioSamples(voiced),
                 sessions,
                 attenuationLimit: ToLinearLimitDb(35),
@@ -107,13 +107,13 @@ public sealed class DeepFilterNetStreamingEnhancerTests
         {
             float[] noisy = BuildNoisyVoiced(48000 * 6, seed: 7);
 
-            float[] limited = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+            float[] limited = await EnhanceToArrayAsync(
                 new InMemoryAudioSamples(noisy),
                 sessions,
                 attenuationLimit: ToLinearLimitDb(35),
                 CancellationToken.None,
                 windowFrames: 200);
-            float[] unlimited = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+            float[] unlimited = await EnhanceToArrayAsync(
                 new InMemoryAudioSamples(noisy),
                 sessions,
                 attenuationLimit: 0f,
@@ -145,7 +145,7 @@ public sealed class DeepFilterNetStreamingEnhancerTests
             cts.Cancel();
 
             await Assert.ThrowsAsync<OperationCanceledException>(() =>
-                DeepFilterNetStreamingEnhancer.EnhanceAsync(
+                EnhanceToArrayAsync(
                     new InMemoryAudioSamples(BuildVoiced(48000)),
                     sessions,
                     attenuationLimit: 0f,
@@ -164,14 +164,122 @@ public sealed class DeepFilterNetStreamingEnhancerTests
         const int windowFrames = 37;
         using var audio = new GuardedAudioSamples((48000 * 2) + 17, windowFrames * 480);
 
-        float[] output = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+        float[] output = await EnhanceToArrayAsync(
             audio, sessions, ToLinearLimitDb(35), CancellationToken.None, windowFrames);
 
         Assert.Equal(audio.SampleFrameCount, audio.FramesRead);
         Assert.Equal((((audio.SampleFrameCount + 479) / 480) * 480) - 1440, output.LongLength);
     }
 
-    private sealed class GuardedAudioSamples(long sampleCount, int maxRead) : IAudioSamples
+    // Full-output materialization is confined to small test fixtures, never production.
+    private static async Task<float[]> EnhanceToArrayAsync(
+        IAudioSamples audio, DeepFilterNetModelSessions sessions, float attenuationLimit,
+        CancellationToken cancellationToken, int windowFrames = 600)
+    {
+        var output = new float[checked((int)DeepFilterNetStreamingEnhancer.GetOutputSampleCount(audio.SampleFrameCount))];
+        int offset = 0;
+        long count = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+            audio, sessions, attenuationLimit, (samples, _) =>
+            {
+                samples.CopyTo(output.AsMemory(offset));
+                offset += samples.Length;
+                return ValueTask.CompletedTask;
+            }, cancellationToken, windowFrames);
+        Assert.Equal(output.LongLength, count);
+        return output;
+    }
+
+    [DfModelFact]
+    public async Task EnhanceAsync_StreamsBeforeEofWithBackpressureAndNoPrefixReplay()
+    {
+        using DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
+        const int windowFrames = 37;
+        using var audio = new GuardedAudioSamples((48000 * 2) + 17, windowFrames * 480);
+        int writes = 0;
+        long framesWritten = 0;
+        long count = await DeepFilterNetStreamingEnhancer.EnhanceAsync(
+            audio, sessions, ToLinearLimitDb(35), async (samples, token) =>
+            {
+                Assert.InRange(samples.Length, 1, windowFrames * 480);
+                if (writes++ == 0)
+                {
+                    Assert.Equal(windowFrames * 480, audio.FramesRead);
+                    Assert.True(audio.FramesRead < audio.SampleFrameCount);
+                }
+
+                long readAtWrite = audio.FramesRead;
+                float firstSample = samples.Span[0];
+                await Task.Delay(1, token);
+                Assert.Equal(readAtWrite, audio.FramesRead);
+                Assert.Equal(firstSample, samples.Span[0]);
+                framesWritten += samples.Length;
+            }, CancellationToken.None, windowFrames);
+
+        Assert.True(writes > 1);
+        Assert.Equal(audio.SampleFrameCount, audio.FramesRead);
+        Assert.Equal(DeepFilterNetStreamingEnhancer.GetOutputSampleCount(audio.SampleFrameCount), count);
+        Assert.Equal(count, framesWritten);
+    }
+
+    [DfModelFact]
+    public async Task EnhanceAsync_LongQuietSourceUsesLongOffsetsAndStopsOnSinkCancellation()
+    {
+        using DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
+        using var cts = new CancellationTokenSource();
+        const long length = (long)int.MaxValue + 48000;
+        using var audio = new GuardedAudioSamples(length, 480 * 37, allQuiet: true);
+        int writes = 0;
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            DeepFilterNetStreamingEnhancer.EnhanceAsync(audio, sessions, 0f, (samples, token) =>
+            {
+                Assert.Equal(cts.Token, token);
+                Assert.Equal(480 * 37, audio.FramesRead);
+                Assert.All(samples.ToArray(), static sample => Assert.Equal(0f, sample));
+                writes++;
+                cts.Cancel();
+                return ValueTask.CompletedTask;
+            }, cts.Token, windowFrames: 37));
+        Assert.Equal(1, writes);
+        Assert.Equal(480 * 37, audio.FramesRead);
+    }
+
+    [DfModelFact]
+    public async Task EnhanceAsync_SinkFailureStopsReadingImmediately()
+    {
+        using DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
+        using var audio = new GuardedAudioSamples(48000 * 2, 480 * 37);
+        var expected = new IOException("Sink failed");
+        Exception actual = await Assert.ThrowsAsync<IOException>(() =>
+            DeepFilterNetStreamingEnhancer.EnhanceAsync(audio, sessions, 0f,
+                (_, _) => ValueTask.FromException(expected), CancellationToken.None, windowFrames: 37));
+        Assert.Same(expected, actual);
+        Assert.Equal(480 * 37, audio.FramesRead);
+    }
+
+    [DfModelFact]
+    public async Task EnhanceAsync_QuietGapsAndPartialHopKeepStateAcrossSingleHopWindows()
+    {
+        using DeepFilterNetModelSessions sessions = await CreateSessionsAsync();
+        const int length = (480 * 53) + 17;
+        using var wideAudio = new GuardedAudioSamples(length, 480 * 600);
+        using var narrowAudio = new GuardedAudioSamples(length, 480);
+        float[] wide = await EnhanceToArrayAsync(wideAudio, sessions, ToLinearLimitDb(35), CancellationToken.None, 600);
+        float[] narrow = await EnhanceToArrayAsync(narrowAudio, sessions, ToLinearLimitDb(35), CancellationToken.None, 1);
+        Assert.Equal(wide.Length, narrow.Length);
+        float peak = wide.Zip(narrow, static (a, b) => MathF.Abs(a - b)).Max();
+        Assert.True(peak <= 2f / 32768f, $"Quiet-gap/window divergence: {peak:E3}");
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 0)]
+    [InlineData(1440, 0)]
+    [InlineData(1441, 480)]
+    [InlineData(1920, 480)]
+    public void GetOutputSampleCount_PadsLastHopAndTrimsPhysicalLatency(long input, long expected) =>
+        Assert.Equal(expected, DeepFilterNetStreamingEnhancer.GetOutputSampleCount(input));
+
+    private sealed class GuardedAudioSamples(long sampleCount, int maxRead, bool allQuiet = false) : IAudioSamples
     {
         public int SampleRate => 48000;
         public long SampleFrameCount => sampleCount;
@@ -186,7 +294,7 @@ public sealed class DeepFilterNetStreamingEnhancerTests
             for (int i = 0; i < destination.Length; i++)
             {
                 long frame = startFrame + i;
-                destination[i] = (frame / 480) % 11 < 4
+                destination[i] = allQuiet || (frame / 480) % 11 < 4
                     ? 0f
                     : 0.2f * MathF.Sin(2f * MathF.PI * 110f * (float)frame / 48000f);
             }

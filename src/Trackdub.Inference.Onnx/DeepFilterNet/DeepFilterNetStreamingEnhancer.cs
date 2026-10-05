@@ -75,32 +75,6 @@ internal static class DeepFilterNetStreamingEnhancer
         return DeepFilterNetFrameGate.Speech;
     }
 
-    /// <summary>
-    /// Enhances mono 48 kHz audio, preserving neural and normalization state across the
-    /// whole input. Returns the enhanced PCM at the native trimmed length.
-    /// </summary>
-    /// <param name="attenuationLimit">Linear mix-back limit (0 disables; 10^(-db/20)).</param>
-    /// <param name="windowFrames">Active frames per inference window; throughput only.</param>
-    // Array convenience for small model tests only. Production uses the streaming overload.
-    public static async Task<float[]> EnhanceAsync(
-        IAudioSamples audio,
-        DeepFilterNetModelSessions sessions,
-        float attenuationLimit,
-        CancellationToken cancellationToken,
-        int windowFrames = DefaultWindowFrames)
-    {
-        ArgumentNullException.ThrowIfNull(audio);
-        var output = new float[checked((int)GetOutputSampleCount(audio.SampleFrameCount))];
-        int offset = 0;
-        await EnhanceAsync(audio, sessions, attenuationLimit, (samples, _) =>
-        {
-            samples.CopyTo(output.AsMemory(offset));
-            offset += samples.Length;
-            return ValueTask.CompletedTask;
-        }, cancellationToken, windowFrames).ConfigureAwait(false);
-        return output;
-    }
-
     internal static long GetOutputSampleCount(long inputSamples)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(inputSamples);
@@ -206,93 +180,93 @@ internal static class DeepFilterNetStreamingEnhancer
 
             if (windowActive > 0)
             {
-            // Chronological features for the window's active frames; the norm state advances
-            // exactly once per active frame and is never replayed over overlaps.
-            var specNew = new Complex32[windowActive, DeepFilterNetSignalProcessor.FreqBins];
-            var erbNew = new float[windowActive, erbBands];
-            var specRealNew = new float[windowActive, nbDf];
-            var specImagNew = new float[windowActive, nbDf];
-            for (int j = 0; j < windowActive; j++)
-            {
-                // The preceding active hop survives quiet gaps and window boundaries.
-                Array.Copy(analysisWindow, hop, analysisWindow, 0, hop);
-                Array.Copy(pcmWindow, ordinalToHop[j] * hop, analysisWindow, hop, hop);
-                DeepFilterNetSignalProcessor.ComputeFrameFeatures(
-                    analysisWindow, normState,
-                    out Complex32[] spectrum, out float[] erbRow, out float[] specReal, out float[] specImag);
-                for (int k = 0; k < DeepFilterNetSignalProcessor.FreqBins; k++)
+                // Chronological features for the window's active frames; the norm state advances
+                // exactly once per active frame and is never replayed over overlaps.
+                var specNew = new Complex32[windowActive, DeepFilterNetSignalProcessor.FreqBins];
+                var erbNew = new float[windowActive, erbBands];
+                var specRealNew = new float[windowActive, nbDf];
+                var specImagNew = new float[windowActive, nbDf];
+                for (int j = 0; j < windowActive; j++)
                 {
-                    specNew[j, k] = spectrum[k];
+                    // The preceding active hop survives quiet gaps and window boundaries.
+                    Array.Copy(analysisWindow, hop, analysisWindow, 0, hop);
+                    Array.Copy(pcmWindow, ordinalToHop[j] * hop, analysisWindow, hop, hop);
+                    DeepFilterNetSignalProcessor.ComputeFrameFeatures(
+                        analysisWindow, normState,
+                        out Complex32[] spectrum, out float[] erbRow, out float[] specReal, out float[] specImag);
+                    for (int k = 0; k < DeepFilterNetSignalProcessor.FreqBins; k++)
+                    {
+                        specNew[j, k] = spectrum[k];
+                    }
+
+                    for (int b = 0; b < erbBands; b++)
+                    {
+                        erbNew[j, b] = erbRow[b];
+                    }
+
+                    for (int k = 0; k < nbDf; k++)
+                    {
+                        specRealNew[j, k] = specReal[k];
+                        specImagNew[j, k] = specImag[k];
+                    }
                 }
 
-                for (int b = 0; b < erbBands; b++)
+                DeepFilterNetEncoderResult encoder = DeepFilterNetOnnxInference.RunEncoderWindow(
+                    sessions,
+                    BuildEncoderFeed(featErbCache, erbNew, windowActive, erbBands),
+                    BuildEncoderFeedComplex(featSpecRealCache, featSpecImagCache, specRealNew, specImagNew, windowActive, nbDf),
+                    recurrentState,
+                    cancellationToken);
+
+                // Refresh feature lookbacks with the window's last two rows.
+                RefreshFeatureCache(featErbCache, erbNew, windowActive, erbBands);
+                RefreshFeatureCache(featSpecRealCache, specRealNew, windowActive, nbDf);
+                RefreshFeatureCache(featSpecImagCache, specImagNew, windowActive, nbDf);
+
+                // Per-frame gate decisions; consecutive equal decisions form runs so decoder
+                // GRU states advance through exactly the frames native would execute.
+                var gainsWindow = new float[1, 1, windowActive, erbBands];
+                var coefsWindow = new float[1, windowActive, dfOrder, nbDf, 2];
+                int runStart = 0;
+                while (runStart < windowActive)
                 {
-                    erbNew[j, b] = erbRow[b];
+                    DeepFilterNetFrameGate gate = ClassifyGate(encoder.Lsnr[runStart]);
+                    int runEnd = runStart + 1;
+                    while (runEnd < windowActive && ClassifyGate(encoder.Lsnr[runEnd]) == gate)
+                    {
+                        runEnd++;
+                    }
+
+                    RunDecoderRun(
+                        sessions, encoder, c0Cache, recurrentState,
+                        gainsWindow, coefsWindow, runStart, runEnd - runStart, gate, cancellationToken);
+
+                    if (gate is DeepFilterNetFrameGate.Speech or DeepFilterNetFrameGate.GainsOnly)
+                    {
+                        RefreshC0Cache(c0Cache, encoder.C0, runStart, runEnd - runStart, c0FrameSize);
+                    }
+
+                    runStart = runEnd;
                 }
 
-                for (int k = 0; k < nbDf; k++)
+                float[] timeDomain = DeepFilterNetSignalProcessor.Synthesize(
+                    BuildSpectrumWindow(specCache, specNew, windowActive),
+                    gainsWindow,
+                    coefsWindow,
+                    attenuationLimit);
+
+                // Hop overlap-add with a carry across windows (native synthesis_mem).
+                for (int j = 0; j < windowActive; j++)
                 {
-                    specRealNew[j, k] = specReal[k];
-                    specImagNew[j, k] = specImag[k];
-                }
-            }
-
-            DeepFilterNetEncoderResult encoder = DeepFilterNetOnnxInference.RunEncoderWindow(
-                sessions,
-                BuildEncoderFeed(featErbCache, erbNew, windowActive, erbBands),
-                BuildEncoderFeedComplex(featSpecRealCache, featSpecImagCache, specRealNew, specImagNew, windowActive, nbDf),
-                recurrentState,
-                cancellationToken);
-
-            // Refresh feature lookbacks with the window's last two rows.
-            RefreshFeatureCache(featErbCache, erbNew, windowActive, erbBands);
-            RefreshFeatureCache(featSpecRealCache, specRealNew, windowActive, nbDf);
-            RefreshFeatureCache(featSpecImagCache, specImagNew, windowActive, nbDf);
-
-            // Per-frame gate decisions; consecutive equal decisions form runs so decoder
-            // GRU states advance through exactly the frames native would execute.
-            var gainsWindow = new float[1, 1, windowActive, erbBands];
-            var coefsWindow = new float[1, windowActive, dfOrder, nbDf, 2];
-            int runStart = 0;
-            while (runStart < windowActive)
-            {
-                DeepFilterNetFrameGate gate = ClassifyGate(encoder.Lsnr[runStart]);
-                int runEnd = runStart + 1;
-                while (runEnd < windowActive && ClassifyGate(encoder.Lsnr[runEnd]) == gate)
-                {
-                    runEnd++;
+                    int hopIndex = ordinalToHop[j];
+                    for (int i = 0; i < hop; i++)
+                    {
+                        hopOut[hopIndex * hop + i] = timeDomain[j * fft + i] + synthesisMemory[i];
+                        synthesisMemory[i] = timeDomain[j * fft + hop + i];
+                    }
                 }
 
-                RunDecoderRun(
-                    sessions, encoder, c0Cache, recurrentState,
-                    gainsWindow, coefsWindow, runStart, runEnd - runStart, gate, cancellationToken);
-
-                if (gate is DeepFilterNetFrameGate.Speech or DeepFilterNetFrameGate.GainsOnly)
-                {
-                    RefreshC0Cache(c0Cache, encoder.C0, runStart, runEnd - runStart, c0FrameSize);
-                }
-
-                runStart = runEnd;
-            }
-
-            float[] timeDomain = DeepFilterNetSignalProcessor.Synthesize(
-                BuildSpectrumWindow(specCache, specNew, windowActive),
-                gainsWindow,
-                coefsWindow,
-                attenuationLimit);
-
-            // Hop overlap-add with a carry across windows (native synthesis_mem).
-            for (int j = 0; j < windowActive; j++)
-            {
-                int hopIndex = ordinalToHop[j];
-                for (int i = 0; i < hop; i++)
-                {
-                    hopOut[hopIndex * hop + i] = timeDomain[j * fft + i] + synthesisMemory[i];
-                    synthesisMemory[i] = timeDomain[j * fft + hop + i];
-                }
-            }
-
-            RefreshSpectrumCache(specCache, specNew, windowActive);
+                RefreshSpectrumCache(specCache, specNew, windowActive);
             }
 
             // Trim in the physical output clock, including quiet hops and small windows.
@@ -325,25 +299,25 @@ internal static class DeepFilterNetStreamingEnhancer
         switch (gate)
         {
             case DeepFilterNetFrameGate.Speech:
-            {
-                float[,,,] gains = DeepFilterNetOnnxInference.RunErbDecoderWindow(
-                    sessions, encoder, offsetFrames, runFrames, recurrentState, cancellationToken);
-                float[,,,,] coefs = DeepFilterNetOnnxInference.RunDfDecoderWindow(
-                    sessions, encoder, c0Cache, offsetFrames, runFrames, recurrentState, cancellationToken);
-                CopyGainsRun(gainsWindow, gains, offsetFrames, runFrames);
-                CopyCoefsRun(coefsWindow, coefs, offsetFrames, runFrames);
-                break;
-            }
+                {
+                    float[,,,] gains = DeepFilterNetOnnxInference.RunErbDecoderWindow(
+                        sessions, encoder, offsetFrames, runFrames, recurrentState, cancellationToken);
+                    float[,,,,] coefs = DeepFilterNetOnnxInference.RunDfDecoderWindow(
+                        sessions, encoder, c0Cache, offsetFrames, runFrames, recurrentState, cancellationToken);
+                    CopyGainsRun(gainsWindow, gains, offsetFrames, runFrames);
+                    CopyCoefsRun(coefsWindow, coefs, offsetFrames, runFrames);
+                    break;
+                }
 
             case DeepFilterNetFrameGate.GainsOnly:
-            {
-                float[,,,] gains = DeepFilterNetOnnxInference.RunErbDecoderWindow(
-                    sessions, encoder, offsetFrames, runFrames, recurrentState, cancellationToken);
-                CopyGainsRun(gainsWindow, gains, offsetFrames, runFrames);
-                // coefsWindow stays zero: native skips the DF stage, leaving the masked
-                // low bins at their zeroed values before the attenuation mix.
-                break;
-            }
+                {
+                    float[,,,] gains = DeepFilterNetOnnxInference.RunErbDecoderWindow(
+                        sessions, encoder, offsetFrames, runFrames, recurrentState, cancellationToken);
+                    CopyGainsRun(gainsWindow, gains, offsetFrames, runFrames);
+                    // coefsWindow stays zero: native skips the DF stage, leaving the masked
+                    // low bins at their zeroed values before the attenuation mix.
+                    break;
+                }
 
             case DeepFilterNetFrameGate.NoiseOnly:
                 // gainsWindow/coefsWindow stay zero: native applies a zero mask and skips DF.
