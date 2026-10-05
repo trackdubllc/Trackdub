@@ -6,6 +6,9 @@ namespace Trackdub.Composition.NvidiaAfx;
 
 internal sealed class NvidiaAfxSession : IDisposable
 {
+    // Every AFX effect processes fixed 10 ms frames (80 / 160 / 480 samples at 8 / 16 / 48 kHz).
+    private const int FramesPerSecond = 100;
+
     private readonly NvidiaAfxEffectHandle _handle;
     private readonly string _selector;
     private readonly uint _numInputChannels;
@@ -113,13 +116,18 @@ internal sealed class NvidiaAfxSession : IDisposable
                 }
             }
 
-            EnsureSuccess(
-                NvidiaAfxNative.NvAFX_SetU32(
-                    safeHandle.DangerousGetHandle(),
-                    NvidiaAfxNativeParameters.InputSampleRate,
-                    (uint)sampleRate),
-                profile.Selector,
-                "Set input sample rate");
+            // A chained selector encodes its sample rates (superres8kto16k_...), and SDK 2.x rejects
+            // input_sample_rate on it with NVAFX_STATUS_INVALID_PARAM.
+            if (!profile.IsChainedEffect)
+            {
+                EnsureSuccess(
+                    NvidiaAfxNative.NvAFX_SetU32(
+                        safeHandle.DangerousGetHandle(),
+                        NvidiaAfxNativeParameters.InputSampleRate,
+                        (uint)sampleRate),
+                    profile.Selector,
+                    "Set input sample rate");
+            }
 
             int expectedOutputSampleRate = profile.ResolveOutputSampleRate(sampleRate);
             // Maxine docs: NVAFX_PARAM_OUTPUT_SAMPLE_RATE is Windows-only and not supported by
@@ -168,7 +176,7 @@ internal sealed class NvidiaAfxSession : IDisposable
                 safeHandle,
                 NvidiaAfxNativeParameters.NumInputSamplesPerFrame,
                 fallbackParameter: NvidiaAfxNativeParameters.SamplesPerFrameLegacy,
-                defaultValue: 480u);
+                defaultValue: checked((uint)(sampleRate / FramesPerSecond)));
             int outputSampleRate = QueryOutputSampleRate(
                 safeHandle,
                 expectedOutputSampleRate);
@@ -397,6 +405,20 @@ internal sealed class NvidiaAfxSession : IDisposable
 
         if (rateChanging)
         {
+            // SDK 2.x chained handles answer every Get* with NVAFX_STATUS_FAILED, so the output
+            // frame cannot be queried. Derive it from the fixed 10 ms framing and the declared rate.
+            if (profile.IsChainedEffect)
+            {
+                uint derived = checked((uint)(outputSampleRate / FramesPerSecond));
+                ValidateOutputFrameRatio(
+                    profile.Selector,
+                    inputSampleRate,
+                    outputSampleRate,
+                    numInputSamples,
+                    derived);
+                return derived;
+            }
+
             throw new InvalidOperationException(
                 $"NVIDIA AFX rate-changing profile '{profile.Selector}' did not report " +
                 $"{NvidiaAfxNativeParameters.NumOutputSamplesPerFrame}; refusing to fall back to the input frame size.");

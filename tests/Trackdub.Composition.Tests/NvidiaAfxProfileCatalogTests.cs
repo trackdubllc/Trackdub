@@ -79,4 +79,24 @@ public sealed class NvidiaAfxProfileCatalogTests
         Assert.Equal(16000, definition.OutputSampleRate);
         Assert.Equal(16000, definition.ResolveOutputSampleRate(8000));
     }
+
+    [Fact]
+    public void TelephonyUpscale_DoesNotAdvertiseIntensity_BecauseChainedIntensityHasNoEffect()
+    {
+        NvidiaAfxProfileDefinition definition =
+            NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.TelephonyUpscale);
+
+        Assert.False(definition.SupportsIntensityRatio);
+    }
+
+    [Fact]
+    public void TelephonyUpscale_UsesTheShippedSuperresModelStem()
+    {
+        NvidiaAfxProfileDefinition definition =
+            NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.TelephonyUpscale);
+
+        Assert.Contains(
+            definition.ResolveRequiredModels(8000),
+            model => model.FeatureFolder == "nvafxsuperres" && model.ModelStem == "superres_8kto16k");
+    }
 }

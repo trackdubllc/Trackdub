@@ -9,8 +9,8 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
     ISpeechAudioEnhancementService ffmpegFallback) : ISpeechAudioEnhancementService
 {
     /// <summary>
-    /// Test seam for exercising post-stub gates (AEC far-end, readiness) without flipping
-    /// <see cref="NvidiaAfxIntegration.IsStubbed"/> for the whole process.
+    /// Test seam for exercising the kill switch and the gates behind it (AEC far-end, readiness)
+    /// without changing <see cref="NvidiaAfxIntegration.IsStubbed"/> for the whole process.
     /// </summary>
     internal Func<bool>? IsStubbedOverride { get; set; }
 
@@ -27,7 +27,17 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
-        NvidiaAfxRuntimeReadiness readiness = readinessService.GetReadiness(options.NvidiaAfxProfile);
+        NvidiaAfxRuntimeReadiness readiness;
+        try
+        {
+            readiness = readinessService.GetReadiness(options.NvidiaAfxProfile);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A readiness probe that throws (settings I/O, native load) must not fail the stage.
+            return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         if (!readiness.IsReady)
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
@@ -73,7 +83,8 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
                 definition,
                 readiness.RuntimeRoot!,
                 targetSampleRate,
-                options.NvidiaAfxIntensityRatio);
+                options.NvidiaAfxIntensityRatio,
+                readiness.ArchitectureBucket);
             float[] enhanced = session.Process(monoSamples, farEndSamples);
 
             // Prefer the native/session output rate (telephony upscale is 8 kHz in → 16 kHz out).

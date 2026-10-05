@@ -23,6 +23,49 @@ public sealed class NvidiaAfxRuntimeLayoutTests
     }
 
     [Fact]
+    public void ResolveNativeLibraryPath_FindsSdkRootBinLayout()
+    {
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-sdkroot-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Join(tempRoot, "bin"));
+        try
+        {
+            string dll = Path.Join(tempRoot, "bin", "NVAudioEffects.dll");
+            File.WriteAllBytes(dll, [0x00]);
+
+            Assert.Equal(dll, NvidiaAfxRuntimeLayout.ResolveNativeLibraryPath(tempRoot));
+            Assert.True(NvidiaAfxRuntimeLayout.HasNativeLibrary(tempRoot));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveNativeLibraryPath_PrefersRootOverBin()
+    {
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-prefer-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Join(tempRoot, "bin"));
+        try
+        {
+            string rootDll = Path.Join(tempRoot, "NVAudioEffects.dll");
+            File.WriteAllBytes(rootDll, [0x00]);
+            File.WriteAllBytes(Path.Join(tempRoot, "bin", "NVAudioEffects.dll"), [0x00]);
+
+            Assert.Equal(rootDll, NvidiaAfxRuntimeLayout.ResolveNativeLibraryPath(tempRoot));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveNativeLibraryPath_ReturnsNull_WhenRootDoesNotExist() =>
+        Assert.Null(NvidiaAfxRuntimeLayout.ResolveNativeLibraryPath(
+            Path.Join(Path.GetTempPath(), $"trackdub-afx-missing-{Guid.NewGuid():N}")));
+
+    [Fact]
     public void ResolveModelFile_PrefersFeatureArchLayout()
     {
         string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-models-{Guid.NewGuid():N}");
@@ -124,6 +167,49 @@ public sealed class NvidiaAfxRuntimeLayoutTests
 
             Assert.Contains(featureDll, enumerated);
             Assert.Contains(sidecarDll, enumerated);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void EnumerateExternalDependencyPaths_FindsSdkBinExternalDlls()
+    {
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-external-{Guid.NewGuid():N}");
+        string cudaBin = Path.Join(tempRoot, "bin", "external", "cuda", "bin");
+        string trtBin = Path.Join(tempRoot, "bin", "external", "nvtrt", "bin");
+        Directory.CreateDirectory(cudaBin);
+        Directory.CreateDirectory(trtBin);
+        try
+        {
+            string cublas = Path.Join(cudaBin, "cublas64_12.dll");
+            string nvinfer = Path.Join(trtBin, "nvinfer_10.dll");
+            File.WriteAllBytes(cublas, [0x00]);
+            File.WriteAllBytes(nvinfer, [0x00]);
+            File.WriteAllText(Path.Join(trtBin, "ThirdPartyLicenses.txt"), "notice");
+
+            string[] enumerated = NvidiaAfxRuntimeLayout.EnumerateExternalDependencyPaths(tempRoot).ToArray();
+
+            Assert.Equal(2, enumerated.Length);
+            Assert.Contains(cublas, enumerated);
+            Assert.Contains(nvinfer, enumerated);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void EnumerateExternalDependencyPaths_IsEmpty_WhenThereIsNoExternalFolder()
+    {
+        string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-noexternal-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            Assert.Empty(NvidiaAfxRuntimeLayout.EnumerateExternalDependencyPaths(tempRoot));
         }
         finally
         {

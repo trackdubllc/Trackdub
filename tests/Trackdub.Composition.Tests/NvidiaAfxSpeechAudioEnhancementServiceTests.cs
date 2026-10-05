@@ -42,13 +42,14 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
     }
 
     [Fact]
-    public async Task EnhanceAsync_FallsBack_WhenIntegrationIsStubbed()
+    public async Task EnhanceAsync_FallsBack_WhenKillSwitchIsOn()
     {
-        Assert.True(NvidiaAfxIntegration.IsStubbed());
-
         var fallback = new FakeSpeechAudioEnhancementService();
         var readiness = new FakeReadinessService(new NvidiaAfxRuntimeReadiness(true, "Ready", "C:\\afx", null));
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback);
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback)
+        {
+            IsStubbedOverride = static () => true
+        };
 
         SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
             new SpeechAudioEnhancementRequest(
@@ -66,11 +67,7 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
     {
         var fallback = new FakeSpeechAudioEnhancementService();
         var readiness = new FakeReadinessService(new NvidiaAfxRuntimeReadiness(true, "Ready", "C:\\afx", null));
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback)
-        {
-            // Exercise the AEC far-end gate without flipping NvidiaAfxIntegration.IsStubbed().
-            IsStubbedOverride = static () => false
-        };
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback);
 
         SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
             new SpeechAudioEnhancementRequest(
@@ -86,6 +83,25 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
         Assert.Equal(SpeechAudioEnhancementBackend.Ffmpeg, result.Backend);
         Assert.True(fallback.WasCalled);
         Assert.Equal(1, readiness.CallCount);
+    }
+
+    [Fact]
+    public async Task EnhanceAsync_FallsBack_WhenTheReadinessCheckThrows()
+    {
+        var fallback = new FakeSpeechAudioEnhancementService();
+        var readiness = new ThrowingReadinessService();
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback);
+
+        SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
+            new SpeechAudioEnhancementRequest(
+                "source.wav",
+                "dest.wav",
+                new SpeechAudioEnhancementOptions(true, NvidiaAfxProfile.NoiseAndReverb, 1.0f)),
+            CancellationToken.None);
+
+        Assert.Equal(1, readiness.CallCount);
+        Assert.True(fallback.WasCalled);
+        Assert.Equal(SpeechAudioEnhancementBackend.Ffmpeg, result.Backend);
     }
 
     [Fact]
@@ -108,13 +124,14 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
     }
 
     [Fact]
-    public async Task EnhanceAsync_DoesNotProbeReadiness_WhenIntegrationIsStubbed()
+    public async Task EnhanceAsync_DoesNotProbeReadiness_WhenKillSwitchIsOn()
     {
-        Assert.True(NvidiaAfxIntegration.IsStubbed());
-
         var fallback = new FakeSpeechAudioEnhancementService();
         var readiness = new ThrowingReadinessService();
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback);
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback)
+        {
+            IsStubbedOverride = static () => true
+        };
 
         SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
             new SpeechAudioEnhancementRequest(

@@ -7,37 +7,17 @@ namespace Trackdub.Composition.Tests;
 public sealed class NvidiaAfxStubContractTests
 {
     [Fact]
-    public void Integration_IsOfficiallyStubbed()
+    public void Integration_IsEnabled_AndKeepsItsKillSwitchMetadata()
     {
-        Assert.True(NvidiaAfxIntegration.IsStubbed());
+        Assert.False(NvidiaAfxIntegration.IsStubbed());
         Assert.Equal("nvidia-afx", NvidiaAfxIntegration.ProviderId);
         Assert.False(string.IsNullOrWhiteSpace(NvidiaAfxIntegration.DisplayName));
         Assert.False(string.IsNullOrWhiteSpace(NvidiaAfxIntegration.StubReason));
     }
 
     [Fact]
-    public void StubReadiness_NeverReportsReady_ForAnyProfile()
+    public void ReadinessService_NeverReportsReady_WhenKillSwitchIsOn()
     {
-        var sut = new StubNvidiaAfxRuntimeReadinessService();
-
-        foreach (NvidiaAfxProfile profile in Enum.GetValues<NvidiaAfxProfile>())
-        {
-            NvidiaAfxRuntimeReadiness readiness = sut.GetReadiness(profile);
-            Assert.False(readiness.IsReady);
-            Assert.Equal(NvidiaAfxIntegration.StubStatusLabel, readiness.StatusLabel);
-            Assert.Equal(NvidiaAfxIntegration.StubReason, readiness.FailureReason);
-            Assert.Null(readiness.RuntimeRoot);
-        }
-    }
-
-    [Fact]
-    public void RealReadinessService_AlsoReportsStub_WhileIntegrationIsStubbed()
-    {
-        if (!NvidiaAfxIntegration.IsStubbed())
-        {
-            return;
-        }
-
         var logger = new NoopLogger();
         string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-stub-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
@@ -47,7 +27,8 @@ public sealed class NvidiaAfxStubContractTests
             var service = new NvidiaAfxRuntimeReadinessService(
                 componentStore,
                 new FixedArchitectureDetector("ada"),
-                Path.Join(tempRoot, "missing-manifest.json"));
+                Path.Join(tempRoot, "missing-manifest.json"),
+                isStubbed: static () => true);
 
             NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.NoiseAndReverb);
 
@@ -65,13 +46,16 @@ public sealed class NvidiaAfxStubContractTests
     }
 
     [Fact]
-    public async Task EnhancementService_FallsBack_WhenStubbedEvenIfEnabledAndReadinessClaimsReady()
+    public async Task EnhancementService_FallsBack_WhenKillSwitchIsOnEvenIfEnabledAndReadinessClaimsReady()
     {
         var fallback = new CapturingFallback();
-        // Deliberately claim Ready to prove IsStubbed short-circuits before native use.
+        // Deliberately claim Ready to prove the kill switch short-circuits before native use.
         var readiness = new FakeReadinessService(
             new NvidiaAfxRuntimeReadiness(true, "Ready", @"C:\afx", null));
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback);
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback)
+        {
+            IsStubbedOverride = static () => true
+        };
 
         SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
             new SpeechAudioEnhancementRequest(
@@ -85,9 +69,8 @@ public sealed class NvidiaAfxStubContractTests
     }
 
     [Fact]
-    public void ProfileCatalog_IsDiscoverableWhileStubbed()
+    public void ProfileCatalog_IsDiscoverable()
     {
-        Assert.True(NvidiaAfxIntegration.IsStubbed());
         Assert.Equal(Enum.GetValues<NvidiaAfxProfile>().Length, NvidiaAfxProfileCatalog.Definitions.Count);
 
         foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions)
@@ -98,13 +81,8 @@ public sealed class NvidiaAfxStubContractTests
     }
 
     [Fact]
-    public async Task Downloader_RefusesInstall_WhileStubbed()
+    public async Task Downloader_RefusesInstall_WhenKillSwitchIsOn()
     {
-        if (!NvidiaAfxIntegration.IsStubbed())
-        {
-            return;
-        }
-
         var logger = new NoopLogger();
         string tempRoot = Path.Join(Path.GetTempPath(), $"trackdub-afx-dl-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
@@ -112,7 +90,11 @@ public sealed class NvidiaAfxStubContractTests
         {
             var componentStore = new Trackdub.Infrastructure.Components.ComponentStore(tempRoot, logger);
             using var httpClient = new HttpClient();
-            var downloader = new NvidiaAfxRuntimeDownloader(componentStore, httpClient, logger);
+            var downloader = new NvidiaAfxRuntimeDownloader(
+                componentStore,
+                httpClient,
+                logger,
+                isStubbed: static () => true);
             var package = new NvidiaAfxRuntimePackage(
                 Architecture: "ada",
                 DownloadUrl: "https://example.invalid/afx.zip",

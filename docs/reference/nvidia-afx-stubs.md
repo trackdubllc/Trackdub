@@ -1,50 +1,42 @@
-# NVIDIA AFX stubs
+# NVIDIA AFX readiness contract
 
-Trackdub registers **NVIDIA Audio Effects (AFX / RTX Voice)** as a first-class **stubbed** speech-enhancement integration for readiness. DeepFilterNet3 remains the shipping enhancement backend. Wiring beyond stubs (native API alignment, packaging gates, AEC far-end, settings→stage) is documented in [nvidia-afx-wiring.md](nvidia-afx-wiring.md).
+Trackdub integrates **NVIDIA Audio Effects (AFX / Maxine)** as an optional speech-enhancement backend. DeepFilterNet3 remains the default and the fallback. Layout, native behavior and verification are in [nvidia-afx-wiring.md](nvidia-afx-wiring.md).
+
+The file keeps its original name for existing links; the integration is no longer a stub.
 
 ## Honesty contract
 
-| Signal | Stub behavior |
-|--------|----------------|
-| `NvidiaAfxIntegration.IsStubbed()` | `true` until Trackdub-hosted redistributables + verified native create/run ship |
-| `INvidiaAfxRuntimeReadinessService` | DI uses `StubNvidiaAfxRuntimeReadinessService`; always `IsReady=false` |
-| `NvidiaAfxRuntimeReadinessService` | Also short-circuits while stubbed (defense in depth) |
-| `NvidiaAfxSpeechAudioEnhancementService` | Falls through to DeepFilterNet when stubbed/disabled/not ready/missing AEC far-end |
-| `NvidiaAfxRuntimeDownloader` / `NvidiaAfxRuntimeInstaller` | Refuse while stubbed; also refuse placeholder packages and missing license acceptance |
-| `nvidiaafx-runtime.manifest.json` | Placeholder `example.invalid` URLs / zero hashes (not downloadable; gated by `NvidiaAfxRuntimePackageGates`) |
+| Signal | Behavior |
+|--------|----------|
+| `INvidiaAfxRuntimeReadinessService` | `NvidiaAfxRuntimeReadinessService` (probe-based). Ready only when the license is accepted, the native library, any feature DLLs the layout requires and every model the profile needs are present, **and** an effect creates and loads at every supported rate on this machine. Only successful native probes are cached; file checks run on every call. |
+| `NvidiaAfxIntegration.IsStubbed()` | Kill switch, `false`. While `true`, readiness never reports Ready, the installer and downloader refuse, and enhancement falls through to DeepFilterNet. |
+| `NvidiaAfxSpeechAudioEnhancementService` | Falls through to DeepFilterNet when disabled, not ready, missing an AEC far-end reference, when the readiness check throws, or when the native run fails. |
+| `NvidiaAfxRuntimeDownloader` / `NvidiaAfxRuntimeInstaller` | Still refuse placeholder packages, missing license acceptance and missing manifests. No hosted redistributable exists, so Trackdub does not download AFX; users point it at a local SDK. |
+| `nvidiaafx-runtime.manifest.json` | Placeholder `example.invalid` URLs and zero hashes. It is only used as an architecture whitelist for readiness and is never downloadable (`NvidiaAfxRuntimePackageGates`). |
 
-Never treat component registration, settings fields, or profile catalog entries as proof that AFX ran or succeeded.
+Never treat component registration, settings fields or profile catalog entries as proof that AFX ran. The stage result's `Backend` is `NvidiaAfx` only when the native effect actually produced the audio.
 
 ## Discoverability
 
 | Area | Location |
 |------|----------|
-| Provider id / stub flag | `src/Trackdub.Contracts/NvidiaAfxIntegration.cs` |
+| Provider id / kill switch | `src/Trackdub.Contracts/NvidiaAfxIntegration.cs` |
 | Profile enum | `src/Trackdub.Contracts/NvidiaAfxProfile.cs` |
 | Studio settings | `EnableNvidiaAfx` / `NvidiaAfxProfile` / `NvidiaAfxIntensityRatio` / `NvidiaAfxLicenseAccepted` / `NvidiaAfxRuntimeDirectory` |
 | Enhancement options | `SpeechAudioEnhancementOptions` (+ `FarEndReferenceAudioPath`, `FromStudioSettings`) |
 | Profile catalog | `src/Trackdub.Composition/NvidiaAfx/NvidiaAfxProfileCatalog.cs` |
-| Stub readiness | `StubNvidiaAfxRuntimeReadinessService` |
-| Native seams | `NvidiaAfxNative`, `NvidiaAfxSession` (Maxine `float**` Run + AEC dual input) |
-| On-disk layout | `NvidiaAfxRuntimeLayout` (Maxine 3.x `NVAudioEffects.dll` + `features/nvafx*/`; legacy `models/*.nvam` fallback) |
+| Readiness | `NvidiaAfxRuntimeReadinessService`, `NvidiaAfxInstalledRuntimeEvaluator`, `NvidiaAfxSessionEffectProbe` |
+| Native seams | `NvidiaAfxNative`, `NvidiaAfxNativeLoader`, `NvidiaAfxSession` |
+| On-disk layout | `NvidiaAfxRuntimeLayout` |
+| GPU architecture | `NvidiaAfxArchitectureDetector` (display adapter, `TRACKDUB_NVIDIA_GPU_NAME` override) |
 | Packaging gates | `NvidiaAfxRuntimePackageGates`, `NvidiaAfxRuntimePathResolver`, `NvidiaAfxRuntimeInstaller` |
-| Runtime manifest | `src/Trackdub.Composition/nvidiaafx-runtime.manifest.json` |
 | DI | `CompositionRoot.AddApplication`, `HeadlessCompositionRoot` |
-| Stage provenance | `SpeechAudioEnhancementStageHandler` (`nvidia-afx` backend tag; settings→options) |
+| Stage provenance | `SpeechAudioEnhancementStageHandler` (`nvidia-afx` backend tag) |
+| Live GPU proofs | `tests/Trackdub.Composition.Tests/NvidiaAfxLiveRuntimeTests.cs` |
 
-## Still stubbed (blocked for Ready)
+## Open items
 
-- Real NVIDIA AFX SDK redistributable download URLs, checksums (NVIDIA installer / Trackdub-hosted packages)
-- Architecture-bucket package selection against a verified install with live download
-- Native `NVAudioEffects.dll` create/run validated on shipping GPUs
-- Flipping `NvidiaAfxIntegration.IsStubbed()` and registering `NvidiaAfxRuntimeReadinessService` instead of the stub
-- AEC: not in Maxine AFX 3.x public selectors; profile stays discoverable only
-
-## Wired but gated
-
-- Packaging validation gates and license-gated installer scaffolding
-- Maxine 3.x `features/` layout resolution (+ legacy models fallback)
-- Rate-specific Maxine models (`ModelsBySampleRate` / `ResolveRequiredModels`) + feature bin DLL gates
-- Native DllImport resolver for `NVAudioEffects.dll` + managed preload of `features/*/bin/*.dll`
-- Corrected native Run signature and AEC far-end reference path
-- Settings → `SpeechAudioEnhancementOptions` through the enhancement stage
+- No Trackdub-hosted redistributable: NVIDIA's license decides whether one can ship. Until then the runtime is user-installed.
+- AEC needs a far-end reference that dubbing never has, so it is hidden from the UI and untested live.
+- Speaker Focus (Early Access) is available in the SDK but is not in the profile catalog.
+- Live proofs need a Windows NVIDIA RTX machine and never run in default CI.

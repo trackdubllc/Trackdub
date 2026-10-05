@@ -7,13 +7,12 @@ namespace Trackdub.Composition.Tests;
 public sealed class NvidiaAfxRuntimeInstallerTests
 {
     [Fact]
-    public async Task EnsureInstalledAsync_Refuses_WhileStubbed()
+    public async Task EnsureInstalledAsync_Refuses_WhenKillSwitchIsOn()
     {
-        Assert.True(NvidiaAfxIntegration.IsStubbed());
-
         await using var harness = await InstallerHarness.CreateAsync(
             StudioSettings.Default with { NvidiaAfxLicenseAccepted = true },
-            downloadableManifest: true);
+            downloadableManifest: true,
+            isStubbed: static () => true);
 
         NvidiaAfxRuntimeInstallResult result = await harness.Installer.EnsureInstalledAsync(null, CancellationToken.None);
 

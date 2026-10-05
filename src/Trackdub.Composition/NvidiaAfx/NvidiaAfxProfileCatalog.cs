@@ -152,12 +152,15 @@ public static class NvidiaAfxProfileCatalog
                 new(
                     8000,
                     [
-                        new("nvafxsuperres", "superres_8k_to_16k"),
+                        new("nvafxsuperres", "superres_8kto16k"),
                         new("nvafxdenoiser", "denoiser_16k"),
                     ]),
             ],
             RequiresFarEndReference: false,
-            SupportsIntensityRatio: true,
+            // SDK 2.x/3.x reject the scalar setter on a chain, and the documented NvAFX_SetFloatList
+            // (per-effect ratios) is accepted but leaves the output unchanged on Windows (verified
+            // live on SDK 3.0.0), so a slider here would do nothing.
+            SupportsIntensityRatio: false,
             OutputSampleRate: 16000),
         new(
             NvidiaAfxProfile.AcousticEchoCancellation,

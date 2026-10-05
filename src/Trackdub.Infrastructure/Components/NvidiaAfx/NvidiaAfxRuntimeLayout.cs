@@ -34,8 +34,12 @@ public static class NvidiaAfxRuntimeLayout
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
 
-        string? existing = NativeLibraryFileNames
-            .Select(fileName => Path.Join(runtimeRoot, fileName))
+        // The Maxine 2.x SDK root keeps the core DLL in bin/ beside features/; flat installs and
+        // staged packages keep it at the root.
+        string[] searchDirectories = [runtimeRoot, Path.Join(runtimeRoot, "bin")];
+
+        string? existing = searchDirectories
+            .SelectMany(directory => NativeLibraryFileNames.Select(fileName => Path.Join(directory, fileName)))
             .FirstOrDefault(File.Exists);
         if (existing is not null)
         {
@@ -43,12 +47,9 @@ public static class NvidiaAfxRuntimeLayout
         }
 
         // Case-insensitive fallback for Linux-hosted fixtures / wine-style trees.
-        if (!Directory.Exists(runtimeRoot))
-        {
-            return null;
-        }
-
-        return Directory.EnumerateFiles(runtimeRoot, "*.dll")
+        return searchDirectories
+            .Where(Directory.Exists)
+            .SelectMany(directory => Directory.EnumerateFiles(directory, "*.dll"))
             .FirstOrDefault(path =>
                 NativeLibraryFileNames.Any(expected =>
                     string.Equals(expected, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)));
@@ -140,6 +141,33 @@ public static class NvidiaAfxRuntimeLayout
     {
         ArgumentNullException.ThrowIfNull(featureFolders);
         return featureFolders.All(folder => HasFeatureNativeLibrary(runtimeRoot, folder));
+    }
+
+    /// <summary>
+    /// Enumerates the third-party DLLs (CUDA, TensorRT, OpenSSL) the Maxine 2.x SDK keeps under
+    /// <c>bin/external/*/bin</c>. Feature DLLs depend on them but those folders are not on the
+    /// default DLL search path, so they must be preloaded by absolute path.
+    /// </summary>
+    public static IEnumerable<string> EnumerateExternalDependencyPaths(string runtimeRoot)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
+
+        foreach (string externalRoot in new[]
+                 {
+                     Path.Join(runtimeRoot, "bin", "external"),
+                     Path.Join(runtimeRoot, "external"),
+                 })
+        {
+            if (!Directory.Exists(externalRoot))
+            {
+                continue;
+            }
+
+            foreach (string dllPath in Directory.EnumerateFiles(externalRoot, "*.dll", SearchOption.AllDirectories))
+            {
+                yield return dllPath;
+            }
+        }
     }
 
     /// <summary>
