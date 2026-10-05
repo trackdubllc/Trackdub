@@ -7,7 +7,7 @@ namespace Trackdub.Inference.Onnx.DeepFilterNet;
 /// <list type="bullet">
 /// <item>Every GRU node's internal zero-initial <c>initial_h</c> (ConstantOfShape/Slice chain)
 /// is replaced by a new graph input <c>state_in_&lt;prefix&gt;_&lt;i&gt;</c>, and the GRU's existing
-/// <c>Y_h</c> output tensor is added to the graph outputs as <c>state_out_&lt;prefix&gt;_&lt;i&gt;</c>.</item>
+/// <c>Y_h</c> output tensor is added to the graph outputs under its existing name.</item>
 /// <item>Causal input <c>Pad</c> nodes (the exported conv1d_causal zero-pads on the time axis)
 /// are removed and their consumers read the graph input directly, so the caller supplies the
 /// true lookback frames instead of zeros. The only such pads in these models sit on the graph

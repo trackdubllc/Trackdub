@@ -7,9 +7,10 @@ namespace Trackdub.Inference.Onnx.DeepFilterNet;
 /// Sessions over the three DeepFilterNet3 ONNX exports, rewritten by
 /// <see cref="DeepFilterNetOnnxGraphTransform"/> so GRU hidden states are explicit graph
 /// inputs/outputs and causal input pads are neutralized. The transformed model bytes are
-/// derived deterministically from the cached originals and cached under the user's temp
-/// directory (keyed by the original content hash), so the original model files are never
-/// modified and the transform runs once per model version.
+/// derived deterministically from the cached originals and cached under the user's local
+/// application-data directory (keyed by the original content hash), so the original model
+/// files are never modified. The transform still runs on every session creation; only the
+/// verified cache write is skipped when the file already matches.
 /// </summary>
 internal sealed class DeepFilterNetModelSessions(
     OnnxExecutionSessionFactory.SingleSessionLease enc,

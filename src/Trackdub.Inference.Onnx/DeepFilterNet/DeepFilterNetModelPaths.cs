@@ -7,7 +7,7 @@ namespace Trackdub.Inference.Onnx.DeepFilterNet;
 // Tensor names as consumed by DeepFilterNetOnnxInference (see
 // scripts/inspect-deepfilternet-onnx.py for the original exports). Sessions rewrite the
 // exports into stateful graphs (DeepFilterNetOnnxGraphTransform): GRU states become explicit
-// state_in_*/state_out inputs/outputs and the causal input pads are removed, so the caller
+// state_in_* inputs and existing Y_h outputs, and the causal input pads are removed, so the caller
 // supplies the lookback rows (2 for feat_erb/feat_spec, 4 for c0) itself.
 // enc.onnx:
 //   input  feat_erb  [1,1,S+2,32]  float32
