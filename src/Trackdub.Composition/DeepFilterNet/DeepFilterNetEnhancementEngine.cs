@@ -65,24 +65,46 @@ public sealed class DeepFilterNetEnhancementEngine : ISpeechAudioEnhancementServ
             .CreateAsync(modelPaths, ExecutionProviderKind.Cpu, cancellationToken)
             .ConfigureAwait(false);
 
-        float[] cleanPcm = await DeepFilterNetChunkedEnhancer
-            .EnhanceAsync(resampled, sessions, ToLinearLimit(attenuationLimitDb), cancellationToken)
-            .ConfigureAwait(false);
+        string partialPath = fullDestinationPath + ".partial";
+        long sampleFrames;
+        try
+        {
+            await using (var destination = new FileStream(
+                partialPath, FileMode.Create, FileAccess.Write, FileShare.None,
+                bufferSize: 8192, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                var writer = await StreamingMonoPcm16WaveWriter.CreateAsync(
+                    destination,
+                    DeepFilterNetStreamingEnhancer.GetOutputSampleCount(resampled.SampleFrameCount),
+                    DeepFilterNetSignalProcessor.SampleRate,
+                    cancellationToken).ConfigureAwait(false);
+                sampleFrames = await DeepFilterNetStreamingEnhancer
+                    .EnhanceAsync(resampled, sessions, ToLinearLimit(attenuationLimitDb),
+                        writer.WriteAsync, cancellationToken)
+                    .ConfigureAwait(false);
+                await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+            }
 
-        await WaveAudioWriter.WriteMonoPcm16Async(
-            fullDestinationPath,
-            cleanPcm,
-            DeepFilterNetSignalProcessor.SampleRate,
-            cancellationToken).ConfigureAwait(false);
+            File.Move(partialPath, fullDestinationPath, overwrite: true);
+        }
+        catch
+        {
+            if (File.Exists(partialPath))
+            {
+                File.Delete(partialPath);
+            }
 
-        double durationSeconds = (double)cleanPcm.Length / DeepFilterNetSignalProcessor.SampleRate;
+            throw;
+        }
+
+        double durationSeconds = (double)sampleFrames / DeepFilterNetSignalProcessor.SampleRate;
 
         return new SpeechAudioEnhancementResult(
             fullDestinationPath,
             durationSeconds,
             DeepFilterNetSignalProcessor.SampleRate,
             ChannelCount: 1,
-            SampleFrames: cleanPcm.Length,
+            SampleFrames: sampleFrames,
             Backend: SpeechAudioEnhancementBackend.DeepFilterNet,
             BackendProfile: attenuationLimitDb > 0
                 ? FormattableString.Invariant($"atten-lim-{attenuationLimitDb:0.#}db")

@@ -7,6 +7,7 @@
 - [specs/](specs/) — Technical specifications and requirements
 - [audits/](audits/) — Completed investigations and reports
 - [operations/](operations/) — Operational procedures
+  - [operations/media-cleanup.md](operations/media-cleanup.md) — Attributed media-cleanup agent skill, Trackdub stage/artifact workflow, and verification boundaries
   - [operations/linear-workflow.md](operations/linear-workflow.md) — Linear source-of-truth + agent update loop (GitHub / Notion / Figma)
 - [development/](development/) — Developer procedures and guides
 - [reference/](reference/) — Technical reference material
