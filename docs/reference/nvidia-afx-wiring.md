@@ -14,7 +14,7 @@ On an RTX 5070 (Blackwell), every profile selectable in the UI (all but Acoustic
 | Telephony Upscale | `superres8kto16k_denoiser16k` (chained) | 8 kHz in, 16 kHz out |
 | Speaker Focus (Early Access) | `speaker_focus` | 16 kHz, 48 kHz |
 
-On SDK 2.1.0.9, Speaker Focus creates, loads and runs a single frame (so readiness reports Ready) but `NvAFX_Run` fails with `NVAFX_STATUS_FAILED` on the 2-second live test signal, and the enhancement then falls back to DeepFilterNet. Use SDK 3.0.0 for Speaker Focus. The same-rate profiles other than Speaker Focus also run on the flat SDK 1.6.1.2 layout. Acoustic Echo Cancellation is not covered (needs a far-end reference).
+Speaker Focus is an Early Access effect, so no test results for it are published here; use SDK 3.0.0 with it. The same-rate profiles other than Speaker Focus also run on the flat SDK 1.6.1.2 layout. Acoustic Echo Cancellation is not covered (needs a far-end reference).
 
 Run the live proofs (skipped unless the variable is set):
 
