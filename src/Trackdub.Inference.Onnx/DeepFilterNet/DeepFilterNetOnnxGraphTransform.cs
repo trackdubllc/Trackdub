@@ -49,9 +49,10 @@ internal static class DeepFilterNetOnnxGraphTransform
         var padRewire = new Dictionary<string, string>(StringComparer.Ordinal);
         var rebuiltNodes = new List<byte[]>();
 
-        foreach (ProtoField nodeField in graphFields.Where(static f => f.Field == NodeField))
+        foreach (List<ProtoField> nodeFields in graphFields
+            .Where(static f => f.Field == NodeField)
+            .Select(static f => Parse(f.Value)))
         {
-            List<ProtoField> nodeFields = Parse(nodeField.Value);
             string op = GetNodeOpType(nodeFields);
             string[] inputs = GetNodeInputs(nodeFields);
             string[] outputs = GetNodeOutputs(nodeFields);
@@ -111,17 +112,17 @@ internal static class DeepFilterNetOnnxGraphTransform
         }
 
         foreach (ProtoField field in nodeFields)
-                {
-                    if (field.Field is NodeInputField or NodeOutputField)
-                    {
-                        continue;
-                    }
-
-                    parts.Add(SerializeField(field));
-                }
-
-                return Serialize(parts);
+        {
+            if (field.Field is NodeInputField or NodeOutputField)
+            {
+                continue;
             }
+
+            parts.Add(SerializeField(field));
+        }
+
+        return Serialize(parts);
+    }
 
     private static List<ProtoField> RebuildGraph(
         List<ProtoField> graphFields,

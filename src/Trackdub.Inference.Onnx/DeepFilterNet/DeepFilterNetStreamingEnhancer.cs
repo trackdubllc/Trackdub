@@ -43,6 +43,8 @@ internal static class DeepFilterNetStreamingEnhancer
     /// <summary>Native quiet-hop gate: mean-square below this freezes the whole state clock.</summary>
     internal const float QuietMeanSquareThresh = 1e-7f;
 
+    internal const int MaxQuietHopsProcessed = 5;
+
     /// <summary>Native <c>-D</c> output latency trim: FFT size minus hop plus two hops.</summary>
     internal const int LatencyTrimSamples = 1440;
 
@@ -148,6 +150,7 @@ internal static class DeepFilterNetStreamingEnhancer
         var synthesisMemory = new float[hop];
         var analysisWindow = new float[fft];
 
+        int quietRun = 0;
         long inputOffset = 0;
         long samplesWritten = 0;
         int trimRemaining = LatencyTrimSamples;
@@ -172,7 +175,9 @@ internal static class DeepFilterNetStreamingEnhancer
                     sumSquares += (double)pcmWindow[i] * pcmWindow[i];
                 }
 
-                if (sumSquares / hop >= QuietMeanSquareThresh)
+                // Native skip_counter: only the 6th consecutive quiet hop onwards is dropped.
+                quietRun = sumSquares / hop >= QuietMeanSquareThresh ? 0 : quietRun + 1;
+                if (quietRun <= MaxQuietHopsProcessed)
                 {
                     ordinalToHop[windowActive++] = h;
                 }
@@ -227,6 +232,7 @@ internal static class DeepFilterNetStreamingEnhancer
                 // GRU states advance through exactly the frames native would execute.
                 var gainsWindow = new float[1, 1, windowActive, erbBands];
                 var coefsWindow = new float[1, windowActive, dfOrder, nbDf, 2];
+                var applyDeepFilter = new bool[windowActive];
                 int runStart = 0;
                 while (runStart < windowActive)
                 {
@@ -241,6 +247,11 @@ internal static class DeepFilterNetStreamingEnhancer
                         sessions, encoder, c0Cache, recurrentState,
                         gainsWindow, coefsWindow, runStart, runEnd - runStart, gate, cancellationToken);
 
+                    if (gate == DeepFilterNetFrameGate.Speech)
+                    {
+                        Array.Fill(applyDeepFilter, true, runStart, runEnd - runStart);
+                    }
+
                     if (gate is DeepFilterNetFrameGate.Speech or DeepFilterNetFrameGate.GainsOnly)
                     {
                         RefreshC0Cache(c0Cache, encoder.C0, runStart, runEnd - runStart, c0FrameSize);
@@ -253,7 +264,8 @@ internal static class DeepFilterNetStreamingEnhancer
                     BuildSpectrumWindow(specCache, specNew, windowActive),
                     gainsWindow,
                     coefsWindow,
-                    attenuationLimit);
+                    attenuationLimit,
+                    applyDeepFilter);
 
                 // Hop overlap-add with a carry across windows (native synthesis_mem).
                 for (int j = 0; j < windowActive; j++)
@@ -314,8 +326,8 @@ internal static class DeepFilterNetStreamingEnhancer
                     float[,,,] gains = DeepFilterNetOnnxInference.RunErbDecoderWindow(
                         sessions, encoder, offsetFrames, runFrames, recurrentState, cancellationToken);
                     CopyGainsRun(gainsWindow, gains, offsetFrames, runFrames);
-                    // coefsWindow stays zero: native skips the DF stage, leaving the masked
-                    // low bins at their zeroed values before the attenuation mix.
+                    // coefsWindow stays zero and applyDeepFilter stays false: native skips the DF
+                    // stage, so Synthesize keeps the masked delayed low bins.
                     break;
                 }
 
@@ -332,7 +344,7 @@ internal static class DeepFilterNetStreamingEnhancer
                     }
                 }
 
-                // coefsWindow stays zero (unused: unity mask keeps the delayed spectrum).
+                // applyDeepFilter stays false: the unity mask keeps the delayed spectrum.
                 break;
 
             default:

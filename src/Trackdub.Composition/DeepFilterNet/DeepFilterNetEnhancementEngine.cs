@@ -65,19 +65,37 @@ public sealed class DeepFilterNetEnhancementEngine : ISpeechAudioEnhancementServ
             .CreateAsync(modelPaths, ExecutionProviderKind.Cpu, cancellationToken)
             .ConfigureAwait(false);
 
-        await using var destination = new FileStream(
-            fullDestinationPath, FileMode.Create, FileAccess.Write, FileShare.None,
-            bufferSize: 8192, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var writer = await StreamingMonoPcm16WaveWriter.CreateAsync(
-            destination,
-            DeepFilterNetStreamingEnhancer.GetOutputSampleCount(resampled.SampleFrameCount),
-            DeepFilterNetSignalProcessor.SampleRate,
-            cancellationToken).ConfigureAwait(false);
-        long sampleFrames = await DeepFilterNetStreamingEnhancer
-            .EnhanceAsync(resampled, sessions, ToLinearLimit(attenuationLimitDb),
-                writer.WriteAsync, cancellationToken)
-            .ConfigureAwait(false);
-        await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+        string partialPath = fullDestinationPath + ".partial";
+        long sampleFrames;
+        try
+        {
+            await using (var destination = new FileStream(
+                partialPath, FileMode.Create, FileAccess.Write, FileShare.None,
+                bufferSize: 8192, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                var writer = await StreamingMonoPcm16WaveWriter.CreateAsync(
+                    destination,
+                    DeepFilterNetStreamingEnhancer.GetOutputSampleCount(resampled.SampleFrameCount),
+                    DeepFilterNetSignalProcessor.SampleRate,
+                    cancellationToken).ConfigureAwait(false);
+                sampleFrames = await DeepFilterNetStreamingEnhancer
+                    .EnhanceAsync(resampled, sessions, ToLinearLimit(attenuationLimitDb),
+                        writer.WriteAsync, cancellationToken)
+                    .ConfigureAwait(false);
+                await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(partialPath, fullDestinationPath, overwrite: true);
+        }
+        catch
+        {
+            if (File.Exists(partialPath))
+            {
+                File.Delete(partialPath);
+            }
+
+            throw;
+        }
 
         double durationSeconds = (double)sampleFrames / DeepFilterNetSignalProcessor.SampleRate;
 

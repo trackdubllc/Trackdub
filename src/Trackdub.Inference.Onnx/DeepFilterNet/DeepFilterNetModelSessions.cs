@@ -82,9 +82,23 @@ internal sealed class DeepFilterNetModelSessions(
             GetDerivedCacheDirectory(modelPath, original),
             Path.GetFileName(modelPath));
         Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
-        if (!File.Exists(cachePath))
+        if (!await CacheMatchesAsync(cachePath, transformed, cancellationToken).ConfigureAwait(false))
         {
-            await File.WriteAllBytesAsync(cachePath, transformed, cancellationToken).ConfigureAwait(false);
+            string tempPath = $"{cachePath}.{Guid.NewGuid():N}.tmp";
+            try
+            {
+                await File.WriteAllBytesAsync(tempPath, transformed, cancellationToken).ConfigureAwait(false);
+                File.Move(tempPath, cachePath, overwrite: true);
+            }
+            catch
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+
+                throw;
+            }
         }
 
         OnnxExecutionSessionFactory.SingleSessionLease lease = await OnnxExecutionSessionFactory
@@ -97,8 +111,25 @@ internal sealed class DeepFilterNetModelSessions(
     {
         byte[] hash = SHA256.HashData(original);
         string hashHex = Convert.ToHexStringLower(hash)[..16];
-        string tempRoot = Path.GetTempPath();
-        return Path.Join(tempRoot, "trackdub", "deepfilternet3-stateful", TransformVersion, hashHex);
+        string cacheRoot = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrEmpty(cacheRoot))
+        {
+            cacheRoot = Path.GetTempPath();
+        }
+
+        return Path.Join(cacheRoot, "trackdub", "deepfilternet3-stateful", TransformVersion, hashHex);
+    }
+
+    private static async Task<bool> CacheMatchesAsync(
+        string cachePath, byte[] transformed, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(cachePath) || new FileInfo(cachePath).Length != transformed.Length)
+        {
+            return false;
+        }
+
+        byte[] existing = await File.ReadAllBytesAsync(cachePath, cancellationToken).ConfigureAwait(false);
+        return SHA256.HashData(existing).AsSpan().SequenceEqual(SHA256.HashData(transformed));
     }
 
     public void Dispose()

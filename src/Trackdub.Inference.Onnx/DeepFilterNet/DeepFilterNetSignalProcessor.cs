@@ -287,13 +287,15 @@ internal static class DeepFilterNetSignalProcessor
     /// <param name="stftFrames">W+4 raw spectra; window frame j is at index j+4.</param>
     /// <param name="erbGains">[1,1,W,32] per-window-frame ERB masks (already gated to unity or zeros).</param>
     /// <param name="dfCoefs">[1,W,DfOrder,NbDf,2] per-window-frame FIR taps (already gated).</param>
+    /// <param name="applyDeepFilter">Per-frame flag; false keeps the masked delayed low bins (native skips DF). Null applies DF to every frame.</param>
     /// <param name="attenuationLimit">Linear mix-back limit (0 disables; libDF 10^(-db/20)).</param>
     /// <returns>W * FftSize floats: per-frame windowed inverse FFTs, concatenated.</returns>
     internal static float[] Synthesize(
         Complex32[,] stftFrames,
         float[,,,] erbGains,
         float[,,,,] dfCoefs,
-        float attenuationLimit = 0f)
+        float attenuationLimit = 0f,
+        bool[]? applyDeepFilter = null)
     {
         int totalFrames = stftFrames.GetLength(0);
         int windowFrames = totalFrames - 4;
@@ -329,20 +331,24 @@ internal static class DeepFilterNetSignalProcessor
             }
 
             // Deep-filter path replaces the low bins, computed from the raw spectra at taps -4..0.
-            for (int k = 0; k < NbDf; k++)
+            // Frames where native skips the DF stage keep the masked delayed spectrum instead.
+            if (applyDeepFilter is null || applyDeepFilter[j])
             {
-                Complex32 filtered = Complex32.Zero;
-                for (int o = 0; o < DfOrder; o++)
+                for (int k = 0; k < NbDf; k++)
                 {
-                    Complex32 src = stftFrames[j + o, k];
-                    float cr = dfCoefs[0, j, o, k, 0];
-                    float ci = dfCoefs[0, j, o, k, 1];
-                    filtered += new Complex32(
-                        (cr * src.Real) - (ci * src.Imaginary),
-                        (cr * src.Imaginary) + (ci * src.Real));
-                }
+                    Complex32 filtered = Complex32.Zero;
+                    for (int o = 0; o < DfOrder; o++)
+                    {
+                        Complex32 src = stftFrames[j + o, k];
+                        float cr = dfCoefs[0, j, o, k, 0];
+                        float ci = dfCoefs[0, j, o, k, 1];
+                        filtered += new Complex32(
+                            (cr * src.Real) - (ci * src.Imaginary),
+                            (cr * src.Imaginary) + (ci * src.Real));
+                    }
 
-                outSpec[k] = filtered;
+                    outSpec[k] = filtered;
+                }
             }
 
             if (attenuationLimit > 0f)
