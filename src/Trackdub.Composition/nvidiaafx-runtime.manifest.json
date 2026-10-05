@@ -3,6 +3,9 @@
   "licenseUrl": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/",
   "developerResourcesUrl": "https://www.nvidia.com/broadcast-sdk-resources",
   "notes": "Packages remain placeholders until Trackdub hosts Maxine AFX 3.x redistributables (core NVAudioEffects.dll + features/nvafx*/bin + rate-specific models from NGC download_features.ps1) with verified SHA-256/size. Ready requires both 16k and 48k models for dual-rate profiles plus feature bin DLLs. Layout: see docs/reference/nvidia-afx-wiring.md. Local installs via NvidiaAfxRuntimeDirectory or TRACKDUB_NVIDIA_AFX_RUNTIME_ROOT are supported for probing after IsStubbed() flips. Do not treat this manifest as downloadable.",
+  "effects": [
+    { "selector": "speaker_focus", "terms": "evaluation" }
+  ],
   "packages": [
     {
       "architecture": "turing",

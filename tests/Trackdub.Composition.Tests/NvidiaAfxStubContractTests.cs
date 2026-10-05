@@ -7,6 +7,18 @@ namespace Trackdub.Composition.Tests;
 public sealed class NvidiaAfxStubContractTests
 {
     [Fact]
+    public void ShippedManifest_RecordsSpeakerFocusAsEvaluationOnly()
+    {
+        NvidiaAfxRuntimeManifest manifest = NvidiaAfxRuntimeManifestLoader.Load(
+            Path.Join(AppContext.BaseDirectory, "nvidiaafx-runtime.manifest.json"));
+
+        Assert.Contains(
+            manifest.Effects ?? [],
+            effect => effect.Selector == "speaker_focus" && effect.Terms == NvidiaAfxEffectTerms.Evaluation);
+        Assert.False(manifest.IsCommerciallyLicensed("speaker_focus"));
+    }
+
+    [Fact]
     public void Integration_IsEnabled_AndKeepsItsKillSwitchMetadata()
     {
         Assert.False(NvidiaAfxIntegration.IsStubbed());

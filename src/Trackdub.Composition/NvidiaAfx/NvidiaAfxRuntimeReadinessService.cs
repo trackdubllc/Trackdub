@@ -168,6 +168,31 @@ public sealed class NvidiaAfxRuntimeReadinessService(
         manifestPath,
         new CachingNvidiaAfxEffectProbe(effectProbe ?? NvidiaAfxSessionEffectProbe.Instance));
 
+    // An Early Access effect runs only when the manifest records commercial terms for it. The
+    // explicit opt-in is a separate, evaluation-only path for development and never changes the manifest.
+    private NvidiaAfxRuntimeReadiness? CheckEarlyAccessEligibility(NvidiaAfxProfileDefinition definition)
+    {
+        try
+        {
+            if (NvidiaAfxRuntimeManifestLoader.Load(manifestPath).IsCommerciallyLicensed(definition.Selector))
+            {
+                return null;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException)
+        {
+            return new NvidiaAfxRuntimeReadiness(false, "Manifest error", null, ex.Message);
+        }
+
+        return _allowEarlyAccess()
+            ? null
+            : new NvidiaAfxRuntimeReadiness(
+                false,
+                "Early Access disabled",
+                null,
+                "This NVIDIA Early Access effect is licensed for evaluation only and is not enabled for production use.");
+    }
+
     public NvidiaAfxRuntimeReadiness GetReadiness(NvidiaAfxProfile profile)
     {
         if (_isStubbed())
@@ -184,13 +209,14 @@ public sealed class NvidiaAfxRuntimeReadinessService(
             return new NvidiaAfxRuntimeReadiness(false, "Unsupported OS", null, "NVIDIA AFX is Windows-only.");
         }
 
-        if (NvidiaAfxProfileCatalog.GetDefinition(profile).IsEarlyAccess && !_allowEarlyAccess())
+        NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
+        if (definition.IsEarlyAccess)
         {
-            return new NvidiaAfxRuntimeReadiness(
-                false,
-                "Early Access disabled",
-                null,
-                "This NVIDIA Early Access effect is under an evaluation license and is disabled in this build.");
+            NvidiaAfxRuntimeReadiness? blocked = CheckEarlyAccessEligibility(definition);
+            if (blocked is not null)
+            {
+                return blocked;
+            }
         }
 
         StudioSettings? settings;

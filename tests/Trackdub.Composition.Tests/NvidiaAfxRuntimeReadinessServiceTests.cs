@@ -46,6 +46,80 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
         Assert.Equal(0, probe.CallCount);
     }
 
+    [Theory]
+    [InlineData("evaluation")]
+    [InlineData(null)]
+    public void GetReadiness_RefusesAnEarlyAccessEffect_WhenTheManifestDoesNotRecordCommercialTerms(string? terms)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        fixture.SetEffectTerms(terms);
+        var probe = new CountingProbe();
+        var service = fixture.CreateService(probe);
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.False(readiness.IsReady);
+        Assert.Equal("Early Access disabled", readiness.StatusLabel);
+        Assert.Equal(0, probe.CallCount);
+    }
+
+    [Fact]
+    public void GetReadiness_PassesTheEarlyAccessGate_WhenTheManifestRecordsCommercialTerms()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        fixture.SetEffectTerms("commercial");
+        var service = fixture.CreateService(new CountingProbe());
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.NotEqual("Early Access disabled", readiness.StatusLabel);
+    }
+
+    [Fact]
+    public void GetReadiness_LetsTheExplicitOptInProbeAnEvaluationOnlyEffect()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        fixture.SetEffectTerms("evaluation");
+        var service = fixture.CreateService(new CountingProbe(), allowEarlyAccess: true);
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.NotEqual("Early Access disabled", readiness.StatusLabel);
+    }
+
+    [Fact]
+    public void GetReadiness_ReportsAnUnreadableManifest_ForAnEarlyAccessEffect()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        fixture.CorruptManifest();
+        var service = fixture.CreateService(new CountingProbe());
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.False(readiness.IsReady);
+        Assert.Equal("Manifest error", readiness.StatusLabel);
+    }
+
     [Fact]
     public void GetReadiness_RequiresTheLicenseToBeAccepted()
     {
@@ -367,6 +441,18 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
             File.WriteAllText(manifestPath, ManifestJson("ada", "ampere"));
             return new RuntimeFixture(tempRoot, runtimePath, manifestPath);
         }
+
+        public void SetEffectTerms(string? terms) =>
+            File.WriteAllText(
+                _manifestPath,
+                ManifestJson("ada", "ampere").Replace(
+                    "\"packages\"",
+                    terms is null
+                        ? "\"effects\": [], \"packages\""
+                        : $"\"effects\": [ {{ \"selector\": \"speaker_focus\", \"terms\": \"{terms}\" }} ], \"packages\"",
+                    StringComparison.Ordinal));
+
+        public void CorruptManifest() => File.WriteAllText(_manifestPath, "{ not json");
 
         public void RemoveModel(string stem) =>
             File.Delete(Path.Join(RuntimePath, "models", stem + ".nvam"));
