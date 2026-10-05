@@ -124,6 +124,45 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
     }
 
     [NvidiaAfxLiveRuntimeFact]
+    public void Probe_agrees_with_a_full_run_for_early_access_profiles()
+    {
+        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
+        string architecture = new NvidiaAfxArchitectureDetector().DetectArchitectureBucket();
+        var disagreements = new List<string>();
+
+        foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
+                     .Where(definition => definition.IsEarlyAccess))
+        {
+            foreach (int sampleRate in definition.SupportedSampleRates)
+            {
+                bool probeOk = NvidiaAfxSessionEffectProbe.Instance
+                    .Probe(root, definition, sampleRate, architecture).Succeeded;
+
+                bool fullRunOk;
+                try
+                {
+                    using NvidiaAfxSession session = NvidiaAfxSession.Create(
+                        definition, root, sampleRate, intensityRatio: 0f, architecture);
+                    session.Process(BuildNoisySpeechLikeSignal(sampleRate, seconds: 2));
+                    fullRunOk = true;
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or FileNotFoundException or DllNotFoundException)
+                {
+                    fullRunOk = false;
+                }
+
+                output.WriteLine($"{definition.Profile} @ {sampleRate} Hz: probe={probeOk} fullRun={fullRunOk}");
+                if (probeOk != fullRunOk)
+                {
+                    disagreements.Add($"{definition.Profile} @ {sampleRate} Hz: probe={probeOk} fullRun={fullRunOk}");
+                }
+            }
+        }
+
+        Assert.True(disagreements.Count == 0, string.Join(Environment.NewLine, disagreements));
+    }
+
+    [NvidiaAfxLiveRuntimeFact]
     public void Telephony_upscale_changes_the_sample_rate_when_models_are_present()
     {
         string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
