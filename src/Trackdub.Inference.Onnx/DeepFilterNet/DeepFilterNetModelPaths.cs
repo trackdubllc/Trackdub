@@ -4,20 +4,20 @@ using Trackdub.Inference.Runtime.Planning;
 
 namespace Trackdub.Inference.Onnx.DeepFilterNet;
 
-// Tensor names and shapes confirmed by scripts/inspect-deepfilternet-onnx.py
-// (original exports; sessions transparently rewrite them into stateful graphs, see
-// DeepFilterNetOnnxGraphTransform — GRU states become explicit inputs/outputs and the
-// causal input pads are neutralized, with shapes otherwise unchanged):
+// Tensor names as consumed by DeepFilterNetOnnxInference (see
+// scripts/inspect-deepfilternet-onnx.py for the original exports). Sessions rewrite the
+// exports into stateful graphs (DeepFilterNetOnnxGraphTransform): GRU states become explicit
+// state_in_*/state_out inputs/outputs and the causal input pads are removed, so the caller
+// supplies the lookback rows (2 for feat_erb/feat_spec, 4 for c0) itself.
 // enc.onnx:
-//   input  feat_erb  [1,1,S,32]    float32
-//   input  feat_spec [1,2,S,481]   float32
-//   output emb_enc   [1,S,256]     float32
+//   input  feat_erb  [1,1,S+2,32]  float32
+//   input  feat_spec [1,2,S+2,96]  float32  (NbDf complex bins)
+//   output emb, e0, e1, e2, e3, c0, lsnr
 // erb_dec.onnx:
-//   input  emb_enc   [1,S,256]     float32
+//   input  emb, e3, e2, e1, e0
 //   output erb_gains [1,1,S,32]    float32
 // df_dec.onnx:
-//   input  emb_enc   [1,S,256]     float32
-//   input  feat_spec [1,2,S,481]   float32
+//   input  emb, c0 (with lookback rows)
 //   output df_coefs  [1,S,5,96,2]  float32
 public sealed record DeepFilterNetModelPaths(
     string RootDirectory,
