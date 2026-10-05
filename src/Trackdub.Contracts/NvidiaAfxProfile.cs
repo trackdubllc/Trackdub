@@ -20,4 +20,10 @@ public enum NvidiaAfxProfile
 
     /// <summary>Acoustic echo cancellation (aec). Requires far-end reference audio.</summary>
     AcousticEchoCancellation = 4,
+
+    /// <summary>
+    /// Speaker focus (speaker_focus): keeps the primary speaker and removes other speakers.
+    /// NVIDIA Early Access effect, shipped under NVIDIA's evaluation license.
+    /// </summary>
+    SpeakerFocus = 5,
 }

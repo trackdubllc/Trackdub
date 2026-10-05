@@ -90,6 +90,39 @@ public sealed class NvidiaAfxProfileCatalogTests
     }
 
     [Fact]
+    public void SpeakerFocus_IsASingleNonChainedEffectWithBothRateModels()
+    {
+        NvidiaAfxProfileDefinition definition =
+            NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.Equal(NvidiaAfxProfile.SpeakerFocus, definition.Profile);
+        Assert.Equal("speaker_focus", definition.Selector);
+        Assert.False(definition.IsChainedEffect);
+        Assert.False(definition.RequiresFarEndReference);
+        Assert.Equal([16000, 48000], definition.SupportedSampleRates);
+        Assert.Equal("speaker_focus_16k", Assert.Single(definition.ResolveRequiredModels(16000)).ModelStem);
+        Assert.Equal("speaker_focus_48k", Assert.Single(definition.ResolveRequiredModels(48000)).ModelStem);
+        Assert.Equal(["nvafxspeakerfocus"], definition.RequiredFeatureFolders);
+    }
+
+    [Fact]
+    public void SpeakerFocus_DoesNotAdvertiseIntensity_BecauseTheSdkIgnoresIt()
+    {
+        Assert.False(NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.SpeakerFocus).SupportsIntensityRatio);
+    }
+
+    [Fact]
+    public void ProfileEnumValues_AreStable_BecauseSettingsPersistThemAsNumbers()
+    {
+        Assert.Equal(0, (int)NvidiaAfxProfile.NoiseOnly);
+        Assert.Equal(1, (int)NvidiaAfxProfile.ReverbOnly);
+        Assert.Equal(2, (int)NvidiaAfxProfile.NoiseAndReverb);
+        Assert.Equal(3, (int)NvidiaAfxProfile.TelephonyUpscale);
+        Assert.Equal(4, (int)NvidiaAfxProfile.AcousticEchoCancellation);
+        Assert.Equal(5, (int)NvidiaAfxProfile.SpeakerFocus);
+    }
+
+    [Fact]
     public void TelephonyUpscale_UsesTheShippedSuperresModelStem()
     {
         NvidiaAfxProfileDefinition definition =

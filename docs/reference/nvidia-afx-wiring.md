@@ -4,7 +4,7 @@ NVIDIA AFX works end to end for a **locally installed** runtime. `NvidiaAfxInteg
 
 ## Verified
 
-On an RTX 5070 (Blackwell), every selectable profile creates, loads and processes audio with NVIDIA Audio Effects SDK **3.0.0.51** (the current release) and its 3.0.0 Blackwell models from NGC, and also with SDK **2.1.0.9** and the 2.1.0 models. Feature versions must match the core SDK version. The same code runs on both with no version switches:
+On an RTX 5070 (Blackwell), every selectable profile creates, loads and processes audio with NVIDIA Audio Effects SDK **3.0.0.51** (the current release) and its 3.0.0 Blackwell models from NGC, and, except for Speaker Focus, also with SDK **2.1.0.9** and the 2.1.0 models. Feature versions must match the core SDK version. The same code runs on both with no version switches:
 
 | Profile | Selector | Rates |
 |---------|----------|-------|
@@ -12,8 +12,9 @@ On an RTX 5070 (Blackwell), every selectable profile creates, loads and processe
 | Reverb Removal | `dereverb` | 16 kHz, 48 kHz |
 | Noise + Reverb Removal | `dereverb_denoiser` | 16 kHz, 48 kHz |
 | Telephony Upscale | `superres8kto16k_denoiser16k` (chained) | 8 kHz in, 16 kHz out |
+| Speaker Focus (Early Access) | `speaker_focus` | 16 kHz, 48 kHz |
 
-The same-rate profiles also run on the flat SDK 1.6.1.2 layout. Acoustic Echo Cancellation is not covered (needs a far-end reference).
+On SDK 2.1.0.9, Speaker Focus creates, loads and runs a single frame (so readiness reports Ready) but `NvAFX_Run` fails with `NVAFX_STATUS_FAILED` on the 2-second live test signal, and the enhancement then falls back to DeepFilterNet. Use SDK 3.0.0 for Speaker Focus. The same-rate profiles other than Speaker Focus also run on the flat SDK 1.6.1.2 layout. Acoustic Echo Cancellation is not covered (needs a far-end reference).
 
 Run the live proofs (skipped unless the variable is set):
 
@@ -35,6 +36,7 @@ The runtime root is the SDK root (`NvidiaAfxRuntimeDirectory` setting, `TRACKDUB
     nvafxdereverb/        bin/nvafxdereverb.dll        models/<arch>/dereverb_{16k,48k}.trtpkg
     nvafxdereverbdenoiser/ bin/nvafxdereverbdenoiser.dll models/<arch>/dereverb_denoiser_{16k,48k}.trtpkg
     nvafxsuperres/        bin/nvafxsuperres.dll        models/<arch>/superres_8kto16k.trtpkg
+    nvafxspeakerfocus/    bin/nvafxspeakerfocus.dll    models/<arch>/speaker_focus_{16k,48k}.trtpkg   (Early Access)
 ```
 
 Resolution is in `NvidiaAfxRuntimeLayout`. A flat `models/<stem>.trtpkg` (SDK 1.6) or legacy `.nvam` tree is still accepted.
@@ -62,7 +64,7 @@ Place model files under `features/nvafx<effect>/models/<arch>/` and the DLL unde
 
 - A Trackdub-hosted redistributable (license-dependent); until then the runtime is user-installed.
 - End-to-end AEC with a real far-end reference.
-- Speaker Focus (Early Access) and Studio Voice are in the SDK but not in the profile catalog. NVIDIA's 3.0.0 docs mark Acoustic Echo Cancellation and Voice Font as deprecated, so they are not planned.
+- Speaker Focus is an NVIDIA Early Access effect under NVIDIA's evaluation license, so it must not be shipped to end users until NVIDIA's terms allow it. Studio Voice is in the SDK but not in the profile catalog. NVIDIA's 3.0.0 docs mark Acoustic Echo Cancellation and Voice Font as deprecated, so they are not planned.
 - Denoiser v2 (`effect_version`) is an experimental preview that cannot be chained and enables voice-activity gating by default, so it is not used.
 - No GPU CI tier.
 

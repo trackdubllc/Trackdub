@@ -163,6 +163,22 @@ public static class NvidiaAfxProfileCatalog
             SupportsIntensityRatio: false,
             OutputSampleRate: 16000),
         new(
+            NvidiaAfxProfile.SpeakerFocus,
+            "Speaker Focus (Early Access)",
+            Selector: "speaker_focus",
+            IsChainedEffect: false,
+            SupportedSampleRates: [16000, 48000],
+            MaxChannels: 1,
+            ModelsBySampleRate:
+            [
+                new(16000, [new("nvafxspeakerfocus", "speaker_focus_16k")]),
+                new(48000, [new("nvafxspeakerfocus", "speaker_focus_48k")]),
+            ],
+            RequiresFarEndReference: false,
+            // The SDK accepts intensity_ratio on this effect but the output does not change
+            // (verified live on SDK 3.0.0), so no control is offered.
+            SupportsIntensityRatio: false),
+        new(
             NvidiaAfxProfile.AcousticEchoCancellation,
             "Acoustic Echo Cancellation",
             // Not listed in Maxine AFX 3.x public effect selectors; kept for discovery.

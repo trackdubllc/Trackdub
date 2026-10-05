@@ -8,7 +8,7 @@ The file keeps its original name for existing links; the integration is no longe
 
 | Signal | Behavior |
 |--------|----------|
-| `INvidiaAfxRuntimeReadinessService` | `NvidiaAfxRuntimeReadinessService` (probe-based). Ready only when the native library, feature DLLs and every model the profile needs are present **and** an effect creates and loads on this machine. Only Ready results are cached. |
+| `INvidiaAfxRuntimeReadinessService` | `NvidiaAfxRuntimeReadinessService` (probe-based). Ready only when the native library, feature DLLs and every model the profile needs are present **and** an effect creates, loads and runs a frame on this machine. Only Ready results are cached. |
 | `NvidiaAfxIntegration.IsStubbed()` | Kill switch, `false`. While `true`, readiness never reports Ready, the installer and downloader refuse, and enhancement falls through to DeepFilterNet. |
 | `NvidiaAfxSpeechAudioEnhancementService` | Falls through to DeepFilterNet when disabled, not ready, missing an AEC far-end reference, or when the native run fails. |
 | `NvidiaAfxRuntimeDownloader` / `NvidiaAfxRuntimeInstaller` | Still refuse placeholder packages, missing license acceptance and missing manifests. No hosted redistributable exists, so Trackdub does not download AFX; users point it at a local SDK. |
