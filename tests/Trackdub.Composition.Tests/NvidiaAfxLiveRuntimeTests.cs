@@ -341,8 +341,8 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
         for (int index = 0; index < signal.Length; index++)
         {
             double time = (double)index / sampleRate;
-            double tone = 0.25 * Math.Sin(2 * Math.PI * 220 * time) + 0.15 * Math.Sin(2 * Math.PI * 660 * time);
-            double noise = 0.08 * (random.NextDouble() * 2 - 1);
+            double tone = (0.25 * Math.Sin(2 * Math.PI * 220 * time)) + (0.15 * Math.Sin(2 * Math.PI * 660 * time));
+            double noise = 0.08 * ((random.NextDouble() * 2) - 1);
             signal[index] = (float)(tone + noise);
         }
 
