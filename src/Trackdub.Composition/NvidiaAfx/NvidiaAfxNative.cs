@@ -82,8 +82,9 @@ internal static class NvidiaAfxNativeParameters
     public const string InputSampleRate = "input_sample_rate";
     public const string OutputSampleRate = "output_sample_rate";
     public const string IntensityRatio = "intensity_ratio";
-    public const string NumInputSamplesPerFrame = "num_input_samples_per_frame";
-    public const string NumOutputSamplesPerFrame = "num_output_samples_per_frame";
+    // Names from nvAudioEffects.h (SDK 2.x): NVAFX_PARAM_NUM_SAMPLES_PER_INPUT_FRAME / _OUTPUT_FRAME.
+    public const string NumInputSamplesPerFrame = "num_samples_per_input_frame";
+    public const string NumOutputSamplesPerFrame = "num_samples_per_output_frame";
     public const string NumInputChannels = "num_input_channels";
     public const string NumOutputChannels = "num_output_channels";
 

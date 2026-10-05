@@ -34,8 +34,12 @@ public static class NvidiaAfxRuntimeLayout
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeRoot);
 
-        string? existing = NativeLibraryFileNames
-            .Select(fileName => Path.Join(runtimeRoot, fileName))
+        // The Maxine 2.x SDK root keeps the core DLL in bin/ beside features/; flat installs and
+        // staged packages keep it at the root.
+        string[] searchDirectories = [runtimeRoot, Path.Join(runtimeRoot, "bin")];
+
+        string? existing = searchDirectories
+            .SelectMany(directory => NativeLibraryFileNames.Select(fileName => Path.Join(directory, fileName)))
             .FirstOrDefault(File.Exists);
         if (existing is not null)
         {
@@ -43,12 +47,9 @@ public static class NvidiaAfxRuntimeLayout
         }
 
         // Case-insensitive fallback for Linux-hosted fixtures / wine-style trees.
-        if (!Directory.Exists(runtimeRoot))
-        {
-            return null;
-        }
-
-        return Directory.EnumerateFiles(runtimeRoot, "*.dll")
+        return searchDirectories
+            .Where(Directory.Exists)
+            .SelectMany(directory => Directory.EnumerateFiles(directory, "*.dll"))
             .FirstOrDefault(path =>
                 NativeLibraryFileNames.Any(expected =>
                     string.Equals(expected, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase)));
