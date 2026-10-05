@@ -227,6 +227,7 @@ internal static class DeepFilterNetStreamingEnhancer
                 // GRU states advance through exactly the frames native would execute.
                 var gainsWindow = new float[1, 1, windowActive, erbBands];
                 var coefsWindow = new float[1, windowActive, dfOrder, nbDf, 2];
+                var applyDf = new bool[windowActive];
                 int runStart = 0;
                 while (runStart < windowActive)
                 {
@@ -241,6 +242,11 @@ internal static class DeepFilterNetStreamingEnhancer
                         sessions, encoder, c0Cache, recurrentState,
                         gainsWindow, coefsWindow, runStart, runEnd - runStart, gate, cancellationToken);
 
+                    if (gate == DeepFilterNetFrameGate.Speech)
+                    {
+                        Array.Fill(applyDf, true, runStart, runEnd - runStart);
+                    }
+
                     if (gate is DeepFilterNetFrameGate.Speech or DeepFilterNetFrameGate.GainsOnly)
                     {
                         RefreshC0Cache(c0Cache, encoder.C0, runStart, runEnd - runStart, c0FrameSize);
@@ -253,7 +259,8 @@ internal static class DeepFilterNetStreamingEnhancer
                     BuildSpectrumWindow(specCache, specNew, windowActive),
                     gainsWindow,
                     coefsWindow,
-                    attenuationLimit);
+                    attenuationLimit,
+                    applyDf);
 
                 // Hop overlap-add with a carry across windows (native synthesis_mem).
                 for (int j = 0; j < windowActive; j++)
@@ -314,8 +321,8 @@ internal static class DeepFilterNetStreamingEnhancer
                     float[,,,] gains = DeepFilterNetOnnxInference.RunErbDecoderWindow(
                         sessions, encoder, offsetFrames, runFrames, recurrentState, cancellationToken);
                     CopyGainsRun(gainsWindow, gains, offsetFrames, runFrames);
-                    // coefsWindow stays zero: native skips the DF stage, leaving the masked
-                    // low bins at their zeroed values before the attenuation mix.
+                    // coefsWindow stays zero: native skips the DF stage; synthesis retains
+                    // the masked delayed spectrum for this frame.
                     break;
                 }
 
