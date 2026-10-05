@@ -179,7 +179,7 @@ public sealed class NvidiaAfxRuntimeReadinessService(
                 return null;
             }
         }
-        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
         {
             return new NvidiaAfxRuntimeReadiness(false, "Manifest error", null, ex.Message);
         }

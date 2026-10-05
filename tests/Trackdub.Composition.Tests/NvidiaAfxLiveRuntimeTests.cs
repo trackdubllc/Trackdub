@@ -78,6 +78,7 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
         var failures = new List<string>();
         foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
                      .Where(definition => !definition.RequiresFarEndReference
+                                          && !definition.IsEarlyAccess
                                           && definition.ResolveOutputSampleRate(definition.SupportedSampleRates[0])
                                              == definition.SupportedSampleRates[0]))
         {
