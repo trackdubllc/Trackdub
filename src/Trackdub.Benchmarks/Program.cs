@@ -274,12 +274,9 @@ public static class Program
                 case "--ffprobe": ffprobe = value; break;
                 case "--sha256": expectedSha256 = value; break;
                 case "--report-dir": reportDirectory = value; break;
-                case "--max-cpu-percent":
-                case "--max-working-set-bytes":
-                case "--max-allocated-bytes":
-                case "--min-available-vram-mb":
+                case var opt when ResourceTelemetryOptionsParser.IsResourceOption(opt):
                     if (!ResourceTelemetryOptionsParser.TryApply(
-                        args[index - 1], value, resourceTelemetryBounds, error, out resourceTelemetryBounds))
+                        opt, value, resourceTelemetryBounds, error, out resourceTelemetryBounds))
                     {
                         return 1;
                     }

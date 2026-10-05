@@ -103,37 +103,13 @@ internal sealed class WorkingSetPeakMonitor
             }
             while (Interlocked.CompareExchange(ref peakBytes, sample, observed) != observed);
         }
-        catch (ObjectDisposedException exception)
-        {
-            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
-            Volatile.Write(ref unavailableReason,
-                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
-        }
-        catch (InvalidOperationException exception)
-        {
-            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
-            Volatile.Write(ref unavailableReason,
-                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
-        }
-        catch (NotSupportedException exception)
-        {
-            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
-            Volatile.Write(ref unavailableReason,
-                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
-        }
-        catch (System.ComponentModel.Win32Exception exception)
-        {
-            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
-            Volatile.Write(ref unavailableReason,
-                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
-        }
-        catch (UnauthorizedAccessException exception)
-        {
-            // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
-            Volatile.Write(ref unavailableReason,
-                $"Continuous working-set sampling unavailable ({exception.GetType().Name}).");
-        }
-        catch (System.Security.SecurityException exception)
+        catch (Exception exception) when (
+            exception is ObjectDisposedException or
+                         InvalidOperationException or
+                         NotSupportedException or
+                         System.ComponentModel.Win32Exception or
+                         UnauthorizedAccessException or
+                         System.Security.SecurityException)
         {
             // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
             Volatile.Write(ref unavailableReason,
