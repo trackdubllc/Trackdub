@@ -17,6 +17,17 @@ This includes:
 
 Do not add a dependency or model unless its license is recorded.
 
+## Video Cleanup workflow adaptation (agent documentation)
+
+- name: Video Cleanup by Mehdi Ksibi (`Mehdi-Ks/video-cleanup`), adapted as `trackdub-media-cleanup`
+- version / revision: supplied package `Video Cleanup-1.0.1-v1`; no upstream commit or independently verified release is claimed
+- source URL: https://github.com/Mehdi-Ks/video-cleanup
+- license: MIT; Copyright (c) 2026 Mehdi Ksibi
+- commercial use allowed? yes, under the retained MIT terms
+- redistribution allowed? yes, with the upstream copyright and permission notice retained
+- attribution required? yes; complete notice retained in [.claude/skills/trackdub-media-cleanup/LICENSE](../../.claude/skills/trackdub-media-cleanup/LICENSE)
+- notes: Agent workflow documentation adapted from the supplied `SKILL.md` and README, not an Anthropic-authored release or endorsement. Trackdub-specific readiness, artifact, routing, consent, and verification rules replace the standalone Python recipe. No upstream processing scripts or additional runtime/model dependency is introduced by this adaptation. See [adaptation record](../../.claude/skills/trackdub-media-cleanup/ATTRIBUTION.md) and [operational entry point](../operations/media-cleanup.md). The adaptation is MIT; unrelated Trackdub code retains its existing license.
+
 Each entry should include:
 
 - name

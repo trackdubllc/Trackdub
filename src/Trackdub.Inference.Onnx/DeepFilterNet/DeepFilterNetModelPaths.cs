@@ -5,6 +5,9 @@ using Trackdub.Inference.Runtime.Planning;
 namespace Trackdub.Inference.Onnx.DeepFilterNet;
 
 // Tensor names and shapes confirmed by scripts/inspect-deepfilternet-onnx.py
+// (original exports; sessions transparently rewrite them into stateful graphs, see
+// DeepFilterNetOnnxGraphTransform — GRU states become explicit inputs/outputs and the
+// causal input pads are neutralized, with shapes otherwise unchanged):
 // enc.onnx:
 //   input  feat_erb  [1,1,S,32]    float32
 //   input  feat_spec [1,2,S,481]   float32

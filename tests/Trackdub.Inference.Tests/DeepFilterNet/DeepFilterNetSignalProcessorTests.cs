@@ -89,80 +89,10 @@ public sealed class DeepFilterNetSignalProcessorTests
     }
 
     [Fact]
-    public void Synthesize_IdentityGainsAndIdentityTap_ReconstructsSignal()
+    public void ComputeFeatures_NativeOrigin_NoFeatureShiftAndZeroHistoryFirstFrame()
     {
-        // 1 kHz sits in the deep-filter range (bin 20 < 96), so this exercises the DF path.
-        int length = 4800;
-        float[] sine = BuildSine(length, frequencyHz: 1000f);
-
-        DeepFilterNetSignalProcessor.ComputeFeatures(
-            sine,
-            DeepFilterNetFeatureNormState.CreateInitial(),
-            out _,
-            out _,
-            out MathNet.Numerics.Complex32[,] stft);
-
-        int numFrames = stft.GetLength(0);
-        float[,,,] erbGains = BuildUnityGains(numFrames);
-
-        // Identity deep filter: with df_lookahead = 2 the current frame sits at tap index
-        // DfOrder - 1 - DfLookahead, so that tap set to 1 + 0i must reproduce the input.
-        int currentTap = DeepFilterNetSignalProcessor.DfOrder - 1 - DeepFilterNetSignalProcessor.DfLookahead;
-        var dfCoefs = new float[1, numFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2];
-        for (int s = 0; s < numFrames; s++)
-        {
-            for (int k = 0; k < DeepFilterNetSignalProcessor.NbDf; k++)
-            {
-                dfCoefs[0, s, currentTap, k, 0] = 1f;
-            }
-        }
-
-        float[] reconstructed = DeepFilterNetSignalProcessor.Synthesize(stft, erbGains, dfCoefs, length);
-
-        Assert.Equal(length, reconstructed.Length);
-
-        // Interior samples (full window overlap, full tap history) must match closely;
-        // this pins both the forward/inverse FFT scaling pair and the tap alignment.
-        int start = DeepFilterNetSignalProcessor.FftSize * 2;
-        int end = length - DeepFilterNetSignalProcessor.FftSize;
-        for (int i = start; i < end; i++)
-        {
-            Assert.True(MathF.Abs(reconstructed[i] - sine[i]) < 1e-3f,
-                $"Sample {i} diverged: expected {sine[i]:F6}, got {reconstructed[i]:F6}.");
-        }
-    }
-
-    [Fact]
-    public void Synthesize_HighFrequencyOutsideDfRange_PreservesLevelWithUnityGains()
-    {
-        // 10 kHz maps to bin 200, above the 96 deep-filter bins, so zero DF coefficients
-        // must not affect it; unity ERB gains must preserve its level.
-        int length = DeepFilterNetSignalProcessor.SampleRate / 10;
-        float[] sine = BuildSine(length, frequencyHz: 10000f, amplitude: 0.5f);
-
-        DeepFilterNetSignalProcessor.ComputeFeatures(
-            sine,
-            DeepFilterNetFeatureNormState.CreateInitial(),
-            out _,
-            out _,
-            out MathNet.Numerics.Complex32[,] stft);
-
-        int numFrames = stft.GetLength(0);
-        float[,,,] erbGains = BuildUnityGains(numFrames);
-        var dfCoefs = new float[1, numFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2];
-
-        float[] reconstructed = DeepFilterNetSignalProcessor.Synthesize(stft, erbGains, dfCoefs, length);
-        float rmsRatio = ComputeRms(reconstructed) / ComputeRms(sine);
-
-        Assert.True(rmsRatio is > 0.9f and < 1.1f,
-            $"RMS ratio {rmsRatio:F3} indicates broken FFT scaling or band gain application.");
-    }
-
-    [Fact]
-    public void ComputeFeatures_ShiftsFeaturesByConvLookahead()
-    {
-        // Silence then a tone: the first feature row that sees the tone must be ConvLookahead
-        // frames before the first STFT frame that contains it.
+        // Silence then a tone: with the native libDF origin, frame s analyzes samples
+        // [(s-1)*hop, (s+1)*hop) and feature row s is the feature of frame s (no shift).
         int hop = DeepFilterNetSignalProcessor.HopSize;
         float[] pcm = new float[hop * 20];
         float[] tone = BuildSine(hop * 10, frequencyHz: 1000f);
@@ -176,51 +106,176 @@ public sealed class DeepFilterNetSignalProcessorTests
             out MathNet.Numerics.Complex32[,] stft);
 
         int firstStftFrame = FirstFrame(t => stft[t, 20].Magnitude > 1e-3f, stft.GetLength(0));
-        int firstFeatRow = FirstFrame(t => MathF.Abs(featSpec[0, 0, t, 20]) + MathF.Abs(featSpec[0, 1, t, 20]) > 1f, featSpec.GetLength(2));
+        int firstFeatRow = FirstFrame(
+            t => MathF.Abs(featSpec[0, 0, t, 20]) + MathF.Abs(featSpec[0, 1, t, 20]) > 1f,
+            featSpec.GetLength(2));
 
-        Assert.Equal(firstStftFrame - DeepFilterNetSignalProcessor.ConvLookahead, firstFeatRow);
-        for (int i = 1; i <= DeepFilterNetSignalProcessor.ConvLookahead; i++)
-        {
-            Assert.Equal(0f, featSpec[0, 0, featSpec.GetLength(2) - i, 20]);
-        }
+        // Tone starts at sample 10*hop; the first analysis window containing it is frame 10
+        // (window [(10-1)*hop, (10+1)*hop) = [4320, 5280) covers sample 4800).
+        Assert.Equal(10, firstStftFrame);
+        Assert.Equal(10, firstFeatRow);
 
-        static int FirstFrame(Func<int, bool> predicate, int count)
-        {
-            for (int t = 0; t < count; t++)
-            {
-                if (predicate(t))
-                {
-                    return t;
-                }
-            }
-
-            return -1;
-        }
+        // No shift means no zero feature tail: the last row is populated for a real frame.
+        Assert.True(MathF.Abs(featSpec[0, 0, featSpec.GetLength(2) - 1, 20]) +
+                    MathF.Abs(featSpec[0, 1, featSpec.GetLength(2) - 1, 20]) > 0f);
     }
 
     [Fact]
-    public void Synthesize_FullAttenuationLimit_ReturnsSourceDespiteZeroMask()
+    public void ComputeFeatures_NativeOrigin_FirstFrameUsesZeroHistoryWindow()
     {
-        int length = 4800;
-        float[] sine = BuildSine(length, frequencyHz: 1000f);
+        // A pure tone: frame 0's window is [zeros(hop), pcm[0:hop]) — the zero-history half must
+        // make frame 0's spectrum differ from frame 1's (window [pcm[0:hop], pcm[hop:2*hop])).
+        int hop = DeepFilterNetSignalProcessor.HopSize;
+        float[] pcm = BuildSine(hop * 4, frequencyHz: 1000f);
+
         DeepFilterNetSignalProcessor.ComputeFeatures(
-            sine,
+            pcm,
             DeepFilterNetFeatureNormState.CreateInitial(),
             out _,
             out _,
             out MathNet.Numerics.Complex32[,] stft);
-        int numFrames = stft.GetLength(0);
 
-        float[] reconstructed = DeepFilterNetSignalProcessor.Synthesize(
-            stft,
-            new float[1, 1, numFrames, DeepFilterNetSignalProcessor.ErbBands],
-            new float[1, numFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2],
-            length,
-            attenuationLimit: 1f);
+        Assert.NotEqual(stft[0, 20].Magnitude, stft[1, 20].Magnitude);
+    }
 
-        for (int i = DeepFilterNetSignalProcessor.FftSize; i < length - DeepFilterNetSignalProcessor.FftSize; i++)
+    [Fact]
+    public void ExpandErbGains_PiecewiseConstantOverBandPartition()
+    {
+        float[] gains = DeepFilterNetSignalProcessor.ExpandErbGains(
+            Enumerable.Repeat(0.5f, DeepFilterNetSignalProcessor.ErbBands).ToArray());
+
+        Assert.Equal(DeepFilterNetSignalProcessor.FreqBins, gains.Length);
+        Assert.All(gains, static g => Assert.Equal(0.5f, g));
+    }
+
+    [Fact]
+    public void Synthesize_IdentityTap_ReconstructsCurrentFrameExactly()
+    {
+        // 1060 Hz is not an exact FFT bin (bin 21.2) and its 45.28-sample period shares no
+        // divisor with the 480-sample hop, so unlike a 1 kHz tone this test is sensitive to
+        // both reconstruction error and hop-delay mistakes: a whole-hop delay would read as
+        // an O(1) mismatch, not a rounding error.
+        // Gains are zero so only the DF path contributes: with the identity tap at index
+        // DfOrder-1 the low bins must reproduce the CURRENT frame's spectrum exactly.
+        int length = 4800;
+        float[] sine = BuildSine(length, frequencyHz: 1060f);
+        float[] padded = PrependHopZeros(sine, 4); // 4 zero lookback rows ahead of the signal
+
+        DeepFilterNetSignalProcessor.ComputeFeatures(
+            padded,
+            DeepFilterNetFeatureNormState.CreateInitial(),
+            out _,
+            out _,
+            out MathNet.Numerics.Complex32[,] stft);
+
+        int totalFrames = stft.GetLength(0);          // 4 lookback + 10 signal frames
+        int windowFrames = totalFrames - 4;
+        var erbGains = new float[1, 1, windowFrames, DeepFilterNetSignalProcessor.ErbBands];
+
+        // Identity deep filter: offset 0 sits at tap index DfOrder-1 (taps span offsets -4..0).
+        int currentTap = DeepFilterNetSignalProcessor.DfOrder - 1;
+        var dfCoefs = new float[1, windowFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2];
+        for (int s = 0; s < windowFrames; s++)
         {
-            Assert.True(MathF.Abs(reconstructed[i] - sine[i]) < 1e-3f, $"Sample {i} diverged.");
+            for (int k = 0; k < DeepFilterNetSignalProcessor.NbDf; k++)
+            {
+                dfCoefs[0, s, currentTap, k, 0] = 1f;
+            }
+        }
+
+        float[] synthesized = DeepFilterNetSignalProcessor.Synthesize(stft, erbGains, dfCoefs);
+
+        // Per-frame td contributions; hop j = td[j][0:480] + td[j-1][480:960].
+        Assert.Equal(windowFrames * DeepFilterNetSignalProcessor.FftSize, synthesized.Length);
+        float[] output = OverlapHops(synthesized, windowFrames);
+
+        // The DF current tap reproduces the current window frame, whose analysis window
+        // covers the PREVIOUS hop plus the current one; hop synthesis keeps the first
+        // half, so the identity reconstruction appears at a one-hop delay.
+        int hop = DeepFilterNetSignalProcessor.HopSize;
+        int start = 2 * hop;
+        int end = Math.Min(output.Length, length) - hop;
+        for (int i = start; i < end; i++)
+        {
+            int expectedIndex = i - hop;
+            float expected = expectedIndex >= 0 && expectedIndex < length ? sine[expectedIndex] : 0f;
+            Assert.True(MathF.Abs(output[i] - expected) < 1e-3f,
+                $"Sample {i} diverged: expected {expected:F6}, got {output[i]:F6}.");
+        }
+    }
+
+    [Fact]
+    public void Synthesize_HighFrequencyOutsideDfRange_PreservesLevelWithUnityGains()
+    {
+        // 10 kHz maps to bin 200, above the 96 deep-filter bins, so zero DF coefficients
+        // must not affect it; unity ERB gains must preserve its level (the native clock delays
+        // the output, which leaves RMS unchanged).
+        int length = DeepFilterNetSignalProcessor.SampleRate / 10;
+        float[] sine = BuildSine(length, frequencyHz: 10000f, amplitude: 0.5f);
+        float[] padded = PrependHopZeros(sine, 4);
+
+        DeepFilterNetSignalProcessor.ComputeFeatures(
+            padded,
+            DeepFilterNetFeatureNormState.CreateInitial(),
+            out _,
+            out _,
+            out MathNet.Numerics.Complex32[,] stft);
+
+        int windowFrames = stft.GetLength(0) - 4;
+        float[,,,] erbGains = BuildUnityGains(windowFrames);
+        var dfCoefs = new float[1, windowFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2];
+
+        float[] synthesized = DeepFilterNetSignalProcessor.Synthesize(stft, erbGains, dfCoefs);
+        float[] output = OverlapHops(synthesized, windowFrames);
+
+        // The unity path carries the DELAYED spectrum, so the signal onset (from the zero
+        // lookback) flushes through the first hops; the trailing carry is dropped. Compare
+        // RMS over the steady interior only.
+        int hop = DeepFilterNetSignalProcessor.HopSize;
+        float[] outputSteady = output[(4 * hop)..(output.Length - hop)];
+        float[] sineSteady = sine[(4 * hop)..(sine.Length - hop)];
+        float rmsRatio = ComputeRms(outputSteady) / ComputeRms(sineSteady);
+
+        Assert.True(rmsRatio is > 0.9f and < 1.1f,
+            $"RMS ratio {rmsRatio:F3} indicates broken FFT scaling or band gain application.");
+    }
+
+    [Fact]
+    public void Synthesize_FullAttenuationLimit_ReturnsDelayedSourceDespiteZeroMask()
+    {
+        // attenuationLimit = 1 mixes back the full delayed noisy spectrum, so a zero mask and
+        // zero taps must still reproduce the source (delayed by one hop, native clock).
+        int length = 4800;
+        float[] sine = BuildSine(length, frequencyHz: 1000f);
+        float[] padded = PrependHopZeros(sine, 4);
+
+        DeepFilterNetSignalProcessor.ComputeFeatures(
+            padded,
+            DeepFilterNetFeatureNormState.CreateInitial(),
+            out _,
+            out _,
+            out MathNet.Numerics.Complex32[,] stft);
+
+        int windowFrames = stft.GetLength(0) - 4;
+        float[] synthesized = DeepFilterNetSignalProcessor.Synthesize(
+            stft,
+            new float[1, 1, windowFrames, DeepFilterNetSignalProcessor.ErbBands],
+            new float[1, windowFrames, DeepFilterNetSignalProcessor.DfOrder, DeepFilterNetSignalProcessor.NbDf, 2],
+            attenuationLimit: 1f);
+        float[] output = OverlapHops(synthesized, windowFrames);
+
+        int start = DeepFilterNetSignalProcessor.FftSize;
+        int end = Math.Min(output.Length, length) - DeepFilterNetSignalProcessor.FftSize;
+        for (int i = start; i < end; i++)
+        {
+            // The native clock applies the attenuation mix to the DELAYED spectrum (two
+            // frames back) and hop synthesis adds one more hop of delay, so a full mix-back
+            // reproduces the source shifted by 3 * HopSize samples — the system delay the
+            // native -D compensation trims (LatencyTrimSamples).
+            int expectedIndex = i - (3 * DeepFilterNetSignalProcessor.HopSize);
+            float expected = expectedIndex >= 0 && expectedIndex < length ? sine[expectedIndex] : 0f;
+            Assert.True(MathF.Abs(output[i] - expected) < 1e-3f,
+                $"Sample {i} diverged: expected {expected:F6}, got {output[i]:F6}.");
         }
     }
 
@@ -304,6 +359,36 @@ public sealed class DeepFilterNetSignalProcessorTests
         return pcm;
     }
 
+    private static float[] PrependHopZeros(float[] pcm, int hopCount)
+    {
+        var padded = new float[pcm.Length + (hopCount * DeepFilterNetSignalProcessor.HopSize)];
+        pcm.CopyTo(padded, hopCount * DeepFilterNetSignalProcessor.HopSize);
+        return padded;
+    }
+
+    private static float[] OverlapHops(float[] synthesized, int windowFrames)
+    {
+        // Hop synthesis: hop j = td[j][0:480] + carry, carry = td[j][480:960].
+        var output = new float[windowFrames * DeepFilterNetSignalProcessor.HopSize];
+        int hop = DeepFilterNetSignalProcessor.HopSize;
+        int fft = DeepFilterNetSignalProcessor.FftSize;
+        var carry = new float[hop];
+        for (int j = 0; j < windowFrames; j++)
+        {
+            for (int i = 0; i < hop; i++)
+            {
+                output[(j * hop) + i] = synthesized[(j * fft) + i] + carry[i];
+            }
+
+            for (int i = 0; i < hop; i++)
+            {
+                carry[i] = synthesized[(j * fft) + hop + i];
+            }
+        }
+
+        return output;
+    }
+
     private static float ComputeRms(float[] samples)
     {
         float sum = 0f;
@@ -311,6 +396,20 @@ public sealed class DeepFilterNetSignalProcessorTests
         {
             sum += s * s;
         }
+
         return MathF.Sqrt(sum / samples.Length);
+    }
+
+    private static int FirstFrame(Func<int, bool> predicate, int count)
+    {
+        for (int t = 0; t < count; t++)
+        {
+            if (predicate(t))
+            {
+                return t;
+            }
+        }
+
+        return -1;
     }
 }
