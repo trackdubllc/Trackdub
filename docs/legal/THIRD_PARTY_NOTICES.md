@@ -147,6 +147,17 @@ Each entry should include:
 - attribution required? yes (link to NVIDIA TensorRT-RTX docs and license pages in this notice and/or app documentation)
 - notes: Trackdub registers `onnxruntime_providers_nv_tensorrt_rtx` / `libonnxruntime_providers_nv_tensorrt_rtx.so` from the installed bundle directory. Model Manager requires `NvidiaTensorRtRtxLicenseAccepted` before download/install. Requires NVIDIA GeForce RTX 30xx or newer with a supported driver/CUDA stack per NVIDIA documentation.
 
+## NVIDIA Audio Effects (Maxine AFX) SDK (user-installed)
+
+- name: NVIDIA Audio Effects (AFX / Maxine) SDK, core package and per-effect feature models
+- version / revision: verified with SDK `3.0.0.51` and `2.1.0.9` (NGC org `nvidia`, team `maxine`: resource `maxine_windows_audio_effects_sdk`, models `afx_win_*`); feature versions must match the SDK version
+- source URL: https://docs.nvidia.com/maxine/afx/latest/index.html ; downloads come from the NVIDIA NGC catalog with the user's own NGC account
+- license: NVIDIA Software License Agreement (https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/) and the NVIDIA Product-Specific Terms for AI Products, as shipped in each package's `license` folder; the Early Access Speaker Focus effect is under the NVIDIA Software and Model Evaluation License Agreement
+- commercial use allowed? not determined; governed by NVIDIA's terms and the user's own agreement with NVIDIA. Do not treat as commercial-safe until reviewed
+- redistribution allowed? Trackdub does not bundle, host or redistribute any AFX file; the user installs the SDK and features themselves
+- attribution required? yes; NVIDIA's branding guidelines apply when AFX is integrated (https://www.nvidia.com/maxine-sdk-guidelines)
+- notes: Optional and off by default. Readiness requires the user to accept the NVIDIA AFX license in Settings (`NvidiaAfxLicenseAccepted`) and to point Trackdub at a local SDK folder (`NvidiaAfxRuntimeDirectory`). Early Access effects (Speaker Focus) are evaluation-licensed and must not be shipped to end users until NVIDIA's terms allow it. NVIDIA's 3.0.0 documentation marks Acoustic Echo Cancellation and Voice Font as deprecated. The commercial-safe mode impact of an optional, user-installed NVIDIA runtime is an open review item.
+
 ## OpenVINO (Intel Windows ML execution provider)
 
 - name: OpenVINOExecutionProvider (Intel OpenVINO execution provider via Windows ML catalog)

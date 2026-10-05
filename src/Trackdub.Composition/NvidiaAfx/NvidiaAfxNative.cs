@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
@@ -108,6 +109,7 @@ internal static class NvidiaAfxNativeLoader
         {
             if (_loaded)
             {
+                EnsureSameRuntimeRoot(_loadedFrom, runtimeRoot);
                 return;
             }
 
@@ -124,6 +126,8 @@ internal static class NvidiaAfxNativeLoader
 
             // Preload Maxine feature DLLs by absolute path so CreateEffect can resolve them
             // without mutating the process-wide DLL search directory (CodeQL / SetDllDirectory).
+            // This throws when the runtime is incomplete, and the process is only marked loaded
+            // afterwards, so pointing at a fixed folder later can still succeed.
             PreloadWindowsNativeDependencies(runtimeRoot);
 
             NativeLibrary.Load(libraryPath);
@@ -131,6 +135,26 @@ internal static class NvidiaAfxNativeLoader
             _loadedFrom = runtimeRoot;
         }
     }
+
+    /// <summary>
+    /// Native libraries cannot be unloaded safely, so once a runtime is loaded the process keeps it.
+    /// Pairing that runtime's binaries with another folder's models would be a mixed runtime.
+    /// </summary>
+    internal static void EnsureSameRuntimeRoot(string? loadedFrom, string requestedRoot)
+    {
+        if (loadedFrom is null
+            || string.Equals(NormalizeRoot(loadedFrom), NormalizeRoot(requestedRoot), StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"NVIDIA AFX is already loaded from '{loadedFrom}' in this process and cannot switch runtimes. " +
+            $"Restart Trackdub to use '{requestedRoot}'.");
+    }
+
+    private static string NormalizeRoot(string path) =>
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 
     public static string? LoadedFrom => _loadedFrom;
 
@@ -148,13 +172,78 @@ internal static class NvidiaAfxNativeLoader
             return;
         }
 
-        PreloadAll(NvidiaAfxRuntimeLayout.EnumerateExternalDependencyPaths(runtimeRoot));
-        PreloadAll(NvidiaAfxRuntimeLayout.EnumerateFeatureNativeLibraryPaths(runtimeRoot));
+        string[] externals = [.. NvidiaAfxRuntimeLayout.EnumerateExternalDependencyPaths(runtimeRoot)];
+
+        // The SDK's CUDA/TensorRT copies become the process-wide module for those names, so do not
+        // quietly displace a different copy (for example ONNX Runtime's) that is already loaded.
+        string? conflict = FindConflictingModule(externals, LoadedModulePaths());
+        if (conflict is not null)
+        {
+            throw new InvalidOperationException(conflict);
+        }
+
+        List<string> failed =
+        [
+            .. PreloadAll(externals),
+            .. PreloadAll(NvidiaAfxRuntimeLayout.EnumerateFeatureNativeLibraryPaths(runtimeRoot)),
+        ];
+        if (failed.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"NVIDIA AFX runtime '{runtimeRoot}' has native libraries that could not be loaded: " +
+                $"{string.Join(", ", failed.Select(path => Path.GetFileName(path)))}.");
+        }
+    }
+
+    /// <summary>
+    /// Describes the first dependency whose file name is already loaded from a different folder, or
+    /// null when nothing would be displaced.
+    /// </summary>
+    internal static string? FindConflictingModule(IEnumerable<string> dependencyPaths, IEnumerable<string> loadedModulePaths)
+    {
+        ILookup<string, string> loadedByName = loadedModulePaths.ToLookup(
+            path => Path.GetFileName(path),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (string dependency in dependencyPaths)
+        {
+            string directory = NormalizeRoot(Path.GetDirectoryName(dependency) ?? string.Empty);
+            string? other = loadedByName[Path.GetFileName(dependency)].FirstOrDefault(loaded =>
+                !string.Equals(
+                    NormalizeRoot(Path.GetDirectoryName(loaded) ?? string.Empty),
+                    directory,
+                    StringComparison.OrdinalIgnoreCase));
+            if (other is not null)
+            {
+                return $"NVIDIA AFX needs its own {Path.GetFileName(dependency)}, but a different copy is already " +
+                       $"loaded from '{other}'. Loading both could break GPU inference elsewhere in Trackdub, so AFX " +
+                       "was not started.";
+            }
+        }
+
+        return null;
+    }
+
+    private static List<string> LoadedModulePaths()
+    {
+        try
+        {
+            using Process process = Process.GetCurrentProcess();
+            return process.Modules
+                .Cast<ProcessModule>()
+                .Select(module => module.FileName)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // Without a module list the conflict check cannot run; the load itself still reports failures.
+            return [];
+        }
     }
 
     // Retries until a pass makes no progress, because the DLLs depend on each other (cuBLAS needs
-    // cuBLASLt) and the enumeration order is not a dependency order.
-    private static void PreloadAll(IEnumerable<string> dependencyPaths)
+    // cuBLASLt) and the enumeration order is not a dependency order. Returns what never loaded.
+    private static List<string> PreloadAll(IEnumerable<string> dependencyPaths)
     {
         List<string> pending = [.. dependencyPaths];
         while (pending.Count > 0)
@@ -163,9 +252,11 @@ internal static class NvidiaAfxNativeLoader
             pending.RemoveAll(TryPreload);
             if (pending.Count == before)
             {
-                return;
+                break;
             }
         }
+
+        return pending;
     }
 
     private static bool TryPreload(string dependencyPath)
@@ -177,7 +268,6 @@ internal static class NvidiaAfxNativeLoader
         }
         catch (Exception ex) when (ex is DllNotFoundException or BadImageFormatException)
         {
-            // Best-effort: invalid/missing feature payloads are reported by CreateEffect/Load.
             return false;
         }
     }

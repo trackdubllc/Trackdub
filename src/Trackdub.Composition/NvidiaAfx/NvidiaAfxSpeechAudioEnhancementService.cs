@@ -27,7 +27,17 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
-        NvidiaAfxRuntimeReadiness readiness = readinessService.GetReadiness(options.NvidiaAfxProfile);
+        NvidiaAfxRuntimeReadiness readiness;
+        try
+        {
+            readiness = readinessService.GetReadiness(options.NvidiaAfxProfile);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A readiness probe that throws (settings I/O, native load) must not fail the stage.
+            return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
         if (!readiness.IsReady)
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);

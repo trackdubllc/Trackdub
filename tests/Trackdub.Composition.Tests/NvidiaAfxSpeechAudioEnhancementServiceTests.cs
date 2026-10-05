@@ -86,6 +86,25 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
     }
 
     [Fact]
+    public async Task EnhanceAsync_FallsBack_WhenTheReadinessCheckThrows()
+    {
+        var fallback = new FakeSpeechAudioEnhancementService();
+        var readiness = new ThrowingReadinessService();
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback);
+
+        SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
+            new SpeechAudioEnhancementRequest(
+                "source.wav",
+                "dest.wav",
+                new SpeechAudioEnhancementOptions(true, NvidiaAfxProfile.NoiseAndReverb, 1.0f)),
+            CancellationToken.None);
+
+        Assert.Equal(1, readiness.CallCount);
+        Assert.True(fallback.WasCalled);
+        Assert.Equal(SpeechAudioEnhancementBackend.Ffmpeg, result.Backend);
+    }
+
+    [Fact]
     public async Task EnhanceAsync_DoesNotProbeReadiness_WhenAfxDisabled()
     {
         var fallback = new FakeSpeechAudioEnhancementService();

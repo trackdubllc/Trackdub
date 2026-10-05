@@ -334,7 +334,11 @@ public sealed class CompositionRootTests : IDisposable
         string runtimeDirectory = CreateTempDirectory();
         var settings = new FakeStudioSettingsService();
         await settings.SaveAsync(
-            StudioSettings.Default with { NvidiaAfxRuntimeDirectory = runtimeDirectory },
+            StudioSettings.Default with
+            {
+                NvidiaAfxRuntimeDirectory = runtimeDirectory,
+                NvidiaAfxLicenseAccepted = true,
+            },
             CancellationToken.None);
         using ServiceProvider provider = BuildProvider(services =>
             services.AddSingleton<IStudioSettingsService>(settings));

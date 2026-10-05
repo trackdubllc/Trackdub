@@ -8,9 +8,9 @@ The file keeps its original name for existing links; the integration is no longe
 
 | Signal | Behavior |
 |--------|----------|
-| `INvidiaAfxRuntimeReadinessService` | `NvidiaAfxRuntimeReadinessService` (probe-based). Ready only when the native library, feature DLLs and every model the profile needs are present **and** an effect creates, loads and runs a frame on this machine. Only Ready results are cached. |
+| `INvidiaAfxRuntimeReadinessService` | `NvidiaAfxRuntimeReadinessService` (probe-based). Ready only when the license is accepted, the native library, any feature DLLs the layout requires and every model the profile needs are present, **and** an effect creates, loads and runs a frame at every supported rate on this machine. Only successful native probes are cached; file checks run on every call. |
 | `NvidiaAfxIntegration.IsStubbed()` | Kill switch, `false`. While `true`, readiness never reports Ready, the installer and downloader refuse, and enhancement falls through to DeepFilterNet. |
-| `NvidiaAfxSpeechAudioEnhancementService` | Falls through to DeepFilterNet when disabled, not ready, missing an AEC far-end reference, or when the native run fails. |
+| `NvidiaAfxSpeechAudioEnhancementService` | Falls through to DeepFilterNet when disabled, not ready, missing an AEC far-end reference, when the readiness check throws, or when the native run fails. |
 | `NvidiaAfxRuntimeDownloader` / `NvidiaAfxRuntimeInstaller` | Still refuse placeholder packages, missing license acceptance and missing manifests. No hosted redistributable exists, so Trackdub does not download AFX; users point it at a local SDK. |
 | `nvidiaafx-runtime.manifest.json` | Placeholder `example.invalid` URLs and zero hashes. It is only used as an architecture whitelist for readiness and is never downloadable (`NvidiaAfxRuntimePackageGates`). |
 
