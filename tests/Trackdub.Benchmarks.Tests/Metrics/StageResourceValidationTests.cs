@@ -64,6 +64,29 @@ public sealed class StageResourceValidationTests
     }
 
     [Fact]
+    public void Stage_capture_surfaces_monitor_dilation_warning_on_the_passing_check()
+    {
+        var capture = new StageResourceTelemetryCapture(
+            new SequenceCollector(),
+            new ResourceTelemetryValidator(),
+            new(),
+            "measured",
+            1,
+            timing: null,
+            workingSetSampler: new FixedSampler(100),
+            workingSetSamplingInterval: null,
+            monitorFactory: new WarningFactory("dilated"));
+        capture.Report(new("asr", PipelineProgressEventKind.Started));
+        capture.Report(new("asr", PipelineProgressEventKind.Completed));
+
+        BenchmarkStageResourceTelemetry sample = Assert.Single(capture.Snapshot());
+        Assert.Equal(BenchmarkEvidenceStatus.Completed, sample.ExecutionStatus);
+        ResourceTelemetryCheck check = Assert.Single(sample.Validation.Checks, item => item.Metric == "workingSetBytes");
+        Assert.Equal(ResourceTelemetryStatus.Passed, check.Status);
+        Assert.Equal("dilated", check.Reason);
+    }
+
+    [Fact]
     public void Working_set_sampler_failure_is_explicitly_unavailable_without_interrupting_stage()
     {
         var capture = Create(new FixedWorkingSetCollector(100), workingSetSampler: new ThrowingWorkingSetSampler());
@@ -263,6 +286,26 @@ public sealed class StageResourceValidationTests
     private sealed class ThrowingWorkingSetSampler : IWorkingSetSampler
     {
         public long CaptureWorkingSetBytes() => throw new InvalidOperationException("Working-set probe failed.");
+    }
+
+    private sealed class FixedSampler(long value) : IWorkingSetSampler
+    {
+        public long CaptureWorkingSetBytes() => value;
+    }
+
+    private sealed class WarningFactory(string warning) : IWorkingSetPeakMonitorFactory
+    {
+        public IWorkingSetPeakMonitor Create(IWorkingSetSampler sampler, long? initialValue, TimeSpan? interval) =>
+            new WarningMonitor(warning);
+    }
+
+    private sealed class WarningMonitor(string warning) : IWorkingSetPeakMonitor
+    {
+        public string? UnavailableReason => null;
+
+        public string? SamplingWarning => warning;
+
+        public long? Stop() => 100;
     }
 
     private sealed class TransientPeakSampler : IWorkingSetSampler

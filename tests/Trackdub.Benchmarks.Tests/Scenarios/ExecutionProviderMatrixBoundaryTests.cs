@@ -207,10 +207,10 @@ public sealed class ExecutionProviderMatrixBoundaryTests
                 ["pipeline:p50"] = 100.0,
                 ["pipeline:throughput"] = 10.0,
             },
-            MemoryBytes = new Dictionary<string, long?>
+            ProcessMemory = new BenchmarkProcessMemoryTelemetry
             {
-                ["peakWorkingSetBytes"] = Mb(500),
-                ["managedAllocatedBytes"] = Mb(50),
+                PeakWorkingSetBytes = Mb(500),
+                ManagedAllocatedBytes = Mb(50),
             },
             Stages = [],
         };

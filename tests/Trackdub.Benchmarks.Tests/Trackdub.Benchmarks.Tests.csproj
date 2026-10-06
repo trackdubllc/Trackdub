@@ -49,4 +49,10 @@
     <Compile Include="..\Trackdub.TestDoubles\FakePipelinePreFlightChecker.cs" Link="TestDoubles\FakePipelinePreFlightChecker.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\Fixtures\benchmark-evidence-schema-v1.json"
+             Link="Fixtures\benchmark-evidence-schema-v1.json"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

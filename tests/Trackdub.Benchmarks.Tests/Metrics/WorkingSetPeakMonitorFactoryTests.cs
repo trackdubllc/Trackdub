@@ -118,6 +118,8 @@ public sealed class WorkingSetPeakMonitorFactoryTests
 
         public string? UnavailableReason => reason;
 
+        public string? SamplingWarning => null;
+
         public long? Stop()
         {
             StopCalls++;

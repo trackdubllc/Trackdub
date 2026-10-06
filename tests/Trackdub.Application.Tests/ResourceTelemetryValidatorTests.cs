@@ -169,6 +169,30 @@ public sealed class ResourceTelemetryValidatorTests
     }
 
     [Fact]
+    public void Validate_annotates_passing_working_set_check_with_sampling_dilation_warning()
+    {
+        const string warning = "Working-set sampling cadence dilated (longest tick gap 180 ms at 25 ms cadence); transient peaks shorter than the gap may have been missed.";
+        var result = validator.Validate(
+            Start, End with { PeakWorkingSetSamplingWarning = warning }, new() { MaxWorkingSetBytes = 1000 });
+
+        ResourceTelemetryCheck check = Check(result, "workingSetBytes");
+        Assert.Equal(ResourceTelemetryStatus.Passed, check.Status);
+        Assert.Equal(1000d, check.ObservedValue);
+        Assert.Equal(warning, check.Reason);
+    }
+
+    [Fact]
+    public void Validate_keeps_failure_reason_when_sampling_dilated_and_bound_exceeded()
+    {
+        var result = validator.Validate(
+            Start, End with { PeakWorkingSetSamplingWarning = "dilated" }, new() { MaxWorkingSetBytes = 999 });
+
+        ResourceTelemetryCheck check = Check(result, "workingSetBytes");
+        Assert.Equal(ResourceTelemetryStatus.Failed, check.Status);
+        Assert.Equal("Configured upper bound exceeded.", check.Reason);
+    }
+
+    [Fact]
     public void Validate_reports_working_set_unavailable_when_continuous_sampling_failed()
     {
         ResourceUsageSnapshot failedPeak = End with

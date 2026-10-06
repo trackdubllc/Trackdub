@@ -111,12 +111,15 @@ public sealed class GenAiTensorRtExclusionTests
     }
 
     [Fact]
-    public void VadStage_AllowsTensorRtRtx()
+    public void VadStage_ExcludesTensorRtRtxButKeepsClassicTensorRt()
     {
-        // VAD previously passed a TRT RTX smoke run; the per-model smoke gate decides.
-        Assert.Contains(
-            ExecutionProviderKind.TensorRTRtx,
-            StageRuntimeRequirementsCatalog.All[RuntimeStage.Vad].AllowedProvidersThisMilestone);
+        // #329: silero-vad fails the TensorRT RTX build on every attempt (squeeze shape error in its
+        // If/else-branch subgraph), so VAD never plans TensorRT RTX. Classic TensorRT is a separate
+        // provider and is not implicated, so it stays allowed.
+        IReadOnlyList<ExecutionProviderKind> allowed =
+            StageRuntimeRequirementsCatalog.All[RuntimeStage.Vad].AllowedProvidersThisMilestone;
+        Assert.DoesNotContain(ExecutionProviderKind.TensorRTRtx, allowed);
+        Assert.Contains(ExecutionProviderKind.TensorRt, allowed);
     }
 
     [Fact]

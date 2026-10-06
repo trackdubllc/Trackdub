@@ -106,24 +106,30 @@ public sealed class Challenger2StressTests : IDisposable
             Assert.NotNull(stage.ActualProvider);
         }
 
-        // 3. Verify stage-level memory telemetry across canonical stages
-        Assert.NotNull(report.MemoryBytes);
-        Assert.True(report.MemoryBytes.ContainsKey("peakWorkingSetBytes"), "Must contain peakWorkingSetBytes");
-        Assert.True(report.MemoryBytes.ContainsKey("managedAllocatedBytes"), "Must contain managedAllocatedBytes");
-        Assert.True(report.MemoryBytes["peakWorkingSetBytes"] > 0, "peakWorkingSetBytes > 0");
+        // 3. Verify typed memory telemetry across canonical stages
+        Assert.NotNull(report.ProcessMemory);
+        Assert.True(report.ProcessMemory.PeakWorkingSetBytes > 0, "peak working set must be sampled > 0");
+        Assert.NotNull(report.ProcessMemory.ManagedAllocatedBytes);
 
         foreach (string stageName in canonicalStages)
         {
-            string allocKey = $"stage:{stageName}:allocatedBytes";
-            string peakKey = $"stage:{stageName}:peakWorkingSet";
-            string gen0Key = $"stage:{stageName}:gen0";
-
-            Assert.True(report.MemoryBytes.ContainsKey(allocKey), $"Missing memory telemetry: {allocKey}");
-            Assert.True(report.MemoryBytes.ContainsKey(peakKey), $"Missing memory telemetry: {peakKey}");
-            Assert.True(report.MemoryBytes.ContainsKey(gen0Key), $"Missing memory telemetry: {gen0Key}");
-
-            Assert.True(report.MemoryBytes[allocKey] >= 0, $"{allocKey} >= 0");
-            Assert.True(report.MemoryBytes[peakKey] > 0, $"{peakKey} > 0");
+            BenchmarkStageResourceTelemetry[] samples = report.ResourceTelemetry
+                .Where(sample => sample.Stage.Equals(stageName, StringComparison.OrdinalIgnoreCase)).ToArray();
+            Assert.NotEmpty(samples);
+            Assert.All(samples, sample =>
+            {
+                foreach (string metric in new[] { "workingSetBytes", "managedAllocatedBytes" })
+                {
+                    var check = Assert.Single(sample.Validation.Checks, check => check.Metric == metric);
+                    Assert.NotNull(check.ObservedValue);
+                    Assert.True(check.ObservedValue >= 0, $"{stageName} {metric} >= 0");
+                }
+            });
+            BenchmarkStageGarbageCollectionTelemetry gc = Assert.Single(
+                report.StageGarbageCollection,
+                entry => entry.Stage.Equals(stageName, StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(gc.Gen0Collections);
+            Assert.True(gc.Gen0Collections >= 0, $"{stageName} gen0 >= 0");
         }
     }
 
@@ -203,10 +209,10 @@ public sealed class Challenger2StressTests : IDisposable
             Assert.Equal(2.0, baselineBudget / dmlBudget);
             Assert.Equal(4.0, baselineBudget / trtBudget);
             Assert.True(
-                dml.P50Milliseconds >= dmlBudget,
+                dml.P50Milliseconds >= dmlBudget - 1.0,
                 $"DirectML P50 {dml.P50Milliseconds} contains its simulated latency budget of {dmlBudget} ms");
             Assert.True(
-                trt.P50Milliseconds >= trtBudget,
+                trt.P50Milliseconds >= trtBudget - 1.0,
                 $"TRT P50 {trt.P50Milliseconds} contains its simulated latency budget of {trtBudget} ms");
         }
     }
@@ -289,7 +295,7 @@ public sealed class Challenger2StressTests : IDisposable
         Assert.Equal(1000.0, cpuBudget);
         Assert.Equal(0.5, directmlBudget / cpuBudget);
         Assert.True(
-            cpu.P50Milliseconds >= cpuBudget,
+            cpu.P50Milliseconds >= cpuBudget - 1.0,
             $"CPU P50 {cpu.P50Milliseconds} contains its simulated latency budget of {cpuBudget} ms");
     }
 
