@@ -34,7 +34,9 @@ public sealed record NvidiaAfxProfileDefinition(
     /// Explicit output sample rate when it differs from the selected input rate
     /// (for example telephony upscale 8 kHz → 16 kHz). Null means output matches input.
     /// </summary>
-    int? OutputSampleRate = null)
+    int? OutputSampleRate = null,
+    /// <summary>NVIDIA Early Access effect under an evaluation license; disabled unless explicitly allowed.</summary>
+    bool IsEarlyAccess = false)
 {
     public int ResolveOutputSampleRate(int inputSampleRate) =>
         OutputSampleRate ?? inputSampleRate;
@@ -163,6 +165,23 @@ public static class NvidiaAfxProfileCatalog
             SupportsIntensityRatio: false,
             OutputSampleRate: 16000),
         new(
+            NvidiaAfxProfile.SpeakerFocus,
+            "Speaker Focus (Early Access)",
+            Selector: "speaker_focus",
+            IsChainedEffect: false,
+            SupportedSampleRates: [16000, 48000],
+            MaxChannels: 1,
+            ModelsBySampleRate:
+            [
+                new(16000, [new("nvafxspeakerfocus", "speaker_focus_16k")]),
+                new(48000, [new("nvafxspeakerfocus", "speaker_focus_48k")]),
+            ],
+            RequiresFarEndReference: false,
+            // The SDK accepts intensity_ratio on this effect but the output does not change
+            // (verified live on SDK 3.0.0), so no control is offered.
+            SupportsIntensityRatio: false,
+            IsEarlyAccess: true),
+        new(
             NvidiaAfxProfile.AcousticEchoCancellation,
             "Acoustic Echo Cancellation",
             // Not listed in Maxine AFX 3.x public effect selectors; kept for discovery.
@@ -179,6 +198,14 @@ public static class NvidiaAfxProfileCatalog
             RequiresFarEndReference: true,
             SupportsIntensityRatio: false)
     ];
+
+    /// <summary>
+    /// Profiles to offer in a UI: Early Access effects are listed only when explicitly allowed.
+    /// </summary>
+    public static IReadOnlyList<NvidiaAfxProfileDefinition> SelectableDefinitions =>
+        [.. Definitions.Where(definition =>
+            !definition.RequiresFarEndReference
+            && (!definition.IsEarlyAccess || NvidiaAfxIntegration.AllowEarlyAccessEffects()))];
 
     public static NvidiaAfxProfileDefinition GetDefinition(NvidiaAfxProfile profile) =>
         Definitions.FirstOrDefault(definition => definition.Profile == profile)

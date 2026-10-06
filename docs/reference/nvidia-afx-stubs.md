@@ -8,11 +8,11 @@ The file keeps its original name for existing links; the integration is no longe
 
 | Signal | Behavior |
 |--------|----------|
-| `INvidiaAfxRuntimeReadinessService` | `NvidiaAfxRuntimeReadinessService` (probe-based). Ready only when the license is accepted, the native library, any feature DLLs the layout requires and every model the profile needs are present, **and** an effect creates and loads at every supported rate on this machine. Only successful native probes are cached; file checks run on every call. |
+| `INvidiaAfxRuntimeReadinessService` | `NvidiaAfxRuntimeReadinessService` (probe-based). Ready only when the license is accepted, the native library, any feature DLLs the layout requires and every model the profile needs are present, **and** an effect creates, loads and runs a frame at every supported rate on this machine. Only successful native probes are cached; file checks run on every call. |
 | `NvidiaAfxIntegration.IsStubbed()` | Kill switch, `false`. While `true`, readiness never reports Ready, the installer and downloader refuse, and enhancement falls through to DeepFilterNet. |
 | `NvidiaAfxSpeechAudioEnhancementService` | Falls through to DeepFilterNet when disabled, not ready, missing an AEC far-end reference, when the readiness check throws, or when the native run fails. |
 | `NvidiaAfxRuntimeDownloader` / `NvidiaAfxRuntimeInstaller` | Still refuse placeholder packages, missing license acceptance and missing manifests. No hosted redistributable exists, so Trackdub does not download AFX; users point it at a local SDK. |
-| `nvidiaafx-runtime.manifest.json` | Placeholder `example.invalid` URLs and zero hashes. It is only used as an architecture whitelist for readiness and is never downloadable (`NvidiaAfxRuntimePackageGates`). |
+| `nvidiaafx-runtime.manifest.json` | Placeholder `example.invalid` URLs and zero hashes. Readiness uses it only as an architecture whitelist; the installer reads it to gate downloads and pick the architecture-matched package. It is never downloadable (`NvidiaAfxRuntimePackageGates`). |
 
 Never treat component registration, settings fields or profile catalog entries as proof that AFX ran. The stage result's `Backend` is `NvidiaAfx` only when the native effect actually produced the audio.
 
@@ -38,5 +38,5 @@ Never treat component registration, settings fields or profile catalog entries a
 
 - No Trackdub-hosted redistributable: NVIDIA's license decides whether one can ship. Until then the runtime is user-installed.
 - AEC needs a far-end reference that dubbing never has, so it is hidden from the UI and untested live.
-- Speaker Focus (Early Access) is available in the SDK but is not in the profile catalog.
+- Speaker Focus (Early Access) is in the catalog but gated: it is hidden from `SelectableDefinitions` and readiness refuses it ("Early Access disabled") unless `TRACKDUB_AFX_ALLOW_EARLY_ACCESS=1` is set, because it ships under NVIDIA's evaluation license, which permits internal testing and evaluation only, not production use.
 - Live proofs need a Windows NVIDIA RTX machine and never run in default CI.

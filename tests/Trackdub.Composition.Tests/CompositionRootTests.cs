@@ -323,14 +323,9 @@ public sealed class CompositionRootTests : IDisposable
         Assert.Equal(0, secondEngine.DisposeCount);
     }
 
-    [Fact]
+    [WindowsOnlyFact]
     public async Task AddTrackdub_resolves_the_probe_based_afx_readiness_service_with_saved_settings()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         string runtimeDirectory = CreateTempDirectory();
         var settings = new FakeStudioSettingsService();
         await settings.SaveAsync(

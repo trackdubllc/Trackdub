@@ -22,6 +22,14 @@ public static class NvidiaAfxIntegration
 
     public const string DeveloperResourcesUrl = "https://www.nvidia.com/broadcast-sdk-resources";
 
+    /// <summary>
+    /// Early Access effects (Speaker Focus) ship under NVIDIA's evaluation license and must not reach
+    /// end users. They stay disabled unless <c>TRACKDUB_AFX_ALLOW_EARLY_ACCESS=1</c> is set for
+    /// development or evaluation.
+    /// </summary>
+    public static bool AllowEarlyAccessEffects() =>
+        Environment.GetEnvironmentVariable("TRACKDUB_AFX_ALLOW_EARLY_ACCESS") == "1";
+
     // Method (not const) so the kill-switch gates do not create CS0162 unreachable-code failures.
     public static bool IsStubbed() => false;
 }

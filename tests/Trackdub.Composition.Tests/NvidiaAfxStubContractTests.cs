@@ -7,6 +7,18 @@ namespace Trackdub.Composition.Tests;
 public sealed class NvidiaAfxStubContractTests
 {
     [Fact]
+    public void ShippedManifest_RecordsSpeakerFocusAsEvaluationOnly()
+    {
+        NvidiaAfxRuntimeManifest manifest = NvidiaAfxRuntimeManifestLoader.Load(
+            Path.Join(AppContext.BaseDirectory, "nvidiaafx-runtime.manifest.json"));
+
+        Assert.Contains(
+            manifest.Effects ?? [],
+            effect => effect.Selector == "speaker_focus" && effect.Terms == NvidiaAfxEffectTerms.Evaluation);
+        Assert.False(manifest.IsCommerciallyLicensed("speaker_focus"));
+    }
+
+    [Fact]
     public void Integration_IsEnabled_AndKeepsItsKillSwitchMetadata()
     {
         Assert.False(NvidiaAfxIntegration.IsStubbed());
@@ -35,6 +47,7 @@ public sealed class NvidiaAfxStubContractTests
             Assert.False(readiness.IsReady);
             Assert.Equal(NvidiaAfxIntegration.StubStatusLabel, readiness.StatusLabel);
             Assert.Equal(NvidiaAfxIntegration.StubReason, readiness.FailureReason);
+            Assert.Null(readiness.RuntimeRoot);
         }
         finally
         {
@@ -52,10 +65,7 @@ public sealed class NvidiaAfxStubContractTests
         // Deliberately claim Ready to prove the kill switch short-circuits before native use.
         var readiness = new FakeReadinessService(
             new NvidiaAfxRuntimeReadiness(true, "Ready", @"C:\afx", null));
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback)
-        {
-            IsStubbedOverride = static () => true
-        };
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback, isStubbed: static () => true);
 
         SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
             new SpeechAudioEnhancementRequest(

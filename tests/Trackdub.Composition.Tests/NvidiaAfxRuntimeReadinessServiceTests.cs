@@ -28,6 +28,99 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
     }
 
     [Fact]
+    public void GetReadiness_RefusesAnEarlyAccessEffect_UnlessItIsExplicitlyAllowed()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        var probe = new CountingProbe();
+        var service = fixture.CreateService(probe);
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.False(readiness.IsReady);
+        Assert.Equal("Early Access disabled", readiness.StatusLabel);
+        Assert.Equal(0, probe.CallCount);
+    }
+
+    [Theory]
+    [InlineData("evaluation")]
+    [InlineData(null)]
+    public void GetReadiness_RefusesAnEarlyAccessEffect_WhenTheManifestDoesNotRecordCommercialTerms(string? terms)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        fixture.SetEffectTerms(terms);
+        var probe = new CountingProbe();
+        var service = fixture.CreateService(probe);
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.False(readiness.IsReady);
+        Assert.Equal("Early Access disabled", readiness.StatusLabel);
+        Assert.Equal(0, probe.CallCount);
+    }
+
+    [Fact]
+    public void GetReadiness_PassesTheEarlyAccessGate_WhenTheManifestRecordsCommercialTerms()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        fixture.SetEffectTerms("commercial");
+        var service = fixture.CreateService(new CountingProbe());
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.NotEqual("Early Access disabled", readiness.StatusLabel);
+    }
+
+    [Fact]
+    public void GetReadiness_LetsTheExplicitOptInProbeAnEvaluationOnlyEffect()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        fixture.SetEffectTerms("evaluation");
+        var service = fixture.CreateService(new CountingProbe(), allowEarlyAccess: true);
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.NotEqual("Early Access disabled", readiness.StatusLabel);
+    }
+
+    [Fact]
+    public void GetReadiness_ReportsAnUnreadableManifest_ForAnEarlyAccessEffect()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var fixture = RuntimeFixture.Create();
+        fixture.CorruptManifest();
+        var service = fixture.CreateService(new CountingProbe());
+
+        NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(NvidiaAfxProfile.SpeakerFocus);
+
+        Assert.False(readiness.IsReady);
+        Assert.Equal("Manifest error", readiness.StatusLabel);
+    }
+
+    [Fact]
     public void GetReadiness_RequiresTheLicenseToBeAccepted()
     {
         if (!OperatingSystem.IsWindows())
@@ -349,6 +442,18 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
             return new RuntimeFixture(tempRoot, runtimePath, manifestPath);
         }
 
+        public void SetEffectTerms(string? terms) =>
+            File.WriteAllText(
+                _manifestPath,
+                ManifestJson("ada", "ampere").Replace(
+                    "\"packages\"",
+                    terms is null
+                        ? "\"effects\": [], \"packages\""
+                        : $"\"effects\": [ {{ \"selector\": \"speaker_focus\", \"terms\": \"{terms}\" }} ], \"packages\"",
+                    StringComparison.Ordinal));
+
+        public void CorruptManifest() => File.WriteAllText(_manifestPath, "{ not json");
+
         public void RemoveModel(string stem) =>
             File.Delete(Path.Join(RuntimePath, "models", stem + ".nvam"));
 
@@ -358,7 +463,8 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
             INvidiaAfxEffectProbe probe,
             INvidiaAfxArchitectureDetector? detector = null,
             bool licenseAccepted = true,
-            Func<StudioSettings>? settingsProvider = null) =>
+            Func<StudioSettings>? settingsProvider = null,
+            bool allowEarlyAccess = false) =>
             new(
                 new ComponentStore(_tempRoot, new TestLogger()),
                 detector ?? new MutableArchitectureDetector("ada"),
@@ -368,7 +474,8 @@ public sealed class NvidiaAfxRuntimeReadinessServiceTests
                     NvidiaAfxRuntimeDirectory = RuntimePath,
                     NvidiaAfxLicenseAccepted = licenseAccepted,
                 }),
-                effectProbe: probe);
+                effectProbe: probe,
+                allowEarlyAccess: () => allowEarlyAccess);
 
         public void Dispose()
         {

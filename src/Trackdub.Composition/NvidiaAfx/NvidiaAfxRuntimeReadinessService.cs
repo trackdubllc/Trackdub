@@ -153,8 +153,11 @@ public sealed class NvidiaAfxRuntimeReadinessService(
     string manifestPath,
     Func<StudioSettings>? settingsProvider = null,
     INvidiaAfxEffectProbe? effectProbe = null,
-    Func<bool>? isStubbed = null) : INvidiaAfxRuntimeReadinessService
+    Func<bool>? isStubbed = null,
+    Func<bool>? allowEarlyAccess = null) : INvidiaAfxRuntimeReadinessService
 {
+    private readonly Func<bool> _allowEarlyAccess = allowEarlyAccess ?? NvidiaAfxIntegration.AllowEarlyAccessEffects;
+
     private readonly Func<bool> _isStubbed = isStubbed ?? NvidiaAfxIntegration.IsStubbed;
 
     // The native probe is the expensive part (it creates a GPU effect), so only successful probes
@@ -164,6 +167,31 @@ public sealed class NvidiaAfxRuntimeReadinessService(
         architectureDetector,
         manifestPath,
         new CachingNvidiaAfxEffectProbe(effectProbe ?? NvidiaAfxSessionEffectProbe.Instance));
+
+    // An Early Access effect runs only when the manifest records commercial terms for it. The
+    // explicit opt-in is a separate, evaluation-only path for development and never changes the manifest.
+    private NvidiaAfxRuntimeReadiness? CheckEarlyAccessEligibility(NvidiaAfxProfileDefinition definition)
+    {
+        try
+        {
+            if (NvidiaAfxRuntimeManifestLoader.Load(manifestPath).IsCommerciallyLicensed(definition.Selector))
+            {
+                return null;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            return new NvidiaAfxRuntimeReadiness(false, "Manifest error", null, ex.Message);
+        }
+
+        return _allowEarlyAccess()
+            ? null
+            : new NvidiaAfxRuntimeReadiness(
+                false,
+                "Early Access disabled",
+                null,
+                "This NVIDIA Early Access effect is licensed for evaluation only and is not enabled for production use.");
+    }
 
     public NvidiaAfxRuntimeReadiness GetReadiness(NvidiaAfxProfile profile)
     {
@@ -179,6 +207,16 @@ public sealed class NvidiaAfxRuntimeReadinessService(
         if (!OperatingSystem.IsWindows())
         {
             return new NvidiaAfxRuntimeReadiness(false, "Unsupported OS", null, "NVIDIA AFX is Windows-only.");
+        }
+
+        NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(profile);
+        if (definition.IsEarlyAccess)
+        {
+            NvidiaAfxRuntimeReadiness? blocked = CheckEarlyAccessEligibility(definition);
+            if (blocked is not null)
+            {
+                return blocked;
+            }
         }
 
         StudioSettings? settings;

@@ -5,8 +5,8 @@ using Trackdub.Infrastructure.Components.NvidiaAfx;
 namespace Trackdub.Composition.NvidiaAfx;
 
 /// <summary>
-/// Probes whether a local AFX runtime can actually load the native library and create/load
-/// an effect. Filename presence alone must not be treated as Ready.
+/// Probes whether a local AFX runtime can actually load the native library, create and load an
+/// effect, and run audio through it. Filename presence alone must not be treated as Ready.
 /// </summary>
 public interface INvidiaAfxEffectProbe
 {
@@ -23,11 +23,17 @@ public sealed record NvidiaAfxEffectProbeResult(
     int? OutputSampleRate);
 
 /// <summary>
-/// Default probe: creates and loads a Maxine effect session, then disposes it.
+/// Default probe: creates and loads a Maxine effect session, streams about one second of audio
+/// through it, then disposes it. Audio is run because creating and loading an effect does not prove
+/// it can process it, and a sustained run is needed because some effects accept the first frame and
+/// fail later (Speaker Focus on SDK 2.1). A failed run later still falls back to DeepFilterNet.
 /// </summary>
 public sealed class NvidiaAfxSessionEffectProbe : INvidiaAfxEffectProbe
 {
     public static NvidiaAfxSessionEffectProbe Instance { get; } = new();
+
+    /// <summary>Frames of 10 ms each, so one second of audio.</summary>
+    internal const int ProbeFrames = 100;
 
     public NvidiaAfxEffectProbeResult Probe(
         string runtimeRoot,
@@ -46,6 +52,21 @@ public sealed class NvidiaAfxSessionEffectProbe : INvidiaAfxEffectProbe
                 inputSampleRate,
                 intensityRatio: profile.SupportsIntensityRatio ? 1.0f : 0f,
                 architectureBucket);
+
+            int frameSamples = checked((int)session.NumInputSamplesPerFrame);
+            float[] frame = new float[frameSamples];
+            float[]? farEnd = profile.RequiresFarEndReference ? new float[frameSamples] : null;
+            for (int frameIndex = 0; frameIndex < ProbeFrames; frameIndex++)
+            {
+                for (int index = 0; index < frame.Length; index++)
+                {
+                    int sample = (frameIndex * frameSamples) + index;
+                    frame[index] = 0.1f * MathF.Sin(2f * MathF.PI * 220f * sample / inputSampleRate);
+                }
+
+                session.Process(frame, farEnd);
+            }
+
             return new NvidiaAfxEffectProbeResult(true, null, session.OutputSampleRate);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

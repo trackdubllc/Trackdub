@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Trackdub.Contracts;
+using Trackdub.Inference.Onnx.Audio;
 using Trackdub.Infrastructure.Components.NvidiaAfx;
 
 namespace Trackdub.Composition.NvidiaAfx;
@@ -265,6 +266,92 @@ internal sealed class NvidiaAfxSession : IDisposable
 
         return output;
     }
+
+    /// <summary>
+    /// Streams <paramref name="nearEnd"/> through the effect in one-second chunks so long recordings
+    /// never need full-length input and output arrays. Output is identical to <see cref="Process"/>:
+    /// the last frame is zero-padded and the output trimmed to <see cref="GetOutputSampleCount"/>.
+    /// Returns the number of samples handed to <paramref name="sink"/>.
+    /// </summary>
+    public async Task<long> ProcessStreamAsync(
+        IAudioSamples nearEnd,
+        IAudioSamples? farEnd,
+        Func<ReadOnlyMemory<float>, CancellationToken, ValueTask> sink,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(nearEnd);
+        ArgumentNullException.ThrowIfNull(sink);
+        if (_requiresFarEndReference)
+        {
+            ArgumentNullException.ThrowIfNull(farEnd);
+        }
+
+        int inputFrame = checked((int)_numInputSamplesPerFrame);
+        int outputFrame = checked((int)_numOutputSamplesPerFrame);
+        if (inputFrame <= 0 || outputFrame <= 0)
+        {
+            throw new InvalidOperationException("Invalid AFX frame size.");
+        }
+
+        const int framesPerChunk = FramesPerSecond;
+        long nearTotal = nearEnd.SampleFrameCount;
+        long expected = GetOutputSampleCount(nearTotal, inputFrame, outputFrame);
+        float[] nearChunk = new float[inputFrame * framesPerChunk];
+        float[] farChunk = _requiresFarEndReference ? new float[inputFrame * framesPerChunk] : [];
+        float[] outChunk = new float[outputFrame * framesPerChunk];
+        float[] nearFrame = new float[inputFrame];
+        float[] farFrame = _requiresFarEndReference ? new float[inputFrame] : [];
+        float[] outFrame = new float[outputFrame];
+
+        long position = 0;
+        long written = 0;
+        while (position < nearTotal)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int count = (int)Math.Min(nearChunk.Length, nearTotal - position);
+            Array.Clear(nearChunk);
+            nearEnd.ReadMonoSamples(position, nearChunk.AsSpan(0, count));
+            if (_requiresFarEndReference)
+            {
+                // A shorter far-end is zero-padded, a longer one ignored, as in Process.
+                Array.Clear(farChunk);
+                IAudioSamples far = farEnd
+                    ?? throw new ArgumentNullException(nameof(farEnd), "This effect requires a far-end reference.");
+                int farAvailable = (int)Math.Clamp(far.SampleFrameCount - position, 0, count);
+                if (farAvailable > 0)
+                {
+                    far.ReadMonoSamples(position, farChunk.AsSpan(0, farAvailable));
+                }
+            }
+
+            int frames = (count + inputFrame - 1) / inputFrame;
+            for (int frame = 0; frame < frames; frame++)
+            {
+                Array.Copy(nearChunk, frame * inputFrame, nearFrame, 0, inputFrame);
+                if (_requiresFarEndReference)
+                {
+                    Array.Copy(farChunk, frame * inputFrame, farFrame, 0, inputFrame);
+                }
+
+                RunFrame(nearFrame, farFrame, outFrame);
+                Array.Copy(outFrame, 0, outChunk, frame * outputFrame, outputFrame);
+            }
+
+            int outCount = (int)Math.Min((long)frames * outputFrame, expected - written);
+            await sink(outChunk.AsMemory(0, outCount), cancellationToken).ConfigureAwait(false);
+            written += outCount;
+            position += count;
+        }
+
+        return written;
+    }
+
+    /// <summary>Output samples for a stream of <paramref name="nearSampleCount"/> input samples.</summary>
+    public long GetOutputSampleCount(long nearSampleCount) =>
+        GetOutputSampleCount(nearSampleCount, checked((int)_numInputSamplesPerFrame), checked((int)_numOutputSamplesPerFrame));
+
+    private static long GetOutputSampleCount(long nearSampleCount, int inputFrame, int outputFrame) =>
+        checked(nearSampleCount * outputFrame / inputFrame);
 
     /// <summary>
     /// Output sample count after dropping frame-alignment padding, preserving the
