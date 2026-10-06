@@ -267,6 +267,7 @@ public sealed class ResourceTelemetryOptionsTests
             {
                 Assert.Equal(bounds, result.Evidence.ResourceTelemetryBounds);
                 Assert.Contains(result.Evidence.Stages, stage => stage.Status == BenchmarkEvidenceStatus.Completed);
+                Assert.Equal(BenchmarkEvidenceStatus.Completed, result.Evidence.Status);
             });
         }
         finally
