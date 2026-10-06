@@ -2,7 +2,9 @@
 // Not compiled in CI. Illustrates the seam; details TBD in the spike.
 //
 // Protocol: JSON-lines on stdin/stdout.
-//   {"id":"..","op":"load","model":"..","providers":[...]} -> {"id":"..","status":"loaded",...}
+//   {"id":"..","op":"load","plan":{...}} -> {"id":"..","status":"loaded",...}
+//   (plan is planner-approved: integrity-qualified model + ordered providers;
+//    the sidecar executes it, never selects models/providers itself)
 //   {"id":"..","op":"infer","inputs":{...}}               -> {"id":"..","status":"ok",...}
 //   {"id":"..","op":"health"}                             -> {"id":"..","status":"alive",...}
 
@@ -19,7 +21,22 @@ fn main() -> anyhow::Result<()> {
     let mut stdout = std::io::stdout();
 
     for line in stdin.lock().lines() {
-        let req: serde_json::Value = serde_json::from_str(&line?)?;
+        // A malformed line must never kill the serve-forever loop: answer
+        // with a protocol error and keep serving (no id available to echo,
+        // so the caller correlates by transport order).
+        let req: serde_json::Value = match serde_json::from_str(&line?) {
+            Ok(v) => v,
+            Err(e) => {
+                writeln!(
+                    stdout,
+                    "{}",
+                    serde_json::json!({ "id": null, "status": "error",
+                        "reason": "invalid-json", "detail": e.to_string() })
+                )?;
+                stdout.flush()?;
+                continue;
+            }
+        };
         let id = req["id"].as_str().unwrap_or("").to_string();
         let op = req["op"].as_str().unwrap_or("").to_string();
 
@@ -30,23 +47,21 @@ fn main() -> anyhow::Result<()> {
                 "activeProvider": active_provider,
             }),
             "load" => {
-                let model = req["model"].as_str().unwrap_or("").to_string();
-                // Provider preference order comes from C#; the sidecar
-                // reports back what it ACTUALLY settled on (honest readiness).
-                let providers: Vec<String> = req["providers"]
-                    .as_array()
-                    .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                    .unwrap_or_else(|| vec!["CPU".into()]);
-
+                // The C# side sends a planner-approved plan (integrity-
+                // qualified model path + ordered provider fallback already
+                // authorized by IRuntimePlanner, hard-pin flag honored) —
+                // the sidecar EXECUTES the plan, it never selects providers
+                // or models itself.
+                let _plan = req.clone();
                 // Real code: ort::session::Session::builder()
                 //   .with_execution_providers([...])?.commit_from_file(&model)?
-                // Fallback chain tried in order; first that commits wins.
-                active_provider = providers.into_iter().next().unwrap_or("CPU".into());
-                session = None; // placeholder: real session goes here
-                let _ = &model;
+                // Fallback chain tried in order; first that commits wins, and
+                // ONLY a committed session may report "loaded" — the stub
+                // below deliberately answers unimplemented so no placeholder
+                // can ever claim a provider before commit succeeds.
                 serde_json::json!({
-                    "id": id, "status": "loaded",
-                    "activeProvider": active_provider, "loadMs": 0,
+                    "id": id, "status": "error",
+                    "reason": "load-not-implemented-in-sketch",
                 })
             }
             "infer" => {

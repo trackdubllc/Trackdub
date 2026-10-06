@@ -30,7 +30,7 @@ and doesn't reopen the distribution wound.
 
 | | Python resident daemon | Go sidecar | TypeScript sidecar | **Rust sidecar (pitched)** |
 |---|---|---|---|---|
-| Cold start | ~1–5 s first load, ms after (resident) | ms (static binary) | 100s of ms + runtime | ms (static binary) |
+| Cold start | ~1–5 s first load, ms after (resident) | ms (static binary) | 100s of ms + runtime | ms process start; first inference unmeasured (spike measures) |
 | Ships as | 2–4 GB env, CUDA-matched | single binary | needs Node/Bun + native addons | small binary + colocated ORT/provider libs (GPU EPs ship as shared libs, not static) |
 | Runs `.pt`-only models | **yes — the only one** | no | no | no (ONNX only) |
 | ORT / GPU story | torch-direct, good | cgo → ORT C API (thin, painful) | `onnxruntime-node`, no TRT-RTX worth having | `ort` crate — first-class ORT bindings |
@@ -57,10 +57,13 @@ possible second executor behind the same contract.**
   models already run resident in-process, so Phase 1's benchmark is
   sidecar-vs-in-process on the same graph, and success means IPC overhead
   within budget, not a speedup.
-- **Phase 2 (only if needed):** a Python resident daemon implementing the
-  *same* IPC contract, used exclusively for `.pt`-only frontier voice models
-  (Chatterbox/CosyVoice) where no usable ONNX exists. Same readiness states,
-  same artifact story — just a different executor the user opts into.
+- **Phase 2 (NOT proposed here — needs its own governance decision):** a Python
+  resident daemon implementing the *same* IPC contract, used exclusively for
+  `.pt`-only frontier voice models where no usable ONNX exists. AGENTS.md
+  forbids end-user Python/Conda/Docker/CUDA-Toolkit dependencies and opt-in
+  does not lift that rule, so Phase 2 is blocked on a governance change plus a
+  defined experimental packaging boundary (cf. strategy.md) — this pitch asks
+  only for the Rust spike, which keeps Phase 2 possible without pre-approving it.
 - **What stays:** C# + in-process ONNX Runtime remains the default local path
   (Whisper, Silero, SortFormer, Kokoro, translation). The sidecar never becomes
   the only way to run anything shippable today.
@@ -78,8 +81,8 @@ only this (full sketches in `tools/rust-sidecar-spike/`):
 
 ```jsonc
 // C# → sidecar
-{ "id": "req-1", "op": "load",  "model": "models/kokoro-onnx/model.onnx",
-  "providers": ["TensorRTRTX", "DirectML", "CPU"] }
+{ "id": "req-1", "op": "load", "plan": { "model": "models/kokoro-onnx/model.onnx",
+  "providers": ["TensorRTRTX", "DirectML", "CPU"], "requirePreferred": false } }
 { "id": "req-2", "op": "infer", "inputs": { "input_ids":
   { "dtype": "int64", "shape": [1, 3], "data": "<base64>" } } }
 { "id": "req-3", "op": "health" }
@@ -97,11 +100,22 @@ the real contract and the gRPC graduation is a transport swap, not a redesign.
 Base64 costs ~33% on payloads (notably PCM outputs); the spike measures it
 before we commit to a transport.
 
+The `load` payload is a planner-approved plan (integrity-qualified path plus
+the planner's ordered provider fallback and hard-pin flag), mirroring
+`StageRuntimePlan` — the sidecar executes it and never selects models or
+providers itself, so `IRuntimePlanner` gates and
+`RequirePreferredExecutionProvider` cannot be bypassed or silently violated.
+
 Fallback transparency is the point: the sidecar reports which provider it
 *actually* settled on, and C# surfaces that in stage evidence — never "GPU
 ready" when the answer was CPU.
 
 ## 5. Cold-start story (estimates, to be measured in the spike)
+
+Terminology, kept honest: "process start" (ms-scale for native binaries) is NOT
+"first inference" — weight load plus EP/CUDA init dominates first use (the
+`loadMs: 1840` example is illustrative, and the real number is an explicit
+spike measurement, not a decision criterion).
 
 | Cost | In-process ORT today (Phase 1 baseline) | Rust sidecar (resident) | Spawn-python per call (Phase 2 motivation) |
 |---|---|---|---|
@@ -141,7 +155,8 @@ same fingerprint rules).
   or does continued ONNX export work cover the next 12 months of voice models?
 - [ ] Accept Phase 1 spike (time-boxed, `tools/` only, no `src/` changes),
   judged on seam-proven + IPC-overhead-measured, not on speedup?
-- [ ] Accept the two-phase direction (Rust now, Python-behind-same-contract later)?
+- [ ] Accept the narrowed direction (Rust spike now; Phase 2 deferred to a
+  separate governance + packaging decision, not pre-approved here)?
 - [ ] Or reject — and if so, what's the preferred answer to `.pt`-only models?
 
 ## Files in this PR (all non-build, decision-only)
