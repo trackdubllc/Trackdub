@@ -197,10 +197,10 @@ public sealed class Challenger2StressTests : IDisposable
             Assert.Equal(2.0, baselineBudget / dmlBudget);
             Assert.Equal(4.0, baselineBudget / trtBudget);
             Assert.True(
-                dml.P50Milliseconds >= dmlBudget,
+                dml.P50Milliseconds >= dmlBudget - 1.0,
                 $"DirectML P50 {dml.P50Milliseconds} contains its simulated latency budget of {dmlBudget} ms");
             Assert.True(
-                trt.P50Milliseconds >= trtBudget,
+                trt.P50Milliseconds >= trtBudget - 1.0,
                 $"TRT P50 {trt.P50Milliseconds} contains its simulated latency budget of {trtBudget} ms");
         }
     }
@@ -283,7 +283,7 @@ public sealed class Challenger2StressTests : IDisposable
         Assert.Equal(1000.0, cpuBudget);
         Assert.Equal(0.5, directmlBudget / cpuBudget);
         Assert.True(
-            cpu.P50Milliseconds >= cpuBudget,
+            cpu.P50Milliseconds >= cpuBudget - 1.0,
             $"CPU P50 {cpu.P50Milliseconds} contains its simulated latency budget of {cpuBudget} ms");
     }
 

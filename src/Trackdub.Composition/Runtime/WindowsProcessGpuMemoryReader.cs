@@ -83,7 +83,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     public string UnavailableReason =>
         warmupFailure is { } failure
             ? $"Windows performance counter initialization failed ({failure})."
-            : $"Windows reported no {CounterSetName} counter instance for this process.";
+            : $"The Windows {CounterSetName} counter set is unavailable on this host, or an instance for this process reported invalid data.";
 
     public long? ReadDedicatedGpuMemoryBytes()
     {
