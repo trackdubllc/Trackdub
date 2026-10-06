@@ -148,6 +148,18 @@ def bench_run(sess, feed, warmup, repeats):
     }
 
 
+def providers_used_by_profile(profile_path):
+    """Return providers that executed profiled graph nodes."""
+    with open(profile_path, encoding="utf-8") as handle:
+        events = json.load(handle)
+    providers = set()
+    for event in events:
+        provider = event.get("args", {}).get("provider")
+        if provider:
+            providers.add(provider)
+    return providers
+
+
 def smoke(model_path, provider_spec, feed, warmup, repeats):
     entry = {"provider_spec": provider_spec, "status": None, "detail": None}
     name, _, options = provider_spec.partition(":")
@@ -167,21 +179,32 @@ def smoke(model_path, provider_spec, feed, warmup, repeats):
             provider_options["backend_path"] = backend
     try:
         requested = resolve_provider_name(name)
+        session_options = ort.SessionOptions()
+        session_options.enable_profiling = True
         start = time.perf_counter()
         if provider_options:
-            sess = ort.InferenceSession(model_path, providers=[(requested, provider_options)])
+            sess = ort.InferenceSession(
+                model_path, sess_options=session_options, providers=[(requested, provider_options)])
         else:
-            sess = ort.InferenceSession(model_path, providers=[requested])
+            sess = ort.InferenceSession(
+                model_path, sess_options=session_options, providers=[requested])
         entry["session_create_s"] = round(time.perf_counter() - start, 2)
         providers_in_use = sess.get_providers()
         sess.run(None, feed)
         timing = bench_run(sess, feed, warmup, repeats)
+        profile_path = sess.end_profiling()
+        providers_used = providers_used_by_profile(profile_path)
+        try:
+            os.remove(profile_path)
+        except OSError:
+            pass
         entry.update(timing)
-        if any(p == requested for p in providers_in_use):
+        if requested in providers_used:
             entry["status"] = "ok"
         else:
             entry["status"] = "fallback"
         entry["providers_in_use"] = providers_in_use
+        entry["providers_used"] = sorted(providers_used)
     except Exception as ex:
         entry["status"] = "fail"
         entry["detail"] = str(ex)[:500]
