@@ -350,43 +350,47 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
         SimulatedLatencyMultiplier(baselineProvider) / SimulatedLatencyMultiplier(provider);
 
     /// <summary>
-    /// Total simulated stage latency, in milliseconds, a full-pipeline mock matrix run configures
-    /// for <paramref name="provider"/> (1000 ms at a multiplier of 1.0). Every simulated stage
+    /// Simulated stage latency, in milliseconds, a mock matrix run configures for
+    /// <paramref name="provider"/> over the stages <paramref name="scenario"/> selects (1000 ms
+    /// for the full pipeline at a multiplier of 1.0). Every simulated stage the run executes
     /// waits at least its configured delay, so a completed mock pipeline's measured percentile
     /// cannot be below this budget, and the ratio between two providers' budgets is the speedup
-    /// the simulation is built to demonstrate. Mock matrix runs carry it on each comparison row
-    /// as <see cref="ProviderComparisonMetrics.SimulatedLatencyBudgetMilliseconds"/>, so consumers
-    /// can assert the contract from the report instead of from here.
+    /// the simulation is built to demonstrate. Mock matrix runs carry it on each comparison row as
+    /// <see cref="ProviderComparisonMetrics.SimulatedLatencyBudgetMilliseconds"/>, so consumers can
+    /// assert the contract from the report instead of from here.
     /// </summary>
-    internal static double SimulatedLatencyBudgetMilliseconds(string provider) =>
-        SimulatedLatencyBudgetMilliseconds(provider, "full-pipeline");
+    /// <param name="provider">The compared provider whose multiplier scales the delays.</param>
+    /// <param name="scenario">
+    /// The scenario identifier the run passes as the pipeline's stage filter — a single stage
+    /// (possibly an alias such as <c>asr</c> or <c>tts</c>) or <c>full-pipeline</c>. A single-stage
+    /// scenario only ever waits its own canonical stage's delay, so charging it the whole
+    /// pipeline's sum would report a budget no run of it measures against. Null or
+    /// <c>full-pipeline</c> budgets every stage, matching a run whose filter is unset.
+    /// </param>
+    internal static double SimulatedLatencyBudgetMilliseconds(string provider, string? scenario = null)
+    {
+        double configured = SimulatedStageDelayTable
+            .Where(stage => ScenarioSelectsStage(scenario, stage.Stage))
+            .Sum(stage => stage.Milliseconds);
+        // The mock uses an unscaled 5 ms fallback for an unrecognized single-stage filter.
+        return configured > 0 ? configured * SimulatedLatencyMultiplier(provider) : 5.0;
+    }
 
     /// <summary>
-    /// Simulated latency budget for the selected mock scenario. A full-pipeline run sums all
-    /// configured stage delays; a single-stage run budgets only the stage it actually measures
-    /// (the runner filters execution to <c>options.Scenario</c>), so reporting the full-pipeline
-    /// total there would overstate the measured floor. Scenarios without a matching configured
-    /// stage use the mock service's 5 ms fallback delay.
+    /// Whether a run with <paramref name="scenario"/>'s stage filter executes
+    /// <paramref name="stage"/>: the same canonical-name comparison the mock pipeline applies, so
+    /// the budget and the waits a run actually performs cannot drift apart.
     /// </summary>
-    internal static double SimulatedLatencyBudgetMilliseconds(string provider, string? scenario)
+    private static bool ScenarioSelectsStage(string? scenario, string stage)
     {
-        double multiplier = SimulatedLatencyMultiplier(provider);
-        if (string.IsNullOrWhiteSpace(scenario)
-            || scenario.Equals("full-pipeline", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(scenario) ||
+            scenario.Equals("full-pipeline", StringComparison.OrdinalIgnoreCase))
         {
-            return SimulatedStageDelayTable.Sum(stage => stage.Milliseconds) * multiplier;
+            return true;
         }
 
-        string canonicalScenario = MockDubbingPipelineServices.CanonicalBenchmarkStage(scenario);
-        double? stageMilliseconds = SimulatedStageDelayTable
-            .Where(stage => MockDubbingPipelineServices.CanonicalBenchmarkStage(stage.Stage).Equals(
-                canonicalScenario, StringComparison.OrdinalIgnoreCase))
-            .Select(stage => (double?)stage.Milliseconds)
-            .FirstOrDefault();
-
-        // The mock service waits its 5 ms fallback for a stage with no configured delay,
-        // unscaled by provider, so the budget is flat there too.
-        return stageMilliseconds is double milliseconds ? milliseconds * multiplier : 5.0;
+        return MockDubbingPipelineServices.CanonicalBenchmarkStage(scenario)
+            .Equals(MockDubbingPipelineServices.CanonicalBenchmarkStage(stage), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
