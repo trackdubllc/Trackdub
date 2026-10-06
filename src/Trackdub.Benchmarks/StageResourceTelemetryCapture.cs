@@ -16,11 +16,27 @@ public sealed class StageResourceTelemetryCapture(
     IWorkingSetSampler? workingSetSampler = null,
     TimeSpan? workingSetSamplingInterval = null) : IProgress<PipelineProgressEvent>
 {
+    private readonly IWorkingSetPeakMonitorFactory monitorFactory = new WorkingSetPeakMonitorFactory();
     private readonly object gate = new();
     private readonly Dictionary<string, PendingStage> pending = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> attempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> completed = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<BenchmarkStageResourceTelemetry> samples = [];
+
+    internal StageResourceTelemetryCapture(
+        IResourceTelemetryCollector collector,
+        IResourceTelemetryValidator validator,
+        ResourceTelemetryBounds bounds,
+        string phase,
+        int iteration,
+        IProgress<PipelineProgressEvent>? timing,
+        IWorkingSetSampler? workingSetSampler,
+        TimeSpan? workingSetSamplingInterval,
+        IWorkingSetPeakMonitorFactory monitorFactory)
+        : this(collector, validator, bounds, phase, iteration, timing, workingSetSampler, workingSetSamplingInterval)
+    {
+        this.monitorFactory = monitorFactory ?? throw new ArgumentNullException(nameof(monitorFactory));
+    }
 
     public void Report(PipelineProgressEvent value)
     {
@@ -38,9 +54,9 @@ public sealed class StageResourceTelemetryCapture(
                 int attempt = attempts.GetValueOrDefault(value.StageKey) + 1;
                 attempts[value.StageKey] = attempt;
                 ResourceUsageSnapshot snapshot = Capture();
-                WorkingSetPeakMonitor? peakMonitor = workingSetSampler is null
+                IWorkingSetPeakMonitor? peakMonitor = workingSetSampler is null
                     ? null
-                    : new WorkingSetPeakMonitor(workingSetSampler, snapshot.WorkingSetBytes, workingSetSamplingInterval);
+                    : monitorFactory.Create(workingSetSampler, snapshot.WorkingSetBytes, workingSetSamplingInterval);
                 pending[value.StageKey] = new(value.StageName, attempt, snapshot, peakMonitor);
                 completed.Remove(value.StageKey);
             }
@@ -187,8 +203,7 @@ public sealed class StageResourceTelemetryCapture(
         {
             return collector.Capture();
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or NotSupportedException or
-            UnauthorizedAccessException or InvalidOperationException or IOException)
+        catch (Exception ex) when (TelemetryExceptionFilters.IsCollectorSamplingFailure(ex))
         {
             string reason = $"Resource sampling unavailable ({ex.GetType().Name}).";
             return new()
@@ -205,6 +220,6 @@ public sealed class StageResourceTelemetryCapture(
         string Name,
         int Attempt,
         ResourceUsageSnapshot Snapshot,
-        WorkingSetPeakMonitor? PeakMonitor = null,
+        IWorkingSetPeakMonitor? PeakMonitor = null,
         int Depth = 1);
 }

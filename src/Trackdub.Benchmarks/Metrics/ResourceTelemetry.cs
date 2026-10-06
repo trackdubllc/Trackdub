@@ -64,7 +64,7 @@ public static class ResourceTelemetry
         {
             return CaptureProcess();
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or NotSupportedException or InvalidOperationException)
+        catch (Exception ex) when (TelemetryExceptionFilters.IsProcessCaptureFailure(ex))
         {
             return null;
         }

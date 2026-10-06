@@ -6,7 +6,7 @@ namespace Trackdub.Benchmarks;
 /// Samples process working set during an interval. The peak is sampled at a finite cadence,
 /// so excursions shorter than the interval can still be missed.
 /// </summary>
-internal sealed class WorkingSetPeakMonitor
+internal sealed class WorkingSetPeakMonitor : IWorkingSetPeakMonitor
 {
     private readonly IWorkingSetSampler sampler;
     private readonly TimeSpan interval;
@@ -103,13 +103,7 @@ internal sealed class WorkingSetPeakMonitor
             }
             while (Interlocked.CompareExchange(ref peakBytes, sample, observed) != observed);
         }
-        catch (Exception exception) when (
-            exception is ObjectDisposedException or
-                         InvalidOperationException or
-                         NotSupportedException or
-                         System.ComponentModel.Win32Exception or
-                         UnauthorizedAccessException or
-                         System.Security.SecurityException)
+        catch (Exception exception) when (TelemetryExceptionFilters.IsWorkingSetSamplingFailure(exception))
         {
             // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
             Volatile.Write(ref unavailableReason,

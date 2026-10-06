@@ -303,7 +303,8 @@ public static class SeparationEvalRunner
         CancellationToken cancellationToken)
     {
         long before = 0;
-        WorkingSetPeakMonitor? monitor = null;
+        IWorkingSetPeakMonitor? monitor = null;
+        var monitorFactory = new WorkingSetPeakMonitorFactory();
         var clock = Stopwatch.StartNew();
         try
         {
@@ -319,7 +320,7 @@ public static class SeparationEvalRunner
                 RequirePreferredExecutionProvider: provider is not null);
 
             before = sampler.CaptureWorkingSetBytes();
-            monitor = new WorkingSetPeakMonitor(sampler, before);
+            monitor = monitorFactory.Create(sampler, before);
             StemSeparationResult separated = await engine.SeparateAsync(request, progress: null, cancellationToken)
                 .ConfigureAwait(false);
             clock.Stop();
@@ -391,7 +392,7 @@ public static class SeparationEvalRunner
         string? provider,
         long before,
         Stopwatch clock,
-        WorkingSetPeakMonitor? monitor,
+        IWorkingSetPeakMonitor? monitor,
         Exception exception)
     {
         clock.Stop();

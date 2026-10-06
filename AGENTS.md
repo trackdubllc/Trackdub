@@ -77,6 +77,7 @@ dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 - Do not run BDN on pull-request CI. CPU runs are manually/nightly triggered; real-model ONNX and saved-commit comparisons are opt-in through `.github/workflows/benchmark-dotnet.yml`.
 - Use `scripts/ci/run_benchmarkdotnet_baseline.py` for saved-commit comparisons; compare like-for-like benchmark names and keep threshold results separate from correctness tests.
 - Benchmark evidence docs: `docs/development/benchmark-evidence.md`. BDN usage: `docs/benchmarks/benchmarkdotnet.md` and `src/Trackdub.Benchmarks.Micro/README.md`.
+- Harness seams (see `src/Trackdub.Benchmarks/README.md`): create peak monitors only through `IWorkingSetPeakMonitorFactory`; parse shared `controlled`/`controlled-matrix` options only through `ControlledBenchmarkCliBinder`; swallow telemetry sampling failures only through a named `TelemetryExceptionFilters` predicate. Do not duplicate or widen these.
 
 ## Inference Session Pool & Memory Admission
 - ONNX session memory admission is enabled by default in `SharedPoolOptions` / `InferenceSessionPool` (4096 MiB per accelerator device, 4096 MiB shared host RAM).
