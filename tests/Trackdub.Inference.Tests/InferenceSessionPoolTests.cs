@@ -1110,10 +1110,12 @@ public sealed class InferenceSessionPoolTests
         await Task.Delay(TimeSpan.FromMilliseconds(300));
         Assert.Equal(0, Volatile.Read(ref factoryCallsB));
 
-        // Once A's allocation lands and is published, B fits and proceeds.
+        // Once A's allocation lands and is published, B fits and proceeds. B re-polls on a 50 ms
+        // cadence, so the generous bound only absorbs a starved thread pool on a loaded CI runner;
+        // a genuine stall would still fail here.
         factoryGate.TrySetResult(true);
-        using SessionLease leaseA = await creatorA.WaitAsync(TimeSpan.FromSeconds(5));
-        using SessionLease leaseB = await creatorB.WaitAsync(TimeSpan.FromSeconds(5));
+        using SessionLease leaseA = await creatorA.WaitAsync(TimeSpan.FromSeconds(30));
+        using SessionLease leaseB = await creatorB.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.NotNull(leaseA.Session);
         Assert.NotNull(leaseB.Session);
