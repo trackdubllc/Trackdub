@@ -66,6 +66,7 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
         }
 
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
+        LogModelProvenance(plan, modelRootPath);
         EnsureGenAiModelRoot(modelRootPath);
         LogModelProvenance(plan, modelRootPath);
 
@@ -135,6 +136,7 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
         }
 
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
+        LogModelProvenance(plan, modelRootPath);
         EnsureGenAiModelRoot(modelRootPath);
         LogModelProvenance(plan, modelRootPath);
 
