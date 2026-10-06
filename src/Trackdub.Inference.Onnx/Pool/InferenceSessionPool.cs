@@ -1595,7 +1595,14 @@ internal sealed class InferenceSessionPool : IDisposable
                     {
                         throw new InvalidOperationException(
                             $"Accelerator admission for '{DescribeBucket(bucket)}' needs ~{needMb} MB, but this "
-                            + $"process already holds ~{observation?.TotalMb} MB of dedicated GPU memory outside "
+                        long attributedMb = ObservedProcessGpuUsageMb(bucket, observation);
+                        throw new InvalidOperationException(
+                            $"Accelerator admission for '{DescribeBucket(bucket)}' needs ~{needMb} MB, but ~{attributedMb} MB "
+                            + "of dedicated GPU memory is attributed to this bucket against a budget of "
+                            + $"{BudgetFor(bucket)} MB, with no evictable sessions or external reservations left to "
+                            + "free. Free GPU memory, raise the budget "
+                            + $"({SharedPoolOptions.BudgetMbVariable}), or opt out of process-GPU admission "
+                            + $"({SharedPoolOptions.ProcessGpuAdmissionVariable}=0).");
                             + $"the pool's reservations against a budget of {BudgetFor(bucket)} MB, with no evictable "
                             + "sessions or external reservations left to free. Free GPU memory, raise the budget "
                             + $"({SharedPoolOptions.BudgetMbVariable}), or opt out of process-GPU admission "
