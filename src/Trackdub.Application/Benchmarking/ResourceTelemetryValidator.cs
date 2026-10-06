@@ -196,7 +196,10 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
                 return new(metric, ResourceTelemetryStatus.Failed, known.Value, maximum,
                     "Available endpoint exceeds the configured upper bound; the other endpoint is unavailable.");
             }
-            return Unavailable(metric, maximum, !start.HasValue ? startReason : endReason,
+            // Prefer whichever endpoint explains the gap: a missing start with no reason of its
+            // own must not drop the end snapshot's unavailable reason.
+            string? reason = !start.HasValue ? startReason ?? endReason : endReason;
+            return Unavailable(metric, maximum, reason,
                 "Byte counter sample unavailable.", unavailableStatus);
         }
         if (cumulative && end.Value < start.Value)

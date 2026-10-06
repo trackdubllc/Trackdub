@@ -10,10 +10,12 @@ namespace Trackdub.Benchmarks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The reported capacity comes from the same device enumeration the run's own pre-flight uses
-/// (<see cref="ResourceBoundsPreflight"/>), so the banner and the pre-flight cannot disagree about
-/// whether a floor is reachable. The banner is diagnostic only: an enumeration failure leaves the
-/// capacity unknown and never changes the run's outcome, exactly like the pre-flight.
+/// The banner builds its own enumerator through <c>DeviceEnumeratorFactory.Create</c>, while the
+/// run's pre-flight (<see cref="ResourceBoundsPreflight"/>) resolves <c>IDeviceEnumerator</c> from
+/// the host container. Both use the same platform enumerator in production, but a host that
+/// replaces the container registration (tests, mock configurators) makes them observe the host
+/// independently, so the two can disagree. The banner is diagnostic only: an enumeration failure
+/// leaves the capacity unknown and never changes the run's outcome, exactly like the pre-flight.
 /// </para>
 /// <para>
 /// Device enumeration here has no OpenVINO runtime to probe, so NPU entries that depend on it are
@@ -37,7 +39,7 @@ internal static class HostCapacityBanner
                 .GetDevicesAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // Diagnostic only: the run's pre-flight treats an unenumerable host as an unknown
             // capacity, and this banner must not turn that into a failure.
@@ -101,8 +103,8 @@ internal static class HostCapacityBanner
 
         long capacityMb = ResourceBoundsPreflight.EffectiveVideoMemoryMb(devices);
         lines.Add(capacityMb > 0
-            ? $"  Effective VRAM capacity: {capacityMb} MB - the largest adapter's dedicated plus "
-                + "shared memory, which --min-available-vram-mb is checked against."
+            ? $"  Effective VRAM capacity: {capacityMb} MB - the sampled adapter's local-segment "
+                + "memory, which --min-available-vram-mb is checked against."
             : "  Effective VRAM capacity: unknown - no GPU adapter reported memory.");
 
         lines.Add(DescribeBoundFeasibility(bounds, capacityMb));

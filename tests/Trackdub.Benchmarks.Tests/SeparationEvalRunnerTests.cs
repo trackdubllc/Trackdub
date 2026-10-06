@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using Trackdub.Benchmarks;
 using Trackdub.Contracts.Benchmarking;

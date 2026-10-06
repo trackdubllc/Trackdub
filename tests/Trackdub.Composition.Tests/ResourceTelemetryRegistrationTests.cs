@@ -8,6 +8,14 @@ using Trackdub.Inference.Onnx.Pool;
 
 namespace Trackdub.Composition.Tests;
 
+/// <summary>
+/// Hosts bind a process-wide reader to the shared pool, so these tests must not run in parallel
+/// with other collections that create hosts.
+/// </summary>
+[CollectionDefinition(nameof(ResourceTelemetryRegistrationTests), DisableParallelization = true)]
+public sealed class ResourceTelemetryRegistrationCollection;
+
+[Collection(nameof(ResourceTelemetryRegistrationTests))]
 public sealed class ResourceTelemetryRegistrationTests
 {
     [Fact]
@@ -55,16 +63,25 @@ public sealed class ResourceTelemetryRegistrationTests
     [Fact]
     public void Headless_binds_the_process_gpu_reader_to_shared_pool_admission()
     {
+        // Creating the host is what hands its reader to the shared session pool, so accelerator
+        // admission accounts for this process's real dedicated GPU footprint instead of only the
+        // pool's own reservations. Resolving the reader alone must not bind anything.
         var services = new ServiceCollection();
         services.AddHeadlessTrackdub();
-        using var provider = services.BuildServiceProvider();
+        using (var provider = services.BuildServiceProvider())
+        {
+            _ = provider.GetRequiredService<IProcessGpuMemoryReader>();
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+        }
 
-        // Creating the host's reader is what hands it to the shared session pool, so accelerator
-        // admission accounts for this process's real dedicated GPU footprint instead of only the
-        // pool's own reservations.
-        IProcessGpuMemoryReader reader = provider.GetRequiredService<IProcessGpuMemoryReader>();
+        // Capture the ambient binding before this test registers its own host, so the
+        // finally restores exactly what was there instead of unconditionally clearing a
+        // reader a previous test or host bound.
+        IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
+        using var host = HeadlessDubbingHost.Create();
         try
         {
+            IProcessGpuMemoryReader reader = host.Services.GetRequiredService<IProcessGpuMemoryReader>();
 #if WINDOWS
             Assert.Same(reader, SharedPoolOptions.ProcessGpuMemoryReader);
 #else
@@ -74,7 +91,45 @@ public sealed class ResourceTelemetryRegistrationTests
         }
         finally
         {
-            SharedPoolOptions.UseProcessGpuMemoryReader(null);
+            SharedPoolOptions.UseProcessGpuMemoryReader(previous);
+        }
+    }
+
+    [Fact]
+    public void Headless_host_dispose_releases_only_its_own_pool_binding()
+    {
+        IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
+        using var first = HeadlessDubbingHost.Create();
+        using var second = HeadlessDubbingHost.Create();
+        try
+        {
+#if WINDOWS
+            // The latest host wins the process-wide registration.
+            Assert.Same(
+                second.Services.GetRequiredService<IProcessGpuMemoryReader>(),
+                SharedPoolOptions.ProcessGpuMemoryReader);
+
+            // Disposing the older host must not tear down the newer host's registration.
+            first.Dispose();
+            Assert.Same(
+                second.Services.GetRequiredService<IProcessGpuMemoryReader>(),
+                SharedPoolOptions.ProcessGpuMemoryReader);
+
+            // Disposing the owning host clears the binding instead of leaking a stale reader
+            // into later hosts and tests in the same process.
+            second.Dispose();
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+#else
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+            first.Dispose();
+            second.Dispose();
+#endif
+        }
+        finally
+        {
+            first.Dispose();
+            second.Dispose();
+            SharedPoolOptions.UseProcessGpuMemoryReader(previous);
         }
     }
 

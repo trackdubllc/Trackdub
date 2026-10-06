@@ -38,9 +38,16 @@ admission.
 What the observation means in practice:
 
 - A process already at or above the accelerator budget admits no new accelerator session until its
-  real usage drains. Idle pooled sessions are evicted first, and the wait is re-evaluated every
-  50 ms, so a genuine release unblocks the caller; the caller's cancellation token remains the
-  escape hatch, exactly as for an exhausted reservation budget.
+  real usage drains. Idle pooled sessions are evicted first — bounded by what eviction can
+  achieve, since evicting cannot lower the observation snapshot — and the wait is re-evaluated
+  every 50 ms, so a genuine release unblocks the caller. When the reservation total fits but the
+  observation alone still blocks with nothing left to free, the wait fails fast (after ~5 s of
+  continuous stall) with a diagnostic naming the bucket, the observed footprint, and the budget,
+  instead of parking until the caller cancels; the caller's cancellation token remains an escape
+  hatch throughout, exactly as for an exhausted reservation budget.
+- In-flight creates hold a pending reservation but have not allocated yet, so the process reading
+  cannot contain them: pending reservations are charged on top of the observed floor, keeping
+  concurrent admissions from overshooting the device budget.
 - The reading is process-wide and cannot be attributed to an adapter, so it is conservative on a
   multi-GPU host: only the reservations the pool's *other* devices already explain are subtracted.
 - Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) are never charged with it.

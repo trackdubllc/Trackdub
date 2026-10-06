@@ -96,6 +96,15 @@ public static class SharedPoolOptions
     public static void UseProcessGpuMemoryReader(IProcessGpuMemoryReader? reader) =>
         Volatile.Write(ref processGpuMemoryReader, reader);
 
+    /// <summary>
+    /// Clears the shared pool's process-GPU observation only while it still references
+    /// <paramref name="expected"/>, atomically. A host disposing while another host registers
+    /// must never tear down the newer registration.
+    /// </summary>
+    /// <returns><see langword="true"/> when the binding was cleared.</returns>
+    public static bool TryClearProcessGpuMemoryReader(IProcessGpuMemoryReader? expected) =>
+        ReferenceEquals(Interlocked.CompareExchange(ref processGpuMemoryReader, null, expected), expected);
+
     internal static bool ReadAdmissionFlag(string variable)
         => ParseAdmissionFlag(Environment.GetEnvironmentVariable(variable));
 

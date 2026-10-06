@@ -133,16 +133,20 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         // Sanitize the resource bounds against this host's real adapter capacity before anything is
         // measured. A free-VRAM floor above the video memory the host can address is physically
         // impossible: rejecting it here keeps the run from burning a full benchmark only to report
-        // a bound the hardware could never have met.
-        long totalVideoMemoryMb = await ResourceBoundsPreflight
-            .QueryTotalVideoMemoryMbAsync(context.Host.Services, cancellationToken)
-            .ConfigureAwait(false);
-        if (ResourceBoundsPreflight.DescribeImpossibleBound(
-                options.ResourceTelemetryBounds, totalVideoMemoryMb) is string impossibleBound)
+        // a bound the hardware could never have met. Skip the query when no floor is configured
+        // to avoid pre-warming device discovery and altering cold-run measurements.
+        if (options.ResourceTelemetryBounds.MinAvailableVramMb > 0)
         {
-            context.Status = BenchmarkEvidenceStatus.Failed;
-            context.Reason = impossibleBound;
-            throw new PreparationIncompleteException();
+            long totalVideoMemoryMb = await ResourceBoundsPreflight
+                .QueryTotalVideoMemoryMbAsync(context.Host.Services, cancellationToken)
+                .ConfigureAwait(false);
+            if (ResourceBoundsPreflight.DescribeImpossibleBound(
+                    options.ResourceTelemetryBounds, totalVideoMemoryMb) is string impossibleBound)
+            {
+                context.Status = BenchmarkEvidenceStatus.Failed;
+                context.Reason = impossibleBound;
+                throw new PreparationIncompleteException();
+            }
         }
     }
 
@@ -752,18 +756,23 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         // report costs no extra process sample.
         BenchmarkStageResourceTelemetry? lastMeasured = resourceTelemetry
             .LastOrDefault(sample => sample.Phase == "measured");
-        memory["availableVramMb"] = lastMeasured is null
-            ? null
-            : (long?)lastMeasured.Validation.Checks
-                .FirstOrDefault(check => check.Metric == "availableVramMb")?.ObservedValue;
+        memory["availableVramMb"] = MetricValue(lastMeasured, "availableVramMb");
 
         // The process-isolated counterpart of the adapter-wide reading above: how much dedicated
         // GPU memory this process itself held, which other processes on the adapter cannot move.
-        memory["gpuBytes"] = lastMeasured is null
-            ? null
-            : (long?)lastMeasured.Validation.Checks
-                .FirstOrDefault(check => check.Metric == "gpuBytes")?.ObservedValue;
+        memory["gpuBytes"] = MetricValue(lastMeasured, "gpuBytes");
     }
+
+    /// <summary>
+    /// The validated value of <paramref name="metric"/> on the last measured sample, or null
+    /// when no stage was measured. Both GPU metrics share this lookup so additional metrics
+    /// cannot introduce divergent null or conversion behavior.
+    /// </summary>
+    private static long? MetricValue(BenchmarkStageResourceTelemetry? sample, string metric) =>
+        sample is null
+            ? null
+            : (long?)sample.Validation.Checks
+                .FirstOrDefault(check => check.Metric == metric)?.ObservedValue;
 
     private static void EnsureMeasuredTelemetry(
         List<BenchmarkStageResourceTelemetry> resourceTelemetry, string? stage, string? reason)

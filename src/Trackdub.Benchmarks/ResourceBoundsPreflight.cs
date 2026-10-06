@@ -18,11 +18,17 @@ namespace Trackdub.Benchmarks;
 /// run, and recording the bound in evidence implies the hardware could have met it.
 /// </para>
 /// <para>
-/// The ceiling compared against is per adapter and covers dedicated plus shared video memory: on
-/// WDDM an adapter's budget includes a share of system memory, so a floor above dedicated VRAM
-/// alone is still satisfiable and must not be rejected. An unknown capacity — no GPU adapter, a
-/// host that cannot enumerate devices, a failed enumeration — skips the check rather than
-/// guessing, so the pre-flight only ever rejects a bound it can prove impossible.
+/// The ceiling compared against is the sampled adapter's local-segment memory: the telemetry
+/// reading the floor is checked against (<c>availableVramMb</c>) is DXGI local-segment
+/// headroom (<c>Budget - CurrentUsage</c> for <c>DXGI_MEMORY_SEGMENT_GROUP_LOCAL</c>) on the
+/// adapter the run samples (device index 0 in every current registration), so the ceiling must
+/// come from that same adapter and segment. On a discrete GPU the local segment is the board's
+/// dedicated VRAM; on an integrated GPU the local segment also spans the shared system memory
+/// the adapter addresses, so shared memory counts there. A floor above dedicated VRAM alone is
+/// still satisfiable on an integrated adapter and must not be rejected. An unknown capacity —
+/// no GPU adapter, a host that cannot enumerate devices, a failed enumeration, or a sampled
+/// adapter that is no longer enumerated — skips the check rather than guessing, so the
+/// pre-flight only ever rejects a bound it can prove impossible.
 /// </para>
 /// <para>
 /// The remaining bounds are maxima. A ceiling above the host's capacity is vacuous rather than
@@ -33,9 +39,17 @@ namespace Trackdub.Benchmarks;
 internal static class ResourceBoundsPreflight
 {
     /// <summary>
-    /// Total addressable video memory, in MB, of the host's most capable GPU adapter: its
-    /// dedicated plus shared memory. Returns 0 when the host cannot report a GPU adapter, which
-    /// callers read as "capacity unknown".
+    /// Device index the telemetry <c>availableVramMb</c> reading is sampled from. Every current
+    /// <c>IAvailableVramReader</c> registration samples device index 0, so the pre-flight ceiling
+    /// must come from that same adapter.
+    /// </summary>
+    private const int SampledDeviceIndex = 0;
+
+    /// <summary>
+    /// Total addressable video memory, in MB, of the sampled GPU adapter's local memory segment:
+    /// dedicated VRAM on a discrete GPU, dedicated plus shared memory on an integrated GPU.
+    /// Returns 0 when the host cannot report a GPU adapter, which callers read as
+    /// "capacity unknown".
     /// </summary>
     internal static async Task<long> QueryTotalVideoMemoryMbAsync(
         IServiceProvider? hostServices,
@@ -66,27 +80,32 @@ internal static class ResourceBoundsPreflight
 
     /// <summary>
     /// The effective video-memory capacity, in MB, that a per-adapter bound is measured against:
-    /// the largest GPU adapter's dedicated plus shared memory. Returns 0 when no GPU adapter
-    /// reports memory, which callers read as "capacity unknown".
+    /// the sampled adapter's local-segment memory (see the class remarks for why the segment
+    /// matters). Returns 0 when no GPU adapter reports memory, which callers read as
+    /// "capacity unknown".
     /// </summary>
     internal static long EffectiveVideoMemoryMb(IReadOnlyList<DeviceEntry> devices)
     {
         ArgumentNullException.ThrowIfNull(devices);
 
-        long capacity = 0;
-        foreach (DeviceEntry device in devices)
+        // The telemetry reading the floor is validated against comes from the sampled adapter
+        // (device index 0 in every current registration), not from whichever adapter is
+        // largest: on a multi-GPU host the largest adapter's memory can never satisfy a floor
+        // measured on another adapter's local segment. When the sampled adapter is absent from
+        // the enumeration, the capacity is unknown rather than borrowed from another adapter.
+        DeviceEntry? sampled = devices.FirstOrDefault(device =>
+            device.DeviceIndex == SampledDeviceIndex
+            && device.Kind is (DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu));
+        if (sampled is null)
         {
-            // CPU entries report no video memory, and an NPU's working set is a device-local
-            // estimate rather than the adapter memory `availableVramMb` measures.
-            if (device.Kind is not (DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu))
-            {
-                continue;
-            }
-
-            capacity = Math.Max(capacity, (long)device.DedicatedVramMb + device.SharedMemoryMb);
+            return 0;
         }
 
-        return capacity;
+        // CPU entries report no video memory, and an NPU's working set is a device-local
+        // estimate rather than the adapter memory `availableVramMb` measures.
+        return sampled.Kind == DeviceKind.DiscreteGpu
+            ? sampled.DedicatedVramMb
+            : (long)sampled.DedicatedVramMb + sampled.SharedMemoryMb;
     }
 
     /// <summary>
@@ -105,7 +124,7 @@ internal static class ResourceBoundsPreflight
             return null;
         }
 
-        return $"--min-available-vram-mb {floor} exceeds this host's total video memory of "
+        return $"--min-available-vram-mb {floor} exceeds this host's sampled adapter video memory of "
             + $"{totalVideoMemoryMb} MB, so no run could leave that much VRAM headroom. "
             + "Lower the floor, or run the benchmark on an adapter with more memory.";
     }

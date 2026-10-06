@@ -1,6 +1,8 @@
 using Trackdub.Application.Dubbing;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Contracts;
+using Trackdub.Contracts.Benchmarking;
+using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Infrastructure.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,11 +16,16 @@ public sealed class HeadlessDubbingHost : IDisposable
 {
     private readonly HeadlessDubbingSessionFactory _sessionFactory;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IProcessGpuMemoryReader? _processGpuReader;
 
-    private HeadlessDubbingHost(HeadlessDubbingSessionFactory sessionFactory, IServiceProvider serviceProvider)
+    private HeadlessDubbingHost(
+        HeadlessDubbingSessionFactory sessionFactory,
+        IServiceProvider serviceProvider,
+        IProcessGpuMemoryReader? processGpuReader)
     {
         _sessionFactory = sessionFactory;
         _serviceProvider = serviceProvider;
+        _processGpuReader = processGpuReader;
     }
 
     /// <summary>
@@ -57,7 +64,30 @@ public sealed class HeadlessDubbingHost : IDisposable
         services.AddHeadlessTrackdub(options);
         ServiceProvider serviceProvider = services.BuildServiceProvider();
 
-        return new HeadlessDubbingHost(new HeadlessDubbingSessionFactory(serviceProvider), serviceProvider);
+        // Arm the shared session pool's process-GPU admission explicitly at host construction:
+        // a lazy DI factory would only bind when something happens to resolve the telemetry
+        // reader, leaving normal host paths on reservation-only accounting despite admission
+        // being default-on, and a host-provided reader override would bypass the factory
+        // entirely. Resolving here also pays the performance-counter warm-up during setup
+        // rather than inside a measured stage. Best-effort: telemetry must never fail host
+        // creation.
+        IProcessGpuMemoryReader? processGpuReader = null;
+#if WINDOWS
+        try
+        {
+            processGpuReader = serviceProvider.GetService<IProcessGpuMemoryReader>();
+            if (processGpuReader is not null)
+            {
+                SharedPoolOptions.UseProcessGpuMemoryReader(processGpuReader);
+            }
+        }
+        catch
+        {
+            processGpuReader = null;
+        }
+#endif
+
+        return new HeadlessDubbingHost(new HeadlessDubbingSessionFactory(serviceProvider), serviceProvider, processGpuReader);
     }
 
     /// <summary>
@@ -90,5 +120,17 @@ public sealed class HeadlessDubbingHost : IDisposable
         (DiagnosticsBundleExporter)_serviceProvider.GetRequiredService<IDiagnosticsBundleExporter>();
 
     /// <inheritdoc />
-    public void Dispose() => _sessionFactory.Dispose();
+    public void Dispose()
+    {
+        // The pool binding is process-wide but was registered by this host: clear it on dispose
+        // only while it still refers to this host's reader, so a later host's registration is
+        // never torn down and later tests never observe a stale reader. The clear is atomic:
+        // a host disposing while another host registers cannot null the newer registration.
+        if (_processGpuReader is not null)
+        {
+            SharedPoolOptions.TryClearProcessGpuMemoryReader(_processGpuReader);
+        }
+
+        _sessionFactory.Dispose();
+    }
 }

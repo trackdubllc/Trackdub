@@ -238,7 +238,7 @@ public sealed class ResourceTelemetryOptionsTests
             MaxCpuPercent = 37.25,
             MaxWorkingSetBytes = 4294967296,
             MaxManagedAllocatedBytes = 123456789012345,
-            MinAvailableVramMb = 512,
+            MinAvailableVramMb = 0,
         };
 
         try

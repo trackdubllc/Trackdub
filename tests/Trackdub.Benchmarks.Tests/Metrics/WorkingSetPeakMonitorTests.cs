@@ -66,10 +66,12 @@ public sealed class WorkingSetPeakMonitorTests
             TimeSpan.FromMilliseconds(25),
             new ScriptedTicker([TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(150)]));
 
-        // Poll the asserted condition itself: the scripted gap lands no earlier than
-        // 150 ms in, and Stop() cancels any tick still in flight, so this cannot overshoot.
+        // Poll the asserted condition itself (the warning), not the scripted 150 ms: Task.Delay
+        // can complete a fraction of a millisecond early, so the measured gap may land just
+        // under 150 ms and a >= 150 ms wait would spin until the timeout. The warning threshold
+        // (4x25 ms) sits well below the scripted gap, and Stop() cancels any tick in flight.
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        while (monitor.MaxObservedTickInterval < TimeSpan.FromMilliseconds(150))
+        while (monitor.SamplingWarning is null)
         {
             await Task.Delay(TimeSpan.FromMilliseconds(5), timeout.Token);
         }
@@ -140,6 +142,7 @@ public sealed class WorkingSetPeakMonitorTests
     private sealed class ScriptedTicker(IEnumerable<TimeSpan> script) : ISamplingTicker
     {
         private readonly Queue<TimeSpan> delays = new(script);
+        private long scriptedTicks;
 
         public async ValueTask<bool> WaitForNextTickAsync(CancellationToken cancellationToken)
         {
@@ -149,9 +152,13 @@ public sealed class WorkingSetPeakMonitorTests
                 return false;
             }
 
-            await Task.Delay(delays.Dequeue(), cancellationToken).ConfigureAwait(false);
+            TimeSpan delay = delays.Dequeue();
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            scriptedTicks += (long)(delay.Ticks * System.Diagnostics.Stopwatch.Frequency / TimeSpan.TicksPerSecond);
             return true;
         }
+
+        public long LastTickTimestamp => scriptedTicks;
 
         public void Dispose()
         {

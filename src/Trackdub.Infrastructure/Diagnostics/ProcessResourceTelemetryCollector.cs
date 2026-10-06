@@ -65,24 +65,11 @@ public sealed class ProcessResourceTelemetryCollector(
     private (long? Value, string? Reason) ReadAvailableVram()
     {
         IAvailableVramReader reader = vramReader ?? DefaultReader;
-        try
-        {
-            long? value = reader.ReadAvailableVramMb();
-            if (value is null)
-            {
-                return (null, reader.UnavailableReason);
-            }
-
-            // A lifted comparison would silently route a null reading down this branch.
-            return value < 0
-                ? (null, "VRAM reader returned a negative reading.")
-                : (value, null);
-        }
-        catch (Exception exception) when (IsPlatformReadFailure(exception) || exception is InvalidOperationException)
-        {
-            // A failing GPU query must degrade the run's evidence, never abort the measurement.
-            return (null, $"Free VRAM measurement unavailable ({exception.GetType().Name}).");
-        }
+        return ReadGpuMetric(
+            reader.ReadAvailableVramMb,
+            () => reader.UnavailableReason,
+            "VRAM reader returned a negative reading.",
+            "Free VRAM measurement unavailable");
     }
 
     private static IAvailableVramReader DefaultReader { get; } = new UnavailableAvailableVramReader();
@@ -95,23 +82,41 @@ public sealed class ProcessResourceTelemetryCollector(
     private (long? Value, string? Reason) ReadProcessGpuMemory()
     {
         IProcessGpuMemoryReader reader = processGpuMemoryReader ?? DefaultProcessGpuReader;
+        return ReadGpuMetric(
+            reader.ReadDedicatedGpuMemoryBytes,
+            () => reader.UnavailableReason,
+            "Process GPU memory reader returned a negative reading.",
+            "Process GPU memory measurement unavailable");
+    }
+
+    /// <summary>
+    /// Shared read-validate-degrade pipeline for GPU metrics: a null reading reports the
+    /// reader's own reason, a negative reading is a defective probe, and a failing query
+    /// degrades the run's evidence instead of aborting the measurement.
+    /// </summary>
+    private static (long? Value, string? Reason) ReadGpuMetric(
+        Func<long?> read,
+        Func<string> unavailableReason,
+        string negativeMessage,
+        string failureMessage)
+    {
         try
         {
-            long? value = reader.ReadDedicatedGpuMemoryBytes();
+            long? value = read();
             if (value is null)
             {
-                return (null, reader.UnavailableReason);
+                return (null, unavailableReason());
             }
 
             // A lifted comparison would silently route a null reading down this branch.
             return value < 0
-                ? (null, "Process GPU memory reader returned a negative reading.")
+                ? (null, negativeMessage)
                 : (value, null);
         }
         catch (Exception exception) when (IsPlatformReadFailure(exception) || exception is InvalidOperationException)
         {
             // A failing GPU query must degrade the run's evidence, never abort the measurement.
-            return (null, $"Process GPU memory measurement unavailable ({exception.GetType().Name}).");
+            return (null, $"{failureMessage} ({exception.GetType().Name}).");
         }
     }
 
