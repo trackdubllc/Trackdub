@@ -8,6 +8,14 @@ using Trackdub.Inference.Onnx.Pool;
 
 namespace Trackdub.Composition.Tests;
 
+/// <summary>
+/// Hosts bind a process-wide reader to the shared pool, so these tests must not run in parallel
+/// with other collections that create hosts.
+/// </summary>
+[CollectionDefinition(nameof(ResourceTelemetryRegistrationTests), DisableParallelization = true)]
+public sealed class ResourceTelemetryRegistrationCollection;
+
+[Collection(nameof(ResourceTelemetryRegistrationTests))]
 public sealed class ResourceTelemetryRegistrationTests
 {
     [Fact]

@@ -210,7 +210,9 @@ public sealed class ResourceBoundsPreflightTests
             // The run is measured as usual (its own resource validation may still fail against
             // live readings — that is a measurement, not a rejected invocation).
             Assert.DoesNotContain(
-                "total video memory", report.Reason ?? string.Empty, StringComparison.Ordinal);
+                "exceeds this host's sampled adapter video memory",
+                report.Reason ?? string.Empty,
+                StringComparison.Ordinal);
             Assert.NotNull(report.TimingsMilliseconds["pipeline"]);
         }
         finally

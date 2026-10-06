@@ -10,10 +10,12 @@ namespace Trackdub.Benchmarks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The reported capacity comes from the same device enumeration the run's own pre-flight uses
-/// (<see cref="ResourceBoundsPreflight"/>), so the banner and the pre-flight cannot disagree about
-/// whether a floor is reachable. The banner is diagnostic only: an enumeration failure leaves the
-/// capacity unknown and never changes the run's outcome, exactly like the pre-flight.
+/// The banner builds its own enumerator through <c>DeviceEnumeratorFactory.Create</c>, while the
+/// run's pre-flight (<see cref="ResourceBoundsPreflight"/>) resolves <c>IDeviceEnumerator</c> from
+/// the host container. Both use the same platform enumerator in production, but a host that
+/// replaces the container registration (tests, mock configurators) makes them observe the host
+/// independently, so the two can disagree. The banner is diagnostic only: an enumeration failure
+/// leaves the capacity unknown and never changes the run's outcome, exactly like the pre-flight.
 /// </para>
 /// <para>
 /// Device enumeration here has no OpenVINO runtime to probe, so NPU entries that depend on it are
