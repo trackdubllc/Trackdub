@@ -66,8 +66,8 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
         }
 
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
-        EnsureGenAiModelRoot(modelRootPath);
         LogModelProvenance(plan, modelRootPath);
+        EnsureGenAiModelRoot(modelRootPath);
 
         GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
             modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
@@ -135,8 +135,8 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
         }
 
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
-        EnsureGenAiModelRoot(modelRootPath);
         LogModelProvenance(plan, modelRootPath);
+        EnsureGenAiModelRoot(modelRootPath);
 
         GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
             modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,

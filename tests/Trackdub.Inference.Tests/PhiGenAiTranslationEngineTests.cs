@@ -20,6 +20,15 @@ public sealed class PhiGenAiTranslationEngineTests
     private const string BundledModelRootRelativePath =
         "phi-3.5-mini-genai/cpu_and_mobile/cpu-int4-awq-block-128-acc-level-4";
 
+    private const string GenAiConfigFileName = "genai_config.json";
+    private const string OnnxGraphFileName =
+        "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx";
+    private const string OnnxGraphDataFileName =
+        "phi-3.5-mini-instruct-cpu-int4-awq-block-128-acc-level-4.onnx.data";
+    private const string TokenizerFileName = "tokenizer.json";
+    private const string SpecialTokensMapFileName = "special_tokens_map.json";
+    private const string TokenizerConfigFileName = "tokenizer_config.json";
+
     /// <summary>
     /// Fixed en→fr fixture used by both tests. The sentences are short and the bundled
     /// genai_config.json decodes greedily (top_k = 1), so the fixture is deterministic.
@@ -31,13 +40,37 @@ public sealed class PhiGenAiTranslationEngineTests
     ];
 
     /// <summary>
+    /// French markers for the fixed fixture sentences. The bundled model decodes greedily
+    /// (top_k = 1), but phrasing still varies with normalization and grammar choices, so the
+    /// tests assert an objective French signal instead of one brittle exact string. Every
+    /// marker only occurs in French, so an English echo or paraphrase fails the check.
+    /// </summary>
+    private static readonly string[] FrenchMarkers =
+    [
+        "Bonjour",
+        "Salut",
+        "comment allez-vous",
+        "ça va",
+        "aujourd",
+        "Le temps",
+        "la météo",
+        "il fait beau"
+    ];
+
+    /// <summary>
     /// Staged once per test class from the bundled model root with <c>config.json</c> removed.
     /// ORT GenAI only needs <c>genai_config.json</c>, but a cache-shaped root proves the engine
     /// does not depend on the Hugging Face config the desktop model cache may not carry.
     /// </summary>
     private static readonly Lazy<string> ConfiglessModelRoot = new(StageConfiglessModelRoot);
 
-    [RequiresBundledModelFact(BundledModelRootRelativePath + "/genai_config.json")]
+    [RequiresBundledModelFact(
+        BundledModelRootRelativePath + "/" + GenAiConfigFileName,
+        BundledModelRootRelativePath + "/" + OnnxGraphFileName,
+        BundledModelRootRelativePath + "/" + OnnxGraphDataFileName,
+        BundledModelRootRelativePath + "/" + TokenizerFileName,
+        BundledModelRootRelativePath + "/" + SpecialTokensMapFileName,
+        BundledModelRootRelativePath + "/" + TokenizerConfigFileName)]
     public async Task PhiGenAiTranslationEngine_ConfiglessModelRoot_TranslatesEnglishToFrench()
     {
         string modelRoot = ConfiglessModelRoot.Value;
@@ -60,8 +93,7 @@ public sealed class PhiGenAiTranslationEngineTests
 
         TranslatedTextSegment segment = Assert.Single(segments);
         Assert.Equal(0, segment.Index);
-        Assert.False(string.IsNullOrWhiteSpace(segment.Text));
-        Assert.NotEqual(FixtureSegments[0].Text, segment.Text);
+        AssertFrenchTranslation(segment.Text);
         Assert.NotNull(engine.LastExecutionSummary);
         Assert.Equal("cpu", engine.LastExecutionSummary!.SelectedProvider);
         Assert.Equal("phi-3.5-mini-genai", engine.LastExecutionSummary.ModelAlias);
@@ -77,7 +109,13 @@ public sealed class PhiGenAiTranslationEngineTests
         Assert.Contains("variant=cpu-int4", provenance, StringComparison.Ordinal);
     }
 
-    [RequiresBundledModelFact(BundledModelRootRelativePath + "/genai_config.json")]
+    [RequiresBundledModelFact(
+        BundledModelRootRelativePath + "/" + GenAiConfigFileName,
+        BundledModelRootRelativePath + "/" + OnnxGraphFileName,
+        BundledModelRootRelativePath + "/" + OnnxGraphDataFileName,
+        BundledModelRootRelativePath + "/" + TokenizerFileName,
+        BundledModelRootRelativePath + "/" + SpecialTokensMapFileName,
+        BundledModelRootRelativePath + "/" + TokenizerConfigFileName)]
     public async Task PhiGenAiTranslationEngine_StreamParity_MatchesBatchPerSegment()
     {
         string modelRoot = ConfiglessModelRoot.Value;
@@ -104,7 +142,7 @@ public sealed class PhiGenAiTranslationEngineTests
         Assert.Equal(batch, streamed.Select(static item => item.Payload).ToArray());
         Assert.Equal(FixtureSegments.Length, streamed.Count);
         Assert.Equal([0L, 1L], streamed.Select(static item => item.Identity.Sequence).ToArray());
-        Assert.All(streamed, static item => Assert.False(string.IsNullOrWhiteSpace(item.Payload.Text)));
+        Assert.All(streamed, item => AssertFrenchTranslation(item.Payload.Text));
         Assert.All(streamed, item =>
         {
             Assert.Equal(runId, item.Identity.RunId);
@@ -113,6 +151,14 @@ public sealed class PhiGenAiTranslationEngineTests
             Assert.Equal(revision, item.Identity.RevisionId);
             Assert.Equal(item.Payload.Index, item.Identity.SegmentIndex);
         });
+    }
+
+    private static void AssertFrenchTranslation(string outputText)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(outputText), "The engine produced an empty translation.");
+        Assert.True(
+            FrenchMarkers.Any(marker => outputText.Contains(marker, StringComparison.OrdinalIgnoreCase)),
+            $"Expected a French translation of the fixture, but generated: '{outputText}'.");
     }
 
     private static PhiGenAiTranslationEngine CreateEngine(
@@ -138,31 +184,49 @@ public sealed class PhiGenAiTranslationEngineTests
     /// Copies the bundled model into a staging directory that mirrors a cache-shaped model root:
     /// the genai_config.json, ONNX weights, and tokenizer files only — never the Hugging Face
     /// <c>config.json</c>/<c>generation_config.json</c>. Staged once per test class because the
-    /// int4 weights are multi-gigabyte, and cleaned up best-effort at process exit because a
-    /// pooled GenAI session can still hold the files open.
+    /// int4 weights are multi-gigabyte. The directory name is unique per process so concurrent
+    /// test hosts (the portable and Windows TFMs, or overlapping test commands) never delete or
+    /// overwrite each other's copies, and a self-deregistering process-exit handler cleans it up
+    /// best-effort because a pooled GenAI session can still hold the files open.
     /// </summary>
     private static string StageConfiglessModelRoot()
     {
         string bundledRoot = Path.GetFullPath(Path.Join(
             TestRepoRootResolver.FindRepoRoot(), "models", BundledModelRootRelativePath));
-        string stagedRoot = Path.Join(Path.GetTempPath(), "trackdub-phi-genai-configless-model");
-        TryDeleteDirectory(stagedRoot);
+        string stagedRoot = Path.Join(
+            Path.GetTempPath(), $"trackdub-phi-genai-configless-model-{Guid.NewGuid():N}");
         Directory.CreateDirectory(stagedRoot);
-        foreach (string sourcePath in Directory.EnumerateFiles(bundledRoot, "*", SearchOption.AllDirectories))
+        try
         {
-            string fileName = Path.GetFileName(sourcePath);
-            if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
-                fileName.Equals("generation_config.json", StringComparison.OrdinalIgnoreCase))
+            foreach (string sourcePath in Directory.EnumerateFiles(bundledRoot, "*", SearchOption.AllDirectories))
             {
-                continue;
-            }
+                string fileName = Path.GetFileName(sourcePath);
+                if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.Equals("generation_config.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
 
-            string destinationPath = Path.Join(stagedRoot, Path.GetRelativePath(bundledRoot, sourcePath));
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            File.Copy(sourcePath, destinationPath);
+                string destinationPath = Path.Join(stagedRoot, Path.GetRelativePath(bundledRoot, sourcePath));
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                File.Copy(sourcePath, destinationPath);
+            }
+        }
+        catch
+        {
+            TryDeleteDirectory(stagedRoot);
+            throw;
         }
 
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => TryDeleteDirectory(stagedRoot);
+        EventHandler cleanupHandler = null!;
+        cleanupHandler = (_, _) =>
+        {
+            // Deregister so the handler never accumulates, then remove this process's own staging
+            // directory (unique per process, so cleanup can never touch another host's copy).
+            AppDomain.CurrentDomain.ProcessExit -= cleanupHandler;
+            TryDeleteDirectory(stagedRoot);
+        };
+        AppDomain.CurrentDomain.ProcessExit += cleanupHandler;
         return stagedRoot;
     }
 
@@ -174,6 +238,7 @@ public sealed class PhiGenAiTranslationEngineTests
         }
         catch (DirectoryNotFoundException)
         {
+            // Best-effort cleanup: the directory may already have been removed.
         }
         catch (IOException)
         {
@@ -181,6 +246,7 @@ public sealed class PhiGenAiTranslationEngineTests
         }
         catch (UnauthorizedAccessException)
         {
+            // Best-effort cleanup: transient file locks or ACLs can block deletion; intentionally ignored.
         }
     }
 
