@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Trackdub.Benchmarks.Reports;
+using Trackdub.Benchmarks.Scenarios;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain.Benchmarking;
 
@@ -8,10 +9,7 @@ namespace Trackdub.Benchmarks.Tests.Metrics;
 
 /// <summary>
 /// Locks the schema-v2 contract's read compatibility with evidence persisted by an older build.
-/// Schema v1 wrote a string-keyed <c>MemoryBytes</c> map that no longer exists on the contract, so
-/// a real v1 file must still load — the unknown map ignored — without corrupting the fields the
-/// typed contract still models. <c>tests/Fixtures/benchmark-evidence-schema-v1.json</c> is that
-/// file, kept byte-for-byte as a v1 build wrote it.
+/// Schema v1 memory measurements remain available to export, comparison, and re-save.
 /// </summary>
 public sealed class SchemaV1EvidenceCompatibilityTests
 {
@@ -43,9 +41,11 @@ public sealed class SchemaV1EvidenceCompatibilityTests
         // The version marker survives verbatim so a reader can still tell the file's age.
         Assert.Equal(1, report.SchemaVersion);
 
-        // The legacy map has no home on the contract; the typed replacements are simply absent.
-        Assert.Null(report.ProcessMemory);
-        Assert.Empty(report.StageGarbageCollection);
+        // Recognized legacy measurements populate the typed fields; the entire map is retained.
+        Assert.Equal(167772160L, report.ProcessMemory!.PeakWorkingSetBytes);
+        Assert.Equal(44040192L, report.ProcessMemory.ManagedAllocatedBytes);
+        Assert.Equal(10485760L, report.LegacyMemoryBytes!["stage:Asr:allocatedBytes"]);
+        Assert.Equal(3L, Assert.Single(report.StageGarbageCollection).Gen0Collections);
 
         // Everything the typed contract still models round-trips from the v1 file.
         Assert.Equal(BenchmarkEvidenceKind.Benchmark, report.Kind);
@@ -96,8 +96,40 @@ public sealed class SchemaV1EvidenceCompatibilityTests
 
         Assert.NotNull(report);
         Assert.Equal(1, report.SchemaVersion);
-        Assert.Null(report.ProcessMemory);
-        Assert.Empty(report.StageGarbageCollection);
+        Assert.Equal(167772160L, report.ProcessMemory!.PeakWorkingSetBytes);
+        Assert.Equal(44040192L, report.ProcessMemory.ManagedAllocatedBytes);
+        Assert.Equal(10485760L, report.LegacyMemoryBytes!["stage:Asr:allocatedBytes"]);
+        Assert.Equal(3L, Assert.Single(report.StageGarbageCollection).Gen0Collections);
         Assert.Equal(240.5, report.TimingsMilliseconds["pipeline"]);
+    }
+    [Fact]
+    public async Task Legacy_memory_survives_export_comparison_and_round_trip()
+    {
+        BenchmarkEvidenceReport report = (await BenchmarkReportExporter.LoadEvidenceJsonAsync(FixturePath))!;
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
+        Assert.Contains("Peak working set", markdown);
+        Assert.DoesNotContain("| Peak working set | � |", markdown);
+        var newer = report with
+        {
+            ProcessMemory = report.ProcessMemory! with { PeakWorkingSetBytes = 200000000L },
+        };
+        var compared = ExecutionProviderMatrixRunner.CompareProviders("asr", "cpu",
+            new Dictionary<string, BenchmarkEvidenceReport> { ["cpu"] = report, ["other"] = newer });
+        Assert.Equal(32227840L, compared.Comparisons.Single(x => x.Provider == "other").PeakWorkingSetDeltaBytes);
+        var restored = JsonSerializer.Deserialize<BenchmarkEvidenceReport>(JsonSerializer.Serialize(report))!;
+        Assert.Equal(report.ProcessMemory, restored.ProcessMemory);
+        Assert.Equal(report.LegacyMemoryBytes!.OrderBy(x => x.Key), restored.LegacyMemoryBytes!.OrderBy(x => x.Key));
+        Assert.Equal(report.StageGarbageCollection.Single(), restored.StageGarbageCollection.Single());
+    }
+
+    [Theory]
+    [InlineData(null, 100L, 200L, 200L)]
+    [InlineData(null, 100L, null, 100L)]
+    [InlineData(null, null, 200L, 200L)]
+    [InlineData(null, null, null, null)]
+    [InlineData(300L, 100L, 200L, 300L)]
+    public void Process_peak_uses_endpoints_only_when_sampling_is_unavailable(long? sampled, long? start, long? end, long? expected)
+    {
+        Assert.Equal(expected, ControlledDubbingBenchmarkRunner.ResolveProcessPeak(sampled, start, end));
     }
 }

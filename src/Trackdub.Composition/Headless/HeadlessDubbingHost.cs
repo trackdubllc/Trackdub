@@ -2,6 +2,7 @@ using Trackdub.Application.Dubbing;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Benchmarking;
+using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Infrastructure.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,15 +17,18 @@ public sealed class HeadlessDubbingHost : IDisposable
     private readonly HeadlessDubbingSessionFactory _sessionFactory;
     private readonly IServiceProvider _serviceProvider;
     private readonly IProcessGpuMemoryReader? _processGpuReader;
+    private readonly IReadOnlyDictionary<int, long>? _adapterLuidMap;
 
     private HeadlessDubbingHost(
         HeadlessDubbingSessionFactory sessionFactory,
         IServiceProvider serviceProvider,
-        IProcessGpuMemoryReader? processGpuReader)
+        IProcessGpuMemoryReader? processGpuReader,
+        IReadOnlyDictionary<int, long>? adapterLuidMap)
     {
         _sessionFactory = sessionFactory;
         _serviceProvider = serviceProvider;
         _processGpuReader = processGpuReader;
+        _adapterLuidMap = adapterLuidMap;
     }
 
     /// <summary>
@@ -70,10 +74,27 @@ public sealed class HeadlessDubbingHost : IDisposable
         // entirely. Resolving here also pays the performance-counter warm-up during setup
         // rather than inside a measured stage. Best-effort: telemetry must never fail host
         // creation.
-        IProcessGpuMemoryReader? processGpuReader =
-            HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(serviceProvider);
+        IProcessGpuMemoryReader? processGpuReader = null;
+        IReadOnlyDictionary<int, long>? adapterLuidMap = null;
+#if WINDOWS
+        try
+        {
+            processGpuReader = serviceProvider.GetService<IProcessGpuMemoryReader>();
+            if (processGpuReader is not null)
+            {
+                SharedPoolOptions.UseProcessGpuMemoryReader(processGpuReader);
+            }
 
-        return new HeadlessDubbingHost(new HeadlessDubbingSessionFactory(serviceProvider), serviceProvider, processGpuReader);
+            adapterLuidMap = HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(serviceProvider);
+        }
+        catch
+        {
+            processGpuReader = null;
+            adapterLuidMap = null;
+        }
+#endif
+
+        return new HeadlessDubbingHost(new HeadlessDubbingSessionFactory(serviceProvider), serviceProvider, processGpuReader, adapterLuidMap);
     }
 
     /// <summary>
@@ -108,11 +129,20 @@ public sealed class HeadlessDubbingHost : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        // The pool binding is process-wide but was registered by this host: clear it on dispose
-        // only while it still refers to this host's reader, so a later host's registration is
-        // never torn down and later tests never observe a stale reader. The clear is atomic:
-        // a host disposing while another host registers cannot null the newer registration.
-        HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(_processGpuReader);
+        // The pool bindings are process-wide but were registered by this host: clear them on
+        // dispose only while they still refer to this host's registrations, so a later host's
+        // registrations are never torn down and later tests never observe stale state. The
+        // clears are atomic: a host disposing while another host registers cannot null the
+        // newer registrations.
+        if (_processGpuReader is not null)
+        {
+            SharedPoolOptions.TryClearProcessGpuMemoryReader(_processGpuReader);
+        }
+
+        if (_adapterLuidMap is not null)
+        {
+            SharedPoolOptions.TryClearAdapterLuidMap(_adapterLuidMap);
+        }
 
         _sessionFactory.Dispose();
     }

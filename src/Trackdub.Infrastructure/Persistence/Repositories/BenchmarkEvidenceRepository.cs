@@ -145,6 +145,7 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
         Configuration = report.Configuration.ToDictionary(x => Scrub(x.Key)!, x => Scrub(x.Value)!),
         RuntimeVersions = report.RuntimeVersions.ToDictionary(x => Scrub(x.Key)!, x => Scrub(x.Value)!),
         TimingsMilliseconds = report.TimingsMilliseconds.ToDictionary(x => Scrub(x.Key)!, x => x.Value),
+        LegacyMemoryBytes = report.LegacyMemoryBytes?.ToDictionary(x => Scrub(x.Key)!, x => x.Value),
         StageGarbageCollection = report.StageGarbageCollection.Select(entry => entry with
         {
             Stage = Scrub(entry.Stage)!,

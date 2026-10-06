@@ -122,23 +122,24 @@ public sealed class BenchmarkEvidenceRepositoryTests
             string fixture = Path.Join(AppContext.BaseDirectory, "Fixtures", "benchmark-evidence-schema-v1.json");
             File.Copy(fixture, Path.Join(reportsDirectory, $"{runId:N}.json"), overwrite: true);
 
-            // A report written by a v1 build still loads: the retired MemoryBytes map is ignored
-            // and the fields the typed contract still models come through intact.
+            // Legacy measurements remain available through both the original map and typed fields.
             BenchmarkEvidenceReport loaded = Assert.IsType<BenchmarkEvidenceReport>(
                 await repository.GetAsync(runId));
             Assert.Equal(1, loaded.SchemaVersion);
-            Assert.Null(loaded.ProcessMemory);
-            Assert.Empty(loaded.StageGarbageCollection);
+            Assert.Equal(167772160L, loaded.ProcessMemory!.PeakWorkingSetBytes);
+            Assert.Equal(44040192L, loaded.ProcessMemory.ManagedAllocatedBytes);
+            Assert.Equal(10485760L, loaded.LegacyMemoryBytes!["stage:Asr:allocatedBytes"]);
+            Assert.Equal(3L, Assert.Single(loaded.StageGarbageCollection).Gen0Collections);
             Assert.Equal(240.5, loaded.TimingsMilliseconds["pipeline"]);
             Assert.Equal("Asr", Assert.Single(loaded.Stages).Name);
 
-            // Saving it back is accepted: schema-v1 evidence stays savable, and its version is
-            // preserved. The retired MemoryBytes map was already dropped on read, so it is not
-            // written back; everything the typed contract models round-trips.
+            // Saving a v1 report preserves its version and every legacy measurement.
             await repository.SaveAsync(loaded);
             BenchmarkEvidenceReport reloaded = Assert.IsType<BenchmarkEvidenceReport>(
                 await repository.GetAsync(runId));
             Assert.Equal(1, reloaded.SchemaVersion);
+            Assert.Equal(loaded.ProcessMemory, reloaded.ProcessMemory);
+            Assert.Equal(loaded.LegacyMemoryBytes!.OrderBy(x => x.Key), reloaded.LegacyMemoryBytes!.OrderBy(x => x.Key));
             Assert.Equal(240.5, reloaded.TimingsMilliseconds["pipeline"]);
 
             // Versions outside the supported set are still refused.

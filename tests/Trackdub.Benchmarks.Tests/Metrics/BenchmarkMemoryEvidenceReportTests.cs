@@ -134,11 +134,11 @@ public sealed class BenchmarkMemoryEvidenceReportTests
         Assert.NotNull(deserialized);
         Assert.Equal(2, deserialized.SchemaVersion);
         Assert.Equal(original.ProcessMemory!.PeakWorkingSetBytes, deserialized.ProcessMemory!.PeakWorkingSetBytes);
-        Assert.Equal(original.ProcessMemory.ManagedAllocatedBytes, deserialized.ProcessMemory.ManagedAllocatedBytes);
+        Assert.Equal(original.ProcessMemory, deserialized.ProcessMemory);
 
         Assert.Equal(original.StageGarbageCollection.Count, deserialized.StageGarbageCollection.Count);
         BenchmarkStageGarbageCollectionTelemetry restored = Assert.Single(deserialized.StageGarbageCollection);
         Assert.Equal("Asr", restored.Stage);
-        Assert.Equal(3L, restored.Gen0Collections);
+        Assert.Equal(original.StageGarbageCollection.Single(), restored);
     }
 }

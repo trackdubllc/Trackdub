@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Trackdub.Domain.Benchmarking;
 
 namespace Trackdub.Contracts.Benchmarking;
@@ -24,6 +25,14 @@ public sealed record BenchmarkEvidenceStage
 /// <summary>Portable, path-free evidence. Durations are measured with a monotonic clock when available.</summary>
 public sealed record BenchmarkEvidenceReport
 {
+    private BenchmarkProcessMemoryTelemetry? processMemory;
+    private IReadOnlyList<BenchmarkStageGarbageCollectionTelemetry>? stageGarbageCollection;
+
+    /// <summary>Schema-v1 memory evidence retained only for compatibility with persisted reports.</summary>
+    [JsonPropertyName("MemoryBytes")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyDictionary<string, long?>? LegacyMemoryBytes { get; init; }
+
     /// <summary>
     /// Evidence schema version. Bumped to 2 when the legacy string-keyed
     /// <c>MemoryBytes</c> map was replaced by the typed <see cref="ProcessMemory"/> and
@@ -54,13 +63,51 @@ public sealed record BenchmarkEvidenceReport
     /// per-stage GC deltas in <see cref="StageGarbageCollection"/>. This typed record replaces the
     /// legacy string-keyed <c>MemoryBytes</c> map.
     /// </summary>
-    public BenchmarkProcessMemoryTelemetry? ProcessMemory { get; init; }
+    public BenchmarkProcessMemoryTelemetry? ProcessMemory
+    {
+        get => processMemory ?? (LegacyMemoryBytes is null ? null : new()
+        {
+            WorkingSetStartBytes = LegacyValue("processWorkingSetStart"),
+            WorkingSetEndBytes = LegacyValue("processWorkingSetEnd"),
+            PeakWorkingSetBytes = LegacyValue("peakWorkingSetBytes") ?? LegacyValue("processPeakWorkingSet"),
+            ManagedAllocatedBytes = LegacyValue("managedAllocatedBytes"),
+            Gen0Collections = LegacyValue("gen0Collections"),
+            Gen1Collections = LegacyValue("gen1Collections"),
+            Gen2Collections = LegacyValue("gen2Collections"),
+        });
+        init => processMemory = value;
+    }
 
     /// <summary>
     /// Per-stage GC collection deltas — the only per-stage memory signal the typed
     /// <see cref="BenchmarkStageResourceTelemetry"/> checks do not already carry.
     /// </summary>
-    public IReadOnlyList<BenchmarkStageGarbageCollectionTelemetry> StageGarbageCollection { get; init; } = [];
+    public IReadOnlyList<BenchmarkStageGarbageCollectionTelemetry> StageGarbageCollection
+    {
+        get => stageGarbageCollection ?? ReadLegacyStageCollections();
+        init => stageGarbageCollection = value;
+    }
+
+    private long? LegacyValue(string key) =>
+        LegacyMemoryBytes is { } memory && memory.TryGetValue(key, out long? value) ? value : null;
+
+    private IReadOnlyList<BenchmarkStageGarbageCollectionTelemetry> ReadLegacyStageCollections()
+    {
+        if (LegacyMemoryBytes is null) return [];
+        string[] stages = LegacyMemoryBytes.Keys
+            .Where(key => key.StartsWith("stage:", StringComparison.Ordinal)
+                && (key.EndsWith(":gen0", StringComparison.Ordinal)
+                    || key.EndsWith(":gen1", StringComparison.Ordinal)
+                    || key.EndsWith(":gen2", StringComparison.Ordinal)))
+            .Select(key => key[6..key.LastIndexOf(':')]).Distinct(StringComparer.Ordinal).ToArray();
+        return stages.Select(stage => new BenchmarkStageGarbageCollectionTelemetry
+        {
+            Stage = stage,
+            Gen0Collections = LegacyValue($"stage:{stage}:gen0"),
+            Gen1Collections = LegacyValue($"stage:{stage}:gen1"),
+            Gen2Collections = LegacyValue($"stage:{stage}:gen2"),
+        }).ToArray();
+    }
 
     /// <summary>Measured counters (summed across iterations) and maxima (peak across
     /// iterations) recorded by <see cref="BenchmarkPhaseCapture"/> under raw names.</summary>

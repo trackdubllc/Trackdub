@@ -98,4 +98,20 @@ public static class HeadlessCompositionRoot
     /// </summary>
     public static void ClearSharedPoolProcessGpuAdmission(IProcessGpuMemoryReader? reader) =>
         Trackdub.Composition.Headless.HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(reader);
+
+    /// <summary>
+    /// Hands the container's device-index to adapter-LUID map to the shared ONNX session pool so
+    /// the process-GPU observation is attributed per adapter. Pair with
+    /// <see cref="BindSharedPoolProcessGpuAdmission"/>: without it multi-GPU hosts charge every
+    /// device the process total. Best-effort.
+    /// </summary>
+    public static IReadOnlyDictionary<int, long>? BindSharedPoolAdapterLuidMap(IServiceProvider services) =>
+        Trackdub.Composition.Headless.HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(services);
+
+    /// <summary>
+    /// Releases the pool's adapter-LUID map only while it still refers to <paramref name="map"/>.
+    /// Safe to call with null.
+    /// </summary>
+    public static void ClearSharedPoolAdapterLuidMap(IReadOnlyDictionary<int, long>? map) =>
+        Trackdub.Composition.Headless.HeadlessCompositionRoot.ClearSharedPoolAdapterLuidMap(map);
 }

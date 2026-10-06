@@ -1,4 +1,5 @@
 using Trackdub.Contracts;
+using Trackdub.Domain;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Application.Benchmarking;
@@ -215,6 +216,80 @@ public static class HeadlessCompositionRoot
             SharedPoolOptions.TryClearProcessGpuMemoryReader(reader);
         }
     }
+
+    /// <summary>
+    /// Hands the container's device-index to adapter-LUID map to the shared ONNX session pool so
+    /// the process-GPU observation can be attributed per adapter instead of charging every
+    /// device the process total. Every composition owner that binds the reader must bind this
+    /// too, or multi-GPU hosts over-restrict admission on otherwise-free adapters. Best-effort
+    /// and synchronous (device enumeration caches): telemetry must never fail composition.
+    /// </summary>
+    /// <returns>The bound map (null when there is nothing to bind).</returns>
+    public static IReadOnlyDictionary<int, long>? BindSharedPoolAdapterLuidMap(IServiceProvider services)
+    {
+        IReadOnlyDictionary<int, long>? map = null;
+#if WINDOWS
+        try
+        {
+            map = QueryAdapterLuidMap(services);
+            if (map is not null)
+            {
+                SharedPoolOptions.UseAdapterLuidMap(map);
+            }
+        }
+        catch
+        {
+            map = null;
+        }
+#endif
+        return map;
+    }
+
+    /// <summary>
+    /// Clears the shared pool's adapter-LUID map only while it still refers to
+    /// <paramref name="map"/>. Safe to call with null.
+    /// </summary>
+    public static void ClearSharedPoolAdapterLuidMap(IReadOnlyDictionary<int, long>? map)
+    {
+        if (map is not null)
+        {
+            SharedPoolOptions.TryClearAdapterLuidMap(map);
+        }
+    }
+
+#if WINDOWS
+    private static IReadOnlyDictionary<int, long>? QueryAdapterLuidMap(IServiceProvider services)
+    {
+        try
+        {
+            IDeviceEnumerator? enumerator = services.GetService<IDeviceEnumerator>();
+            if (enumerator is null)
+            {
+                return null;
+            }
+
+            IReadOnlyList<DeviceEntry> devices = enumerator
+                .GetDevicesAsync(CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            var map = new Dictionary<int, long>();
+            foreach (DeviceEntry device in devices)
+            {
+                if (device.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu
+                    && device.AdapterLuid is long luid)
+                {
+                    map[device.DeviceIndex] = luid;
+                }
+            }
+
+            return map.Count == 0 ? null : map;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+#endif
 }
 
 /// <summary>

@@ -84,7 +84,7 @@
           {
             "Metric": "cpuPercent",
             "Status": "Passed",
-            "ObservedValue": 161.2,
+            "ObservedValue": 16.1,
             "Threshold": 95.0,
             "Reason": null
           },

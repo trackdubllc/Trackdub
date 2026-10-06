@@ -113,6 +113,8 @@ public sealed class Challenger2StressTests : IDisposable
 
         foreach (string stageName in canonicalStages)
         {
+            Assert.Contains(report.ResourceTelemetry,
+                sample => sample.Stage.Equals(stageName, StringComparison.OrdinalIgnoreCase));
             BenchmarkStageGarbageCollectionTelemetry gc = Assert.Single(
                 report.StageGarbageCollection,
                 entry => entry.Stage.Equals(stageName, StringComparison.OrdinalIgnoreCase));

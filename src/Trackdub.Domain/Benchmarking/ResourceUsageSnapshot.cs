@@ -31,8 +31,8 @@ public sealed record ResourceUsageSnapshot
 
     /// <summary>
     /// Dedicated GPU memory allocated by this process, in bytes. Unlike <see cref="AvailableVramMb"/>
-    /// this is process-isolated, so a stage's cost can be attributed without interference from
-    /// other processes sharing the adapter.
+    /// this is process-isolated and excludes other processes sharing the adapter. Concurrent
+    /// GPU work inside this process remains included; this is not a stage-isolated cost.
     /// </summary>
     public long? GpuBytes { get; init; }
 

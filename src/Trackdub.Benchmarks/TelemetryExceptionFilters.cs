@@ -5,7 +5,7 @@ namespace Trackdub.Benchmarks;
 /// change stage execution, so each sampling boundary swallows only OS/plugin failures
 /// and records them as unavailable instead. Each predicate preserves the exact
 /// exception set its call site used inline before; the sets differ on purpose
-/// (a periodic sampler can observe disposal races a point-in-time collector cannot),
+/// (each boundary has its own supported OS and plugin failure set),
 /// so they are named per call site rather than merged.
 /// </summary>
 internal static class TelemetryExceptionFilters

@@ -821,6 +821,19 @@ public static class CompositionRoot
         services.TryAddSingleton<IDeviceEnumerator, CpuOnlyDeviceEnumerator>();
 #endif
 
+        // IProcessGpuMemoryReader — this process's dedicated GPU memory, used both as benchmark
+        // evidence and as the shared session pool's accelerator-admission observation. Registered
+        // in the core path (not only headless) so every host that calls AddTrackdub — desktop,
+        // headless, benchmark — offers a reader, and so a host that pre-registers its own wins.
+        // Binding the final registration to the pool happens at host construction, after all
+        // service overrides, rather than inside this factory: admission must not depend on
+        // something later resolving the telemetry services (see HeadlessDubbingSessionFactory).
+#if WINDOWS
+        services.TryAddSingleton<Trackdub.Contracts.Benchmarking.IProcessGpuMemoryReader, WindowsProcessGpuMemoryReader>();
+#else
+        services.TryAddSingleton<Trackdub.Contracts.Benchmarking.IProcessGpuMemoryReader, UnavailableProcessGpuMemoryReader>();
+#endif
+
         // IExecutionProviderBootstrapper — platform-specific EP bootstrap logic, singleton.
         // Also calls OnnxExecutionSessionFactory.Initialize() so the static factory uses the
         // DI-wired bootstrapper (with real IOpenVinoAvailabilityProvider on Linux).

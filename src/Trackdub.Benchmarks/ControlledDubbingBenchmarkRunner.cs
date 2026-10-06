@@ -512,12 +512,16 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         {
             WorkingSetStartBytes = processTelemetryStart?.WorkingSetBytes,
             WorkingSetEndBytes = processTelemetryEnd?.WorkingSetBytes,
-            PeakWorkingSetBytes = sampledProcessPeak,
+            PeakWorkingSetBytes = ResolveProcessPeak(sampledProcessPeak,
+                processTelemetryStart?.WorkingSetBytes, processTelemetryEnd?.WorkingSetBytes),
             ManagedAllocatedBytes = processDelta?.ManagedAllocatedBytes,
             Gen0Collections = processDelta?.Gen0Collections,
             Gen1Collections = processDelta?.Gen1Collections,
             Gen2Collections = processDelta?.Gen2Collections,
         };
+
+    internal static long? ResolveProcessPeak(long? sampled, long? start, long? end) =>
+        sampled ?? (start.HasValue && end.HasValue ? Math.Max(start.Value, end.Value) : start ?? end);
 
     private static async Task<string> CopyFixtureAsync(
         string fixturePath, string fixtureCopy, CancellationToken cancellationToken)
