@@ -14,7 +14,9 @@ public sealed class StageResourceTelemetryCapture(
     int iteration,
     IProgress<PipelineProgressEvent>? timing = null,
     IWorkingSetSampler? workingSetSampler = null,
-    TimeSpan? workingSetSamplingInterval = null) : IProgress<PipelineProgressEvent>
+    TimeSpan? workingSetSamplingInterval = null,
+    IProcessGpuMemoryReader? gpuMemoryReader = null,
+    TimeSpan? gpuSamplingInterval = null) : IProgress<PipelineProgressEvent>
 {
     private readonly IWorkingSetPeakMonitorFactory monitorFactory = new WorkingSetPeakMonitorFactory();
     private readonly object gate = new();
@@ -57,7 +59,10 @@ public sealed class StageResourceTelemetryCapture(
                 IWorkingSetPeakMonitor? peakMonitor = workingSetSampler is null
                     ? null
                     : monitorFactory.Create(workingSetSampler, snapshot.WorkingSetBytes, workingSetSamplingInterval);
-                pending[value.StageKey] = new(value.StageName, attempt, snapshot, peakMonitor);
+                GpuPeakMonitor? gpuPeakMonitor = gpuMemoryReader is null
+                    ? null
+                    : new GpuPeakMonitor(gpuMemoryReader, snapshot.GpuBytes, gpuSamplingInterval);
+                pending[value.StageKey] = new(value.StageName, attempt, snapshot, peakMonitor, gpuPeakMonitor);
                 completed.Remove(value.StageKey);
             }
             else if (value.EventKind is PipelineProgressEventKind.Completed or PipelineProgressEventKind.Failed or PipelineProgressEventKind.Skipped)
@@ -171,6 +176,15 @@ public sealed class StageResourceTelemetryCapture(
                 PeakWorkingSetSamplingWarning = start.PeakMonitor.SamplingWarning,
             };
         }
+        if (start?.GpuPeakMonitor is not null && end is not null)
+        {
+            long? gpuPeak = start.GpuPeakMonitor.Stop();
+            end = end with
+            {
+                PeakGpuBytes = gpuPeak,
+                PeakGpuUnavailableReason = start.GpuPeakMonitor.UnavailableReason,
+            };
+        }
         ResourceTelemetryValidation validation = validator.Validate(start?.Snapshot, end, bounds);
         if (start is null)
         {
@@ -222,5 +236,6 @@ public sealed class StageResourceTelemetryCapture(
         int Attempt,
         ResourceUsageSnapshot Snapshot,
         IWorkingSetPeakMonitor? PeakMonitor = null,
+        GpuPeakMonitor? GpuPeakMonitor = null,
         int Depth = 1);
 }

@@ -38,19 +38,29 @@ admission.
 What the observation means in practice:
 
 - A process already at or above the accelerator budget admits no new accelerator session until its
-  real usage drains. Idle pooled sessions are evicted first — bounded by what eviction can
-  achieve, since evicting cannot lower the observation snapshot — and the wait is re-evaluated
-  every 50 ms, so a genuine release unblocks the caller. When the reservation total fits but the
-  observation alone still blocks with nothing left to free, the wait fails fast (after ~5 s of
-  continuous stall) with a diagnostic naming the bucket, the observed footprint, and the budget,
-  instead of parking until the caller cancels; the caller's cancellation token remains an escape
-  hatch throughout, exactly as for an exhausted reservation budget.
+  real usage drains. Each observation-blocked pass evicts at most one idle entry and re-observes,
+  so evicted memory gets a chance to drain before more cache is discarded. Passes that free
+  nothing count toward a fail-fast: an empty bucket throws after ~5 s of continuous stall, while
+  a bucket holding live-but-unevictable entries (held leases, pins, live externals) gets ~60 s
+  for turnover before the same diagnostic fires — a lease held for a whole stage still ends in
+  an error, not a hang. The caller's cancellation token remains an escape hatch throughout,
+  exactly as for an exhausted reservation budget.
 - In-flight creates hold a pending reservation but have not allocated yet, so the process reading
   cannot contain them: pending reservations are charged on top of the observed floor, keeping
   concurrent admissions from overshooting the device budget.
-- The reading is process-wide and cannot be attributed to an adapter, so it is conservative on a
-  multi-GPU host: only the reservations the pool's *other* devices already explain are subtracted.
-- Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) are never charged with it.
+- When the reader attributes usage per adapter (Windows) and the host registered its
+  device-to-LUID map, each accelerator device is charged exactly its own adapter's footprint:
+  usage on other adapters never blocks it and no sibling subtraction is needed. Without a
+  breakdown or a mapping for the deciding GPU, the pool uses the full process total as an
+  upper bound. It never subtracts estimated sibling reservations from measured bytes: an
+  overestimate could otherwise hide real usage on the deciding GPU. This fallback can block
+  a free adapter while another adapter holds memory; admission remains bounded by the stall
+  limits above. Per-adapter attribution avoids that restriction when available.
+  Both `HeadlessDubbingHost` and SDK `TrackdubBuilder.Build` register this mapping from
+  `IDeviceEnumerator` during construction and release their own mapping on disposal without
+  clearing a newer host's registration.
+- Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) and OpenVINO NPU buckets are never
+  charged with dedicated GPU observations.
 - An unavailable reading — no GPU, a driver that does not publish the counter set, a GPU-idle
   process, or a failing probe — leaves admission exactly as it was.
 
