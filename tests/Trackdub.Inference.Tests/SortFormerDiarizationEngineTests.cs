@@ -256,20 +256,18 @@ public sealed class SortFormerDiarizationEngineTests
     /// <summary>
     /// Hardware validation for TRT-RTX optimization of the SortFormer encoder.
     ///
-    /// Prerequisites before removing the Skip attribute:
+    /// Prerequisites (already satisfied on hardware where build/sortformer-4spk-onnx-trtrtx-validated-fp16
+    /// exists with a PASS in build/sortformer-4spk-trtrtx-validation.json):
     ///   1. Download the model:
     ///      dotnet run --project src/Trackdub.Tools -- ingest --model cgus/diar_streaming_sortformer_4spk-v2.1-onnx
     ///   2. Run Olive TRT-RTX optimization and staging:
     ///      .\tools\olive\Validate-SortFormerTrtRtx.ps1
-    ///   3. Verify build/sortformer-4spk-onnx-trtrtx-validated-fp16/ was created and the script
-    ///      printed PASS (its own provider check already confirmed trt-rtx on hardware).
-    ///   4. Remove the Skip attribute, run:
-    ///      dotnet test tests/Trackdub.Inference.Tests --filter "FullyQualifiedName~SortFormerDiarizationEngineTests.DiarizeAsync_with_trtrtx_staged_model"
-    ///   5. If it passes: run .\tools\olive\Flip-TrtRtxAsrDiarization.ps1 to apply manifest+test changes.
     ///
-    /// This test never runs in CI (guarded by Skip and by staging dir absence).
+    /// This test never runs in CI: the fact skips at discovery time when its gitignored
+    /// staging directory under build/ is absent (same pattern as the whisper TRT-RTX smokes).
     /// </summary>
-    [Fact(Skip = "Pending TRT-RTX validation — run tools/olive/Validate-SortFormerTrtRtx.ps1, then remove this Skip")]
+    [RequiresTrtRtxStagingFact("sortformer-4spk-onnx-trtrtx-validated-fp16",
+        "run tools/olive/Validate-SortFormerTrtRtx.ps1")]
     public async Task DiarizeAsync_with_trtrtx_staged_model_selects_tensorrt_rtx_provider()
     {
         string stagingDir = Path.Join(FindRepoRoot(), "build", "sortformer-4spk-onnx-trtrtx-validated-fp16", "onnx");
