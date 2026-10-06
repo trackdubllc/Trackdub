@@ -16,6 +16,13 @@ namespace Trackdub.Inference.Tests;
 public sealed class RequiresTrtRtxStagingFactAttribute : FactAttribute
 {
     public RequiresTrtRtxStagingFactAttribute(string modelSize)
+        : this(
+            $"whisper-{modelSize}-onnx-trtrtx-validated",
+            $"run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize {modelSize}")
+    {
+    }
+
+    public RequiresTrtRtxStagingFactAttribute(string stagingDirectoryName, string fixHint)
     {
         // TryFindRepoRoot rather than the throwing FindRepoRoot: an exception escaping the
         // constructor during xunit v2 discovery can cost the whole assembly's test run, while
@@ -32,11 +39,10 @@ public sealed class RequiresTrtRtxStagingFactAttribute : FactAttribute
         string stagingDirectory = Path.Join(
             repoRoot,
             NormalizeRelativeSegment("build"),
-            NormalizeRelativeSegment($"whisper-{modelSize}-onnx-trtrtx-validated"));
+            NormalizeRelativeSegment(stagingDirectoryName));
         if (!Directory.Exists(stagingDirectory))
         {
-            Skip = $"TRT-RTX staging directory not found: {stagingDirectory} " +
-                   $"(run tools/olive/Validate-WhisperOnnxTrtRtx.ps1 -ModelSize {modelSize}).";
+            Skip = $"TRT-RTX staging directory not found: {stagingDirectory} ({fixHint}).";
         }
     }
 
