@@ -34,8 +34,10 @@ public sealed class StageResourceTelemetryCapture(
         IProgress<PipelineProgressEvent>? timing,
         IWorkingSetSampler? workingSetSampler,
         TimeSpan? workingSetSamplingInterval,
-        IWorkingSetPeakMonitorFactory monitorFactory)
-        : this(collector, validator, bounds, phase, iteration, timing, workingSetSampler, workingSetSamplingInterval)
+        IWorkingSetPeakMonitorFactory monitorFactory,
+        IProcessGpuMemoryReader? gpuMemoryReader = null,
+        TimeSpan? gpuSamplingInterval = null)
+        : this(collector, validator, bounds, phase, iteration, timing, workingSetSampler, workingSetSamplingInterval, gpuMemoryReader, gpuSamplingInterval)
     {
         this.monitorFactory = monitorFactory ?? throw new ArgumentNullException(nameof(monitorFactory));
     }
@@ -227,6 +229,7 @@ public sealed class StageResourceTelemetryCapture(
                 MemoryUnavailableReason = reason,
                 PeakWorkingSetUnavailableReason = reason,
                 VramUnavailableReason = reason,
+                GpuUnavailableReason = reason,
             };
         }
     }

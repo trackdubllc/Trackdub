@@ -44,10 +44,19 @@ are not duplicated across call sites. Preserve them when extending the harness:
   each command keeps only its divergent arms (`--stage` vs `--stages`, `--model` shapes,
   `--report-dir`). Leaf bounds validation stays in `ResourceTelemetryOptionsParser`.
   Never re-open a bounds or shared-flag switch arm in an entry point.
+- **Error routing** — `SeparationEvalRunner` funnels setup and per-job failures through
+  separate file-load, setup, and per-job exception filters. The per-job boundary rethrows
+  caller-requested cancellation; unrequested cancellation there becomes job failure.
+  Extend the filter at the affected boundary, not a runner-wide catch.
+- **Typed memory telemetry** — `BenchmarkEvidenceReport` (schema v2) carries the run-level
+  process envelope in `ProcessMemory` and per-stage GC deltas in `StageGarbageCollection`.
+  Per-stage working-set peaks and managed allocation already live in the typed
+  `ResourceTelemetry` checks and `ResourceDistribution`. There is no string-keyed memory
+  map: add a typed field rather than reintroducing key/value memory dictionaries.
 - **Telemetry exception filters** — `TelemetryExceptionFilters` names the swallowed
   exception sets for continuous working-set sampling, stage-boundary collection, and the
-  process snapshot probe. These sets differ on purpose (a periodic sampler can observe
-  disposal races a point-in-time probe cannot), so add a named predicate per boundary
+  process snapshot probe. These sets differ on purpose: each boundary has its own
+  supported OS and plugin failures, so add a named predicate per boundary
   rather than merging or widening an existing one.
   `tests/Trackdub.Benchmarks.Tests/Metrics/TelemetryExceptionFiltersTests` locks each
   accept/reject boundary.

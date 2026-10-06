@@ -237,35 +237,14 @@ public static class SeparationEvalRunner
             output.WriteLine($"separation-eval: {all.Count - failed} ok, {failed} failed; results in {options.ResultsPath}");
             return failed == 0 ? 0 : 2;
         }
-        catch (IOException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (ArgumentException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (NotSupportedException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (JsonException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (System.Security.SecurityException ex)
+        catch (Exception ex) when (ex is IOException or
+            UnauthorizedAccessException or
+            ArgumentException or
+            InvalidOperationException or
+            NotSupportedException or
+            JsonException or
+            System.ComponentModel.Win32Exception or
+            System.Security.SecurityException)
         {
             return ReportSetupFailure(error, ex);
         }
@@ -364,43 +343,18 @@ public static class SeparationEvalRunner
             monitor?.Stop();
             throw;
         }
-        catch (OperationCanceledException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (IOException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (ArgumentException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (JsonException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (NotSupportedException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (TimeoutException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (System.Security.SecurityException ex)
+        // Unrequested cancellations (e.g. an engine timing out on its own) are job
+        // failures; caller-requested cancellation takes the rethrow arm above.
+        catch (Exception ex) when (ex is OperationCanceledException or
+            IOException or
+            UnauthorizedAccessException or
+            InvalidOperationException or
+            ArgumentException or
+            JsonException or
+            NotSupportedException or
+            TimeoutException or
+            System.ComponentModel.Win32Exception or
+            System.Security.SecurityException)
         {
             return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
         }

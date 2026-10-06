@@ -230,7 +230,7 @@ public sealed class ResourceTelemetryOptionsTests
         using var harness = new MockDubbingBenchmarkHarness();
         string fixture = harness.CreateTempAudioFixture();
         DirectoryInfo directory = Directory.CreateTempSubdirectory("trackdub-telemetry-options-");
-        // The VRAM floor stays within any real adapter's capacity: a floor above it is physically
+        // A zero VRAM floor is satisfiable on every adapter: a floor above it is physically
         // impossible on this host and is now rejected pre-flight (see ResourceBoundsPreflightTests),
         // which would leave this test asserting propagation over a run that never measured anything.
         var bounds = new ResourceTelemetryBounds
@@ -258,7 +258,11 @@ public sealed class ResourceTelemetryOptionsTests
                 }, TestContext.Current.CancellationToken);
 
             Assert.Equal(["audio-preparation", "asr"], report.Results.Select(result => result.Stage));
-            Assert.All(report.Results, result => Assert.Equal(bounds, result.Evidence.ResourceTelemetryBounds));
+            Assert.All(report.Results, result =>
+            {
+                Assert.Equal(bounds, result.Evidence.ResourceTelemetryBounds);
+                Assert.Contains(result.Evidence.Stages, stage => stage.Status == BenchmarkEvidenceStatus.Completed);
+            });
         }
         finally
         {

@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
+using Trackdub.Inference.Onnx.TensorRtRtx;
 
 namespace Trackdub.Inference.Onnx.Pool;
 
@@ -284,7 +285,10 @@ internal sealed class InferenceSessionPool : IDisposable
             if (Interlocked.Exchange(ref disposeState, 1) == 0)
             {
                 Gate.Dispose();
-                Session.Dispose();
+                // Healthy sessions always release their native memory. Only a TensorRT-RTX session
+                // in a process whose runtime was poisoned by a CUDA OOM skips teardown (see
+                // TensorRtRtxTeardownGuard); dispose of such a session can fault uncatchably.
+                TensorRtRtxTeardownGuard.DisposeSafely(Session);
             }
         }
     }

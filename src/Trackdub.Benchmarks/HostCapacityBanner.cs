@@ -121,9 +121,12 @@ internal static class HostCapacityBanner
             _ => "CPU",
         };
         string identity = $"{kind} #{device.DeviceIndex}: {device.AdapterDescription} ({device.VendorName})";
-        string memory = device.Kind is DeviceKind.Cpu
-            ? "no adapter memory"
-            : $"{device.DedicatedVramMb} MB dedicated + {device.SharedMemoryMb} MB shared";
+        string memory = device.Kind switch
+        {
+            DeviceKind.Cpu => "no adapter memory",
+            DeviceKind.Npu => $"{device.DedicatedVramMb} MB estimated device-local memory",
+            _ => $"{device.DedicatedVramMb} MB dedicated + {device.SharedMemoryMb} MB shared",
+        };
         string providers = device.SupportedProviders.Count == 0
             ? string.Empty
             : $" [providers: {string.Join(", ", device.SupportedProviders)}]";

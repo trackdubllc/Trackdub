@@ -45,6 +45,11 @@ public sealed class ControlledBenchmarkCliBinderTests
         var controlledState = ParseViaBinderLoop(sharedArgs);
 
         Assert.Equal(matrixState.OutputDirectory, controlledState.OutputDirectory);
+        Assert.Equal(matrixState.ModelDirectory, controlledState.ModelDirectory);
+        Assert.Equal(matrixState.Provider, controlledState.Provider);
+        Assert.Equal(matrixState.FfmpegPath, controlledState.FfmpegPath);
+        Assert.Equal(matrixState.FfprobePath, controlledState.FfprobePath);
+        Assert.Equal(matrixState.ExpectedFixtureSha256, controlledState.ExpectedFixtureSha256);
         Assert.Equal(matrixState.TargetLanguage, controlledState.TargetLanguage);
         Assert.Equal(matrixState.SourceLanguage, controlledState.SourceLanguage);
         Assert.Equal(matrixState.Mode, controlledState.Mode);
@@ -132,13 +137,16 @@ public sealed class ControlledBenchmarkCliBinderTests
         return new ControlledBenchmarkCliOptions
         {
             OutputDirectory = options.OutputDirectory,
+            ModelDirectory = options.ModelDirectory,
+            Provider = options.Provider,
+            FfmpegPath = options.FfmpegPath,
+            FfprobePath = options.FfprobePath,
+            ExpectedFixtureSha256 = options.ExpectedFixtureSha256,
             TargetLanguage = options.TargetLanguage,
             SourceLanguage = options.SourceLanguage,
             Mode = options.Mode,
             RunCount = options.RunCount,
             ResourceTelemetryBounds = options.ResourceTelemetryBounds,
-            ModelDirectory = options.ModelDirectory,
-            Provider = options.Provider,
         };
     }
 

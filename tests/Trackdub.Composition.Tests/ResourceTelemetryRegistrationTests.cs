@@ -19,6 +19,22 @@ public sealed class ResourceTelemetryRegistrationCollection;
 public sealed class ResourceTelemetryRegistrationTests
 {
     [Fact]
+    public void Core_composition_registers_gpu_reader_and_preserves_host_override()
+    {
+        var defaults = new ServiceCollection();
+        defaults.AddTrackdub();
+        using var defaultProvider = defaults.BuildServiceProvider();
+        Assert.NotNull(defaultProvider.GetRequiredService<IProcessGpuMemoryReader>());
+
+        var custom = new UnavailableProcessGpuMemoryReader();
+        var services = new ServiceCollection();
+        services.AddSingleton<IProcessGpuMemoryReader>(custom);
+        services.AddTrackdub();
+        using var provider = services.BuildServiceProvider();
+        Assert.Same(custom, provider.GetRequiredService<IProcessGpuMemoryReader>());
+    }
+
+    [Fact]
     public void Headless_registers_resolvable_singleton_resource_services()
     {
         var services = new ServiceCollection();
@@ -127,8 +143,6 @@ public sealed class ResourceTelemetryRegistrationTests
         }
         finally
         {
-            first.Dispose();
-            second.Dispose();
             SharedPoolOptions.UseProcessGpuMemoryReader(previous);
         }
     }

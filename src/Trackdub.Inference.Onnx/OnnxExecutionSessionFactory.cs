@@ -23,6 +23,13 @@ namespace Trackdub.Inference.Onnx;
 
 internal static class OnnxExecutionSessionFactory
 {
+    private static string ExtractLogId(string modelPath)
+    {
+        string fileName = Path.GetFileNameWithoutExtension(modelPath);
+        string[] parts = modelPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return parts.Length >= 3 ? $"{parts[^3]}/{fileName}" : fileName;
+    }
+
     // Canonical EP names returned by ORT device discovery. TensorRT RTX uses the standalone
     // EP ABI plugin, not the Windows ML catalog spelling. Single source of truth — must match the
     // name the plugin is registered under (see TensorRtRtxPluginService.RegistrationName); ORT reports
@@ -151,13 +158,13 @@ internal static class OnnxExecutionSessionFactory
         WindowsMlExecutionDevicePolicy devicePolicy,
         IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions,
         IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions,
-        bool enableEncoderCudaGraph = false)
+        bool enableEncoderCudaGraph = false, string? encoderLogId = null, string? decoderLogId = null)
     {
         ExecutionProviderKind sessionProvider =
             ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider);
         return new DualOptionsSelections(
-            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph),
-            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtDecoderOptions));
+            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph, encoderLogId),
+            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtDecoderOptions, enableCudaGraph: false, decoderLogId));
     }
 
     private static DualSessionMetadata ResolveDualSessionMetadata(
@@ -201,7 +208,7 @@ internal static class OnnxExecutionSessionFactory
         string? modelId,
         string? variant,
         CancellationToken cancellationToken,
-        bool enableEncoderCudaGraph = false)
+        bool enableEncoderCudaGraph = false, string? encoderLogId = null, string? decoderLogId = null)
     {
         string encoderFingerprint = BuildSessionOptionsFingerprint(
             selections.Encoder.SelectedProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph);
@@ -331,9 +338,15 @@ internal static class OnnxExecutionSessionFactory
         string loadPath = selectedProvider is ExecutionProviderKind.TensorRTRtx
             ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath
             : modelPath;
-        return sessionFactory is null
+        InferenceSession session = sessionFactory is null
             ? new InferenceSession(loadPath, options)
             : sessionFactory(loadPath, options);
+        if (selectedProvider is ExecutionProviderKind.TensorRTRtx)
+        {
+            TensorRtRtxTeardownGuard.Track(session);
+        }
+
+        return session;
     }
 
     /// <summary>
@@ -428,6 +441,7 @@ internal static class OnnxExecutionSessionFactory
         Exception originalFailure)
     {
         string trtError = SummarizeExceptionMessage(originalFailure);
+        TensorRtRtxTeardownGuard.MarkPoisonedIfCudaOutOfMemory(originalFailure);
         Exception lastFailure = originalFailure;
         foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
                      .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
@@ -876,11 +890,69 @@ internal static class OnnxExecutionSessionFactory
             [encoderModelPath, decoderModelPath],
             out string? graphFallbackReason);
 
-        BootstrapContext bootstrap = await BootstrapForProviderAsync(selectedProviderKind, cancellationToken)
+        // TensorRT RTX can fail a Whisper session at engine build or load (CUDA OOM, importer
+        // errors) after the pre-flight passed. Walk the same DirectML (Windows) then CPU chain the
+        // single-session path uses, recording why each provider was abandoned.
+        List<ExecutionProviderKind> attempts = [selectedProviderKind];
+        if (selectedProviderKind is ExecutionProviderKind.TensorRTRtx)
+        {
+            attempts.AddRange(EnumerateTrtInitFallbackProviders());
+        }
+
+        string? abandonedReason = null;
+        for (int attempt = 0; ; attempt++)
+        {
+            ExecutionProviderKind attemptProvider = attempts[attempt];
+            try
+            {
+                DualPooledLeasePair pair = await AcquirePooledWhisperPairAsync(
+                    engineFamily, encoderModelPath, decoderModelPath, attemptProvider, cancellationToken,
+                    pool, modelId, variant, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
+                    sessionFactory).ConfigureAwait(false);
+
+                return new WhisperSessionLease(
+                    pair.EncoderLease.Session, pair.DecoderLease.Session,
+                    requestedProvider, FormatProviderLabel(pair.SelectedProvider),
+                    MergeFallbackReasons(MergeFallbackReasons(graphFallbackReason, abandonedReason), pair.BootstrapDetail))
+                {
+                    EncoderPoolLease = pair.EncoderLease,
+                    DecoderPoolLease = pair.DecoderLease
+                };
+            }
+            catch (Exception ex) when (
+                attempt < attempts.Count - 1
+                && !cancellationToken.IsCancellationRequested
+                && IsRecoverableTrtFallbackInitFailure(ex))
+            {
+                TensorRtRtxTeardownGuard.MarkPoisonedIfCudaOutOfMemory(ex);
+                abandonedReason = MergeFallbackReasons(
+                    abandonedReason,
+                    $"{FormatProviderLabel(attemptProvider)} Whisper session init failed ({SummarizeExceptionMessage(ex)}); "
+                    + $"fell back to {FormatProviderLabel(attempts[attempt + 1])}.");
+            }
+        }
+    }
+
+    private static async Task<DualPooledLeasePair> AcquirePooledWhisperPairAsync(
+        string engineFamily,
+        string encoderModelPath,
+        string decoderModelPath,
+        ExecutionProviderKind provider,
+        CancellationToken cancellationToken,
+        InferenceSessionPool pool,
+        string? modelId,
+        string? variant,
+        IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions,
+        IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions,
+        Func<string, SessionOptions, InferenceSession>? sessionFactory)
+    {
+        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
             .ConfigureAwait(false);
         DualOptionsSelections selections = CreateDualOptionsSelections(
-            selectedProviderKind, bootstrap.Bootstrap, bootstrap.DevicePolicy,
-            additionalTrtEncoderOptions, additionalTrtDecoderOptions);
+            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+            additionalTrtEncoderOptions, additionalTrtDecoderOptions,
+            encoderLogId: ExtractLogId(encoderModelPath),
+            decoderLogId: ExtractLogId(decoderModelPath));
         using SessionOptions encoderOptions = selections.Encoder.Options;
         using SessionOptions decoderOptions = selections.Decoder.Options;
         (SessionPoolKey encoderKey, SessionPoolKey decoderKey) = await BuildDualPooledKeysAsync(
@@ -888,20 +960,11 @@ internal static class OnnxExecutionSessionFactory
             bootstrap.DevicePolicy, additionalTrtEncoderOptions, additionalTrtDecoderOptions,
             modelId, variant, cancellationToken).ConfigureAwait(false);
 
-        DualPooledLeasePair pair = await AcquireDualPooledSessionsAsync(
-            selectedProviderKind, bootstrap, selections,
+        return await AcquireDualPooledSessionsAsync(
+            provider, bootstrap, selections,
             encoderModelPath, decoderModelPath,
             encoderKey, decoderKey, pool, cancellationToken, sessionFactory)
             .ConfigureAwait(false);
-
-        return new WhisperSessionLease(
-            pair.EncoderLease.Session, pair.DecoderLease.Session,
-            requestedProvider, FormatProviderLabel(pair.SelectedProvider),
-            MergeFallbackReasons(graphFallbackReason, pair.BootstrapDetail))
-        {
-            EncoderPoolLease = pair.EncoderLease,
-            DecoderPoolLease = pair.DecoderLease
-        };
     }
 
     public static async Task<Qwen3AsrSessionLease> CreatePooledQwen3AsrAsync(
@@ -1387,13 +1450,13 @@ internal static class OnnxExecutionSessionFactory
         ExecutionProviderKind provider,
         WindowsMlExecutionDevicePolicy devicePolicy,
         IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
-        bool enableCudaGraph = false)
+        bool enableCudaGraph = false, string? logId = null)
     {
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, provider);
         SessionOptions options = CreateBaseSessionOptions(
             useCatalogDevicePolicy ? devicePolicy : WindowsMlExecutionDevicePolicy.Explicit,
             out bool devicePolicyApplied,
-            tensorRtRtx: provider is ExecutionProviderKind.TensorRTRtx);
+            tensorRtRtx: provider is ExecutionProviderKind.TensorRTRtx, logId: logId);
 
         if (provider is ExecutionProviderKind.Cpu)
         {
@@ -2039,7 +2102,7 @@ internal static class OnnxExecutionSessionFactory
     private static SessionOptions CreateBaseSessionOptions(
         WindowsMlExecutionDevicePolicy devicePolicy,
         out bool devicePolicyApplied,
-        bool tensorRtRtx = false)
+        bool tensorRtRtx = false, string? logId = null)
     {
         SessionOptions options = new()
         {
@@ -2050,7 +2113,8 @@ internal static class OnnxExecutionSessionFactory
             GraphOptimizationLevel = tensorRtRtx
                 ? GraphOptimizationLevel.ORT_ENABLE_BASIC
                 : GraphOptimizationLevel.ORT_ENABLE_ALL,
-            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL
+            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+            LogId = logId ?? string.Empty
         };
 
         devicePolicyApplied = false;

@@ -90,11 +90,11 @@ public sealed class MockPipelineExecutionTests : IDisposable
             Mock = true,
         });
 
-        Assert.NotNull(report.MemoryBytes);
-        Assert.True(report.MemoryBytes.ContainsKey("processWorkingSetStart"));
-        Assert.True(report.MemoryBytes.ContainsKey("peakWorkingSetBytes"));
-        Assert.True(report.MemoryBytes.ContainsKey("managedAllocatedBytes"));
-        Assert.True(report.MemoryBytes["peakWorkingSetBytes"] > 0);
+        Assert.NotNull(report.ProcessMemory);
+        Assert.NotNull(report.ProcessMemory.WorkingSetStartBytes);
+        Assert.NotNull(report.ProcessMemory.PeakWorkingSetBytes);
+        Assert.NotNull(report.ProcessMemory.ManagedAllocatedBytes);
+        Assert.True(report.ProcessMemory.PeakWorkingSetBytes > 0);
     }
 
     [Fact]

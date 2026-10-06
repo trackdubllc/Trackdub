@@ -27,6 +27,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 {
     private readonly IBenchmarkEvidenceRepository _history;
     private readonly Action<IServiceCollection>? _serviceConfigurator;
+    private readonly IWorkingSetPeakMonitorFactory _monitorFactory = new WorkingSetPeakMonitorFactory();
     private HeadlessDubbingHost? _warmHost;
     private string? _warmHostKey;
 
@@ -37,6 +38,14 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         _history = history ?? new BenchmarkEvidenceRepository(
             new SqliteUserBenchmarkDatabase(new TrackdubStoragePaths().UserDataRoot));
         _serviceConfigurator = serviceConfigurator;
+    }
+
+    internal ControlledDubbingBenchmarkRunner(
+        IBenchmarkEvidenceRepository? history,
+        Action<IServiceCollection>? serviceConfigurator,
+        IWorkingSetPeakMonitorFactory monitorFactory) : this(history, serviceConfigurator)
+    {
+        _monitorFactory = monitorFactory ?? throw new ArgumentNullException(nameof(monitorFactory));
     }
 
     public void Dispose()
@@ -53,7 +62,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         ArgumentNullException.ThrowIfNull(options);
         string? stage = ResolveStage(options.Stage);
         ValidateOptions(options);
-        var context = new BenchmarkRunContext(options, stage, Guid.NewGuid());
+        var context = new BenchmarkRunContext(options, stage, Guid.NewGuid(), _monitorFactory);
         try
         {
             await PrepareHostAsync(context, options, cancellationToken).ConfigureAwait(false);
@@ -326,7 +335,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         double mediaDuration = artifacts.MediaDurationSeconds;
 
         RecordStageTimings(context.Timings, runs.StageSamples, mediaDuration, context.Stage);
-        RecordStageMemory(context.Memory, runs.StageSamples.Keys, runs.StageMemorySamples, runs.LastClock, context.ResourceTelemetry);
+        context.StageGarbageCollection = BuildStageGarbageCollection(
+            runs.StageSamples.Keys, runs.StageMemorySamples, runs.LastClock);
 
         if (runs.PipelineSamples.Count > 0)
         {
@@ -391,7 +401,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             ? ResourceTelemetry.CalculateDelta(context.ProcessTelemetryStart, processTelemetryEnd) : null;
 
         long? sampledProcessPeak = context.ProcessWorkingSetPeak?.Stop();
-        RecordProcessMemory(context.Memory, processTelemetryEnd, processDelta, sampledProcessPeak, context.ResourceTelemetry);
+        BenchmarkProcessMemoryTelemetry? processMemory = BuildProcessMemory(
+            context.ProcessTelemetryStart, processTelemetryEnd, processDelta, sampledProcessPeak);
 
         EnsureMeasuredTelemetry(context.ResourceTelemetry, context.Stage, context.Reason);
         string[] resourceFailures = CollectResourceFailures(context.ResourceTelemetry);
@@ -433,7 +444,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             Configuration = BuildConfiguration(options, context.Stage, context.Stages, context.ProcessWorkingSetPeak),
             RuntimeVersions = CaptureRuntimeVersions(),
             TimingsMilliseconds = context.Timings,
-            MemoryBytes = context.Memory,
+            ProcessMemory = processMemory,
+            StageGarbageCollection = context.StageGarbageCollection,
             Counters = counters,
             Stages = context.Stages,
             ResourceTelemetryBounds = options.ResourceTelemetryBounds,
@@ -461,6 +473,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             context.Host.Services.GetRequiredService<IResourceTelemetryValidator>(),
             options.ResourceTelemetryBounds, phase, iteration, stageClock,
             context.Host.Services.GetRequiredService<IWorkingSetSampler>(),
+            null, _monitorFactory,
             gpuMemoryReader: context.Host.Services.GetRequiredService<IProcessGpuMemoryReader>());
         try
         {
@@ -501,19 +514,28 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         ["firstPlayableAudio"] = null,
     };
 
-    private static Dictionary<string, long?> CreateMemory(ResourceTelemetrySnapshot? processTelemetryStart) =>
-        new(StringComparer.Ordinal)
+    /// <summary>
+    /// Builds the typed run-level process memory envelope from the run's endpoint snapshots, the
+    /// process delta, and the continuously-sampled peak.
+    /// </summary>
+    private static BenchmarkProcessMemoryTelemetry BuildProcessMemory(
+        ResourceTelemetrySnapshot? processTelemetryStart,
+        ResourceTelemetrySnapshot? processTelemetryEnd,
+        ResourceTelemetryDelta? processDelta,
+        long? sampledProcessPeak) => new()
         {
-            ["processWorkingSetStart"] = processTelemetryStart?.WorkingSetBytes,
-            ["processWorkingSetEnd"] = null,
-            ["processPeakWorkingSet"] = processTelemetryStart?.PeakWorkingSetBytes,
-            ["peakWorkingSetBytes"] = processTelemetryStart?.PeakWorkingSetBytes,
-            ["managedAllocatedBytes"] = null,
-            ["gen0Collections"] = null,
-            ["gen1Collections"] = null,
-            ["gen2Collections"] = null,
-            ["availableVramMb"] = null,
+            WorkingSetStartBytes = processTelemetryStart?.WorkingSetBytes,
+            WorkingSetEndBytes = processTelemetryEnd?.WorkingSetBytes,
+            PeakWorkingSetBytes = ResolveProcessPeak(sampledProcessPeak,
+                processTelemetryStart?.WorkingSetBytes, processTelemetryEnd?.WorkingSetBytes),
+            ManagedAllocatedBytes = processDelta?.ManagedAllocatedBytes,
+            Gen0Collections = processDelta?.Gen0Collections,
+            Gen1Collections = processDelta?.Gen1Collections,
+            Gen2Collections = processDelta?.Gen2Collections,
         };
+
+    internal static long? ResolveProcessPeak(long? sampled, long? start, long? end) =>
+        sampled ?? (start.HasValue && end.HasValue ? Math.Max(start.Value, end.Value) : start ?? end);
 
     private static async Task<string> CopyFixtureAsync(
         string fixturePath, string fixtureCopy, CancellationToken cancellationToken)
@@ -609,13 +631,33 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         timings[$"stage:{stage}"] = canP50;
     }
 
-    private static void RecordStageMemory(
-        Dictionary<string, long?> memory,
+    /// <summary>
+    /// Builds the typed per-stage GC deltas from the per-run memory samples, falling back to the
+    /// stage clock's delta when a stage produced no samples. Working-set peaks and managed
+    /// allocation for the same stages are already carried by the typed per-stage resource checks,
+    /// so only the GC deltas are materialized here.
+    /// </summary>
+    private static List<BenchmarkStageGarbageCollectionTelemetry> BuildStageGarbageCollection(
         IEnumerable<string> measuredStages,
         Dictionary<string, List<ResourceTelemetryDelta>> stageMemorySamples,
-        StageTimingCollector? lastClock,
-        IReadOnlyList<BenchmarkStageResourceTelemetry> resourceTelemetry)
+        StageTimingCollector? lastClock)
     {
+        var collections = new List<BenchmarkStageGarbageCollectionTelemetry>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        void Add(string stageKey, ResourceTelemetryDelta delta)
+        {
+            if (!seen.Add(stageKey))
+                return;
+            collections.Add(new BenchmarkStageGarbageCollectionTelemetry
+            {
+                Stage = stageKey,
+                Gen0Collections = delta.Gen0Collections,
+                Gen1Collections = delta.Gen1Collections,
+                Gen2Collections = delta.Gen2Collections,
+            });
+        }
+
         foreach (string stageName in measuredStages)
         {
             ResourceTelemetryDelta? summary =
@@ -625,21 +667,19 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             if (summary is null)
                 continue;
 
-            long? peakWorkingSet = MeasuredWorkingSetPeak(resourceTelemetry, stageName);
-            SetStageMemory(memory, stageName, summary, peakWorkingSet);
+            Add(stageName, summary);
             string canonical = MockDubbingPipelineServices.CanonicalBenchmarkStage(stageName);
             if (!canonical.Equals(stageName, StringComparison.OrdinalIgnoreCase))
-                SetStageMemory(memory, canonical, summary, peakWorkingSet);
+                Add(canonical, summary);
         }
 
-        if (lastClock is null)
-            return;
-
-        foreach ((string stageKey, ResourceTelemetryDelta delta) in lastClock.GetAllMemoryDeltas())
+        if (lastClock is not null)
         {
-            if (!memory.ContainsKey($"stage:{stageKey}:allocatedBytes"))
-                SetStageMemory(memory, stageKey, delta, MeasuredWorkingSetPeak(resourceTelemetry, stageKey));
+            foreach ((string stageKey, ResourceTelemetryDelta delta) in lastClock.GetAllMemoryDeltas())
+                Add(stageKey, delta);
         }
+
+        return collections;
     }
 
     // Only the allocation and GC fields are meaningful; working-set values come from sampling.
@@ -653,35 +693,6 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
     private static double Median(IEnumerable<double> values) =>
         PercentileCalculator.CalculatePercentile(values.OrderBy(x => x).ToArray(), 0.5);
-
-    private static void SetStageMemory(
-        Dictionary<string, long?> memory, string stageKey, ResourceTelemetryDelta delta, long? peakWorkingSet)
-    {
-        memory[$"stage:{stageKey}:allocatedBytes"] = delta.ManagedAllocatedBytes;
-        memory[$"stage:{stageKey}:peakWorkingSet"] = peakWorkingSet;
-        memory[$"stage:{stageKey}:gen0"] = delta.Gen0Collections;
-        memory[$"stage:{stageKey}:gen1"] = delta.Gen1Collections;
-        memory[$"stage:{stageKey}:gen2"] = delta.Gen2Collections;
-    }
-
-    private static long? MeasuredWorkingSetPeak(
-        IReadOnlyList<BenchmarkStageResourceTelemetry> resourceTelemetry, string stageName)
-    {
-        string canonicalStage = MockDubbingPipelineServices.CanonicalBenchmarkStage(stageName);
-        BenchmarkStageResourceTelemetry[] matchingSamples = resourceTelemetry
-            .Where(sample => sample.Phase == "measured" &&
-                MockDubbingPipelineServices.CanonicalBenchmarkStage(sample.Stage).Equals(
-                    canonicalStage, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (matchingSamples.Length == 0) return null;
-
-        double[] peaks = matchingSamples
-            .Select(sample => sample.Validation.Checks.FirstOrDefault(check => check.Metric == "workingSetBytes")?.ObservedValue)
-            .Where(value => value.HasValue && double.IsFinite(value.Value) && value.Value >= 0)
-            .Select(value => value!.Value)
-            .ToArray();
-        return peaks.Length == 0 ? null : (long?)Math.Ceiling(peaks.Max());
-    }
 
     private static BenchmarkEvidenceStage? FindRequestedStage(
         IReadOnlyList<BenchmarkEvidenceStage> stages, string? stage)
@@ -736,44 +747,6 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 
         return (BenchmarkEvidenceStatus.Completed, reason);
     }
-
-    private static void RecordProcessMemory(
-        Dictionary<string, long?> memory,
-        ResourceTelemetrySnapshot? processTelemetryEnd,
-        ResourceTelemetryDelta? processDelta,
-        long? sampledProcessPeak,
-        IReadOnlyList<BenchmarkStageResourceTelemetry> resourceTelemetry)
-    {
-        memory["processWorkingSetEnd"] = processTelemetryEnd?.WorkingSetBytes;
-        memory["processPeakWorkingSet"] = sampledProcessPeak;
-        memory["peakWorkingSetBytes"] = sampledProcessPeak;
-        memory["managedAllocatedBytes"] = processDelta?.ManagedAllocatedBytes;
-        memory["gen0Collections"] = processDelta?.Gen0Collections;
-        memory["gen1Collections"] = processDelta?.Gen1Collections;
-        memory["gen2Collections"] = processDelta?.Gen2Collections;
-
-        // The legacy memory map carried a permanently-null GPU placeholder; report the real
-        // adapter-wide free VRAM instead. Reuses the last measured sample's reading so the
-        // report costs no extra process sample.
-        BenchmarkStageResourceTelemetry? lastMeasured = resourceTelemetry
-            .LastOrDefault(sample => sample.Phase == "measured");
-        memory["availableVramMb"] = MetricValue(lastMeasured, "availableVramMb");
-
-        // The process-isolated counterpart of the adapter-wide reading above: how much dedicated
-        // GPU memory this process itself held, which other processes on the adapter cannot move.
-        memory["gpuBytes"] = MetricValue(lastMeasured, "gpuBytes");
-    }
-
-    /// <summary>
-    /// The validated value of <paramref name="metric"/> on the last measured sample, or null
-    /// when no stage was measured. Both GPU metrics share this lookup so additional metrics
-    /// cannot introduce divergent null or conversion behavior.
-    /// </summary>
-    private static long? MetricValue(BenchmarkStageResourceTelemetry? sample, string metric) =>
-        sample is null
-            ? null
-            : (long?)sample.Validation.Checks
-                .FirstOrDefault(check => check.Metric == metric)?.ObservedValue;
 
     private static void EnsureMeasuredTelemetry(
         List<BenchmarkStageResourceTelemetry> resourceTelemetry, string? stage, string? reason)
@@ -1246,7 +1219,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     // the phases mutate this context instead of returning every accumulated value.
     private sealed class BenchmarkRunContext
     {
-        public BenchmarkRunContext(ControlledDubbingBenchmarkOptions options, string? stage, Guid reportId)
+        public BenchmarkRunContext(ControlledDubbingBenchmarkOptions options, string? stage, Guid reportId, IWorkingSetPeakMonitorFactory monitorFactory)
         {
             Stage = stage;
             ReportId = reportId;
@@ -1254,10 +1227,10 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             Clock = Stopwatch.StartNew();
             Timings = CreateTimings();
             ResourceTelemetry = new List<BenchmarkStageResourceTelemetry>();
+            StageGarbageCollection = [];
             ProcessTelemetryStart = Metrics.ResourceTelemetry.TryCaptureProcess();
-            ProcessWorkingSetPeak = new WorkingSetPeakMonitorFactory().Create(
+            ProcessWorkingSetPeak = monitorFactory.Create(
                 new ProcessWorkingSetSampler(), ProcessTelemetryStart?.WorkingSetBytes);
-            Memory = CreateMemory(ProcessTelemetryStart);
             CounterTotals = new Dictionary<string, long>(StringComparer.Ordinal);
             ObservedMaxima = new Dictionary<string, long>(StringComparer.Ordinal);
             ProjectRoot = Path.Join(options.OutputDirectory, "projects", reportId.ToString("N"));
@@ -1274,7 +1247,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         public List<BenchmarkStageResourceTelemetry> ResourceTelemetry { get; }
         public ResourceTelemetrySnapshot? ProcessTelemetryStart { get; }
         public IWorkingSetPeakMonitor? ProcessWorkingSetPeak { get; }
-        public Dictionary<string, long?> Memory { get; }
+        public List<BenchmarkStageGarbageCollectionTelemetry> StageGarbageCollection { get; set; }
         public Dictionary<string, long> CounterTotals { get; }
         public Dictionary<string, long> ObservedMaxima { get; }
         public string ProjectRoot { get; }

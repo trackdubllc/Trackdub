@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Trackdub.Application.Dubbing;
 using Trackdub.Benchmarks;
 using Trackdub.Benchmarks.Metrics;
 using Trackdub.Contracts.Benchmarking;
@@ -8,10 +7,10 @@ using Trackdub.Domain.StageRuns;
 namespace Trackdub.Benchmarks.Tests.Metrics;
 
 /// <summary>
-/// Empirical challenger verification harness for Milestone 2:
+/// Challenger verification harness for Milestone 2:
 /// 1. Multi-run sample aggregation math (odd/even counts, linear interpolation, order-independence, extreme spreads).
-/// 2. Verification of all canonical process keys and stage keys in MemoryBytes and TimingsMilliseconds.
-/// 3. JSON round-trip serialization/deserialization fidelity under multiple serializer options (SchemaVersion == 1).
+/// 2. Presence and non-negativity of the typed process-memory envelope and per-stage GC records.
+/// 3. JSON round-trip serialization/deserialization fidelity under multiple serializer options (SchemaVersion == 2).
 /// 4. Fallback behavior when stage samples are empty or unrecorded.
 /// </summary>
 public sealed class ChallengerMultiRunMemoryAggregationTests
@@ -135,11 +134,11 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
     }
 
     // =========================================================================
-    // 2. Canonical Keys Verification
+    // 2. Typed Telemetry Presence
     // =========================================================================
 
     [Fact]
-    public void CanonicalKeys_AllProcessAndStageKeysPresentAndNonNegative()
+    public void TypedMemoryTelemetry_ProcessEnvelopeAndStageCollectionsArePresent()
     {
         string[] canonicalStages =
         [
@@ -150,49 +149,6 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
             StageNames.Tts,
         ];
 
-        var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
-        {
-            ["processWorkingSetStart"] = 120_000_000,
-            ["processWorkingSetEnd"] = 180_000_000,
-            ["processPeakWorkingSet"] = 195_000_000,
-            ["peakWorkingSetBytes"] = 195_000_000,
-            ["managedAllocatedBytes"] = 65_000_000,
-            ["gen0Collections"] = 12,
-            ["gen1Collections"] = 4,
-            ["gen2Collections"] = 1,
-            ["availableVramMb"] = null,
-        };
-
-        foreach (string stage in canonicalStages)
-        {
-            memory[$"stage:{stage}:allocatedBytes"] = 10_000_000;
-            memory[$"stage:{stage}:peakWorkingSet"] = 150_000_000;
-            memory[$"stage:{stage}:gen0"] = 2;
-            memory[$"stage:{stage}:gen1"] = 1;
-            memory[$"stage:{stage}:gen2"] = 0;
-        }
-
-        var timings = new Dictionary<string, double?>(StringComparer.Ordinal)
-        {
-            ["total"] = 1500.0,
-            ["pipeline"] = 1200.0,
-            ["hostCreation"] = 150.0,
-            ["fixturePreparation"] = 50.0,
-            ["prerequisites"] = 100.0,
-        };
-
-        foreach (string stage in canonicalStages)
-        {
-            timings[$"stage:{stage}:p50"] = 240.0;
-            timings[$"stage:{stage}:min"] = 200.0;
-            timings[$"stage:{stage}:max"] = 280.0;
-            timings[$"stage:{stage}:mean"] = 240.0;
-            timings[$"stage:{stage}:p90"] = 270.0;
-            timings[$"stage:{stage}:p99"] = 279.0;
-            timings[$"stage:{stage}:throughput"] = 10.0;
-            timings[$"stage:{stage}:sampleCount"] = 3.0;
-        }
-
         var report = new BenchmarkEvidenceReport
         {
             RunId = Guid.NewGuid(),
@@ -201,40 +157,40 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
             RunMode = "fresh-process",
             Status = BenchmarkEvidenceStatus.Completed,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            MemoryBytes = memory,
-            TimingsMilliseconds = timings,
+            ProcessMemory = new BenchmarkProcessMemoryTelemetry
+            {
+                WorkingSetStartBytes = 120_000_000,
+                WorkingSetEndBytes = 180_000_000,
+                PeakWorkingSetBytes = 195_000_000,
+                ManagedAllocatedBytes = 65_000_000,
+                Gen0Collections = 12,
+                Gen1Collections = 4,
+                Gen2Collections = 1,
+            },
+            StageGarbageCollection = canonicalStages.Select(stage => new BenchmarkStageGarbageCollectionTelemetry
+            {
+                Stage = stage,
+                Gen0Collections = 2,
+                Gen1Collections = 1,
+                Gen2Collections = 0,
+            }).ToArray(),
         };
 
-        // Assert 8 required process keys
-        string[] requiredProcessKeys =
-        [
-            "processWorkingSetStart",
-            "processWorkingSetEnd",
-            "processPeakWorkingSet",
-            "peakWorkingSetBytes",
-            "managedAllocatedBytes",
-            "gen0Collections",
-            "gen1Collections",
-            "gen2Collections",
-        ];
+        Assert.NotNull(report.ProcessMemory);
+        Assert.NotNull(report.ProcessMemory.WorkingSetStartBytes);
+        Assert.NotNull(report.ProcessMemory.WorkingSetEndBytes);
+        Assert.NotNull(report.ProcessMemory.PeakWorkingSetBytes);
+        Assert.NotNull(report.ProcessMemory.ManagedAllocatedBytes);
+        Assert.NotNull(report.ProcessMemory.Gen0Collections);
+        Assert.NotNull(report.ProcessMemory.Gen1Collections);
+        Assert.NotNull(report.ProcessMemory.Gen2Collections);
 
-        foreach (string key in requiredProcessKeys)
-        {
-            Assert.True(report.MemoryBytes.ContainsKey(key), $"Missing required process key: {key}");
-            Assert.NotNull(report.MemoryBytes[key]);
-            Assert.True(report.MemoryBytes[key] >= 0, $"Process metric '{key}' must be non-negative.");
-        }
-
-        // Assert 5 stage keys per canonical stage
-        string[] requiredStageMetrics = ["allocatedBytes", "peakWorkingSet", "gen0", "gen1", "gen2"];
         foreach (string stage in canonicalStages)
         {
-            foreach (string key in requiredStageMetrics.Select(metric => $"stage:{stage}:{metric}"))
-            {
-                Assert.True(report.MemoryBytes.ContainsKey(key), $"Missing required stage key: {key}");
-                Assert.NotNull(report.MemoryBytes[key]);
-                Assert.True(report.MemoryBytes[key] >= 0, $"Stage metric '{key}' must be non-negative.");
-            }
+            BenchmarkStageGarbageCollectionTelemetry gc = Assert.Single(
+                report.StageGarbageCollection, entry => entry.Stage == stage);
+            Assert.NotNull(gc.Gen0Collections);
+            Assert.True(gc.Gen0Collections >= 0, $"Stage metric for '{stage}' must be non-negative.");
         }
     }
 
@@ -245,34 +201,35 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
     [Fact]
     public void JsonRoundTrip_WithFullTelemetry_PreservesSchemaVersionAndValues()
     {
-        var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
-        {
-            ["processWorkingSetStart"] = 100_000_000,
-            ["processWorkingSetEnd"] = 150_000_000,
-            ["processPeakWorkingSet"] = 175_000_000,
-            ["peakWorkingSetBytes"] = 175_000_000,
-            ["managedAllocatedBytes"] = 35_000_000,
-            ["gen0Collections"] = 7,
-            ["gen1Collections"] = 2,
-            ["gen2Collections"] = 1,
-            ["availableVramMb"] = null,
-            ["stage:Asr:allocatedBytes"] = 20_000_000,
-            ["stage:Asr:peakWorkingSet"] = 160_000_000,
-            ["stage:Asr:gen0"] = 4,
-            ["stage:Asr:gen1"] = 1,
-            ["stage:Asr:gen2"] = 0,
-        };
-
         var original = new BenchmarkEvidenceReport
         {
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             RunId = Guid.NewGuid(),
             Kind = BenchmarkEvidenceKind.Benchmark,
             Scenario = "json-fidelity-test",
             RunMode = "fresh-process",
             Status = BenchmarkEvidenceStatus.Completed,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            MemoryBytes = memory,
+            ProcessMemory = new BenchmarkProcessMemoryTelemetry
+            {
+                WorkingSetStartBytes = 100_000_000,
+                WorkingSetEndBytes = 150_000_000,
+                PeakWorkingSetBytes = 175_000_000,
+                ManagedAllocatedBytes = 35_000_000,
+                Gen0Collections = 7,
+                Gen1Collections = 2,
+                Gen2Collections = 1,
+            },
+            StageGarbageCollection =
+            [
+                new BenchmarkStageGarbageCollectionTelemetry
+                {
+                    Stage = "Asr",
+                    Gen0Collections = 4,
+                    Gen1Collections = 1,
+                    Gen2Collections = 0,
+                },
+            ],
             Configuration = new Dictionary<string, string> { ["threads"] = "8" },
         };
 
@@ -281,16 +238,14 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
         BenchmarkEvidenceReport? restored = JsonSerializer.Deserialize<BenchmarkEvidenceReport>(json, BenchmarkReportWriter.SerializerOptions);
 
         Assert.NotNull(restored);
-        Assert.Equal(1, restored.SchemaVersion);
+        Assert.Equal(2, restored.SchemaVersion);
         Assert.Equal(original.RunId, restored.RunId);
         Assert.Equal(original.Status, restored.Status);
-        Assert.Equal(original.MemoryBytes.Count, restored.MemoryBytes.Count);
-
-        foreach ((string key, long? expectedVal) in original.MemoryBytes)
-        {
-            Assert.True(restored.MemoryBytes.ContainsKey(key), $"Deserialized report missing key: {key}");
-            Assert.Equal(expectedVal, restored.MemoryBytes[key]);
-        }
+        Assert.Equal(original.ProcessMemory!.PeakWorkingSetBytes, restored.ProcessMemory!.PeakWorkingSetBytes);
+        Assert.Equal(original.ProcessMemory.ManagedAllocatedBytes, restored.ProcessMemory.ManagedAllocatedBytes);
+        Assert.Equal(original.ProcessMemory.Gen0Collections, restored.ProcessMemory.Gen0Collections);
+        Assert.Equal(original.StageGarbageCollection.Count, restored.StageGarbageCollection.Count);
+        Assert.Equal("Asr", Assert.Single(restored.StageGarbageCollection).Stage);
     }
 
     [Fact]
@@ -302,33 +257,35 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
             Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
         };
 
-        var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
-        {
-            ["processWorkingSetStart"] = 200_000_000,
-            ["processWorkingSetEnd"] = 250_000_000,
-            ["processPeakWorkingSet"] = 300_000_000,
-            ["peakWorkingSetBytes"] = 300_000_000,
-            ["managedAllocatedBytes"] = 50_000_000,
-            ["gen0Collections"] = 10,
-            ["gen1Collections"] = 3,
-            ["gen2Collections"] = 1,
-            ["stage:Separation:allocatedBytes"] = 15_000_000,
-            ["stage:Separation:peakWorkingSet"] = 280_000_000,
-            ["stage:Separation:gen0"] = 3,
-            ["stage:Separation:gen1"] = 1,
-            ["stage:Separation:gen2"] = 0,
-        };
-
         var original = new BenchmarkEvidenceReport
         {
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             RunId = Guid.NewGuid(),
             Kind = BenchmarkEvidenceKind.Benchmark,
             Scenario = "web-options-test",
             RunMode = "fresh-process",
             Status = BenchmarkEvidenceStatus.Completed,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            MemoryBytes = memory,
+            ProcessMemory = new BenchmarkProcessMemoryTelemetry
+            {
+                WorkingSetStartBytes = 200_000_000,
+                WorkingSetEndBytes = 250_000_000,
+                PeakWorkingSetBytes = 300_000_000,
+                ManagedAllocatedBytes = 50_000_000,
+                Gen0Collections = 10,
+                Gen1Collections = 3,
+                Gen2Collections = 1,
+            },
+            StageGarbageCollection =
+            [
+                new BenchmarkStageGarbageCollectionTelemetry
+                {
+                    Stage = "Separation",
+                    Gen0Collections = 3,
+                    Gen1Collections = 1,
+                    Gen2Collections = 0,
+                },
+            ],
         };
 
         string json = JsonSerializer.Serialize(original, options);
@@ -337,44 +294,48 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
         BenchmarkEvidenceReport? restored = JsonSerializer.Deserialize<BenchmarkEvidenceReport>(json, options);
 
         Assert.NotNull(restored);
-        Assert.Equal(1, restored.SchemaVersion);
-        Assert.Equal(original.MemoryBytes.Count, restored.MemoryBytes.Count);
-
-        foreach ((string key, long? expectedVal) in original.MemoryBytes)
-        {
-            Assert.True(restored.MemoryBytes.ContainsKey(key), $"Web deserialized report missing key: {key}");
-            Assert.Equal(expectedVal, restored.MemoryBytes[key]);
-        }
+        Assert.Equal(2, restored.SchemaVersion);
+        Assert.Equal(original.ProcessMemory!.PeakWorkingSetBytes, restored.ProcessMemory!.PeakWorkingSetBytes);
+        Assert.Equal(original.StageGarbageCollection.Count, restored.StageGarbageCollection.Count);
     }
 
     [Fact]
-    public void JsonRoundTrip_NullAndAvailableVramMb_HandledGracefully()
+    public void JsonRoundTrip_NullValues_HandledGracefully()
     {
-        var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
-        {
-            ["processWorkingSetStart"] = 100_000_000,
-            ["availableVramMb"] = null,
-            ["stage:Tts:allocatedBytes"] = null,
-        };
-
         var original = new BenchmarkEvidenceReport
         {
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             RunId = Guid.NewGuid(),
             Kind = BenchmarkEvidenceKind.Benchmark,
             Scenario = "null-values-test",
             RunMode = "fresh-process",
             Status = BenchmarkEvidenceStatus.Completed,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            MemoryBytes = memory,
+            ProcessMemory = new BenchmarkProcessMemoryTelemetry
+            {
+                WorkingSetStartBytes = 100_000_000,
+                PeakWorkingSetBytes = null,
+                ManagedAllocatedBytes = null,
+            },
+            StageGarbageCollection =
+            [
+                new BenchmarkStageGarbageCollectionTelemetry
+                {
+                    Stage = "Tts",
+                    Gen0Collections = null,
+                    Gen1Collections = null,
+                    Gen2Collections = null,
+                },
+            ],
         };
 
         string json = JsonSerializer.Serialize(original, BenchmarkReportWriter.SerializerOptions);
         BenchmarkEvidenceReport? restored = JsonSerializer.Deserialize<BenchmarkEvidenceReport>(json, BenchmarkReportWriter.SerializerOptions);
 
         Assert.NotNull(restored);
-        Assert.Null(restored.MemoryBytes["availableVramMb"]);
-        Assert.Null(restored.MemoryBytes["stage:Tts:allocatedBytes"]);
+        Assert.Null(restored.ProcessMemory!.PeakWorkingSetBytes);
+        Assert.Null(restored.ProcessMemory.ManagedAllocatedBytes);
+        Assert.Null(Assert.Single(restored.StageGarbageCollection).Gen0Collections);
     }
 
     [Fact]
@@ -386,24 +347,29 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
             Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
         };
 
-        var memory = new Dictionary<string, long?>(StringComparer.Ordinal)
-        {
-            ["processWorkingSetStart"] = 100_000_000,
-            ["peakWorkingSetBytes"] = 150_000_000,
-            ["managedAllocatedBytes"] = 25_000_000,
-            ["stage:Asr:allocatedBytes"] = 12_000_000,
-        };
-
         var original = new BenchmarkEvidenceReport
         {
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             RunId = Guid.NewGuid(),
             Kind = BenchmarkEvidenceKind.Benchmark,
             Scenario = "cross-serializer-test",
             RunMode = "fresh-process",
             Status = BenchmarkEvidenceStatus.Completed,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            MemoryBytes = memory,
+            ProcessMemory = new BenchmarkProcessMemoryTelemetry
+            {
+                WorkingSetStartBytes = 100_000_000,
+                PeakWorkingSetBytes = 150_000_000,
+                ManagedAllocatedBytes = 25_000_000,
+            },
+            StageGarbageCollection =
+            [
+                new BenchmarkStageGarbageCollectionTelemetry
+                {
+                    Stage = "Asr",
+                    Gen0Collections = 3,
+                },
+            ],
         };
 
         // 1. Serialize with Web (camelCase property names)
@@ -412,7 +378,8 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
         // 2. Deserialize with Web (case-insensitive) - must succeed
         var fromWeb = JsonSerializer.Deserialize<BenchmarkEvidenceReport>(webJson, webOptions);
         Assert.NotNull(fromWeb);
-        Assert.Equal(4, fromWeb.MemoryBytes.Count);
+        Assert.Equal(150_000_000L, fromWeb.ProcessMemory!.PeakWorkingSetBytes);
+        Assert.Single(fromWeb.StageGarbageCollection);
 
         // 3. Serialize with BenchmarkReportWriter.SerializerOptions (PascalCase)
         string writerJson = JsonSerializer.Serialize(original, BenchmarkReportWriter.SerializerOptions);
@@ -420,8 +387,8 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
         // 4. Deserialize with Web (case-insensitive) - must succeed
         var fromWriterWithWeb = JsonSerializer.Deserialize<BenchmarkEvidenceReport>(writerJson, webOptions);
         Assert.NotNull(fromWriterWithWeb);
-        Assert.Equal(4, fromWriterWithWeb.MemoryBytes.Count);
-        Assert.Equal(12_000_000L, fromWriterWithWeb.MemoryBytes["stage:Asr:allocatedBytes"]);
+        Assert.Equal(150_000_000L, fromWriterWithWeb.ProcessMemory!.PeakWorkingSetBytes);
+        Assert.Equal("Asr", Assert.Single(fromWriterWithWeb.StageGarbageCollection).Stage);
     }
 
     // =========================================================================
@@ -429,10 +396,10 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
     // =========================================================================
 
     [Fact]
-    public void StageMemoryAggregation_FallbackToLastClockDelta_WhenStageMemorySamplesEmpty()
+    public void StageGarbageCollection_FallbackToLastClockDelta_WhenStageMemorySamplesEmpty()
     {
-        // Simulate ControlledDubbingBenchmarkRunner lines 359-366:
-        // when stageMemorySamples doesn't have entries for a stage, it falls back to lastClock.GetMemoryDelta(stageName)
+        // Simulate the runner's stage-GC mapping: when stageMemorySamples has no entry for a
+        // stage, it falls back to the stage clock's delta.
         var fallbackDelta = new ResourceTelemetryDelta(
             WorkingSetDeltaBytes: 5_000_000,
             PeakWorkingSetBytes: 80_000_000,
@@ -444,30 +411,22 @@ public sealed class ChallengerMultiRunMemoryAggregationTests
         var stageMemorySamples = new Dictionary<string, List<ResourceTelemetryDelta>>(StringComparer.OrdinalIgnoreCase);
         // "FallbackStage" is NOT in stageMemorySamples
 
-        var memory = new Dictionary<string, long?>(StringComparer.Ordinal);
+        const string stageName = "FallbackStage";
+        ResourceTelemetryDelta summary =
+            stageMemorySamples.TryGetValue(stageName, out var samples) && samples.Count > 0
+                ? samples[0]
+                : fallbackDelta;
 
-        string stageName = "FallbackStage";
-        if (stageMemorySamples.TryGetValue(stageName, out var mSamples) && mSamples.Count > 0)
+        var entry = new BenchmarkStageGarbageCollectionTelemetry
         {
-            var sortedAlloc = mSamples.Select(s => (double)s.ManagedAllocatedBytes).OrderBy(x => x).ToArray();
-            memory[$"stage:{stageName}:allocatedBytes"] = (long)Math.Round(PercentileCalculator.CalculatePercentile(sortedAlloc, 0.5));
-            memory[$"stage:{stageName}:peakWorkingSet"] = mSamples.Max(s => s.PeakWorkingSetBytes);
-        }
-        else
-        {
-            // Runner fallback logic
-            memory[$"stage:{stageName}:allocatedBytes"] = fallbackDelta.ManagedAllocatedBytes;
-            memory[$"stage:{stageName}:peakWorkingSet"] = fallbackDelta.PeakWorkingSetBytes;
-            memory[$"stage:{stageName}:gen0"] = fallbackDelta.Gen0Collections;
-            memory[$"stage:{stageName}:gen1"] = fallbackDelta.Gen1Collections;
-            memory[$"stage:{stageName}:gen2"] = fallbackDelta.Gen2Collections;
-        }
+            Stage = stageName,
+            Gen0Collections = summary.Gen0Collections,
+            Gen1Collections = summary.Gen1Collections,
+            Gen2Collections = summary.Gen2Collections,
+        };
 
-        Assert.Equal(15_000_000L, memory[$"stage:{stageName}:allocatedBytes"]);
-        Assert.Equal(80_000_000L, memory[$"stage:{stageName}:peakWorkingSet"]);
-        Assert.Equal(2, memory[$"stage:{stageName}:gen0"]);
-        Assert.Equal(1, memory[$"stage:{stageName}:gen1"]);
-        Assert.Equal(0, memory[$"stage:{stageName}:gen2"]);
+        Assert.Equal(2L, entry.Gen0Collections);
+        Assert.Equal(1L, entry.Gen1Collections);
+        Assert.Equal(0L, entry.Gen2Collections);
     }
 }
-

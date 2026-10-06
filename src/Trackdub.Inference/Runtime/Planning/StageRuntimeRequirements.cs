@@ -43,6 +43,10 @@ internal static class StageRuntimeRequirementsCatalog
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx and not ExecutionProviderKind.TensorRt)];
 
+    private static IReadOnlyList<ExecutionProviderKind> WithoutTensorRtRtx(
+        IReadOnlyList<ExecutionProviderKind> providers) =>
+        [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx)];
+
     private static IReadOnlyList<ExecutionProviderKind> PreferDirectMl(
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [ExecutionProviderKind.DirectMl, .. providers.Where(static p => p != ExecutionProviderKind.DirectMl)];
@@ -54,9 +58,14 @@ internal static class StageRuntimeRequirementsCatalog
                 RuntimeStage.Vad,
                 ModelTask.Vad,
                 ["silero-vad", "silero"],
-                // TensorRT RTX is allowed again for VAD; the per-model smoke test gates it
-                // (silero-vad previously passed a TRT RTX smoke run) and DirectML remains the fallback.
-                DefaultOnnxStageAllowedProviders,
+                // TensorRT RTX is excluded for VAD. silero-vad's If/else-branch subgraph fails
+                // the TensorRT RTX build on every attempt (EP ABI 0.4.2/cu13, TensorRT-RTX 1.6.1:
+                // "squeeze index (1) must be less than length (0)", then IConditionalOutputLayer rank
+                // mismatch). Session-init fallback recovers it to DirectML, but each run paid a failed
+                // engine build and emitted native stderr that was misattributed to TTS in #329.
+                // The model is tiny, so DirectML/CPU cost nothing meaningful. Classic TensorRT is a
+                // separate provider with no evidence of the failure, so it stays allowed.
+                WithoutTensorRtRtx(DefaultOnnxStageAllowedProviders),
                 ["fp16", "q4f16"],
                 ["int8", "quantized", "uint8", "q4"]),
             [RuntimeStage.Asr] = new(
