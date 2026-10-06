@@ -60,12 +60,6 @@ internal sealed class WhisperTokenizerDecoder
 
         Dictionary<int, string> tokenTextById = await LoadTokenTextsAsync(vocabPath).ConfigureAwait(false);
         WhisperModelConfig config = await LoadConfigAsync(configPath).ConfigureAwait(false);
-        int timestampBeginToken = tokenTextById
-            .Where(static pair => pair.Value.Equals("<|0.00|>", StringComparison.Ordinal))
-            .Select(static pair => pair.Key)
-            .DefaultIfEmpty(50364)
-            .First();
-
         var suppressed = new HashSet<int>(config.SuppressTokens);
         foreach (int token in config.BeginSuppressTokens)
         {
@@ -92,6 +86,12 @@ internal sealed class WhisperTokenizerDecoder
                 }
             }
         }
+
+        int timestampBeginToken = tokenTextById
+            .Where(static pair => pair.Value.Equals("<|0.00|>", StringComparison.Ordinal))
+            .Select(static pair => pair.Key)
+            .DefaultIfEmpty(50364)
+            .First();
 
         HashSet<int> languageTokenIds = tokenTextById
             .Where(static pair => IsLanguageTokenText(pair.Value))

@@ -395,7 +395,10 @@ public static class CompositionRoot
         services.TryAddSingleton<IAudioExtractionService>(_ => new FfmpegAudioExtractionService(ffmpegPath: null));
         services.TryAddSingleton<IFfmpegVideoEncoderCapabilities>(_ => new FfmpegVideoEncoderCapabilityService());
         services.TryAddSingleton<ILoudnessNormalizer>(_ => new FfmpegLoudnessNormalizer(ffmpegPath: null));
-        services.TryAddSingleton<IExportRenderer>(_ => new FfmpegMuxer(ffmpegPath: null));
+        services.TryAddSingleton<IExportRenderer>(sp => new FfmpegMuxer(
+            sp.GetRequiredService<IFfmpegVideoEncoderCapabilities>(),
+            sp.GetService<IMediaGpuHintProvider>(),
+            ffmpegPath: null));
         services.TryAddSingleton<IVideoRecomposer>(_ => new FfmpegVideoRecomposer(ffmpegPath: null));
         services.TryAddSingleton<IAudioQualityAnalyzer, PcmAudioQualityAnalyzer>();
         services.TryAddSingleton<ISpeechAudioPreparationPlanner, SpeechAudioPreparationPlanner>();

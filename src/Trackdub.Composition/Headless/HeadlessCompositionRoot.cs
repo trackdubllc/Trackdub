@@ -116,8 +116,11 @@ public static class HeadlessCompositionRoot
                 _ => new FfmpegVideoEncoderCapabilityService(ffmpegPath)));
             services.Replace(ServiceDescriptor.Singleton<ILoudnessNormalizer>(
                 _ => new FfmpegLoudnessNormalizer(ffmpegPath)));
-            services.Replace(ServiceDescriptor.Singleton<IExportRenderer>(
-                _ => new FfmpegMuxer(ffmpegPath)));
+            services.Replace(ServiceDescriptor.Singleton<IExportRenderer>(sp =>
+                new FfmpegMuxer(
+                    sp.GetRequiredService<IFfmpegVideoEncoderCapabilities>(),
+                    sp.GetService<IMediaGpuHintProvider>(),
+                    ffmpegPath)));
             services.Replace(ServiceDescriptor.Singleton<IVideoRecomposer>(
                 _ => new FfmpegVideoRecomposer(ffmpegPath)));
             services.Replace(ServiceDescriptor.Singleton<ISpeechAudioProcessingService>(
