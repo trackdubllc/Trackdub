@@ -42,7 +42,7 @@ public sealed class ProcessResourceTelemetryCollectorTests
         Assert.Null(end.AvailableVramMb);
         Assert.Equal("No VRAM reader is registered for this host.", end.VramUnavailableReason);
         Assert.Null(end.GpuBytes);
-        Assert.Equal("No process GPU memory reader is registered for this host.", end.GpuUnavailableReason);
+        Assert.Equal("No platform process GPU memory source is available for this host.", end.GpuUnavailableReason);
     }
 
     [Fact]

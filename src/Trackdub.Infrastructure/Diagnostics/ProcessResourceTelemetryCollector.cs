@@ -65,24 +65,11 @@ public sealed class ProcessResourceTelemetryCollector(
     private (long? Value, string? Reason) ReadAvailableVram()
     {
         IAvailableVramReader reader = vramReader ?? DefaultReader;
-        try
-        {
-            long? value = reader.ReadAvailableVramMb();
-            if (value is null)
-            {
-                return (null, reader.UnavailableReason);
-            }
-
-            // A lifted comparison would silently route a null reading down this branch.
-            return value < 0
-                ? (null, "VRAM reader returned a negative reading.")
-                : (value, null);
-        }
-        catch (Exception exception) when (IsGpuReadFailure(exception))
-        {
-            // Expected GPU query failures degrade the run's evidence without aborting the measurement.
-            return (null, $"Free VRAM measurement unavailable ({exception.GetType().Name}).");
-        }
+        return ReadGpuMetric(
+            reader.ReadAvailableVramMb,
+            () => reader.UnavailableReason,
+            "VRAM reader returned a negative reading.",
+            "Free VRAM measurement unavailable");
     }
 
     private static IAvailableVramReader DefaultReader { get; } = new UnavailableAvailableVramReader();
@@ -95,39 +82,49 @@ public sealed class ProcessResourceTelemetryCollector(
     private (long? Value, string? Reason) ReadProcessGpuMemory()
     {
         IProcessGpuMemoryReader reader = processGpuMemoryReader ?? DefaultProcessGpuReader;
+        return ReadGpuMetric(
+            reader.ReadDedicatedGpuMemoryBytes,
+            () => reader.UnavailableReason,
+            "Process GPU memory reader returned a negative reading.",
+            "Process GPU memory measurement unavailable");
+    }
+
+    /// <summary>
+    /// Shared read-validate-degrade pipeline for GPU metrics: a null reading reports the
+    /// reader's own reason, a negative reading is a defective probe, and a failing query
+    /// degrades the run's evidence instead of aborting the measurement.
+    /// </summary>
+    private static (long? Value, string? Reason) ReadGpuMetric(
+        Func<long?> read,
+        Func<string> unavailableReason,
+        string negativeMessage,
+        string failureMessage)
+    {
         try
         {
-            long? value = reader.ReadDedicatedGpuMemoryBytes();
+            long? value = read();
             if (value is null)
             {
-                return (null, reader.UnavailableReason);
+                return (null, unavailableReason());
             }
 
             // A lifted comparison would silently route a null reading down this branch.
             return value < 0
-                ? (null, "Process GPU memory reader returned a negative reading.")
+                ? (null, negativeMessage)
                 : (value, null);
         }
-        catch (Exception exception) when (IsGpuReadFailure(exception))
+        catch (Exception exception) when (IsPlatformReadFailure(exception) || exception is InvalidOperationException)
         {
-            // Expected GPU query failures degrade the run's evidence without aborting the measurement.
-            return (null, $"Process GPU memory measurement unavailable ({exception.GetType().Name}).");
+            // A failing GPU query must degrade the run's evidence, never abort the measurement.
+            return (null, $"{failureMessage} ({exception.GetType().Name}).");
         }
     }
 
     private static IProcessGpuMemoryReader DefaultProcessGpuReader { get; } = new UnavailableProcessGpuMemoryReader();
 
     private static bool IsPlatformReadFailure(Exception exception) =>
-        exception is Win32Exception or NotSupportedException or UnauthorizedAccessException;
-
-    /// <summary>
-    /// GPU probes additionally load native DLLs (PDH, DXGI) that the BCL process reads never
-    /// touch: a missing library or export surfaces an unusable host and must degrade the reading
-    /// rather than abort the measurement. Kept separate from
-    /// <see cref="IsPlatformReadFailure"/> so those failures cannot silently mask themselves as
-    /// benign platform unavailability in the unrelated CPU and working-set reads.
-    /// </summary>
-    private static bool IsGpuReadFailure(Exception exception) =>
-        IsPlatformReadFailure(exception) ||
-        exception is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException;
+        exception is Win32Exception or NotSupportedException or UnauthorizedAccessException or
+        // Native probes (PDH, DXGI) surface an unusable host this way; a measurement must degrade
+        // rather than abort the run when a probe cannot be loaded or resolved.
+        DllNotFoundException or EntryPointNotFoundException;
 }

@@ -936,7 +936,7 @@ public sealed class InferenceSessionPoolTests
                 _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
                 CancellationToken.None));
 
-        Assert.Contains("observed dedicated GPU usage", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("dedicated GPU memory outside", failure.Message, StringComparison.Ordinal);
         Assert.Contains("TRACKDUB_SESSION_PROCESS_GPU_ADMISSION", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, factoryCalls);
     }
@@ -1009,58 +1009,6 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
-    public async Task ProcessGpuAdmission_PerAdapterReading_ChargesOnlyTheBucketsOwnAdapter()
-    {
-        // With per-adapter attribution the pool reads the bucket's own adapter directly: another
-        // adapter's footprint is invisible to this decision, so a process holding 4 GB on
-        // adapter 1 cannot lock adapter 0's budget — which is exactly what the aggregate
-        // fallback (5000 MB total − 0 siblings) would have done.
-        var reader = new PerAdapterProcessGpuMemoryReader(
-            new Dictionary<int, long>
-            {
-                [0] = 1024L * 1024 * 1024,
-                [1] = 4096L * 1024 * 1024,
-            },
-            processTotalBytes: 5000L * 1024 * 1024);
-        using var pool = new InferenceSessionPool(
-            maxSessions: 8,
-            memoryBudgetMb: 4096,
-            hostMemoryBudgetMb: 4096,
-            processGpuMemoryReader: () => reader);
-
-        using SessionLease lease = await pool.GetLeaseAsync(
-            AcceleratorKey("pg10", 2000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
-
-        Assert.NotNull(lease.Session);
-    }
-
-    [Fact]
-    public async Task ProcessGpuAdmission_PerAdapterUsageAtCeiling_FailsFastWithNothingIdleLeftToFree()
-    {
-        // The bucket's own adapter is full — per-adapter attribution blocks exactly the device
-        // under decision, and with no idle work to free the wait fails fast rather than parking.
-        var reader = new PerAdapterProcessGpuMemoryReader(
-            new Dictionary<int, long>
-            {
-                [0] = 4096L * 1024 * 1024,
-                [1] = 0L,
-            });
-        using var pool = new InferenceSessionPool(
-            maxSessions: 8,
-            memoryBudgetMb: 4096,
-            hostMemoryBudgetMb: 4096,
-            processGpuMemoryReader: () => reader);
-
-        InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => pool.GetLeaseAsync(
-                AcceleratorKey("pg11", 256),
-                _ => Task.FromResult(CreateMinimalSession()),
-                CancellationToken.None));
-
-        Assert.Contains("observed dedicated GPU usage", failure.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task ProcessGpuAdmission_UsageDrainingWhileWaiting_LetsAdmissionProceed()
     {
         // The wait path re-observes on every pass: once the process's real usage drains below the
@@ -1078,6 +1026,423 @@ public sealed class InferenceSessionPoolTests
             AcceleratorKey("pg5", 256), _ => Task.FromResult(CreateMinimalSession()), cts.Token);
 
         Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_PendingCreatesAreChargedOnTopOfTheObservation()
+    {
+        // A pending create holds a reservation but has not allocated yet, so the process reading
+        // cannot contain it. Charging it on top of the observed floor keeps a second concurrent
+        // admission from disappearing into the observation and overshooting the device budget.
+        var reader = new MutableProcessGpuMemoryReader(5120L * 1024 * 1024);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 8192,
+            hostMemoryBudgetMb: 8192,
+            processGpuMemoryReader: () => reader);
+
+        // One idle pooled session: the reservation total is 3072 MB against the 5120 MB observed.
+        SessionLease pooled = await pool.GetLeaseAsync(
+            AcceleratorKey("pend0", 3072), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        pooled.Dispose();
+
+        // Creator A reserves 2048 MB but its factory has not allocated yet.
+        var factoryGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<SessionLease> creatorA = pool.GetLeaseAsync(
+            AcceleratorKey("pendA", 2048),
+            async _ => { await factoryGate.Task; return CreateMinimalSession(); },
+            CancellationToken.None);
+
+        // Let A take its pending reservation before B decides, so the overlap is deterministic.
+        await Task.Delay(TimeSpan.FromMilliseconds(150));
+
+        // Creator B needs 2048 MB more: 5120 observed + 2048 pending + 2048 new = 9216 > 8192,
+        // so it must wait rather than slip into the observation's shadow.
+        int factoryCallsB = 0;
+        Task<SessionLease> creatorB = pool.GetLeaseAsync(
+            AcceleratorKey("pendB", 2048),
+            _ =>
+            {
+                Interlocked.Increment(ref factoryCallsB);
+                return Task.FromResult(CreateMinimalSession());
+            },
+            CancellationToken.None);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+        Assert.Equal(0, Volatile.Read(ref factoryCallsB));
+
+        // Once A's allocation lands and is published, B fits and proceeds.
+        factoryGate.TrySetResult(true);
+        using SessionLease leaseA = await creatorA.WaitAsync(TimeSpan.FromSeconds(5));
+        using SessionLease leaseB = await creatorB.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(leaseA.Session);
+        Assert.NotNull(leaseB.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_EvictedMemoryDrainingWhileWaiting_LetsAdmissionProceed()
+    {
+        // One idle session plus unexplained observed usage: the wait evicts at most one idle
+        // entry per pass and re-observes, so once the evicted memory drains the parked
+        // admission proceeds instead of failing fast.
+        var reader = new CountdownDrainingReader(8500L * 1024 * 1024, hotReads: 10);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 8192,
+            hostMemoryBudgetMb: 8192,
+            processGpuMemoryReader: () => reader);
+
+        SessionLease warm = await pool.GetLeaseAsync(
+            AcceleratorKey("drain0", 3000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        warm.Dispose();
+
+        int factoryCalls = 0;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("drain1", 3000),
+            _ => { Interlocked.Increment(ref factoryCalls); return Task.FromResult(CreateMinimalSession()); },
+            cts.Token);
+
+        Assert.NotNull(lease.Session);
+        Assert.Equal(1, Volatile.Read(ref factoryCalls));
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_LiveButUnevictableEntriesGetALongerBound()
+    {
+        // A held lease can still turn over (release, then evictable), so live-but-unevictable
+        // entries wait on a longer bound than an empty bucket — but the wait stays bounded:
+        // a lease held for a whole stage must not park the waiter until caller cancel.
+        var reader = new MutableProcessGpuMemoryReader(0);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        SessionLease held = await pool.GetLeaseAsync(
+            AcceleratorKey("leased0", 512), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        // Non-pooled GPU memory arrives while the lease is held: the reservation total fits,
+        // but the observation alone blocks the next admission.
+        reader.Set(4096L * 1024 * 1024);
+
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        int previousBusyBound = InferenceSessionPool.ObservedBlockBusyFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 100;
+        InferenceSessionPool.ObservedBlockBusyFailFastPasses = 4;
+        try
+        {
+            int factoryCalls = 0;
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("leased1", 256),
+                _ => { Interlocked.Increment(ref factoryCalls); return Task.FromResult(CreateMinimalSession()); },
+                cts.Token));
+
+            Assert.Contains("4096", failure.Message, StringComparison.Ordinal);
+            Assert.Equal(0, Volatile.Read(ref factoryCalls));
+        }
+        finally
+        {
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+            InferenceSessionPool.ObservedBlockBusyFailFastPasses = previousBusyBound;
+        }
+
+        held.Dispose();
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_InFlightCreateAlone_GetsTheLongerBound()
+    {
+        // A slow factory in an otherwise-empty bucket is live work: its pending reservation
+        // drains from the observation once it publishes. A concurrent waiter must not be told
+        // the bucket is empty and fail on the short bound before that factory completes.
+        var reader = new MutableProcessGpuMemoryReader(0);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        var factoryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFactory = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<SessionLease> slowCreate = pool.GetLeaseAsync(
+            AcceleratorKey("inflight0", 256),
+            async _ =>
+            {
+                factoryStarted.SetResult();
+                await releaseFactory.Task;
+                return CreateMinimalSession();
+            },
+            CancellationToken.None);
+        await factoryStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        reader.Set(4096L * 1024 * 1024);
+
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        int previousBusyBound = InferenceSessionPool.ObservedBlockBusyFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 3;
+        InferenceSessionPool.ObservedBlockBusyFailFastPasses = 100_000;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("inflight1", 256),
+                _ => Task.FromResult(CreateMinimalSession()),
+                cts.Token));
+        }
+        finally
+        {
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+            InferenceSessionPool.ObservedBlockBusyFailFastPasses = previousBusyBound;
+            releaseFactory.SetResult();
+        }
+
+        (await slowCreate).Dispose();
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_UnfreeableObservation_FailsFastAfterEvictingIdleWork()
+    {
+        // When the observation alone blocks, each pass evicts at most one idle entry and
+        // re-observes: evicted sessions get a chance to drain before more cache is discarded.
+        // Once no idle work remains and the reading still blocks, the wait fails with a
+        // diagnostic instead of parking until the caller cancels.
+        var reader = new MutableProcessGpuMemoryReader(0);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        SessionLease warm1 = await pool.GetLeaseAsync(
+            AcceleratorKey("stall1", 512), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        warm1.Dispose();
+        SessionLease warm2 = await pool.GetLeaseAsync(
+            AcceleratorKey("stall2", 512), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        warm2.Dispose();
+
+        // Non-pooled GPU memory arrives after the warm cache is built: the reservation total
+        // (1024 MB) fits, but the 4096 MB observation alone blocks the next 256 MB admission.
+        reader.Set(4096L * 1024 * 1024);
+
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 3;
+        try
+        {
+            InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("stall3", 256),
+                _ => Task.FromResult(CreateMinimalSession()),
+                CancellationToken.None));
+            Assert.Contains("4096", failure.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+        }
+
+        // Both idle entries were offered one per pass before the fail-fast: the first passes
+        // evicted while idle work remained, and only the passes with nothing left to free
+        // counted toward the bound.
+        Assert.False(pool.TryPinExisting(AcceleratorKey("stall1", 512), out _));
+        Assert.False(pool.TryPinExisting(AcceleratorKey("stall2", 512), out _));
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_PerAdapterAttributionIsolatesDevices()
+    {
+        // With a per-adapter breakdown and a host LUID map, device 1's real usage is never
+        // charged to device 0: no sibling subtraction, no cross-adapter blocking.
+        var reader = new PerAdapterProcessGpuMemoryReader(
+            totalBytes: 5000L * 1024 * 1024,
+            byLuidBytes: new Dictionary<long, long>
+            {
+                [100] = 1500L * 1024 * 1024,
+                [200] = 3500L * 1024 * 1024,
+            });
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        IReadOnlyDictionary<int, long>? previous = SharedPoolOptions.AdapterLuidMap;
+        SharedPoolOptions.UseAdapterLuidMap(new Dictionary<int, long> { [0] = 100, [1] = 200 });
+        try
+        {
+            // 1500 MB on this adapter + 256 MB need fits the 4096 MB budget, even though the
+            // process total (5000 MB) would block under the fallback accounting.
+            using SessionLease lease = await pool.GetLeaseAsync(
+                AcceleratorKey("pa1", 256, deviceId: 0),
+                _ => Task.FromResult(CreateMinimalSession()),
+                CancellationToken.None);
+
+            Assert.NotNull(lease.Session);
+        }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previous);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_PerAdapter_MappedAdapterWithNoUsage_IsChargedNothing()
+    {
+        // The breakdown is complete when present, so a mapped adapter with no entry holds nothing:
+        // the first admission on a fresh second GPU must not be charged the other adapter's usage.
+        var reader = new PerAdapterProcessGpuMemoryReader(
+            totalBytes: 3900L * 1024 * 1024,
+            byLuidBytes: new Dictionary<long, long> { [100] = 3900L * 1024 * 1024 });
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        IReadOnlyDictionary<int, long>? previous = SharedPoolOptions.AdapterLuidMap;
+        SharedPoolOptions.UseAdapterLuidMap(new Dictionary<int, long> { [0] = 100, [1] = 200 });
+        try
+        {
+            using SessionLease lease = await pool.GetLeaseAsync(
+                AcceleratorKey("pa0", 256, deviceId: 1),
+                _ => Task.FromResult(CreateMinimalSession()),
+                CancellationToken.None);
+
+            Assert.NotNull(lease.Session);
+        }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previous);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_ExternalTurnoverAfterBusyPasses_DoesNotTripEmptyBucketFailFast()
+    {
+        // The busy bound waits for live-but-unevictable entries to turn over. When that
+        // turnover happens (an idle external evicted through its callback), the stall counter
+        // must reset: otherwise the bucket empties, the bound drops to the short fail-fast,
+        // and a waiter parked through the busy phase throws before the freed memory has had a
+        // single re-observe to drain.
+        var reader = new MutableDrainGpuReader();
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        using ExternalMemoryReservation external = await pool.ReserveExternalAsync(
+            ExecutionProviderKind.DirectMl, null, 500, CancellationToken.None);
+        reader.Set(4096L * 1024 * 1024);
+
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        int previousBusyBound = InferenceSessionPool.ObservedBlockBusyFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 3;
+        InferenceSessionPool.ObservedBlockBusyFailFastPasses = 20;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            Task<ExternalMemoryReservation> waiter = pool.ReserveExternalAsync(
+                ExecutionProviderKind.DirectMl, null, 256, cts.Token);
+
+            // Busy passes accumulate past the short bound while the external stays live (no
+            // eviction callback yet): the reservations fit, the observation alone blocks.
+            await Task.Delay(TimeSpan.FromMilliseconds(400));
+
+            // Register the idle-eviction callback. The first pass that offers the external
+            // evicts it; the reading stays hot for two more reads, so the freshly-emptied
+            // bucket is still observation-blocked — the reset stall counter is what lets the
+            // waiter survive that pass and admit once the memory drains.
+            var evicted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Assert.True(external.TrySetIdleEvictionCallback(() =>
+            {
+                reader.ArmDrain(2);
+                evicted.TrySetResult();
+                return true;
+            }));
+
+            await evicted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            using ExternalMemoryReservation admitted = await waiter.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.NotNull(admitted);
+        }
+        finally
+        {
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+            InferenceSessionPool.ObservedBlockBusyFailFastPasses = previousBusyBound;
+        }
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_MissingMapFallsBackToProcessTotal()
+    {
+        // Without a host LUID map the pool keeps the conservative process-total accounting:
+        // the 5000 MB total blocks a 256 MB admission on a 4096 MB budget.
+        var reader = new PerAdapterProcessGpuMemoryReader(
+            totalBytes: 5000L * 1024 * 1024,
+            byLuidBytes: new Dictionary<long, long> { [100] = 1500L * 1024 * 1024 });
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        IReadOnlyDictionary<int, long>? previous = SharedPoolOptions.AdapterLuidMap;
+        SharedPoolOptions.UseAdapterLuidMap(null);
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+            int factoryCalls = 0;
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("pa2", 256, deviceId: 0),
+                _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
+                cts.Token));
+
+            Assert.Equal(0, factoryCalls);
+        }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previous);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_UnattributedBreakdownFallsBackToProcessTotal()
+    {
+        // A reader that cannot attribute per adapter (null breakdown) degrades to the same
+        // fallback even when the host registered a map.
+        var reader = new PerAdapterProcessGpuMemoryReader(totalBytes: 5000L * 1024 * 1024, byLuidBytes: null);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        IReadOnlyDictionary<int, long>? previous = SharedPoolOptions.AdapterLuidMap;
+        SharedPoolOptions.UseAdapterLuidMap(new Dictionary<int, long> { [0] = 100 });
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("pa3", 256, deviceId: 0),
+                _ => Task.FromResult(CreateMinimalSession()),
+                cts.Token));
+        }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previous);
+        }
+    }
+
+    private sealed class PerAdapterProcessGpuMemoryReader(long? totalBytes, IReadOnlyDictionary<long, long>? byLuidBytes)
+        : IProcessGpuMemoryReader
+    {
+        public string UnavailableReason => "Test double: scripted per-adapter reading.";
+
+        public long? ReadDedicatedGpuMemoryBytes() => totalBytes;
+
+        public IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid() => byLuidBytes;
     }
 
     [Fact]
@@ -1152,10 +1517,6 @@ public sealed class InferenceSessionPoolTests
 
         public long? ReadDedicatedGpuMemoryBytes() => bytes;
 
-        // Aggregate-only double: per-adapter attribution unavailable, so the pool falls back to
-        // the process total plus sibling subtraction — the shape production takes when the
-        // reader cannot map its LUIDs to device indices.
-        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
     }
 
     /// <summary>Stand-in whose reading follows the host's real usage over time.</summary>
@@ -1173,8 +1534,6 @@ public sealed class InferenceSessionPoolTests
             long value = Volatile.Read(ref current);
             return value < 0 ? null : value;
         }
-
-        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
     }
 
     /// <summary>Reports one hot reading, then drains — stands in for freed GPU memory.</summary>
@@ -1186,8 +1545,45 @@ public sealed class InferenceSessionPoolTests
 
         public long? ReadDedicatedGpuMemoryBytes() =>
             Interlocked.Increment(ref reads) == 1 ? firstBytes : 0;
+    }
 
-        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
+    /// <summary>Reports a hot reading for a fixed number of reads, then drains.</summary>
+    private sealed class CountdownDrainingReader(long hotBytes, int hotReads) : IProcessGpuMemoryReader
+    {
+        private int reads;
+
+        public string UnavailableReason => "Test double: hot readings, then drained.";
+
+        public long? ReadDedicatedGpuMemoryBytes() =>
+            Interlocked.Increment(ref reads) <= hotReads ? hotBytes : 0;
+    }
+
+    /// <summary>
+    /// Stand-in whose reading stays hot until <see cref="ArmDrain"/> counts the remaining hot
+    /// reads, then reports 0 — models freed GPU memory that takes a couple of re-observes to
+    /// drain after an external is evicted.
+    /// </summary>
+    private sealed class MutableDrainGpuReader : IProcessGpuMemoryReader
+    {
+        private long current = -1;
+        private int hotReads = int.MaxValue;
+
+        public string UnavailableReason => "Test double: draining after armed reads.";
+
+        public void Set(long? value) => Volatile.Write(ref current, value ?? -1);
+
+        public void ArmDrain(int reads) => Volatile.Write(ref hotReads, reads);
+
+        public long? ReadDedicatedGpuMemoryBytes()
+        {
+            if (Interlocked.Decrement(ref hotReads) < 0)
+            {
+                return 0;
+            }
+
+            long value = Volatile.Read(ref current);
+            return value < 0 ? null : value;
+        }
     }
 
     private sealed class ThrowingProcessGpuMemoryReader : IProcessGpuMemoryReader
@@ -1196,25 +1592,6 @@ public sealed class InferenceSessionPoolTests
 
         public long? ReadDedicatedGpuMemoryBytes() =>
             throw new InvalidOperationException("probe exploded.");
-
-        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() =>
-            throw new InvalidOperationException("probe exploded.");
-    }
-
-    /// <summary>
-    /// Double that attributes usage per adapter, exercising the pool's per-device observation
-    /// path: the reading for adapter <c>deviceId</c> is charged directly, with no sibling
-    /// subtraction, and other adapters' usage is invisible to this bucket.
-    /// </summary>
-    private sealed class PerAdapterProcessGpuMemoryReader(
-        IReadOnlyDictionary<int, long>? bytesByAdapter,
-        long? processTotalBytes = null) : IProcessGpuMemoryReader
-    {
-        public string UnavailableReason => "Test double: per-adapter reading configured.";
-
-        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => bytesByAdapter;
-
-        public long? ReadDedicatedGpuMemoryBytes() => processTotalBytes;
     }
 
     // ── SharedPoolOptions (production activation contract) ────────────────────
@@ -1510,11 +1887,11 @@ public sealed class InferenceSessionPoolTests
     [Fact]
     public async Task DefaultConstructor_HardAdmission_BlocksAcceleratorBeyondDefaultBudget()
     {
-        // Defaults: admission on, 4096 MB accelerator budget per device. A second DML
+        // Defaults: admission on, a hardware-scaled accelerator budget per device. A second DML
         // graph that cannot fit must wait — never fall back to an ephemeral session.
         using var pool = new InferenceSessionPool();
-        var key1 = AcceleratorKey("ha1", 3000);
-        var key2 = AcceleratorKey("ha2", 2000);
+        var key1 = AcceleratorKey("ha1", InferenceSessionPool.DefaultMemoryBudgetMb);
+        var key2 = AcceleratorKey("ha2", 1);
         int key2FactoryCalls = 0;
 
         using SessionLease lease1 = await pool.GetLeaseAsync(
@@ -1625,8 +2002,8 @@ public sealed class InferenceSessionPoolTests
     public async Task GetLeaseBundleAsync_AggregateOversize_FailsBeforeAnyFactory()
     {
         using var pool = new InferenceSessionPool();
-        var big1 = AcceleratorKey("bo1", 3000);
-        var big2 = AcceleratorKey("bo2", 2000);
+        var big1 = AcceleratorKey("bo1", InferenceSessionPool.DefaultMemoryBudgetMb);
+        var big2 = AcceleratorKey("bo2", 1);
         int factoryCalls = 0;
 
         Task<InferenceSession> Factory(CancellationToken _)
@@ -1635,7 +2012,7 @@ public sealed class InferenceSessionPoolTests
             return Task.FromResult(CreateMinimalSession());
         }
 
-        // 3000 + 2000 exceeds the default 4096 MB device-0 accelerator budget.
+        // The combined estimates exceed the hardware-scaled device-0 budget by 1 MB.
         InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => pool.GetLeaseBundleAsync(
                 [new SessionLeaseRequest(big1, Factory), new SessionLeaseRequest(big2, Factory)],

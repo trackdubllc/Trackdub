@@ -28,19 +28,26 @@ public interface IProcessGpuMemoryReader
 {
     /// <summary>
     /// Dedicated GPU memory currently allocated by this process, in bytes, or null when this
-    /// platform or driver cannot report it. The total spans every adapter this process touches,
-    /// so it is the right reading for a process-wide bound but not for one device's budget.
+    /// platform or driver cannot report it.
     /// </summary>
     long? ReadDedicatedGpuMemoryBytes();
 
     /// <summary>
-    /// Dedicated GPU memory this process holds on each graphics adapter, keyed by the adapter
-    /// index the host's device enumerator reports (DXGI enumeration order, software adapters
-    /// skipped), or null when per-adapter attribution is unavailable on this platform or driver —
-    /// callers then fall back to <see cref="ReadDedicatedGpuMemoryBytes"/>. An empty map means
-    /// the reading succeeded and this process holds nothing on any adapter.
+    /// Dedicated GPU memory currently allocated by this process, broken down by adapter LUID,
+    /// or null when this platform, driver, or reader cannot attribute usage per adapter. The
+    /// values sum to <see cref="ReadDedicatedGpuMemoryBytes"/> when both are available. The
+    /// default implementation reports no per-adapter attribution, in which case consumers fall
+    /// back to the process-total reading.
     /// </summary>
-    IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter();
+    IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid() => null;
+
+    /// <summary>
+    /// Reads the process total and the per-adapter breakdown together. A reader that can derive
+    /// both from one underlying collection overrides this so the two numbers describe the same
+    /// instant and cost one collection; the default composes the two separate reads.
+    /// </summary>
+    (long? TotalBytes, IReadOnlyDictionary<long, long>? ByAdapterLuid) ReadDedicatedGpuMemory() =>
+        (ReadDedicatedGpuMemoryBytes(), ReadDedicatedGpuMemoryBytesByAdapterLuid());
 
     /// <summary>Why the reading is unavailable, surfaced verbatim in benchmark evidence.</summary>
     string UnavailableReason { get; }

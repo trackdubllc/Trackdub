@@ -77,6 +77,73 @@ public sealed class ResourceTelemetryValidatorTests
     }
 
     [Fact]
+    public void Validate_gpu_bytes_fails_when_the_interval_peak_exceeds_the_budget()
+    {
+        // A spike that drains before the terminal event still counts: the peak is the
+        // maximum of the endpoints and the sampled interval maximum.
+        var result = validator.Validate(
+            Start with { GpuBytes = 1000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = 9000 },
+            new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Failed, check.Status);
+        Assert.Equal(9000.0, check.ObservedValue);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_passes_when_peak_and_endpoints_fit_the_budget()
+    {
+        var result = validator.Validate(
+            Start with { GpuBytes = 1000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = 2000 },
+            new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Passed, check.Status);
+        Assert.Equal(2000.0, check.ObservedValue);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_is_unavailable_when_peak_sampling_failed_with_a_budget()
+    {
+        var result = validator.Validate(
+            Start with { GpuBytes = 1000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = null, PeakGpuUnavailableReason = "Continuous process-GPU sampling unavailable (UnauthorizedAccessException)." },
+            new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Unavailable, check.Status);
+        Assert.Contains("Continuous process-GPU sampling unavailable", check.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_is_skipped_when_peak_sampling_failed_without_a_budget()
+    {
+        // Unbudgeted and unmeasurable stays Skipped so CPU-only stages are not downgraded.
+        var result = validator.Validate(
+            Start with { GpuBytes = 1000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = null, PeakGpuUnavailableReason = "Continuous process-GPU sampling unavailable (UnauthorizedAccessException)." },
+            new());
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Skipped, check.Status);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_fails_when_an_endpoint_proves_the_breach_despite_a_peak_gap()
+    {
+        var result = validator.Validate(
+            Start with { GpuBytes = 9000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = null, PeakGpuUnavailableReason = "Continuous process-GPU sampling unavailable (UnauthorizedAccessException)." },
+            new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Failed, check.Status);
+        Assert.Equal(9000.0, check.ObservedValue);
+    }
+
+    [Fact]
     public void Validate_uses_measured_peak_working_set_when_it_exceeds_both_endpoints()
     {
         ResourceUsageSnapshot peak = End with { PeakWorkingSetBytes = 1500 };

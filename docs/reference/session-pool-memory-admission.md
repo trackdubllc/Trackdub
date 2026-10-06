@@ -38,11 +38,24 @@ admission.
 What the observation means in practice:
 
 - A process already at or above the accelerator budget admits no new accelerator session until its
-  real usage drains. Idle pooled sessions are evicted first, and the wait is re-evaluated every
-  50 ms, so a genuine release unblocks the caller; the caller's cancellation token remains the
-  escape hatch, exactly as for an exhausted reservation budget.
-- The reading is process-wide and cannot be attributed to an adapter, so it is conservative on a
-  multi-GPU host: only the reservations the pool's *other* devices already explain are subtracted.
+  real usage drains. Each observation-blocked pass evicts at most one idle entry and re-observes,
+  so evicted memory gets a chance to drain before more cache is discarded. Passes that free
+  nothing count toward a fail-fast: an empty bucket throws after ~5 s of continuous stall, while
+  a bucket holding live-but-unevictable entries (held leases, pins, live externals) gets ~60 s
+  for turnover before the same diagnostic fires — a lease held for a whole stage still ends in
+  an error, not a hang. The caller's cancellation token remains an escape hatch throughout,
+  exactly as for an exhausted reservation budget.
+- In-flight creates hold a pending reservation but have not allocated yet, so the process reading
+  cannot contain them: pending reservations are charged on top of the observed floor, keeping
+  concurrent admissions from overshooting the device budget.
+- When the reader attributes usage per adapter (Windows) and the host registered its
+  device-to-LUID map, each accelerator device is charged exactly its own adapter's footprint:
+  usage on other adapters never blocks it and no sibling subtraction is needed. Without a
+  breakdown or a map, the pool falls back to the conservative process total minus the sibling
+  devices' reservations, so multi-GPU pipelines cannot lock themselves out.
+  Both `HeadlessDubbingHost` and SDK `TrackdubBuilder.Build` register this mapping from
+  `IDeviceEnumerator` during construction and release their own mapping on disposal without
+  clearing a newer host's registration.
 - Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) are never charged with it.
 - An unavailable reading — no GPU, a driver that does not publish the counter set, a GPU-idle
   process, or a failing probe — leaves admission exactly as it was.

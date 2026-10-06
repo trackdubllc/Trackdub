@@ -40,8 +40,7 @@ internal static class HostCapacityBanner
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // Diagnostic only: the run's pre-flight treats an unenumerable host as an unknown
-            // capacity, and this banner must not turn that into a failure. Cancellation is control
-            // flow and must propagate, matching ResourceBoundsPreflight.QueryTotalVideoMemoryMbAsync.
+            // capacity, and this banner must not turn that into a failure.
         }
 
         foreach (string line in Describe(devices, bounds))
@@ -83,9 +82,14 @@ internal static class HostCapacityBanner
 
         long detectedVideoMemoryMb = 0;
         int gpuAdapterCount = 0;
-        foreach (DeviceEntry device in ResourceBoundsPreflight.GpuAdapters(devices))
+        foreach (DeviceEntry device in devices)
         {
-            detectedVideoMemoryMb += ResourceBoundsPreflight.TotalAdapterMemoryMb(device);
+            if (device.Kind is not (DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu))
+            {
+                continue;
+            }
+
+            detectedVideoMemoryMb += (long)device.DedicatedVramMb + device.SharedMemoryMb;
             gpuAdapterCount++;
         }
 
@@ -97,8 +101,8 @@ internal static class HostCapacityBanner
 
         long capacityMb = ResourceBoundsPreflight.EffectiveVideoMemoryMb(devices);
         lines.Add(capacityMb > 0
-            ? $"  Effective VRAM capacity: {capacityMb} MB - the telemetered adapter's dedicated "
-                + "(DXGI LOCAL-segment) memory, which --min-available-vram-mb is checked against."
+            ? $"  Effective VRAM capacity: {capacityMb} MB - the sampled adapter's local-segment "
+                + "memory, which --min-available-vram-mb is checked against."
             : "  Effective VRAM capacity: unknown - no GPU adapter reported memory.");
 
         lines.Add(DescribeBoundFeasibility(bounds, capacityMb));

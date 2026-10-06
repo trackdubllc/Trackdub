@@ -53,28 +53,106 @@ public sealed class ResourceTelemetryRegistrationTests
     }
 
     [Fact]
-    public void Headless_host_startup_binds_the_process_gpu_reader_to_shared_pool_admission()
+    public void Headless_binds_the_process_gpu_reader_to_shared_pool_admission()
     {
+        // Creating the host is what hands its reader to the shared session pool, so accelerator
+        // admission accounts for this process's real dedicated GPU footprint instead of only the
+        // pool's own reservations. Resolving the reader alone must not bind anything.
+        var services = new ServiceCollection();
+        services.AddHeadlessTrackdub();
+        using (var provider = services.BuildServiceProvider())
+        {
+            _ = provider.GetRequiredService<IProcessGpuMemoryReader>();
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+        }
+
+        // Capture the ambient binding before this test registers its own host, so the
+        // finally restores exactly what was there instead of unconditionally clearing a
+        // reader a previous test or host bound.
+        IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
+        using var host = HeadlessDubbingHost.Create();
+        try
+        {
+            IProcessGpuMemoryReader reader = host.Services.GetRequiredService<IProcessGpuMemoryReader>();
+#if WINDOWS
+            Assert.Same(reader, SharedPoolOptions.ProcessGpuMemoryReader);
+#else
+            // No platform reader here: the pool keeps its reservation-only model.
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+#endif
+        }
+        finally
+        {
+            SharedPoolOptions.UseProcessGpuMemoryReader(previous);
+        }
+    }
+
+    [Fact]
+    public void Headless_host_dispose_releases_only_its_own_pool_binding()
+    {
+        IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
+        var first = HeadlessDubbingHost.Create();
+        var second = HeadlessDubbingHost.Create();
+        try
+        {
+#if WINDOWS
+            // The latest host wins the process-wide registration.
+            Assert.Same(
+                second.Services.GetRequiredService<IProcessGpuMemoryReader>(),
+                SharedPoolOptions.ProcessGpuMemoryReader);
+
+            // Disposing the older host must not tear down the newer host's registration.
+            first.Dispose();
+            Assert.Same(
+                second.Services.GetRequiredService<IProcessGpuMemoryReader>(),
+                SharedPoolOptions.ProcessGpuMemoryReader);
+
+            // Disposing the owning host clears the binding instead of leaking a stale reader
+            // into later hosts and tests in the same process.
+            second.Dispose();
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+#else
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+            first.Dispose();
+            second.Dispose();
+#endif
+        }
+        finally
+        {
+            first.Dispose();
+            second.Dispose();
+            SharedPoolOptions.UseProcessGpuMemoryReader(previous);
+        }
+    }
+
+    [Fact]
+    public void Headless_composition_root_binds_and_clears_shared_pool_admission()
+    {
+        // The shared helper every headless composition owner calls — HeadlessDubbingHost and
+        // the SDK's TrackdubBuilder.Build — must bind the container's reader and release the
+        // binding on dispose without touching a previous registration.
+        IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
         var services = new ServiceCollection();
         services.AddHeadlessTrackdub();
         using var provider = services.BuildServiceProvider();
 
-        // Host construction — not telemetry-service resolution — is what hands the final reader
-        // registration to the shared session pool, so accelerator admission is armed before the
-        // first session even when nothing ever asks for the collector. This test deliberately
-        // never resolves IProcessGpuMemoryReader itself: it only builds the factory that every
-        // headless host path constructs (HeadlessDubbingHost and TrackdubBuilder →
-        // TrackdubSessionFactory), then verifies the pool picked up the container's reader.
-        _ = new HeadlessDubbingSessionFactory(provider);
-
-        IProcessGpuMemoryReader reader = provider.GetRequiredService<IProcessGpuMemoryReader>();
         try
         {
-            Assert.Same(reader, SharedPoolOptions.ProcessGpuMemoryReader);
+            IProcessGpuMemoryReader? bound = HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(provider);
+#if WINDOWS
+            Assert.Same(provider.GetRequiredService<IProcessGpuMemoryReader>(), bound);
+            Assert.Same(bound, SharedPoolOptions.ProcessGpuMemoryReader);
+            HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(bound);
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+#else
+            // No platform reader here: the pool keeps its reservation-only model.
+            Assert.Null(bound);
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+#endif
         }
         finally
         {
-            SharedPoolOptions.UseProcessGpuMemoryReader(null);
+            SharedPoolOptions.UseProcessGpuMemoryReader(previous);
         }
     }
 

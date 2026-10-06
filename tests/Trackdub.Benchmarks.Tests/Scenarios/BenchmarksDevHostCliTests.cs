@@ -101,6 +101,9 @@ public sealed class BenchmarksDevHostCliTests : IDisposable
         Assert.Equal(0, exitCode);
         string text = output.ToString();
         Assert.Contains("Host capacity", text, StringComparison.Ordinal);
+        int bannerCount = (text.Length - text.Replace("Host capacity", string.Empty, StringComparison.Ordinal).Length)
+            / "Host capacity".Length;
+        Assert.Equal(1, bannerCount);
         Assert.True(
             text.IndexOf("Host capacity", StringComparison.Ordinal)
                 < text.IndexOf("Stage matrix", StringComparison.Ordinal),

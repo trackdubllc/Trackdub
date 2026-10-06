@@ -38,9 +38,9 @@ public sealed class HostCapacityBannerTests
     [Fact]
     public void Separates_detected_video_memory_from_the_effective_capacity()
     {
-        // The sum of both adapters is not the capacity: a floor applies to the adapter the run's
-        // free-VRAM telemetry actually samples (index 0, its dedicated LOCAL-segment memory), so
-        // neither the sum nor the other adapter's larger shared pool can raise the ceiling.
+        // The sum of both adapters is not the capacity: a floor applies to the sampled
+        // adapter's local segment, so the ceiling is the discrete adapter's dedicated VRAM —
+        // neither the summed total nor the larger integrated total.
         string[] lines = [.. HostCapacityBanner.Describe(
             [
                 Device(DeviceKind.DiscreteGpu, 0, "GeForce RTX 4090", "NVIDIA", 8192, 4096),
@@ -131,7 +131,7 @@ public sealed class HostCapacityBannerTests
             new ResourceTelemetryBounds { MinAvailableVramMb = 8192 })];
 
         string feasibility = Assert.Single(lines, line => line.Contains("Bound feasibility", StringComparison.Ordinal));
-        Assert.Contains("--min-available-vram-mb 12288 MB is within", feasibility, StringComparison.Ordinal);
+        Assert.Contains("--min-available-vram-mb 8192 MB is within", feasibility, StringComparison.Ordinal);
     }
 
     [Fact]
