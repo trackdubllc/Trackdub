@@ -167,6 +167,14 @@ public static class TtsEvalRunner
                 throw new InvalidDataException(
                     $"Jobs line {lineNumber}: id, text, language_code and voice_id are required.");
             }
+            if (job.WarmupRuns is < 0)
+            {
+                throw new InvalidDataException($"Jobs line {lineNumber}: warmup_runs must be non-negative.");
+            }
+            if (job.RepeatRuns is < 1)
+            {
+                throw new InvalidDataException($"Jobs line {lineNumber}: repeat_runs must be positive.");
+            }
             if (!ids.Add(job.Id))
             {
                 throw new InvalidDataException($"Jobs line {lineNumber}: duplicate id '{job.Id}'.");
