@@ -173,7 +173,7 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         return new ResourceTelemetryCheck("workingSetBytes",
             exceeded ? ResourceTelemetryStatus.Failed : ResourceTelemetryStatus.Passed,
             observedValue, maximum,
-            exceeded ? "Configured upper bound exceeded." : end?.PeakWorkingSetSamplingWarning);
+            exceeded ? "Configured upper bound exceeded." : end.PeakWorkingSetSamplingWarning);
     }
 
     private static long? Maximum(long? first, long? second) =>
