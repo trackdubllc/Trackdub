@@ -56,6 +56,52 @@ public sealed class WorkingSetPeakMonitorTests
     }
 
     [Fact]
+    public async Task Sampling_warns_on_a_scripted_dilated_gap_without_disturbing_the_peakAsync()
+    {
+        // One-sided by construction: the scripted 150 ms gap can only grow under host
+        // load, never shrink below the 100 ms (4x25 ms) threshold, so this cannot flake.
+        var monitor = new WorkingSetPeakMonitor(
+            new SequenceSampler(100, 100, 100),
+            100,
+            TimeSpan.FromMilliseconds(25),
+            new ScriptedTicker([TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(150)]));
+
+        // Poll the asserted condition itself: the scripted gap lands no earlier than
+        // 150 ms in, and Stop() cancels any tick still in flight, so this cannot overshoot.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (monitor.MaxObservedTickInterval < TimeSpan.FromMilliseconds(150))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(5), timeout.Token);
+        }
+        Assert.Equal(100, monitor.Stop());
+
+        Assert.Contains("cadence", monitor.SamplingWarning, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Sampling_stays_silent_when_scripted_ticks_hold_cadenceAsync()
+    {
+        var monitor = new WorkingSetPeakMonitor(
+            new SequenceSampler(100, 100, 100, 100),
+            100,
+            TimeSpan.FromMilliseconds(25),
+            new ScriptedTicker([
+                TimeSpan.FromMilliseconds(5),
+                TimeSpan.FromMilliseconds(5),
+                TimeSpan.FromMilliseconds(5),
+            ]));
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (monitor.MaxObservedTickInterval == TimeSpan.Zero)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(5), timeout.Token);
+        }
+        Assert.Equal(100, monitor.Stop());
+
+        Assert.Null(monitor.SamplingWarning);
+    }
+
+    [Fact]
     public async Task Sampling_measures_tick_gaps_and_reports_warning_consistentlyAsync()
     {
         var sampler = new SequenceSampler(100, 100, 100, 100);
@@ -89,5 +135,26 @@ public sealed class WorkingSetPeakMonitorTests
     private sealed class ThrowingSampler : IWorkingSetSampler
     {
         public long CaptureWorkingSetBytes() => throw new InvalidOperationException("probe failed");
+    }
+
+    private sealed class ScriptedTicker(IEnumerable<TimeSpan> script) : ISamplingTicker
+    {
+        private readonly Queue<TimeSpan> delays = new(script);
+
+        public async ValueTask<bool> WaitForNextTickAsync(CancellationToken cancellationToken)
+        {
+            if (delays.Count == 0)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+                return false;
+            }
+
+            await Task.Delay(delays.Dequeue(), cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }
