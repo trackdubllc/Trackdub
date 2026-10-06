@@ -175,10 +175,16 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
         await File.WriteAllBytesAsync(fixture, [1, 2, 3]);
         try
         {
+            // The outlier delay sets the scale: a median contaminated by it would read
+            // >= ~OutlierDelayMs, while the true p50 gap is ~30 ms of simulated work.
+            // The assertion bound sits halfway between, so it checks ordering (p50
+            // excludes the outlier) rather than a wall-clock budget that dispatch
+            // overhead on loaded nodes could cross.
+            const int outlierDelayMs = 2000;
             var transcriptionStage = new SequencedTranscriptionStage(
                 TimeSpan.Zero,
                 TimeSpan.Zero,
-                TimeSpan.FromMilliseconds(1000));
+                TimeSpan.FromMilliseconds(outlierDelayMs));
             using var runner = new ControlledDubbingBenchmarkRunner(
                 new NoHistory(),
                 services =>
@@ -200,8 +206,8 @@ public sealed class ControlledDubbingBenchmarkRunnerTests
             double persisted = Assert.IsType<double>(
                 report.TimingsMilliseconds["firstPersistedTranscript"]);
             Assert.True(
-                persisted - available < 500,
-                $"p50 first-output gap should exclude the final 1000 ms outlier, but was {persisted - available} ms.");
+                persisted - available < outlierDelayMs / 2,
+                $"p50 first-output gap should exclude the final {outlierDelayMs} ms outlier, but was {persisted - available} ms.");
         }
         finally
         {

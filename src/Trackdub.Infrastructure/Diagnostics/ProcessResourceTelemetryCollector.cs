@@ -91,7 +91,7 @@ public sealed class ProcessResourceTelemetryCollector(
 
     /// <summary>
     /// Shared read-validate-degrade pipeline for GPU metrics: a null reading reports the
-    /// reader's own reason, a negative reading is a defective probe, and a failing query
+    /// reader's own reason, a negative reading is a defective probe, and a handled platform query failure
     /// degrades the run's evidence instead of aborting the measurement.
     /// </summary>
     private static (long? Value, string? Reason) ReadGpuMetric(
@@ -115,7 +115,7 @@ public sealed class ProcessResourceTelemetryCollector(
         }
         catch (Exception exception) when (IsPlatformReadFailure(exception) || exception is InvalidOperationException)
         {
-            // A failing GPU query must degrade the run's evidence, never abort the measurement.
+            // Handled platform query failures degrade the evidence instead of aborting the measurement.
             return (null, $"{failureMessage} ({exception.GetType().Name}).");
         }
     }

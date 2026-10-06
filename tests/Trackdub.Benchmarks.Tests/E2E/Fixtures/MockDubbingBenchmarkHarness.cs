@@ -65,15 +65,15 @@ public sealed class MockDubbingBenchmarkHarness : IDisposable
             timings[$"stage:{kvp.Key}:duration"] = kvp.Value;
         }
 
-        var memory = new Dictionary<string, long?>
+        var processMemory = new BenchmarkProcessMemoryTelemetry
         {
-            ["processWorkingSetStart"] = workingSetStartBytes,
-            ["processWorkingSetEnd"] = workingSetEndBytes,
-            ["peakWorkingSetBytes"] = peakWorkingSetBytes,
-            ["managedAllocatedBytes"] = managedAllocatedBytes,
-            ["gen0Collections"] = gen0,
-            ["gen1Collections"] = gen1,
-            ["gen2Collections"] = gen2,
+            WorkingSetStartBytes = workingSetStartBytes,
+            WorkingSetEndBytes = workingSetEndBytes,
+            PeakWorkingSetBytes = peakWorkingSetBytes,
+            ManagedAllocatedBytes = managedAllocatedBytes,
+            Gen0Collections = gen0,
+            Gen1Collections = gen1,
+            Gen2Collections = gen2,
         };
 
         return new BenchmarkEvidenceReport
@@ -91,7 +91,7 @@ public sealed class MockDubbingBenchmarkHarness : IDisposable
             RequestedModel = "mock-model",
             ActualModel = "mock-model",
             TimingsMilliseconds = timings,
-            MemoryBytes = memory,
+            ProcessMemory = processMemory,
             Stages = stages,
             Configuration = new Dictionary<string, string>
             {

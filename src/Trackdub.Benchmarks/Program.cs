@@ -226,76 +226,41 @@ public static class Program
             output.WriteLine(ResourceTelemetryOptionsParser.Description);
             return args.Length == 0 ? 1 : 0;
         }
-        string? outputDirectory = null, stage = null, model = null, provider = null;
-        string? sourceLanguage = null, modelDirectory = null, ffmpeg = null, ffprobe = null;
-        string? expectedSha256 = null;
+        string? stage = null, model = null;
         string? reportDirectory = null;
-        string language = "es", mode = "fresh-process";
-        bool reuseCache = false;
-        bool mock = false;
-        bool dryRun = false;
-        int runCount = 1;
-        var resourceTelemetryBounds = new ResourceTelemetryBounds();
+        var shared = new ControlledBenchmarkCliOptions();
         for (int index = 1; index < args.Length; index++)
         {
-            if (args[index] == "--reuse-engine-cache")
+            if (ControlledBenchmarkCliBinder.TryApplyFlag(args[index], shared))
             {
-                reuseCache = true;
                 continue;
             }
-            if (args[index] == "--mock")
+            string option = args[index];
+            if (!ControlledBenchmarkCliBinder.TryReadValue(args, ref index, error, out string value))
             {
-                mock = true;
-                continue;
-            }
-            if (args[index] == "--dry-run")
-            {
-                dryRun = true;
-                mock = true;
-                continue;
-            }
-            if (index + 1 >= args.Length)
-            {
-                error.WriteLine($"Missing value for {args[index]}.");
                 return 1;
             }
-            string value = args[++index];
-            switch (args[index - 1])
+            ControlledCliOptionResult sharedResult =
+                ControlledBenchmarkCliBinder.TryApplyOption(option, value, shared, error);
+            if (sharedResult == ControlledCliOptionResult.Failed)
             {
-                case "--output": outputDirectory = value; break;
+                return 1;
+            }
+            if (sharedResult == ControlledCliOptionResult.Applied)
+            {
+                continue;
+            }
+            switch (option)
+            {
                 case "--stage": stage = value; break;
                 case "--model": model = value; break;
-                case "--provider": provider = value; break;
-                case "--mode": mode = value; break;
-                case "--language": language = value; break;
-                case "--source-language": sourceLanguage = value; break;
-                case "--model-directory": modelDirectory = value; break;
-                case "--ffmpeg": ffmpeg = value; break;
-                case "--ffprobe": ffprobe = value; break;
-                case "--sha256": expectedSha256 = value; break;
                 case "--report-dir": reportDirectory = value; break;
-                case var opt when ResourceTelemetryOptionsParser.IsResourceOption(opt):
-                    if (!ResourceTelemetryOptionsParser.TryApply(
-                        opt, value, resourceTelemetryBounds, error, out resourceTelemetryBounds))
-                    {
-                        return 1;
-                    }
-
-                    break;
-                case "--runs":
-                    if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
-                    {
-                        error.WriteLine($"Invalid run count '{value}'. Expected a positive integer.");
-                        return 1;
-                    }
-                    runCount = parsedRuns;
-                    break;
                 default:
-                    error.WriteLine($"Unknown option {args[index - 1]}.");
+                    error.WriteLine($"Unknown option {option}.");
                     return 1;
             }
         }
-        if (outputDirectory is null)
+        if (shared.OutputDirectory is null)
         {
             error.WriteLine("--output is required.");
             return 1;
@@ -303,7 +268,7 @@ public static class Program
 
         // Report the host's adapters and effective VRAM capacity before the run starts, so a
         // configured --min-available-vram-mb floor can be judged against real hardware up front.
-        await HostCapacityBanner.WriteAsync(output, resourceTelemetryBounds, cancellationToken)
+        await HostCapacityBanner.WriteAsync(output, shared.ResourceTelemetryBounds, cancellationToken)
             .ConfigureAwait(false);
         try
         {
@@ -311,22 +276,22 @@ public static class Program
                 new ControlledDubbingBenchmarkOptions
                 {
                     FixturePath = args[0],
-                    ExpectedFixtureSha256 = expectedSha256,
-                    OutputDirectory = outputDirectory,
+                    ExpectedFixtureSha256 = shared.ExpectedFixtureSha256,
+                    OutputDirectory = shared.OutputDirectory,
                     Stage = stage,
                     Model = model,
-                    Provider = provider,
-                    Mode = mode,
-                    ReuseEngineCache = reuseCache,
-                    TargetLanguage = language,
-                    SourceLanguage = sourceLanguage,
-                    ModelDirectory = modelDirectory,
-                    FfmpegPath = ffmpeg,
-                    FfprobePath = ffprobe,
-                    RunCount = runCount,
-                    ResourceTelemetryBounds = resourceTelemetryBounds,
-                    Mock = mock,
-                    DryRun = dryRun,
+                    Provider = shared.Provider,
+                    Mode = shared.Mode,
+                    ReuseEngineCache = shared.ReuseEngineCache,
+                    TargetLanguage = shared.TargetLanguage,
+                    SourceLanguage = shared.SourceLanguage,
+                    ModelDirectory = shared.ModelDirectory,
+                    FfmpegPath = shared.FfmpegPath,
+                    FfprobePath = shared.FfprobePath,
+                    RunCount = shared.RunCount,
+                    ResourceTelemetryBounds = shared.ResourceTelemetryBounds,
+                    Mock = shared.Mock,
+                    DryRun = shared.DryRun,
                 }, cancellationToken).ConfigureAwait(false);
             output.WriteLine($"Evidence {report.RunId:N}: {report.Status} ({report.RunMode}, {report.Scenario})");
             if (report.Reason is not null) output.WriteLine(report.Reason);

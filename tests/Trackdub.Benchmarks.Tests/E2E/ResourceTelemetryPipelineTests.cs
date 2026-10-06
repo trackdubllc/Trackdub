@@ -45,6 +45,39 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task Injected_monitor_factory_controls_process_and_stage_peaksAsync()
+    {
+        var factory = new FixedPeakFactory();
+        using var runner = new ControlledDubbingBenchmarkRunner(history, services =>
+        {
+            services.AddSingleton<IResourceTelemetryCollector>(new CounterCollector());
+            services.AddSingleton<IWorkingSetSampler>(new FixedWorkingSetSampler(1000));
+        }, factory);
+        var report = await runner.RunAsync(Options() with { ResourceTelemetryBounds = new() });
+        Assert.Equal(BenchmarkEvidenceStatus.Completed, report.Status);
+        Assert.Equal(2999L, report.ProcessMemory!.PeakWorkingSetBytes);
+        Assert.Equal(2999d, Assert.Single(Assert.Single(report.ResourceTelemetry).Validation.Checks,
+            check => check.Metric == "workingSetBytes").ObservedValue);
+        Assert.True(factory.Created >= 2);
+    }
+
+    private sealed class FixedPeakFactory : IWorkingSetPeakMonitorFactory
+    {
+        public int Created { get; private set; }
+        public IWorkingSetPeakMonitor Create(IWorkingSetSampler sampler, long? initialValue, TimeSpan? interval = null)
+        {
+            Created++;
+            return new FixedPeak();
+        }
+        private sealed class FixedPeak : IWorkingSetPeakMonitor
+        {
+            public string? UnavailableReason => null;
+            public string? SamplingWarning => null;
+            public long? Stop() => 2999;
+        }
+    }
+
+    [Fact]
     public async Task Runner_emits_typed_passed_evidence_at_exact_inclusive_budgetsAsync()
     {
         var collector = new CounterCollector();
@@ -107,7 +140,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     }
 
     [Fact]
-    public async Task Sampled_working_set_peak_is_written_to_typed_telemetry_and_legacy_memory_mapAsync()
+    public async Task Sampled_working_set_peak_is_written_to_typed_telemetryAsync()
     {
         using var runner = CreateMockRunner(
             new CounterCollector(), workingSetSampler: new FixedWorkingSetSampler(2000));
@@ -121,7 +154,6 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         ResourceTelemetryCheck workingSet = Assert.Single(sample.Validation.Checks,
             check => check.Metric == "workingSetBytes");
         Assert.Equal(2000d, workingSet.ObservedValue);
-        Assert.Equal(2000L, report.MemoryBytes["stage:audio-prep:peakWorkingSet"]);
     }
 
     [Fact]

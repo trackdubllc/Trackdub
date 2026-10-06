@@ -187,7 +187,7 @@ public sealed class Tier1FeatureCoverageTests
     }
 
     [Fact]
-    public void R2_T1_05_MemoryReportIntegration_PersistsInEvidenceMemoryBytes()
+    public void R2_T1_05_MemoryReportIntegration_PersistsInTypedProcessMemory()
     {
         BenchmarkEvidenceReport report = MockDubbingBenchmarkHarness.CreateMockEvidenceReport(
             scenario: "telemetry-check",
@@ -201,11 +201,12 @@ public sealed class Tier1FeatureCoverageTests
             gen1: 2,
             gen2: 0);
 
-        Assert.Equal(100_000_000, report.MemoryBytes["processWorkingSetStart"]);
-        Assert.Equal(130_000_000, report.MemoryBytes["processWorkingSetEnd"]);
-        Assert.Equal(140_000_000, report.MemoryBytes["peakWorkingSetBytes"]);
-        Assert.Equal(15_000_000, report.MemoryBytes["managedAllocatedBytes"]);
-        Assert.Equal(4, report.MemoryBytes["gen0Collections"]);
+        Assert.NotNull(report.ProcessMemory);
+        Assert.Equal(100_000_000L, report.ProcessMemory.WorkingSetStartBytes);
+        Assert.Equal(130_000_000L, report.ProcessMemory.WorkingSetEndBytes);
+        Assert.Equal(140_000_000L, report.ProcessMemory.PeakWorkingSetBytes);
+        Assert.Equal(15_000_000L, report.ProcessMemory.ManagedAllocatedBytes);
+        Assert.Equal(4L, report.ProcessMemory.Gen0Collections);
     }
 
     // =========================================================================

@@ -304,10 +304,10 @@ public sealed class ExecutionProviderMatrixChallengerStressTests
                 ["pipeline:p50"] = 100.0,
                 ["pipeline:throughput"] = 10.0,
             },
-            MemoryBytes = new Dictionary<string, long?>
+            ProcessMemory = new BenchmarkProcessMemoryTelemetry
             {
-                ["peakWorkingSetBytes"] = 10L * OneTb,
-                ["managedAllocatedBytes"] = 5L * OneTb,
+                PeakWorkingSetBytes = 10L * OneTb,
+                ManagedAllocatedBytes = 5L * OneTb,
             },
             Stages = [],
         };
@@ -328,10 +328,10 @@ public sealed class ExecutionProviderMatrixChallengerStressTests
                 ["pipeline:p50"] = 0.01, // 10 microseconds
                 ["pipeline:throughput"] = 100_000.0,
             },
-            MemoryBytes = new Dictionary<string, long?>
+            ProcessMemory = new BenchmarkProcessMemoryTelemetry
             {
-                ["peakWorkingSetBytes"] = 60L * OneTb,
-                ["managedAllocatedBytes"] = 2L * OneTb,
+                PeakWorkingSetBytes = 60L * OneTb,
+                ManagedAllocatedBytes = 2L * OneTb,
             },
             Stages = [],
         };

@@ -50,6 +50,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         WarmCounterSubsystem, LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static volatile string? warmupFailure;
+    private volatile string? lastReadFailure;
 
     public WindowsProcessGpuMemoryReader() => _ = Warmup.Value;
 
@@ -68,7 +69,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     {
         try
         {
-            _ = QueryObservation();
+            _ = QueryObservation(out _);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -80,57 +81,37 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         return true;
     }
 
-    public string UnavailableReason =>
-        warmupFailure is { } failure
+    public string UnavailableReason => lastReadFailure
+        ?? (warmupFailure is { } failure
             ? $"Windows performance counter initialization failed ({failure})."
-            : $"Windows reported no {CounterSetName} counter instance for this process.";
+            : "No current Windows process GPU measurement is available.");
 
-    public long? ReadDedicatedGpuMemoryBytes()
-    {
-        try
-        {
-            return QueryObservation()?.TotalBytes;
-        }
-        catch (Exception exception) when (exception is DllNotFoundException or BadImageFormatException)
-        {
-            // A host without a usable pdh.dll degrades the reading instead of aborting the run. A
-            // missing entry point is deliberately not caught here: pdh.dll always exports these,
-            // so that would mean a mistyped import and must fail loudly rather than silently
-            // disable the feature. The telemetry collector still declines it in production.
-            return null;
-        }
-    }
+    public long? ReadDedicatedGpuMemoryBytes() => ReadObservation()?.TotalBytes;
 
     public (long? TotalBytes, IReadOnlyDictionary<long, long>? ByAdapterLuid) ReadDedicatedGpuMemory()
     {
-        try
-        {
-            GpuMemoryObservation? observation = QueryObservation();
-            return (observation?.TotalBytes, observation?.ByAdapterLuid);
-        }
-        catch (Exception exception) when (exception is DllNotFoundException or BadImageFormatException)
-        {
-            return (null, null);
-        }
+        GpuMemoryObservation? observation = ReadObservation();
+        return (observation?.TotalBytes, observation?.ByAdapterLuid);
     }
 
-    public IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid()
+    public IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid() =>
+        ReadObservation()?.ByAdapterLuid;
+
+    private GpuMemoryObservation? ReadObservation()
     {
         try
         {
-            return QueryObservation()?.ByAdapterLuid;
+            GpuMemoryObservation? observation = QueryObservation(out string? failure);
+            lastReadFailure = failure;
+            return observation;
         }
         catch (Exception exception) when (exception is DllNotFoundException or BadImageFormatException)
         {
+            lastReadFailure = $"Windows GPU memory probe could not load pdh.dll ({exception.GetType().Name}).";
             return null;
         }
     }
 
-    /// <summary>
-    /// One wildcard collection of this process's dedicated GPU instances: their total plus the
-    /// per-adapter breakdown keyed by adapter LUID (null when an instance cannot be attributed),
-    /// or null when the reading is unavailable.
-    /// </summary>
     private sealed record GpuMemoryObservation(long TotalBytes, IReadOnlyDictionary<long, long>? ByAdapterLuid);
 
     /// <summary>
@@ -168,10 +149,13 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         return long.TryParse(text, out value);
     }
 
-    private static GpuMemoryObservation? QueryObservation()
+    private static GpuMemoryObservation? QueryObservation(out string? failure)
     {
-        if (NativeMethods.PdhOpenQueryW(null, 0, out nint query) != ErrorSuccess)
+        failure = null;
+        uint openStatus = NativeMethods.PdhOpenQueryW(null, 0, out nint query);
+        if (openStatus != ErrorSuccess)
         {
+            failure = $"PDH query open failed (0x{openStatus:X8}).";
             return null;
         }
 
@@ -182,17 +166,21 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
             // present at this collection, so a process that starts GPU work after the reader
             // was constructed is still observed.
             string path = $@"\{CounterSetName}(*)\{DedicatedUsageCounterName}";
-            if (NativeMethods.PdhAddEnglishCounterW(query, path, 0, out nint counter) != ErrorSuccess)
+            uint addStatus = NativeMethods.PdhAddEnglishCounterW(query, path, 0, out nint counter);
+            if (addStatus != ErrorSuccess)
             {
                 // The counter set itself is absent (no GPU, a server SKU without GPU
                 // counters, or a driver that does not publish them).
+                failure = $"PDH GPU counter registration failed (0x{addStatus:X8}).";
                 return null;
             }
 
             // These are instantaneous counters, so one collection is enough; only rate counters
             // need a second sample to produce a value.
-            if (NativeMethods.PdhCollectQueryData(query) != ErrorSuccess)
+            uint collectStatus = NativeMethods.PdhCollectQueryData(query);
+            if (collectStatus != ErrorSuccess)
             {
+                failure = $"PDH GPU counter collection failed (0x{collectStatus:X8}).";
                 return null;
             }
 
@@ -201,6 +189,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                 counter, FormatLarge, ref bufferSize, out uint itemCount, nint.Zero);
             if (status != MoreData && status != ErrorSuccess)
             {
+                failure = $"PDH GPU counter array sizing failed (0x{status:X8}).";
                 return null;
             }
 
@@ -218,6 +207,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                     counter, FormatLarge, ref bufferSize, out itemCount, buffer);
                 if (status != ErrorSuccess)
                 {
+                    failure = $"PDH GPU counter formatting failed (0x{status:X8}).";
                     return null;
                 }
 
@@ -279,6 +269,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                 // instead of silently contributing nothing.
                 if (invalid || readings == 0)
                 {
+                    failure = "A process GPU counter instance reported invalid data; the partial footprint was rejected.";
                     return null;
                 }
 
@@ -291,6 +282,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         }
         catch (OverflowException)
         {
+            failure = "PDH GPU counter values or buffer size overflowed the supported range.";
             return null;
         }
         finally

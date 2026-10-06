@@ -42,7 +42,12 @@ public sealed class TrackdubFactoryThreadSafetyTests : IDisposable
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
 
         var workspaceCancellation = new CancellationTokenSource();
-        _workspaceCancellationSources.Add(workspaceCancellation);
+        // Scoped workspaces are resolved from concurrent CreateSession calls, so this shared
+        // list needs a lock.
+        lock (_workspaceCancellationSources)
+        {
+            _workspaceCancellationSources.Add(workspaceCancellation);
+        }
 
         type.GetField("disposalSync", flags)?.SetValue(workspace, new object());
         type.GetField("_pipelineGuard", flags)?.SetValue(workspace, new SemaphoreSlim(1, 1));
