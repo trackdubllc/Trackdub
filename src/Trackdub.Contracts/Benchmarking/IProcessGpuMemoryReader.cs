@@ -41,6 +41,14 @@ public interface IProcessGpuMemoryReader
     /// </summary>
     IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid() => null;
 
+    /// <summary>
+    /// Reads the process total and the per-adapter breakdown together. A reader that can derive
+    /// both from one underlying collection overrides this so the two numbers describe the same
+    /// instant and cost one collection; the default composes the two separate reads.
+    /// </summary>
+    (long? TotalBytes, IReadOnlyDictionary<long, long>? ByAdapterLuid) ReadDedicatedGpuMemory() =>
+        (ReadDedicatedGpuMemoryBytes(), ReadDedicatedGpuMemoryBytesByAdapterLuid());
+
     /// <summary>Why the reading is unavailable, surfaced verbatim in benchmark evidence.</summary>
     string UnavailableReason { get; }
 }

@@ -1240,14 +1240,13 @@ internal sealed class InferenceSessionPool : IDisposable
                 return null;
             }
 
-            long? bytes = reader.ReadDedicatedGpuMemoryBytes();
+            (long? bytes, IReadOnlyDictionary<long, long>? byLuid) = reader.ReadDedicatedGpuMemory();
             if (bytes is not > 0)
             {
                 return null;
             }
 
             long totalMb = bytes.Value / BytesPerMegabyte;
-            IReadOnlyDictionary<long, long>? byLuid = reader.ReadDedicatedGpuMemoryBytesByAdapterLuid();
             Dictionary<long, long>? byLuidMb = null;
             if (byLuid is not null)
             {
@@ -1296,10 +1295,10 @@ internal sealed class InferenceSessionPool : IDisposable
         if (bucket.AcceleratorProvider is null
             && observation.ByAdapterLuidMb is not null
             && SharedPoolOptions.AdapterLuidMap is { } map
-            && map.TryGetValue(bucket.DeviceId, out long adapterLuid)
-            && observation.ByAdapterLuidMb.TryGetValue(adapterLuid, out long deviceMb))
+            && map.TryGetValue(bucket.DeviceId, out long adapterLuid))
         {
-            return deviceMb;
+            // The breakdown is complete when present: no entry means nothing on this adapter.
+            return observation.ByAdapterLuidMb.TryGetValue(adapterLuid, out long deviceMb) ? deviceMb : 0;
         }
 
         long committedElsewhereMb = 0;

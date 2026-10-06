@@ -1235,6 +1235,37 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
+    public async Task ProcessGpuAdmission_PerAdapter_MappedAdapterWithNoUsage_IsChargedNothing()
+    {
+        // The breakdown is complete when present, so a mapped adapter with no entry holds nothing:
+        // the first admission on a fresh second GPU must not be charged the other adapter's usage.
+        var reader = new PerAdapterProcessGpuMemoryReader(
+            totalBytes: 3500L * 1024 * 1024,
+            byLuidBytes: new Dictionary<long, long> { [100] = 3500L * 1024 * 1024 });
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        IReadOnlyDictionary<int, long>? previous = SharedPoolOptions.AdapterLuidMap;
+        SharedPoolOptions.UseAdapterLuidMap(new Dictionary<int, long> { [0] = 100, [1] = 200 });
+        try
+        {
+            using SessionLease lease = await pool.GetLeaseAsync(
+                AcceleratorKey("pa0", 256, deviceId: 1),
+                _ => Task.FromResult(CreateMinimalSession()),
+                CancellationToken.None);
+
+            Assert.NotNull(lease.Session);
+        }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previous);
+        }
+    }
+
+    [Fact]
     public async Task ProcessGpuAdmission_ExternalTurnoverAfterBusyPasses_DoesNotTripEmptyBucketFailFast()
     {
         // The busy bound waits for live-but-unevictable entries to turn over. When that

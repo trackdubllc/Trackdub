@@ -101,6 +101,19 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         }
     }
 
+    public (long? TotalBytes, IReadOnlyDictionary<long, long>? ByAdapterLuid) ReadDedicatedGpuMemory()
+    {
+        try
+        {
+            GpuMemoryObservation? observation = QueryObservation();
+            return (observation?.TotalBytes, observation?.ByAdapterLuid);
+        }
+        catch (Exception exception) when (exception is DllNotFoundException or BadImageFormatException)
+        {
+            return (null, null);
+        }
+    }
+
     public IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid()
     {
         try
