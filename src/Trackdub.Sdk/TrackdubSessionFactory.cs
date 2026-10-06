@@ -15,12 +15,15 @@ public sealed class TrackdubSessionFactory : IDubbingSessionFactory, IDisposable
     private readonly ServiceProvider _serviceProvider;
     private readonly HeadlessDubbingSessionFactory _inner;
     private readonly IProcessGpuMemoryReader? _processGpuReader;
+    private readonly IReadOnlyDictionary<int, long>? _adapterLuidMap;
     private volatile bool _disposed;
 
-    internal TrackdubSessionFactory(ServiceProvider serviceProvider, IProcessGpuMemoryReader? processGpuReader = null)
+    internal TrackdubSessionFactory(ServiceProvider serviceProvider, IProcessGpuMemoryReader? processGpuReader = null,
+        IReadOnlyDictionary<int, long>? adapterLuidMap = null)
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _processGpuReader = processGpuReader;
+        _adapterLuidMap = adapterLuidMap;
         _inner = new HeadlessDubbingSessionFactory(serviceProvider);
     }
 
@@ -79,6 +82,7 @@ public sealed class TrackdubSessionFactory : IDubbingSessionFactory, IDisposable
         // TrackdubBuilder.Build bound this factory's reader to the shared pool: release the
         // process-wide binding only while it still refers to this factory's reader.
         HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(_processGpuReader);
+        HeadlessCompositionRoot.ClearSharedPoolAdapterLuidMap(_adapterLuidMap);
         _inner.Dispose();
     }
 }

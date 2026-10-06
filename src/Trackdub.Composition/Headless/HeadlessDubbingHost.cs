@@ -2,9 +2,7 @@ using Trackdub.Application.Dubbing;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Benchmarking;
-using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Pool;
-using Trackdub.Inference.Runtime.Planning;
 using Trackdub.Infrastructure.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -69,80 +67,13 @@ public sealed class HeadlessDubbingHost : IDisposable
         services.AddHeadlessTrackdub(options);
         ServiceProvider serviceProvider = services.BuildServiceProvider();
 
-        // Arm the shared session pool's process-GPU admission explicitly at host construction:
-        // a lazy DI factory would only bind when something happens to resolve the telemetry
-        // reader, leaving normal host paths on reservation-only accounting despite admission
-        // being default-on, and a host-provided reader override would bypass the factory
-        // entirely. Resolving here also pays the performance-counter warm-up during setup
-        // rather than inside a measured stage. Best-effort: telemetry must never fail host
-        // creation.
-        IProcessGpuMemoryReader? processGpuReader = null;
-        IReadOnlyDictionary<int, long>? adapterLuidMap = null;
-#if WINDOWS
-        try
-        {
-            processGpuReader = serviceProvider.GetService<IProcessGpuMemoryReader>();
-            if (processGpuReader is not null)
-            {
-                SharedPoolOptions.UseProcessGpuMemoryReader(processGpuReader);
-            }
-
-            adapterLuidMap = QueryAdapterLuidMap(serviceProvider);
-            if (adapterLuidMap is not null)
-            {
-                SharedPoolOptions.UseAdapterLuidMap(adapterLuidMap);
-            }
-        }
-        catch
-        {
-            processGpuReader = null;
-            adapterLuidMap = null;
-        }
-#endif
+        IProcessGpuMemoryReader? processGpuReader =
+            HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(serviceProvider);
+        IReadOnlyDictionary<int, long>? adapterLuidMap =
+            HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(serviceProvider);
 
         return new HeadlessDubbingHost(new HeadlessDubbingSessionFactory(serviceProvider), serviceProvider, processGpuReader, adapterLuidMap);
     }
-
-#if WINDOWS
-    /// <summary>
-    /// Maps enumerated device indexes to their DXGI adapter LUIDs so the shared session pool
-    /// can attribute the process-GPU observation per adapter. Best-effort and synchronous like
-    /// <see cref="WindowsVramMonitor"/>: enumeration caches, and telemetry must never fail
-    /// host creation.
-    /// </summary>
-    private static IReadOnlyDictionary<int, long>? QueryAdapterLuidMap(IServiceProvider services)
-    {
-        try
-        {
-            IDeviceEnumerator? enumerator = services.GetService<IDeviceEnumerator>();
-            if (enumerator is null)
-            {
-                return null;
-            }
-
-            IReadOnlyList<DeviceEntry> devices = enumerator
-                .GetDevicesAsync(CancellationToken.None)
-                .GetAwaiter()
-                .GetResult();
-
-            var map = new Dictionary<int, long>();
-            foreach (DeviceEntry device in devices)
-            {
-                if (device.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu
-                    && device.AdapterLuid is long luid)
-                {
-                    map[device.DeviceIndex] = luid;
-                }
-            }
-
-            return map.Count == 0 ? null : map;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-#endif
 
     /// <summary>
     /// Creates a new <see cref="DubbingPipelineEngine"/> bound to this host's session factory.

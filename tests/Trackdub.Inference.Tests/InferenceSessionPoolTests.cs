@@ -1832,11 +1832,11 @@ public sealed class InferenceSessionPoolTests
     [Fact]
     public async Task DefaultConstructor_HardAdmission_BlocksAcceleratorBeyondDefaultBudget()
     {
-        // Defaults: admission on, 4096 MB accelerator budget per device. A second DML
+        // Defaults: admission on, a hardware-scaled accelerator budget per device. A second DML
         // graph that cannot fit must wait — never fall back to an ephemeral session.
         using var pool = new InferenceSessionPool();
-        var key1 = AcceleratorKey("ha1", 3000);
-        var key2 = AcceleratorKey("ha2", 2000);
+        var key1 = AcceleratorKey("ha1", InferenceSessionPool.DefaultMemoryBudgetMb);
+        var key2 = AcceleratorKey("ha2", 1);
         int key2FactoryCalls = 0;
 
         using SessionLease lease1 = await pool.GetLeaseAsync(
@@ -1947,8 +1947,8 @@ public sealed class InferenceSessionPoolTests
     public async Task GetLeaseBundleAsync_AggregateOversize_FailsBeforeAnyFactory()
     {
         using var pool = new InferenceSessionPool();
-        var big1 = AcceleratorKey("bo1", 3000);
-        var big2 = AcceleratorKey("bo2", 2000);
+        var big1 = AcceleratorKey("bo1", InferenceSessionPool.DefaultMemoryBudgetMb);
+        var big2 = AcceleratorKey("bo2", 1);
         int factoryCalls = 0;
 
         Task<InferenceSession> Factory(CancellationToken _)
@@ -1957,7 +1957,7 @@ public sealed class InferenceSessionPoolTests
             return Task.FromResult(CreateMinimalSession());
         }
 
-        // 3000 + 2000 exceeds the default 4096 MB device-0 accelerator budget.
+        // The combined estimates exceed the hardware-scaled device-0 budget by 1 MB.
         InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => pool.GetLeaseBundleAsync(
                 [new SessionLeaseRequest(big1, Factory), new SessionLeaseRequest(big2, Factory)],

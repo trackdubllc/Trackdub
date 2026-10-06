@@ -1,4 +1,5 @@
 using Trackdub.Contracts;
+using Trackdub.Domain;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Application.Benchmarking;
@@ -213,6 +214,57 @@ public static class HeadlessCompositionRoot
         if (reader is not null)
         {
             SharedPoolOptions.TryClearProcessGpuMemoryReader(reader);
+        }
+    }
+
+    /// <summary>
+    /// Registers enumerated GPU device indexes and DXGI LUIDs for per-adapter pool admission.
+    /// Returns the registration so its owner can release it without clearing a newer host's map.
+    /// Enumeration failure leaves process-total admission available.
+    /// </summary>
+    public static IReadOnlyDictionary<int, long>? BindSharedPoolAdapterLuidMap(IServiceProvider services)
+    {
+#if WINDOWS
+        try
+        {
+            IDeviceEnumerator? enumerator = services.GetService<IDeviceEnumerator>();
+            if (enumerator is null)
+            {
+                return null;
+            }
+
+            IReadOnlyList<DeviceEntry> devices = enumerator.GetDevicesAsync(CancellationToken.None)
+                .GetAwaiter().GetResult();
+            var map = new Dictionary<int, long>();
+            foreach (DeviceEntry device in devices)
+            {
+                if (device.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu
+                    && device.AdapterLuid is long luid)
+                {
+                    map[device.DeviceIndex] = luid;
+                }
+            }
+
+            if (map.Count > 0)
+            {
+                SharedPoolOptions.UseAdapterLuidMap(map);
+                return map;
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Optional telemetry must never prevent host construction.
+        }
+#endif
+        return null;
+    }
+
+    /// <summary>Releases this owner's map only while it is still the active registration.</summary>
+    public static void ClearSharedPoolAdapterLuidMap(IReadOnlyDictionary<int, long>? map)
+    {
+        if (map is not null)
+        {
+            SharedPoolOptions.TryClearAdapterLuidMap(map);
         }
     }
 }

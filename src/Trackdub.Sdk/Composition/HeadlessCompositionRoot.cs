@@ -98,4 +98,8 @@ public static class HeadlessCompositionRoot
     /// </summary>
     public static void ClearSharedPoolProcessGpuAdmission(IProcessGpuMemoryReader? reader) =>
         Trackdub.Composition.Headless.HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(reader);
+
+    /// <summary>Registers the device-to-LUID mapping used for per-adapter GPU admission.</summary>
+    public static IReadOnlyDictionary<int, long>? BindSharedPoolAdapterLuidMap(IServiceProvider services) =>
+        Trackdub.Composition.Headless.HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(services);
 }

@@ -53,6 +53,9 @@ What the observation means in practice:
   usage on other adapters never blocks it and no sibling subtraction is needed. Without a
   breakdown or a map, the pool falls back to the conservative process total minus the sibling
   devices' reservations, so multi-GPU pipelines cannot lock themselves out.
+  Both `HeadlessDubbingHost` and SDK `TrackdubBuilder.Build` register this mapping from
+  `IDeviceEnumerator` during construction and release their own mapping on disposal without
+  clearing a newer host's registration.
 - Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) are never charged with it.
 - An unavailable reading — no GPU, a driver that does not publish the counter set, a GPU-idle
   process, or a failing probe — leaves admission exactly as it was.
