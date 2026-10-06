@@ -141,7 +141,7 @@ public sealed class Tier3CombinationsTests
         // JSON serialization
         string json = JsonSerializer.Serialize(evidence, BenchmarkReportWriter.SerializerOptions);
         Assert.Contains("\"ActualProvider\": \"directml\"", json);
-        Assert.Contains("\"managedAllocatedBytes\": 62914560", json);
+        Assert.Contains("\"ManagedAllocatedBytes\": 62914560", json);
         Assert.Contains("\"stage:transcription:duration\": 75", json);
 
         // Markdown summary of execution provider matrix

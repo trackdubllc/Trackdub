@@ -45,14 +45,26 @@ public sealed class BenchmarkReportExportTests : IDisposable
             ["pipeline:p99"] = 1500.0,
             ["pipeline:throughput"] = 0.81,
         },
-        MemoryBytes = new Dictionary<string, long?>
+        ProcessMemory = new BenchmarkProcessMemoryTelemetry
         {
-            ["peakWorkingSetBytes"] = 256 * 1024 * 1024L,
-            ["managedAllocatedBytes"] = 64 * 1024 * 1024L,
-            ["gen0Collections"] = 12,
-            ["gen1Collections"] = 3,
-            ["gen2Collections"] = 1,
+            WorkingSetStartBytes = 200 * 1024 * 1024L,
+            WorkingSetEndBytes = 220 * 1024 * 1024L,
+            PeakWorkingSetBytes = 256 * 1024 * 1024L,
+            ManagedAllocatedBytes = 64 * 1024 * 1024L,
+            Gen0Collections = 12,
+            Gen1Collections = 3,
+            Gen2Collections = 1,
         },
+        StageGarbageCollection =
+        [
+            new BenchmarkStageGarbageCollectionTelemetry
+            {
+                Stage = "audio-prep",
+                Gen0Collections = 4,
+                Gen1Collections = 1,
+                Gen2Collections = 0,
+            },
+        ],
         Stages =
         [
             new BenchmarkEvidenceStage
@@ -71,6 +83,21 @@ public sealed class BenchmarkReportExportTests : IDisposable
             },
         ],
     };
+
+    private static ExecutionProviderMatrixReport CreateSampleSimulatedMatrixReport() =>
+        ExecutionProviderMatrixRunner.CompareProviders(
+            scenario: "full-pipeline",
+            baselineProvider: "cpu",
+            providerStats: new Dictionary<string, (double P50, double Throughput, long PeakMemory, long ManagedAlloc)>
+            {
+                ["cpu"] = (100.0, 10.0, 0, 0),
+                ["directml"] = (50.0, 20.0, 0, 0),
+            },
+            simulatedLatencyBudgets: new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["cpu"] = 1000.0,
+                ["directml"] = 500.0,
+            });
 
     private static ExecutionProviderMatrixReport CreateSampleMatrixReport() =>
         ExecutionProviderMatrixRunner.CompareProviders(
@@ -119,7 +146,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
         Assert.Equal(original.Status, loaded.Status);
         Assert.Equal(original.RunMode, loaded.RunMode);
         Assert.Equal(original.TimingsMilliseconds["pipeline"], loaded.TimingsMilliseconds["pipeline"]);
-        Assert.Equal(original.MemoryBytes["peakWorkingSetBytes"], loaded.MemoryBytes["peakWorkingSetBytes"]);
+        Assert.Equal(original.ProcessMemory!.PeakWorkingSetBytes, loaded.ProcessMemory!.PeakWorkingSetBytes);
         Assert.Equal(original.Stages.Count, loaded.Stages.Count);
     }
 
@@ -178,7 +205,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
         Assert.Contains("full-pipeline", markdown);
         Assert.Contains("Completed", markdown);
         Assert.Contains("pipeline", markdown);
-        Assert.Contains("peakWorkingSetBytes", markdown);
+        Assert.Contains("Peak working set", markdown);
         Assert.Contains("audio-prep", markdown);
         Assert.Contains("separation", markdown);
     }
@@ -196,14 +223,25 @@ public sealed class BenchmarkReportExportTests : IDisposable
     }
 
     [Fact]
+    public void RenderEvidenceMarkdown_ContainsStageGarbageCollectionTable()
+    {
+        BenchmarkEvidenceReport report = CreateSampleEvidenceReport();
+
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
+
+        Assert.Contains("## Stage Garbage Collection", markdown);
+        Assert.Contains("| audio-prep | 4 | 1 | 0 |", markdown);
+    }
+
+    [Fact]
     public void RenderEvidenceMarkdown_ContainsMemoryTable()
     {
         BenchmarkEvidenceReport report = CreateSampleEvidenceReport();
 
         string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
 
-        Assert.Contains("## Memory Metrics", markdown);
-        Assert.Contains("peakWorkingSetBytes", markdown);
+        Assert.Contains("## Process Memory", markdown);
+        Assert.Contains("Peak working set", markdown);
         Assert.Contains("MB", markdown);
     }
 
@@ -404,6 +442,43 @@ public sealed class BenchmarkReportExportTests : IDisposable
         Assert.Contains("4.00x", markdown);
     }
 
+    [Fact]
+    public void RenderMatrixMarkdown_NotesSimulatedBudgetsForADeterministicRun()
+    {
+        // A mock run's comparison demonstrates the simulation's contract, and the table alone
+        // cannot say so; the budgets it was built from must be visible to a reader.
+        ExecutionProviderMatrixReport report = CreateSampleSimulatedMatrixReport();
+
+        string markdown = BenchmarkReportExporter.RenderMatrixMarkdown(report);
+
+        Assert.Contains("**Simulated latency budgets:**", markdown);
+        Assert.Contains("cpu 1000 ms", markdown);
+        Assert.Contains("directml 500 ms", markdown);
+        Assert.Contains("mock pipeline", markdown);
+    }
+
+    [Fact]
+    public void RenderMatrixMarkdown_OmitsSimulatedBudgetsForRealRuns()
+    {
+        string markdown = BenchmarkReportExporter.RenderMatrixMarkdown(CreateSampleMatrixReport());
+
+        Assert.DoesNotContain("Simulated latency budgets", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExportJsonAsync_MatrixReport_RoundTripsSimulatedBudgets()
+    {
+        ExecutionProviderMatrixReport original = CreateSampleSimulatedMatrixReport();
+        string outputPath = Path.Join(_tempDir, "matrix-budget-rt.json");
+
+        await BenchmarkReportExporter.ExportJsonAsync(original, outputPath);
+        ExecutionProviderMatrixReport? loaded = await BenchmarkReportExporter.LoadMatrixJsonAsync(outputPath);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(1000.0, loaded.Comparisons.First(c => c.Provider == "cpu").SimulatedLatencyBudgetMilliseconds);
+        Assert.Equal(500.0, loaded.Comparisons.First(c => c.Provider == "directml").SimulatedLatencyBudgetMilliseconds);
+    }
+
     // ─── ExportAll ────────────────────────────────────────────────────
 
     [Fact]
@@ -541,7 +616,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
         Assert.Contains("# Benchmark Evidence Report", markdown);
         Assert.Contains("minimal", markdown);
         Assert.DoesNotContain("## Timing Metrics", markdown);
-        Assert.DoesNotContain("## Memory Metrics", markdown);
+        Assert.DoesNotContain("## Process Memory", markdown);
         Assert.DoesNotContain("## Stage Results", markdown);
     }
 

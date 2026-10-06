@@ -23,7 +23,7 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
     public async Task SaveAsync(BenchmarkEvidenceReport report, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(report);
-        if (report.SchemaVersion != 1 || report.RunId == Guid.Empty)
+        if (report.SchemaVersion is not (1 or 2) || report.RunId == Guid.Empty)
         {
             throw new ArgumentException("Unsupported evidence schema or empty run id.", nameof(report));
         }
@@ -145,7 +145,11 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
         Configuration = report.Configuration.ToDictionary(x => Scrub(x.Key)!, x => Scrub(x.Value)!),
         RuntimeVersions = report.RuntimeVersions.ToDictionary(x => Scrub(x.Key)!, x => Scrub(x.Value)!),
         TimingsMilliseconds = report.TimingsMilliseconds.ToDictionary(x => Scrub(x.Key)!, x => x.Value),
-        MemoryBytes = report.MemoryBytes.ToDictionary(x => Scrub(x.Key)!, x => x.Value),
+        LegacyMemoryBytes = report.LegacyMemoryBytes?.ToDictionary(x => Scrub(x.Key)!, x => x.Value),
+        StageGarbageCollection = report.StageGarbageCollection.Select(entry => entry with
+        {
+            Stage = Scrub(entry.Stage)!,
+        }).ToArray(),
         ResourceTelemetry = report.ResourceTelemetry.Select(sample => sample with
         {
             Stage = Scrub(sample.Stage)!,

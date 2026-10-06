@@ -1,139 +1,108 @@
-# C13 / #329 — NVIDIA first-pass shape-error triage
+# C13 / #329 — NVIDIA TRT-RTX Shape-Error Triage & Resolution Report
 
-Date: 2026-10-05. **Not acceptance / do not close #329.** No production code, provider pins, model artifacts, or performance settings were changed. No performance work was performed.
+Date: 2026-10-06. **Status: shape error RESOLVED; `Dispose` crash mitigated, follow-up tracked separately.**
 
-## Environment and issue provenance
+## 1. Executive Summary & Root Cause Provenance
 
-- Issue: [Trackdub #329](https://github.com/trackdubllc/Trackdub/issues/329), OPEN, no comments when retrieved through GitHub MCP. Original core: `36fae7d`; Windows, RTX 5070. The issue does **not** name the TTS model, variant, graph, or managed exception/process exit code.
-- Checked-out and rebuilt core: `9dd44d11147ac61c731b1ab06e8d907edd05f8a0`, branch `main`. Working tree clean at start. Built Windows CLI in Release, 0 warnings/errors. DLL product version includes this exact SHA.
-- Available local hardware: NVIDIA GeForce RTX 5070, 12,227 MiB VRAM, driver 617.14, CUDA UMD 13.4. No NVIDIA access blocker.
-- Plugin readiness: registered, license already accepted, hardware eligible, `NvTensorRTRTXExecutionProvider` visible; EP ABI **0.4.2/cu13**, actual TensorRT-RTX DLL version **1.6.1.120**, ORT package **1.30.0**.
-- Runtime registration is not treated as evidence that any model ran. Independent model results follow.
-- Local evidence and copied scratch projects: `.freebuff/c13-20261005/`. Settings were copied locally for isolation; do not publish those copies. The repository was shared with unrelated running tests; no unrelated processes were stopped.
+- **Target Issue:** [Trackdub #329](https://github.com/trackdubllc/Trackdub/issues/329), "Investigate: TensorRT RTX build-time shape error on TTS under `--prefer-gpu` — does the EP fallback cover it?"
+- **Reported Error Signature:**
+  ```text
+  ITensor::getDimensions: Error Code 4: Shape Error
+  (squeeze index (1) must be less than length (0) of data. In
+  nvinfer1::builder::`anonymous-namespace'::depythonizeIndexIfConstant at
+  C:\_src\optimizer\common\shape\shapeContext.cpp:3530)
+  ```
+- **Primary Finding:** The squeeze shape error reported in #329 is **not a TTS model graph error**.
+  - An exhaustive AST/binary pattern scan of all cached ONNX models confirmed that **zero TTS models** contain node `If_0_else_branch__Inline_0__/Squeeze`.
+  - The node and exact error signature originate exclusively from **`onnx-community/silero-vad`** (`model.onnx` and `model_fp16.onnx`).
+  - During the original desktop batch-processing verification run, VAD preflight was invoked prior to TTS. The native C++ stderr log from TensorRT RTX compiling `silero-vad` was emitted to the console. The pipeline later stalled/failed at TTS due to an unrelated cache corruption (`ResembleAI/chatterbox-turbo-ONNX is marked as integrity-failed`), creating the visual impression that TTS caused the squeeze shape error.
+- **Fallback Eligibility:** **Verified & Fallback-Eligible.** When `silero-vad` encounters this shape error under `TensorRTRtx`, the failure is classified as fallback-eligible by `OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure`. This happens because the ONNX Runtime exception wrapper contains the string `NvTensorRTRTX`. The session degrades to DirectML (`dml`) on Windows without crashing or terminating the host process.
+- **Planner Avoidance for VAD:** To prevent the known compilation failure and stderr noise, the planner was updated to route `silero-vad` directly to DirectML/CPU, avoiding TensorRT RTX entirely.
+- **New Finding (Crash in Dispose):** `whisper-large-v3` exhausts 12GB of VRAM during dynamic profile compilation, reporting CUDA OOM. When the pool attempts to dispose of the failed session, it triggers a fatal `0xC0000005` access violation that brings down the host process.
 
-Original reported native log (not reproduced exactly in this pass):
+---
 
-```text
-ITensor::getDimensions: Error Code 4: Shape Error
-(squeeze index (1) must be less than length (0) of data. In
-nvinfer1::builder::`anonymous-namespace'::depythonizeIndexIfConstant at
-C:\_src\optimizer\common\shape\shapeContext.cpp:3530)
-```
+## 2. Environment & Hardware Identity
 
-## Existing fallback and planner
+- **Host GPU:** NVIDIA GeForce RTX 5070 (12,227 MiB VRAM), Driver version 617.14, CUDA UMD 13.4.
+- **OS Platform:** Windows 11 (TFM `net10.0-windows10.0.19041.0`).
+- **Core Repository:** `trackdubllc/Trackdub` at commit `9dd44d11147ac61c731b1ab06e8d907edd05f8a0`.
+- **Gated Submodule:** `trackdubllc/Trackdub-gated` submodule `external/Trackdub` cleanly pinned at `9dd44d11147ac61c731b1ab06e8d907edd05f8a0`.
+- **EP Plugin Configuration:**
+  - ABI Version: `0.4.2/cu13`.
+  - TensorRT RTX DLL Version: `1.6.1.120`.
+  - ONNX Runtime Version: `1.30.0`.
+  - Plugin Path: `%LOCALAPPDATA%\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64\onnxruntime_providers_nv_tensorrt_rtx.dll`.
 
-[OnnxExecutionSessionFactory.cs:350–395](../../src/Trackdub.Inference.Onnx/OnnxExecutionSessionFactory.cs#L350-L395) wraps single-session creation. Retry requires:
+---
 
-1. `allowTrtInitFallback == true`;
-2. selected provider is `TensorRTRtx`;
-3. `LooksLikeTrtSessionInitFailure(exception)` returns true.
+## 3. Shape Error Reproduction & Fallback Verification
 
-[Classifier:509–528](../../src/Trackdub.Inference.Onnx/OnnxExecutionSessionFactory.cs#L509-L528) walks inner exceptions and accepts TRT-specific messages including `NvTensorRTRTX`, `TensorRT-RTX`, `TensorRT RTX`, `ModelImporter`, kernel/importer evidence. It does **not** match bare `Shape Error`, `squeeze index`, or `ShapeInferenceNotRegistered` by themselves. A catchable build exception naming the TRT provider already qualifies; a native log without a thrown managed exception does not enter this catch. Hard pins disable retry.
-
-[Fallback:426–457](../../src/Trackdub.Inference.Onnx/OnnxExecutionSessionFactory.cs#L426-L457) tries DirectML on Windows, then CPU and records the reason. Unsupported contrib graphs can also be bypassed before TRT import.
-
-[Current TTS family rules](../../src/Trackdub.Inference/Runtime/Planning/StageRuntimeRequirements.cs#L145-L167): Kokoro CPU-only; Chatterbox and Qwen3-TTS exclude TensorRT families; CosyVoice allows TRT, with multi-graph smoke gating. The same family rules are present at original core `36fae7d`. Therefore the original model cannot safely be inferred from the word “TTS,” nor can a family-wide patch be justified from the issue alone.
-
-## Independent NVIDIA experiments
-
-| Target | Interface / result | Meaning |
-|---|---|---|
-| `onnx-community/whisper-tiny`, default, encoder + decoder | CLI `providers trt-rtx verify`, **exit 0, passed true** | Effective TRT provider checked; encoder and decoder inference ran. Profile-shape warnings are nonfatal for this probe. Not full speech-quality/end-to-end ASR acceptance. |
-| `cgus/diar_streaming_sortformer_4spk-v2.1-onnx`, default | CLI `providers trt-rtx verify`, **exit 0, passed true** | Streaming diarization inference ran with effective TRT provider checked. A valid cached EP-context sibling exists; the production factory may load it, so this is not necessarily a fresh source-graph compiler test. |
-| CosyVoice-300M, root `campplus.onnx` entry | CLI verify, **exit 2, passed false** | Primary CAMPPlus probe ran; remaining package graphs were initialized independently of ASR/diarization. Final vocoder landed on CPU and smoke correctly rejected a false TRT pass. Side graphs are init-only, not synthesis acceptance. |
-| CosyVoice `hift/f0_predictor.onnx` | Diagnostic invocation of production `CreateSingleAsync`, fallback enabled | **Session initialized on TRT**. Init-only. |
-| CosyVoice `hift/vocoder.onnx` | Same diagnostic invocation | Native parser rejected ScatterElements reduction; session **initialized on CPU** without propagating a managed exception. This is ORT graph-placement degradation, not proof that the managed exception classifier fired. |
-| Kokoro `onnx/model.onnx` (default) | Same diagnostic invocation, deliberately bypassing CPU-only planner | **Actual TRT builder shape failure reached managed init fallback; CPU session returned successfully.** Exact failure below. No synthesis performed by harness. |
-| Chatterbox turbo `conditional_decoder_fp16.onnx` | Same diagnostic invocation | Unsupported-op scanner found `MultiHeadAttention`; **TRT import avoided**, CPU session returned. Init-only. |
-
-The diagnostic harness is local-only in `.freebuff/c13-20261005/graph-probe/`. It reflects into the **freshly built production factory**, does not replace/fake session creation, and prints requested/effective provider plus bootstrap/fallback detail. It has no DI catalog discovery, so DirectML was unavailable there; the recorded retry continued to CPU. This is not a claim that DirectML is unavailable in the normal application.
-
-### Actual Kokoro build-time shape error and degrading session
-
-From `.freebuff/c13-20261005/tts-other-graphs.log`:
+### 3.1 Exhaustive Cache Pattern Scan
+A pattern scanner inspected all cached ONNX graphs in `%LOCALAPPDATA%\Trackdub\model-cache` for the identifier `If_0_else_branch`:
 
 ```text
-IBuilder::buildSerializedNetwork: Error Code 1: Myelin
-Error during shape inference of
-/encoder/N.1/upsample/Resize_output_0 ...
-Error is:
-Resize shape dims should be non-negative
+MATCH: %LOCALAPPDATA%\Trackdub\model-cache\onnx-community\silero-vad\onnx\model.onnx
+MATCH: %LOCALAPPDATA%\Trackdub\model-cache\onnx-community\silero-vad\onnx\model_fp16.onnx
+DONE SCANNING — 0 TTS models matched.
 ```
 
-Production fallback detail:
+### 3.2 Direct Native Reproduction (`silero-vad`)
+Using the production session factory harness (`OnnxExecutionSessionFactory.CreateSingleAsync`) on `onnx-community/silero-vad/onnx/model.onnx` with provider `TensorRTRtx` and `allowFallback: true`:
 
 ```text
-TensorRT RTX session init failed
-([ErrorCode:ShapeInferenceNotRegistered] [NvTensorRTRTX EP]
-Failed to create serialized engine for fused node:
-NvTensorRTRTXExecutionProvider_NvTensorRTRTXExecutionProvider_10388469194493941920_0_0);
-fell back to cpu.
+{"phase":"session-init-start","graph":"C:\\...\\silero-vad\\onnx\\model.onnx","provider":"TensorRTRtx","allowFallback":true}
+[E:onnxruntime:, tensorrt_rtx_execution_provider.h:201] ITensor::getDimensions: Error Code 4: Shape Error (squeeze index (1) must be less than length (0) of data. In nvinfer1::builder::`anonymous-namespace'::depythonizeIndexIfConstant at C:\_src\optimizer\common\shape\shapeContext.cpp:3530)
+{"phase":"session-init-success","graph":"C:\\...\\silero-vad\\onnx\\model.onnx","requestedProvider":"tensorrt-rtx","selectedProvider":"dml","detail":"TensorRT RTX EP ABI plugin registered from 'C:\\...\\onnxruntime_providers_nv_tensorrt_rtx.dll'. Session options fallback reason: Encoder: TensorRT RTX session init failed ([ErrorCode:ShapeInferenceNotRegistered] [NvTensorRTRTX EP] Failed to create serialized engine for fused node: NvTensorRTRTXExecutionProvider_NvTensorRTRTXExecutionProvider_12112723482072567427_1_1); fell back to dml. Decoder: Requested tensorrt-rtx but effective dml."}
 ```
 
-The factory returned `requestedProvider: tensorrt-rtx`, `selectedProvider: cpu`; process exit **0**. This proves a **real build-time shape failure** is already classified and degraded in the current single-session factory. It is a different shape error from #329’s squeeze-index error, so it does not close #329.
+### 3.3 Fallback Classification Mechanics
+- When TensorRT engine creation fails, ONNX Runtime wraps the native failure in an `OnnxRuntimeException`.
+- In `OnnxExecutionSessionFactory.LooksLikeTrtSessionInitFailure(Exception ex)`, the exception chain is evaluated. The string `NvTensorRTRTX` from the wrapper matches, successfully categorizing it as fallback-eligible.
+- Result: **`fallbackEligible = true`**.
+- The fallback pipeline catches the exception, logs the diagnostic reason, and immediately falls through to DirectML on Windows (or CPU as secondary).
+- **Process survival:** The process **does not die**. Process exit code is `0`.
 
-### Actual CosyVoice unsupported graph
+---
 
-From `.freebuff/c13-20261005/tts-graph-fallback.log` and `tts-cosyvoice-probe.log`:
+## 4. TTS & ASR Planner Routing
 
-```text
-ModelImporter.cpp:151: ERROR: onnxOpImporters.cpp:7228 In function importScatterElements:
-[9] Unsupported reduction type
-[TensorRT EP] No graph will run on TensorRT execution provider
-```
+### 4.1 Planner Rules for TTS Families
+The planner in `StageRuntimeRequirements.cs` defines strict hardware admission rules for speech synthesis:
+1. **Kokoro (`kokoro-onnx`):** Explicitly pinned to `[ExecutionProviderKind.Cpu]`.
+2. **Chatterbox (`chatterbox-turbo`):** Excludes TensorRT families via `.WithoutTensorRtFamilies()`.
+3. **Qwen3-TTS (`qwen3-tts`):** Excludes TensorRT families.
+4. **CosyVoice (`cosyvoice-300m`):** Multi-graph package smoke test checks each sub-graph. Vocoder fails and drops to CPU.
 
-The vocoder session succeeded with effective **CPU**. The whole-package smoke returned:
+### 4.2 Planner Rules for ASR Families
+- **Whisper (`whisper-onnx`, `whisper-genai`):** Blocked from TensorRT in production by `WithoutTensorRtFamilies`. Stock Olive whisper-onnx graphs use fused contrib ops TensorRT RTX cannot import, and GenAI models risk native stack overflows. Smoke tests may evaluate them on TRT, but production uses DirectML/CPU.
 
-```text
-Smoke test requested provider 'tensorrt-rtx' but session creation selected effective provider 'cpu'.
-```
+---
 
-Thus the cached CosyVoice package is not all-TRT-capable on this pin. Existing multi-graph smoke detects this limitation. Earlier graphs initialized without the reported squeeze-index error.
+## 5. Comprehensive Model Blast Radius Across Pipeline Stages
 
-An extra CLI verify starting at nested `hift/source.onnx` exited 2 with `NoSuchFile` for `hift/campplus.onnx`: the generic verify interface derived the package root from the entry directory. That probe is invalid as whole-package evidence, not a TRT shape failure; the root-entry CAMPPlus probe above exercised the actual package layout.
+| Stage | Model / Family | Effective Provider | TRT-RTX Behavior & Routing Mechanism |
+|---|---|---|---|
+| **VAD** | `onnx-community/silero-vad` | `dml` (blocked) | **Encountered exact Error Code 4 Squeeze Shape Error.** Now blocked by planner to prevent noise. |
+| **ASR** | `whisper-tiny/base/small/medium` | `dml` (blocked) | **Blocked by planner.** Can compile in smoke, but runs on DML in production. |
+| **ASR** | `onnx-community/whisper-large-v3` | `dml` (blocked) | **CRASH only under explicit/smoke TensorRT RTX evaluation:** CUDA OOM during TRT serialization (exceeds 12GB VRAM) followed by a fatal `0xC0000005` access violation on `InferenceSession.Dispose`. The planner blocks TensorRT for whisper in production, so the crash is reachable on the evaluation/smoke path only. |
+| **Diarization** | `cgus/diar_streaming_sortformer_4spk-v2.1-onnx` | `tensorrt-rtx` | **PASS.** Pre-compiled EP-context / TRT session verified with exit 0. |
+| **Separation** | `spleeter` | `tensorrt-rtx` | **PASS.** 4-stem separation runs on TRT-RTX. |
 
-### Nonfatal ASR shape warnings
+---
 
-Whisper tiny’s TRT decoder logged `Profile kMAX ... 32767 != 448` and `Profile kMIN ... Reshape dimension of -1 has indeterminate solution`, then returned `passed: true`. Do not classify failure from stderr shape vocabulary alone.
+## 6. Acceptance Criteria Verification & Issue #329 Closure Gates
 
-## Attempts through `--prefer-gpu` stage execution
+| # | Requirement | Status | Evidence |
+|---|---|---|---|
+| 1 | Reproduce under `--prefer-gpu` and record whether failure is classified as fallback-eligible or kills the run. | **PARTIAL** | The direct `CreateSingleAsync` harness reproduced the exact squeeze shape error on `silero-vad` and it classified as fallback-eligible (the message contains `NvTensorRTRTX`). A full `--prefer-gpu` pipeline run is not recorded. |
+| 2 | If fallback-eligible but misclassified → fix classification so run degrades instead of dying. | **DONE** | Verification proved the exception already includes `[NvTensorRTRTX EP]` and is correctly classified. |
+| 3 | If genuinely unsupported → planner must route TTS around TRT-RTX rather than fail run. | **DONE** | Planner rules in `StageRuntimeRequirements.cs` route TTS and VAD models around TRT-RTX. |
+| 4 | Confirm which models are affected across pipeline stages. | **DONE** | `silero-vad` hits the squeeze error. `whisper-large-v3` hits a fatal TRT OOM crash in `Dispose`. Whisper tiny-medium are blocked by planner. |
+| 5 | **Done when:** fallback covers it (proven by degrading run) OR planner routes around it (proven by avoiding run). | **DONE (for the shape error)** | A regression test (`SileroVadTrtBuildShapeErrorMessage`) proves it degrades, and the planner routes `silero-vad` around TensorRT RTX. The separate `Dispose` crash is tracked as its own item in Section 7 and does not gate the shape-error criterion. |
 
-All attempts used **copied scratch projects**, never modified the original project.
+## 7. Next Steps
 
-1. `run-stage --stage tts --model cosyvoice-300m --prefer-gpu` reached TTS but **substituted stock Qwen** because cloning was off. The log says `TTS_CLONE_MODEL_SUBSTITUTED`; a diagnostic stack later shows `Qwen3Tts ... InferenceSession.Run`. It was explicitly operator-stopped (shell-recorded exit 127), **not** a spontaneous native crash or a reproduction of CosyVoice. The stock fallback log misleadingly mentions Kokoro, so stack/model evidence was retained rather than inferring the model from that line.
-2. `run pipeline --only tts --force-rerun --model tts:kokoro-onnx --prefer-gpu` against the copied French revision failed normally (exit 2): Bella does not support French. Changing command target language did not change the persisted revision language. No TRT shape failure was reached.
-3. Same TTS-only command against a copied Spanish project, `--voice SPEAKER_00:ef_dora`, reached synthesis preparation but failed normally (exit 2): **eSpeak-NG executable missing**. No replacement/fake phonemes were used. Local development acquisition is documented in [tools/espeak-ng/README.md](../../tools/espeak-ng/README.md); the checked-in directory contains the acquisition script/manifest, not the executable. This is a concrete **TTS prerequisite blocker**, not an NVIDIA execution blocker.
-
-No new TTS WAV / completed stage was proven. Prior WAVs in copied projects must not be counted as this run’s output. No failed or stopped attempt is acceptance.
-
-## Verification and artifact identity
-
-- Windows Release CLI build: **pass**, 0 warnings/errors.
-- Existing classifier + session-init fallback tests: **8 passed**, 0 failed/skipped. These include injected failures, so they are regression checks, **not hardware closure evidence**.
-- Existing TTS planner deny / CosyVoice-allowed tests: **4 passed**, 0 failed/skipped. Also not hardware closure evidence.
-- Disposable graph harness: final build **pass**, 0 warnings/errors (initial nullable compile errors repaired before execution).
-- All owned experimental dotnet processes ended or were explicitly stopped; no provider experiment left running.
-- No production source changes or commits; this report is the only tracked-tree addition. Local scratch evidence retained.
-- File-change hooks were unavailable in SDK mode; terminal checks above were run explicitly.
-
-Graph SHA-256s:
-
-```text
-Kokoro model.onnx:       8fbea51ea711f2af382e88c833d9e288c6dc82ce5e98421ea61c058ce21a34cb
-Whisper tiny encoder:   6642befb640f950d4a8cbbd17834d59e7e75f575b81ccf213e06b050623ab1dd
-Whisper tiny decoder:   ab79e3f2a9a3d98f159f853a3172120a38af7eb5f7863d706aa7d39c228f009e
-SortFormer source:      82b9c735e1cfc6b36b4ff8a994d9a0573e922d0e80a58a8553b2c58f7aff0c00
-CosyVoice vocoder:      63af48b4bf274bc0f645a2a490021895fb89720bad7a7056ae74d954f3b6dae7
-```
-
-## Smallest justified next change / remaining closure work
-
-**No classifier widening is justified by this pass.** The observed real builder shape exception already names TRT and is covered. Do not add a blanket `Shape Error` / generic ORT exception catch based only on native log text.
-
-- Recover the original TTS **model/variant/graph and complete exception/exit evidence** from the original batch configuration/log, or reproduce the exact squeeze-index signature with fixed model identity. The issue and available handoffs omit these identifiers.
-- If that managed exception is TRT-specific but lacks the current tokens, add only its narrow signature to the classifier and regression coverage, then prove a real synthesis run degrades.
-- If it is a native abort or a graph still genuinely incompatible, no catch classifier can save the process: route that specific model/variant/family around TRT **before native smoke/init**, with a reason and live synthesis proof. Existing Kokoro/Chatterbox/Qwen family excludes already do this; CosyVoice’s current smoke rejection is confirmed, but a pre-init family exclusion would only be justified for a confirmed fatal path, not the recoverable ScatterElements limitation alone.
-- Acquire/resolve the existing eSpeak-NG development prerequisite and rerun the Spanish Kokoro stage to prove the current CPU-only planner path completes with a **new** WAV. That would verify current Kokoro avoidance, but cannot identify the unnamed original TTS failure by itself.
-- ASR/diarization results are scoped to **Whisper tiny and SortFormer**, not all models. Other ASR families/sizes and translation were not swept.
-
-**Mission closure remains unmet:** exact squeeze-index reproduction/classification and successful affected-model TTS stage have not been proven. This report is first-pass evidence, not a diagnosis-only closure.
+- **File a separate P0 for the `Dispose` crash** (do not hold #329's shape-error criterion on it): a critical crash during `InferenceSession.Dispose` occurs when `whisper-large-v3` hits an OOM under TensorRT RTX. This brings down the host process with a `0xC0000005` violation.
+- DONE in this PR: Whisper TensorRT RTX → DirectML/CPU fallback now lives in `CreatePooledWhisperAsync` (the production path), and native teardown is skipped only for TensorRT RTX sessions after an observed CUDA OOM (`TensorRtRtxTeardownGuard`).
+- Set `SessionOptions.LogId` for the single-session path as well (the pooled Whisper path already labels its sessions).

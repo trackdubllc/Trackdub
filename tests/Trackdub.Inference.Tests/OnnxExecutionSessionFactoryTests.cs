@@ -815,7 +815,7 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object result = method.Invoke(
             null,
-            [ExecutionProviderKind.DirectMl, devicePolicy, null, false])
+            [ExecutionProviderKind.DirectMl, devicePolicy, null, false, null])
             ?? throw new InvalidOperationException("Session options factory returned null.");
         Type resultType = result.GetType();
         using var options = Assert.IsAssignableFrom<SessionOptions>(
@@ -858,7 +858,7 @@ public sealed class OnnxExecutionSessionFactoryTests
 
         object result = method.Invoke(
             null,
-            [ExecutionProviderKind.Dnnl, WindowsMlExecutionDevicePolicy.Explicit, null, false])
+            [ExecutionProviderKind.Dnnl, WindowsMlExecutionDevicePolicy.Explicit, null, false, null])
             ?? throw new InvalidOperationException("Session options factory returned null.");
         Type resultType = result.GetType();
         using var options = Assert.IsAssignableFrom<SessionOptions>(
@@ -923,6 +923,11 @@ public sealed class OnnxExecutionSessionFactoryTests
     [InlineData("ModelImporter failed to import graph", true)]
     [InlineData("No graph will run on TensorRT-RTX", true)]
     [InlineData("NvTensorRTRTXExecutionProvider registration failed", true)]
+    // #329: exact managed message ORT surfaced for silero-vad's build-time squeeze shape error
+    // (RTX 5070, EP ABI 0.4.2/cu13, TensorRT-RTX 1.6.1).
+    [InlineData(SileroVadTrtBuildShapeErrorMessage, true)]
+    // #329 sweep: whisper-large-v3 engine deserialize failure after CUDA OOM on 12 GB VRAM.
+    [InlineData("[ErrorCode:ShapeInferenceNotRegistered] [NvTensorRTRTX EP] NvTensorRTRTX EP failed to deserialize engine for fused node: NvTensorRTRTXExecutionProvider_NvTensorRTRTXExecutionProvider_4350742136944386634_0_0", true)]
     [InlineData("unrelated IO error", false)]
     public void LooksLikeTrtSessionInitFailure_detects_known_trt_messages(string message, bool expected)
     {
@@ -979,6 +984,51 @@ public sealed class OnnxExecutionSessionFactoryTests
             Assert.NotNull(selection.FallbackReason);
             Assert.Contains("TensorRT RTX session init failed", selection.FallbackReason, StringComparison.Ordinal);
             Assert.Contains("fell back to", selection.FallbackReason, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private const string SileroVadTrtBuildShapeErrorMessage =
+        "[ErrorCode:ShapeInferenceNotRegistered] [NvTensorRTRTX EP] Failed to create serialized engine for fused node: NvTensorRTRTXExecutionProvider_NvTensorRTRTXExecutionProvider_12112723482072567427_1_1";
+
+    [Fact]
+    public void CreateInferenceSessionWithTrtInitFallback_degrades_on_trt_build_time_shape_error()
+    {
+        // #329 acceptance: a TensorRT RTX build-time shape error must degrade to the next EP
+        // instead of propagating. ORT surfaces it as OnnxRuntimeException (internal ctor), so the
+        // fake factory throws the exact observed message; classification is message-based.
+        var trtOptions = new SessionOptions();
+        var initialSelection = new OnnxExecutionSessionFactory.SessionOptionsSelection(
+            trtOptions,
+            ExecutionProviderKind.TensorRTRtx);
+
+        int createAttempts = 0;
+        (InferenceSession session, OnnxExecutionSessionFactory.SessionOptionsSelection selection) =
+            OnnxExecutionSessionFactory.CreateInferenceSessionWithTrtInitFallback(
+                "silero-vad.onnx",
+                initialSelection,
+                WindowsMlExecutionDevicePolicy.Explicit,
+                additionalTrtOptions: null,
+                sessionFactory: (_, _) =>
+                {
+                    createAttempts++;
+                    if (createAttempts == 1)
+                    {
+                        throw new InvalidOperationException(SileroVadTrtBuildShapeErrorMessage);
+                    }
+
+                    return CreateMinimalSession();
+                },
+                CancellationToken.None);
+
+        using (session)
+        using (selection.Options)
+        {
+            Assert.Equal(2, createAttempts);
+            Assert.NotEqual(ExecutionProviderKind.TensorRTRtx, selection.SelectedProvider);
+            Assert.True(
+                selection.SelectedProvider is ExecutionProviderKind.DirectMl or ExecutionProviderKind.Cpu);
+            Assert.NotNull(selection.FallbackReason);
+            Assert.Contains("Failed to create serialized engine", selection.FallbackReason, StringComparison.Ordinal);
         }
     }
 
@@ -1185,3 +1235,4 @@ public sealed class OnnxExecutionSessionFactoryTests
         0x12, 0x04, 0x0A, 0x02, 0x08, 0x01, 0x42, 0x04, 0x0A, 0x00, 0x10, 0x09,
     ];
 }
+

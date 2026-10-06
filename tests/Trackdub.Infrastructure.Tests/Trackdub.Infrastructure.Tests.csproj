@@ -36,4 +36,10 @@
     <Compile Include="..\Trackdub.TestDoubles\FakeStudioSettingsService.cs" Link="TestDoubles\FakeStudioSettingsService.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\Fixtures\benchmark-evidence-schema-v1.json"
+             Link="Fixtures\benchmark-evidence-schema-v1.json"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

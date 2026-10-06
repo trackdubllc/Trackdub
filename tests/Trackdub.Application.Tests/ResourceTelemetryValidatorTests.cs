@@ -14,7 +14,8 @@ public sealed class ResourceTelemetryValidatorTests
         ProcessorCount = 4,
         WorkingSetBytes = 1000,
         ManagedAllocatedBytes = 100,
-        AvailableVramMb = 500
+        AvailableVramMb = 500,
+        GpuBytes = 2000
     };
     private static ResourceUsageSnapshot End => new()
     {
@@ -23,7 +24,8 @@ public sealed class ResourceTelemetryValidatorTests
         ProcessorCount = 4,
         WorkingSetBytes = 800,
         ManagedAllocatedBytes = 400,
-        AvailableVramMb = 400
+        AvailableVramMb = 400,
+        GpuBytes = 1500
     };
 
     [Fact]
@@ -44,7 +46,101 @@ public sealed class ResourceTelemetryValidatorTests
             check => AssertCheck(check, "cpuPercent", 50),
             check => AssertCheck(check, "workingSetBytes", 1000),
             check => AssertCheck(check, "managedAllocatedBytes", 300),
-            check => AssertCheck(check, "availableVramMb", 400));
+            check => AssertCheck(check, "availableVramMb", 400),
+            check => AssertCheck(check, "gpuBytes", 2000));
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_uses_the_process_isolated_reading_not_adapter_headroom()
+    {
+        // Both readings are present; only the process-isolated metric moves with GpuBytes.
+        var result = validator.Validate(Start, End with { GpuBytes = 9000 }, new() { MaxGpuBytes = 9000 });
+
+        Assert.Equal(ResourceTelemetryStatus.Passed, result.Status);
+        AssertCheck(Check(result, "gpuBytes"), "gpuBytes", 9000);
+        AssertCheck(Check(result, "availableVramMb"), "availableVramMb", 400);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_reports_the_unavailable_reason_instead_of_zero()
+    {
+        var result = validator.Validate(Start, End with
+        {
+            GpuBytes = null,
+            GpuUnavailableReason = "Windows reported no GPU Process Memory counter instance for this process."
+        }, new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Unavailable, check.Status);
+        Assert.Equal(Start.GpuBytes, check.ObservedValue);
+        Assert.Equal("Windows reported no GPU Process Memory counter instance for this process.", check.Reason);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_fails_when_the_interval_peak_exceeds_the_budget()
+    {
+        // A spike that drains before the terminal event still counts: the peak is the
+        // maximum of the endpoints and the sampled interval maximum.
+        var result = validator.Validate(
+            Start with { GpuBytes = 1000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = 9000 },
+            new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Failed, check.Status);
+        Assert.Equal(9000.0, check.ObservedValue);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_passes_when_peak_and_endpoints_fit_the_budget()
+    {
+        var result = validator.Validate(
+            Start with { GpuBytes = 1000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = 2000 },
+            new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Passed, check.Status);
+        Assert.Equal(2000.0, check.ObservedValue);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_is_unavailable_when_peak_sampling_failed_with_a_budget()
+    {
+        var result = validator.Validate(
+            Start with { GpuBytes = 1000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = null, PeakGpuUnavailableReason = "Continuous process-GPU sampling unavailable (UnauthorizedAccessException)." },
+            new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Unavailable, check.Status);
+        Assert.Contains("Continuous process-GPU sampling unavailable", check.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_is_skipped_when_peak_sampling_failed_without_a_budget()
+    {
+        // Unbudgeted and unmeasurable stays Skipped so CPU-only stages are not downgraded.
+        var result = validator.Validate(
+            Start with { GpuBytes = 1000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = null, PeakGpuUnavailableReason = "Continuous process-GPU sampling unavailable (UnauthorizedAccessException)." },
+            new());
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Skipped, check.Status);
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_fails_when_an_endpoint_proves_the_breach_despite_a_peak_gap()
+    {
+        var result = validator.Validate(
+            Start with { GpuBytes = 9000 },
+            End with { GpuBytes = 1200, PeakGpuBytes = null, PeakGpuUnavailableReason = "Continuous process-GPU sampling unavailable (UnauthorizedAccessException)." },
+            new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck check = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Failed, check.Status);
+        Assert.Equal(9000.0, check.ObservedValue);
     }
 
     [Fact]
@@ -73,6 +169,30 @@ public sealed class ResourceTelemetryValidatorTests
     }
 
     [Fact]
+    public void Validate_annotates_passing_working_set_check_with_sampling_dilation_warning()
+    {
+        const string warning = "Working-set sampling cadence dilated (longest tick gap 180 ms at 25 ms cadence); transient peaks shorter than the gap may have been missed.";
+        var result = validator.Validate(
+            Start, End with { PeakWorkingSetSamplingWarning = warning }, new() { MaxWorkingSetBytes = 1000 });
+
+        ResourceTelemetryCheck check = Check(result, "workingSetBytes");
+        Assert.Equal(ResourceTelemetryStatus.Passed, check.Status);
+        Assert.Equal(1000d, check.ObservedValue);
+        Assert.Equal(warning, check.Reason);
+    }
+
+    [Fact]
+    public void Validate_keeps_failure_reason_when_sampling_dilated_and_bound_exceeded()
+    {
+        var result = validator.Validate(
+            Start, End with { PeakWorkingSetSamplingWarning = "dilated" }, new() { MaxWorkingSetBytes = 999 });
+
+        ResourceTelemetryCheck check = Check(result, "workingSetBytes");
+        Assert.Equal(ResourceTelemetryStatus.Failed, check.Status);
+        Assert.Equal("Configured upper bound exceeded.", check.Reason);
+    }
+
+    [Fact]
     public void Validate_reports_working_set_unavailable_when_continuous_sampling_failed()
     {
         ResourceUsageSnapshot failedPeak = End with
@@ -92,6 +212,7 @@ public sealed class ResourceTelemetryValidatorTests
     [InlineData("workingSetBytes")]
     [InlineData("managedAllocatedBytes")]
     [InlineData("availableVramMb")]
+    [InlineData("gpuBytes")]
     public void Validate_breaching_each_bound_fails(string metric)
     {
         var bounds = metric switch
@@ -99,6 +220,7 @@ public sealed class ResourceTelemetryValidatorTests
             "cpuPercent" => new ResourceTelemetryBounds { MaxCpuPercent = 49 },
             "workingSetBytes" => new ResourceTelemetryBounds { MaxWorkingSetBytes = 999 },
             "managedAllocatedBytes" => new ResourceTelemetryBounds { MaxManagedAllocatedBytes = 299 },
+            "gpuBytes" => new ResourceTelemetryBounds { MaxGpuBytes = 1999 },
             _ => new ResourceTelemetryBounds { MinAvailableVramMb = 401 }
         };
         var result = validator.Validate(Start, End, bounds);
@@ -169,24 +291,46 @@ public sealed class ResourceTelemetryValidatorTests
         // The free-VRAM floor reads only the end-of-stage sample, so it stays evaluable whenever
         // that sample exists; the delta metrics need both endpoints and degrade without them.
         ResourceTelemetryCheck vram = Check(result, "availableVramMb");
+        // Dedicated GPU memory has no configured budget in these cases, so an unmeasurable reading
+        // is Skipped rather than downgrading the stage: the absence stays visible in evidence
+        // without turning a stage that could not touch the GPU into an unverified one.
+        ResourceTelemetryCheck gpu = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Skipped, gpu.Status);
+        Assert.Equal(missingStart ? (missingEnd ? null : End.GpuBytes) : Start.GpuBytes, gpu.ObservedValue);
+        Assert.NotNull(gpu.Reason);
         if (missingEnd)
         {
             Assert.Equal(ResourceTelemetryStatus.Unavailable, vram.Status);
             Assert.Null(vram.ObservedValue);
             Assert.NotNull(vram.Reason);
-            Assert.All(result.Checks, check => Assert.Equal(ResourceTelemetryStatus.Unavailable, check.Status));
+            Assert.All(result.Checks.Where(check => check.Metric != "gpuBytes"),
+                check => Assert.Equal(ResourceTelemetryStatus.Unavailable, check.Status));
         }
         else
         {
             Assert.Equal(ResourceTelemetryStatus.Passed, vram.Status);
             Assert.Equal(400d, vram.ObservedValue);
-            Assert.All(result.Checks.Where(check => check.Metric != "availableVramMb"), check =>
+            Assert.All(result.Checks.Where(check => check.Metric is not ("availableVramMb" or "gpuBytes")), check =>
             {
                 Assert.Equal(ResourceTelemetryStatus.Unavailable, check.Status);
                 Assert.Null(check.ObservedValue);
                 Assert.NotNull(check.Reason);
             });
         }
+    }
+
+    [Fact]
+    public void Validate_gpu_bytes_with_a_configured_budget_degrades_when_unmeasurable()
+    {
+        // With a budget configured the run genuinely cannot be verified, unlike the unbudgeted
+        // case above where the metric is merely not applicable.
+        var result = validator.Validate(Start, null, new() { MaxGpuBytes = 4096 });
+
+        ResourceTelemetryCheck gpu = Check(result, "gpuBytes");
+        Assert.Equal(ResourceTelemetryStatus.Unavailable, gpu.Status);
+        Assert.Equal(Start.GpuBytes, gpu.ObservedValue);
+        Assert.Equal(4096d, gpu.Threshold);
+        Assert.NotNull(gpu.Reason);
     }
 
     [Fact]
@@ -275,6 +419,7 @@ public sealed class ResourceTelemetryValidatorTests
     [InlineData("negativeAllocation")]
     [InlineData("negativeWorkingSet")]
     [InlineData("negativeVram")]
+    [InlineData("negativeGpu")]
     public void Validate_regressions_and_invalid_counters_fail(string defect)
     {
         var end = defect switch
@@ -287,6 +432,7 @@ public sealed class ResourceTelemetryValidatorTests
             "allocation" => End with { ManagedAllocatedBytes = 99 },
             "negativeAllocation" => End with { ManagedAllocatedBytes = -1 },
             "negativeWorkingSet" => End with { WorkingSetBytes = -1 },
+            "negativeGpu" => End with { GpuBytes = -1 },
             _ => End with { AvailableVramMb = -1 }
         };
         var result = validator.Validate(Start, end, new());
@@ -325,6 +471,7 @@ public sealed class ResourceTelemetryValidatorTests
         Assert.Throws<ArgumentOutOfRangeException>(() => validator.Validate(null, null, new() { MaxWorkingSetBytes = -1 }));
         Assert.Throws<ArgumentOutOfRangeException>(() => validator.Validate(null, null, new() { MaxManagedAllocatedBytes = -1 }));
         Assert.Throws<ArgumentOutOfRangeException>(() => validator.Validate(null, null, new() { MinAvailableVramMb = -1 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => validator.Validate(null, null, new() { MaxGpuBytes = -1 }));
     }
 
     private static ResourceTelemetryCheck Check(ResourceTelemetryValidation result, string metric) =>

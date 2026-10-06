@@ -27,7 +27,14 @@ public sealed record SeparationEvalResult(
     string? RequestedProvider,
     string? SelectedProvider,
     string? BootstrapDetail,
-    IReadOnlyDictionary<string, string>? Metadata);
+    IReadOnlyDictionary<string, string>? Metadata)
+{
+    /// <summary>
+    /// Advisory warning when the peak sampler's cadence dilated under load.
+    /// Informational only: the peak still stands. Null when ticks stayed within cadence.
+    /// </summary>
+    public string? PeakWorkingSetSamplingWarning { get; init; }
+}
 
 public sealed record SeparationEvalOptions(
     string JobsPath,
@@ -230,60 +237,53 @@ public static class SeparationEvalRunner
             output.WriteLine($"separation-eval: {all.Count - failed} ok, {failed} failed; results in {options.ResultsPath}");
             return failed == 0 ? 0 : 2;
         }
-        catch (IOException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (ArgumentException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (NotSupportedException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (JsonException ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            return ReportSetupFailure(error, ex);
-        }
-        catch (System.Security.SecurityException ex)
+        catch (Exception ex) when (ex is IOException or
+            UnauthorizedAccessException or
+            ArgumentException or
+            InvalidOperationException or
+            NotSupportedException or
+            JsonException or
+            System.ComponentModel.Win32Exception or
+            System.Security.SecurityException)
         {
             return ReportSetupFailure(error, ex);
         }
     }
 
-    public static async Task<IReadOnlyList<SeparationEvalResult>> RunJobsAsync(
+    public static Task<IReadOnlyList<SeparationEvalResult>> RunJobsAsync(
         IReadOnlyList<SeparationEvalJob> jobs,
         IStemSeparationEngineAdapter engine,
         IWorkingSetSampler sampler,
         string model,
         string? provider,
         TextWriter results,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        RunJobsAsync(jobs, engine, sampler, model, provider, results, cancellationToken,
+            new WorkingSetPeakMonitorFactory());
+
+    internal static async Task<IReadOnlyList<SeparationEvalResult>> RunJobsAsync(
+        IReadOnlyList<SeparationEvalJob> jobs,
+        IStemSeparationEngineAdapter engine,
+        IWorkingSetSampler sampler,
+        string model,
+        string? provider,
+        TextWriter results,
+        CancellationToken cancellationToken,
+        IWorkingSetPeakMonitorFactory monitorFactory)
     {
         ArgumentNullException.ThrowIfNull(jobs);
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(sampler);
         ArgumentNullException.ThrowIfNull(results);
+        ArgumentNullException.ThrowIfNull(monitorFactory);
 
         var all = new List<SeparationEvalResult>(jobs.Count);
         for (int index = 0; index < jobs.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             SeparationEvalJob job = jobs[index];
-            SeparationEvalResult result = await RunJobAsync(job, index, engine, sampler, model, provider, cancellationToken)
+            SeparationEvalResult result = await RunJobAsync(
+                    job, index, engine, sampler, model, provider, monitorFactory, cancellationToken)
                 .ConfigureAwait(false);
             all.Add(result);
             await results.WriteLineAsync(JsonSerializer.Serialize(result, JsonOptions)).ConfigureAwait(false);
@@ -300,10 +300,11 @@ public static class SeparationEvalRunner
         IWorkingSetSampler sampler,
         string model,
         string? provider,
+        IWorkingSetPeakMonitorFactory monitorFactory,
         CancellationToken cancellationToken)
     {
         long before = 0;
-        WorkingSetPeakMonitor? monitor = null;
+        IWorkingSetPeakMonitor? monitor = null;
         var clock = Stopwatch.StartNew();
         try
         {
@@ -319,7 +320,7 @@ public static class SeparationEvalRunner
                 RequirePreferredExecutionProvider: provider is not null);
 
             before = sampler.CaptureWorkingSetBytes();
-            monitor = new WorkingSetPeakMonitor(sampler, before);
+            monitor = monitorFactory.Create(sampler, before);
             StemSeparationResult separated = await engine.SeparateAsync(request, progress: null, cancellationToken)
                 .ConfigureAwait(false);
             clock.Stop();
@@ -332,50 +333,28 @@ public static class SeparationEvalRunner
                 Rtf: separated.DurationSeconds > 0 ? wallMs / 1000.0 / separated.DurationSeconds : null,
                 before, peak,
                 summary?.RequestedProvider, summary?.SelectedProvider, summary?.BootstrapDetail,
-                separated.Metadata);
+                separated.Metadata)
+            {
+                PeakWorkingSetSamplingWarning = monitor?.SamplingWarning,
+            };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             monitor?.Stop();
             throw;
         }
-        catch (OperationCanceledException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (IOException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (ArgumentException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (JsonException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (NotSupportedException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (TimeoutException ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
-        }
-        catch (System.Security.SecurityException ex)
+        // Unrequested cancellations (e.g. an engine timing out on its own) are job
+        // failures; caller-requested cancellation takes the rethrow arm above.
+        catch (Exception ex) when (ex is OperationCanceledException or
+            IOException or
+            UnauthorizedAccessException or
+            InvalidOperationException or
+            ArgumentException or
+            JsonException or
+            NotSupportedException or
+            TimeoutException or
+            System.ComponentModel.Win32Exception or
+            System.Security.SecurityException)
         {
             return CreateFailedResult(job, index, provider, before, clock, monitor, ex);
         }
@@ -391,7 +370,7 @@ public static class SeparationEvalRunner
         string? provider,
         long before,
         Stopwatch clock,
-        WorkingSetPeakMonitor? monitor,
+        IWorkingSetPeakMonitor? monitor,
         Exception exception)
     {
         clock.Stop();
@@ -399,7 +378,10 @@ public static class SeparationEvalRunner
         return new SeparationEvalResult(
             job.Id, index, Ok: false, Error: exception.Message, clock.Elapsed.TotalMilliseconds, AudioSeconds: 0,
             Rtf: null, before, peak, RequestedProvider: provider, SelectedProvider: null,
-            BootstrapDetail: null, Metadata: null);
+            BootstrapDetail: null, Metadata: null)
+        {
+            PeakWorkingSetSamplingWarning = monitor?.SamplingWarning,
+        };
     }
 
     private static int ReportSetupFailure(TextWriter error, Exception exception)

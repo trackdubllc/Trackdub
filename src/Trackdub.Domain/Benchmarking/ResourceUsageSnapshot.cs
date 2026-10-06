@@ -13,6 +13,13 @@ public sealed record ResourceUsageSnapshot
 
     /// <summary>Maximum working set observed during a measured interval, when interval sampling ran.</summary>
     public long? PeakWorkingSetBytes { get; init; }
+
+    /// <summary>
+    /// Advisory warning when the interval sampler's cadence dilated under load
+    /// (see WorkingSetPeakMonitor). Informational only: the peak still stands,
+    /// but transient excursions shorter than the dilated gap may have been missed.
+    /// </summary>
+    public string? PeakWorkingSetSamplingWarning { get; init; }
     public long? ManagedAllocatedBytes { get; init; }
     public string? PeakWorkingSetUnavailableReason { get; init; }
 
@@ -22,7 +29,20 @@ public sealed record ResourceUsageSnapshot
     /// </summary>
     public long? AvailableVramMb { get; init; }
 
+    /// <summary>
+    /// Dedicated GPU memory allocated by this process, in bytes. Unlike <see cref="AvailableVramMb"/>
+    /// this is process-isolated and excludes other processes sharing the adapter. Concurrent
+    /// GPU work inside this process remains included; this is not a stage-isolated cost.
+    /// </summary>
+    public long? GpuBytes { get; init; }
+
+    /// <summary>Maximum dedicated GPU memory observed during a measured interval, when interval sampling ran.</summary>
+    public long? PeakGpuBytes { get; init; }
+
+    public string? PeakGpuUnavailableReason { get; init; }
+
     public string? CpuUnavailableReason { get; init; }
     public string? MemoryUnavailableReason { get; init; }
     public string? VramUnavailableReason { get; init; }
+    public string? GpuUnavailableReason { get; init; }
 }

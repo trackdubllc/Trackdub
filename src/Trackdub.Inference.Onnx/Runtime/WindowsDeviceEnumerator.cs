@@ -374,6 +374,57 @@ public sealed class WindowsDeviceEnumerator : IDeviceEnumerator
         return null;
     }
 
+    /// <summary>
+    /// Maps an adapter LUID to the <see cref="DeviceEntry.DeviceIndex"/> the enumerator would
+    /// assign it: DXGI enumeration order with software adapters skipped, so the index matches
+    /// what device pins and session keys refer to. Returns null when the LUID is not among this
+    /// host's usable adapters (enumeration failure, a software-only match, driver mismatch).
+    /// </summary>
+    public static int? QueryAdapterIndexByLuid(long adapterLuid)
+    {
+        int hr = NativeMethods.CreateDXGIFactory1(ref NativeMethods.IID_IDXGIFactory1, out nint factoryPtr);
+        if (hr < 0 || factoryPtr == 0)
+            return null;
+
+        try
+        {
+            int deviceIndex = 0;
+            for (uint adapterIndex = 0; ; adapterIndex++)
+            {
+                hr = NativeMethods.IDXGIFactory1_EnumAdapters1(factoryPtr, adapterIndex, out nint adapterPtr);
+                if (hr < 0)
+                    break;
+
+                try
+                {
+                    var desc = new DxgiAdapterDesc1();
+                    if (NativeMethods.IDXGIAdapter1_GetDesc1(adapterPtr, ref desc) < 0)
+                        continue;
+
+                    // Mirror EnumerateGpuDevices: software adapters never receive a device
+                    // index, so they must not shift the mapping either.
+                    if ((desc.Flags & NativeMethods.DXGI_ADAPTER_FLAG_SOFTWARE) != 0)
+                        continue;
+
+                    if (desc.AdapterLuid == adapterLuid)
+                        return deviceIndex;
+
+                    deviceIndex++;
+                }
+                finally
+                {
+                    Marshal.Release(adapterPtr);
+                }
+            }
+        }
+        finally
+        {
+            Marshal.Release(factoryPtr);
+        }
+
+        return null;
+    }
+
     internal static DeviceKind ClassifyDeviceKind(uint adapterFlags, int dedicatedVramMb)
     {
         // If the adapter is flagged as non-detachable (integrated), classify as IntegratedGpu

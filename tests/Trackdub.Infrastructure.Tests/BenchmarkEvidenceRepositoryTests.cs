@@ -109,6 +109,45 @@ public sealed class BenchmarkEvidenceRepositoryTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    [Fact]
+    public async Task Schema_v1_report_reads_from_disk_and_saves_back()
+    {
+        string root = NewRoot();
+        try
+        {
+            var repository = new BenchmarkEvidenceRepository(new SqliteUserBenchmarkDatabase(root));
+            var runId = Guid.Parse("3f1c9b2e-7a4d-4c6f-9b0e-2d5a8c1f4e70");
+            string reportsDirectory = Path.Join(Path.GetFullPath(root), "benchmark-reports");
+            Directory.CreateDirectory(reportsDirectory);
+            string fixture = Path.Join(AppContext.BaseDirectory, "Fixtures", "benchmark-evidence-schema-v1.json");
+            File.Copy(fixture, Path.Join(reportsDirectory, $"{runId:N}.json"), overwrite: true);
+
+            // Legacy measurements remain available through both the original map and typed fields.
+            BenchmarkEvidenceReport loaded = Assert.IsType<BenchmarkEvidenceReport>(
+                await repository.GetAsync(runId));
+            Assert.Equal(1, loaded.SchemaVersion);
+            Assert.Equal(167772160L, loaded.ProcessMemory!.PeakWorkingSetBytes);
+            Assert.Equal(44040192L, loaded.ProcessMemory.ManagedAllocatedBytes);
+            Assert.Equal(10485760L, loaded.LegacyMemoryBytes!["stage:Asr:allocatedBytes"]);
+            Assert.Equal(3L, Assert.Single(loaded.StageGarbageCollection).Gen0Collections);
+            Assert.Equal(240.5, loaded.TimingsMilliseconds["pipeline"]);
+            Assert.Equal("Asr", Assert.Single(loaded.Stages).Name);
+
+            // Saving a v1 report preserves its version and every legacy measurement.
+            await repository.SaveAsync(loaded);
+            BenchmarkEvidenceReport reloaded = Assert.IsType<BenchmarkEvidenceReport>(
+                await repository.GetAsync(runId));
+            Assert.Equal(1, reloaded.SchemaVersion);
+            Assert.Equal(loaded.ProcessMemory, reloaded.ProcessMemory);
+            Assert.Equal(loaded.LegacyMemoryBytes!.OrderBy(x => x.Key), reloaded.LegacyMemoryBytes!.OrderBy(x => x.Key));
+            Assert.Equal(240.5, reloaded.TimingsMilliseconds["pipeline"]);
+
+            // Versions outside the supported set are still refused.
+            await Assert.ThrowsAsync<ArgumentException>(() => repository.SaveAsync(loaded with { SchemaVersion = 3 }));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     private static string NewRoot() => Path.Join(Path.GetTempPath(), "Trackdub.Evidence.Tests", Guid.NewGuid().ToString("N"));
 
     private static BenchmarkEvidenceReport Observation(Guid id, DateTimeOffset completedAt) => new()

@@ -797,28 +797,38 @@ public static class CompositionRoot
         services.TryAddSingleton<IOpenVinoAvailabilityProvider>(sp =>
             sp.GetRequiredService<OpenVinoBootstrapper>());
 
-        // IDeviceEnumerator — platform-specific GPU/NPU discovery, singleton.
-#if WINDOWS
-        services.TryAddSingleton<IDeviceEnumerator>(sp =>
-            new WindowsDeviceEnumerator(
-                sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
-                sp.GetRequiredService<ILogger<WindowsDeviceEnumerator>>()));
-#elif MACOS
-#pragma warning disable CA1416 // macOS-only types registered under MACOS compile constant
-        services.TryAddSingleton<IDeviceEnumerator>(sp =>
-            new MacDeviceEnumerator(sp.GetRequiredService<ILogger<MacDeviceEnumerator>>()));
-#pragma warning restore CA1416
-#elif LINUX
+        // IDeviceEnumerator — platform-specific GPU/NPU discovery, singleton. The platform
+        // dispatch lives in DeviceEnumeratorFactory so the pre-container callers share it.
+#if LINUX
 #pragma warning disable CA1416 // Linux-only types registered under LINUX compile constant
         services.TryAddSingleton<ISysfsReader, PhysicalSysfsReader>();
+#pragma warning restore CA1416
+#endif
         services.TryAddSingleton<IDeviceEnumerator>(sp =>
-            new LinuxDeviceEnumerator(
+#if LINUX
+#pragma warning disable CA1416 // Linux-only type resolved under LINUX compile constant
+            DeviceEnumeratorFactory.CreateLinux(
                 sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
-                sp.GetRequiredService<ISysfsReader>(),
-                sp.GetRequiredService<ILogger<LinuxDeviceEnumerator>>()));
+                sp.GetRequiredService<ILoggerFactory>(),
+                sp.GetRequiredService<ISysfsReader>()));
 #pragma warning restore CA1416
 #else
-        services.TryAddSingleton<IDeviceEnumerator, CpuOnlyDeviceEnumerator>();
+            DeviceEnumeratorFactory.Create(
+                sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
+                sp.GetRequiredService<ILoggerFactory>()));
+#endif
+
+        // IProcessGpuMemoryReader — this process's dedicated GPU memory, used both as benchmark
+        // evidence and as the shared session pool's accelerator-admission observation. Registered
+        // in the core path (not only headless) so every host that calls AddTrackdub — desktop,
+        // headless, benchmark — offers a reader, and so a host that pre-registers its own wins.
+        // Binding the final registration to the pool happens at host construction, after all
+        // service overrides, rather than inside this factory: admission must not depend on
+        // something later resolving the telemetry services (see HeadlessDubbingSessionFactory).
+#if WINDOWS
+        services.TryAddSingleton<Trackdub.Contracts.Benchmarking.IProcessGpuMemoryReader, WindowsProcessGpuMemoryReader>();
+#else
+        services.TryAddSingleton<Trackdub.Contracts.Benchmarking.IProcessGpuMemoryReader, UnavailableProcessGpuMemoryReader>();
 #endif
 
         // IExecutionProviderBootstrapper — platform-specific EP bootstrap logic, singleton.

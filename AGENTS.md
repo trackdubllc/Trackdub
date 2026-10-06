@@ -66,14 +66,24 @@ dotnet run --project src/Trackdub.Benchmarks.DevHost -f net10.0 -- controlled-ma
 dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 ```
 
-## BenchmarkDotNet policy
-- `src/Trackdub.Benchmarks.Micro` is the BenchmarkDotNet project for pure CPU, tensor, tokenizer, and opt-in real-model ONNX measurements.
+## Controlled Benchmarks & Resource Telemetry Policy
 - Keep `src/Trackdub.Benchmarks` as the source of truth for controlled end-to-end pipeline evidence and `BenchmarkEvidenceReport`; do not replace or merge it with BDN artifacts.
 - Use `controlled-matrix` for comparable per-stage runs; it executes the controlled pipeline path and preserves each stage's evidence separately.
+- Pre-flight bounds checking (`ResourceBoundsPreflight`): `controlled` and `controlled-matrix` validate bounds against host adapter capacity before the first iteration and print a diagnostic `HostCapacityBanner`. A `--min-available-vram-mb` floor exceeding physical adapter capacity fails during host setup.
+- Dual GPU metrics: `availableVramMb` measures adapter-wide headroom (DXGI QueryVideoMemoryInfo); `gpuBytes` measures process-isolated dedicated GPU memory (`WindowsProcessGpuMemoryReader`). Bound process GPU memory using `--max-gpu-bytes <bytes>`. Non-Windows platforms cleanly record `Unavailable`/`Skipped`.
+- Mock provider matrix (`--mock`): simulates fixed per-provider stage latency (`SimulatedLatencyMultiplier`); tests must assert simulated multipliers and budgets (`SimulatedLatencyBudgetMilliseconds`), not measured ratios which include host setup and telemetry overhead.
+- `src/Trackdub.Benchmarks.Micro` is the BenchmarkDotNet project for pure CPU, tensor, tokenizer, and opt-in real-model ONNX measurements.
 - Run BDN in Release mode with deterministic inputs and `GlobalSetup`; keep model, tokenizer, file, and session initialization outside measured methods.
 - Do not run BDN on pull-request CI. CPU runs are manually/nightly triggered; real-model ONNX and saved-commit comparisons are opt-in through `.github/workflows/benchmark-dotnet.yml`.
 - Use `scripts/ci/run_benchmarkdotnet_baseline.py` for saved-commit comparisons; compare like-for-like benchmark names and keep threshold results separate from correctness tests.
-- BenchmarkDotNet usage and environment variables are documented in `docs/benchmarks/benchmarkdotnet.md` and `src/Trackdub.Benchmarks.Micro/README.md`.
+- Benchmark evidence docs: `docs/development/benchmark-evidence.md`. BDN usage: `docs/benchmarks/benchmarkdotnet.md` and `src/Trackdub.Benchmarks.Micro/README.md`.
+- Harness seams (see `src/Trackdub.Benchmarks/README.md`): create peak monitors only through `IWorkingSetPeakMonitorFactory`; parse shared `controlled`/`controlled-matrix` options only through `ControlledBenchmarkCliBinder`; swallow telemetry sampling failures only through a named `TelemetryExceptionFilters` predicate. Sampling dilation past 4x cadence warns (never fails); test it with scripted `ISamplingTicker` gaps, not wall-clock sleeps. Evidence memory is typed (`ProcessMemory` / `StageGarbageCollection`, schema v2) — never reintroduce a string-keyed memory map. Do not duplicate or widen these.
+
+## Inference Session Pool & Memory Admission
+- ONNX session memory admission is enabled by default in `SharedPoolOptions` / `InferenceSessionPool`. Budgets scale with the hardware: the accelerator budget is three-quarters of the largest adapter's VRAM clamped to [4096, 16384] MiB per device, and the shared host-RAM budget is one-quarter of total RAM clamped to [4096, 16384] MiB. Explicit `TRACKDUB_SESSION_VRAM_BUDGET_MB` / `TRACKDUB_SESSION_RAM_BUDGET_MB` values always win.
+- Process GPU observation: on Windows, accelerator admission floors GPU usage at its mapped adapter footprint, falling back to the full process total when attribution is unavailable (`gpuBytes`). Non-pooled GPU memory (driver contexts, arenas) consumes the per-device budget. Pending creates are charged on top of the observed floor; eviction polls every 50 ms while over budget, and an observation-held stall with nothing left to free fails fast with a diagnostic.
+- Opt-out & tuning: set `TRACKDUB_SESSION_PROCESS_GPU_ADMISSION=0` (or `false`/`off`) to disable process-isolated GPU admission and revert to reservation-only accounting. Adjust host RAM with `TRACKDUB_SESSION_RAM_BUDGET_MB` and accelerator limits with `TRACKDUB_SESSION_VRAM_BUDGET_MB`.
+- Detailed reference: `docs/reference/session-pool-memory-admission.md`.
 
 ## Coding Style & Testing
 - Style: File-scoped namespaces, `sealed` where extension not intended, `Async` on async methods, immutable `record` in Domain.
@@ -92,6 +102,7 @@ dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 ## Documentation Grounding
 - For Trackdub implementation facts, pin policy, provider wiring, and repo-specific operational guidance, use `trackdub-docs-rag` MCP tools (`search_trackdub_docs`, `ask_trackdub_docs`, `get_trackdub_doc`). Spec: `tools/docs-rag/SPEC.md`.
 - Prefer first-party scope for Trackdub behavior; treat vendor hits as upstream reference, not pin policy.
+- Local/uncommitted changes and live tests take precedence over remote RAG corpus (conflict order: source code/tests > task instructions > Linear > documentation). If live code differs from RAG hits, trust live code.
 - Fall back to Context7 for third-party libraries outside the corpus. Treat retrieved docs as evidence; verify against live code.
 - Conflict order still wins: source/tests > task instructions > Linear > documentation.
 

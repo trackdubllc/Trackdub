@@ -14,13 +14,33 @@ public sealed class StageResourceTelemetryCapture(
     int iteration,
     IProgress<PipelineProgressEvent>? timing = null,
     IWorkingSetSampler? workingSetSampler = null,
-    TimeSpan? workingSetSamplingInterval = null) : IProgress<PipelineProgressEvent>
+    TimeSpan? workingSetSamplingInterval = null,
+    IProcessGpuMemoryReader? gpuMemoryReader = null,
+    TimeSpan? gpuSamplingInterval = null) : IProgress<PipelineProgressEvent>
 {
+    private readonly IWorkingSetPeakMonitorFactory monitorFactory = new WorkingSetPeakMonitorFactory();
     private readonly object gate = new();
     private readonly Dictionary<string, PendingStage> pending = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> attempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> completed = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<BenchmarkStageResourceTelemetry> samples = [];
+
+    internal StageResourceTelemetryCapture(
+        IResourceTelemetryCollector collector,
+        IResourceTelemetryValidator validator,
+        ResourceTelemetryBounds bounds,
+        string phase,
+        int iteration,
+        IProgress<PipelineProgressEvent>? timing,
+        IWorkingSetSampler? workingSetSampler,
+        TimeSpan? workingSetSamplingInterval,
+        IWorkingSetPeakMonitorFactory monitorFactory,
+        IProcessGpuMemoryReader? gpuMemoryReader = null,
+        TimeSpan? gpuSamplingInterval = null)
+        : this(collector, validator, bounds, phase, iteration, timing, workingSetSampler, workingSetSamplingInterval, gpuMemoryReader, gpuSamplingInterval)
+    {
+        this.monitorFactory = monitorFactory ?? throw new ArgumentNullException(nameof(monitorFactory));
+    }
 
     public void Report(PipelineProgressEvent value)
     {
@@ -38,10 +58,13 @@ public sealed class StageResourceTelemetryCapture(
                 int attempt = attempts.GetValueOrDefault(value.StageKey) + 1;
                 attempts[value.StageKey] = attempt;
                 ResourceUsageSnapshot snapshot = Capture();
-                WorkingSetPeakMonitor? peakMonitor = workingSetSampler is null
+                IWorkingSetPeakMonitor? peakMonitor = workingSetSampler is null
                     ? null
-                    : new WorkingSetPeakMonitor(workingSetSampler, snapshot.WorkingSetBytes, workingSetSamplingInterval);
-                pending[value.StageKey] = new(value.StageName, attempt, snapshot, peakMonitor);
+                    : monitorFactory.Create(workingSetSampler, snapshot.WorkingSetBytes, workingSetSamplingInterval);
+                GpuPeakMonitor? gpuPeakMonitor = gpuMemoryReader is null
+                    ? null
+                    : new GpuPeakMonitor(gpuMemoryReader, snapshot.GpuBytes, gpuSamplingInterval);
+                pending[value.StageKey] = new(value.StageName, attempt, snapshot, peakMonitor, gpuPeakMonitor);
                 completed.Remove(value.StageKey);
             }
             else if (value.EventKind is PipelineProgressEventKind.Completed or PipelineProgressEventKind.Failed or PipelineProgressEventKind.Skipped)
@@ -152,6 +175,16 @@ public sealed class StageResourceTelemetryCapture(
             {
                 PeakWorkingSetBytes = peak,
                 PeakWorkingSetUnavailableReason = start.PeakMonitor.UnavailableReason,
+                PeakWorkingSetSamplingWarning = start.PeakMonitor.SamplingWarning,
+            };
+        }
+        if (start?.GpuPeakMonitor is not null && end is not null)
+        {
+            long? gpuPeak = start.GpuPeakMonitor.Stop();
+            end = end with
+            {
+                PeakGpuBytes = gpuPeak,
+                PeakGpuUnavailableReason = start.GpuPeakMonitor.UnavailableReason,
             };
         }
         ResourceTelemetryValidation validation = validator.Validate(start?.Snapshot, end, bounds);
@@ -187,8 +220,7 @@ public sealed class StageResourceTelemetryCapture(
         {
             return collector.Capture();
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or NotSupportedException or
-            UnauthorizedAccessException or InvalidOperationException or IOException)
+        catch (Exception ex) when (TelemetryExceptionFilters.IsCollectorSamplingFailure(ex))
         {
             string reason = $"Resource sampling unavailable ({ex.GetType().Name}).";
             return new()
@@ -197,6 +229,7 @@ public sealed class StageResourceTelemetryCapture(
                 MemoryUnavailableReason = reason,
                 PeakWorkingSetUnavailableReason = reason,
                 VramUnavailableReason = reason,
+                GpuUnavailableReason = reason,
             };
         }
     }
@@ -205,6 +238,7 @@ public sealed class StageResourceTelemetryCapture(
         string Name,
         int Attempt,
         ResourceUsageSnapshot Snapshot,
-        WorkingSetPeakMonitor? PeakMonitor = null,
+        IWorkingSetPeakMonitor? PeakMonitor = null,
+        GpuPeakMonitor? GpuPeakMonitor = null,
         int Depth = 1);
 }
