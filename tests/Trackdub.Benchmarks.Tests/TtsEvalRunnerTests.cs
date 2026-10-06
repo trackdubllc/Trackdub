@@ -39,11 +39,11 @@ public sealed class TtsEvalRunnerTests
     }
 
     [Theory]
-    [InlineData("warmup_runs", -1)]
-    [InlineData("repeat_runs", 0)]
-    public void ReadJobs_RejectsInvalidRunOverrides(string property, int value)
+    [InlineData("""{"id":"a","text":"x","language_code":"en-us","voice_id":"af_heart","warmup_runs":-1}""")]
+    [InlineData("""{"id":"a","text":"x","language_code":"en-us","voice_id":"af_heart","repeat_runs":0}""")]
+    [InlineData("""{"id":"a","text":"x","language_code":"en-us","voice_id":"af_heart","repeat_runs":-3}""")]
+    public void ReadJobs_RejectsInvalidPerJobRunOverrides(string line)
     {
-        string line = $"{{\"id\":\"a\",\"text\":\"x\",\"language_code\":\"en-us\",\"voice_id\":\"af_heart\",\"{property}\":{value}}}";
         using var reader = new StringReader(line);
         Assert.Throws<InvalidDataException>(() => TtsEvalRunner.ReadJobs(reader));
     }
@@ -108,7 +108,7 @@ public sealed class TtsEvalRunnerTests
     public async Task RunJobsAsync_RecordsTimingMemoryAndProviderPerJobAndContinuesAfterFailure()
     {
         var engine = new FakeTtsEngine { FailOn = "Boom text." };
-        var sampler = new SequenceSampler(100, 150, 120, 120, 130, 140);
+        var sampler = new SequenceSampler(100, 150, 120, 120, 160, 170);
         var jobs = new[]
         {
             new TtsEvalJob("ok1", "Hello there.", "en-us", "af_heart", null, 1, 2),
@@ -126,7 +126,10 @@ public sealed class TtsEvalRunnerTests
         Assert.True(results[0].Rtf > 0);
         Assert.Equal("Cpu", results[0].SelectedProvider);
         Assert.True(results[0].PeakWorkingSetBytes >= 150);
+        Assert.True(results[0].WarmupPeakWorkingSetBytes >= 150);
+        Assert.Equal("cpu", results[1].RequestedProvider);
         Assert.Equal("kokoro", engine.Requests[0].Options!.PreferredModelAlias);
+        Assert.True(engine.Requests[0].Options!.RequirePreferredModelAlias);
         Assert.Equal("cpu", engine.Requests[0].Options!.PreferredExecutionProvider);
         Assert.True(engine.Requests[0].Options!.RequirePreferredExecutionProvider);
         Assert.Equal("af_heart", engine.Requests[0].Voice.VoiceId);
@@ -136,7 +139,28 @@ public sealed class TtsEvalRunnerTests
         Assert.Equal("ok1", first.RootElement.GetProperty("id").GetString());
         Assert.True(first.RootElement.TryGetProperty("best_wall_ms", out _));
         Assert.True(first.RootElement.TryGetProperty("mean_wall_ms", out _));
+        Assert.True(first.RootElement.TryGetProperty("warmup_peak_working_set_bytes", out _));
         Assert.True(first.RootElement.TryGetProperty("peak_working_set_bytes", out _));
+    }
+
+    [Fact]
+    public async Task RunJobsAsync_SamplerFailureDoesNotAbortRemainingJobs()
+    {
+        using var lines = new StringWriter();
+        var engine = new FakeTtsEngine();
+        var jobs = new[]
+        {
+            new TtsEvalJob("a", "Hello.", "en-us", "af_heart", null, 0, 1),
+            new TtsEvalJob("b", "World.", "en-us", "af_heart", null, 0, 1),
+        };
+        var options = new TtsEvalOptions("j", "r", null, "kokoro", null, null, 0, 1, false);
+        IReadOnlyList<TtsEvalResult> results = await TtsEvalRunner.RunJobsAsync(
+            jobs, engine, new ThrowingSampler(), options, lines, CancellationToken.None);
+        Assert.Equal([true, true], results.Select(r => r.Ok));
+        Assert.Equal(-1, results[0].WorkingSetBeforeBytes);
+        Assert.Null(results[0].WarmupPeakWorkingSetBytes);
+        Assert.Null(results[0].PeakWorkingSetBytes);
+        Assert.Equal(2, engine.Requests.Count);
     }
 
     [Fact]
@@ -186,6 +210,11 @@ public sealed class TtsEvalRunnerTests
     {
         private int next;
         public long CaptureWorkingSetBytes() => values[Math.Min(next++, values.Length - 1)];
+    }
+
+    private sealed class ThrowingSampler : IWorkingSetSampler
+    {
+        public long CaptureWorkingSetBytes() => throw new InvalidOperationException("sampler unavailable");
     }
 
     private sealed class FakeTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionReporter

@@ -936,7 +936,7 @@ public sealed class InferenceSessionPoolTests
                 _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
                 CancellationToken.None));
 
-        Assert.Contains("dedicated GPU memory outside", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("dedicated GPU memory is attributed to this bucket", failure.Message, StringComparison.Ordinal);
         Assert.Contains("TRACKDUB_SESSION_PROCESS_GPU_ADMISSION", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, factoryCalls);
     }
