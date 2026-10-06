@@ -220,8 +220,48 @@ public sealed class SeparationEvalRunnerTests
         }
     }
 
+    [Fact]
+    public async Task RunJobsAsync_CarriesMonitorDilationWarningOnSuccessAndFailure()
+    {
+        var engine = new FakeEngine { FailOn = "b.wav" };
+        var jobs = new[]
+        {
+            new SeparationEvalJob("ok", "a.wav", Out("v1"), Out("b1")),
+            new SeparationEvalJob("bad", "b.wav", Out("v2"), Out("b2")),
+        };
+        using var lines = new StringWriter();
+
+        IReadOnlyList<SeparationEvalResult> results = await SeparationEvalRunner.RunJobsAsync(
+            jobs, engine, new SequenceSampler(100, 150), "spleeter", "cpu", lines,
+            CancellationToken.None, new WarningMonitorFactory("dilated"));
+
+        Assert.Equal(["dilated", "dilated"], results.Select(r => r.PeakWorkingSetSamplingWarning));
+        string[] written = lines.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, written.Length);
+        foreach (string line in written)
+        {
+            using JsonDocument document = JsonDocument.Parse(line);
+            Assert.Equal("dilated", document.RootElement.GetProperty("peak_working_set_sampling_warning").GetString());
+        }
+    }
+
     private static string Out(string name) =>
         Path.Join(Path.GetTempPath(), "trackdub-separation-eval-tests", name + ".wav");
+
+    private sealed class WarningMonitorFactory(string warning) : IWorkingSetPeakMonitorFactory
+    {
+        public IWorkingSetPeakMonitor Create(IWorkingSetSampler sampler, long? initialValue, TimeSpan? interval) =>
+            new WarningMonitor(warning);
+    }
+
+    private sealed class WarningMonitor(string warning) : IWorkingSetPeakMonitor
+    {
+        public string? UnavailableReason => null;
+
+        public string? SamplingWarning => warning;
+
+        public long? Stop() => 150;
+    }
 
     private sealed class SequenceSampler(params long[] values) : IWorkingSetSampler
     {

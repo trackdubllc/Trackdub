@@ -168,9 +168,12 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         // Both endpoints are known here, so Maximum(...) is guaranteed non-null.
         long observedValue = observed!.Value;
         bool exceeded = maximum.HasValue && observedValue > maximum.Value;
+        // A dilation warning is advisory: it annotates a passing check without changing
+        // its status, so contended-host notes reach the evidence instead of staying silent.
         return new ResourceTelemetryCheck("workingSetBytes",
             exceeded ? ResourceTelemetryStatus.Failed : ResourceTelemetryStatus.Passed,
-            observedValue, maximum, exceeded ? "Configured upper bound exceeded." : null);
+            observedValue, maximum,
+            exceeded ? "Configured upper bound exceeded." : end?.PeakWorkingSetSamplingWarning);
     }
 
     private static long? Maximum(long? first, long? second) =>

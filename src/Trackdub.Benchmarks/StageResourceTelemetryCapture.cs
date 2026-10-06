@@ -168,6 +168,7 @@ public sealed class StageResourceTelemetryCapture(
             {
                 PeakWorkingSetBytes = peak,
                 PeakWorkingSetUnavailableReason = start.PeakMonitor.UnavailableReason,
+                PeakWorkingSetSamplingWarning = start.PeakMonitor.SamplingWarning,
             };
         }
         ResourceTelemetryValidation validation = validator.Validate(start?.Snapshot, end, bounds);

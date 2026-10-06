@@ -13,6 +13,13 @@ public sealed record ResourceUsageSnapshot
 
     /// <summary>Maximum working set observed during a measured interval, when interval sampling ran.</summary>
     public long? PeakWorkingSetBytes { get; init; }
+
+    /// <summary>
+    /// Advisory warning when the interval sampler's cadence dilated under load
+    /// (see WorkingSetPeakMonitor). Informational only: the peak still stands,
+    /// but transient excursions shorter than the dilated gap may have been missed.
+    /// </summary>
+    public string? PeakWorkingSetSamplingWarning { get; init; }
     public long? ManagedAllocatedBytes { get; init; }
     public string? PeakWorkingSetUnavailableReason { get; init; }
 

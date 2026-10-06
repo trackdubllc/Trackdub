@@ -27,7 +27,14 @@ public sealed record SeparationEvalResult(
     string? RequestedProvider,
     string? SelectedProvider,
     string? BootstrapDetail,
-    IReadOnlyDictionary<string, string>? Metadata);
+    IReadOnlyDictionary<string, string>? Metadata)
+{
+    /// <summary>
+    /// Advisory warning when the peak sampler's cadence dilated under load.
+    /// Informational only: the peak still stands. Null when ticks stayed within cadence.
+    /// </summary>
+    public string? PeakWorkingSetSamplingWarning { get; init; }
+}
 
 public sealed record SeparationEvalOptions(
     string JobsPath,
@@ -264,26 +271,40 @@ public static class SeparationEvalRunner
         }
     }
 
-    public static async Task<IReadOnlyList<SeparationEvalResult>> RunJobsAsync(
+    public static Task<IReadOnlyList<SeparationEvalResult>> RunJobsAsync(
         IReadOnlyList<SeparationEvalJob> jobs,
         IStemSeparationEngineAdapter engine,
         IWorkingSetSampler sampler,
         string model,
         string? provider,
         TextWriter results,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        RunJobsAsync(jobs, engine, sampler, model, provider, results, cancellationToken,
+            new WorkingSetPeakMonitorFactory());
+
+    internal static async Task<IReadOnlyList<SeparationEvalResult>> RunJobsAsync(
+        IReadOnlyList<SeparationEvalJob> jobs,
+        IStemSeparationEngineAdapter engine,
+        IWorkingSetSampler sampler,
+        string model,
+        string? provider,
+        TextWriter results,
+        CancellationToken cancellationToken,
+        IWorkingSetPeakMonitorFactory monitorFactory)
     {
         ArgumentNullException.ThrowIfNull(jobs);
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(sampler);
         ArgumentNullException.ThrowIfNull(results);
+        ArgumentNullException.ThrowIfNull(monitorFactory);
 
         var all = new List<SeparationEvalResult>(jobs.Count);
         for (int index = 0; index < jobs.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             SeparationEvalJob job = jobs[index];
-            SeparationEvalResult result = await RunJobAsync(job, index, engine, sampler, model, provider, cancellationToken)
+            SeparationEvalResult result = await RunJobAsync(
+                    job, index, engine, sampler, model, provider, monitorFactory, cancellationToken)
                 .ConfigureAwait(false);
             all.Add(result);
             await results.WriteLineAsync(JsonSerializer.Serialize(result, JsonOptions)).ConfigureAwait(false);
@@ -300,11 +321,11 @@ public static class SeparationEvalRunner
         IWorkingSetSampler sampler,
         string model,
         string? provider,
+        IWorkingSetPeakMonitorFactory monitorFactory,
         CancellationToken cancellationToken)
     {
         long before = 0;
         IWorkingSetPeakMonitor? monitor = null;
-        var monitorFactory = new WorkingSetPeakMonitorFactory();
         var clock = Stopwatch.StartNew();
         try
         {
@@ -333,7 +354,10 @@ public static class SeparationEvalRunner
                 Rtf: separated.DurationSeconds > 0 ? wallMs / 1000.0 / separated.DurationSeconds : null,
                 before, peak,
                 summary?.RequestedProvider, summary?.SelectedProvider, summary?.BootstrapDetail,
-                separated.Metadata);
+                separated.Metadata)
+            {
+                PeakWorkingSetSamplingWarning = monitor?.SamplingWarning,
+            };
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -400,7 +424,10 @@ public static class SeparationEvalRunner
         return new SeparationEvalResult(
             job.Id, index, Ok: false, Error: exception.Message, clock.Elapsed.TotalMilliseconds, AudioSeconds: 0,
             Rtf: null, before, peak, RequestedProvider: provider, SelectedProvider: null,
-            BootstrapDetail: null, Metadata: null);
+            BootstrapDetail: null, Metadata: null)
+        {
+            PeakWorkingSetSamplingWarning = monitor?.SamplingWarning,
+        };
     }
 
     private static int ReportSetupFailure(TextWriter error, Exception exception)
