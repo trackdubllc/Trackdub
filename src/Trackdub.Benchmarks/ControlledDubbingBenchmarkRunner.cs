@@ -729,7 +729,6 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         return (BenchmarkEvidenceStatus.Completed, reason);
     }
 
-
     private static void EnsureMeasuredTelemetry(
         List<BenchmarkStageResourceTelemetry> resourceTelemetry, string? stage, string? reason)
     {
