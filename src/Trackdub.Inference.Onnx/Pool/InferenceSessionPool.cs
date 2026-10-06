@@ -1374,7 +1374,11 @@ internal sealed class InferenceSessionPool : IDisposable
             }
         }
 
-        return false;
+        // An in-flight create holds a pending reservation whose factory will turn over (publish
+        // an entry or release the reservation), so it is live work too: the busy bound must
+        // apply while it runs, or a slow factory in an otherwise-empty bucket trips the short
+        // fail-fast before the pending drains from the observation.
+        return pendingCreateMbByBucket.TryGetValue(bucket, out long pendingMb) && pendingMb > 0;
     }
 
     /// <summary>

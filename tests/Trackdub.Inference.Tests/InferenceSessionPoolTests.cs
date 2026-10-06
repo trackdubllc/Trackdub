@@ -1151,6 +1151,56 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
+    public async Task ProcessGpuAdmission_InFlightCreateAlone_GetsTheLongerBound()
+    {
+        // A slow factory in an otherwise-empty bucket is live work: its pending reservation
+        // drains from the observation once it publishes. A concurrent waiter must not be told
+        // the bucket is empty and fail on the short bound before that factory completes.
+        var reader = new MutableProcessGpuMemoryReader(0);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        var factoryStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFactory = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<SessionLease> slowCreate = pool.GetLeaseAsync(
+            AcceleratorKey("inflight0", 256),
+            async _ =>
+            {
+                factoryStarted.SetResult();
+                await releaseFactory.Task;
+                return CreateMinimalSession();
+            },
+            CancellationToken.None);
+        await factoryStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        reader.Set(4096L * 1024 * 1024);
+
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        int previousBusyBound = InferenceSessionPool.ObservedBlockBusyFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 3;
+        InferenceSessionPool.ObservedBlockBusyFailFastPasses = 100_000;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(600));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("inflight1", 256),
+                _ => Task.FromResult(CreateMinimalSession()),
+                cts.Token));
+        }
+        finally
+        {
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+            InferenceSessionPool.ObservedBlockBusyFailFastPasses = previousBusyBound;
+            releaseFactory.SetResult();
+        }
+
+        (await slowCreate).Dispose();
+    }
+
+    [Fact]
     public async Task ProcessGpuAdmission_UnfreeableObservation_FailsFastAfterEvictingIdleWork()
     {
         // When the observation alone blocks, each pass evicts at most one idle entry and
