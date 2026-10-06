@@ -23,6 +23,29 @@ namespace Trackdub.Inference.Onnx;
 
 internal static class OnnxExecutionSessionFactory
 {
+    private static string ExtractLogId(string modelPath)
+    {
+        string[] parts = modelPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (parts.Length >= 3)
+        {
+            return parts[^3];
+        }
+        return Path.GetFileNameWithoutExtension(modelPath);
+    }
+
+    private static void SafeDisposeOnCreationFailure(InferenceSession? session, ExecutionProviderKind provider)
+    {
+        if (session is null) return;
+        if (provider is ExecutionProviderKind.TensorRTRtx)
+        {
+            GC.SuppressFinalize(session);
+        }
+        else
+        {
+            session.Dispose();
+        }
+    }
+
     // Canonical EP names returned by ORT device discovery. TensorRT RTX uses the standalone
     // EP ABI plugin, not the Windows ML catalog spelling. Single source of truth — must match the
     // name the plugin is registered under (see TensorRtRtxPluginService.RegistrationName); ORT reports
@@ -151,13 +174,13 @@ internal static class OnnxExecutionSessionFactory
         WindowsMlExecutionDevicePolicy devicePolicy,
         IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions,
         IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions,
-        bool enableEncoderCudaGraph = false)
+        bool enableEncoderCudaGraph = false, string? encoderLogId = null, string? decoderLogId = null)
     {
         ExecutionProviderKind sessionProvider =
             ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider);
         return new DualOptionsSelections(
-            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph),
-            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtDecoderOptions));
+            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph, encoderLogId),
+            CreateSessionOptions(sessionProvider, devicePolicy, additionalTrtDecoderOptions, enableCudaGraph: false, decoderLogId));
     }
 
     private static DualSessionMetadata ResolveDualSessionMetadata(
@@ -201,7 +224,7 @@ internal static class OnnxExecutionSessionFactory
         string? modelId,
         string? variant,
         CancellationToken cancellationToken,
-        bool enableEncoderCudaGraph = false)
+        bool enableEncoderCudaGraph = false, string? encoderLogId = null, string? decoderLogId = null)
     {
         string encoderFingerprint = BuildSessionOptionsFingerprint(
             selections.Encoder.SelectedProvider, devicePolicy, additionalTrtEncoderOptions, enableEncoderCudaGraph);
@@ -549,39 +572,60 @@ internal static class OnnxExecutionSessionFactory
         IReadOnlyDictionary<string, string>? additionalTrtEncoderOptions = null,
         IReadOnlyDictionary<string, string>? additionalTrtDecoderOptions = null)
     {
-        BootstrapContext bootstrap = await BootstrapForProviderAsync(provider, cancellationToken)
-            .ConfigureAwait(false);
-        DualOptionsSelections selections = CreateDualOptionsSelections(
-            provider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
-            additionalTrtEncoderOptions, additionalTrtDecoderOptions);
-        using SessionOptions encoderOptions = selections.Encoder.Options;
-        using SessionOptions decoderOptions = selections.Decoder.Options;
-        InferenceSession? encoderSession = null;
-        InferenceSession? decoderSession = null;
-        try
+        var providersToTry = new System.Collections.Generic.List<ExecutionProviderKind> { provider };
+        if (provider == ExecutionProviderKind.TensorRTRtx)
         {
-            encoderSession = new InferenceSession(encoderModelPath, encoderOptions);
-            decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
-            DualSessionMetadata metadata = ResolveDualSessionMetadata(
-                provider, bootstrap, selections, encoderSession, decoderSession);
-            CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
-            CpuExecutionAdmission.Shared.RegisterSession(decoderSession, metadata.DecoderProvider);
+            if (OperatingSystem.IsWindows()) providersToTry.Add(ExecutionProviderKind.DirectMl);
+            providersToTry.Add(ExecutionProviderKind.Cpu);
+        }
 
-            return new WhisperSessionLease(
-                encoderSession,
-                decoderSession,
-                bootstrap.RequestedProviderLabel,
-                FormatProviderLabel(metadata.SelectedProvider),
-                metadata.BootstrapDetail);
-        }
-        catch
+        Exception? lastException = null;
+
+        foreach (var currentProvider in providersToTry)
         {
-            encoderSession?.Dispose();
-            decoderSession?.Dispose();
-            throw;
+            BootstrapContext bootstrap = await BootstrapForProviderAsync(currentProvider, cancellationToken)
+                .ConfigureAwait(false);
+            DualOptionsSelections selections = CreateDualOptionsSelections(
+                currentProvider, bootstrap.Bootstrap, bootstrap.DevicePolicy,
+                additionalTrtEncoderOptions, additionalTrtDecoderOptions,
+                encoderLogId: ExtractLogId(encoderModelPath),
+                decoderLogId: ExtractLogId(decoderModelPath));
+            
+            InferenceSession? encoderSession = null;
+            InferenceSession? decoderSession = null;
+            try
+            {
+                encoderSession = new InferenceSession(encoderModelPath, selections.Encoder.Options);
+                decoderSession = new InferenceSession(decoderModelPath, selections.Decoder.Options);
+                DualSessionMetadata metadata = ResolveDualSessionMetadata(
+                    provider, bootstrap, selections, encoderSession, decoderSession);
+                CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
+                CpuExecutionAdmission.Shared.RegisterSession(decoderSession, metadata.DecoderProvider);
+
+                return new WhisperSessionLease(
+                    encoderSession,
+                    decoderSession,
+                    bootstrap.RequestedProviderLabel,
+                    FormatProviderLabel(metadata.SelectedProvider),
+                    metadata.BootstrapDetail);
+            }
+            catch (Exception ex)
+            {
+                SafeDisposeOnCreationFailure(encoderSession, currentProvider);
+                SafeDisposeOnCreationFailure(decoderSession, currentProvider);
+                selections.Encoder.Options.Dispose();
+                selections.Decoder.Options.Dispose();
+
+                if (currentProvider == ExecutionProviderKind.TensorRTRtx && LooksLikeTrtSessionInitFailure(ex))
+                {
+                    lastException = ex;
+                    continue;
+                }
+                throw;
+            }
         }
+        throw lastException ?? new InvalidOperationException();
     }
-
     public static async Task<OpusSessionLease> CreateOpusAsync(
         string encoderModelPath,
         string decoderModelPath,
@@ -1387,13 +1431,13 @@ internal static class OnnxExecutionSessionFactory
         ExecutionProviderKind provider,
         WindowsMlExecutionDevicePolicy devicePolicy,
         IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
-        bool enableCudaGraph = false)
+        bool enableCudaGraph = false, string? logId = null)
     {
         bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, provider);
         SessionOptions options = CreateBaseSessionOptions(
             useCatalogDevicePolicy ? devicePolicy : WindowsMlExecutionDevicePolicy.Explicit,
             out bool devicePolicyApplied,
-            tensorRtRtx: provider is ExecutionProviderKind.TensorRTRtx);
+            tensorRtRtx: provider is ExecutionProviderKind.TensorRTRtx, logId: logId);
 
         if (provider is ExecutionProviderKind.Cpu)
         {
@@ -1416,7 +1460,7 @@ internal static class OnnxExecutionSessionFactory
         SessionOptions options,
         ExecutionProviderKind provider,
         IReadOnlyDictionary<string, string>? additionalTrtOptions,
-        bool enableCudaGraph = false)
+        bool enableCudaGraph = false, string? logId = null)
     {
         return provider switch
         {
@@ -1467,7 +1511,7 @@ internal static class OnnxExecutionSessionFactory
     private static SessionOptionsSelection CreateTensorRtRtxSelection(
         SessionOptions options,
         IReadOnlyDictionary<string, string>? additionalTrtOptions,
-        bool enableCudaGraph = false)
+        bool enableCudaGraph = false, string? logId = null)
     {
         ExecutionProviderKind selectedProvider =
             AppendTensorRtRtxOrFallbackProvider(options, additionalTrtOptions, enableCudaGraph);
@@ -1804,7 +1848,7 @@ internal static class OnnxExecutionSessionFactory
     internal static ExecutionProviderKind AppendTensorRtRtxOrFallbackProvider(
         SessionOptions options,
         IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
-        bool enableCudaGraph = false)
+        bool enableCudaGraph = false, string? logId = null)
     {
 #if WINDOWS
         WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
@@ -1913,7 +1957,7 @@ internal static class OnnxExecutionSessionFactory
     /// </param>
     private static IReadOnlyDictionary<string, string> BuildTensorRtRtxOptions(
         IReadOnlyDictionary<string, string>? additionalTrtOptions,
-        bool enableCudaGraph = false)
+        bool enableCudaGraph = false, string? logId = null)
     {
         var trtOptions = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -1986,7 +2030,7 @@ internal static class OnnxExecutionSessionFactory
         ExecutionProviderKind selectedProviderKind,
         WindowsMlExecutionDevicePolicy devicePolicy,
         IReadOnlyDictionary<string, string>? additionalTrtOptions,
-        bool enableCudaGraph = false)
+        bool enableCudaGraph = false, string? logId = null)
     {
         if (selectedProviderKind is ExecutionProviderKind.TensorRTRtx)
         {
@@ -2039,7 +2083,7 @@ internal static class OnnxExecutionSessionFactory
     private static SessionOptions CreateBaseSessionOptions(
         WindowsMlExecutionDevicePolicy devicePolicy,
         out bool devicePolicyApplied,
-        bool tensorRtRtx = false)
+        bool tensorRtRtx = false, string? logId = null)
     {
         SessionOptions options = new()
         {
@@ -2050,7 +2094,8 @@ internal static class OnnxExecutionSessionFactory
             GraphOptimizationLevel = tensorRtRtx
                 ? GraphOptimizationLevel.ORT_ENABLE_BASIC
                 : GraphOptimizationLevel.ORT_ENABLE_ALL,
-            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL
+            ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+            LogId = logId ?? string.Empty
         };
 
         devicePolicyApplied = false;

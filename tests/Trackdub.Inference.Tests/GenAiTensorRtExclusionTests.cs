@@ -111,12 +111,14 @@ public sealed class GenAiTensorRtExclusionTests
     }
 
     [Fact]
-    public void VadStage_AllowsTensorRtRtx()
+    public void VadStage_ExcludesTensorRtFamilies()
     {
-        // VAD previously passed a TRT RTX smoke run; the per-model smoke gate decides.
-        Assert.Contains(
-            ExecutionProviderKind.TensorRTRtx,
-            StageRuntimeRequirementsCatalog.All[RuntimeStage.Vad].AllowedProvidersThisMilestone);
+        // #329: silero-vad fails the TensorRT RTX build on every attempt (squeeze shape error in its
+        // If/else-branch subgraph), so VAD routes straight to DirectML/CPU.
+        IReadOnlyList<ExecutionProviderKind> allowed =
+            StageRuntimeRequirementsCatalog.All[RuntimeStage.Vad].AllowedProvidersThisMilestone;
+        Assert.DoesNotContain(ExecutionProviderKind.TensorRTRtx, allowed);
+        Assert.DoesNotContain(ExecutionProviderKind.TensorRt, allowed);
     }
 
     [Fact]
