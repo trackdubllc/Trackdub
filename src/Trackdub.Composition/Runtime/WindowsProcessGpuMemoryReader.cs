@@ -160,6 +160,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                 long total = 0;
                 int readings = 0;
                 bool matched = false;
+                bool invalid = false;
                 for (uint i = 0; i < itemCount; i++)
                 {
                     nint itemPtr = buffer + (int)(i * (uint)itemSize);
@@ -175,6 +176,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                     if (item.Value.Status is not (ValidDataStatus or NewDataStatus)
                         || item.Value.LargeValue < 0)
                     {
+                        invalid = true;
                         continue;
                     }
 
@@ -190,7 +192,15 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                     return 0;
                 }
 
-                return readings == 0 ? null : total;
+                // A partial footprint would under-report the process's real usage and let
+                // admission exceed the budget, so any unreadable instance fails the reading
+                // instead of silently contributing nothing.
+                if (invalid || readings == 0)
+                {
+                    return null;
+                }
+
+                return total;
             }
             finally
             {

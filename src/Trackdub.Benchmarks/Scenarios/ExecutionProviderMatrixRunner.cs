@@ -236,7 +236,7 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
                     mockOpts.DryRun = options.DryRun;
                     double latencyMultiplier = SimulatedLatencyMultiplier(provider);
                     // The base delays are large enough (sum 1s at 1.0x) that a provider's simulated
-                    // speed survives OS scheduler jitter; see SimulatedStageDelayMilliseconds for
+                    // speed survives OS scheduler jitter; see SimulatedLatencyBudgetMilliseconds for
                     // what a mock run's measurement is allowed to be asserted against.
                     foreach ((string stage, double milliseconds) in SimulatedStageDelayTable)
                     {
@@ -326,7 +326,7 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
     /// the simulated ratio: measured TensorRT routinely exceeds measured DirectML even though its
     /// simulated stages take half as long. Callers that need to state what a mock run guarantees
     /// should use <see cref="SimulatedSpeedupFactor"/> and
-    /// <see cref="SimulatedStageDelayMilliseconds"/> instead of the measured ratios.
+    /// <see cref="SimulatedLatencyBudgetMilliseconds"/> instead of the measured ratios.
     /// </remarks>
     internal static double SimulatedLatencyMultiplier(string provider)
     {

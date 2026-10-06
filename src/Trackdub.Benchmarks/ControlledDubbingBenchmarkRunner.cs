@@ -752,18 +752,23 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         // report costs no extra process sample.
         BenchmarkStageResourceTelemetry? lastMeasured = resourceTelemetry
             .LastOrDefault(sample => sample.Phase == "measured");
-        memory["availableVramMb"] = lastMeasured is null
-            ? null
-            : (long?)lastMeasured.Validation.Checks
-                .FirstOrDefault(check => check.Metric == "availableVramMb")?.ObservedValue;
+        memory["availableVramMb"] = MetricValue(lastMeasured, "availableVramMb");
 
         // The process-isolated counterpart of the adapter-wide reading above: how much dedicated
         // GPU memory this process itself held, which other processes on the adapter cannot move.
-        memory["gpuBytes"] = lastMeasured is null
-            ? null
-            : (long?)lastMeasured.Validation.Checks
-                .FirstOrDefault(check => check.Metric == "gpuBytes")?.ObservedValue;
+        memory["gpuBytes"] = MetricValue(lastMeasured, "gpuBytes");
     }
+
+    /// <summary>
+    /// The validated value of <paramref name="metric"/> on the last measured sample, or null
+    /// when no stage was measured. Both GPU metrics share this lookup so additional metrics
+    /// cannot introduce divergent null or conversion behavior.
+    /// </summary>
+    private static long? MetricValue(BenchmarkStageResourceTelemetry? sample, string metric) =>
+        sample is null
+            ? null
+            : (long?)sample.Validation.Checks
+                .FirstOrDefault(check => check.Metric == metric)?.ObservedValue;
 
     private static void EnsureMeasuredTelemetry(
         List<BenchmarkStageResourceTelemetry> resourceTelemetry, string? stage, string? reason)

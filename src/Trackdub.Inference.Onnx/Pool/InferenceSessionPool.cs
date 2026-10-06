@@ -745,7 +745,11 @@ internal sealed class InferenceSessionPool : IDisposable
                 bool reserved = false;
                 // Observe outside creationLock: the first Windows performance-counter read can
                 // block for around a second on a cold host, and it must not stall other creators.
-                long? observedProcessGpuMb = enableMemoryAdmission ? ReadObservedProcessGpuMb() : null;
+                // Host-RAM buckets are never charged with the observation, so they skip the
+                // probe instead of polling GPU counters on every admission.
+                long? observedProcessGpuMb = enableMemoryAdmission && !bucket.IsHost
+                    ? ReadObservedProcessGpuMb()
+                    : null;
                 using (BenchmarkPhaseCapture.Start("pool-creation-lock-wait"))
                     await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
@@ -1379,7 +1383,10 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 // Re-observe every iteration: this loop evicts idle work and then waits, so the
                 // next pass can see the process's real usage fall as released sessions drain.
-                long? observedProcessGpuMb = ReadObservedProcessGpuMb();
+                // Host-RAM buckets are never charged with the observation (see
+                // ObservedProcessGpuUsageMb), so they skip the probe instead of polling GPU
+                // counters every 50 ms.
+                long? observedProcessGpuMb = bucket.IsHost ? null : ReadObservedProcessGpuMb();
 
                 bool acquired = false;
                 List<PoolEntry>? toDispose = null;

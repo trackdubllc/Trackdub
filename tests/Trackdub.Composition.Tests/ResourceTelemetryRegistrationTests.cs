@@ -66,6 +66,10 @@ public sealed class ResourceTelemetryRegistrationTests
             Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
         }
 
+        // Capture the ambient binding before this test registers its own host, so the
+        // finally restores exactly what was there instead of unconditionally clearing a
+        // reader a previous test or host bound.
+        IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
         using var host = HeadlessDubbingHost.Create();
         try
         {
@@ -79,13 +83,14 @@ public sealed class ResourceTelemetryRegistrationTests
         }
         finally
         {
-            SharedPoolOptions.UseProcessGpuMemoryReader(null);
+            SharedPoolOptions.UseProcessGpuMemoryReader(previous);
         }
     }
 
     [Fact]
     public void Headless_host_dispose_releases_only_its_own_pool_binding()
     {
+        IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
         var first = HeadlessDubbingHost.Create();
         var second = HeadlessDubbingHost.Create();
         try
@@ -116,7 +121,7 @@ public sealed class ResourceTelemetryRegistrationTests
         {
             first.Dispose();
             second.Dispose();
-            SharedPoolOptions.UseProcessGpuMemoryReader(null);
+            SharedPoolOptions.UseProcessGpuMemoryReader(previous);
         }
     }
 
