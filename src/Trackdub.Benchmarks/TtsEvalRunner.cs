@@ -218,14 +218,15 @@ public static class TtsEvalRunner
                 RequirePreferredExecutionProviders = pins is not null,
             });
             using IServiceScope scope = host.Services.CreateScope();
-            ITtsEngineAdapter? engine = scope.ServiceProvider
-                .GetServices<ITtsEngineAdapter>()
-                .FirstOrDefault(e => string.Equals(e.EngineFamily, options.Model, StringComparison.OrdinalIgnoreCase));
-            if (engine is null)
+            // Use the routed engine so model selection and the runtime plan are applied before
+            // invoking adapters. Some adapters intentionally reject the unplanned overload.
+            if (options.Model.Equals("chatterbox", StringComparison.OrdinalIgnoreCase) ||
+                options.Model.Equals("cosyvoice", StringComparison.OrdinalIgnoreCase))
             {
-                error.WriteLine($"No TTS engine with family '{options.Model}' is registered.");
+                error.WriteLine($"TTS model '{options.Model}' requires voice-clone request inputs not present in benchmark jobs.");
                 return 1;
             }
+            ITtsEngine engine = scope.ServiceProvider.GetRequiredService<RoutedTtsEngine>();
             IReadOnlyList<TtsEvalResult> all = await RunJobsAsync(
                 jobs,
                 engine,
@@ -273,7 +274,7 @@ public static class TtsEvalRunner
 
     public static async Task<IReadOnlyList<TtsEvalResult>> RunJobsAsync(
         IReadOnlyList<TtsEvalJob> jobs,
-        ITtsEngineAdapter engine,
+        ITtsEngine engine,
         IWorkingSetSampler sampler,
         TtsEvalOptions options,
         TextWriter results,
@@ -301,7 +302,7 @@ public static class TtsEvalRunner
     private static async Task<TtsEvalResult> RunJobAsync(
         TtsEvalJob job,
         int index,
-        ITtsEngineAdapter engine,
+        ITtsEngine engine,
         IWorkingSetSampler sampler,
         TtsEvalOptions options,
         CancellationToken cancellationToken)
