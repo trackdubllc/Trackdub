@@ -20,6 +20,8 @@ public static class BenchmarkConsole
         writer.WriteLine("  Trackdub.Benchmarks dubbing <input-path> [--language <code>] [--source-language <code>] [--output <dir>] [--force-rerun]");
         writer.WriteLine("  Trackdub.Benchmarks dubbing --batch <videos-dir> --languages fr,de [--source-language <code>] [--output <dir>] [--force-rerun]");
         writer.WriteLine("  Trackdub.Benchmarks dubbing --help");
+        writer.WriteLine($"  Trackdub.Benchmarks tts-bench --jobs <jobs.jsonl> --results <results.jsonl> [--model <alias>] [--provider cpu|{WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys("|")}] [--warmup-runs <n>] [--repeat-runs <n>]");
+        writer.WriteLine("  Trackdub.Benchmarks tts-bench --help");
         writer.WriteLine("  Trackdub.Benchmarks --help");
         writer.WriteLine($"  Trackdub.Benchmarks --model <path-or-scope> [--variant <name> | --all-variants] [--output <path>] [--provider cpu|auto|dml|migraphx|trt-rtx] [--windows-ml-device-policy {WindowsMlExecutionDevicePolicySettings.FormatSupportedKeys("|")}] [--runs <n>] [--format console|json|both]");
         writer.WriteLine($"  Trackdub.Benchmarks --scope {TrtRtxSmokeCatalog.ScopeName} [--output <path>] [--provider trt-rtx] [--runs <n>] [--format console|json|both]");
