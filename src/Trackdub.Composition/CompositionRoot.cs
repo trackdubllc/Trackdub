@@ -797,29 +797,25 @@ public static class CompositionRoot
         services.TryAddSingleton<IOpenVinoAvailabilityProvider>(sp =>
             sp.GetRequiredService<OpenVinoBootstrapper>());
 
-        // IDeviceEnumerator — platform-specific GPU/NPU discovery, singleton.
-#if WINDOWS
-        services.TryAddSingleton<IDeviceEnumerator>(sp =>
-            new WindowsDeviceEnumerator(
-                sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
-                sp.GetRequiredService<ILogger<WindowsDeviceEnumerator>>()));
-#elif MACOS
-#pragma warning disable CA1416 // macOS-only types registered under MACOS compile constant
-        services.TryAddSingleton<IDeviceEnumerator>(sp =>
-            new MacDeviceEnumerator(sp.GetRequiredService<ILogger<MacDeviceEnumerator>>()));
-#pragma warning restore CA1416
-#elif LINUX
+        // IDeviceEnumerator — platform-specific GPU/NPU discovery, singleton. The platform
+        // dispatch lives in DeviceEnumeratorFactory so the pre-container callers share it.
+#if LINUX
 #pragma warning disable CA1416 // Linux-only types registered under LINUX compile constant
         services.TryAddSingleton<ISysfsReader, PhysicalSysfsReader>();
+#pragma warning restore CA1416
+#endif
         services.TryAddSingleton<IDeviceEnumerator>(sp =>
-            new LinuxDeviceEnumerator(
+            DeviceEnumeratorFactory.Create(
                 sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
-                sp.GetRequiredService<ISysfsReader>(),
-                sp.GetRequiredService<ILogger<LinuxDeviceEnumerator>>()));
+                sp.GetRequiredService<ILoggerFactory>(),
+#if LINUX
+#pragma warning disable CA1416 // Linux-only type resolved under LINUX compile constant
+                sp.GetRequiredService<ISysfsReader>()
 #pragma warning restore CA1416
 #else
-        services.TryAddSingleton<IDeviceEnumerator, CpuOnlyDeviceEnumerator>();
+                sysfsReader: null
 #endif
+                ));
 
         // IExecutionProviderBootstrapper — platform-specific EP bootstrap logic, singleton.
         // Also calls OnnxExecutionSessionFactory.Initialize() so the static factory uses the

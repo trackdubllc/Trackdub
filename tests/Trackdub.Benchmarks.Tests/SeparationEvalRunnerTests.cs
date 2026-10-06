@@ -239,7 +239,7 @@ public sealed class SeparationEvalRunnerTests
         Assert.Equal(["dilated", "dilated"], results.Select(r => r.PeakWorkingSetSamplingWarning));
         string[] written = lines.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, written.Length);
-        foreach (JsonDocument document in written.Select(JsonDocument.Parse))
+        foreach (JsonDocument document in written.Select(line => JsonDocument.Parse(line)))
         {
             using JsonDocument disposable = document;
             Assert.Equal("dilated", disposable.RootElement.GetProperty("peak_working_set_sampling_warning").GetString());

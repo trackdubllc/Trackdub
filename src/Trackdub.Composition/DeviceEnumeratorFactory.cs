@@ -11,8 +11,8 @@ namespace Trackdub.Composition;
 /// (for example the benchmark CLI's host-capacity banner).
 /// </summary>
 /// <remarks>
-/// Keep the platform dispatch in step with the <c>IDeviceEnumerator</c> registrations in
-/// <see cref="CompositionRoot"/>. With no OpenVINO runtime to probe, NPU entries that depend on it
+/// This is the single owner of the platform dispatch; the <c>IDeviceEnumerator</c> registration in
+/// <see cref="CompositionRoot"/> delegates here. With no OpenVINO runtime to probe, NPU entries that depend on it
 /// are omitted; GPU adapters — the only devices that report video memory — enumerate identically.
 /// The returned enumerator caches its device list for the process lifetime, so a caller that needs
 /// a fresh reading must use <see cref="IDeviceEnumerator.ReEnumerateAsync"/> or create a new
@@ -22,7 +22,8 @@ public static class DeviceEnumeratorFactory
 {
     public static IDeviceEnumerator Create(
         IOpenVinoAvailabilityProvider? openVinoAvailability = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        ISysfsReader? sysfsReader = null)
     {
         openVinoAvailability ??= new NullOpenVinoAvailabilityProvider();
         loggerFactory ??= NullLoggerFactory.Instance;
@@ -39,7 +40,7 @@ public static class DeviceEnumeratorFactory
 #pragma warning disable CA1416 // Linux-only type constructed under the LINUX compile constant
         return new LinuxDeviceEnumerator(
             openVinoAvailability,
-            new PhysicalSysfsReader(),
+            sysfsReader ?? new PhysicalSysfsReader(),
             loggerFactory.CreateLogger<LinuxDeviceEnumerator>());
 #pragma warning restore CA1416
 #else
