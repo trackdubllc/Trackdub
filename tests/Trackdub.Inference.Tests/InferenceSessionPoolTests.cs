@@ -1078,11 +1078,12 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
-    public async Task ProcessGpuAdmission_UnfreeableObservation_FailsFastWithoutEvictingIdleSessions()
+    public async Task ProcessGpuAdmission_UnfreeableObservation_FailsFastAfterEvictingIdleWork()
     {
-        // When the observation alone blocks and no pooled or external work can be freed, the
-        // wait must fail with a diagnostic instead of evicting the whole warm cache one idle
-        // session at a time and then parking until the caller cancels.
+        // When the observation alone blocks, each pass evicts at most one idle entry and
+        // re-observes: evicted sessions get a chance to drain before more cache is discarded.
+        // Once no idle work remains and the reading still blocks, the wait fails with a
+        // diagnostic instead of parking until the caller cancels.
         var reader = new MutableProcessGpuMemoryReader(0);
         using var pool = new InferenceSessionPool(
             maxSessions: 8,
@@ -1116,12 +1117,11 @@ public sealed class InferenceSessionPoolTests
             InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
         }
 
-        // The warm cache survived: eviction is bounded by what it can achieve, and evicting
-        // cannot lower the observation snapshot.
-        Assert.True(pool.TryPinExisting(AcceleratorKey("stall1", 512), out SessionResidency? first));
-        first!.Dispose();
-        Assert.True(pool.TryPinExisting(AcceleratorKey("stall2", 512), out SessionResidency? second));
-        second!.Dispose();
+        // Both idle entries were offered one per pass before the fail-fast: the first passes
+        // evicted while idle work remained, and only the passes with nothing left to free
+        // counted toward the bound.
+        Assert.False(pool.TryPinExisting(AcceleratorKey("stall1", 512), out _));
+        Assert.False(pool.TryPinExisting(AcceleratorKey("stall2", 512), out _));
     }
 
     [Fact]

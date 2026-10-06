@@ -106,6 +106,22 @@ public sealed class ResourceBoundsPreflightTests
     }
 
     [Fact]
+    public async Task Capacity_is_unknown_when_the_sampled_adapter_is_absent()
+    {
+        // Telemetry is sampled from device index 0: a host enumerating only some other GPU
+        // leaves the capacity unknown instead of borrowing an adapter the run never measures.
+        // A 2048 MB adapter at index 1 must not reject a 4096 MB floor meant for index 0.
+        using ServiceProvider provider = Provider(new StubDeviceEnumerator(
+        [
+            Device(DeviceKind.DiscreteGpu, index: 1, dedicatedMb: 2048, sharedMb: 0),
+        ]));
+
+        Assert.Equal(
+            0L,
+            await ResourceBoundsPreflight.QueryTotalVideoMemoryMbAsync(provider, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Capacity_is_unknown_without_an_enumerator_or_without_a_gpu_adapter()
     {
         using ServiceProvider empty = new ServiceCollection().BuildServiceProvider();

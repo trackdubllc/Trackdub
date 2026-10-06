@@ -124,11 +124,11 @@ public sealed class HeadlessDubbingHost : IDisposable
     {
         // The pool binding is process-wide but was registered by this host: clear it on dispose
         // only while it still refers to this host's reader, so a later host's registration is
-        // never torn down and later tests never observe a stale reader.
-        if (_processGpuReader is not null
-            && ReferenceEquals(SharedPoolOptions.ProcessGpuMemoryReader, _processGpuReader))
+        // never torn down and later tests never observe a stale reader. The clear is atomic:
+        // a host disposing while another host registers cannot null the newer registration.
+        if (_processGpuReader is not null)
         {
-            SharedPoolOptions.UseProcessGpuMemoryReader(null);
+            SharedPoolOptions.TryClearProcessGpuMemoryReader(_processGpuReader);
         }
 
         _sessionFactory.Dispose();

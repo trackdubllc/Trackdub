@@ -1399,10 +1399,9 @@ internal sealed class InferenceSessionPool : IDisposable
                     ObjectDisposedException.ThrowIf(disposed, this);
 
                     // Eviction is bounded by what it can achieve: evicting a pooled entry lowers
-                    // the reservation total but never the observation snapshot, so once the
-                    // reservations fit, further eviction cannot unblock an observation-held
-                    // admission — it would only throw away the device's warm cache one idle
-                    // session at a time.
+                    // the reservation total but each eviction is re-observed before the next, so
+                    // an observation-held admission converges instead of discarding the device's
+                    // warm cache in one pass.
                     while (CurrentReservedMb(bucket) + needMb > BudgetFor(bucket))
                     {
                         PoolEntry? evicted = TryEvictLruIdle(onlyBucket: bucket);
@@ -1419,7 +1418,28 @@ internal sealed class InferenceSessionPool : IDisposable
                     observedBlocked = !reservationBlocked
                         && AdmissionUsageMb(bucket, observedProcessGpuMb) + needMb > BudgetFor(bucket);
 
-                    if (reservationBlocked)
+                    if (observedBlocked)
+                    {
+                        // Reservations already fit, so the loop above evicted nothing: evict at
+                        // most one idle entry per pass. Its real allocation sits inside the
+                        // observation, so the next pass re-observes lower once that memory
+                        // drains; evicting more per pass would throw away warm sessions faster
+                        // than the observation can confirm they were the blockage.
+                        PoolEntry? single = TryEvictLruIdle(onlyBucket: bucket);
+                        if (single is not null)
+                        {
+                            toDispose ??= new List<PoolEntry>();
+                            toDispose.Add(single);
+                        }
+                        else
+                        {
+                            // No pooled ONNX entry in this bucket is evictable; offer every
+                            // idle external reservation a chance to release its resource,
+                            // oldest first.
+                            idleExternals = OrderedIdleExternals(bucket);
+                        }
+                    }
+                    else if (reservationBlocked)
                     {
                         // No pooled ONNX entry in this bucket is evictable; offer every idle
                         // external reservation a chance to release its resource, oldest first.
@@ -1488,12 +1508,24 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 if (observedBlocked)
                 {
-                    // Nothing in this bucket can be freed to lower the reading: the reservation
-                    // total fits, and eviction cannot move the observation. The process's own
-                    // non-pooled usage (device contexts, runtime arenas, consumers outside the
-                    // pool) may still drain, so keep waiting — but bound the stall instead of
-                    // parking until the caller cancels with no diagnostic.
-                    observedStallPasses++;
+                    // Any eviction this pass may still drain: the next pass re-observes, so only
+                    // consecutive passes that free nothing count toward the fail-fast bound.
+                    bool progressed = toDispose is { Count: > 0 };
+                    if (progressed)
+                    {
+                        observedStallPasses = 0;
+                    }
+                    else
+                    {
+                        // Nothing in this bucket can be freed to lower the reading: the
+                        // reservation total fits, and no idle work remains to evict. The
+                        // process's own non-pooled usage (device contexts, runtime arenas,
+                        // consumers outside the pool) may still drain, so keep waiting — but
+                        // bound the stall instead of parking until the caller cancels with no
+                        // diagnostic.
+                        observedStallPasses++;
+                    }
+
                     if (observedStallPasses >= ObservedBlockFailFastPasses)
                     {
                         throw new InvalidOperationException(

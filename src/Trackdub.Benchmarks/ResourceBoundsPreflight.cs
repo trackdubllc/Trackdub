@@ -91,22 +91,21 @@ internal static class ResourceBoundsPreflight
         // The telemetry reading the floor is validated against comes from the sampled adapter
         // (device index 0 in every current registration), not from whichever adapter is
         // largest: on a multi-GPU host the largest adapter's memory can never satisfy a floor
-        // measured on another adapter's local segment.
+        // measured on another adapter's local segment. When the sampled adapter is absent from
+        // the enumeration, the capacity is unknown rather than borrowed from another adapter.
         DeviceEntry? sampled = devices.FirstOrDefault(device =>
             device.DeviceIndex == SampledDeviceIndex
             && device.Kind is (DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu));
-        DeviceEntry? adapter = sampled ?? devices.FirstOrDefault(device =>
-            device.Kind is (DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu));
-        if (adapter is null)
+        if (sampled is null)
         {
             return 0;
         }
 
         // CPU entries report no video memory, and an NPU's working set is a device-local
         // estimate rather than the adapter memory `availableVramMb` measures.
-        return adapter.Kind == DeviceKind.DiscreteGpu
-            ? adapter.DedicatedVramMb
-            : (long)adapter.DedicatedVramMb + adapter.SharedMemoryMb;
+        return sampled.Kind == DeviceKind.DiscreteGpu
+            ? sampled.DedicatedVramMb
+            : (long)sampled.DedicatedVramMb + sampled.SharedMemoryMb;
     }
 
     /// <summary>
