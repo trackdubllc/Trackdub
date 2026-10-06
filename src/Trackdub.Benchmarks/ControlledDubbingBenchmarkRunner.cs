@@ -27,6 +27,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
 {
     private readonly IBenchmarkEvidenceRepository _history;
     private readonly Action<IServiceCollection>? _serviceConfigurator;
+    private readonly IWorkingSetPeakMonitorFactory _monitorFactory = new WorkingSetPeakMonitorFactory();
     private HeadlessDubbingHost? _warmHost;
     private string? _warmHostKey;
 
@@ -37,6 +38,14 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         _history = history ?? new BenchmarkEvidenceRepository(
             new SqliteUserBenchmarkDatabase(new TrackdubStoragePaths().UserDataRoot));
         _serviceConfigurator = serviceConfigurator;
+    }
+
+    internal ControlledDubbingBenchmarkRunner(
+        IBenchmarkEvidenceRepository? history,
+        Action<IServiceCollection>? serviceConfigurator,
+        IWorkingSetPeakMonitorFactory monitorFactory) : this(history, serviceConfigurator)
+    {
+        _monitorFactory = monitorFactory ?? throw new ArgumentNullException(nameof(monitorFactory));
     }
 
     public void Dispose()
@@ -53,7 +62,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         ArgumentNullException.ThrowIfNull(options);
         string? stage = ResolveStage(options.Stage);
         ValidateOptions(options);
-        var context = new BenchmarkRunContext(options, stage, Guid.NewGuid());
+        var context = new BenchmarkRunContext(options, stage, Guid.NewGuid(), _monitorFactory);
         try
         {
             await PrepareHostAsync(context, options, cancellationToken).ConfigureAwait(false);
@@ -460,6 +469,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             context.Host.Services.GetRequiredService<IResourceTelemetryValidator>(),
             options.ResourceTelemetryBounds, phase, iteration, stageClock,
             context.Host.Services.GetRequiredService<IWorkingSetSampler>(),
+            null, _monitorFactory,
             gpuMemoryReader: context.Host.Services.GetRequiredService<IProcessGpuMemoryReader>());
         try
         {
@@ -1205,7 +1215,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
     // the phases mutate this context instead of returning every accumulated value.
     private sealed class BenchmarkRunContext
     {
-        public BenchmarkRunContext(ControlledDubbingBenchmarkOptions options, string? stage, Guid reportId)
+        public BenchmarkRunContext(ControlledDubbingBenchmarkOptions options, string? stage, Guid reportId, IWorkingSetPeakMonitorFactory monitorFactory)
         {
             Stage = stage;
             ReportId = reportId;
@@ -1215,7 +1225,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             ResourceTelemetry = new List<BenchmarkStageResourceTelemetry>();
             StageGarbageCollection = [];
             ProcessTelemetryStart = Metrics.ResourceTelemetry.TryCaptureProcess();
-            ProcessWorkingSetPeak = new WorkingSetPeakMonitorFactory().Create(
+            ProcessWorkingSetPeak = monitorFactory.Create(
                 new ProcessWorkingSetSampler(), ProcessTelemetryStart?.WorkingSetBytes);
             CounterTotals = new Dictionary<string, long>(StringComparer.Ordinal);
             ObservedMaxima = new Dictionary<string, long>(StringComparer.Ordinal);
