@@ -96,6 +96,7 @@ internal static class StageRuntimeRequirementsCatalog
                     // before ASR proceeded on DirectML. Try DirectML first, retaining
                     // TensorRT RTX as a fallback or explicit provider choice.
                     ["qwen3-asr"] = PreferDirectMl(DefaultOnnxStageAllowedProviders),
+                    ["nemotron-asr"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["whisper-onnx"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["whisper-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 },
