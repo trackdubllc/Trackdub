@@ -91,8 +91,8 @@ public sealed class ResourceTelemetryRegistrationTests
     public void Headless_host_dispose_releases_only_its_own_pool_binding()
     {
         IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
-        var first = HeadlessDubbingHost.Create();
-        var second = HeadlessDubbingHost.Create();
+        using var first = HeadlessDubbingHost.Create();
+        using var second = HeadlessDubbingHost.Create();
         try
         {
 #if WINDOWS
