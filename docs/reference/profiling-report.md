@@ -1,7 +1,7 @@
 # Trackdub performance profiling report
 
-> **Status:** MIXED — controlled dubbing-pipeline samples are recorded below; startup, UI, export, and broader model/provider matrix rows marked *pending local run* remain unmeasured.
-> **Last updated:** 2026-09-28
+> **Status:** MIXED — controlled dubbing-pipeline samples are recorded below; reference-machine, startup, idle working-set, and TRT-RTX EP rows measured 2026-10-06; project-open/model-manager startup, steady-state memory, export, and waveform rows marked *pending local run* remain unmeasured.
+> **Last updated:** 2026-10-06
 > **Report branch:** core performance-audit stack beginning at `17c4a66` (not the revision used for the older samples)
 
 ## Measurement methodology (fill before claiming budgets)
@@ -63,11 +63,11 @@ The ASR run spent another 30,251 ms preparing prerequisite stages; that duration
 
 | Field | Value |
 |---|---|
-| OS | *pending local run* |
-| CPU | *pending local run* |
-| RAM | *pending local run* |
-| GPU / EP | *pending local run* (Windows ML policy, DirectML fallback, etc.) |
-| Trackdub commit | *pending local run* |
+| OS | Windows 11 Pro 10.0.26200 x64 |
+| CPU | AMD Ryzen 7 5700X3D (8 cores / 16 threads) |
+| RAM | 68,613,902,336 bytes (~63 GiB) |
+| GPU / EP | NVIDIA GeForce RTX 5070, 12,227 MiB, driver 617.14; `NvTensorRTRTXExecutionProvider` via EP ABI plugin 0.4.2/cu13 (`trackdub providers trt-rtx status` → `ready:true`, `isRegisteredWithOrt:true`); DirectML remains the fallback path |
+| Trackdub commit | Core `90cdcd75` for the test/provider evidence below; desktop startup rows measured on gated `42546ad` (`1.0.0+42546ad` Release build) with core pin `67fdc36e` |
 | TFM exercised | `net10.0-windows10.0.19041.0` (Windows) / `net10.0` (portable) |
 
 ## Startup (cold, ms)
@@ -76,9 +76,12 @@ Measured from process launch to first interactive shell frame (no project open).
 
 | Scenario | Target (draft) | Measured | Notes |
 |---|---:|---:|---|
-| Avalonia shell cold start | TBD | *pending local run* | `dotnet run --project src/Trackdub.App.Avalonia -f net10.0-windows10.0.19041.0` |
+| Avalonia shell cold start | TBD | median 19,305.8; n=5; range 10,145.3–28,826.1 | App-reported launch→`firstVisibleUi` (BenchmarkEvidenceReport `desktop-startup`), Release `net10.0-windows10.0.19041.0`; isolated `TRACKDUB_DATA_ROOT`/`TRACKDUB_CACHE_ROOT` wiped per rep (cold app state; OS page cache not cleared) |
+| Avalonia shell warm start (cache-warm roots) | TBD | median 9,207.5; n=32; range 4,207.3–26,990.2; p95 21,138.7 | Same harness, roots persist across reps; warm tail (largest 5): 18,992.9 / 19,006.7 / 19,053.5 / 21,138.7 / 26,990.2; run-order last 5: 12,815.4 / 12,994.3 / 15,788.1 / 7,422.6 / 6,590.5 |
 | Shell + empty project open | TBD | *pending local run* | Includes SQLite migrate/open |
 | Model Manager gate (bundled ONNX) | TBD | *pending local run* | Separate from shell; do not collapse readiness states |
+
+Raw per-rep samples retained at `D:\Dev\Trackdub_Workspace\c7-evidence\{cold,warm,smoke}.csv` (harness: `Measure-DesktopStartup.ps1`, same directory); per-run app reports under `cold|warm\data\benchmark-reports\`. Variance is high; the warm distribution has not converged by rep 32, so treat medians as provisional.
 
 ### Example row format (illustrative only — not measured)
 
@@ -96,7 +99,7 @@ Private bytes / working set after steady state (5 min idle, no pipeline run).
 
 | Scenario | Target (draft) | Measured | Notes |
 |---|---:|---:|---|
-| Idle shell, no media | TBD | *pending local run* | Task Manager or `dotnet-counters` |
+| Idle shell, no media | TBD | working set median 281.8 MB (warm, n=32, range 268.5–287.5); private bytes median 263.0 MB; GPU process memory median 91 MB (range 91.0–101.4) | Sampled ~8 s after `firstVisibleUi`, not the 5-min-idle methodology above; post-start settle sample, real but shallow |
 | Project open, transcript loaded | TBD | *pending local run* | Typical editor session |
 | Post-ASR + translation (no TTS) | TBD | *pending local run* | Pipeline artifacts on disk; memory in-process |
 
@@ -147,13 +150,13 @@ Record commit hash, model manifest IDs, and EP selection policy (`WindowsMlExecu
 
 | Field | Value |
 |---|---|
-| Model id | *pending local run* (`onnx-community/silero-vad` suggested) |
+| Model id | `onnx-community/whisper-tiny`, `whisper-base`, `whisper-small` (ONNX path, `providers trt-rtx smoke` → PASS each); staged TRT-RTX smokes also pass for `whisper-{tiny,base,small,medium,large-v3}` + `cgus/diar_streaming_sortformer_4spk-v2.1-onnx` via `RequiresTrtRtxStagingFact` tests (6/6 on 2026-10-06). Whisper **GenAI** variants are excluded by planner policy (host-process native stack overflow guard), so smoke reports FAIL by design, not a crash |
 | Plugin version | `0.4.2/cu13` (TRT-RTX 1.6.1) |
-| Command | `Trackdub.Benchmarks.DevHost --provider trt-rtx --runs 1 --format console` |
-| Headless probe | `trackdub providers trt-rtx status` |
-| Wall time (ms) | *pending local run* |
-| Actual EP reported | *pending local run* (`NvTensorRTRTXExecutionProvider`) |
-| Commit SHA | *pending local run* |
+| Command | `trackdub providers trt-rtx status` → `ready:true`; `trackdub providers trt-rtx smoke` → PASS on ONNX whisper models |
+| Headless probe | `trackdub providers trt-rtx status` → `{"ready":true,"isRegisteredWithOrt":true,"isHardwareEligible":true}` |
+| Wall time (ms) | ~70–290 s per whisper ONNX model in `smoke`, dominated by first-run TRT engine compile (log span 18:04:32→18:09:46 UTC for 3 models); inference itself is sub-second once engines are cached |
+| Actual EP reported | `NvTensorRTRTXExecutionProvider` (engine logs show `tensorrt_rtx_execution_provider` node compilation; `providers status` reports `isRegisteredWithOrt:true`) |
+| Commit SHA | `90cdcd75` |
 | Plugin dir | `%LOCALAPPDATA%\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64` or `TRACKDUB_TRT_RTX_EP_DIR` |
 
 ## Avalonia UI / render budget (headless)
