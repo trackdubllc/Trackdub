@@ -1,6 +1,8 @@
 # PITCH: Rust inference sidecar for Trackdub (decision-only, not wired into the build)
 
-- Status: **Pitch — do not merge as accepted architecture until reviewed**
+- Status: **Accepted direction (2026-10-06, Tony): Python is inevitable for
+  `.pt`-only frontier voice models — ship it as painless as possible under Rust
+  supervision. This doc records the decision; spike plan to follow.**
 - Date: 2026-10-06
 - Author: Hermes Agent (drafted with Tony)
 - Scope: `docs/plans/` + `tools/rust-sidecar-spike/` sketches only. Nothing in
@@ -57,13 +59,11 @@ possible second executor behind the same contract.**
   models already run resident in-process, so Phase 1's benchmark is
   sidecar-vs-in-process on the same graph, and success means IPC overhead
   within budget, not a speedup.
-- **Phase 2 (NOT proposed here — needs its own governance decision):** a Python
-  resident daemon implementing the *same* IPC contract, used exclusively for
-  `.pt`-only frontier voice models where no usable ONNX exists. AGENTS.md
-  forbids end-user Python/Conda/Docker/CUDA-Toolkit dependencies and opt-in
-  does not lift that rule, so Phase 2 is blocked on a governance change plus a
-  defined experimental packaging boundary (cf. strategy.md) — this pitch asks
-  only for the Rust spike, which keeps Phase 2 possible without pre-approving it.
+- **Phase 2 (ACCEPTED in principle, 2026-10-06):** a Rust-supervised Python
+  worker implementing the *same* IPC contract, used for `.pt`-only frontier
+  voice models where no usable ONNX exists. The AGENTS.md end-user-Python rule
+  gets a scoped exception for this worker (ADR to follow); the pain is
+  contained by the supervision design in Section 5b, not by opt-in alone.
 - **What stays:** C# + in-process ONNX Runtime remains the default local path
   (Whisper, Silero, SortFormer, Kokoro, translation). The sidecar never becomes
   the only way to run anything shippable today.
@@ -132,6 +132,39 @@ one-time warmup at app start / first use — the same move our ORT engine cache
 already makes, with the same invalidation discipline (stale engine → re-verify,
 same fingerprint rules).
 
+## 5b. Painless Python: Rust supervision design (accepted direction)
+
+Python doesn't get to be a pet — it gets a supervisor. The Rust binary owns
+everything users hate about Python, and Python itself only runs models:
+
+- **Bundled interpreter, pinned.** Ship a fixed CPython via `uv python`
+  (or equivalent), never the system Python. Version stamp checked at startup;
+  mismatch refuses to serve, same fingerprint discipline as engine caches.
+- **Locked dependencies.** One lockfile for torch + model deps per worker
+  release. No pip-at-runtime, no floating versions, no "works on my machine."
+- **Resident worker, warmed once.** Supervisor spawns Python at app start /
+  first use, preloads weights + CUDA context, then holds it warm. Per-call
+  cost is IPC + inference — the cold hit happens once, where users forgive it.
+- **Honest readiness, enforced by the supervisor.** `process alive` !=
+  `interpreter up` != `weights loaded` != `accelerator ready` — each gated
+  separately, surfaced in stage evidence verbatim. No "GPU ready" unless CUDA
+  actually initialized.
+- **Crash containment with backoff.** Python segfaults or OOMs, the supervisor
+  restarts with backoff, marks the stage failed with the real reason, and the
+  app itself never goes down. In-process native crashes can't offer this.
+- **Kill and reclaim.** Unload a 6 GB voice model by killing the worker —
+  clean memory/GPU reclamation, no app-heap fragmentation.
+- **Same contract or nothing.** The worker speaks the Section 4 protocol
+  (typed `{dtype, shape, data}` envelopes, planner-approved load plans) —
+  shared verbatim with the Rust ONNX path, so executors stay interchangeable
+  and the gRPC graduation covers both.
+- **Telemetry from day one.** First-use latency, warm-call overhead, VRAM held
+  per worker — measured through `controlled-matrix --executor sidecar`, per
+  repo policy, before any claim ships.
+
+What Rust does NOT do: run `.pt` models, touch the UI, or own pipeline state.
+It supervises. Python computes. C# orchestrates. Three jobs, three owners.
+
 ## 6. Open questions for review
 
 1. IPC transport: JSON-lines (spike) vs gRPC vs named pipes — who has a
@@ -140,8 +173,10 @@ same fingerprint rules).
    dedicated `ISidecarHost` behind `Trackdub.Infrastructure`?
 3. Signing/notarization: does a second binary complicate the installer signing
    story on macOS/Windows?
-4. Do we even need Phase 2 (Python), or does the Rust seam plus continued ONNX
-   export work cover the next 12 months of voice models?
+4. ~~Do we even need Phase 2 (Python), or does the Rust seam plus continued ONNX~~
+   ~~export work cover the next 12 months of voice models?~~ **Decided
+   2026-10-06: Phase 2 is needed — `.pt`-only models are inevitable. The
+   remaining question is execution against Section 5b, not whether.**
 5. Benchmark harness: extend `controlled-matrix` with a `--executor sidecar`
    lane so claims come with evidence, per repo policy?
 6. Distribution + ORT pinning: the sidecar ships its own ORT copy plus GPU
@@ -151,12 +186,12 @@ same fingerprint rules).
 
 ## 7. Decision requested
 
-- [ ] First: is the `.pt`-only problem (Q4) real enough to need the seam at all —
-  or does continued ONNX export work cover the next 12 months of voice models?
+- [x] First: is the `.pt`-only problem (Q4) real enough to need the seam at all —
+  **Decided 2026-10-06: yes, Python is inevitable. Contain it per Section 5b.**
 - [ ] Accept Phase 1 spike (time-boxed, `tools/` only, no `src/` changes),
   judged on seam-proven + IPC-overhead-measured, not on speedup?
-- [ ] Accept the narrowed direction (Rust spike now; Phase 2 deferred to a
-  separate governance + packaging decision, not pre-approved here)?
+- [ ] Accept the narrowed direction (Rust spike now; Rust-supervised Python
+  worker next, under a scoped AGENTS.md exception recorded in an ADR)?
 - [ ] Or reject — and if so, what's the preferred answer to `.pt`-only models?
 
 ## Files in this PR (all non-build, decision-only)
