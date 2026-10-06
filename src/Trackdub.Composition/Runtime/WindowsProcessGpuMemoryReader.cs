@@ -112,6 +112,8 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         }
     }
 
+    private sealed record GpuMemoryObservation(long TotalBytes, IReadOnlyDictionary<long, long>? ByAdapterLuid);
+
     /// <summary>
     /// Parses the adapter LUID out of a GPU Process Memory instance name
     /// (<c>pid_&lt;pid&gt;_luid_&lt;high&gt;_&lt;low&gt;_phys_&lt;n&gt;</c>, components in hex
