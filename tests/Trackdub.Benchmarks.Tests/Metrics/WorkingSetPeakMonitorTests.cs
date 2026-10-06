@@ -79,16 +79,18 @@ public sealed class WorkingSetPeakMonitorTests
     }
 
     [Fact]
-    public async Task Sampling_stays_silent_when_scripted_ticks_hold_cadenceAsync()
+    public async Task Sampling_stays_silent_when_scripted_ticks_hold_production_cadenceAsync()
     {
-        // A one-hour cadence puts the 4x threshold a universe away from millisecond
-        // scripted gaps: no host stall can cross it, so the null path through the real
-        // wiring is deterministic. (A tight cadence here would reintroduce the very
-        // load-sensitivity this machinery warns about.)
+        // Production cadence, not a stand-in: the interval every runner gets when it does not
+        // override it, so the 4x threshold is the real 100 ms. The scripted 5 ms gaps are a fifth
+        // of the cadence, so an idle host stays silent. A contended host can only *inflate* a
+        // measured gap, so the absolute outcome is asserted only when the gap stayed under the
+        // threshold; a dilated gap must then be reported, which keeps the decision boundary
+        // deterministic instead of trading a fake cadence for a flaky null.
         var monitor = new WorkingSetPeakMonitor(
             new SequenceSampler(100, 100, 100, 100),
             100,
-            TimeSpan.FromHours(1),
+            WorkingSetPeakMonitor.DefaultSamplingInterval,
             new ScriptedTicker([
                 TimeSpan.FromMilliseconds(5),
                 TimeSpan.FromMilliseconds(5),
@@ -102,7 +104,15 @@ public sealed class WorkingSetPeakMonitorTests
         }
         Assert.Equal(100, monitor.Stop());
 
-        Assert.Null(monitor.SamplingWarning);
+        if (monitor.MaxObservedTickInterval <=
+            WorkingSetPeakMonitor.DefaultSamplingInterval * WorkingSetPeakMonitor.DilationWarnMultiple)
+        {
+            Assert.Null(monitor.SamplingWarning);
+        }
+        else
+        {
+            Assert.Contains("cadence", monitor.SamplingWarning, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]

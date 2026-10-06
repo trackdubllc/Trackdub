@@ -15,6 +15,12 @@ internal sealed class WorkingSetPeakMonitor : IWorkingSetPeakMonitor
     /// </summary>
     internal const int DilationWarnMultiple = 4;
 
+    /// <summary>
+    /// Production sampling cadence, used when a caller does not override it. Single-sourced so a
+    /// test can exercise the interval the runners actually run with instead of a stand-in.
+    /// </summary>
+    internal static readonly TimeSpan DefaultSamplingInterval = TimeSpan.FromMilliseconds(25);
+
     private readonly IWorkingSetSampler sampler;
     private readonly TimeSpan interval;
     private readonly CancellationTokenSource cancellation = new();
@@ -35,7 +41,7 @@ internal sealed class WorkingSetPeakMonitor : IWorkingSetPeakMonitor
         IWorkingSetSampler sampler, long? initialValue, TimeSpan? interval, ISamplingTicker? ticker)
     {
         this.sampler = sampler ?? throw new ArgumentNullException(nameof(sampler));
-        this.interval = interval ?? TimeSpan.FromMilliseconds(25);
+        this.interval = interval ?? DefaultSamplingInterval;
         if (this.interval <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(interval), "Sampling interval must be positive.");

@@ -106,24 +106,18 @@ public sealed class Challenger2StressTests : IDisposable
             Assert.NotNull(stage.ActualProvider);
         }
 
-        // 3. Verify stage-level memory telemetry across canonical stages
-        Assert.NotNull(report.MemoryBytes);
-        Assert.True(report.MemoryBytes.ContainsKey("peakWorkingSetBytes"), "Must contain peakWorkingSetBytes");
-        Assert.True(report.MemoryBytes.ContainsKey("managedAllocatedBytes"), "Must contain managedAllocatedBytes");
-        Assert.True(report.MemoryBytes["peakWorkingSetBytes"] > 0, "peakWorkingSetBytes > 0");
+        // 3. Verify typed memory telemetry across canonical stages
+        Assert.NotNull(report.ProcessMemory);
+        Assert.True(report.ProcessMemory.PeakWorkingSetBytes > 0, "peak working set must be sampled > 0");
+        Assert.NotNull(report.ProcessMemory.ManagedAllocatedBytes);
 
         foreach (string stageName in canonicalStages)
         {
-            string allocKey = $"stage:{stageName}:allocatedBytes";
-            string peakKey = $"stage:{stageName}:peakWorkingSet";
-            string gen0Key = $"stage:{stageName}:gen0";
-
-            Assert.True(report.MemoryBytes.ContainsKey(allocKey), $"Missing memory telemetry: {allocKey}");
-            Assert.True(report.MemoryBytes.ContainsKey(peakKey), $"Missing memory telemetry: {peakKey}");
-            Assert.True(report.MemoryBytes.ContainsKey(gen0Key), $"Missing memory telemetry: {gen0Key}");
-
-            Assert.True(report.MemoryBytes[allocKey] >= 0, $"{allocKey} >= 0");
-            Assert.True(report.MemoryBytes[peakKey] > 0, $"{peakKey} > 0");
+            BenchmarkStageGarbageCollectionTelemetry gc = Assert.Single(
+                report.StageGarbageCollection,
+                entry => entry.Stage.Equals(stageName, StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(gc.Gen0Collections);
+            Assert.True(gc.Gen0Collections >= 0, $"{stageName} gen0 >= 0");
         }
     }
 

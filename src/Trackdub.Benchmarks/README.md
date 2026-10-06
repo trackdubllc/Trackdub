@@ -48,11 +48,11 @@ are not duplicated across call sites. Preserve them when extending the harness:
   single `catch (Exception) when (...)` filters. Caller-requested cancellation keeps its
   dedicated rethrow arm ahead of the filter; unrequested cancellations are job failures.
   Add new failure types to the filter list, not new catch blocks.
-- **Legacy memory map** — `MemoryBytes` keeps its exact keys for matrix comparisons,
-  exporters, and persisted reports, but it is assembled once in
-  `BuildLegacyMemoryBytes` from the typed records (stage medians, then process
-  readings, in historical key order). Never reintroduce incremental `memory[...]`
-  writes across methods.
+- **Typed memory telemetry** — `BenchmarkEvidenceReport` (schema v2) carries the run-level
+  process envelope in `ProcessMemory` and per-stage GC deltas in `StageGarbageCollection`.
+  Per-stage working-set peaks and managed allocation already live in the typed
+  `ResourceTelemetry` checks and `ResourceDistribution`. There is no string-keyed memory
+  map: add a typed field rather than reintroducing key/value memory dictionaries.
 - **Telemetry exception filters** — `TelemetryExceptionFilters` names the swallowed
   exception sets for continuous working-set sampling, stage-boundary collection, and the
   process snapshot probe. These sets differ on purpose (a periodic sampler can observe

@@ -45,14 +45,26 @@ public sealed class BenchmarkReportExportTests : IDisposable
             ["pipeline:p99"] = 1500.0,
             ["pipeline:throughput"] = 0.81,
         },
-        MemoryBytes = new Dictionary<string, long?>
+        ProcessMemory = new BenchmarkProcessMemoryTelemetry
         {
-            ["peakWorkingSetBytes"] = 256 * 1024 * 1024L,
-            ["managedAllocatedBytes"] = 64 * 1024 * 1024L,
-            ["gen0Collections"] = 12,
-            ["gen1Collections"] = 3,
-            ["gen2Collections"] = 1,
+            WorkingSetStartBytes = 200 * 1024 * 1024L,
+            WorkingSetEndBytes = 220 * 1024 * 1024L,
+            PeakWorkingSetBytes = 256 * 1024 * 1024L,
+            ManagedAllocatedBytes = 64 * 1024 * 1024L,
+            Gen0Collections = 12,
+            Gen1Collections = 3,
+            Gen2Collections = 1,
         },
+        StageGarbageCollection =
+        [
+            new BenchmarkStageGarbageCollectionTelemetry
+            {
+                Stage = "audio-prep",
+                Gen0Collections = 4,
+                Gen1Collections = 1,
+                Gen2Collections = 0,
+            },
+        ],
         Stages =
         [
             new BenchmarkEvidenceStage
@@ -119,7 +131,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
         Assert.Equal(original.Status, loaded.Status);
         Assert.Equal(original.RunMode, loaded.RunMode);
         Assert.Equal(original.TimingsMilliseconds["pipeline"], loaded.TimingsMilliseconds["pipeline"]);
-        Assert.Equal(original.MemoryBytes["peakWorkingSetBytes"], loaded.MemoryBytes["peakWorkingSetBytes"]);
+        Assert.Equal(original.ProcessMemory!.PeakWorkingSetBytes, loaded.ProcessMemory!.PeakWorkingSetBytes);
         Assert.Equal(original.Stages.Count, loaded.Stages.Count);
     }
 
@@ -178,7 +190,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
         Assert.Contains("full-pipeline", markdown);
         Assert.Contains("Completed", markdown);
         Assert.Contains("pipeline", markdown);
-        Assert.Contains("peakWorkingSetBytes", markdown);
+        Assert.Contains("Peak working set", markdown);
         Assert.Contains("audio-prep", markdown);
         Assert.Contains("separation", markdown);
     }
@@ -196,14 +208,25 @@ public sealed class BenchmarkReportExportTests : IDisposable
     }
 
     [Fact]
+    public void RenderEvidenceMarkdown_ContainsStageGarbageCollectionTable()
+    {
+        BenchmarkEvidenceReport report = CreateSampleEvidenceReport();
+
+        string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
+
+        Assert.Contains("## Stage Garbage Collection", markdown);
+        Assert.Contains("| audio-prep | 4 | 1 | 0 |", markdown);
+    }
+
+    [Fact]
     public void RenderEvidenceMarkdown_ContainsMemoryTable()
     {
         BenchmarkEvidenceReport report = CreateSampleEvidenceReport();
 
         string markdown = BenchmarkReportExporter.RenderEvidenceMarkdown(report);
 
-        Assert.Contains("## Memory Metrics", markdown);
-        Assert.Contains("peakWorkingSetBytes", markdown);
+        Assert.Contains("## Process Memory", markdown);
+        Assert.Contains("Peak working set", markdown);
         Assert.Contains("MB", markdown);
     }
 
@@ -602,7 +625,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
         Assert.Contains("# Benchmark Evidence Report", markdown);
         Assert.Contains("minimal", markdown);
         Assert.DoesNotContain("## Timing Metrics", markdown);
-        Assert.DoesNotContain("## Memory Metrics", markdown);
+        Assert.DoesNotContain("## Process Memory", markdown);
         Assert.DoesNotContain("## Stage Results", markdown);
     }
 

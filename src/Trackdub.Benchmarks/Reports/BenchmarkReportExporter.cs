@@ -267,20 +267,43 @@ public static class BenchmarkReportExporter
             }
         }
 
-        // Memory
-        if (report.MemoryBytes.Count > 0)
+        // Process memory: the run-level envelope the typed per-stage resource checks do not carry.
+        if (report.ProcessMemory is { } processMemory)
+        {
+            (string Metric, string Value)[] memoryRows =
+            [
+                ("Working set start", FormatBytesOrDash(processMemory.WorkingSetStartBytes)),
+                ("Working set end", FormatBytesOrDash(processMemory.WorkingSetEndBytes)),
+                ("Peak working set", FormatBytesOrDash(processMemory.PeakWorkingSetBytes)),
+                ("Managed allocated", FormatBytesOrDash(processMemory.ManagedAllocatedBytes)),
+                ("GC gen 0", FormatCountOrDash(processMemory.Gen0Collections)),
+                ("GC gen 1", FormatCountOrDash(processMemory.Gen1Collections)),
+                ("GC gen 2", FormatCountOrDash(processMemory.Gen2Collections)),
+            ];
+            if (memoryRows.Any(row => row.Value != "—"))
+            {
+                sb.AppendLine();
+                sb.AppendLine("## Process Memory");
+                sb.AppendLine();
+                sb.AppendLine("| Metric | Value |");
+                sb.AppendLine("| --- | ---: |");
+                foreach ((string metric, string value) in memoryRows)
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"| {metric} | {value} |");
+            }
+        }
+
+        // Per-stage GC deltas: the only per-stage memory signal the resource sections omit.
+        if (report.StageGarbageCollection.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine("## Memory Metrics");
+            sb.AppendLine("## Stage Garbage Collection");
             sb.AppendLine();
-            sb.AppendLine("| Metric | Value |");
-            sb.AppendLine("| --- | ---: |");
-            foreach ((string key, long? value) in report.MemoryBytes)
+            sb.AppendLine("| Stage | Gen 0 | Gen 1 | Gen 2 |");
+            sb.AppendLine("| --- | ---: | ---: | ---: |");
+            foreach (BenchmarkStageGarbageCollectionTelemetry stage in report.StageGarbageCollection)
             {
-                string formatted = value.HasValue
-                    ? FormatBytes(value.Value)
-                    : "—";
-                sb.AppendLine(CultureInfo.InvariantCulture, $"| {key} | {formatted} |");
+                sb.AppendLine(CultureInfo.InvariantCulture,
+                    $"| {EscapeMarkdownCell(stage.Stage)} | {FormatCountOrDash(stage.Gen0Collections)} | {FormatCountOrDash(stage.Gen1Collections)} | {FormatCountOrDash(stage.Gen2Collections)} |");
             }
         }
 
@@ -402,6 +425,12 @@ public static class BenchmarkReportExporter
         value is null
             ? string.Empty
             : value.Replace("\\", "\\\\").Replace("|", "\\|").Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
+
+    private static string FormatBytesOrDash(long? bytes) =>
+        bytes.HasValue ? FormatBytes(bytes.Value) : "—";
+
+    private static string FormatCountOrDash(long? count) =>
+        count.HasValue ? count.Value.ToString("N0", CultureInfo.InvariantCulture) : "—";
 
     private static string FormatBytes(long bytes)
     {

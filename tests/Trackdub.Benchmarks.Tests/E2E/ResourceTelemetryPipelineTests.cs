@@ -107,7 +107,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     }
 
     [Fact]
-    public async Task Sampled_working_set_peak_is_written_to_typed_telemetry_and_legacy_memory_mapAsync()
+    public async Task Sampled_working_set_peak_is_written_to_typed_telemetryAsync()
     {
         using var runner = CreateMockRunner(
             new CounterCollector(), workingSetSampler: new FixedWorkingSetSampler(2000));
@@ -121,7 +121,6 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         ResourceTelemetryCheck workingSet = Assert.Single(sample.Validation.Checks,
             check => check.Metric == "workingSetBytes");
         Assert.Equal(2000d, workingSet.ObservedValue);
-        Assert.Equal(2000L, report.MemoryBytes["stage:audio-prep:peakWorkingSet"]);
     }
 
     [Fact]

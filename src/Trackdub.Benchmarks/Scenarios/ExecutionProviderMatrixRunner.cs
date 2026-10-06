@@ -160,11 +160,8 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
                 ?? 0.0;
             double throughput = report.TimingsMilliseconds.GetValueOrDefault("pipeline:throughput")
                 ?? 0.0;
-            long peakMemory = report.MemoryBytes.GetValueOrDefault("peakWorkingSetBytes")
-                ?? report.MemoryBytes.GetValueOrDefault("processPeakWorkingSet")
-                ?? 0L;
-            long managedAlloc = report.MemoryBytes.GetValueOrDefault("managedAllocatedBytes")
-                ?? 0L;
+            long peakMemory = report.ProcessMemory?.PeakWorkingSetBytes ?? 0L;
+            long managedAlloc = report.ProcessMemory?.ManagedAllocatedBytes ?? 0L;
 
             stats[provider] = (p50, throughput, peakMemory, managedAlloc);
         }
