@@ -42,7 +42,7 @@ public sealed class ProcessResourceTelemetryCollectorTests
         Assert.Null(end.AvailableVramMb);
         Assert.Equal("No VRAM reader is registered for this host.", end.VramUnavailableReason);
         Assert.Null(end.GpuBytes);
-        Assert.Equal("No process GPU memory reader is registered for this host.", end.GpuUnavailableReason);
+        Assert.Equal("No platform process GPU memory source is available for this host.", end.GpuUnavailableReason);
     }
 
     [Fact]
@@ -169,12 +169,19 @@ public sealed class ProcessResourceTelemetryCollectorTests
     {
         public long? ReadDedicatedGpuMemoryBytes() => reading;
 
+        // Aggregate-only double: per-adapter attribution is unavailable, which is exactly the
+        // fallback shape the admission path must handle.
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
+
         public string UnavailableReason => "fixed";
     }
 
     private sealed class ThrowingGpuReader : IProcessGpuMemoryReader
     {
         public long? ReadDedicatedGpuMemoryBytes() => throw new InvalidOperationException("GPU process counters busy.");
+
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() =>
+            throw new InvalidOperationException("GPU process counters busy.");
 
         public string UnavailableReason => "never reached";
     }

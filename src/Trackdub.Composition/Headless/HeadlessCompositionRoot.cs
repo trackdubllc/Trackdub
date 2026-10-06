@@ -161,8 +161,13 @@ public static class HeadlessCompositionRoot
         // No DXGI on this platform: telemetry records an explicit unavailable reading, and the
         // shared pool keeps accounting for its own reservations only.
         services.TryAddSingleton<IAvailableVramReader, UnavailableAvailableVramReader>();
-        services.TryAddSingleton<IProcessGpuMemoryReader, UnavailableProcessGpuMemoryReader>();
 #endif
+        // IProcessGpuMemoryReader itself is registered by the core AddTrackdub() path, so the
+        // desktop and headless hosts share one registration; the headless session factory binds
+        // the final (possibly host-replaced) reader to the shared pool's admission before the
+        // first session is created. Its first read initializes the performance-counter subsystem
+        // (~1 s once per process), so a host that measures stage timings should construct the
+        // reader while preparing rather than inside a measured stage.
         services.TryAddSingleton<IWorkingSetSampler, ProcessWorkingSetSampler>();
         services.TryAddSingleton<IResourceTelemetryCollector, ProcessResourceTelemetryCollector>();
         services.TryAddSingleton<IResourceTelemetryValidator, ResourceTelemetryValidator>();

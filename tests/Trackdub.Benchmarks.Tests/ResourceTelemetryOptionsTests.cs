@@ -163,7 +163,12 @@ public sealed class ResourceTelemetryOptionsTests
 
         Assert.False(parsed);
         Assert.Null(options);
-        Assert.Contains("Invalid value", error.ToString(), StringComparison.Ordinal);
+        // A blank value is a missing value at the shared option-reading boundary; any other
+        // unusable value is invalid.
+        Assert.Contains(
+            string.IsNullOrWhiteSpace(value) ? "Missing value" : "Invalid value",
+            error.ToString(),
+            StringComparison.Ordinal);
         Assert.Contains(option, error.ToString(), StringComparison.Ordinal);
     }
 
@@ -282,7 +287,12 @@ public sealed class ResourceTelemetryOptionsTests
             TextReader.Null, output, error, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("Invalid value", error.ToString(), StringComparison.Ordinal);
+        // A blank value is a missing value at the shared option-reading boundary; any other
+        // unusable value is invalid.
+        Assert.Contains(
+            string.IsNullOrWhiteSpace(value) ? "Missing value" : "Invalid value",
+            error.ToString(),
+            StringComparison.Ordinal);
         Assert.Contains(option, error.ToString(), StringComparison.Ordinal);
         Assert.Equal(string.Empty, output.ToString());
     }

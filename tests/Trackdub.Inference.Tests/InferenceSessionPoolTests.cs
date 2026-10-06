@@ -915,11 +915,14 @@ public sealed class InferenceSessionPoolTests
     // ── Process-isolated GPU admission (the reading drives admission, not only telemetry) ──
 
     [Fact]
-    public async Task ProcessGpuAdmission_ProcessAtDeviceCeiling_BlocksAcceleratorAdmission()
+    public async Task ProcessGpuAdmission_ProcessAtDeviceCeiling_FailsFastWithNothingIdleLeftToFree()
     {
         // This process already holds the device budget's worth of dedicated GPU memory outside
-        // the pool's reservations (driver context, runtime arenas, non-pooled consumers). A new
-        // accelerator session must wait rather than push the process past the ceiling.
+        // the pool's reservations (driver context, runtime arenas, non-pooled consumers). The
+        // reservation fits the configured budget on its own, the observation is what blocks, and
+        // there is no idle pooled session or external reservation to free — so admission fails
+        // fast with a diagnosis instead of polling a wait that can never succeed. It must never
+        // construct the session anyway.
         using var pool = new InferenceSessionPool(
             maxSessions: 8,
             memoryBudgetMb: 4096,
@@ -927,14 +930,14 @@ public sealed class InferenceSessionPoolTests
             processGpuMemoryReader: () => new StubProcessGpuMemoryReader(4096L * 1024 * 1024));
         int factoryCalls = 0;
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
-            AcceleratorKey("pg1", 256),
-            _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
-            cts.Token));
+        InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => pool.GetLeaseAsync(
+                AcceleratorKey("pg1", 256),
+                _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
+                CancellationToken.None));
 
-        // The reservation fits the configured budget on its own — the observation is what holds
-        // this back, and it must never construct the session anyway.
+        Assert.Contains("dedicated GPU memory outside", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("TRACKDUB_SESSION_PROCESS_GPU_ADMISSION", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, factoryCalls);
     }
 
@@ -1107,10 +1110,12 @@ public sealed class InferenceSessionPoolTests
         await Task.Delay(TimeSpan.FromMilliseconds(300));
         Assert.Equal(0, Volatile.Read(ref factoryCallsB));
 
-        // Once A's allocation lands and is published, B fits and proceeds.
+        // Once A's allocation lands and is published, B fits and proceeds. B re-polls on a 50 ms
+        // cadence, so the generous bound only absorbs a starved thread pool on a loaded CI runner;
+        // a genuine stall would still fail here.
         factoryGate.TrySetResult(true);
-        using SessionLease leaseA = await creatorA.WaitAsync(TimeSpan.FromSeconds(5));
-        using SessionLease leaseB = await creatorB.WaitAsync(TimeSpan.FromSeconds(5));
+        using SessionLease leaseA = await creatorA.WaitAsync(TimeSpan.FromSeconds(30));
+        using SessionLease leaseB = await creatorB.WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.NotNull(leaseA.Session);
         Assert.NotNull(leaseB.Session);
@@ -1714,8 +1719,10 @@ public sealed class InferenceSessionPoolTests
     public void SharedPoolOptions_ProcessGpuAdmission_IsOptOutOnly()
     {
         // Process-isolated GPU admission is on by default and only an explicit negative token
-        // turns it off. The variable is cleared rather than set so this test can never capture a
-        // negative default when it happens to initialise SharedPoolOptions first.
+        // turns it off. This test exercises the pure readers against an isolated environment;
+        // it deliberately does not assert SharedPoolOptions.EnableProcessGpuAdmission, which is
+        // captured during type initialization and cannot be re-read — the admission tests above
+        // are what depend on that cached default staying on, so they fail if anything flips it.
         using var env = new ScopedEnvironment();
         env.Clear(SharedPoolOptions.ProcessGpuAdmissionVariable);
 
