@@ -37,7 +37,7 @@ internal static class HostCapacityBanner
                 .GetDevicesAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // Diagnostic only: the run's pre-flight treats an unenumerable host as an unknown
             // capacity, and this banner must not turn that into a failure.
