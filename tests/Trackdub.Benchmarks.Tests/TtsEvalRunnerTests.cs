@@ -38,6 +38,16 @@ public sealed class TtsEvalRunnerTests
         Assert.Throws<InvalidDataException>(() => TtsEvalRunner.ReadJobs(reader));
     }
 
+    [Theory]
+    [InlineData("warmup_runs", -1)]
+    [InlineData("repeat_runs", 0)]
+    public void ReadJobs_RejectsInvalidRunOverrides(string property, int value)
+    {
+        string line = $"{{\"id\":\"a\",\"text\":\"x\",\"language_code\":\"en-us\",\"voice_id\":\"af_heart\",\"{property}\":{value}}}";
+        using var reader = new StringReader(line);
+        Assert.Throws<InvalidDataException>(() => TtsEvalRunner.ReadJobs(reader));
+    }
+
     [Fact]
     public void TryParse_AcceptsRequiredAndOptionalArguments()
     {
