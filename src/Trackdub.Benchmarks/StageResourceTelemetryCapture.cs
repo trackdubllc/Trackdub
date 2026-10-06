@@ -212,6 +212,7 @@ public sealed class StageResourceTelemetryCapture(
                 MemoryUnavailableReason = reason,
                 PeakWorkingSetUnavailableReason = reason,
                 VramUnavailableReason = reason,
+                GpuUnavailableReason = reason,
             };
         }
     }
