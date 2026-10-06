@@ -17,7 +17,7 @@ public sealed class TrackdubBuilderProcessGpuAdmissionTests
     public void Build_binds_process_gpu_reader_to_shared_pool_admission_and_dispose_releases_it()
     {
         IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
-        var factory = new TrackdubBuilder().Build();
+        using var factory = new TrackdubBuilder().Build();
         try
         {
 #if WINDOWS
@@ -32,7 +32,6 @@ public sealed class TrackdubBuilderProcessGpuAdmissionTests
         }
         finally
         {
-            factory.Dispose();
             SharedPoolOptions.UseProcessGpuMemoryReader(previous);
         }
     }
