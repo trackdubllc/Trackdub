@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.ML.OnnxRuntimeGenAI;
+using Trackdub.Contracts;
 using Trackdub.Contracts.Pipeline;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Runtime.Routing;
@@ -13,12 +14,14 @@ namespace Trackdub.Inference.Onnx.Phi;
 
 public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
     BenchmarkModelPathResolver modelPathResolver,
-    IRuntimePlanningPreferences? runtimePlanningPreferences = null)
+    IRuntimePlanningPreferences? runtimePlanningPreferences = null,
+    IApplicationLogger? applicationLogger = null)
     : IStreamingTranslationEngineAdapter, IStageRuntimeExecutionReporter
 {
     public const string EngineFamilyName = "phi-genai";
 
     private const string GenAiConfigFileName = "genai_config.json";
+    private const string HfConfigFileName = "config.json";
     private const int MaxNewTokens = 512;
     private const double RepetitionPenalty = 1.1;
 
@@ -27,6 +30,7 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
 
     private readonly IRuntimePlanner runtimePlanner = runtimePlanner ?? throw new ArgumentNullException(nameof(runtimePlanner));
     private readonly BenchmarkModelPathResolver modelPathResolver = modelPathResolver ?? throw new ArgumentNullException(nameof(modelPathResolver));
+    private readonly IApplicationLogger? applicationLogger = applicationLogger;
 
     public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
 
@@ -63,6 +67,7 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
 
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
         EnsureGenAiModelRoot(modelRootPath);
+        LogModelProvenance(plan, modelRootPath);
 
         GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
             modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
@@ -131,6 +136,7 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
 
         string modelRootPath = PlannedRuntimeModelResolver.ResolveModelRootPath(plan, modelPathResolver);
         EnsureGenAiModelRoot(modelRootPath);
+        LogModelProvenance(plan, modelRootPath);
 
         GenAiModelKey modelKey = await GenAiModelKey.CreateAsync(
             modelRootPath, plan.ExecutionProvider!.Value, plan.ModelId, plan.Variant, plan.DeviceIndex,
@@ -267,6 +273,23 @@ public sealed class PhiGenAiTranslationEngine(IRuntimePlanner runtimePlanner,
                 "Phi GenAI model root does not contain genai_config.json.", configPath);
         }
     }
+
+    /// <summary>
+    /// Records the resolved GenAI model provenance before the native model is loaded: the root
+    /// ORT GenAI will read, whether the files it requires are present, and which planner-visible
+    /// identity (provider/model/variant/revision) the run is attributed to. Mirrors the OPUS
+    /// tokenizer provenance line so a cache-shaped model root is diagnosable from trackdub.log.
+    /// <c>genai_config.json</c> is the only config ORT GenAI needs; the Hugging Face
+    /// <c>config.json</c> is reported because the desktop model cache does not guarantee it.
+    /// </summary>
+    private void LogModelProvenance(StageRuntimePlan plan, string modelRootPath) =>
+        applicationLogger?.LogInformation(
+            $"Phi GenAI model provenance: root='{modelRootPath}'; " +
+            $"genai_config.json={(File.Exists(Path.Join(modelRootPath, GenAiConfigFileName)) ? "present" : "absent")}; " +
+            $"config.json={(File.Exists(Path.Join(modelRootPath, HfConfigFileName)) ? "present" : "absent")}; " +
+            $"provider={plan.ExecutionProvider!.Value.ToString().ToLowerInvariant()}; " +
+            $"model={plan.ModelId}; variant={plan.Variant}; " +
+            $"revision={plan.ModelRevisionHash ?? "unresolved"}.");
 
     private static StageRuntimeExecutionSummary CreateExecutionSummary(
         StageRuntimePlan plan,

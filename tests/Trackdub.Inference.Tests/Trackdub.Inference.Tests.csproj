@@ -59,4 +59,29 @@
     <Compile Include="..\Trackdub.TestDoubles\RequiresBundledModelFactAttribute.cs" Link="TestDoubles\RequiresBundledModelFactAttribute.cs" />
   </ItemGroup>
 
+  <!--
+    Align root onnxruntime.dll with the managed-package pair, mirroring the desktop app's
+    AlignOnnxRuntimeNativeForGenAi step. Composition force-copies Windows ML's older ORT to the
+    output root; the managed ORT/GenAI pair in this graph is 1.30, and GenAiNativeCompatibility
+    rejects the mismatch before any GenAI model can load, so real-model GenAI tests (Phi, Qwen,
+    Whisper GenAI) cannot run on the Windows TFM without this. Prefer runtimes/<rid>/native as
+    the canonical app-base copy; skipped for the Dnnl flavor, where Trackdub.OnnxRuntime.Dnnl.Native
+    owns libonnxruntime.*.
+  -->
+  <Target Name="AlignOnnxRuntimeNativeForGenAi"
+          AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
+    <PropertyGroup>
+      <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_GenAiNativeRid>
+      <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">win-arm64</_GenAiNativeRid>
+      <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$(_GenAiNativeRid)' == ''">win-x64</_GenAiNativeRid>
+      <_GenAiNativeDir>$(TargetDir)runtimes\$(_GenAiNativeRid)\native\</_GenAiNativeDir>
+    </PropertyGroup>
+    <Copy SourceFiles="$(_GenAiNativeDir)onnxruntime.dll"
+          DestinationFiles="$(TargetDir)onnxruntime.dll"
+          Condition="'$(_GenAiNativeRid)' != '' And Exists('$(_GenAiNativeDir)onnxruntime.dll')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false" />
+  </Target>
+
 </Project>
