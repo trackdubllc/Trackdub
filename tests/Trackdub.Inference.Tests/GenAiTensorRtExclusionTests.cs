@@ -111,14 +111,15 @@ public sealed class GenAiTensorRtExclusionTests
     }
 
     [Fact]
-    public void VadStage_ExcludesTensorRtFamilies()
+    public void VadStage_ExcludesTensorRtRtxButKeepsClassicTensorRt()
     {
         // #329: silero-vad fails the TensorRT RTX build on every attempt (squeeze shape error in its
-        // If/else-branch subgraph), so VAD routes straight to DirectML/CPU.
+        // If/else-branch subgraph), so VAD never plans TensorRT RTX. Classic TensorRT is a separate
+        // provider and is not implicated, so it stays allowed.
         IReadOnlyList<ExecutionProviderKind> allowed =
             StageRuntimeRequirementsCatalog.All[RuntimeStage.Vad].AllowedProvidersThisMilestone;
         Assert.DoesNotContain(ExecutionProviderKind.TensorRTRtx, allowed);
-        Assert.DoesNotContain(ExecutionProviderKind.TensorRt, allowed);
+        Assert.Contains(ExecutionProviderKind.TensorRt, allowed);
     }
 
     [Fact]
