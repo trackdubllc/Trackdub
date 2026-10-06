@@ -818,7 +818,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         ControlledDubbingBenchmarkOptions options,
         string? stage,
         IReadOnlyList<BenchmarkEvidenceStage> stages,
-        WorkingSetPeakMonitor? processWorkingSetPeak)
+        IWorkingSetPeakMonitor? processWorkingSetPeak)
     {
         var configuration = new Dictionary<string, string>
         {
@@ -1237,7 +1237,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             Timings = CreateTimings();
             ResourceTelemetry = new List<BenchmarkStageResourceTelemetry>();
             ProcessTelemetryStart = Metrics.ResourceTelemetry.TryCaptureProcess();
-            ProcessWorkingSetPeak = new WorkingSetPeakMonitor(
+            ProcessWorkingSetPeak = new WorkingSetPeakMonitorFactory().Create(
                 new ProcessWorkingSetSampler(), ProcessTelemetryStart?.WorkingSetBytes);
             Memory = CreateMemory(ProcessTelemetryStart);
             CounterTotals = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -1255,7 +1255,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         public Dictionary<string, double?> Timings { get; }
         public List<BenchmarkStageResourceTelemetry> ResourceTelemetry { get; }
         public ResourceTelemetrySnapshot? ProcessTelemetryStart { get; }
-        public WorkingSetPeakMonitor? ProcessWorkingSetPeak { get; }
+        public IWorkingSetPeakMonitor? ProcessWorkingSetPeak { get; }
         public Dictionary<string, long?> Memory { get; }
         public Dictionary<string, long> CounterTotals { get; }
         public Dictionary<string, long> ObservedMaxima { get; }

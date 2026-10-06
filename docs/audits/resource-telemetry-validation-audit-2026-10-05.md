@@ -34,7 +34,9 @@ Scope: Resource telemetry collection, stage validation, bounds checking, and ben
 
 **Identified Gaps**:
 1. **Direct Component Instantiation in Progress Collector** ([StageResourceTelemetryCapture.cs](Trackdub/src/Trackdub.Benchmarks/StageResourceTelemetryCapture.cs)): Progress capture instantiates `WorkingSetPeakMonitor` directly rather than through an injected monitor factory.
+   - **Resolved 2026-10-06.** `WorkingSetPeakMonitorFactory` (core `src/Trackdub.Benchmarks/WorkingSetPeakMonitorFactory.cs`) is now the dedicated coordinator for peak-monitor lifetime: `StageResourceTelemetryCapture` creates its per-stage monitors through an injected `IWorkingSetPeakMonitorFactory` (defaulting to the production factory, so the public constructor is unchanged), and `ControlledDubbingBenchmarkRunner` plus `SeparationEvalRunner` create theirs through the same factory instead of `new`. Stage-boundary `Stop()` ownership is unchanged; only creation moved.
 2. **Duplicated Option Extraction Branches** ([Program.cs](Trackdub/src/Trackdub.Benchmarks/Program.cs) and [ControlledStageBenchmarkMatrixOptionsParser.cs](Trackdub/src/Trackdub.Benchmarks/ControlledStageBenchmarkMatrixOptionsParser.cs)): CLI option parsing branches unpack bounds options separately in both entry points.
+   - **Resolved 2026-10-06.** `ControlledBenchmarkCliBinder` (core `src/Trackdub.Benchmarks/ControlledBenchmarkCliBinder.cs`) is the single binder for the shared `controlled`/`controlled-matrix` surface: flags, value reads, `--runs`, shared string options, and resource bounds unpack in one place, with leaf validation still in `ResourceTelemetryOptionsParser`. Each command keeps only its divergent arms (`--stage` vs `--stages`, `--model` shapes, `--report-dir`). Error text and defaults are unchanged.
 
 ---
 

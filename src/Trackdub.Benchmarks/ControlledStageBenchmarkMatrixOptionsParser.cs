@@ -1,5 +1,4 @@
 using Trackdub.Application.Dubbing;
-using Trackdub.Domain.Benchmarking;
 
 namespace Trackdub.Benchmarks;
 
@@ -20,81 +19,38 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
         }
 
         string fixturePath = args[0];
-        string? outputDirectory = null;
         string? stages = null;
-        string? expectedSha256 = null;
-        string targetLanguage = "es";
-        string? sourceLanguage = null;
-        string mode = "fresh-process";
-        bool reuseEngineCache = false;
-        bool mock = false;
-        bool dryRun = false;
-        string? modelDirectory = null;
-        string? provider = null;
-        string? ffmpeg = null;
-        string? ffprobe = null;
-        int runCount = 1;
-        var resourceTelemetryBounds = new ResourceTelemetryBounds();
+        var shared = new ControlledBenchmarkCliOptions();
         var modelOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         for (int index = 1; index < args.Length; index++)
         {
-            if (args[index] == "--reuse-engine-cache")
+            if (ControlledBenchmarkCliBinder.TryApplyFlag(args[index], shared))
             {
-                reuseEngineCache = true;
                 continue;
-            }
-
-            if (args[index] == "--mock")
-            {
-                mock = true;
-                continue;
-            }
-
-            if (args[index] == "--dry-run")
-            {
-                dryRun = true;
-                mock = true;
-                continue;
-            }
-
-            if (index + 1 >= args.Length)
-            {
-                error.WriteLine($"Missing value for {args[index]}.");
-                return false;
             }
 
             string option = args[index];
-            string value = args[++index];
+            if (!ControlledBenchmarkCliBinder.TryReadValue(args, ref index, error, out string value))
+            {
+                return false;
+            }
+
+            ControlledCliOptionResult sharedResult =
+                ControlledBenchmarkCliBinder.TryApplyOption(option, value, shared, error);
+            if (sharedResult == ControlledCliOptionResult.Failed)
+            {
+                return false;
+            }
+
+            if (sharedResult == ControlledCliOptionResult.Applied)
+            {
+                continue;
+            }
+
             switch (option)
             {
-                case "--output": outputDirectory = value; break;
                 case "--stages": stages = value; break;
-                case "--sha256": expectedSha256 = value; break;
-                case "--language": targetLanguage = value; break;
-                case "--source-language": sourceLanguage = value; break;
-                case "--mode": mode = value; break;
-                case "--model-directory": modelDirectory = value; break;
-                case "--provider": provider = value; break;
-                case "--ffmpeg": ffmpeg = value; break;
-                case "--ffprobe": ffprobe = value; break;
-                case var opt when ResourceTelemetryOptionsParser.IsResourceOption(opt):
-                    if (!ResourceTelemetryOptionsParser.TryApply(
-                        opt, value, resourceTelemetryBounds, error, out resourceTelemetryBounds))
-                    {
-                        return false;
-                    }
-
-                    break;
-                case "--runs":
-                    if (!int.TryParse(value, out int parsedRuns) || parsedRuns <= 0)
-                    {
-                        error.WriteLine($"Invalid run count '{value}'. Expected a positive integer.");
-                        return false;
-                    }
-
-                    runCount = parsedRuns;
-                    break;
                 case "--model":
                     if (!TryParseModelOverride(value, error, modelOverrides))
                     {
@@ -108,7 +64,7 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
             }
         }
 
-        if (string.IsNullOrWhiteSpace(outputDirectory))
+        if (string.IsNullOrWhiteSpace(shared.OutputDirectory))
         {
             error.WriteLine("--output is required.");
             return false;
@@ -123,22 +79,22 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
         options = new ControlledStageBenchmarkMatrixOptions
         {
             FixturePath = fixturePath,
-            OutputDirectory = outputDirectory,
+            OutputDirectory = shared.OutputDirectory,
             Stages = selectedStages,
-            ExpectedFixtureSha256 = expectedSha256,
-            TargetLanguage = targetLanguage,
-            SourceLanguage = sourceLanguage,
-            Mode = mode,
-            ReuseEngineCache = reuseEngineCache,
-            ModelDirectory = modelDirectory,
-            Provider = provider,
-            FfmpegPath = ffmpeg,
-            FfprobePath = ffprobe,
+            ExpectedFixtureSha256 = shared.ExpectedFixtureSha256,
+            TargetLanguage = shared.TargetLanguage,
+            SourceLanguage = shared.SourceLanguage,
+            Mode = shared.Mode,
+            ReuseEngineCache = shared.ReuseEngineCache,
+            ModelDirectory = shared.ModelDirectory,
+            Provider = shared.Provider,
+            FfmpegPath = shared.FfmpegPath,
+            FfprobePath = shared.FfprobePath,
             ModelOverrides = modelOverrides,
-            RunCount = runCount,
-            ResourceTelemetryBounds = resourceTelemetryBounds,
-            Mock = mock,
-            DryRun = dryRun,
+            RunCount = shared.RunCount,
+            ResourceTelemetryBounds = shared.ResourceTelemetryBounds,
+            Mock = shared.Mock,
+            DryRun = shared.DryRun,
         };
         return true;
     }
