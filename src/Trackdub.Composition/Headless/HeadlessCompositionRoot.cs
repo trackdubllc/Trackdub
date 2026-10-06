@@ -148,14 +148,14 @@ public static class HeadlessCompositionRoot
             new WindowsAvailableVramReader(sp.GetRequiredService<IVramMonitor>()));
         // The GPU Process Memory performance counters give the process-isolated attribution the
         // adapter-wide DXGI reading cannot, so both readings are kept and reported separately.
-        // Creating the reader is also what binds it to the shared session pool's accelerator
-        // admission (see SharedPoolOptions.UseProcessGpuMemoryReader): from then on, GPU memory
-        // this process holds outside the pool's own reservations consumes the same per-device
-        // budget. Its first read initializes the performance-counter subsystem (~1 s once per
+        // Registering the reader has no process-wide side effect on its own: the host that owns
+        // this container hands it to the shared session pool explicitly when it is built (see
+        // HeadlessDubbingHost.Create), so resolving telemetry services can never silently arm
+        // accelerator admission, and a host-provided override binds exactly like the default.
+        // The reader's first read initializes the performance-counter subsystem (~1 s once per
         // process), so a host that measures stage timings should resolve the reader while
         // preparing rather than inside a measured stage.
-        services.TryAddSingleton<IProcessGpuMemoryReader>(static _ =>
-            BindProcessGpuAdmission(new WindowsProcessGpuMemoryReader()));
+        services.TryAddSingleton<IProcessGpuMemoryReader>(static _ => new WindowsProcessGpuMemoryReader());
 #else
         // No DXGI on this platform: telemetry records an explicit unavailable reading, and the
         // shared pool keeps accounting for its own reservations only.
@@ -172,17 +172,49 @@ public static class HeadlessCompositionRoot
         return services;
     }
 
-#if WINDOWS
     /// <summary>
-    /// Hands the host's process-isolated GPU reader to the shared session pool so accelerator
-    /// admission accounts for GPU memory this process holds outside the pool's reservations.
+    /// Hands the container's process-GPU reader to the shared ONNX session pool so accelerator
+    /// admission accounts for this process's real dedicated GPU footprint (opt-out via
+    /// <c>TRACKDUB_SESSION_PROCESS_GPU_ADMISSION</c>). Every headless composition owner must call
+    /// this once the <see cref="IServiceProvider"/> is built — <see cref="HeadlessDubbingHost"/> and
+    /// the SDK's <c>TrackdubBuilder.Build</c> — or the advertised default-on admission silently
+    /// stays reservation-only for that path. Best-effort: a failing reader must never fail
+    /// composition. On platforms without a Windows reader the pool keeps its reservation-only
+    /// model and this returns null.
     /// </summary>
-    private static IProcessGpuMemoryReader BindProcessGpuAdmission(IProcessGpuMemoryReader reader)
+    /// <returns>The bound reader (null when there is nothing to bind).</returns>
+    public static IProcessGpuMemoryReader? BindSharedPoolProcessGpuAdmission(IServiceProvider services)
     {
-        SharedPoolOptions.UseProcessGpuMemoryReader(reader);
+        IProcessGpuMemoryReader? reader = null;
+#if WINDOWS
+        try
+        {
+            reader = services.GetService<IProcessGpuMemoryReader>();
+            if (reader is not null)
+            {
+                SharedPoolOptions.UseProcessGpuMemoryReader(reader);
+            }
+        }
+        catch
+        {
+            reader = null;
+        }
+#endif
         return reader;
     }
-#endif
+
+    /// <summary>
+    /// Clears the shared pool's process-GPU reader binding only while it still refers to
+    /// <paramref name="reader"/>, so disposing one composition owner never tears down a newer
+    /// owner's registration. Safe to call with null.
+    /// </summary>
+    public static void ClearSharedPoolProcessGpuAdmission(IProcessGpuMemoryReader? reader)
+    {
+        if (reader is not null)
+        {
+            SharedPoolOptions.TryClearProcessGpuMemoryReader(reader);
+        }
+    }
 }
 
 /// <summary>

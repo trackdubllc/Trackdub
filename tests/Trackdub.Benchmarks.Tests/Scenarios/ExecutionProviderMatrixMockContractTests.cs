@@ -91,6 +91,25 @@ public sealed class ExecutionProviderMatrixMockContractTests
         Assert.Null(Budget(report, "tensorrt"));
     }
 
+    [Theory]
+    [InlineData("full-pipeline", "cpu", 1000.0)]
+    [InlineData("full-pipeline", "directml", 500.0)]
+    [InlineData("transcription", "cpu", 300.0)]
+    [InlineData("asr", "cpu", 300.0)]               // alias for the transcription stage
+    [InlineData("separation", "directml", 100.0)]   // 200 ms at the 0.5 DirectML multiplier
+    [InlineData("tts", "tensorrt", 62.5)]           // 250 ms dubbing at the 0.25 TensorRT multiplier
+    [InlineData("audio-prep", "cpu", 100.0)]
+    [InlineData("unknown-stage", "cpu", 5.0)]       // mock fallback delay, unscaled
+    [InlineData(null, "cpu", 1000.0)]
+    public void Simulated_latency_budget_follows_the_selected_scenario(
+        string? scenario, string provider, double expectedBudgetMilliseconds)
+    {
+        Assert.Equal(
+            expectedBudgetMilliseconds,
+            ExecutionProviderMatrixRunner.SimulatedLatencyBudgetMilliseconds(provider, scenario),
+            precision: 9);
+    }
+
     [Fact]
     public void Comparison_rows_carry_no_simulated_budget_without_one()
     {
