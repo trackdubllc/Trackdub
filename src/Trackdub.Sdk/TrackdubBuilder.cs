@@ -201,6 +201,9 @@ public sealed class TrackdubBuilder
         IProcessGpuMemoryReader? processGpuReader =
             HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(serviceProvider);
 
-        return new TrackdubSessionFactory(serviceProvider, processGpuReader);
+        IReadOnlyDictionary<int, long>? adapterLuidMap =
+            HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(serviceProvider);
+
+        return new TrackdubSessionFactory(serviceProvider, processGpuReader, adapterLuidMap);
     }
 }

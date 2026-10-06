@@ -87,11 +87,7 @@ public sealed class HeadlessDubbingHost : IDisposable
                 SharedPoolOptions.UseProcessGpuMemoryReader(processGpuReader);
             }
 
-            adapterLuidMap = QueryAdapterLuidMap(serviceProvider);
-            if (adapterLuidMap is not null)
-            {
-                SharedPoolOptions.UseAdapterLuidMap(adapterLuidMap);
-            }
+            adapterLuidMap = HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(serviceProvider);
         }
         catch
         {
@@ -103,46 +99,6 @@ public sealed class HeadlessDubbingHost : IDisposable
         return new HeadlessDubbingHost(new HeadlessDubbingSessionFactory(serviceProvider), serviceProvider, processGpuReader, adapterLuidMap);
     }
 
-#if WINDOWS
-    /// <summary>
-    /// Maps enumerated device indexes to their DXGI adapter LUIDs so the shared session pool
-    /// can attribute the process-GPU observation per adapter. Best-effort and synchronous like
-    /// <see cref="WindowsVramMonitor"/>: enumeration caches, and telemetry must never fail
-    /// host creation.
-    /// </summary>
-    private static IReadOnlyDictionary<int, long>? QueryAdapterLuidMap(IServiceProvider services)
-    {
-        try
-        {
-            IDeviceEnumerator? enumerator = services.GetService<IDeviceEnumerator>();
-            if (enumerator is null)
-            {
-                return null;
-            }
-
-            IReadOnlyList<DeviceEntry> devices = enumerator
-                .GetDevicesAsync(CancellationToken.None)
-                .GetAwaiter()
-                .GetResult();
-
-            var map = new Dictionary<int, long>();
-            foreach (DeviceEntry device in devices)
-            {
-                if (device.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu
-                    && device.AdapterLuid is long luid)
-                {
-                    map[device.DeviceIndex] = luid;
-                }
-            }
-
-            return map.Count == 0 ? null : map;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-#endif
 
     /// <summary>
     /// Creates a new <see cref="DubbingPipelineEngine"/> bound to this host's session factory.
