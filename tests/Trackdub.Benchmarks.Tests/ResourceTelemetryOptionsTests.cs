@@ -24,7 +24,7 @@ public sealed class ResourceTelemetryOptionsTests
 
             foreach (string option in new[]
             {
-                "--max-working-set-bytes", "--max-allocated-bytes", "--min-available-vram-mb",
+                "--max-working-set-bytes", "--max-allocated-bytes", "--min-available-vram-mb", "--max-gpu-bytes",
             })
             {
                 foreach (string value in new[]
@@ -47,10 +47,12 @@ public sealed class ResourceTelemetryOptionsTests
         { "--max-working-set-bytes", null },
         { "--max-allocated-bytes", null },
         { "--min-available-vram-mb", null },
+        { "--max-gpu-bytes", null },
         { "--max-cpu-percent", "--mock" },
         { "--max-working-set-bytes", "--mock" },
         { "--max-allocated-bytes", "--mock" },
         { "--min-available-vram-mb", "--mock" },
+        { "--max-gpu-bytes", "--mock" },
     };
 
     [Fact]
@@ -78,6 +80,7 @@ public sealed class ResourceTelemetryOptionsTests
                 "--max-working-set-bytes", "4294967296",
                 "--max-allocated-bytes", "123456789012345",
                 "--min-available-vram-mb", "9223372036854775807",
+                "--max-gpu-bytes", "4096",
             ], error, out var options);
 
         Assert.True(parsed, error.ToString());
@@ -88,6 +91,7 @@ public sealed class ResourceTelemetryOptionsTests
             MaxWorkingSetBytes = 4294967296,
             MaxManagedAllocatedBytes = 123456789012345,
             MinAvailableVramMb = long.MaxValue,
+            MaxGpuBytes = 4096,
         }, options.ResourceTelemetryBounds);
     }
 
@@ -107,6 +111,7 @@ public sealed class ResourceTelemetryOptionsTests
                 "--max-working-set-bytes", bytes,
                 "--max-allocated-bytes", bytes,
                 "--min-available-vram-mb", bytes,
+                "--max-gpu-bytes", bytes,
             ], error, out var options);
 
         Assert.True(parsed, error.ToString());
@@ -117,6 +122,7 @@ public sealed class ResourceTelemetryOptionsTests
             MaxWorkingSetBytes = expectedBytes,
             MaxManagedAllocatedBytes = expectedBytes,
             MinAvailableVramMb = expectedBytes,
+            MaxGpuBytes = expectedBytes,
         }, options.ResourceTelemetryBounds);
     }
 
@@ -125,6 +131,7 @@ public sealed class ResourceTelemetryOptionsTests
     [InlineData("--max-working-set-bytes")]
     [InlineData("--max-allocated-bytes")]
     [InlineData("--min-available-vram-mb")]
+    [InlineData("--max-gpu-bytes")]
     public void Matrix_parser_sets_only_the_requested_limit(string option)
     {
         using var error = new StringWriter();
@@ -133,6 +140,7 @@ public sealed class ResourceTelemetryOptionsTests
             "--max-cpu-percent" => new ResourceTelemetryBounds { MaxCpuPercent = 1 },
             "--max-working-set-bytes" => new ResourceTelemetryBounds { MaxWorkingSetBytes = 1 },
             "--max-allocated-bytes" => new ResourceTelemetryBounds { MaxManagedAllocatedBytes = 1 },
+            "--max-gpu-bytes" => new ResourceTelemetryBounds { MaxGpuBytes = 1 },
             _ => new ResourceTelemetryBounds { MinAvailableVramMb = 1 },
         };
 
@@ -192,6 +200,7 @@ public sealed class ResourceTelemetryOptionsTests
                     "--max-working-set-bytes", "4294967296",
                     "--max-allocated-bytes", "1024",
                     "--min-available-vram-mb", "2048",
+                    "--max-gpu-bytes", "4096",
                 ], error, out var options);
 
             Assert.True(parsed, error.ToString());
@@ -202,6 +211,7 @@ public sealed class ResourceTelemetryOptionsTests
                 MaxWorkingSetBytes = 4294967296,
                 MaxManagedAllocatedBytes = 1024,
                 MinAvailableVramMb = 2048,
+                MaxGpuBytes = 4096,
             }, options.ResourceTelemetryBounds);
 
             Assert.False(ControlledStageBenchmarkMatrixOptionsParser.TryParse(
@@ -220,12 +230,15 @@ public sealed class ResourceTelemetryOptionsTests
         using var harness = new MockDubbingBenchmarkHarness();
         string fixture = harness.CreateTempAudioFixture();
         DirectoryInfo directory = Directory.CreateTempSubdirectory("trackdub-telemetry-options-");
+        // The VRAM floor stays within any real adapter's capacity: a floor above it is physically
+        // impossible on this host and is now rejected pre-flight (see ResourceBoundsPreflightTests),
+        // which would leave this test asserting propagation over a run that never measured anything.
         var bounds = new ResourceTelemetryBounds
         {
             MaxCpuPercent = 37.25,
             MaxWorkingSetBytes = 4294967296,
             MaxManagedAllocatedBytes = 123456789012345,
-            MinAvailableVramMb = long.MaxValue,
+            MinAvailableVramMb = 512,
         };
 
         try
@@ -304,6 +317,7 @@ public sealed class ResourceTelemetryOptionsTests
         Assert.Contains("--max-working-set-bytes", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("--max-allocated-bytes", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("--min-available-vram-mb", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("--max-gpu-bytes", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("0..100", output.ToString(), StringComparison.Ordinal);
     }
 

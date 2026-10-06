@@ -22,7 +22,20 @@ public sealed record ResourceUsageSnapshot
     /// </summary>
     public long? AvailableVramMb { get; init; }
 
+    /// <summary>
+    /// Dedicated GPU memory allocated by this process, in bytes. Unlike <see cref="AvailableVramMb"/>
+    /// this is process-isolated, so a stage's cost can be attributed without interference from
+    /// other processes sharing the adapter.
+    /// </summary>
+    public long? GpuBytes { get; init; }
+
+    /// <summary>Maximum dedicated GPU memory observed during a measured interval, when interval sampling ran.</summary>
+    public long? PeakGpuBytes { get; init; }
+
+    public string? PeakGpuUnavailableReason { get; init; }
+
     public string? CpuUnavailableReason { get; init; }
     public string? MemoryUnavailableReason { get; init; }
     public string? VramUnavailableReason { get; init; }
+    public string? GpuUnavailableReason { get; init; }
 }

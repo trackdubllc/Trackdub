@@ -19,13 +19,21 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
     /// <param name="baselineProvider">The reference baseline provider (typically "cpu").</param>
     /// <param name="providerStats">Per-provider statistics dictionary mapping provider name to (P50, Throughput, PeakMemory, ManagedAlloc).</param>
     /// <param name="timestamp">Optional timestamp for report metadata.</param>
+    /// <param name="simulatedLatencyBudgets">
+    /// The simulated latency budget, in milliseconds, a deterministic mock run configured for each
+    /// provider, keyed by provider name. Matching rows carry it as
+    /// <see cref="ProviderComparisonMetrics.SimulatedLatencyBudgetMilliseconds"/>; a null map, or a
+    /// provider absent from it, leaves the row's budget null. See
+    /// <see cref="SimulatedLatencyBudgetMilliseconds"/> for what the budget means.
+    /// </param>
     /// <returns>A complete <see cref="ExecutionProviderMatrixReport"/> with comparative metrics.</returns>
     /// <exception cref="ArgumentException">Thrown when scenario or baselineProvider is empty, or baselineProvider is not in providerStats.</exception>
     public static ExecutionProviderMatrixReport CompareProviders(
         string scenario,
         string baselineProvider,
         IReadOnlyDictionary<string, (double P50, double Throughput, long PeakMemory, long ManagedAlloc)> providerStats,
-        DateTimeOffset? timestamp = null)
+        DateTimeOffset? timestamp = null,
+        IReadOnlyDictionary<string, double>? simulatedLatencyBudgets = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scenario);
         ArgumentException.ThrowIfNullOrWhiteSpace(baselineProvider);
@@ -94,7 +102,10 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
                 LatencyDeltaMilliseconds: latencyDelta,
                 ThroughputRatio: throughputRatio,
                 PeakWorkingSetDeltaBytes: peakMemoryDelta,
-                ManagedAllocatedDeltaBytes: managedAllocDelta));
+                ManagedAllocatedDeltaBytes: managedAllocDelta)
+            {
+                SimulatedLatencyBudgetMilliseconds = LookupSimulatedLatencyBudget(provider, simulatedLatencyBudgets),
+            });
         }
 
         return new ExecutionProviderMatrixReport(
@@ -108,11 +119,16 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
     /// <summary>
     /// Calculates comparison metrics from a dictionary of provider evidence reports.
     /// </summary>
+    /// <param name="simulatedLatencyBudgets">
+    /// Optional per-provider simulated latency budgets, attached to the matching comparison rows.
+    /// See the statistics overload for the matching rules.
+    /// </param>
     public static ExecutionProviderMatrixReport CompareProviders(
         string scenario,
         string baselineProvider,
         IReadOnlyDictionary<string, BenchmarkEvidenceReport> providerReports,
-        DateTimeOffset? timestamp = null)
+        DateTimeOffset? timestamp = null,
+        IReadOnlyDictionary<string, double>? simulatedLatencyBudgets = null)
     {
         ArgumentNullException.ThrowIfNull(providerReports);
 
@@ -161,18 +177,24 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
                 nameof(baselineProvider));
         }
 
-        ExecutionProviderMatrixReport compared = CompareProviders(scenario, baselineProvider, stats, timestamp);
+        ExecutionProviderMatrixReport compared = CompareProviders(
+            scenario, baselineProvider, stats, timestamp, simulatedLatencyBudgets);
         return compared with { SkippedProviders = skipped };
     }
 
     /// <summary>
     /// Calculates comparison metrics from a collection of evidence reports.
     /// </summary>
+    /// <param name="simulatedLatencyBudgets">
+    /// Optional per-provider simulated latency budgets, attached to the matching comparison rows.
+    /// See the statistics overload for the matching rules.
+    /// </param>
     public static ExecutionProviderMatrixReport CompareProviders(
         string scenario,
         string baselineProvider,
         IReadOnlyList<BenchmarkEvidenceReport> reports,
-        DateTimeOffset? timestamp = null)
+        DateTimeOffset? timestamp = null,
+        IReadOnlyDictionary<string, double>? simulatedLatencyBudgets = null)
     {
         ArgumentNullException.ThrowIfNull(reports);
 
@@ -183,7 +205,7 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
             dict[key] = report;
         }
 
-        return CompareProviders(scenario, baselineProvider, dict, timestamp);
+        return CompareProviders(scenario, baselineProvider, dict, timestamp, simulatedLatencyBudgets);
     }
 
     /// <summary>
@@ -212,15 +234,15 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
                 {
                     mockOpts.DefaultProvider = provider;
                     mockOpts.DryRun = options.DryRun;
-                    double speedMultiplier = GetMockProviderSpeedMultiplier(provider);
-                    // Base delays are large enough (sum ~1s at 1.0x) that OS scheduler jitter on
-                    // loaded CI runners (observed on macOS) can't swamp the relative gap between
-                    // providers' simulated speeds; smaller (~10-30ms) delays were flaky here.
-                    mockOpts.SimulatedStageLatencies["audio-prep"] = TimeSpan.FromMilliseconds(100.0 * speedMultiplier);
-                    mockOpts.SimulatedStageLatencies["separation"] = TimeSpan.FromMilliseconds(200.0 * speedMultiplier);
-                    mockOpts.SimulatedStageLatencies["transcription"] = TimeSpan.FromMilliseconds(300.0 * speedMultiplier);
-                    mockOpts.SimulatedStageLatencies["alignment"] = TimeSpan.FromMilliseconds(150.0 * speedMultiplier);
-                    mockOpts.SimulatedStageLatencies["dubbing"] = TimeSpan.FromMilliseconds(250.0 * speedMultiplier);
+                    double latencyMultiplier = SimulatedLatencyMultiplier(provider);
+                    // The base delays are large enough (sum 1s at 1.0x) that a provider's simulated
+                    // speed survives OS scheduler jitter; see SimulatedLatencyBudgetMilliseconds for
+                    // what a mock run's measurement is allowed to be asserted against.
+                    foreach ((string stage, double milliseconds) in SimulatedStageDelayTable)
+                    {
+                        mockOpts.SimulatedStageLatencies[stage] =
+                            TimeSpan.FromMilliseconds(milliseconds * latencyMultiplier);
+                    }
                 });
             }
 
@@ -251,10 +273,27 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
             evidenceReports[provider] = evidence;
         }
 
+        // A mock run that actually waits its simulated delays is the deterministic mode: report
+        // each provider's budget so a caller can assert the simulated contract from the report
+        // alone. A dry run waits nothing, and real execution simulates nothing, so neither carries
+        // a budget.
+        IReadOnlyDictionary<string, double>? simulatedLatencyBudgets = null;
+        if (options.Mock && !options.DryRun)
+        {
+            var budgets = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (string provider in options.Providers)
+            {
+                budgets[provider] = SimulatedLatencyBudgetMilliseconds(provider, options.Scenario);
+            }
+
+            simulatedLatencyBudgets = budgets;
+        }
+
         ExecutionProviderMatrixReport report = CompareProviders(
             options.Scenario,
             options.BaselineProvider,
-            evidenceReports);
+            evidenceReports,
+            simulatedLatencyBudgets: simulatedLatencyBudgets);
 
         string reportPath = Path.Join(options.OutputDirectory, "execution-provider-matrix.json");
         await BenchmarkReportWriter.WriteAsync(report, reportPath, cancellationToken).ConfigureAwait(false);
@@ -262,7 +301,34 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
         return report;
     }
 
-    private static double GetMockProviderSpeedMultiplier(string provider)
+    /// <summary>
+    /// Base simulated delay of each canonical stage, in milliseconds, before a provider's
+    /// <see cref="SimulatedLatencyMultiplier"/> scales it.
+    /// </summary>
+    private static readonly (string Stage, double Milliseconds)[] SimulatedStageDelayTable =
+    [
+        ("audio-prep", 100.0),
+        ("separation", 200.0),
+        ("transcription", 300.0),
+        ("alignment", 150.0),
+        ("dubbing", 250.0),
+    ];
+
+    /// <summary>
+    /// The factor a mock matrix run applies to every simulated stage delay for
+    /// <paramref name="provider"/>: a provider at 0.5 runs the same stages in half the time of the
+    /// 1.0 baseline, so the baseline is twice as slow as it.
+    /// </summary>
+    /// <remarks>
+    /// A mock comparison demonstrates this contract and nothing more. The fixed cost of each
+    /// provider's own run — host setup, resource telemetry sampling, the simulated allocations —
+    /// is of the same order as the simulated gap, so a measured pipeline percentile cannot assert
+    /// the simulated ratio: measured TensorRT routinely exceeds measured DirectML even though its
+    /// simulated stages take half as long. Callers that need to state what a mock run guarantees
+    /// should use <see cref="SimulatedSpeedupFactor"/> and
+    /// <see cref="SimulatedLatencyBudgetMilliseconds"/> instead of the measured ratios.
+    /// </remarks>
+    internal static double SimulatedLatencyMultiplier(string provider)
     {
         string normalized = BenchmarkComparison.NormalizeProvider(provider);
         return normalized switch
@@ -273,6 +339,87 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
             "cpu" => 1.0,
             _ => 1.0,
         };
+    }
+
+    /// <summary>
+    /// The speedup <paramref name="provider"/>'s simulated stages have over
+    /// <paramref name="baselineProvider"/>'s, i.e. the ratio the mock's configured stage delays
+    /// imply: DirectML is 2x and TensorRT 4x the CPU baseline.
+    /// </summary>
+    internal static double SimulatedSpeedupFactor(string provider, string baselineProvider) =>
+        SimulatedLatencyMultiplier(baselineProvider) / SimulatedLatencyMultiplier(provider);
+
+    /// <summary>
+    /// Total simulated stage latency, in milliseconds, a full-pipeline mock matrix run configures
+    /// for <paramref name="provider"/> (1000 ms at a multiplier of 1.0). Every simulated stage
+    /// waits at least its configured delay, so a completed mock pipeline's measured percentile
+    /// cannot be below this budget, and the ratio between two providers' budgets is the speedup
+    /// the simulation is built to demonstrate. Mock matrix runs carry it on each comparison row
+    /// as <see cref="ProviderComparisonMetrics.SimulatedLatencyBudgetMilliseconds"/>, so consumers
+    /// can assert the contract from the report instead of from here.
+    /// </summary>
+    internal static double SimulatedLatencyBudgetMilliseconds(string provider) =>
+        SimulatedLatencyBudgetMilliseconds(provider, "full-pipeline");
+
+    /// <summary>
+    /// Simulated latency budget for the selected mock scenario. A full-pipeline run sums all
+    /// configured stage delays; a single-stage run budgets only the stage it actually measures
+    /// (the runner filters execution to <c>options.Scenario</c>), so reporting the full-pipeline
+    /// total there would overstate the measured floor. Scenarios without a matching configured
+    /// stage use the mock service's 5 ms fallback delay.
+    /// </summary>
+    internal static double SimulatedLatencyBudgetMilliseconds(string provider, string? scenario)
+    {
+        double multiplier = SimulatedLatencyMultiplier(provider);
+        if (string.IsNullOrWhiteSpace(scenario)
+            || scenario.Equals("full-pipeline", StringComparison.OrdinalIgnoreCase))
+        {
+            return SimulatedStageDelayTable.Sum(stage => stage.Milliseconds) * multiplier;
+        }
+
+        string canonicalScenario = MockDubbingPipelineServices.CanonicalBenchmarkStage(scenario);
+        double? stageMilliseconds = SimulatedStageDelayTable
+            .Where(stage => MockDubbingPipelineServices.CanonicalBenchmarkStage(stage.Stage).Equals(
+                canonicalScenario, StringComparison.OrdinalIgnoreCase))
+            .Select(stage => (double?)stage.Milliseconds)
+            .FirstOrDefault();
+
+        // The mock service waits its 5 ms fallback for a stage with no configured delay,
+        // unscaled by provider, so the budget is flat there too.
+        return stageMilliseconds is double milliseconds ? milliseconds * multiplier : 5.0;
+    }
+
+    /// <summary>
+    /// The simulated latency budget recorded for <paramref name="provider"/>, or
+    /// <see langword="null"/> when no budget map was supplied or none of its entries names the
+    /// provider. Budgets are keyed by the names the caller configured, which need not spell a
+    /// provider the way the compared statistics do (<c>dml</c> against <c>directml</c>), so an
+    /// exact match is tried before a normalized one — the same tolerance the baseline lookup uses.
+    /// </summary>
+    private static double? LookupSimulatedLatencyBudget(
+        string provider, IReadOnlyDictionary<string, double>? simulatedLatencyBudgets)
+    {
+        if (simulatedLatencyBudgets is null)
+        {
+            return null;
+        }
+
+        if (simulatedLatencyBudgets.TryGetValue(provider, out double exact))
+        {
+            return exact;
+        }
+
+        string normalized = BenchmarkComparison.NormalizeProvider(provider);
+        foreach ((string candidate, double budget) in simulatedLatencyBudgets)
+        {
+            if (BenchmarkComparison.NormalizeProvider(candidate).Equals(
+                    normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                return budget;
+            }
+        }
+
+        return null;
     }
 
     public void Dispose()

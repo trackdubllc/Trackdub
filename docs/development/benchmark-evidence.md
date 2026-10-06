@@ -10,7 +10,11 @@ dotnet run --project src/Trackdub.Benchmarks.DevHost -c Release -f net10.0-windo
 
 `--reuse-engine-cache` distinguishes a new process with a compatible existing engine cache from the default new isolated engine cache. `--mode warm-host` times a rerun after warmup in one host. `--mode artifact-resume` primes artifacts, then times a resume attempt. A resume can legitimately skip with `EXISTING_ARTIFACTS_VALID`; that is not a speed sample. `--stage` may be omitted to attempt the full dubbing pipeline. Stage values come from `DubbingPipelineStages.ExtendedStageOrder`, such as `asr` and `audio-preparation`.
 
-Reports record UTC endpoints and monotonic durations, stage status and reason, persisted actual model/provider, fixture hash, runtime versions, process memory, and available phase spans. Null means unavailable. First transcript and audio timings require a usable transcript or playable take, respectively. GPU memory remains null without a reliable probe. Reports contain no transcript, media, or absolute source path. Project histories remain intact; only automatic observation history is bounded to 90 days or 5,000 records.
+Reports record UTC endpoints and monotonic durations, stage status and reason, persisted actual model/provider, fixture hash, runtime versions, process memory, and available phase spans. Null means unavailable. First transcript and audio timings require a usable transcript or playable take, respectively. Reports contain no transcript, media, or absolute source path. Project histories remain intact; only automatic observation history is bounded to 90 days or 5,000 records.
+
+Resource telemetry distinguishes two GPU readings that are not interchangeable. `availableVramMb` is adapter-wide free headroom from DXGI `QueryVideoMemoryInfo`, so it moves with every other process on the same GPU and detects memory pressure rather than attributing bytes. `gpuBytes` is this process's own dedicated GPU memory, read on Windows from the per-process `GPU Process Memory` performance counter set; it is process-isolated, so a stage's GPU cost can be attributed to that stage. Either reading is null when the platform or driver cannot report it, and `--max-gpu-bytes` bounds `gpuBytes` as an inclusive maximum over the stage's start and end readings and its interval-sampled peak, so a transient spike that drains before the end reading still fails the bound. Sampling runs on a finite cadence, so excursions shorter than the interval can still be missed. A `--min-available-vram-mb` floor above the sampled adapter's local-segment video memory (dedicated VRAM on a discrete GPU; dedicated plus shared on an integrated GPU, whose local segment spans shared system memory) can never be met by any run, so it is rejected during host setup — before any iteration is measured — instead of being accepted and reported afterwards; a host whose capacity cannot be enumerated skips that check rather than guessing. The process reading is also wired into the shared ONNX session pool: on Windows the host registers it with the pool, which floors each accelerator device's admitted usage at the process's real dedicated footprint, so GPU memory the pool never reserved still consumes the same per-device budget. Set `TRACKDUB_SESSION_PROCESS_GPU_ADMISSION=0` to opt out; see [session-pool memory admission](../reference/session-pool-memory-admission.md).
+
+`controlled` and `controlled-matrix` print a host-capacity banner before the first iteration: the detected devices with the memory each reports, the video memory detected across the GPU adapters, and the effective capacity the pre-flight compares a `--min-available-vram-mb` floor against, followed by that floor's feasibility. The banner derives the effective capacity the same way as the pre-flight, but it enumerates through its own factory instance while the pre-flight uses the host's container, so the two observe the host independently; either way it is diagnostic only — a host it cannot enumerate leaves the capacity unknown and never changes the run's outcome. The `controlled` resource options also grew `--max-gpu-bytes` (see `ResourceTelemetryOptionsParser.Usage`).
 
 ## Stage-focused matrix
 
@@ -44,6 +48,27 @@ gate via `scripts/ci/check_controlled_matrix_cpu_budget.py`. It enforces the
 normalized CPU limit of 95% per measured stage sample and verifies the typed
 report contains all expected iterations; it does not require models, GPUs, or
 machine-local fixtures.
+
+A mock provider matrix (`matrix <fixture> --output <dir> --mock --providers cpu,directml,tensorrt`)
+simulates a fixed per-provider latency rather than measuring one: each canonical
+stage waits a base delay scaled by the provider's multiplier — 1.0 for CPU, 0.6 for
+OpenVINO, 0.5 for DirectML, 0.25 for TensorRT — so the comparison a mock run
+demonstrates is a 2x DirectML and 4x TensorRT speedup over the CPU baseline. The
+measured ratios the report computes are not that contract: a mock run's own fixed
+cost (host setup, telemetry sampling, the simulated allocations) is of the same
+order as the simulated gap, so a provider's measured percentile can even invert the
+order the simulation intended. A non-dry mock run is therefore the deterministic
+mode: each comparison row in `execution-provider-matrix.json` also carries
+`SimulatedLatencyBudgetMilliseconds`, the total simulated stage latency that
+provider was configured to wait (1000 ms for CPU, 500 for DirectML, 250 for
+TensorRT), and the markdown export lists the same budgets beneath the table.
+Dividing the baseline row's budget by another row's gives the speedup the
+simulation demonstrates, and a measured percentile cannot fall below its own
+budget, so the contract is assertable from the report itself. A dry run waits no
+simulated delay and a real run simulates nothing, so neither reports a budget, and
+the field is omitted from JSON when absent so real reports keep their shape.
+Latency-to-ratio arithmetic remains covered by the pure comparison tests; real
+runs measure real execution, and their ratios are exactly what the report states.
 
 ## Baseline fixture set, 2026-09-23
 

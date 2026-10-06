@@ -24,3 +24,52 @@ default. The accelerator limit can be adjusted independently with
 `TRACKDUB_SESSION_VRAM_BUDGET_MB`; it applies per device. Raising either limit permits more
 resident sessions and can increase memory pressure or cause the operating system to terminate
 the process if the actual workload exceeds physical memory.
+
+## Process-isolated GPU observation
+
+Reservations are estimates. On Windows the shared pool also accounts for this process's *actual*
+dedicated GPU memory: the host registers the process-isolated reading (`gpuBytes`, summed from the
+process's `GPU Process Memory` performance-counter instances) as the pool's observation source, and
+every accelerator admission decision then floors that device's admitted usage at the process's real
+dedicated footprint. GPU memory the pool never reserved — driver contexts, runtime arenas,
+non-pooled consumers — consumes the same per-device budget instead of being invisible to
+admission.
+
+What the observation means in practice:
+
+- A process already at or above the accelerator budget admits no new accelerator session until its
+  real usage drains. Each observation-blocked pass evicts at most one idle entry and re-observes,
+  so evicted memory gets a chance to drain before more cache is discarded. Passes that free
+  nothing count toward a fail-fast: an empty bucket throws after ~5 s of continuous stall, while
+  a bucket holding live-but-unevictable entries (held leases, pins, live externals) gets ~60 s
+  for turnover before the same diagnostic fires — a lease held for a whole stage still ends in
+  an error, not a hang. The caller's cancellation token remains an escape hatch throughout,
+  exactly as for an exhausted reservation budget.
+- In-flight creates hold a pending reservation but have not allocated yet, so the process reading
+  cannot contain them: pending reservations are charged on top of the observed floor, keeping
+  concurrent admissions from overshooting the device budget.
+- When the reader attributes usage per adapter (Windows) and the host registered its
+  device-to-LUID map, each accelerator device is charged exactly its own adapter's footprint:
+  usage on other adapters never blocks it and no sibling subtraction is needed. Without a
+  breakdown or a mapping for the deciding GPU, the pool uses the full process total as an
+  upper bound. It never subtracts estimated sibling reservations from measured bytes: an
+  overestimate could otherwise hide real usage on the deciding GPU. This fallback can block
+  a free adapter while another adapter holds memory; admission remains bounded by the stall
+  limits above. Per-adapter attribution avoids that restriction when available.
+  Both `HeadlessDubbingHost` and SDK `TrackdubBuilder.Build` register this mapping from
+  `IDeviceEnumerator` during construction and release their own mapping on disposal without
+  clearing a newer host's registration.
+- Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) and OpenVINO NPU buckets are never
+  charged with dedicated GPU observations.
+- An unavailable reading — no GPU, a driver that does not publish the counter set, a GPU-idle
+  process, or a failing probe — leaves admission exactly as it was.
+
+Set `TRACKDUB_SESSION_PROCESS_GPU_ADMISSION` to `0`, `false`, `off`, or `disabled` to turn the
+observation off explicitly; anything else, including unset, keeps it on.
+
+```powershell
+$env:TRACKDUB_SESSION_PROCESS_GPU_ADMISSION = "0"
+```
+
+The process reading is reported as the `gpuBytes` evidence metric as well; that reporting is
+independent of admission. See [benchmark-evidence.md](../development/benchmark-evidence.md).

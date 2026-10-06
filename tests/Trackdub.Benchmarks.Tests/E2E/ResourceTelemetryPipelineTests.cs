@@ -29,6 +29,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         MaxWorkingSetBytes = 1000,
         MaxManagedAllocatedBytes = 10,
         MinAvailableVramMb = 500,
+        MaxGpuBytes = 4096,
     };
 
     private readonly string root = Path.Join(Path.GetTempPath(), $"trackdub-resource-e2e-{Guid.NewGuid():N}");
@@ -47,7 +48,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     public async Task Runner_emits_typed_passed_evidence_at_exact_inclusive_budgetsAsync()
     {
         var collector = new CounterCollector();
-        using var runner = CreateMockRunner(collector);
+        using var runner = CreateMockRunner(collector, gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options());
 
@@ -74,6 +75,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     [InlineData("workingSetBytes", 1000d, 999d)]
     [InlineData("managedAllocatedBytes", 10d, 9d)]
     [InlineData("availableVramMb", 500d, 501d)]
+    [InlineData("gpuBytes", 4096d, 4095d)]
     public async Task Each_metric_budget_can_fail_report_without_rewriting_successful_stageAsync(string metric, double observed, double bound)
     {
         // Usage budgets are inclusive maxima (breach above); the VRAM floor is an inclusive
@@ -83,6 +85,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             "cpuPercent" => ExactBounds with { MaxCpuPercent = bound },
             "workingSetBytes" => ExactBounds with { MaxWorkingSetBytes = (long)bound },
             "managedAllocatedBytes" => ExactBounds with { MaxManagedAllocatedBytes = (long)bound },
+            "gpuBytes" => ExactBounds with { MaxGpuBytes = (long)bound },
             _ => ExactBounds with { MinAvailableVramMb = (long)bound },
         };
         using var runner = CreateMockRunner(new CounterCollector());
@@ -143,7 +146,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     [Fact]
     public async Task Earlier_measured_outlier_fails_report_even_when_final_iteration_passesAsync()
     {
-        using var runner = CreateMockRunner(new CounterCollector(outlierPair: 0));
+        using var runner = CreateMockRunner(new CounterCollector(outlierPair: 0), gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options() with { RunCount = 3 });
 
@@ -185,7 +188,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             progress.Report(new(stage, PipelineProgressEventKind.Started));
             progress.Report(new(stage, PipelineProgressEventKind.Completed));
             return Result(stage, StageStatus.Succeeded);
-        });
+        }, gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options() with { Mock = false });
 
@@ -242,7 +245,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             string stage = Assert.Single(options.StageFilter!);
             progress!.Report(new(stage, PipelineProgressEventKind.Started));
             return Result(stage, StageStatus.Succeeded);
-        });
+        }, gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options() with { Mock = false });
 
@@ -286,7 +289,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     public async Task Preparation_outlier_is_retained_but_not_counted_as_measured_timingAsync(string mode, string phase)
     {
         // ASR prepares VAD and diarization first, then warms/primes ASR before two measured runs.
-        using var runner = CreateMockRunner(new CounterCollector(outlierPair: 2));
+        using var runner = CreateMockRunner(new CounterCollector(outlierPair: 2), gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options() with
         {
@@ -311,7 +314,8 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     [Fact]
     public async Task Matrix_writer_serializes_validation_and_raw_cpu_normalization_for_every_stageAsync()
     {
-        using var matrixRunner = new ControlledStageBenchmarkMatrixRunner(CreateMockRunner(new CounterCollector()));
+        using var matrixRunner = new ControlledStageBenchmarkMatrixRunner(
+            CreateMockRunner(new CounterCollector(), gpuMemoryReader: new FixedGpuMemoryReader(4096)));
         ControlledStageBenchmarkMatrixReport matrix = await matrixRunner.RunAsync(new()
         {
             FixturePath = Fixture,
@@ -553,7 +557,8 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         IResourceTelemetryCollector collector,
         Action<MockPipelineOptions>? configure = null,
         IBenchmarkEvidenceRepository? repository = null,
-        IWorkingSetSampler? workingSetSampler = null) => new(repository ?? history, services =>
+        IWorkingSetSampler? workingSetSampler = null,
+        IProcessGpuMemoryReader? gpuMemoryReader = null) => new(repository ?? history, services =>
     {
         MockDubbingPipelineServices.ConfigureMockPipeline(services, options =>
         {
@@ -565,14 +570,19 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         });
         services.AddSingleton<IResourceTelemetryCollector>(collector);
         services.AddSingleton<IWorkingSetSampler>(workingSetSampler ?? new FixedWorkingSetSampler(1000));
+        if (gpuMemoryReader is not null)
+            services.AddSingleton<IProcessGpuMemoryReader>(gpuMemoryReader);
     });
 
     private ControlledDubbingBenchmarkRunner CreateScriptedRunner(
         IResourceTelemetryCollector collector,
-        Func<DubbingSessionOptions, IProgress<PipelineProgressEvent>?, DubbingRunResult> execute) => new(history, services =>
+        Func<DubbingSessionOptions, IProgress<PipelineProgressEvent>?, DubbingRunResult> execute,
+        IProcessGpuMemoryReader? gpuMemoryReader = null) => new(history, services =>
     {
         services.AddSingleton<IResourceTelemetryCollector>(collector);
         services.AddSingleton<IWorkingSetSampler>(new FixedWorkingSetSampler(1000));
+        if (gpuMemoryReader is not null)
+            services.AddSingleton<IProcessGpuMemoryReader>(gpuMemoryReader);
         services.AddSingleton<IDubbingPipelineService>(new ScriptedPipeline(execute));
     });
 
@@ -610,11 +620,12 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         Assert.Equal(200d, validation.CpuTimeMilliseconds);
         Assert.Equal(100d, validation.ElapsedMilliseconds);
         Assert.Equal(4, validation.ProcessorCount);
-        Assert.Equal(4, validation.Checks.Count);
+        Assert.Equal(5, validation.Checks.Count);
         AssertCheck(validation, "cpuPercent", 50);
         AssertCheck(validation, "workingSetBytes", 1000);
         AssertCheck(validation, "managedAllocatedBytes", 10);
         AssertCheck(validation, "availableVramMb", 500);
+        AssertCheck(validation, "gpuBytes", 4096);
     }
 
     private static void AssertCheck(ResourceTelemetryValidation validation, string metric, double expected)
@@ -631,7 +642,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         Assert.Null(validation.CpuTimeMilliseconds);
         Assert.Null(validation.ElapsedMilliseconds);
         Assert.Null(validation.ProcessorCount);
-        Assert.Equal(4, validation.Checks.Count);
+        Assert.Equal(5, validation.Checks.Count);
         Assert.All(validation.Checks, check =>
         {
             Assert.Equal(status, check.Status);
@@ -666,6 +677,14 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         public long CaptureWorkingSetBytes() => workingSetBytes;
     }
 
+    /// <summary>Reports a constant process-GPU reading so interval peak sampling is real.</summary>
+    private sealed class FixedGpuMemoryReader(long bytes) : IProcessGpuMemoryReader
+    {
+        public string UnavailableReason => "Test double: fixed reading.";
+
+        public long? ReadDedicatedGpuMemoryBytes() => bytes;
+    }
+
     private sealed class MissingCollector : IResourceTelemetryCollector
     {
         public ResourceUsageSnapshot Capture() => new();
@@ -692,6 +711,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
                 ManagedAllocatedBytes = index * 10L,
                 AvailableVramMb = gpuUnavailableReason is null ? 500 : null,
                 VramUnavailableReason = gpuUnavailableReason,
+                GpuBytes = 4096,
             };
         }
     }
