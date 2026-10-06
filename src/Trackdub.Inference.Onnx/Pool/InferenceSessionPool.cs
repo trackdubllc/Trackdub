@@ -1280,20 +1280,18 @@ internal sealed class InferenceSessionPool : IDisposable
     /// When the reader attributes usage per adapter and the host mapped this device to its
     /// adapter LUID, the bucket is charged exactly its own adapter's footprint: usage on other
     /// adapters never blocks it, and sibling reservations are never subtracted twice. Otherwise
-    /// the counter set's process total is charged minus the sibling accelerator buckets' own
-    /// reservations — the conservative fallback that keeps multi-GPU pipelines from locking
-    /// themselves out. Host buckets are never charged: their sessions live in RAM, not on an
-    /// adapter.
+    /// the full process total is the conservative upper bound for the deciding GPU. Sibling
+    /// reservations are estimates, not measured allocations: subtracting them could hide real
+    /// usage on this adapter. Host and NPU buckets are never charged with GPU observations.
     /// </remarks>
     private long ObservedProcessGpuUsageMb(AdmissionBucket bucket, ProcessGpuObservation? observation)
     {
-        if (bucket.IsHost || observation is null)
+        if (bucket.IsHost || bucket.AcceleratorProvider is not null || observation is null)
         {
             return 0;
         }
 
-        if (bucket.AcceleratorProvider is null
-            && observation.ByAdapterLuidMb is not null
+        if (observation.ByAdapterLuidMb is not null
             && SharedPoolOptions.AdapterLuidMap is { } map
             && map.TryGetValue(bucket.DeviceId, out long adapterLuid))
         {
@@ -1301,24 +1299,7 @@ internal sealed class InferenceSessionPool : IDisposable
             return observation.ByAdapterLuidMb.TryGetValue(adapterLuid, out long deviceMb) ? deviceMb : 0;
         }
 
-        long committedElsewhereMb = 0;
-        foreach (SessionPoolKey key in entries.Keys)
-        {
-            if (BucketOf(key) is AdmissionBucket other && other != bucket && !other.IsHost)
-            {
-                committedElsewhereMb += ResolveReservationMb(key);
-            }
-        }
-
-        foreach (ExternalReservationState state in externalReservations.Values)
-        {
-            if (!state.Bucket.IsHost && state.Bucket != bucket)
-            {
-                committedElsewhereMb += state.EstimatedMemoryMb;
-            }
-        }
-
-        return Math.Max(0, observation.TotalMb - committedElsewhereMb);
+        return observation.TotalMb;
     }
 
     /// <summary>

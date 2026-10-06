@@ -976,35 +976,74 @@ public sealed class InferenceSessionPoolTests
         Assert.NotNull(lease.Session);
     }
 
-    [Fact]
-    public async Task ProcessGpuAdmission_SiblingDeviceReservationsAreSubtractedFromTheProcessTotal()
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    [InlineData(1, true)]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    public async Task ProcessGpuAdmission_UnattributedUsageCannotBeReducedBySiblingEstimates(
+        int attributionGap, bool externalSibling)
     {
-        // The counter set publishes one total for the process, summed across the adapters it
-        // touches. What device 1's own pool reservations explain must not be charged again to
-        // device 0, or a multi-GPU pipeline would lock itself out as sessions load.
-        var reader = new MutableProcessGpuMemoryReader(1024L * 1024 * 1024);
+        IProcessGpuMemoryReader reader = new StubProcessGpuMemoryReader(0);
         using var pool = new InferenceSessionPool(
             maxSessions: 8,
             memoryBudgetMb: 4096,
             hostMemoryBudgetMb: 4096,
             processGpuMemoryReader: () => reader);
 
-        using (await pool.GetLeaseAsync(
-                   AcceleratorKey("pg4a", 3000, deviceId: 1),
-                   _ => Task.FromResult(CreateMinimalSession()),
-                   CancellationToken.None))
+        using SessionLease? sibling = externalSibling ? null : await pool.GetLeaseAsync(
+            AcceleratorKey("pg4a", 3000, deviceId: 1),
+            _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        using ExternalMemoryReservation? external = externalSibling
+            ? await pool.ReserveExternalAsync(ExecutionProviderKind.DirectMl, 1, 3000, CancellationToken.None)
+            : null;
+
+        IReadOnlyDictionary<int, long>? previousMap = SharedPoolOptions.AdapterLuidMap;
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        SharedPoolOptions.UseAdapterLuidMap(attributionGap == 0 ? null
+            : attributionGap == 2 ? new Dictionary<int, long> { [1] = 200 }
+            : new Dictionary<int, long> { [0] = 100 });
+        InferenceSessionPool.ObservedBlockFailFastPasses = 1;
+        try
         {
+            // The sibling estimates 3000 MB but really holds 1024 MB; GPU 0 holds 3072 MB
+            // outside the pool. Subtracting the estimate from the 4096 MB process total
+            // would admit another 2048 MB on GPU 0 and hide the budget breach.
+            reader = new PerAdapterProcessGpuMemoryReader(4096L * 1024 * 1024,
+                attributionGap == 1 ? null : new Dictionary<long, long>
+                {
+                    [100] = 3072L * 1024 * 1024,
+                    [200] = 1024L * 1024 * 1024,
+                });
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            int factoryCalls = 0;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("pg4b", 2048, deviceId: 0),
+                _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); }, cts.Token));
+            Assert.Equal(0, factoryCalls);
         }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previousMap);
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+        }
+    }
 
-        // The process keeps GPU memory this pool never reserved (driver contexts, runtime arenas).
-        reader.Set(5000L * 1024 * 1024);
-
-        // 5000 observed − 3000 committed on device 1 = 2000 charged to device 0, so 256 MB fits.
+    [Fact]
+    public async Task ProcessGpuAdmission_ProcessTotalDoesNotBlockNpuAdmission()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8, memoryBudgetMb: 4096, hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => new StubProcessGpuMemoryReader(8192L * 1024 * 1024));
+        var key = new SessionPoolKey("eng", null, null, ExecutionProviderKind.OpenVino, "npu-gpu-floor", null, "default")
+        {
+            EstimatedVramMb = 256,
+        };
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using SessionLease lease = await pool.GetLeaseAsync(
-            AcceleratorKey("pg4b", 256, deviceId: 0),
-            _ => Task.FromResult(CreateMinimalSession()),
-            CancellationToken.None);
-
+            key, _ => Task.FromResult(CreateMinimalSession()), cts.Token);
         Assert.NotNull(lease.Session);
     }
 

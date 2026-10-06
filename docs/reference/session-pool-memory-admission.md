@@ -51,12 +51,16 @@ What the observation means in practice:
 - When the reader attributes usage per adapter (Windows) and the host registered its
   device-to-LUID map, each accelerator device is charged exactly its own adapter's footprint:
   usage on other adapters never blocks it and no sibling subtraction is needed. Without a
-  breakdown or a map, the pool falls back to the conservative process total minus the sibling
-  devices' reservations, so multi-GPU pipelines cannot lock themselves out.
+  breakdown or a mapping for the deciding GPU, the pool uses the full process total as an
+  upper bound. It never subtracts estimated sibling reservations from measured bytes: an
+  overestimate could otherwise hide real usage on the deciding GPU. This fallback can block
+  a free adapter while another adapter holds memory; admission remains bounded by the stall
+  limits above. Per-adapter attribution avoids that restriction when available.
   Both `HeadlessDubbingHost` and SDK `TrackdubBuilder.Build` register this mapping from
   `IDeviceEnumerator` during construction and release their own mapping on disposal without
   clearing a newer host's registration.
-- Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) are never charged with it.
+- Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) and OpenVINO NPU buckets are never
+  charged with dedicated GPU observations.
 - An unavailable reading — no GPU, a driver that does not publish the counter set, a GPU-idle
   process, or a failing probe — leaves admission exactly as it was.
 
