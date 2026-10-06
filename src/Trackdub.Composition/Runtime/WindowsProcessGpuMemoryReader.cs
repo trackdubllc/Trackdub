@@ -165,9 +165,20 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     /// </summary>
     private static string[] EnumerateProcessInstances()
     {
+        // PdhEnumObjectItemsW uses PDH's cached object list. Refresh it before every sizing
+        // call so instances created after the process warm-up (including this process's GPU
+        // instance) are visible.
+        uint objectListLength = 0;
+        uint status = NativeMethods.PdhEnumObjectsW(
+            null, null, nint.Zero, ref objectListLength, DetailWizard, true);
+        if (status is not (ErrorSuccess or MoreData))
+        {
+            return [];
+        }
+
         uint counterLength = 0;
         uint instanceLength = 0;
-        uint status = NativeMethods.PdhEnumObjectItemsW(
+        status = NativeMethods.PdhEnumObjectItemsW(
             null, null, CounterSetName,
             nint.Zero, ref counterLength,
             nint.Zero, ref instanceLength,
@@ -223,7 +234,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         int end = checked((int)characterCount);
         while (offset < end)
         {
-            string? value = Marshal.PtrToStringUni(buffer + (offset * sizeof(char)));
+            string? value = Marshal.PtrToStringUni(buffer + offset * sizeof(char));
             if (string.IsNullOrEmpty(value))
             {
                 yield break;
@@ -247,6 +258,11 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
 
         [DllImport("pdh.dll", ExactSpelling = true)]
         internal static extern uint PdhGetFormattedCounterValue(nint counter, uint format, out uint type, out PdhFmtCounterValue value);
+
+        [DllImport("pdh.dll", EntryPoint = "PdhEnumObjectsW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        internal static extern uint PdhEnumObjectsW(
+            string? dataSource, string? machineName, nint objectList, ref uint objectListLength,
+            uint detailLevel, [MarshalAs(UnmanagedType.Bool)] bool refresh);
 
         [DllImport("pdh.dll", EntryPoint = "PdhEnumObjectItemsW", CharSet = CharSet.Unicode, ExactSpelling = true)]
         internal static extern uint PdhEnumObjectItemsW(
