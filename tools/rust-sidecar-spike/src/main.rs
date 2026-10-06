@@ -50,14 +50,18 @@ fn main() -> anyhow::Result<()> {
                 })
             }
             "infer" => {
-                if session.is_none() && active_provider == "none" {
+                // Readiness keys ONLY on the loaded session: after any `load`
+                // the provider name is set while the session is still a stub,
+                // so gating on it would report "ready" with no model.
+                if session.is_none() {
                     serde_json::json!({ "id": id, "status": "error",
                         "reason": "no-model-loaded" })
                 } else {
-                    // Real code: build ort::value::Value inputs from
-                    // req["inputs"], session.run(...), base64 the PCM bytes.
+                    // Real code: decode each { dtype, shape, data } envelope
+                    // into ort::value::Value inputs, session.run(...), then
+                    // base64 the PCM bytes into the same envelope shape.
                     let _inputs: HashMap<String, serde_json::Value> = serde_json::from_value(
-                        req["inputs"].clone().unwrap_or_default(),
+                        req["inputs"].clone(),
                     )
                     .unwrap_or_default();
                     serde_json::json!({ "id": id, "status": "ok",
