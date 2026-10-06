@@ -829,8 +829,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             ["resourceScope"] = "Process-wide; includes concurrent work; excludes child processes.",
             ["cpuNormalization"] = "100 * delta CPU milliseconds / (monotonic elapsed milliseconds * processor count)",
             ["memorySampling"] = "Process working set sampled every 25 ms across each stage and the benchmark run; excursions shorter than the cadence may be missed. A sampler failure is reported as unavailable.",
-            ["workingSetPeakSampling"] = processWorkingSetPeak?.UnavailableReason
-                ?? "Sampled at a 25 ms cadence; excursions shorter than the cadence may be missed.",
+            ["workingSetPeakSampling"] = SamplingCaveat(processWorkingSetPeak),
             ["vramScope"] = "Adapter-wide free VRAM (budget minus current usage), not this process's allocation; moves with other processes on the same GPU.",
         };
         foreach (BenchmarkEvidenceStage measuredStage in stages)
@@ -841,6 +840,20 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
                 configuration[$"stage:{measuredStage.Name}:provider"] = measuredStage.ActualProvider;
         }
         return configuration;
+    }
+
+    private static string SamplingCaveat(IWorkingSetPeakMonitor? processWorkingSetPeak)
+    {
+        // The run-level monitor usually stops before this is read, so a dilation warning
+        // observed across setup, pipeline, and export is appended instead of staying silent.
+        string caveat = processWorkingSetPeak?.UnavailableReason
+            ?? "Sampled at a 25 ms cadence; excursions shorter than the cadence may be missed.";
+        if (processWorkingSetPeak?.SamplingWarning is string warning)
+        {
+            caveat += " " + warning;
+        }
+
+        return caveat;
     }
 
     private static Dictionary<string, string> CaptureRuntimeVersions() =>

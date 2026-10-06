@@ -11,6 +11,12 @@ internal interface IWorkingSetPeakMonitor
 {
     string? UnavailableReason { get; }
 
+    /// <summary>
+    /// Advisory warning when the sampling cadence dilated under load; null when ticks
+    /// stayed within cadence. Informational only: it never changes the peak result.
+    /// </summary>
+    string? SamplingWarning { get; }
+
     long? Stop();
 }
 

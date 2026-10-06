@@ -36,6 +36,43 @@ public sealed class WorkingSetPeakMonitorTests
             new WorkingSetPeakMonitor(new SequenceSampler(1), 1, TimeSpan.Zero));
     }
 
+    [Theory]
+    [InlineData(25, 30, false)]
+    [InlineData(25, 100, false)]
+    [InlineData(25, 101, true)]
+    [InlineData(5, 25, true)]
+    public void Dilation_warning_fires_only_beyond_four_times_cadence(
+        int intervalMs, int gapMs, bool expectedWarning)
+    {
+        string? warning = WorkingSetPeakMonitor.DescribeDilationWarning(
+            TimeSpan.FromMilliseconds(intervalMs), TimeSpan.FromMilliseconds(gapMs));
+
+        Assert.Equal(expectedWarning, warning is not null);
+        if (expectedWarning)
+        {
+            Assert.Contains("cadence", warning, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("may have been missed", warning, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task Sampling_measures_tick_gaps_and_reports_warning_consistentlyAsync()
+    {
+        var sampler = new SequenceSampler(100, 100, 100, 100);
+        var monitor = new WorkingSetPeakMonitor(sampler, 100, TimeSpan.FromMilliseconds(5));
+
+        // The sampler signals its second call, which runs after the first tick gap
+        // is already recorded, so this holds regardless of host load.
+        await sampler.SecondSample.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(100, monitor.Stop());
+
+        Assert.True(monitor.MaxObservedTickInterval > TimeSpan.Zero);
+        Assert.Equal(
+            WorkingSetPeakMonitor.DescribeDilationWarning(
+                TimeSpan.FromMilliseconds(5), monitor.MaxObservedTickInterval),
+            monitor.SamplingWarning);
+    }
+
     private sealed class SequenceSampler(params long[] values) : IWorkingSetSampler
     {
         private int index;
