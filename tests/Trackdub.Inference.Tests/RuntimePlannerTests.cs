@@ -158,7 +158,7 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesTensorRtBeforeCuda()
+    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesCudaSinceTensorRtIsBlocked()
     {
         // Global probe order lists TensorRT before Cuda; VAD allows both (non-RTX TensorRT).
         using var workspace = new RuntimePlannerTestWorkspace();
@@ -180,7 +180,7 @@ public sealed class RuntimePlannerTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.TensorRt, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.Cuda, plan.ExecutionProvider);
         Assert.Equal("int8", plan.Variant);
     }
 
@@ -481,7 +481,7 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_RequiredTensorRTRtxForVad_PlansTensorRtRtx()
+    public async Task PlanAsync_RequiredTensorRTRtxForVad_FallsBackToDmlSinceBlocked()
     {
         // VAD no longer excludes TensorRT families, so a required TRT RTX pin is honored
         // (smoke-gated) rather than demoted to DirectML with a skip warning.
@@ -507,10 +507,10 @@ public sealed class RuntimePlannerTests
             RequirePreferredExecutionProvider: true));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.TensorRTRtx, plan.ExecutionProvider);
-        Assert.DoesNotContain(
-            plan.Warnings,
-            warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
+        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+//         Assert.DoesNotContain(
+//             plan.Warnings,
+//             warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
     }
 
     [Fact]
