@@ -23,7 +23,7 @@ public sealed partial class BenchmarkEvidenceRepository(SqliteUserBenchmarkDatab
     public async Task SaveAsync(BenchmarkEvidenceReport report, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(report);
-        if (report.SchemaVersion != 2 || report.RunId == Guid.Empty)
+        if (report.SchemaVersion is not (1 or 2) || report.RunId == Guid.Empty)
         {
             throw new ArgumentException("Unsupported evidence schema or empty run id.", nameof(report));
         }

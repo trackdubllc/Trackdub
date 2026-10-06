@@ -110,7 +110,7 @@ public sealed class BenchmarkEvidenceRepositoryTests
     }
 
     [Fact]
-    public async Task Schema_v1_report_reads_from_disk_but_is_rejected_on_save()
+    public async Task Schema_v1_report_reads_from_disk_and_saves_back()
     {
         string root = NewRoot();
         try
@@ -132,9 +132,17 @@ public sealed class BenchmarkEvidenceRepositoryTests
             Assert.Equal(240.5, loaded.TimingsMilliseconds["pipeline"]);
             Assert.Equal("Asr", Assert.Single(loaded.Stages).Name);
 
-            // Saving it back is refused: only schema-v2 reports are accepted, so a v1 file must
-            // be re-exported through the current contract rather than silently rewritten.
-            await Assert.ThrowsAsync<ArgumentException>(() => repository.SaveAsync(loaded));
+            // Saving it back is accepted: schema-v1 evidence stays savable, and its version is
+            // preserved. The retired MemoryBytes map was already dropped on read, so it is not
+            // written back; everything the typed contract models round-trips.
+            await repository.SaveAsync(loaded);
+            BenchmarkEvidenceReport reloaded = Assert.IsType<BenchmarkEvidenceReport>(
+                await repository.GetAsync(runId));
+            Assert.Equal(1, reloaded.SchemaVersion);
+            Assert.Equal(240.5, reloaded.TimingsMilliseconds["pipeline"]);
+
+            // Versions outside the supported set are still refused.
+            await Assert.ThrowsAsync<ArgumentException>(() => repository.SaveAsync(loaded with { SchemaVersion = 3 }));
         }
         finally { Directory.Delete(root, recursive: true); }
     }
