@@ -27,6 +27,12 @@ internal sealed class WorkingSetPeakMonitor : IWorkingSetPeakMonitor
     private long maxTickGapTicks;
 
     public WorkingSetPeakMonitor(IWorkingSetSampler sampler, long? initialValue, TimeSpan? interval = null)
+        : this(sampler, initialValue, interval, ticker: null)
+    {
+    }
+
+    internal WorkingSetPeakMonitor(
+        IWorkingSetSampler sampler, long? initialValue, TimeSpan? interval, ISamplingTicker? ticker)
     {
         this.sampler = sampler ?? throw new ArgumentNullException(nameof(sampler));
         this.interval = interval ?? TimeSpan.FromMilliseconds(25);
@@ -42,7 +48,7 @@ internal sealed class WorkingSetPeakMonitor : IWorkingSetPeakMonitor
         }
 
         Capture();
-        samplingTask = SampleUntilStoppedAsync();
+        samplingTask = SampleUntilStoppedAsync(ticker ?? new PeriodicSamplingTicker(this.interval));
     }
 
     public string? UnavailableReason => Volatile.Read(ref unavailableReason);
@@ -96,9 +102,9 @@ internal sealed class WorkingSetPeakMonitor : IWorkingSetPeakMonitor
         }
     }
 
-    private async Task SampleUntilStoppedAsync()
+    private async Task SampleUntilStoppedAsync(ISamplingTicker ticker)
     {
-        using var timer = new PeriodicTimer(interval);
+        using var _ = ticker;
         long previousTick = Stopwatch.GetTimestamp();
         try
         {
