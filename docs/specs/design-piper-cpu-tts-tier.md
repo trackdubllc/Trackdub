@@ -28,6 +28,7 @@ This pitch does **not** assume either is a live problem. It proposes benchmarkin
 ## 3. Phase 0 — benchmark before design
 
 - **Kokoro RTF on target CPUs** (DubBench, reference low-end machine profile, fixed voice + sentence suite): if RTF is comfortably < 1 on the target class, the speed concern is closed and only the dependency-fragility concern can justify Phase 1.
+- **Kokoro intelligibility on target CPUs:** fixed sentence suite per voice, native-listener review — establishes whether the CPU tier is acceptably intelligible on the reference profile.
 - **Piper comparison:** run the same suite against piper on the same hardware so the trade (RTF vs naturalness) is quantified, not asserted.
 - **espeak-ng failure characterization:** what actually breaks in the field (missing `espeak-ng-data`, library ABI drift, distro packaging)? This determines whether a fallback tier or a hardening fix is the right response.
 
@@ -39,7 +40,7 @@ This pitch does **not** assume either is a live problem. It proposes benchmarkin
 | Kokoro RTF fine, fragility real | Prefer hardening Kokoro's espeak-ng path (bundle `espeak-ng-data`, tighten the health check); piper only if hardening fails |
 | Kokoro RTF unacceptable on target class | Phase 1: piper fallback tier |
 
-**Phase 0 initial results (constrained-CPU sandbox; full data in PR #386 comments):** 5 vCPU Intel Xeon 6985P-C @ 2.30 GHz, no GPU, 5.9 GB RAM. Kokoro-82M fp32 ONNX (CPU EP, voice `af_heart`): aggregate RTF **0.208** (short-segment 0.338, long-sentence 0.187), peak RSS 807 MB, load 0.81 s. Piper `en_US-lessac-medium`: aggregate RTF **0.028**, peak RSS 327 MB, load 0.78 s. Both engines phonemize via eSpeak-NG (Kokoro through `espeakng-loader`, piper embedded) — piper does **not** de-risk the espeak chain by substitution, only by self-contained packaging.
+**Phase 0 initial results (constrained-CPU sandbox; full data in PR #386 comments):** 5 vCPU Intel Xeon 6985P-C @ 2.30 GHz, no GPU, 5.9 GB RAM. Kokoro-82M fp32 ONNX (CPU EP, voice `af_heart`): aggregate RTF **0.208** (short-segment 0.338, long-sentence 0.187), peak RSS 807 MB, load 0.81 s. Piper `en_US-lessac-medium`: aggregate RTF **0.028**, peak RSS 327 MB, load 0.78 s. Both engines phonemize via eSpeak-NG (Kokoro through `EspeakNgPhonemizer`, piper embedded) — piper does **not** de-risk the espeak chain by substitution, only by self-contained packaging.
 
 Preliminary read: on this hardware class the matrix lands on **"Kokoro RTF fine; fragility is a packaging/health-check question, not an engine question"** → hardening over a second runtime. This is a server-class constrained environment, not a true low-end consumer laptop; the numbers must be re-validated on the actual target profile (2–4 core / ≤4 GB class) before closing.
 
@@ -53,7 +54,7 @@ Preliminary read: on this hardware class the matrix lands on **"Kokoro RTF fine;
 
 If piper's standalone binary packages its phonemizer data self-containedly (to be verified during Phase 0/1 investigation — per its README it embeds eSpeak-NG), it genuinely de-risks the fragility concern; if not, it inherits the same failure class and the case for it weakens to speed only.
 
-**Sidecar pattern:** managed child process, loopback-only, health-checked startup, deterministic shutdown — same pattern proposed for the llama.cpp tier in `design-llamacpp-cpu-text-tier.md`.
+**Sidecar pattern:** managed child process, loopback-only, health-checked startup, deterministic shutdown — same pattern used for the planned llama.cpp CPU tier sidecar.
 
 ## 5. Licensing and governance (blocking for Phase 1)
 
@@ -65,7 +66,7 @@ Per repo model governance (`AGENTS.md`: commercial-only, unknown license = unsaf
 
 ## 6. Execution plan
 
-1. **Phase 0 (the ask):** Kokoro vs piper benchmark on reference low-end hardware + espeak-ng failure characterization + piper packaging/license investigation (self-contained binary? embedded-data licensing?).
+1. **Phase 0 (the ask):** Kokoro vs piper benchmark and native-listener intelligibility review of Kokoro on reference low-end hardware + espeak-ng failure characterization + piper packaging/license investigation (self-contained binary? embedded-data licensing?).
 2. **Phase 1 (conditional):** `PiperTtsEngine` + planner wiring (TTS requirements entry, ranked below Kokoro) + voice manifest entries with verified licenses + readiness health checks mirroring the Kokoro espeak pattern.
 3. **Intelligibility gate:** fixed sentence suite per voice, native-listener review — sufficient for a fallback tier; plus DubBench RTF on the reference machine.
 
@@ -81,7 +82,7 @@ Per repo model governance (`AGENTS.md`: commercial-only, unknown license = unsaf
 
 ## 8. Open questions for review
 
-1. Reference low-end hardware profile(s) — same question as the llama.cpp spec; ideally one shared profile set.
+1. Reference low-end hardware profile(s) — ideally one shared profile set for the CPU tiers.
 2. Upstream piper standalone-binary support (no Python) — confirm feasibility with the project before Phase 1.
 3. Fallback trigger semantics in the planner: strict ranking (piper only when Kokoro NotReady) vs RTF-threshold demotion — decided after Phase 0 numbers.
 4. If espeak-ng fragility proves real but Kokoro RTF is fine: is bundling `espeak-ng-data` with Kokoro (hardening) the whole answer, making piper unnecessary?

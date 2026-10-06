@@ -33,6 +33,7 @@ public sealed record TtsEvalResult(
     double AudioSeconds,
     double? Rtf,
     long WorkingSetBeforeBytes,
+    long? WarmupPeakWorkingSetBytes,
     long? PeakWorkingSetBytes,
     string? RequestedProvider,
     string? SelectedProvider,
@@ -167,6 +168,16 @@ public static class TtsEvalRunner
                 throw new InvalidDataException(
                     $"Jobs line {lineNumber}: id, text, language_code and voice_id are required.");
             }
+            if (job.WarmupRuns is < 0)
+            {
+                throw new InvalidDataException(
+                    $"Jobs line {lineNumber}: warmup_runs must be non-negative.");
+            }
+            if (job.RepeatRuns is < 1)
+            {
+                throw new InvalidDataException(
+                    $"Jobs line {lineNumber}: repeat_runs must be a positive integer.");
+            }
             if (!ids.Add(job.Id))
             {
                 throw new InvalidDataException($"Jobs line {lineNumber}: duplicate id '{job.Id}'.");
@@ -218,14 +229,18 @@ public static class TtsEvalRunner
                 RequirePreferredExecutionProviders = pins is not null,
             });
             using IServiceScope scope = host.Services.CreateScope();
-            ITtsEngineAdapter? engine = scope.ServiceProvider
-                .GetServices<ITtsEngineAdapter>()
-                .FirstOrDefault(e => string.Equals(e.EngineFamily, KokoroTtsEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase));
-            if (engine is null)
+            if (!scope.ServiceProvider.GetServices<ITtsEngineAdapter>().Any(e =>
+                    string.Equals(e.EngineFamily, KokoroTtsEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase)))
             {
                 error.WriteLine("No Kokoro TTS engine is registered.");
                 return 1;
             }
+
+            // Route through the product's RoutedTtsEngine so the preferred model alias is a hard
+            // requirement (RequirePreferredModelAlias), matching the real dubbing path. The Kokoro
+            // adapter alone never forwards RequirePreferredModelAlias, so the planner could otherwise
+            // fall back to a different TTS entry and the row would measure the wrong model.
+            RoutedTtsEngine engine = scope.ServiceProvider.GetRequiredService<RoutedTtsEngine>();
             IReadOnlyList<TtsEvalResult> all = await RunJobsAsync(
                 jobs,
                 engine,
@@ -273,7 +288,7 @@ public static class TtsEvalRunner
 
     public static async Task<IReadOnlyList<TtsEvalResult>> RunJobsAsync(
         IReadOnlyList<TtsEvalJob> jobs,
-        ITtsEngineAdapter engine,
+        ITtsEngine engine,
         IWorkingSetSampler sampler,
         TtsEvalOptions options,
         TextWriter results,
@@ -301,12 +316,12 @@ public static class TtsEvalRunner
     private static async Task<TtsEvalResult> RunJobAsync(
         TtsEvalJob job,
         int index,
-        ITtsEngineAdapter engine,
+        ITtsEngine engine,
         IWorkingSetSampler sampler,
         TtsEvalOptions options,
         CancellationToken cancellationToken)
     {
-        long before = sampler.CaptureWorkingSetBytes();
+        WorkingSetPeakMonitor? warmupMonitor = null;
         WorkingSetPeakMonitor? monitor = null;
         var request = new TtsSynthesisRequest(
             job.Text,
@@ -315,12 +330,18 @@ public static class TtsEvalRunner
             Speed: job.Speed ?? 1.0f,
             Options: new InferenceRequestOptions(
                 PreferredModelAlias: options.Model,
+                RequirePreferredModelAlias: true,
                 PreferredExecutionProvider: options.Provider,
                 RequirePreferredExecutionProvider: options.Provider is not null));
         int warmupRuns = job.WarmupRuns ?? options.WarmupRuns;
         int repeatRuns = job.RepeatRuns ?? options.RepeatRuns;
+        long before = -1;
         try
         {
+            // The initial sample also captures the load phase (session creation + model load)
+            // when recorded before the warmup loop; a sampler failure must not abort the job.
+            before = CaptureWorkingSetBestEffort(sampler);
+            warmupMonitor = new WorkingSetPeakMonitor(sampler, before);
             double warmupMs = 0;
             TtsSynthesisResult warm = new(Array.Empty<byte>(), 0, 0, "", job.VoiceId, "");
             for (int run = 0; run < warmupRuns; run++)
@@ -330,6 +351,8 @@ public static class TtsEvalRunner
                 warmClock.Stop();
                 warmupMs = Math.Max(warmupMs, warmClock.Elapsed.TotalMilliseconds);
             }
+            long? warmupPeak = warmupMonitor.Stop();
+            warmupMonitor = null;
             monitor = new WorkingSetPeakMonitor(sampler, before);
             var walls = new List<double>(repeatRuns);
             TtsSynthesisResult synthesized = warm;
@@ -352,12 +375,13 @@ public static class TtsEvalRunner
                 job.Id, index, Ok: true, Error: null,
                 warmupMs, bestWallMs, meanWallMs, audioSeconds,
                 Rtf: audioSeconds > 0 ? bestWallMs / 1000.0 / audioSeconds : null,
-                before, peak,
+                before, warmupPeak, peak,
                 summary?.RequestedProvider, summary?.SelectedProvider, summary?.BootstrapDetail,
                 synthesized.ModelId, synthesized.VoiceId);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            warmupMonitor?.Stop();
             monitor?.Stop();
             throw;
         }
@@ -367,11 +391,26 @@ public static class TtsEvalRunner
             TimeoutException or JsonException or FileNotFoundException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException or
             System.ComponentModel.Win32Exception or System.Security.SecurityException)
         {
-            return CreateFailedResult(job, index, before, monitor, ex);
+            return CreateFailedResult(job, index, before, warmupMonitor, monitor, options.Provider, ex);
         }
         finally
         {
+            warmupMonitor?.Stop();
             monitor?.Stop();
+        }
+    }
+
+    private static long CaptureWorkingSetBestEffort(IWorkingSetSampler sampler)
+    {
+        try
+        {
+            return sampler.CaptureWorkingSetBytes();
+        }
+        catch (Exception exception) when (
+            exception is ObjectDisposedException or InvalidOperationException or NotSupportedException or
+            System.ComponentModel.Win32Exception or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return -1;
         }
     }
 
@@ -379,15 +418,18 @@ public static class TtsEvalRunner
         TtsEvalJob job,
         int index,
         long before,
+        WorkingSetPeakMonitor? warmupMonitor,
         WorkingSetPeakMonitor? monitor,
+        string? requestedProvider,
         Exception exception)
     {
+        long? warmupPeak = warmupMonitor?.Stop();
         long? peak = monitor?.Stop();
         return new TtsEvalResult(
             job.Id, index, Ok: false, Error: exception.Message,
             WarmupMs: 0, BestWallMs: 0, MeanWallMs: 0, AudioSeconds: 0, Rtf: null,
-            before, peak,
-            RequestedProvider: null, SelectedProvider: null, BootstrapDetail: null,
+            before, warmupPeak, peak,
+            RequestedProvider: requestedProvider, SelectedProvider: null, BootstrapDetail: null,
             ModelId: "", VoiceId: job.VoiceId);
     }
 
