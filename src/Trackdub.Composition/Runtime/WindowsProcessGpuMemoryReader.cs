@@ -32,9 +32,6 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     /// <summary>PDH_FMT_LARGE: return the counter as a 64-bit value rather than a double.</summary>
     private const uint FormatLarge = 0x0000_0100;
 
-    /// <summary>PERF_DETAIL_WIZARD: enumerate every instance, not just the default subset.</summary>
-    private const uint DetailWizard = 400;
-
     private const uint ErrorSuccess = 0;
     private const uint MoreData = 0x8000_07D2;
     private const uint ValidDataStatus = 0;
@@ -51,7 +48,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     /// Initializes the performance-counter subsystem, once per process.
     /// </summary>
     /// <remarks>
-    /// The subsystem initializes on this type's first PDH call: the enumeration below measured
+    /// The subsystem initializes on this type's first PDH call: the query below measured
     /// ~1300 ms on a cold Windows host and ~0.15 ms on every call after it. The cost is
     /// process-global, so it is paid through <see cref="Warmup"/> rather than per reader instance,
     /// and a host that measures stage timings should construct the reader while preparing (see
@@ -97,12 +94,6 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
 
     private static long? QueryDedicatedUsageBytes()
     {
-        string[] instances = EnumerateProcessInstances();
-        if (instances.Length == 0)
-        {
-            return null;
-        }
-
         if (NativeMethods.PdhOpenQueryW(null, 0, out nint query) != ErrorSuccess)
         {
             return null;
@@ -110,44 +101,57 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
 
         try
         {
-            var counters = new List<nint>(instances.Length);
-            foreach (string instance in instances)
-            {
-                // PdhAddEnglishCounter resolves the English name on any OS display language, so a
-                // localized Windows install still finds the counter set.
-                string path = $@"\{CounterSetName}({instance})\{DedicatedUsageCounterName}";
-                if (NativeMethods.PdhAddEnglishCounterW(query, path, 0, out nint counter) == ErrorSuccess)
-                {
-                    counters.Add(counter);
-                }
-            }
-
-            // These are instantaneous counters, so one collection is enough; only rate counters
-            // need a second sample to produce a value.
-            if (counters.Count == 0 || NativeMethods.PdhCollectQueryData(query) != ErrorSuccess)
+            // The English API accepts this wildcard path on every display language and expands
+            // instances when the array is formatted. This avoids both localized object names and
+            // the stale instance list retained by PdhEnumObjectItemsW after warm-up.
+            string path = $@"\{CounterSetName}(pid_{Environment.ProcessId}_*)\{DedicatedUsageCounterName}";
+            if (NativeMethods.PdhAddEnglishCounterW(query, path, 0, out nint counter) != ErrorSuccess ||
+                NativeMethods.PdhCollectQueryData(query) != ErrorSuccess)
             {
                 return null;
             }
 
-            long total = 0;
-            int readings = 0;
-            foreach (nint counter in counters)
+            uint bufferSize = 0;
+            uint itemCount = 0;
+            uint status = NativeMethods.PdhGetFormattedCounterArrayW(
+                counter, FormatLarge, ref bufferSize, ref itemCount, nint.Zero);
+            if (status != MoreData || bufferSize == 0 || itemCount == 0)
             {
-                if (NativeMethods.PdhGetFormattedCounterValue(counter, FormatLarge, out _, out PdhFmtCounterValue value) != ErrorSuccess)
-                {
-                    continue;
-                }
-
-                if (value.Status is not (ValidDataStatus or NewDataStatus) || value.LargeValue < 0)
-                {
-                    continue;
-                }
-
-                total = checked(total + value.LargeValue);
-                readings++;
+                return null;
             }
 
-            return readings == 0 ? null : total;
+            nint buffer = Marshal.AllocHGlobal(checked((int)bufferSize));
+            try
+            {
+                status = NativeMethods.PdhGetFormattedCounterArrayW(
+                    counter, FormatLarge, ref bufferSize, ref itemCount, buffer);
+                if (status != ErrorSuccess)
+                {
+                    return null;
+                }
+
+                long total = 0;
+                int readings = 0;
+                int stride = Marshal.SizeOf<PdhFmtCounterValueItem>();
+                for (uint index = 0; index < itemCount; index++)
+                {
+                    PdhFmtCounterValueItem item = Marshal.PtrToStructure<PdhFmtCounterValueItem>(
+                        buffer + (nint)(index * (uint)stride));
+                    if (item.Value.Status is not (ValidDataStatus or NewDataStatus) || item.Value.LargeValue < 0)
+                    {
+                        continue;
+                    }
+
+                    total = checked(total + item.Value.LargeValue);
+                    readings++;
+                }
+
+                return readings == 0 ? null : total;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
         }
         catch (OverflowException)
         {
@@ -156,81 +160,6 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         finally
         {
             _ = NativeMethods.PdhCloseQuery(query);
-        }
-    }
-
-    /// <summary>
-    /// Instance names of the counter set that belong to the current process. Returns an empty
-    /// array when the counter set does not exist, which is the normal no-GPU case.
-    /// </summary>
-    private static string[] EnumerateProcessInstances()
-    {
-        uint counterLength = 0;
-        uint instanceLength = 0;
-        uint status = NativeMethods.PdhEnumObjectItemsW(
-            null, null, CounterSetName,
-            nint.Zero, ref counterLength,
-            nint.Zero, ref instanceLength,
-            DetailWizard, 0);
-        if (status != MoreData || counterLength == 0 || instanceLength == 0)
-        {
-            return [];
-        }
-
-        // Both lists must have room for their reported sizes. Handing PDH a null buffer while its
-        // length is the nonzero size from the sizing call fails with PDH_INVALID_ARGUMENT, so the
-        // second call sizes both lists rather than repeating the null-buffer probe for one of them.
-        nint counterBuffer = Marshal.AllocHGlobal(checked((int)counterLength * sizeof(char)));
-        nint instanceBuffer = Marshal.AllocHGlobal(checked((int)instanceLength * sizeof(char)));
-        try
-        {
-            uint counterCapacity = counterLength;
-            uint instanceCapacity = instanceLength;
-            status = NativeMethods.PdhEnumObjectItemsW(
-                null, null, CounterSetName,
-                counterBuffer, ref counterCapacity,
-                instanceBuffer, ref instanceCapacity,
-                DetailWizard, 0);
-            if (status != ErrorSuccess)
-            {
-                return [];
-            }
-
-            string prefix = $"pid_{Environment.ProcessId}_";
-            var matches = new List<string>();
-            foreach (string instance in ReadMultiString(instanceBuffer, instanceCapacity))
-            {
-                // The trailing underscore keeps pid_123_ from matching pid_1234_....
-                if (instance.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    matches.Add(instance);
-                }
-            }
-
-            return matches.ToArray();
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(instanceBuffer);
-            Marshal.FreeHGlobal(counterBuffer);
-        }
-    }
-
-    /// <summary>Walks a double-null-terminated MULTI_SZ buffer produced by PDH.</summary>
-    private static IEnumerable<string> ReadMultiString(nint buffer, uint characterCount)
-    {
-        int offset = 0;
-        int end = checked((int)characterCount);
-        while (offset < end)
-        {
-            string? value = Marshal.PtrToStringUni(buffer + offset * sizeof(char));
-            if (string.IsNullOrEmpty(value))
-            {
-                yield break;
-            }
-
-            yield return value;
-            offset += value.Length + 1;
         }
     }
 
@@ -245,15 +174,9 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         [DllImport("pdh.dll", ExactSpelling = true)]
         internal static extern uint PdhCollectQueryData(nint query);
 
-        [DllImport("pdh.dll", ExactSpelling = true)]
-        internal static extern uint PdhGetFormattedCounterValue(nint counter, uint format, out uint type, out PdhFmtCounterValue value);
-
-        [DllImport("pdh.dll", EntryPoint = "PdhEnumObjectItemsW", CharSet = CharSet.Unicode, ExactSpelling = true)]
-        internal static extern uint PdhEnumObjectItemsW(
-            string? dataSource, string? machineName, string objectName,
-            nint counterList, ref uint counterListLength,
-            nint instanceList, ref uint instanceListLength,
-            uint detailLevel, uint flags);
+        [DllImport("pdh.dll", EntryPoint = "PdhGetFormattedCounterArrayW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        internal static extern uint PdhGetFormattedCounterArrayW(
+            nint counter, uint format, ref uint bufferSize, ref uint itemCount, nint buffer);
 
         [DllImport("pdh.dll", ExactSpelling = true)]
         internal static extern uint PdhCloseQuery(nint query);
@@ -268,5 +191,12 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     {
         public uint Status;
         public long LargeValue;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PdhFmtCounterValueItem
+    {
+        public nint Name;
+        public PdhFmtCounterValue Value;
     }
 }
