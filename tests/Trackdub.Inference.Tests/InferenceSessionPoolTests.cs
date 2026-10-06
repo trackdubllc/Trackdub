@@ -1516,7 +1516,6 @@ public sealed class InferenceSessionPoolTests
         public string UnavailableReason => "Test double: no reading configured.";
 
         public long? ReadDedicatedGpuMemoryBytes() => bytes;
-
     }
 
     /// <summary>Stand-in whose reading follows the host's real usage over time.</summary>
