@@ -140,6 +140,7 @@ public sealed class WorkingSetPeakMonitorTests
     private sealed class ScriptedTicker(IEnumerable<TimeSpan> script) : ISamplingTicker
     {
         private readonly Queue<TimeSpan> delays = new(script);
+        private long scriptedTicks;
 
         public async ValueTask<bool> WaitForNextTickAsync(CancellationToken cancellationToken)
         {
@@ -149,9 +150,13 @@ public sealed class WorkingSetPeakMonitorTests
                 return false;
             }
 
-            await Task.Delay(delays.Dequeue(), cancellationToken).ConfigureAwait(false);
+            TimeSpan delay = delays.Dequeue();
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            scriptedTicks += delay.Ticks;
             return true;
         }
+
+        public long LastTickTimestamp => scriptedTicks;
 
         public void Dispose()
         {

@@ -9,6 +9,13 @@ namespace Trackdub.Benchmarks;
 internal interface ISamplingTicker : IDisposable
 {
     ValueTask<bool> WaitForNextTickAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Timestamp of the last tick returned by <see cref="WaitForNextTickAsync"/>.
+    /// The monitor uses this instead of <see cref="System.Diagnostics.Stopwatch"/> so
+    /// scripted tick gaps are measured as scripted, not as wall-clock.
+    /// </summary>
+    long LastTickTimestamp { get; }
 }
 
 internal sealed class PeriodicSamplingTicker : ISamplingTicker
@@ -19,6 +26,8 @@ internal sealed class PeriodicSamplingTicker : ISamplingTicker
 
     public ValueTask<bool> WaitForNextTickAsync(CancellationToken cancellationToken) =>
         timer.WaitForNextTickAsync(cancellationToken);
+
+    public long LastTickTimestamp => System.Diagnostics.Stopwatch.GetTimestamp();
 
     public void Dispose() => timer.Dispose();
 }

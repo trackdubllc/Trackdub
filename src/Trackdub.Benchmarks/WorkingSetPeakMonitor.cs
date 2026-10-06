@@ -105,13 +105,13 @@ internal sealed class WorkingSetPeakMonitor : IWorkingSetPeakMonitor
     private async Task SampleUntilStoppedAsync(ISamplingTicker ticker)
     {
         using var _ = ticker;
-        long previousTick = Stopwatch.GetTimestamp();
+        long previousTick = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             while (await ticker.WaitForNextTickAsync(cancellation.Token).ConfigureAwait(false))
             {
-                long tick = Stopwatch.GetTimestamp();
-                RecordTickGap(Stopwatch.GetElapsedTime(previousTick, tick));
+                long tick = ticker.LastTickTimestamp;
+                RecordTickGap(System.Diagnostics.Stopwatch.GetElapsedTime(previousTick, tick));
                 previousTick = tick;
                 Capture();
             }
