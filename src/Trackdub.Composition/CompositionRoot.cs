@@ -805,17 +805,18 @@ public static class CompositionRoot
 #pragma warning restore CA1416
 #endif
         services.TryAddSingleton<IDeviceEnumerator>(sp =>
-            DeviceEnumeratorFactory.Create(
-                sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
-                sp.GetRequiredService<ILoggerFactory>(),
 #if LINUX
 #pragma warning disable CA1416 // Linux-only type resolved under LINUX compile constant
-                sp.GetRequiredService<ISysfsReader>()
+            DeviceEnumeratorFactory.CreateLinux(
+                sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
+                sp.GetRequiredService<ILoggerFactory>(),
+                sp.GetRequiredService<ISysfsReader>()));
 #pragma warning restore CA1416
 #else
-                sysfsReader: null
+            DeviceEnumeratorFactory.Create(
+                sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
+                sp.GetRequiredService<ILoggerFactory>()));
 #endif
-                ));
 
         // IExecutionProviderBootstrapper — platform-specific EP bootstrap logic, singleton.
         // Also calls OnnxExecutionSessionFactory.Initialize() so the static factory uses the

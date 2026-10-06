@@ -22,8 +22,7 @@ public static class DeviceEnumeratorFactory
 {
     public static IDeviceEnumerator Create(
         IOpenVinoAvailabilityProvider? openVinoAvailability = null,
-        ILoggerFactory? loggerFactory = null,
-        ISysfsReader? sysfsReader = null)
+        ILoggerFactory? loggerFactory = null)
     {
         openVinoAvailability ??= new NullOpenVinoAvailabilityProvider();
         loggerFactory ??= NullLoggerFactory.Instance;
@@ -38,10 +37,7 @@ public static class DeviceEnumeratorFactory
 #pragma warning restore CA1416
 #elif LINUX
 #pragma warning disable CA1416 // Linux-only type constructed under the LINUX compile constant
-        return new LinuxDeviceEnumerator(
-            openVinoAvailability,
-            sysfsReader ?? new PhysicalSysfsReader(),
-            loggerFactory.CreateLogger<LinuxDeviceEnumerator>());
+        return CreateLinux(openVinoAvailability, loggerFactory, new PhysicalSysfsReader());
 #pragma warning restore CA1416
 #else
         // Portable TFM with no platform define: mirror the composition root's CPU-only fallback so
@@ -49,4 +45,22 @@ public static class DeviceEnumeratorFactory
         return new CpuOnlyDeviceEnumerator();
 #endif
     }
+
+#if LINUX
+    /// <summary>
+    /// Linux enumerator over an explicit sysfs reader, so the composition root can hand in the
+    /// reader it registered. <c>ISysfsReader</c> is only compiled into Linux builds, hence the
+    /// guard instead of an optional parameter on <see cref="Create"/>.
+    /// </summary>
+#pragma warning disable CA1416 // Linux-only type constructed under the LINUX compile constant
+    internal static IDeviceEnumerator CreateLinux(
+        IOpenVinoAvailabilityProvider openVinoAvailability,
+        ILoggerFactory loggerFactory,
+        ISysfsReader sysfsReader) =>
+        new LinuxDeviceEnumerator(
+            openVinoAvailability,
+            sysfsReader,
+            loggerFactory.CreateLogger<LinuxDeviceEnumerator>());
+#pragma warning restore CA1416
+#endif
 }
