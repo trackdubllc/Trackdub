@@ -315,10 +315,12 @@ internal sealed class NvidiaAfxSession : IDisposable
             {
                 // A shorter far-end is zero-padded, a longer one ignored, as in Process.
                 Array.Clear(farChunk);
-                int farAvailable = (int)Math.Clamp(farEnd!.SampleFrameCount - position, 0, count);
+                IAudioSamples far = farEnd
+                    ?? throw new ArgumentNullException(nameof(farEnd), "This effect requires a far-end reference.");
+                int farAvailable = (int)Math.Clamp(far.SampleFrameCount - position, 0, count);
                 if (farAvailable > 0)
                 {
-                    farEnd.ReadMonoSamples(position, farChunk.AsSpan(0, farAvailable));
+                    far.ReadMonoSamples(position, farChunk.AsSpan(0, farAvailable));
                 }
             }
 
