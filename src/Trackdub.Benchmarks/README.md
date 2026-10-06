@@ -44,6 +44,15 @@ are not duplicated across call sites. Preserve them when extending the harness:
   each command keeps only its divergent arms (`--stage` vs `--stages`, `--model` shapes,
   `--report-dir`). Leaf bounds validation stays in `ResourceTelemetryOptionsParser`.
   Never re-open a bounds or shared-flag switch arm in an entry point.
+- **Error routing** — `SeparationEvalRunner` funnels setup and per-job failures through
+  single `catch (Exception) when (...)` filters. Caller-requested cancellation keeps its
+  dedicated rethrow arm ahead of the filter; unrequested cancellations are job failures.
+  Add new failure types to the filter list, not new catch blocks.
+- **Legacy memory map** — `MemoryBytes` keeps its exact keys for matrix comparisons,
+  exporters, and persisted reports, but it is assembled once in
+  `BuildLegacyMemoryBytes` from the typed records (stage medians, then process
+  readings, in historical key order). Never reintroduce incremental `memory[...]`
+  writes across methods.
 - **Telemetry exception filters** — `TelemetryExceptionFilters` names the swallowed
   exception sets for continuous working-set sampling, stage-boundary collection, and the
   process snapshot probe. These sets differ on purpose (a periodic sampler can observe

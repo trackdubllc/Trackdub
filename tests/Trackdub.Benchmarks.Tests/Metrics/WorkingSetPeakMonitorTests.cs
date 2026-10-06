@@ -81,10 +81,14 @@ public sealed class WorkingSetPeakMonitorTests
     [Fact]
     public async Task Sampling_stays_silent_when_scripted_ticks_hold_cadenceAsync()
     {
+        // A one-hour cadence puts the 4x threshold a universe away from millisecond
+        // scripted gaps: no host stall can cross it, so the null path through the real
+        // wiring is deterministic. (A tight cadence here would reintroduce the very
+        // load-sensitivity this machinery warns about.)
         var monitor = new WorkingSetPeakMonitor(
             new SequenceSampler(100, 100, 100, 100),
             100,
-            TimeSpan.FromMilliseconds(25),
+            TimeSpan.FromHours(1),
             new ScriptedTicker([
                 TimeSpan.FromMilliseconds(5),
                 TimeSpan.FromMilliseconds(5),
