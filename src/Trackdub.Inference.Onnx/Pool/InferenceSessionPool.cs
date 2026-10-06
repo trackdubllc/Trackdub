@@ -1269,7 +1269,12 @@ internal sealed class InferenceSessionPool : IDisposable
     /// </remarks>
     private long ObservedProcessGpuUsageMb(AdmissionBucket bucket, long? observedProcessGpuMb)
     {
-        if (bucket.IsHost || observedProcessGpuMb is not > 0)
+        // The "GPU Process Memory" counter reports dedicated GPU memory only. An OpenVINO NPU
+        // bucket lives in device-local NPU memory the counter never sees, so charging the GPU
+        // reading to it (or subtracting its reservations from a GPU bucket's total) cross-charges
+        // two unrelated memory pools. Host buckets are likewise never charged.
+        if (bucket.IsHost || bucket.AcceleratorProvider is ExecutionProviderKind.OpenVino
+            || observedProcessGpuMb is not > 0)
         {
             return 0;
         }
@@ -1277,7 +1282,8 @@ internal sealed class InferenceSessionPool : IDisposable
         long committedElsewhereMb = 0;
         foreach (SessionPoolKey key in entries.Keys)
         {
-            if (BucketOf(key) is AdmissionBucket other && other != bucket && !other.IsHost)
+            if (BucketOf(key) is AdmissionBucket other && other != bucket && !other.IsHost
+                && other.AcceleratorProvider is not ExecutionProviderKind.OpenVino)
             {
                 committedElsewhereMb += ResolveReservationMb(key);
             }
@@ -1285,7 +1291,8 @@ internal sealed class InferenceSessionPool : IDisposable
 
         foreach (ExternalReservationState state in externalReservations.Values)
         {
-            if (!state.Bucket.IsHost && state.Bucket != bucket)
+            if (!state.Bucket.IsHost && state.Bucket != bucket
+                && state.Bucket.AcceleratorProvider is not ExecutionProviderKind.OpenVino)
             {
                 committedElsewhereMb += state.EstimatedMemoryMb;
             }
