@@ -16,6 +16,9 @@
     <PackageReference Include="FsCheck.Xunit" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" Condition="'$(TargetFramework)' == 'net10.0'" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Managed" Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime"
+                      Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'"
+                      GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
@@ -75,7 +78,7 @@
       <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_GenAiNativeRid>
       <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">win-arm64</_GenAiNativeRid>
       <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$(_GenAiNativeRid)' == ''">win-x64</_GenAiNativeRid>
-      <_GenAiNativeDir>$(TargetDir)runtimes\$(_GenAiNativeRid)\native\</_GenAiNativeDir>
+      <_GenAiNativeDir>$(PkgMicrosoft_ML_OnnxRuntime)\runtimes\$(_GenAiNativeRid)\native\</_GenAiNativeDir>
     </PropertyGroup>
     <Copy SourceFiles="$(_GenAiNativeDir)onnxruntime.dll"
           DestinationFiles="$(TargetDir)onnxruntime.dll"
