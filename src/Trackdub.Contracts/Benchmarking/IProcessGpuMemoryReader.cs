@@ -28,9 +28,19 @@ public interface IProcessGpuMemoryReader
 {
     /// <summary>
     /// Dedicated GPU memory currently allocated by this process, in bytes, or null when this
-    /// platform or driver cannot report it.
+    /// platform or driver cannot report it. The total spans every adapter this process touches,
+    /// so it is the right reading for a process-wide bound but not for one device's budget.
     /// </summary>
     long? ReadDedicatedGpuMemoryBytes();
+
+    /// <summary>
+    /// Dedicated GPU memory this process holds on each graphics adapter, keyed by the adapter
+    /// index the host's device enumerator reports (DXGI enumeration order, software adapters
+    /// skipped), or null when per-adapter attribution is unavailable on this platform or driver —
+    /// callers then fall back to <see cref="ReadDedicatedGpuMemoryBytes"/>. An empty map means
+    /// the reading succeeded and this process holds nothing on any adapter.
+    /// </summary>
+    IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter();
 
     /// <summary>Why the reading is unavailable, surfaced verbatim in benchmark evidence.</summary>
     string UnavailableReason { get; }

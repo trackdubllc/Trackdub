@@ -10,5 +10,7 @@ public sealed class UnavailableProcessGpuMemoryReader : IProcessGpuMemoryReader
 {
     public long? ReadDedicatedGpuMemoryBytes() => null;
 
-    public string UnavailableReason => "No process GPU memory reader is registered for this host.";
+    public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
+
+    public string UnavailableReason => "No platform process GPU memory source is available for this host.";
 }

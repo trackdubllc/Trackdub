@@ -70,19 +70,21 @@ public sealed class ResourceBoundsPreflightTests
     // ── Capacity discovery ──────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Capacity_is_the_largest_adapter_dedicated_plus_shared_memory()
+    public async Task Capacity_is_the_telemetered_adapter_dedicated_video_memory()
     {
         using ServiceProvider provider = Provider(new StubDeviceEnumerator(
         [
             Device(DeviceKind.DiscreteGpu, dedicatedMb: 8192, sharedMb: 4096),
-            Device(DeviceKind.IntegratedGpu, dedicatedMb: 128, sharedMb: 8192),
+            Device(DeviceKind.IntegratedGpu, dedicatedMb: 128, sharedMb: 8192, index: 1),
             Device(DeviceKind.Npu, dedicatedMb: 50, sharedMb: 0),
             Device(DeviceKind.Cpu, dedicatedMb: 0, sharedMb: 0),
         ]));
 
-        // 8192 + 4096 wins over 128 + 8192; NPU and CPU entries carry no adapter memory.
+        // Free-VRAM telemetry samples adapter #0's DXGI LOCAL segment (≈ its dedicated memory), so
+        // that alone is the ceiling a floor can ever meet: the adapter's own shared pool and every
+        // other adapter's memory are outside the reading, and NPU/CPU entries report none at all.
         Assert.Equal(
-            12288L,
+            8192L,
             await ResourceBoundsPreflight.QueryTotalVideoMemoryMbAsync(provider, CancellationToken.None));
     }
 
@@ -175,7 +177,7 @@ public sealed class ResourceBoundsPreflightTests
             // The run is measured as usual (its own resource validation may still fail against
             // live readings — that is a measurement, not a rejected invocation).
             Assert.DoesNotContain(
-                "total video memory", report.Reason ?? string.Empty, StringComparison.Ordinal);
+                "--min-available-vram-mb 4096 exceeds", report.Reason ?? string.Empty, StringComparison.Ordinal);
             Assert.NotNull(report.TimingsMilliseconds["pipeline"]);
         }
         finally
@@ -200,8 +202,8 @@ public sealed class ResourceBoundsPreflightTests
     private static ServiceProvider Provider(IDeviceEnumerator enumerator) =>
         new ServiceCollection().AddSingleton(enumerator).BuildServiceProvider();
 
-    private static DeviceEntry Device(DeviceKind kind, int dedicatedMb, int sharedMb) =>
-        new(kind, 0, "Test Adapter", "Test Vendor", dedicatedMb, sharedMb, [ExecutionProviderKind.DirectMl]);
+    private static DeviceEntry Device(DeviceKind kind, int dedicatedMb, int sharedMb, int index = 0) =>
+        new(kind, index, "Test Adapter", "Test Vendor", dedicatedMb, sharedMb, [ExecutionProviderKind.DirectMl]);
 
     private sealed class StubDeviceEnumerator(IReadOnlyList<DeviceEntry>? devices) : IDeviceEnumerator
     {

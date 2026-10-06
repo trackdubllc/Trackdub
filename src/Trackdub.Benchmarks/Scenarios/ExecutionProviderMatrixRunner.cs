@@ -283,7 +283,7 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
             var budgets = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             foreach (string provider in options.Providers)
             {
-                budgets[provider] = SimulatedLatencyBudgetMilliseconds(provider);
+                budgets[provider] = SimulatedLatencyBudgetMilliseconds(provider, options.Scenario);
             }
 
             simulatedLatencyBudgets = budgets;
@@ -326,7 +326,7 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
     /// the simulated ratio: measured TensorRT routinely exceeds measured DirectML even though its
     /// simulated stages take half as long. Callers that need to state what a mock run guarantees
     /// should use <see cref="SimulatedSpeedupFactor"/> and
-    /// <see cref="SimulatedStageDelayMilliseconds"/> instead of the measured ratios.
+    /// <see cref="SimulatedLatencyBudgetMilliseconds"/> instead of the measured ratios.
     /// </remarks>
     internal static double SimulatedLatencyMultiplier(string provider)
     {
@@ -350,16 +350,44 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
         SimulatedLatencyMultiplier(baselineProvider) / SimulatedLatencyMultiplier(provider);
 
     /// <summary>
-    /// Total simulated stage latency, in milliseconds, a mock matrix run configures for
-    /// <paramref name="provider"/> (1000 ms at a multiplier of 1.0). Every simulated stage waits
-    /// at least its configured delay, so a completed mock pipeline's measured percentile cannot be
-    /// below this budget, and the ratio between two providers' budgets is the speedup the
-    /// simulation is built to demonstrate. Mock matrix runs carry it on each comparison row as
+    /// Simulated stage latency, in milliseconds, a mock matrix run configures for
+    /// <paramref name="provider"/> over the stages <paramref name="scenario"/> selects (1000 ms
+    /// for the full pipeline at a multiplier of 1.0). Every simulated stage the run executes
+    /// waits at least its configured delay, so a completed mock pipeline's measured percentile
+    /// cannot be below this budget, and the ratio between two providers' budgets is the speedup
+    /// the simulation is built to demonstrate. Mock matrix runs carry it on each comparison row as
     /// <see cref="ProviderComparisonMetrics.SimulatedLatencyBudgetMilliseconds"/>, so consumers can
     /// assert the contract from the report instead of from here.
     /// </summary>
-    internal static double SimulatedLatencyBudgetMilliseconds(string provider) =>
-        SimulatedStageDelayTable.Sum(stage => stage.Milliseconds) * SimulatedLatencyMultiplier(provider);
+    /// <param name="provider">The compared provider whose multiplier scales the delays.</param>
+    /// <param name="scenario">
+    /// The scenario identifier the run passes as the pipeline's stage filter — a single stage
+    /// (possibly an alias such as <c>asr</c> or <c>tts</c>) or <c>full-pipeline</c>. A single-stage
+    /// scenario only ever waits its own canonical stage's delay, so charging it the whole
+    /// pipeline's sum would report a budget no run of it measures against. Null or
+    /// <c>full-pipeline</c> budgets every stage, matching a run whose filter is unset.
+    /// </param>
+    internal static double SimulatedLatencyBudgetMilliseconds(string provider, string? scenario = null) =>
+        SimulatedStageDelayTable
+            .Where(stage => ScenarioSelectsStage(scenario, stage.Stage))
+            .Sum(stage => stage.Milliseconds) * SimulatedLatencyMultiplier(provider);
+
+    /// <summary>
+    /// Whether a run with <paramref name="scenario"/>'s stage filter executes
+    /// <paramref name="stage"/>: the same canonical-name comparison the mock pipeline applies, so
+    /// the budget and the waits a run actually performs cannot drift apart.
+    /// </summary>
+    private static bool ScenarioSelectsStage(string? scenario, string stage)
+    {
+        if (string.IsNullOrWhiteSpace(scenario) ||
+            scenario.Equals("full-pipeline", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return MockDubbingPipelineServices.CanonicalBenchmarkStage(scenario)
+            .Equals(MockDubbingPipelineServices.CanonicalBenchmarkStage(stage), StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// The simulated latency budget recorded for <paramref name="provider"/>, or

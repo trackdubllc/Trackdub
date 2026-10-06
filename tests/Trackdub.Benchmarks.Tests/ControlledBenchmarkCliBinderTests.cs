@@ -120,6 +120,26 @@ public sealed class ControlledBenchmarkCliBinderTests
         Assert.Contains("Missing value for --output", error.ToString(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("--mock")]              // the value was omitted: the next option followed
+    [InlineData("--runs")]
+    [InlineData("")]                    // empty token
+    [InlineData("\"\"")]                // quote-only token the shell failed to pair
+    [InlineData("''")]
+    public void Option_looking_or_empty_tokens_are_reported_as_missing_values(string nextToken)
+    {
+        // Swallowing these as the preceding option's value would silently configure the wrong
+        // path (e.g. OutputDirectory = "--mock") instead of failing the parse.
+        string[] args = ["fixture.wav", "--output", nextToken];
+        using var error = new StringWriter();
+        int index = 1;
+
+        Assert.False(ControlledBenchmarkCliBinder.TryReadValue(args, ref index, error, out string value));
+        Assert.Equal(string.Empty, value);
+        Assert.Equal(1, index);
+        Assert.Contains("Missing value for --output", error.ToString(), StringComparison.Ordinal);
+    }
+
     private static ControlledBenchmarkCliOptions ParseViaMatrix(string[] sharedArgs)
     {
         using var error = new StringWriter();

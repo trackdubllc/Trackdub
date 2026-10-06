@@ -169,12 +169,19 @@ public sealed class ProcessResourceTelemetryCollectorTests
     {
         public long? ReadDedicatedGpuMemoryBytes() => reading;
 
+        // Aggregate-only double: per-adapter attribution is unavailable, which is exactly the
+        // fallback shape the admission path must handle.
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
+
         public string UnavailableReason => "fixed";
     }
 
     private sealed class ThrowingGpuReader : IProcessGpuMemoryReader
     {
         public long? ReadDedicatedGpuMemoryBytes() => throw new InvalidOperationException("GPU process counters busy.");
+
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() =>
+            throw new InvalidOperationException("GPU process counters busy.");
 
         public string UnavailableReason => "never reached";
     }

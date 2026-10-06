@@ -53,24 +53,24 @@ public sealed class ResourceTelemetryRegistrationTests
     }
 
     [Fact]
-    public void Headless_binds_the_process_gpu_reader_to_shared_pool_admission()
+    public void Headless_host_startup_binds_the_process_gpu_reader_to_shared_pool_admission()
     {
         var services = new ServiceCollection();
         services.AddHeadlessTrackdub();
         using var provider = services.BuildServiceProvider();
 
-        // Creating the host's reader is what hands it to the shared session pool, so accelerator
-        // admission accounts for this process's real dedicated GPU footprint instead of only the
-        // pool's own reservations.
+        // Host construction — not telemetry-service resolution — is what hands the final reader
+        // registration to the shared session pool, so accelerator admission is armed before the
+        // first session even when nothing ever asks for the collector. This test deliberately
+        // never resolves IProcessGpuMemoryReader itself: it only builds the factory that every
+        // headless host path constructs (HeadlessDubbingHost and TrackdubBuilder →
+        // TrackdubSessionFactory), then verifies the pool picked up the container's reader.
+        _ = new HeadlessDubbingSessionFactory(provider);
+
         IProcessGpuMemoryReader reader = provider.GetRequiredService<IProcessGpuMemoryReader>();
         try
         {
-#if WINDOWS
             Assert.Same(reader, SharedPoolOptions.ProcessGpuMemoryReader);
-#else
-            // No platform reader here: the pool keeps its reservation-only model.
-            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
-#endif
         }
         finally
         {
