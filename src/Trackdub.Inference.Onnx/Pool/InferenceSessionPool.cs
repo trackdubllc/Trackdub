@@ -1440,6 +1440,7 @@ internal sealed class InferenceSessionPool : IDisposable
         try
         {
             int observedStallPasses = 0;
+            bool hadLiveEntries = false;
             while (true)
             {
                 ObjectDisposedException.ThrowIf(disposed, this);
@@ -1560,6 +1561,10 @@ internal sealed class InferenceSessionPool : IDisposable
                             externalReservations.TryRemove(candidate);
                             SignalBundleStateChanged();
                             anyEvicted = true;
+                            // Turnover through eviction is progress for the stall bound: the
+                            // freed memory needs a re-observe to drain, and a freshly-emptied
+                            // bucket must not inherit the busy phase's accumulated passes.
+                            observedStallPasses = 0;
                             break;
                         }
                     }
@@ -1578,6 +1583,18 @@ internal sealed class InferenceSessionPool : IDisposable
                     // longer busy bound since their turnover can still unblock the wait; an
                     // empty bucket fails on the shorter bound.
                     bool progressed = toDispose is { Count: > 0 };
+                    // Turnover that happens outside this loop — a live external released by its
+                    // owner, or the last live entry going idle without being evicted here — is
+                    // progress too: the busy bound existed to wait for it, so a live-to-empty
+                    // transition must not trip the empty-bucket fail-fast on the very next pass
+                    // before the freed memory has had a single re-observe to drain.
+                    bool hasLiveEntries = BucketHasLiveEntries(bucket);
+                    if (!hasLiveEntries && hadLiveEntries)
+                    {
+                        progressed = true;
+                    }
+
+                    hadLiveEntries = hasLiveEntries;
                     if (progressed)
                     {
                         observedStallPasses = 0;
@@ -1587,7 +1604,7 @@ internal sealed class InferenceSessionPool : IDisposable
                         observedStallPasses++;
                     }
 
-                    int stallBound = BucketHasLiveEntries(bucket)
+                    int stallBound = hasLiveEntries
                         ? ObservedBlockBusyFailFastPasses
                         : ObservedBlockFailFastPasses;
                     if (observedStallPasses >= stallBound)

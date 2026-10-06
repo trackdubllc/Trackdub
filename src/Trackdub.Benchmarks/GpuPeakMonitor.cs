@@ -17,6 +17,7 @@ internal sealed class GpuPeakMonitor
     private readonly object stopGate = new();
     private long peakBytes;
     private int hasSample;
+    private int realSamples;
     private int stopped;
     private string? unavailableReason;
 
@@ -60,6 +61,17 @@ internal sealed class GpuPeakMonitor
 
                 Capture(allowStopped: true);
                 cancellation.Dispose();
+
+                // A start-value seed is not interval evidence. When every real read was a gap
+                // (the reader could not report), the "peak" would just be the seeded endpoint
+                // value with no sampled coverage: surface that instead of labelling the
+                // endpoint-only result as a sampled peak.
+                if (Volatile.Read(ref unavailableReason) is null
+                    && Volatile.Read(ref hasSample) == 1
+                    && Volatile.Read(ref realSamples) == 0)
+                {
+                    Volatile.Write(ref unavailableReason, "No process-GPU interval sample was readable.");
+                }
             }
 
             return Volatile.Read(ref unavailableReason) is null && Volatile.Read(ref hasSample) == 1
@@ -102,6 +114,7 @@ internal sealed class GpuPeakMonitor
             }
 
             Interlocked.Exchange(ref hasSample, 1);
+            Interlocked.Increment(ref realSamples);
             long observed;
             do
             {
@@ -116,7 +129,11 @@ internal sealed class GpuPeakMonitor
                          NotSupportedException or
                          System.ComponentModel.Win32Exception or
                          UnauthorizedAccessException or
-                         System.Security.SecurityException)
+                         System.Security.SecurityException or
+                         // Native probes (PDH) surface an unusable host this way; the collector
+                         // degrades the same failures, and the monitor must not let them escape a
+                         // stage-start capture and fail the pipeline instead of telemetry.
+                         DllNotFoundException or EntryPointNotFoundException)
         {
             // Telemetry is best-effort: a plugin or OS failure must never change stage execution.
             Volatile.Write(ref unavailableReason,

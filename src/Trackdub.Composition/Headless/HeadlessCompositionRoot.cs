@@ -171,6 +171,50 @@ public static class HeadlessCompositionRoot
 
         return services;
     }
+
+    /// <summary>
+    /// Hands the container's process-GPU reader to the shared ONNX session pool so accelerator
+    /// admission accounts for this process's real dedicated GPU footprint (opt-out via
+    /// <c>TRACKDUB_SESSION_PROCESS_GPU_ADMISSION</c>). Every headless composition owner must call
+    /// this once the <see cref="IServiceProvider"/> is built — <see cref="HeadlessDubbingHost"/> and
+    /// the SDK's <c>TrackdubBuilder.Build</c> — or the advertised default-on admission silently
+    /// stays reservation-only for that path. Best-effort: a failing reader must never fail
+    /// composition. On platforms without a Windows reader the pool keeps its reservation-only
+    /// model and this returns null.
+    /// </summary>
+    /// <returns>The bound reader (null when there is nothing to bind).</returns>
+    public static IProcessGpuMemoryReader? BindSharedPoolProcessGpuAdmission(IServiceProvider services)
+    {
+        IProcessGpuMemoryReader? reader = null;
+#if WINDOWS
+        try
+        {
+            reader = services.GetService<IProcessGpuMemoryReader>();
+            if (reader is not null)
+            {
+                SharedPoolOptions.UseProcessGpuMemoryReader(reader);
+            }
+        }
+        catch
+        {
+            reader = null;
+        }
+#endif
+        return reader;
+    }
+
+    /// <summary>
+    /// Clears the shared pool's process-GPU reader binding only while it still refers to
+    /// <paramref name="reader"/>, so disposing one composition owner never tears down a newer
+    /// owner's registration. Safe to call with null.
+    /// </summary>
+    public static void ClearSharedPoolProcessGpuAdmission(IProcessGpuMemoryReader? reader)
+    {
+        if (reader is not null)
+        {
+            SharedPoolOptions.TryClearProcessGpuMemoryReader(reader);
+        }
+    }
 }
 
 /// <summary>

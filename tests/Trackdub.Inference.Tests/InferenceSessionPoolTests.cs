@@ -1235,6 +1235,62 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
+    public async Task ProcessGpuAdmission_ExternalTurnoverAfterBusyPasses_DoesNotTripEmptyBucketFailFast()
+    {
+        // The busy bound waits for live-but-unevictable entries to turn over. When that
+        // turnover happens (an idle external evicted through its callback), the stall counter
+        // must reset: otherwise the bucket empties, the bound drops to the short fail-fast,
+        // and a waiter parked through the busy phase throws before the freed memory has had a
+        // single re-observe to drain.
+        var reader = new MutableDrainGpuReader();
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        using ExternalMemoryReservation external = await pool.ReserveExternalAsync(
+            ExecutionProviderKind.DirectMl, null, 500, CancellationToken.None);
+        reader.Set(4096L * 1024 * 1024);
+
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        int previousBusyBound = InferenceSessionPool.ObservedBlockBusyFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 3;
+        InferenceSessionPool.ObservedBlockBusyFailFastPasses = 20;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            Task<ExternalMemoryReservation> waiter = pool.ReserveExternalAsync(
+                ExecutionProviderKind.DirectMl, null, 256, cts.Token);
+
+            // Busy passes accumulate past the short bound while the external stays live (no
+            // eviction callback yet): the reservations fit, the observation alone blocks.
+            await Task.Delay(TimeSpan.FromMilliseconds(400));
+
+            // Register the idle-eviction callback. The first pass that offers the external
+            // evicts it; the reading stays hot for two more reads, so the freshly-emptied
+            // bucket is still observation-blocked — the reset stall counter is what lets the
+            // waiter survive that pass and admit once the memory drains.
+            var evicted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Assert.True(external.TrySetIdleEvictionCallback(() =>
+            {
+                reader.ArmDrain(2);
+                evicted.TrySetResult();
+                return true;
+            }));
+
+            await evicted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            using ExternalMemoryReservation admitted = await waiter.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.NotNull(admitted);
+        }
+        finally
+        {
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+            InferenceSessionPool.ObservedBlockBusyFailFastPasses = previousBusyBound;
+        }
+    }
+
+    [Fact]
     public async Task ProcessGpuAdmission_MissingMapFallsBackToProcessTotal()
     {
         // Without a host LUID map the pool keeps the conservative process-total accounting:
@@ -1415,6 +1471,34 @@ public sealed class InferenceSessionPoolTests
 
         public long? ReadDedicatedGpuMemoryBytes() =>
             Interlocked.Increment(ref reads) <= hotReads ? hotBytes : 0;
+    }
+
+    /// <summary>
+    /// Stand-in whose reading stays hot until <see cref="ArmDrain"/> counts the remaining hot
+    /// reads, then reports 0 — models freed GPU memory that takes a couple of re-observes to
+    /// drain after an external is evicted.
+    /// </summary>
+    private sealed class MutableDrainGpuReader : IProcessGpuMemoryReader
+    {
+        private long current = -1;
+        private int hotReads = int.MaxValue;
+
+        public string UnavailableReason => "Test double: draining after armed reads.";
+
+        public void Set(long? value) => Volatile.Write(ref current, value ?? -1);
+
+        public void ArmDrain(int reads) => Volatile.Write(ref hotReads, reads);
+
+        public long? ReadDedicatedGpuMemoryBytes()
+        {
+            if (Interlocked.Decrement(ref hotReads) < 0)
+            {
+                return 0;
+            }
+
+            long value = Volatile.Read(ref current);
+            return value < 0 ? null : value;
+        }
     }
 
     private sealed class ThrowingProcessGpuMemoryReader : IProcessGpuMemoryReader

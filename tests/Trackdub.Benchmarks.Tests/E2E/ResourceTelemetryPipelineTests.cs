@@ -48,7 +48,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     public async Task Runner_emits_typed_passed_evidence_at_exact_inclusive_budgetsAsync()
     {
         var collector = new CounterCollector();
-        using var runner = CreateMockRunner(collector);
+        using var runner = CreateMockRunner(collector, gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options());
 
@@ -146,7 +146,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     [Fact]
     public async Task Earlier_measured_outlier_fails_report_even_when_final_iteration_passesAsync()
     {
-        using var runner = CreateMockRunner(new CounterCollector(outlierPair: 0));
+        using var runner = CreateMockRunner(new CounterCollector(outlierPair: 0), gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options() with { RunCount = 3 });
 
@@ -188,7 +188,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             progress.Report(new(stage, PipelineProgressEventKind.Started));
             progress.Report(new(stage, PipelineProgressEventKind.Completed));
             return Result(stage, StageStatus.Succeeded);
-        });
+        }, gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options() with { Mock = false });
 
@@ -245,7 +245,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             string stage = Assert.Single(options.StageFilter!);
             progress!.Report(new(stage, PipelineProgressEventKind.Started));
             return Result(stage, StageStatus.Succeeded);
-        });
+        }, gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options() with { Mock = false });
 
@@ -289,7 +289,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     public async Task Preparation_outlier_is_retained_but_not_counted_as_measured_timingAsync(string mode, string phase)
     {
         // ASR prepares VAD and diarization first, then warms/primes ASR before two measured runs.
-        using var runner = CreateMockRunner(new CounterCollector(outlierPair: 2));
+        using var runner = CreateMockRunner(new CounterCollector(outlierPair: 2), gpuMemoryReader: new FixedGpuMemoryReader(4096));
 
         BenchmarkEvidenceReport report = await runner.RunAsync(Options() with
         {
@@ -314,7 +314,8 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     [Fact]
     public async Task Matrix_writer_serializes_validation_and_raw_cpu_normalization_for_every_stageAsync()
     {
-        using var matrixRunner = new ControlledStageBenchmarkMatrixRunner(CreateMockRunner(new CounterCollector()));
+        using var matrixRunner = new ControlledStageBenchmarkMatrixRunner(
+            CreateMockRunner(new CounterCollector(), gpuMemoryReader: new FixedGpuMemoryReader(4096)));
         ControlledStageBenchmarkMatrixReport matrix = await matrixRunner.RunAsync(new()
         {
             FixturePath = Fixture,
@@ -556,7 +557,8 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         IResourceTelemetryCollector collector,
         Action<MockPipelineOptions>? configure = null,
         IBenchmarkEvidenceRepository? repository = null,
-        IWorkingSetSampler? workingSetSampler = null) => new(repository ?? history, services =>
+        IWorkingSetSampler? workingSetSampler = null,
+        IProcessGpuMemoryReader? gpuMemoryReader = null) => new(repository ?? history, services =>
     {
         MockDubbingPipelineServices.ConfigureMockPipeline(services, options =>
         {
@@ -568,14 +570,19 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         });
         services.AddSingleton<IResourceTelemetryCollector>(collector);
         services.AddSingleton<IWorkingSetSampler>(workingSetSampler ?? new FixedWorkingSetSampler(1000));
+        if (gpuMemoryReader is not null)
+            services.AddSingleton<IProcessGpuMemoryReader>(gpuMemoryReader);
     });
 
     private ControlledDubbingBenchmarkRunner CreateScriptedRunner(
         IResourceTelemetryCollector collector,
-        Func<DubbingSessionOptions, IProgress<PipelineProgressEvent>?, DubbingRunResult> execute) => new(history, services =>
+        Func<DubbingSessionOptions, IProgress<PipelineProgressEvent>?, DubbingRunResult> execute,
+        IProcessGpuMemoryReader? gpuMemoryReader = null) => new(history, services =>
     {
         services.AddSingleton<IResourceTelemetryCollector>(collector);
         services.AddSingleton<IWorkingSetSampler>(new FixedWorkingSetSampler(1000));
+        if (gpuMemoryReader is not null)
+            services.AddSingleton<IProcessGpuMemoryReader>(gpuMemoryReader);
         services.AddSingleton<IDubbingPipelineService>(new ScriptedPipeline(execute));
     });
 
@@ -668,6 +675,14 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     private sealed class FixedWorkingSetSampler(long workingSetBytes) : IWorkingSetSampler
     {
         public long CaptureWorkingSetBytes() => workingSetBytes;
+    }
+
+    /// <summary>Reports a constant process-GPU reading so interval peak sampling is real.</summary>
+    private sealed class FixedGpuMemoryReader(long bytes) : IProcessGpuMemoryReader
+    {
+        public string UnavailableReason => "Test double: fixed reading.";
+
+        public long? ReadDedicatedGpuMemoryBytes() => bytes;
     }
 
     private sealed class MissingCollector : IResourceTelemetryCollector
