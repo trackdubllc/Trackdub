@@ -1078,6 +1078,75 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
+    public async Task ProcessGpuAdmission_EvictedMemoryDrainingWhileWaiting_LetsAdmissionProceed()
+    {
+        // One idle session plus unexplained observed usage: the wait evicts at most one idle
+        // entry per pass and re-observes, so once the evicted memory drains the parked
+        // admission proceeds instead of failing fast.
+        var reader = new CountdownDrainingReader(8500L * 1024 * 1024, hotReads: 10);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 8192,
+            hostMemoryBudgetMb: 8192,
+            processGpuMemoryReader: () => reader);
+
+        SessionLease warm = await pool.GetLeaseAsync(
+            AcceleratorKey("drain0", 3000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        warm.Dispose();
+
+        int factoryCalls = 0;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("drain1", 3000),
+            _ => { Interlocked.Increment(ref factoryCalls); return Task.FromResult(CreateMinimalSession()); },
+            cts.Token);
+
+        Assert.NotNull(lease.Session);
+        Assert.Equal(1, Volatile.Read(ref factoryCalls));
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_LeasedEntriesKeepWaitingInsteadOfFailingFast()
+    {
+        // A held lease turns idle on release (then evictable), so its presence means the wait
+        // can still make progress: the stall bound must not fire while the bucket holds any
+        // pooled entry or external reservation.
+        var reader = new MutableProcessGpuMemoryReader(0);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        SessionLease held = await pool.GetLeaseAsync(
+            AcceleratorKey("leased0", 512), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        // Non-pooled GPU memory arrives while the lease is held: the reservation total fits,
+        // but the observation alone blocks the next admission.
+        reader.Set(4096L * 1024 * 1024);
+
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 3;
+        try
+        {
+            int factoryCalls = 0;
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("leased1", 256),
+                _ => { Interlocked.Increment(ref factoryCalls); return Task.FromResult(CreateMinimalSession()); },
+                cts.Token));
+
+            Assert.Equal(0, Volatile.Read(ref factoryCalls));
+        }
+        finally
+        {
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+        }
+
+        held.Dispose();
+    }
+
+    [Fact]
     public async Task ProcessGpuAdmission_UnfreeableObservation_FailsFastAfterEvictingIdleWork()
     {
         // When the observation alone blocks, each pass evicts at most one idle entry and
@@ -1223,6 +1292,17 @@ public sealed class InferenceSessionPoolTests
 
         public long? ReadDedicatedGpuMemoryBytes() =>
             Interlocked.Increment(ref reads) == 1 ? firstBytes : 0;
+    }
+
+    /// <summary>Reports a hot reading for a fixed number of reads, then drains.</summary>
+    private sealed class CountdownDrainingReader(long hotBytes, int hotReads) : IProcessGpuMemoryReader
+    {
+        private int reads;
+
+        public string UnavailableReason => "Test double: hot readings, then drained.";
+
+        public long? ReadDedicatedGpuMemoryBytes() =>
+            Interlocked.Increment(ref reads) <= hotReads ? hotBytes : 0;
     }
 
     private sealed class ThrowingProcessGpuMemoryReader : IProcessGpuMemoryReader

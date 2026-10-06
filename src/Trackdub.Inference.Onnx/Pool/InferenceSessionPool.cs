@@ -1325,6 +1325,32 @@ internal sealed class InferenceSessionPool : IDisposable
         pendingCreateMbByBucket.AddOrUpdate(bucket, 0, (_, existing) => Math.Max(0, existing - mb));
 
     /// <summary>
+    /// Whether <paramref name="bucket"/> holds any pooled session (idle or leased) or live
+    /// external reservation that could still turn over. A leased session becomes evictable on
+    /// release, so its presence means an observation-held wait can still make progress.
+    /// </summary>
+    private bool BucketHasLiveEntries(AdmissionBucket bucket)
+    {
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
+        {
+            if (BucketOf(pair.Key) == bucket)
+            {
+                return true;
+            }
+        }
+
+        foreach (ExternalReservationState state in externalReservations.Values)
+        {
+            if (state.Bucket == bucket)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Evicts idle sessions in <paramref name="bucket"/> until <paramref name="needMb"/> fits,
     /// then takes the pending reservation. Eviction is driven by reservations only: evicting a
     /// pooled entry cannot lower the process-GPU observation snapshot, so an observation-blocked
@@ -1515,14 +1541,20 @@ internal sealed class InferenceSessionPool : IDisposable
                     {
                         observedStallPasses = 0;
                     }
+                    else if (BucketHasLiveEntries(bucket))
+                    {
+                        // Leased sessions turn idle on release (then evictable), and live
+                        // external reservations may yet be freed, so waiting can still make
+                        // progress: don't count toward fail-fast while the bucket holds any
+                        // pooled entry or external reservation.
+                        observedStallPasses = 0;
+                    }
                     else
                     {
-                        // Nothing in this bucket can be freed to lower the reading: the
-                        // reservation total fits, and no idle work remains to evict. The
-                        // process's own non-pooled usage (device contexts, runtime arenas,
-                        // consumers outside the pool) may still drain, so keep waiting — but
-                        // bound the stall instead of parking until the caller cancels with no
-                        // diagnostic.
+                        // Nothing in this bucket can turn over to lower the reading: no pooled
+                        // entries and no external reservations remain, yet the process's own
+                        // non-pooled usage still blocks. Keep waiting a bounded stall instead
+                        // of parking until the caller cancels with no diagnostic.
                         observedStallPasses++;
                     }
 
