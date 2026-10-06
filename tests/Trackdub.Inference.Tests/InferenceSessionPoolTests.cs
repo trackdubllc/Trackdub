@@ -1240,8 +1240,8 @@ public sealed class InferenceSessionPoolTests
         // The breakdown is complete when present, so a mapped adapter with no entry holds nothing:
         // the first admission on a fresh second GPU must not be charged the other adapter's usage.
         var reader = new PerAdapterProcessGpuMemoryReader(
-            totalBytes: 3500L * 1024 * 1024,
-            byLuidBytes: new Dictionary<long, long> { [100] = 3500L * 1024 * 1024 });
+            totalBytes: 3900L * 1024 * 1024,
+            byLuidBytes: new Dictionary<long, long> { [100] = 3900L * 1024 * 1024 });
         using var pool = new InferenceSessionPool(
             maxSessions: 8,
             memoryBudgetMb: 4096,
