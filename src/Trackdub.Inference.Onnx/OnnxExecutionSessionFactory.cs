@@ -590,7 +590,7 @@ internal static class OnnxExecutionSessionFactory
                 additionalTrtEncoderOptions, additionalTrtDecoderOptions,
                 encoderLogId: ExtractLogId(encoderModelPath),
                 decoderLogId: ExtractLogId(decoderModelPath));
-            
+
             InferenceSession? encoderSession = null;
             InferenceSession? decoderSession = null;
             try
