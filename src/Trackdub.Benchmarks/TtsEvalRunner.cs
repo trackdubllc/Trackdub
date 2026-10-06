@@ -364,7 +364,7 @@ public static class TtsEvalRunner
         catch (Exception ex) when (
             ex is OperationCanceledException or IOException or UnauthorizedAccessException or
             ArgumentException or InvalidOperationException or NotSupportedException or
-            TimeoutException or JsonException or FileNotFoundException or
+            TimeoutException or JsonException or FileNotFoundException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException or
             System.ComponentModel.Win32Exception or System.Security.SecurityException)
         {
             return CreateFailedResult(job, index, before, monitor, ex);
