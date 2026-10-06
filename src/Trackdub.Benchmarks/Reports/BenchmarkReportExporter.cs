@@ -376,6 +376,21 @@ public static class BenchmarkReportExporter
                 $"| {comp.Provider} | {p50} | {speedup} | {latencyDelta} | {throughput} | {peakWsDelta} | {managedDelta} |");
         }
 
+        ProviderComparisonMetrics[] simulated = report.Comparisons
+            .Where(comparison => comparison.SimulatedLatencyBudgetMilliseconds is not null)
+            .ToArray();
+        if (simulated.Length > 0)
+        {
+            // Mock comparisons demonstrate the simulation's contract, not measured provider
+            // performance, and the table above cannot show that on its own.
+            sb.AppendLine();
+            sb.AppendLine("**Simulated latency budgets:** " + string.Join(", ", simulated.Select(
+                    comparison => string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{comparison.Provider} {comparison.SimulatedLatencyBudgetMilliseconds:0.###} ms")))
+                + " — this run used the mock pipeline, so the comparison demonstrates the simulation's contract rather than measured provider performance.");
+        }
+
         return sb.ToString();
     }
 

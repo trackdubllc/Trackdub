@@ -15,7 +15,8 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
         {
             throw new ArgumentOutOfRangeException(nameof(bounds), "CPU limit must be finite and nonnegative.");
         }
-        if (bounds.MaxWorkingSetBytes < 0 || bounds.MaxManagedAllocatedBytes < 0 || bounds.MinAvailableVramMb < 0)
+        if (bounds.MaxWorkingSetBytes < 0 || bounds.MaxManagedAllocatedBytes < 0 ||
+            bounds.MinAvailableVramMb < 0 || bounds.MaxGpuBytes < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(bounds), "Byte and VRAM limits must be nonnegative.");
         }
@@ -31,7 +32,19 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
             CheckBytes("managedAllocatedBytes", start?.ManagedAllocatedBytes, end?.ManagedAllocatedBytes,
                 bounds.MaxManagedAllocatedBytes, true, start?.MemoryUnavailableReason, end?.MemoryUnavailableReason),
             CheckMinimum("availableVramMb", end?.AvailableVramMb, bounds.MinAvailableVramMb,
-                end?.VramUnavailableReason)
+                end?.VramUnavailableReason),
+            // Process-isolated dedicated GPU memory: an endpoint maximum, unlike the adapter-wide
+            // free-VRAM floor above, so it attributes bytes to this run rather than to the GPU's
+            // remaining headroom (audit gap #1).
+            //
+            // A host that cannot report the reading is not a failure. Many benchmarks legitimately
+            // never touch the GPU (a CPU execution provider leaves no GPU Process Memory instance),
+            // so with no configured budget there is nothing to verify and the metric is recorded
+            // as Skipped instead of downgrading an otherwise verifiable stage. Once a budget is
+            // configured an unavailable reading is a genuine verification gap, so it degrades.
+            CheckBytes("gpuBytes", start?.GpuBytes, end?.GpuBytes, bounds.MaxGpuBytes, false,
+                start?.GpuUnavailableReason, end?.GpuUnavailableReason,
+                bounds.MaxGpuBytes is null ? ResourceTelemetryStatus.Skipped : ResourceTelemetryStatus.Unavailable)
         ];
         return new ResourceTelemetryValidation
         {
@@ -165,7 +178,8 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
 
     private static ResourceTelemetryCheck CheckBytes(
         string metric, long? start, long? end, long? maximum, bool cumulative,
-        string? startReason, string? endReason)
+        string? startReason, string? endReason,
+        ResourceTelemetryStatus unavailableStatus = ResourceTelemetryStatus.Unavailable)
     {
         if (start < 0 || end < 0)
         {
@@ -180,7 +194,7 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
                     "Available endpoint exceeds the configured upper bound; the other endpoint is unavailable.");
             }
             return Unavailable(metric, maximum, !start.HasValue ? startReason : endReason,
-                "Byte counter sample unavailable.");
+                "Byte counter sample unavailable.", unavailableStatus);
         }
         if (cumulative && end.Value < start.Value)
         {
@@ -233,6 +247,8 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
     private static ResourceTelemetryCheck Failed(string metric, double? maximum, string reason) =>
         new(metric, ResourceTelemetryStatus.Failed, null, maximum, reason);
 
-    private static ResourceTelemetryCheck Unavailable(string metric, double? maximum, string? reason, string fallback) =>
-        new(metric, ResourceTelemetryStatus.Unavailable, null, maximum, reason ?? fallback);
+    private static ResourceTelemetryCheck Unavailable(
+        string metric, double? maximum, string? reason, string fallback,
+        ResourceTelemetryStatus status = ResourceTelemetryStatus.Unavailable) =>
+        new(metric, status, null, maximum, reason ?? fallback);
 }

@@ -1,0 +1,37 @@
+namespace Trackdub.Contracts.Benchmarking;
+
+/// <summary>
+/// Reports dedicated GPU memory allocated by this process.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is process-isolated usage of the adapter's own memory, which is the attribution
+/// <see cref="IAvailableVramReader"/> cannot provide: DXGI's <c>QueryVideoMemoryInfo</c> reports
+/// adapter-wide budget minus usage, so its reading also moves with every other process on the
+/// same GPU. On Windows this reader instead uses the per-process "GPU Process Memory"
+/// performance counter set, whose instance names are keyed by process id.
+/// </para>
+/// <para>
+/// The two ports answer different questions and are not interchangeable: use this one to
+/// attribute bytes to a stage or to bound one process's footprint, and
+/// <see cref="IAvailableVramReader"/> to detect adapter-wide pressure. Returns null where the
+/// platform or driver cannot report it.
+/// </para>
+/// <para>
+/// A host can also make this reading drive the shared ONNX session pool's accelerator admission
+/// instead of only reporting it, so GPU memory this process holds outside the pool's own
+/// reservations consumes the same per-device budget; see <c>SharedPoolOptions</c> in
+/// <c>Trackdub.Inference.Onnx</c>.
+/// </para>
+/// </remarks>
+public interface IProcessGpuMemoryReader
+{
+    /// <summary>
+    /// Dedicated GPU memory currently allocated by this process, in bytes, or null when this
+    /// platform or driver cannot report it.
+    /// </summary>
+    long? ReadDedicatedGpuMemoryBytes();
+
+    /// <summary>Why the reading is unavailable, surfaced verbatim in benchmark evidence.</summary>
+    string UnavailableReason { get; }
+}

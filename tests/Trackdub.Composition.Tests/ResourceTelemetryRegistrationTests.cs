@@ -4,6 +4,7 @@ using Trackdub.Application.Benchmarking;
 using Trackdub.Composition.Headless;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Infrastructure.Diagnostics;
+using Trackdub.Inference.Onnx.Pool;
 
 namespace Trackdub.Composition.Tests;
 
@@ -18,12 +19,63 @@ public sealed class ResourceTelemetryRegistrationTests
         var collector = provider.GetRequiredService<IResourceTelemetryCollector>();
         var validator = provider.GetRequiredService<IResourceTelemetryValidator>();
         var workingSetSampler = provider.GetRequiredService<IWorkingSetSampler>();
+        var gpuMemoryReader = provider.GetRequiredService<IProcessGpuMemoryReader>();
         Assert.IsType<ProcessResourceTelemetryCollector>(collector);
         Assert.IsType<ResourceTelemetryValidator>(validator);
         Assert.IsType<ProcessWorkingSetSampler>(workingSetSampler);
         Assert.Same(collector, provider.GetRequiredService<IResourceTelemetryCollector>());
         Assert.Same(validator, provider.GetRequiredService<IResourceTelemetryValidator>());
         Assert.Same(workingSetSampler, provider.GetRequiredService<IWorkingSetSampler>());
+        Assert.Same(gpuMemoryReader, provider.GetRequiredService<IProcessGpuMemoryReader>());
+    }
+
+    [Fact]
+    public void Headless_process_gpu_memory_reader_degrades_instead_of_throwing()
+    {
+        var services = new ServiceCollection();
+        services.AddHeadlessTrackdub();
+        using var provider = services.BuildServiceProvider();
+
+        IProcessGpuMemoryReader reader = provider.GetRequiredService<IProcessGpuMemoryReader>();
+
+        // Exercised through the same port the collector uses, so this covers the real
+        // Windows PDH probe where the host provides it and the explicit unavailable fallback
+        // everywhere else. Either way the reading never throws and never invents a zero.
+        long? reading = reader.ReadDedicatedGpuMemoryBytes();
+        if (reading is null)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(reader.UnavailableReason));
+        }
+        else
+        {
+            Assert.True(reading.Value >= 0);
+        }
+    }
+
+    [Fact]
+    public void Headless_binds_the_process_gpu_reader_to_shared_pool_admission()
+    {
+        var services = new ServiceCollection();
+        services.AddHeadlessTrackdub();
+        using var provider = services.BuildServiceProvider();
+
+        // Creating the host's reader is what hands it to the shared session pool, so accelerator
+        // admission accounts for this process's real dedicated GPU footprint instead of only the
+        // pool's own reservations.
+        IProcessGpuMemoryReader reader = provider.GetRequiredService<IProcessGpuMemoryReader>();
+        try
+        {
+#if WINDOWS
+            Assert.Same(reader, SharedPoolOptions.ProcessGpuMemoryReader);
+#else
+            // No platform reader here: the pool keeps its reservation-only model.
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+#endif
+        }
+        finally
+        {
+            SharedPoolOptions.UseProcessGpuMemoryReader(null);
+        }
     }
 
     [Fact]
@@ -36,11 +88,14 @@ public sealed class ResourceTelemetryRegistrationTests
         services.AddSingleton<IResourceTelemetryValidator>(validator);
         var workingSetSampler = new ProcessWorkingSetSampler();
         services.AddSingleton<IWorkingSetSampler>(workingSetSampler);
+        var gpuMemoryReader = new UnavailableProcessGpuMemoryReader();
+        services.AddSingleton<IProcessGpuMemoryReader>(gpuMemoryReader);
         services.AddHeadlessTrackdub();
         using var provider = services.BuildServiceProvider();
         Assert.Same(collector, provider.GetRequiredService<IResourceTelemetryCollector>());
         Assert.Same(validator, provider.GetRequiredService<IResourceTelemetryValidator>());
         Assert.Same(workingSetSampler, provider.GetRequiredService<IWorkingSetSampler>());
+        Assert.Same(gpuMemoryReader, provider.GetRequiredService<IProcessGpuMemoryReader>());
     }
 
     [Fact]

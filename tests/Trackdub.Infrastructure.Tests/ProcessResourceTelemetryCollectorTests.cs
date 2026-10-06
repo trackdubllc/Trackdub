@@ -41,6 +41,8 @@ public sealed class ProcessResourceTelemetryCollectorTests
         }
         Assert.Null(end.AvailableVramMb);
         Assert.Equal("No VRAM reader is registered for this host.", end.VramUnavailableReason);
+        Assert.Null(end.GpuBytes);
+        Assert.Equal("No process GPU memory reader is registered for this host.", end.GpuUnavailableReason);
     }
 
     [Fact]
@@ -91,6 +93,64 @@ public sealed class ProcessResourceTelemetryCollectorTests
         Assert.True(snapshot.WorkingSetBytes > 0);
     }
 
+    [Fact]
+    public void Capture_uses_the_injected_process_gpu_reader()
+    {
+        IResourceTelemetryCollector collector = new ProcessResourceTelemetryCollector(
+            processGpuMemoryReader: new FixedGpuReader(4096));
+
+        ResourceUsageSnapshot snapshot = collector.Capture();
+
+        Assert.Equal(4096L, snapshot.GpuBytes);
+        Assert.Null(snapshot.GpuUnavailableReason);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-4096)]
+    public void Capture_degrades_a_negative_gpu_reading_to_unavailable(long reading)
+    {
+        IResourceTelemetryCollector collector = new ProcessResourceTelemetryCollector(
+            processGpuMemoryReader: new FixedGpuReader(reading));
+
+        ResourceUsageSnapshot snapshot = collector.Capture();
+
+        Assert.Null(snapshot.GpuBytes);
+        Assert.Equal("Process GPU memory reader returned a negative reading.", snapshot.GpuUnavailableReason);
+    }
+
+    [Fact]
+    public void Capture_keeps_adapter_vram_and_process_gpu_readings_independent()
+    {
+        // The adapter-wide headroom and the process-isolated attribution come from different OS
+        // sources; one failing must not suppress the other.
+        IResourceTelemetryCollector collector = new ProcessResourceTelemetryCollector(
+            new ThrowingVramReader(), new FixedGpuReader(4096));
+
+        ResourceUsageSnapshot snapshot = collector.Capture();
+
+        Assert.Null(snapshot.AvailableVramMb);
+        Assert.Contains("InvalidOperationException", snapshot.VramUnavailableReason, StringComparison.Ordinal);
+        Assert.Equal(4096L, snapshot.GpuBytes);
+        Assert.Null(snapshot.GpuUnavailableReason);
+    }
+
+    [Fact]
+    public void Capture_degrades_a_throwing_process_gpu_reader_without_failing_the_sample()
+    {
+        IResourceTelemetryCollector collector = new ProcessResourceTelemetryCollector(
+            new FixedVramReader(8192), new ThrowingGpuReader());
+
+        ResourceUsageSnapshot snapshot = collector.Capture();
+
+        Assert.Equal(8192L, snapshot.AvailableVramMb);
+        Assert.Null(snapshot.GpuBytes);
+        Assert.Contains("InvalidOperationException", snapshot.GpuUnavailableReason, StringComparison.Ordinal);
+        // The process counters must survive a broken GPU source.
+        AssertCounterOrReason(snapshot.CpuTimeMilliseconds, snapshot.CpuUnavailableReason);
+        Assert.True(snapshot.WorkingSetBytes > 0);
+    }
+
     private sealed class FixedVramReader(long reading) : IAvailableVramReader
     {
         public long? ReadAvailableVramMb() => reading;
@@ -101,6 +161,20 @@ public sealed class ProcessResourceTelemetryCollectorTests
     private sealed class ThrowingVramReader : IAvailableVramReader
     {
         public long? ReadAvailableVramMb() => throw new InvalidOperationException("DXGI adapter busy.");
+
+        public string UnavailableReason => "never reached";
+    }
+
+    private sealed class FixedGpuReader(long reading) : IProcessGpuMemoryReader
+    {
+        public long? ReadDedicatedGpuMemoryBytes() => reading;
+
+        public string UnavailableReason => "fixed";
+    }
+
+    private sealed class ThrowingGpuReader : IProcessGpuMemoryReader
+    {
+        public long? ReadDedicatedGpuMemoryBytes() => throw new InvalidOperationException("GPU process counters busy.");
 
         public string UnavailableReason => "never reached";
     }

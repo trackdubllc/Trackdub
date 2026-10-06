@@ -29,6 +29,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         MaxWorkingSetBytes = 1000,
         MaxManagedAllocatedBytes = 10,
         MinAvailableVramMb = 500,
+        MaxGpuBytes = 4096,
     };
 
     private readonly string root = Path.Join(Path.GetTempPath(), $"trackdub-resource-e2e-{Guid.NewGuid():N}");
@@ -74,6 +75,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
     [InlineData("workingSetBytes", 1000d, 999d)]
     [InlineData("managedAllocatedBytes", 10d, 9d)]
     [InlineData("availableVramMb", 500d, 501d)]
+    [InlineData("gpuBytes", 4096d, 4095d)]
     public async Task Each_metric_budget_can_fail_report_without_rewriting_successful_stageAsync(string metric, double observed, double bound)
     {
         // Usage budgets are inclusive maxima (breach above); the VRAM floor is an inclusive
@@ -83,6 +85,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
             "cpuPercent" => ExactBounds with { MaxCpuPercent = bound },
             "workingSetBytes" => ExactBounds with { MaxWorkingSetBytes = (long)bound },
             "managedAllocatedBytes" => ExactBounds with { MaxManagedAllocatedBytes = (long)bound },
+            "gpuBytes" => ExactBounds with { MaxGpuBytes = (long)bound },
             _ => ExactBounds with { MinAvailableVramMb = (long)bound },
         };
         using var runner = CreateMockRunner(new CounterCollector());
@@ -610,11 +613,12 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         Assert.Equal(200d, validation.CpuTimeMilliseconds);
         Assert.Equal(100d, validation.ElapsedMilliseconds);
         Assert.Equal(4, validation.ProcessorCount);
-        Assert.Equal(4, validation.Checks.Count);
+        Assert.Equal(5, validation.Checks.Count);
         AssertCheck(validation, "cpuPercent", 50);
         AssertCheck(validation, "workingSetBytes", 1000);
         AssertCheck(validation, "managedAllocatedBytes", 10);
         AssertCheck(validation, "availableVramMb", 500);
+        AssertCheck(validation, "gpuBytes", 4096);
     }
 
     private static void AssertCheck(ResourceTelemetryValidation validation, string metric, double expected)
@@ -631,7 +635,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
         Assert.Null(validation.CpuTimeMilliseconds);
         Assert.Null(validation.ElapsedMilliseconds);
         Assert.Null(validation.ProcessorCount);
-        Assert.Equal(4, validation.Checks.Count);
+        Assert.Equal(5, validation.Checks.Count);
         Assert.All(validation.Checks, check =>
         {
             Assert.Equal(status, check.Status);
@@ -692,6 +696,7 @@ public sealed class ResourceTelemetryPipelineTests : IDisposable
                 ManagedAllocatedBytes = index * 10L,
                 AvailableVramMb = gpuUnavailableReason is null ? 500 : null,
                 VramUnavailableReason = gpuUnavailableReason,
+                GpuBytes = 4096,
             };
         }
     }

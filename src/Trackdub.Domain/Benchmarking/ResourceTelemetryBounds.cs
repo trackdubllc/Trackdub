@@ -12,4 +12,12 @@ public sealed record ResourceTelemetryBounds
     /// pressure. This is a minimum, not a maximum: a run that leaves less headroom fails.
     /// </summary>
     public long? MinAvailableVramMb { get; init; }
+
+    /// <summary>
+    /// Inclusive ceiling on this process's dedicated GPU memory in bytes (the <c>gpuBytes</c>
+    /// metric). Unlike <see cref="MinAvailableVramMb"/> this is a usage maximum on a
+    /// process-isolated reading, so breaching it means this run allocated more of the adapter's
+    /// own memory than it was allowed, regardless of what other processes are doing.
+    /// </summary>
+    public long? MaxGpuBytes { get; init; }
 }

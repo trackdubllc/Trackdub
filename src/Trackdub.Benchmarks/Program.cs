@@ -300,6 +300,11 @@ public static class Program
             error.WriteLine("--output is required.");
             return 1;
         }
+
+        // Report the host's adapters and effective VRAM capacity before the run starts, so a
+        // configured --min-available-vram-mb floor can be judged against real hardware up front.
+        await HostCapacityBanner.WriteAsync(output, resourceTelemetryBounds, cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             var report = await new ControlledDubbingBenchmarkRunner().RunAsync(
@@ -492,7 +497,12 @@ public static class Program
                 output.WriteLine($"Execution Provider Matrix: {report.Scenario} (Baseline: {report.BaselineProvider})");
                 foreach (var comp in report.Comparisons)
                 {
-                    output.WriteLine($"  {comp.Provider}: P50={comp.P50Milliseconds:F1}ms, Speedup={comp.SpeedupFactor:F2}x, LatencyDelta={comp.LatencyDeltaMilliseconds:F1}ms, ThroughputRatio={comp.ThroughputRatio:F2}x, MemoryDelta={comp.PeakWorkingSetDeltaBytes / (1024 * 1024):+0;-0;0}MB");
+                    // A mock row's budget is what makes its simulated contract readable: without it
+                    // the measured speedup looks like real provider performance.
+                    string simulatedBudget = comp.SimulatedLatencyBudgetMilliseconds is double budget
+                        ? $", SimulatedBudget={budget:F0}ms"
+                        : string.Empty;
+                    output.WriteLine($"  {comp.Provider}: P50={comp.P50Milliseconds:F1}ms, Speedup={comp.SpeedupFactor:F2}x, LatencyDelta={comp.LatencyDeltaMilliseconds:F1}ms, ThroughputRatio={comp.ThroughputRatio:F2}x, MemoryDelta={comp.PeakWorkingSetDeltaBytes / (1024 * 1024):+0;-0;0}MB{simulatedBudget}");
                 }
             }
 
@@ -548,6 +558,10 @@ public static class Program
             return 1;
         }
 
+        // Report the host's adapters and effective VRAM capacity once, before the first stage
+        // runs, so a configured --min-available-vram-mb floor can be judged against real hardware.
+        await HostCapacityBanner.WriteAsync(output, options.ResourceTelemetryBounds, cancellationToken)
+            .ConfigureAwait(false);
         try
         {
             using var runner = new ControlledStageBenchmarkMatrixRunner();

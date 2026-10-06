@@ -119,11 +119,31 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         long hostStart = Stopwatch.GetTimestamp();
         context.OwnsHost = options.Mode != "warm-host";
         context.Host = context.OwnsHost ? CreateHost(options) : AcquireWarmHost(options);
+        // Resolve the resource probe during host setup so its one-time initialization is charged
+        // to hostCreation rather than to the first measured iteration. The first Windows
+        // performance-counter call measured ~1300 ms on a cold host, and a full-pipeline run has
+        // no untimed prerequisite phase in front of iteration 1 to absorb it.
+        _ = context.Host.Services.GetRequiredService<IResourceTelemetryCollector>();
         // Headless storage overrides may set this variable while building the host.
         // Apply the per-sample engine-cache root again before any session is created.
         if (context.CacheScope is EnvironmentOverride engineCache)
             engineCache.Apply();
         context.Timings["hostCreation"] = Stopwatch.GetElapsedTime(hostStart).TotalMilliseconds;
+
+        // Sanitize the resource bounds against this host's real adapter capacity before anything is
+        // measured. A free-VRAM floor above the video memory the host can address is physically
+        // impossible: rejecting it here keeps the run from burning a full benchmark only to report
+        // a bound the hardware could never have met.
+        long totalVideoMemoryMb = await ResourceBoundsPreflight
+            .QueryTotalVideoMemoryMbAsync(context.Host.Services, cancellationToken)
+            .ConfigureAwait(false);
+        if (ResourceBoundsPreflight.DescribeImpossibleBound(
+                options.ResourceTelemetryBounds, totalVideoMemoryMb) is string impossibleBound)
+        {
+            context.Status = BenchmarkEvidenceStatus.Failed;
+            context.Reason = impossibleBound;
+            throw new PreparationIncompleteException();
+        }
     }
 
     private async Task PreparePrerequisitesAsync(
@@ -736,6 +756,13 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             ? null
             : (long?)lastMeasured.Validation.Checks
                 .FirstOrDefault(check => check.Metric == "availableVramMb")?.ObservedValue;
+
+        // The process-isolated counterpart of the adapter-wide reading above: how much dedicated
+        // GPU memory this process itself held, which other processes on the adapter cannot move.
+        memory["gpuBytes"] = lastMeasured is null
+            ? null
+            : (long?)lastMeasured.Validation.Checks
+                .FirstOrDefault(check => check.Metric == "gpuBytes")?.ObservedValue;
     }
 
     private static void EnsureMeasuredTelemetry(

@@ -912,6 +912,228 @@ public sealed class InferenceSessionPoolTests
         }
     }
 
+    // ── Process-isolated GPU admission (the reading drives admission, not only telemetry) ──
+
+    [Fact]
+    public async Task ProcessGpuAdmission_ProcessAtDeviceCeiling_BlocksAcceleratorAdmission()
+    {
+        // This process already holds the device budget's worth of dedicated GPU memory outside
+        // the pool's reservations (driver context, runtime arenas, non-pooled consumers). A new
+        // accelerator session must wait rather than push the process past the ceiling.
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => new StubProcessGpuMemoryReader(4096L * 1024 * 1024));
+        int factoryCalls = 0;
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+            AcceleratorKey("pg1", 256),
+            _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
+            cts.Token));
+
+        // The reservation fits the configured budget on its own — the observation is what holds
+        // this back, and it must never construct the session anyway.
+        Assert.Equal(0, factoryCalls);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_ObservedUsageUnderBudget_KeepsAdmittingReservations()
+    {
+        // The floor only ever tightens: an observation that still leaves headroom behaves exactly
+        // like reservation-only accounting.
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => new StubProcessGpuMemoryReader(1024L * 1024 * 1024));
+
+        using SessionLease first = await pool.GetLeaseAsync(
+            AcceleratorKey("pg2a", 2000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        using SessionLease second = await pool.GetLeaseAsync(
+            AcceleratorKey("pg2b", 2000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        Assert.NotNull(second.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_HostRamBucketsIgnoreTheAcceleratorObservation()
+    {
+        // CPU/DNNL sessions live in RAM, so the process's GPU footprint must not gate them.
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => new StubProcessGpuMemoryReader(8192L * 1024 * 1024));
+
+        using SessionLease lease = await pool.GetLeaseAsync(
+            HostKey("pg3", 3000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_SiblingDeviceReservationsAreSubtractedFromTheProcessTotal()
+    {
+        // The counter set publishes one total for the process, summed across the adapters it
+        // touches. What device 1's own pool reservations explain must not be charged again to
+        // device 0, or a multi-GPU pipeline would lock itself out as sessions load.
+        var reader = new MutableProcessGpuMemoryReader(1024L * 1024 * 1024);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        using (await pool.GetLeaseAsync(
+                   AcceleratorKey("pg4a", 3000, deviceId: 1),
+                   _ => Task.FromResult(CreateMinimalSession()),
+                   CancellationToken.None))
+        {
+        }
+
+        // The process keeps GPU memory this pool never reserved (driver contexts, runtime arenas).
+        reader.Set(5000L * 1024 * 1024);
+
+        // 5000 observed − 3000 committed on device 1 = 2000 charged to device 0, so 256 MB fits.
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("pg4b", 256, deviceId: 0),
+            _ => Task.FromResult(CreateMinimalSession()),
+            CancellationToken.None);
+
+        Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_UsageDrainingWhileWaiting_LetsAdmissionProceed()
+    {
+        // The wait path re-observes on every pass: once the process's real usage drains below the
+        // budget, the parked admission proceeds instead of timing out. The reader instance is
+        // shared so its read count, not the delegate, carries the draining state.
+        var reader = new DrainingProcessGpuMemoryReader(4096L * 1024 * 1024);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("pg5", 256), _ => Task.FromResult(CreateMinimalSession()), cts.Token);
+
+        Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_UnavailableReading_LeavesAdmissionUnchanged()
+    {
+        // A reader that cannot report (no GPU, a driver without the counter set, a GPU-idle
+        // process) must neither tighten nor loosen admission: the reservation model stands alone.
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => new StubProcessGpuMemoryReader(null));
+
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("pg6", 4000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        Assert.NotNull(lease.Session);
+    }
+
+    [Theory]
+    [InlineData(-1L)]
+    [InlineData(0L)]
+    public async Task ProcessGpuAdmission_NonPositiveReading_LeavesAdmissionUnchanged(long bytes)
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => new StubProcessGpuMemoryReader(bytes));
+
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("pg7", 4000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_FailingProbe_DoesNotBreakAdmission()
+    {
+        // A throwing probe must degrade the observation, never the admission path.
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => new ThrowingProcessGpuMemoryReader());
+
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("pg8", 4000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_NoRegisteredReader_LeavesAdmissionUnchanged()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: static () => null);
+
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("pg9", 4000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        Assert.NotNull(lease.Session);
+    }
+
+    /// <summary>Deterministic stand-in for the host's process-isolated GPU reading.</summary>
+    private sealed class StubProcessGpuMemoryReader(long? bytes) : IProcessGpuMemoryReader
+    {
+        public string UnavailableReason => "Test double: no reading configured.";
+
+        public long? ReadDedicatedGpuMemoryBytes() => bytes;
+    }
+
+    /// <summary>Stand-in whose reading follows the host's real usage over time.</summary>
+    private sealed class MutableProcessGpuMemoryReader(long? bytes) : IProcessGpuMemoryReader
+    {
+        // -1 stands for "no reading", so the field can stay a Volatile-friendly primitive.
+        private long current = bytes ?? -1;
+
+        public string UnavailableReason => "Test double: no reading configured.";
+
+        public void Set(long? value) => Volatile.Write(ref current, value ?? -1);
+
+        public long? ReadDedicatedGpuMemoryBytes()
+        {
+            long value = Volatile.Read(ref current);
+            return value < 0 ? null : value;
+        }
+    }
+
+    /// <summary>Reports one hot reading, then drains — stands in for freed GPU memory.</summary>
+    private sealed class DrainingProcessGpuMemoryReader(long firstBytes) : IProcessGpuMemoryReader
+    {
+        private int reads;
+
+        public string UnavailableReason => "Test double: one hot reading, then drained.";
+
+        public long? ReadDedicatedGpuMemoryBytes() =>
+            Interlocked.Increment(ref reads) == 1 ? firstBytes : 0;
+    }
+
+    private sealed class ThrowingProcessGpuMemoryReader : IProcessGpuMemoryReader
+    {
+        public string UnavailableReason => "Test double: probe always fails.";
+
+        public long? ReadDedicatedGpuMemoryBytes() =>
+            throw new InvalidOperationException("probe exploded.");
+    }
+
     // ── SharedPoolOptions (production activation contract) ────────────────────
 
     [Theory]
@@ -991,6 +1213,42 @@ public sealed class InferenceSessionPoolTests
         Assert.Equal(8192L, SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.BudgetMbVariable));
         Assert.Equal(2048L, SharedPoolOptions.ReadPositiveInt64(SharedPoolOptions.HostBudgetMbVariable));
         Assert.Equal(20, SharedPoolOptions.ReadPositiveInt32(SharedPoolOptions.MaxSessionsVariable));
+    }
+
+    [Fact]
+    public void SharedPoolOptions_ProcessGpuAdmission_IsOptOutOnly()
+    {
+        // Process-isolated GPU admission is on by default and only an explicit negative token
+        // turns it off. The variable is cleared rather than set so this test can never capture a
+        // negative default when it happens to initialise SharedPoolOptions first.
+        using var env = new ScopedEnvironment();
+        env.Clear(SharedPoolOptions.ProcessGpuAdmissionVariable);
+
+        Assert.Equal("TRACKDUB_SESSION_PROCESS_GPU_ADMISSION", SharedPoolOptions.ProcessGpuAdmissionVariable);
+        Assert.True(SharedPoolOptions.EnableProcessGpuAdmission);
+        Assert.True(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.ProcessGpuAdmissionVariable));
+        Assert.False(SharedPoolOptions.ParseAdmissionFlag("0"));
+        Assert.False(SharedPoolOptions.ParseAdmissionFlag("false"));
+        Assert.False(SharedPoolOptions.ParseAdmissionFlag("off"));
+        Assert.False(SharedPoolOptions.ParseAdmissionFlag("disabled"));
+        Assert.True(SharedPoolOptions.ParseAdmissionFlag("typpo"));
+    }
+
+    [Fact]
+    public void SharedPoolOptions_UseProcessGpuMemoryReader_RoundTripsAndClears()
+    {
+        var reader = new StubProcessGpuMemoryReader(1024);
+        try
+        {
+            SharedPoolOptions.UseProcessGpuMemoryReader(reader);
+            Assert.Same(reader, SharedPoolOptions.ProcessGpuMemoryReader);
+        }
+        finally
+        {
+            SharedPoolOptions.UseProcessGpuMemoryReader(null);
+        }
+
+        Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
     }
 
     [Fact]

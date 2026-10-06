@@ -1,3 +1,5 @@
+using Trackdub.Contracts.Benchmarking;
+
 namespace Trackdub.Inference.Onnx.Pool;
 
 /// <summary>
@@ -18,10 +20,17 @@ namespace Trackdub.Inference.Onnx.Pool;
 ///   <item><description><c>TRACKDUB_SESSION_VRAM_BUDGET_MB</c> — positive integer accelerator budget in MB, applied per device. Invalid values fall back to <see cref="InferenceSessionPool.DefaultMemoryBudgetMb"/>.</description></item>
 ///   <item><description><c>TRACKDUB_SESSION_RAM_BUDGET_MB</c> — positive integer host RAM budget in MB, shared by CPU/DNNL and OpenVINO CPU-proxy sessions. Invalid values fall back to <see cref="InferenceSessionPool.DefaultHostMemoryBudgetMb"/>.</description></item>
 ///   <item><description><c>TRACKDUB_SESSION_MAX_SESSIONS</c> — positive integer capacity (count mode). Invalid or overflowing values fall back to the pool default.</description></item>
+///   <item><description><c>TRACKDUB_SESSION_PROCESS_GPU_ADMISSION</c> — <c>0</c>/<c>false</c>/<c>off</c>/<c>disabled</c> to stop accelerator admission from accounting for this process's own dedicated GPU usage; anything else (including unset) keeps it on.</description></item>
 /// </list>
 /// <para>
-/// The values are captured once, when the shared pool is first resolved, so changing the
-/// environment afterwards has no effect on the running process.
+/// The environment values are captured once, when the shared pool is first resolved, so
+/// changing the environment afterwards has no effect on the running process.
+/// </para>
+/// <para>
+/// The one non-environment input is <see cref="ProcessGpuMemoryReader"/>, the host's
+/// process-isolated dedicated GPU reading. A host registers it with
+/// <see cref="UseProcessGpuMemoryReader"/>, which the shared pool consults on every accelerator
+/// admission decision; until it is registered the pool accounts for its own reservations only.
 /// </para>
 /// </remarks>
 public static class SharedPoolOptions
@@ -38,6 +47,12 @@ public static class SharedPoolOptions
     /// <summary>Optional session capacity override.</summary>
     public const string MaxSessionsVariable = "TRACKDUB_SESSION_MAX_SESSIONS";
 
+    /// <summary>
+    /// Opt-out switch for process-isolated GPU admission: only an explicit negative stops the
+    /// pool from accounting for this process's own dedicated GPU usage.
+    /// </summary>
+    public const string ProcessGpuAdmissionVariable = "TRACKDUB_SESSION_PROCESS_GPU_ADMISSION";
+
     /// <summary>Whether budgeted admission is enabled for the shared pool.</summary>
     public static bool EnableMemoryAdmission { get; } = ReadAdmissionFlag(AdmissionVariable);
 
@@ -53,14 +68,42 @@ public static class SharedPoolOptions
     public static int MaxSessions { get; } =
         ReadPositiveInt32(MaxSessionsVariable) ?? InferenceSessionPool.DefaultMaxSessions;
 
+    /// <summary>
+    /// Whether accelerator admission also accounts for this process's real dedicated GPU
+    /// usage (see <see cref="ProcessGpuMemoryReader"/>). On by default: the reading only ever
+    /// tightens admission, and it is the only signal that can see GPU memory this process holds
+    /// outside the pool's own reservations (driver contexts, arenas, non-pooled consumers).
+    /// </summary>
+    public static bool EnableProcessGpuAdmission { get; } = ReadAdmissionFlag(ProcessGpuAdmissionVariable);
+
+    private static IProcessGpuMemoryReader? processGpuMemoryReader;
+
+    /// <summary>
+    /// The host's process-isolated dedicated GPU reading, or <see langword="null"/> when no host
+    /// has registered one. Read on every accelerator admission decision, so registering a reader
+    /// after the shared pool was first resolved still takes effect.
+    /// </summary>
+    public static IProcessGpuMemoryReader? ProcessGpuMemoryReader =>
+        Volatile.Read(ref processGpuMemoryReader);
+
+    /// <summary>
+    /// Registers <paramref name="reader"/> as the shared pool's process-GPU observation, or
+    /// clears it with <see langword="null"/>. Composition calls this as the host's reader is
+    /// created (see <c>HeadlessCompositionRoot</c>); the reader is consulted only while
+    /// <see cref="EnableProcessGpuAdmission"/> is on, and a reader that cannot report a reading
+    /// leaves admission behaviour exactly as it was.
+    /// </summary>
+    public static void UseProcessGpuMemoryReader(IProcessGpuMemoryReader? reader) =>
+        Volatile.Write(ref processGpuMemoryReader, reader);
+
     internal static bool ReadAdmissionFlag(string variable)
         => ParseAdmissionFlag(Environment.GetEnvironmentVariable(variable));
 
     /// <summary>
-    /// Parses an admission switch value. Admission is the safe default: only an explicit
-    /// negative token (<c>0</c>/<c>false</c>/<c>off</c>/<c>disabled</c>, case-insensitive)
-    /// disables it; unset, blank, and unrecognised values keep it enabled so a typo cannot
-    /// silently drop the memory guard.
+    /// Parses an admission switch value. The guarded behaviour is the safe default: only an
+    /// explicit negative token (<c>0</c>/<c>false</c>/<c>off</c>/<c>disabled</c>,
+    /// case-insensitive) disables it; unset, blank, and unrecognised values keep it enabled so a
+    /// typo cannot silently drop the memory guard.
     /// </summary>
     internal static bool ParseAdmissionFlag(string? raw)
     {

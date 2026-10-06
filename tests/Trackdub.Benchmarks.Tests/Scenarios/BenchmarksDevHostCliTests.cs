@@ -44,6 +44,30 @@ public sealed class BenchmarksDevHostCliTests : IDisposable
     }
 
     [Fact]
+    public async Task Cli_ControlledRun_ReportsHostCapacityBeforeTheRunStarts()
+    {
+        string fixture = _harness.CreateTempAudioFixture(durationSeconds: 1.0);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await Program.RunAsync(
+            ["controlled", fixture, "--output", _tempOutputDir, "--mock"],
+            TextReader.Null,
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        string text = output.ToString();
+        Assert.Contains("Host capacity", text, StringComparison.Ordinal);
+        Assert.Contains("Effective VRAM capacity", text, StringComparison.Ordinal);
+        Assert.True(
+            text.IndexOf("Host capacity", StringComparison.Ordinal)
+                < text.IndexOf("Evidence", StringComparison.Ordinal),
+            "the host-capacity banner must be printed before the run's outcome");
+    }
+
+    [Fact]
     public async Task Cli_ControlledRun_AcceptsDryRunFlag_SynonymForMock()
     {
         string fixture = _harness.CreateTempAudioFixture(durationSeconds: 1.0);
@@ -75,6 +99,12 @@ public sealed class BenchmarksDevHostCliTests : IDisposable
             CancellationToken.None);
 
         Assert.Equal(0, exitCode);
+        string text = output.ToString();
+        Assert.Contains("Host capacity", text, StringComparison.Ordinal);
+        Assert.True(
+            text.IndexOf("Host capacity", StringComparison.Ordinal)
+                < text.IndexOf("Stage matrix", StringComparison.Ordinal),
+            "the host-capacity banner must be printed once, before the first stage runs");
     }
 
     [Fact]
@@ -153,6 +183,9 @@ public sealed class BenchmarksDevHostCliTests : IDisposable
             if (format is "console" or "both")
             {
                 Assert.Contains("Execution Provider Matrix", output.ToString(), StringComparison.OrdinalIgnoreCase);
+                // A mock comparison row names the simulated latency budget it was built from, so the
+                // console summary cannot be mistaken for measured provider performance.
+                Assert.Contains("SimulatedBudget=", output.ToString(), StringComparison.Ordinal);
             }
             if (format is "json" or "both")
             {

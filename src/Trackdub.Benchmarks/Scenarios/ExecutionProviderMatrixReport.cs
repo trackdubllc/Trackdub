@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Trackdub.Benchmarks.Scenarios;
 
 /// <summary>
@@ -17,7 +19,23 @@ public sealed record ProviderComparisonMetrics(
     double LatencyDeltaMilliseconds,
     double ThroughputRatio,
     long PeakWorkingSetDeltaBytes,
-    long ManagedAllocatedDeltaBytes);
+    long ManagedAllocatedDeltaBytes)
+{
+    /// <summary>
+    /// The total simulated stage latency, in milliseconds, a deterministic mock run configured for
+    /// this provider; <see langword="null"/> when the comparison came from real execution, or from
+    /// a dry run that waits no simulated delay.
+    /// </summary>
+    /// <remarks>
+    /// This is the budget the mock promised before the run, so it is what a comparison can be
+    /// checked against: dividing the baseline row's budget by another row's budget gives the
+    /// speedup the simulation is built to demonstrate (2x for DirectML, 4x for TensorRT against
+    /// CPU). The measured <see cref="SpeedupFactor"/> carries each provider's own fixed run cost
+    /// and cannot stand in for it. Omitted from JSON when absent, so real reports keep their shape.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? SimulatedLatencyBudgetMilliseconds { get; init; }
+}
 
 /// <summary>
 /// Cross-execution provider benchmark comparison matrix report.
