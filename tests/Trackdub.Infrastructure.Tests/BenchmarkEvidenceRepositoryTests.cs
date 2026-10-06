@@ -109,6 +109,36 @@ public sealed class BenchmarkEvidenceRepositoryTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    [Fact]
+    public async Task Schema_v1_report_reads_from_disk_but_is_rejected_on_save()
+    {
+        string root = NewRoot();
+        try
+        {
+            var repository = new BenchmarkEvidenceRepository(new SqliteUserBenchmarkDatabase(root));
+            var runId = Guid.Parse("3f1c9b2e-7a4d-4c6f-9b0e-2d5a8c1f4e70");
+            string reportsDirectory = Path.Join(Path.GetFullPath(root), "benchmark-reports");
+            Directory.CreateDirectory(reportsDirectory);
+            string fixture = Path.Join(AppContext.BaseDirectory, "Fixtures", "benchmark-evidence-schema-v1.json");
+            File.Copy(fixture, Path.Join(reportsDirectory, $"{runId:N}.json"), overwrite: true);
+
+            // A report written by a v1 build still loads: the retired MemoryBytes map is ignored
+            // and the fields the typed contract still models come through intact.
+            BenchmarkEvidenceReport loaded = Assert.IsType<BenchmarkEvidenceReport>(
+                await repository.GetAsync(runId));
+            Assert.Equal(1, loaded.SchemaVersion);
+            Assert.Null(loaded.ProcessMemory);
+            Assert.Empty(loaded.StageGarbageCollection);
+            Assert.Equal(240.5, loaded.TimingsMilliseconds["pipeline"]);
+            Assert.Equal("Asr", Assert.Single(loaded.Stages).Name);
+
+            // Saving it back is refused: only schema-v2 reports are accepted, so a v1 file must
+            // be re-exported through the current contract rather than silently rewritten.
+            await Assert.ThrowsAsync<ArgumentException>(() => repository.SaveAsync(loaded));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     private static string NewRoot() => Path.Join(Path.GetTempPath(), "Trackdub.Evidence.Tests", Guid.NewGuid().ToString("N"));
 
     private static BenchmarkEvidenceReport Observation(Guid id, DateTimeOffset completedAt) => new()

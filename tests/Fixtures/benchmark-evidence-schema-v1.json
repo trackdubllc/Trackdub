@@ -1,0 +1,132 @@
+{
+  "SchemaVersion": 1,
+  "RunId": "3f1c9b2e-7a4d-4c6f-9b0e-2d5a8c1f4e70",
+  "Kind": "Benchmark",
+  "Scenario": "asr",
+  "RunMode": "fresh-process",
+  "Status": "Completed",
+  "Reason": null,
+  "StartedAtUtc": "2026-09-14T08:15:02.1140000+00:00",
+  "CompletedAtUtc": "2026-09-14T08:15:12.4820000+00:00",
+  "FixtureSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "RequestedModel": "onnx-community/whisper-tiny",
+  "ActualModel": "onnx-community/whisper-tiny",
+  "RequestedProvider": "cpu",
+  "ActualProvider": "cpu",
+  "Configuration": {
+    "runCount": "3",
+    "mode": "fresh-process"
+  },
+  "RuntimeVersions": {
+    "onnxruntime": "1.20.0"
+  },
+  "TimingsMilliseconds": {
+    "stage:Asr": 240.5,
+    "stage:Asr:p50": 240.5,
+    "pipeline": 240.5
+  },
+  "MemoryBytes": {
+    "processWorkingSetStart": 104857600,
+    "processWorkingSetEnd": 157286400,
+    "processPeakWorkingSet": 167772160,
+    "peakWorkingSetBytes": 167772160,
+    "managedAllocatedBytes": 44040192,
+    "gen0Collections": 6,
+    "gen1Collections": 2,
+    "gen2Collections": 1,
+    "availableVramMb": null,
+    "stage:Asr:allocatedBytes": 10485760,
+    "stage:Asr:peakWorkingSet": 157286400,
+    "stage:Asr:gen0": 3,
+    "stage:Asr:gen1": 1,
+    "stage:Asr:gen2": 0
+  },
+  "Counters": {
+    "phase:decode:allocatedBytes": 10485760
+  },
+  "Stages": [
+    {
+      "Name": "Asr",
+      "Status": "Completed",
+      "Reason": null,
+      "StageRunId": "9c2b7d1a-4e5f-4a6b-8c7d-1e2f3a4b5c6d",
+      "StartedAtUtc": "2026-09-14T08:15:02.1140000+00:00",
+      "CompletedAtUtc": "2026-09-14T08:15:06.3550000+00:00",
+      "DurationMilliseconds": 240.5,
+      "RequestedModel": "onnx-community/whisper-tiny",
+      "ActualModel": "onnx-community/whisper-tiny",
+      "RequestedProvider": "cpu",
+      "ActualProvider": "cpu"
+    }
+  ],
+  "ResourceTelemetryBounds": {
+    "MaxCpuPercent": 95.0,
+    "MaxWorkingSetBytes": null,
+    "MaxManagedAllocatedBytes": null,
+    "MinAvailableVramMb": null,
+    "MaxGpuBytes": null
+  },
+  "ResourceValidationStatus": "Passed",
+  "ResourceTelemetry": [
+    {
+      "Stage": "Asr",
+      "Phase": "measured",
+      "Iteration": 0,
+      "Attempt": 1,
+      "ExecutionStatus": "Completed",
+      "Reason": null,
+      "Validation": {
+        "Status": "Passed",
+        "CpuTimeMilliseconds": 620.0,
+        "ElapsedMilliseconds": 240.5,
+        "ProcessorCount": 16,
+        "Checks": [
+          {
+            "Metric": "cpuPercent",
+            "Status": "Passed",
+            "ObservedValue": 161.2,
+            "Threshold": 95.0,
+            "Reason": null
+          },
+          {
+            "Metric": "workingSetBytes",
+            "Status": "Passed",
+            "ObservedValue": 157286400.0,
+            "Threshold": null,
+            "Reason": "Working-set sampling cadence dilated (longest tick gap 120 ms at 25 ms cadence); transient peaks shorter than the gap may have been missed."
+          },
+          {
+            "Metric": "managedAllocatedBytes",
+            "Status": "Passed",
+            "ObservedValue": 10485760.0,
+            "Threshold": null,
+            "Reason": null
+          }
+        ]
+      }
+    }
+  ],
+  "ResourceDistribution": [
+    {
+      "Stage": "Asr",
+      "Phase": "measured",
+      "IterationCount": 1,
+      "Metrics": [
+        {
+          "Metric": "workingSetBytes",
+          "SampleCount": 1,
+          "UnavailableSampleCount": 0,
+          "FailingSampleCount": 0,
+          "Minimum": 157286400.0,
+          "Maximum": 157286400.0,
+          "Mean": 157286400.0,
+          "P50": 157286400.0,
+          "P95": 157286400.0,
+          "P99": 157286400.0,
+          "Threshold": null,
+          "Status": "Passed"
+        }
+      ]
+    }
+  ]
+}
