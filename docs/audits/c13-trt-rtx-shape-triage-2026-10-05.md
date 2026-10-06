@@ -1,6 +1,6 @@
 # C13 / #329 — NVIDIA TRT-RTX Shape-Error Triage & Resolution Report
 
-Date: 2026-10-06. **Status: PARTIALLY RESOLVED / OPEN (Reopening #329).**
+Date: 2026-10-06. **Status: shape error RESOLVED; `Dispose` crash mitigated, follow-up tracked separately.**
 
 ## 1. Executive Summary & Root Cause Provenance
 
@@ -32,18 +32,18 @@ Date: 2026-10-06. **Status: PARTIALLY RESOLVED / OPEN (Reopening #329).**
   - ABI Version: `0.4.2/cu13`.
   - TensorRT RTX DLL Version: `1.6.1.120`.
   - ONNX Runtime Version: `1.30.0`.
-  - Plugin Path: `C:\Users\tonyt\AppData\Local\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64\onnxruntime_providers_nv_tensorrt_rtx.dll`.
+  - Plugin Path: `%LOCALAPPDATA%\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64\onnxruntime_providers_nv_tensorrt_rtx.dll`.
 
 ---
 
 ## 3. Shape Error Reproduction & Fallback Verification
 
 ### 3.1 Exhaustive Cache Pattern Scan
-A pattern scanner inspected all cached ONNX graphs in `C:\Users\tonyt\AppData\Local\Trackdub\model-cache` for the identifier `If_0_else_branch`:
+A pattern scanner inspected all cached ONNX graphs in `%LOCALAPPDATA%\Trackdub\model-cache` for the identifier `If_0_else_branch`:
 
 ```text
-MATCH: C:\Users\tonyt\AppData\Local\Trackdub\model-cache\onnx-community\silero-vad\onnx\model.onnx
-MATCH: C:\Users\tonyt\AppData\Local\Trackdub\model-cache\onnx-community\silero-vad\onnx\model_fp16.onnx
+MATCH: %LOCALAPPDATA%\Trackdub\model-cache\onnx-community\silero-vad\onnx\model.onnx
+MATCH: %LOCALAPPDATA%\Trackdub\model-cache\onnx-community\silero-vad\onnx\model_fp16.onnx
 DONE SCANNING — 0 TTS models matched.
 ```
 
@@ -85,7 +85,7 @@ The planner in `StageRuntimeRequirements.cs` defines strict hardware admission r
 |---|---|---|---|
 | **VAD** | `onnx-community/silero-vad` | `dml` (blocked) | **Encountered exact Error Code 4 Squeeze Shape Error.** Now blocked by planner to prevent noise. |
 | **ASR** | `whisper-tiny/base/small/medium` | `dml` (blocked) | **Blocked by planner.** Can compile in smoke, but runs on DML in production. |
-| **ASR** | `onnx-community/whisper-large-v3` | **CRASH** | **CUDA OOM during TRT serialization.** Exceeds 12GB VRAM. Followed by a fatal `0xC0000005` access violation upon `InferenceSession.Dispose`, terminating the process. |
+| **ASR** | `onnx-community/whisper-large-v3` | `dml` (blocked) | **CRASH only under explicit/smoke TensorRT RTX evaluation:** CUDA OOM during TRT serialization (exceeds 12GB VRAM) followed by a fatal `0xC0000005` access violation on `InferenceSession.Dispose`. The planner blocks TensorRT for whisper in production, so the crash is reachable on the evaluation/smoke path only. |
 | **Diarization** | `cgus/diar_streaming_sortformer_4spk-v2.1-onnx` | `tensorrt-rtx` | **PASS.** Pre-compiled EP-context / TRT session verified with exit 0. |
 | **Separation** | `spleeter` | `tensorrt-rtx` | **PASS.** 4-stem separation runs on TRT-RTX. |
 
@@ -95,14 +95,14 @@ The planner in `StageRuntimeRequirements.cs` defines strict hardware admission r
 
 | # | Requirement | Status | Evidence |
 |---|---|---|---|
-| 1 | Reproduce under `--prefer-gpu` and record whether failure is classified as fallback-eligible or kills the run. | **DONE** | Exact squeeze shape error reproduced on `silero-vad`. Classified as fallback-eligible because the message contains `NvTensorRTRTX`. |
+| 1 | Reproduce under `--prefer-gpu` and record whether failure is classified as fallback-eligible or kills the run. | **PARTIAL** | The direct `CreateSingleAsync` harness reproduced the exact squeeze shape error on `silero-vad` and it classified as fallback-eligible (the message contains `NvTensorRTRTX`). A full `--prefer-gpu` pipeline run is not recorded. |
 | 2 | If fallback-eligible but misclassified → fix classification so run degrades instead of dying. | **DONE** | Verification proved the exception already includes `[NvTensorRTRTX EP]` and is correctly classified. |
 | 3 | If genuinely unsupported → planner must route TTS around TRT-RTX rather than fail run. | **DONE** | Planner rules in `StageRuntimeRequirements.cs` route TTS and VAD models around TRT-RTX. |
 | 4 | Confirm which models are affected across pipeline stages. | **DONE** | `silero-vad` hits the squeeze error. `whisper-large-v3` hits a fatal TRT OOM crash in `Dispose`. Whisper tiny-medium are blocked by planner. |
-| 5 | **Done when:** fallback covers it (proven by degrading run) OR planner routes around it (proven by avoiding run). | **DONE** | A regression test `SileroVadTrtBuildShapeErrorMessage` was added to prove it degrades. Planner rule added for `silero-vad`. |
+| 5 | **Done when:** fallback covers it (proven by degrading run) OR planner routes around it (proven by avoiding run). | **DONE (for the shape error)** | A regression test (`SileroVadTrtBuildShapeErrorMessage`) proves it degrades, and the planner routes `silero-vad` around TensorRT RTX. The separate `Dispose` crash is tracked as its own item in Section 7 and does not gate the shape-error criterion. |
 
 ## 7. Next Steps
 
-- **Reopen Issue #329** (or file a new P0): A critical crash during `InferenceSession.Dispose` occurs when `whisper-large-v3` hits an OOM under TensorRT RTX. This brings down the host process with a `0xC0000005` violation.
-- Add fallback to multi-session factories in `OnnxExecutionSessionFactory.cs`.
-- Set `SessionOptions.LogId` to accurately label native log lines.
+- **File a separate P0 for the `Dispose` crash** (do not hold #329's shape-error criterion on it): a critical crash during `InferenceSession.Dispose` occurs when `whisper-large-v3` hits an OOM under TensorRT RTX. This brings down the host process with a `0xC0000005` violation.
+- DONE in this PR: Whisper TensorRT RTX → DirectML/CPU fallback now lives in `CreatePooledWhisperAsync` (the production path), and native teardown is skipped only for TensorRT RTX sessions after an observed CUDA OOM (`TensorRtRtxTeardownGuard`).
+- Set `SessionOptions.LogId` for the single-session path as well (the pooled Whisper path already labels its sessions).
