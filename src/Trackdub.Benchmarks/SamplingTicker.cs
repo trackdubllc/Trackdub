@@ -27,7 +27,6 @@ internal sealed class PeriodicSamplingTicker : ISamplingTicker
     public ValueTask<bool> WaitForNextTickAsync(CancellationToken cancellationToken) =>
         timer.WaitForNextTickAsync(cancellationToken);
 
-
     public long LastTickTimestamp => System.Diagnostics.Stopwatch.GetTimestamp();
 
     public void Dispose() => timer.Dispose();
