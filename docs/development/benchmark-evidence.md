@@ -38,7 +38,12 @@ Working-set limits use an interval sampler at a 25 ms cadence, starting at the
 stage boundary and stopping at its terminal event. The reported peak is the
 maximum observed sample plus the two endpoint samples; short spikes between
 polls may be missed. A sampler failure is explicit `Unavailable` evidence
-unless a known endpoint already breaches the configured limit. The benchmark
+unless a known endpoint already breaches the configured limit. When host
+contention stretches the longest tick gap past 4x cadence, the evidence carries
+an advisory dilation warning instead of failing: on the passing
+`workingSetBytes` check reason, on the run-level `workingSetPeakSampling`
+configuration, and on each separation-eval result
+(`peak_working_set_sampling_warning`). The benchmark
 report also records a run-level sampled peak across setup, pipeline, and
 teardown. This samples the benchmark process only, including concurrent work
 and excluding child processes.

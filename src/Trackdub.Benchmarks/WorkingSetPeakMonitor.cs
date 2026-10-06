@@ -108,7 +108,7 @@ internal sealed class WorkingSetPeakMonitor : IWorkingSetPeakMonitor
         long previousTick = Stopwatch.GetTimestamp();
         try
         {
-            while (await timer.WaitForNextTickAsync(cancellation.Token).ConfigureAwait(false))
+            while (await ticker.WaitForNextTickAsync(cancellation.Token).ConfigureAwait(false))
             {
                 long tick = Stopwatch.GetTimestamp();
                 RecordTickGap(Stopwatch.GetElapsedTime(previousTick, tick));

@@ -55,9 +55,11 @@ are not duplicated across call sites. Preserve them when extending the harness:
   warns past 4x cadence (`DescribeDilationWarning`); the warning annotates passing
   `workingSetBytes` checks, the run-level `workingSetPeakSampling` configuration, and
   each `SeparationEvalResult` (`peak_working_set_sampling_warning` in results JSONL).
-  It is advisory by design — never fail a stage on it. Wall-clock timing assertions in
-  tests must assert ordering against a scaled outlier (see the p50 multi-run test), not
-  an absolute millisecond budget that loaded nodes can cross.
+  It is advisory by design — never fail a stage on it. Ticks come from the injected
+  `ISamplingTicker` (production: `PeriodicTimer`); script tick gaps in tests to prove
+  dilation handling deterministically. Wall-clock timing assertions in tests must assert
+  ordering against a scaled outlier (see the p50 multi-run test), not an absolute
+  millisecond budget that loaded nodes can cross.
 
 ## Agent guidance
 
