@@ -152,7 +152,7 @@ public sealed class WorkingSetPeakMonitorTests
 
             TimeSpan delay = delays.Dequeue();
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-            scriptedTicks += delay.Ticks;
+            scriptedTicks += (long)(delay.Ticks * System.Diagnostics.Stopwatch.Frequency / TimeSpan.TicksPerSecond);
             return true;
         }
 
