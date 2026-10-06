@@ -1282,14 +1282,17 @@ internal sealed class InferenceSessionPool : IDisposable
     /// </summary>
     /// <remarks>
     /// The counter set reports a single total for the process, summed across every adapter it
-    /// touches, so the sibling accelerator buckets' own reservations are subtracted first. What
+    /// touches, so the sibling GPU-backed buckets' own reservations are subtracted first. What
     /// remains is GPU usage the pool cannot explain — driver contexts, runtime arenas, non-pooled
     /// consumers — charged to the bucket under decision. Host buckets are never charged: their
     /// sessions live in RAM, not on an adapter.
     /// </remarks>
     private long ObservedProcessGpuUsageMb(AdmissionBucket bucket, long? observedProcessGpuMb)
     {
-        if (bucket.IsHost || observedProcessGpuMb is not > 0)
+        // OpenVINO accelerator buckets represent NPU memory, not dedicated GPU memory. The
+        // process-wide GPU reading must not affect them, nor may their reservations be deducted
+        // from GPU headroom.
+        if (bucket.IsHost || bucket.AcceleratorProvider is ExecutionProviderKind.OpenVino || observedProcessGpuMb is not > 0)
         {
             return 0;
         }
@@ -1297,7 +1300,8 @@ internal sealed class InferenceSessionPool : IDisposable
         long committedElsewhereMb = 0;
         foreach (SessionPoolKey key in entries.Keys)
         {
-            if (BucketOf(key) is AdmissionBucket other && other != bucket && !other.IsHost)
+            if (BucketOf(key) is AdmissionBucket other && other != bucket &&
+                !other.IsHost && other.AcceleratorProvider is not ExecutionProviderKind.OpenVino)
             {
                 committedElsewhereMb += ResolveReservationMb(key);
             }
@@ -1305,7 +1309,8 @@ internal sealed class InferenceSessionPool : IDisposable
 
         foreach (ExternalReservationState state in externalReservations.Values)
         {
-            if (!state.Bucket.IsHost && state.Bucket != bucket)
+            if (!state.Bucket.IsHost && state.Bucket.AcceleratorProvider is not ExecutionProviderKind.OpenVino &&
+                state.Bucket != bucket)
             {
                 committedElsewhereMb += state.EstimatedMemoryMb;
             }
