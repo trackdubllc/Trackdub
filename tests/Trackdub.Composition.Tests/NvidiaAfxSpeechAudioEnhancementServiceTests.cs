@@ -46,10 +46,7 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
     {
         var fallback = new FakeSpeechAudioEnhancementService();
         var readiness = new FakeReadinessService(new NvidiaAfxRuntimeReadiness(true, "Ready", "C:\\afx", null));
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback)
-        {
-            IsStubbedOverride = static () => true
-        };
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback, isStubbed: static () => true);
 
         SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
             new SpeechAudioEnhancementRequest(
@@ -105,6 +102,51 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
     }
 
     [Fact]
+    public async Task EnhanceAsync_LogsTheReadinessFailure_BeforeFallingBack()
+    {
+        var logger = new CapturingLogger();
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(
+            new ThrowingReadinessService(),
+            new FakeSpeechAudioEnhancementService(),
+            logger: logger);
+
+        await sut.EnhanceAsync(
+            new SpeechAudioEnhancementRequest(
+                "source.wav",
+                "dest.wav",
+                new SpeechAudioEnhancementOptions(true, NvidiaAfxProfile.NoiseAndReverb, 1.0f)),
+            CancellationToken.None);
+
+        Assert.Contains(NvidiaAfxProfile.NoiseAndReverb.ToString(), logger.Message, StringComparison.Ordinal);
+        Assert.IsType<InvalidOperationException>(logger.Exception);
+    }
+
+    [Fact]
+    public async Task EnhanceAsync_LogsAFailedNativeAttempt_AndFallsBack()
+    {
+        var logger = new CapturingLogger();
+        var fallback = new FakeSpeechAudioEnhancementService();
+        string missingSource = Path.Join(Path.GetTempPath(), $"trackdub-afx-missing-{Guid.NewGuid():N}.wav");
+        string destination = Path.Join(Path.GetTempPath(), $"trackdub-afx-dest-{Guid.NewGuid():N}.wav");
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(
+            new FakeReadinessService(new NvidiaAfxRuntimeReadiness(true, "Ready", "C:\afx", null)),
+            fallback,
+            logger: logger);
+
+        SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
+            new SpeechAudioEnhancementRequest(
+                missingSource,
+                destination,
+                new SpeechAudioEnhancementOptions(true, NvidiaAfxProfile.NoiseAndReverb, 1.0f)),
+            CancellationToken.None);
+
+        Assert.True(fallback.WasCalled);
+        Assert.Equal(SpeechAudioEnhancementBackend.Ffmpeg, result.Backend);
+        Assert.NotNull(logger.Exception);
+        Assert.False(File.Exists(destination + ".partial"));
+    }
+
+    [Fact]
     public async Task EnhanceAsync_DoesNotProbeReadiness_WhenAfxDisabled()
     {
         var fallback = new FakeSpeechAudioEnhancementService();
@@ -128,10 +170,7 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
     {
         var fallback = new FakeSpeechAudioEnhancementService();
         var readiness = new ThrowingReadinessService();
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback)
-        {
-            IsStubbedOverride = static () => true
-        };
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback, isStubbed: static () => true);
 
         SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
             new SpeechAudioEnhancementRequest(
@@ -143,6 +182,25 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
         Assert.Equal(0, readiness.CallCount);
         Assert.True(fallback.WasCalled);
         Assert.Equal(SpeechAudioEnhancementBackend.Ffmpeg, result.Backend);
+    }
+
+    private sealed class CapturingLogger : IApplicationLogger
+    {
+        public string? Message { get; private set; }
+
+        public Exception? Exception { get; private set; }
+
+        public void LogDebug(string message) { }
+
+        public void LogInformation(string message) { }
+
+        public void LogWarning(string message, Exception? exception = null)
+        {
+            Message = message;
+            Exception = exception;
+        }
+
+        public void LogError(string message, Exception? exception = null) { }
     }
 
     private sealed class FakeReadinessService(NvidiaAfxRuntimeReadiness readiness) : INvidiaAfxRuntimeReadinessService

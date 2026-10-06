@@ -6,13 +6,11 @@ namespace Trackdub.Composition.NvidiaAfx;
 
 public sealed class NvidiaAfxSpeechAudioEnhancementService(
     INvidiaAfxRuntimeReadinessService readinessService,
-    ISpeechAudioEnhancementService ffmpegFallback) : ISpeechAudioEnhancementService
+    ISpeechAudioEnhancementService ffmpegFallback,
+    Func<bool>? isStubbed = null,
+    IApplicationLogger? logger = null) : ISpeechAudioEnhancementService
 {
-    /// <summary>
-    /// Test seam for exercising the kill switch and the gates behind it (AEC far-end, readiness)
-    /// without changing <see cref="NvidiaAfxIntegration.IsStubbed"/> for the whole process.
-    /// </summary>
-    internal Func<bool>? IsStubbedOverride { get; set; }
+    private readonly Func<bool> _isStubbed = isStubbed ?? NvidiaAfxIntegration.IsStubbed;
 
     public async Task<SpeechAudioEnhancementResult> EnhanceAsync(
         SpeechAudioEnhancementRequest request,
@@ -22,7 +20,7 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         // Gate before readiness: TryAddSingleton hosts may replace readiness with a probe that
         // throws. Disabled/stubbed AFX must still fall through to DeepFilterNet safely.
         // Never pretend AFX ran.
-        if (!options.EnableNvidiaAfx || IsIntegrationStubbed())
+        if (!options.EnableNvidiaAfx || _isStubbed())
         {
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
@@ -35,6 +33,9 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // A readiness probe that throws (settings I/O, native load) must not fail the stage.
+            logger?.LogWarning(
+                $"NVIDIA AFX readiness check threw for profile '{options.NvidiaAfxProfile}'; falling back to DeepFilterNet.",
+                ex);
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
@@ -49,6 +50,8 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
+        string fullDestinationPath = Path.GetFullPath(request.DestinationPath);
+        string partialPath = fullDestinationPath + ".partial";
         try
         {
             using IAudioSamples source = await WaveAudioReader
@@ -59,25 +62,18 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
                 ? source.SampleRate
                 : definition.SupportedSampleRates[0];
 
-            float[] monoSamples;
-            if (source.SampleRate == targetSampleRate)
-            {
-                monoSamples = ReadAllSamples(source);
-            }
-            else
-            {
-                using IAudioSamples resampled = AudioResampler.CreateResampledStream(source, targetSampleRate);
-                monoSamples = ReadAllSamples(resampled);
-            }
+            using IAudioSamples? nearResampled = ResampleOrNull(source, targetSampleRate);
+            IAudioSamples nearEnd = nearResampled ?? source;
 
-            float[]? farEndSamples = null;
-            if (definition.RequiresFarEndReference)
-            {
-                farEndSamples = await ReadMonoSamplesAtRateAsync(
-                    options.FarEndReferenceAudioPath!,
-                    targetSampleRate,
-                    cancellationToken).ConfigureAwait(false);
-            }
+            using IAudioSamples? farEndSource = definition.RequiresFarEndReference
+                ? await WaveAudioReader
+                    .ReadMonoPcm16Async(options.FarEndReferenceAudioPath!, cancellationToken)
+                    .ConfigureAwait(false)
+                : null;
+            using IAudioSamples? farResampled = farEndSource is null
+                ? null
+                : ResampleOrNull(farEndSource, targetSampleRate);
+            IAudioSamples? farEnd = farResampled ?? farEndSource;
 
             using NvidiaAfxSession session = NvidiaAfxSession.Create(
                 definition,
@@ -85,24 +81,37 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
                 targetSampleRate,
                 options.NvidiaAfxIntensityRatio,
                 readiness.ArchitectureBucket);
-            float[] enhanced = session.Process(monoSamples, farEndSamples);
 
             // Prefer the native/session output rate (telephony upscale is 8 kHz in → 16 kHz out).
             int outputSampleRate = session.OutputSampleRate > 0
                 ? session.OutputSampleRate
                 : definition.ResolveOutputSampleRate(targetSampleRate);
-            await WaveAudioWriter.WriteMonoPcm16Async(
-                request.DestinationPath,
-                enhanced,
-                outputSampleRate,
-                cancellationToken).ConfigureAwait(false);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(fullDestinationPath)!);
+            long sampleFrames;
+            await using (var destination = new FileStream(
+                partialPath, FileMode.Create, FileAccess.Write, FileShare.None,
+                bufferSize: 8192, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                var writer = await StreamingMonoPcm16WaveWriter.CreateAsync(
+                    destination,
+                    session.GetOutputSampleCount(nearEnd.SampleFrameCount),
+                    outputSampleRate,
+                    cancellationToken).ConfigureAwait(false);
+                sampleFrames = await session
+                    .ProcessStreamAsync(nearEnd, farEnd, writer.WriteAsync, cancellationToken)
+                    .ConfigureAwait(false);
+                await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(partialPath, fullDestinationPath, overwrite: true);
 
             return new SpeechAudioEnhancementResult(
                 request.DestinationPath,
-                DurationSeconds: (double)enhanced.Length / outputSampleRate,
+                DurationSeconds: (double)sampleFrames / outputSampleRate,
                 SampleRate: outputSampleRate,
                 ChannelCount: 1,
-                SampleFrames: enhanced.Length,
+                SampleFrames: sampleFrames,
                 Backend: SpeechAudioEnhancementBackend.NvidiaAfx,
                 BackendProfile: definition.Selector);
         }
@@ -110,36 +119,26 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            // Native create/run and file failures all land here; keep the reason so a fallback caused
+            // by a failed AFX attempt is distinguishable from an intentional one.
+            logger?.LogWarning(
+                $"NVIDIA AFX enhancement failed for profile '{definition.Selector}'; falling back to DeepFilterNet.",
+                ex);
             return await ffmpegFallback.EnhanceAsync(request, cancellationToken).ConfigureAwait(false);
         }
-    }
-
-    private static async Task<float[]> ReadMonoSamplesAtRateAsync(
-        string path,
-        int targetSampleRate,
-        CancellationToken cancellationToken)
-    {
-        using IAudioSamples source = await WaveAudioReader
-            .ReadMonoPcm16Async(path, cancellationToken)
-            .ConfigureAwait(false);
-        if (source.SampleRate == targetSampleRate)
+        finally
         {
-            return ReadAllSamples(source);
+            if (File.Exists(partialPath))
+            {
+                File.Delete(partialPath);
+            }
         }
-
-        using IAudioSamples resampled = AudioResampler.CreateResampledStream(source, targetSampleRate);
-        return ReadAllSamples(resampled);
     }
 
-    private bool IsIntegrationStubbed() =>
-        IsStubbedOverride?.Invoke() ?? NvidiaAfxIntegration.IsStubbed();
-
-    private static float[] ReadAllSamples(IAudioSamples audio)
-    {
-        var samples = new float[audio.SampleFrameCount];
-        audio.ReadMonoSamples(0L, samples.AsSpan());
-        return samples;
-    }
+    private static IAudioSamples? ResampleOrNull(IAudioSamples source, int targetSampleRate) =>
+        source.SampleRate == targetSampleRate
+            ? null
+            : AudioResampler.CreateResampledStream(source, targetSampleRate);
 }

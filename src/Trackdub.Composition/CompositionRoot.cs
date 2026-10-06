@@ -419,7 +419,8 @@ public static class CompositionRoot
                 sp.GetRequiredService<INvidiaAfxRuntimeReadinessService>(),
                 new Trackdub.Composition.DeepFilterNet.ResolvingSpeechAudioEnhancementService(
                     sp.GetService<BundledModelManifestRegistry>(),
-                    sp.GetService<IModelCacheInventory>())));
+                    sp.GetService<IModelCacheInventory>()),
+                logger: sp.GetService<IApplicationLogger>()));
         services.TryAddSingleton<NvidiaAfxRuntimeDownloader>(sp =>
             new NvidiaAfxRuntimeDownloader(
                 sp.GetRequiredService<ComponentStore>(),

@@ -65,10 +65,7 @@ public sealed class NvidiaAfxStubContractTests
         // Deliberately claim Ready to prove the kill switch short-circuits before native use.
         var readiness = new FakeReadinessService(
             new NvidiaAfxRuntimeReadiness(true, "Ready", @"C:\afx", null));
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback)
-        {
-            IsStubbedOverride = static () => true
-        };
+        var sut = new NvidiaAfxSpeechAudioEnhancementService(readiness, fallback, isStubbed: static () => true);
 
         SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
             new SpeechAudioEnhancementRequest(

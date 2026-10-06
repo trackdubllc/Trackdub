@@ -1,3 +1,4 @@
+using Trackdub.Inference.Onnx.Audio;
 using System.Runtime.CompilerServices;
 using Trackdub.Composition.NvidiaAfx;
 using Trackdub.Contracts;
@@ -40,17 +41,23 @@ public sealed class NvidiaAfxLiveRuntimeFactAttribute : FactAttribute
 /// </summary>
 public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
 {
+    private static (string Root, string Architecture) ResolveRuntime() =>
+        (NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot, new NvidiaAfxArchitectureDetector().DetectArchitectureBucket());
+
+    /// <summary>Profiles the UI offers by default: no AEC (needs a far-end reference) and no Early Access.</summary>
+    private static IEnumerable<NvidiaAfxProfileDefinition> ShippingDefinitions() =>
+        NvidiaAfxProfileCatalog.Definitions
+            .Where(definition => !definition.RequiresFarEndReference && !definition.IsEarlyAccess);
+
     [NvidiaAfxLiveRuntimeFact]
     public void Probe_succeeds_for_every_selectable_profile_and_rate()
     {
-        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
-        string architecture = new NvidiaAfxArchitectureDetector().DetectArchitectureBucket();
+        (string root, string architecture) = ResolveRuntime();
         output.WriteLine($"runtime root: {root}");
         output.WriteLine($"architecture bucket: {architecture}");
 
         var failures = new List<string>();
-        foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
-                     .Where(definition => !definition.RequiresFarEndReference && !definition.IsEarlyAccess))
+        foreach (NvidiaAfxProfileDefinition definition in ShippingDefinitions())
         {
             foreach (int sampleRate in definition.SupportedSampleRates)
             {
@@ -72,15 +79,12 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
     [NvidiaAfxLiveRuntimeFact]
     public void Same_rate_effects_process_real_audio_at_every_supported_rate()
     {
-        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
-        string architecture = new NvidiaAfxArchitectureDetector().DetectArchitectureBucket();
+        (string root, string architecture) = ResolveRuntime();
 
         var failures = new List<string>();
-        foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
-                     .Where(definition => !definition.RequiresFarEndReference
-                                          && !definition.IsEarlyAccess
-                                          && definition.ResolveOutputSampleRate(definition.SupportedSampleRates[0])
-                                             == definition.SupportedSampleRates[0]))
+        foreach (NvidiaAfxProfileDefinition definition in ShippingDefinitions()
+                     .Where(definition => definition.ResolveOutputSampleRate(definition.SupportedSampleRates[0])
+                                          == definition.SupportedSampleRates[0]))
         {
             foreach (int sampleRate in definition.SupportedSampleRates)
             {
@@ -127,8 +131,7 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
     [NvidiaAfxLiveRuntimeFact]
     public void Probe_agrees_with_a_full_run_for_early_access_profiles()
     {
-        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
-        string architecture = new NvidiaAfxArchitectureDetector().DetectArchitectureBucket();
+        (string root, string architecture) = ResolveRuntime();
         var disagreements = new List<string>();
 
         foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
@@ -164,10 +167,54 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
     }
 
     [NvidiaAfxLiveRuntimeFact]
+    public async Task Streamed_processing_matches_whole_buffer_processing_across_chunk_boundaries()
+    {
+        (string root, string architecture) = ResolveRuntime();
+        NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.NoiseAndReverb);
+        const int sampleRate = 48000;
+        // 2.5 s is more than two one-second chunks and ends mid-frame, so padding and trimming are exercised.
+        float[] input = BuildNoisySpeechLikeSignal(sampleRate, seconds: 3)[..(sampleRate * 5 / 2 - 7)];
+
+        using NvidiaAfxSession whole = NvidiaAfxSession.Create(definition, root, sampleRate, 1.0f, architecture);
+        float[] expected = whole.Process(input);
+
+        using NvidiaAfxSession streamed = NvidiaAfxSession.Create(definition, root, sampleRate, 1.0f, architecture);
+        var collected = new List<float>();
+        long written = await streamed.ProcessStreamAsync(
+            new ArrayAudioSamples(input, sampleRate),
+            farEnd: null,
+            (chunk, _) =>
+            {
+                collected.AddRange(chunk.ToArray());
+                return ValueTask.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.Equal(expected.Length, written);
+        Assert.Equal(expected.Length, collected.Count);
+        double maxDifference = expected.Zip(collected, (a, b) => Math.Abs(a - b)).Max();
+        output.WriteLine($"whole vs streamed max |difference| = {maxDifference:G3}");
+        Assert.True(maxDifference < 1e-3, $"Streamed output diverges from whole-buffer output by {maxDifference}.");
+    }
+
+    private sealed class ArrayAudioSamples(float[] data, int sampleRate) : IAudioSamples
+    {
+        public int SampleRate => sampleRate;
+
+        public long SampleFrameCount => data.Length;
+
+        public void ReadMonoSamples(long startFrame, Span<float> destination) =>
+            data.AsSpan((int)startFrame, destination.Length).CopyTo(destination);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    [NvidiaAfxLiveRuntimeFact]
     public void Telephony_upscale_changes_the_sample_rate_when_models_are_present()
     {
-        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
-        string architecture = new NvidiaAfxArchitectureDetector().DetectArchitectureBucket();
+        (string root, string architecture) = ResolveRuntime();
         NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.TelephonyUpscale);
         const int inputRate = 8000;
 
@@ -201,12 +248,11 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
     [NvidiaAfxLiveRuntimeFact]
     public void Intensity_changes_the_output_for_every_profile_that_advertises_it()
     {
-        string root = NvidiaAfxLiveRuntimeFactAttribute.RuntimeRoot;
-        string architecture = new NvidiaAfxArchitectureDetector().DetectArchitectureBucket();
+        (string root, string architecture) = ResolveRuntime();
 
         var ignored = new List<string>();
-        foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
-                     .Where(definition => definition.SupportsIntensityRatio && !definition.RequiresFarEndReference))
+        foreach (NvidiaAfxProfileDefinition definition in ShippingDefinitions()
+                     .Where(definition => definition.SupportsIntensityRatio))
         {
             int sampleRate = definition.SupportedSampleRates.Max();
             float[] input = BuildNoisySpeechLikeSignal(sampleRate, seconds: 2);
@@ -243,8 +289,7 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
         var service = CreateReadinessService(tempStore.Store, root);
 
         var notReady = new List<string>();
-        foreach (NvidiaAfxProfileDefinition definition in NvidiaAfxProfileCatalog.Definitions
-                     .Where(definition => !definition.RequiresFarEndReference && !definition.IsEarlyAccess))
+        foreach (NvidiaAfxProfileDefinition definition in ShippingDefinitions())
         {
             NvidiaAfxRuntimeReadiness readiness = service.GetReadiness(definition.Profile);
             output.WriteLine(

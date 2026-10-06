@@ -126,7 +126,8 @@ public static class HeadlessCompositionRoot
                     sp.GetRequiredService<INvidiaAfxRuntimeReadinessService>(),
                     new ResolvingSpeechAudioEnhancementService(
                         sp.GetService<BundledModelManifestRegistry>(),
-                        sp.GetService<IModelCacheInventory>()))));
+                        sp.GetService<IModelCacheInventory>()),
+                    logger: sp.GetService<IApplicationLogger>())));
             services.Replace(ServiceDescriptor.Scoped<IAudioTimeStretchService>(
                 _ => new AudioTimeStretchService(ffmpegPath)));
         }
