@@ -13,6 +13,8 @@ public sealed class HeadlessDubbingSessionFactory : IDubbingSessionFactory
 {
     private readonly ServiceProvider _serviceProvider;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly Trackdub.Contracts.Benchmarking.IProcessGpuMemoryReader? _processGpuReader;
+    private readonly IReadOnlyDictionary<int, long>? _adapterLuidMap;
     private readonly object _licenseInitGate = new();
     private volatile bool _disposed;
     private volatile bool _licenseInitialized;
@@ -28,6 +30,8 @@ public sealed class HeadlessDubbingSessionFactory : IDubbingSessionFactory
         serviceProvider.GetService<HeadlessStorageEnvironmentScope>();
 
         _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        _processGpuReader = HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(serviceProvider);
+        _adapterLuidMap = HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(serviceProvider);
     }
 
     /// <inheritdoc />
@@ -57,6 +61,8 @@ public sealed class HeadlessDubbingSessionFactory : IDubbingSessionFactory
             return;
 
         _disposed = true;
+        HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(_processGpuReader);
+        HeadlessCompositionRoot.ClearSharedPoolAdapterLuidMap(_adapterLuidMap);
         _serviceProvider.Dispose();
     }
 
