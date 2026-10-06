@@ -164,7 +164,12 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
             var bytesByAdapter = new Dictionary<int, long>(reading.BytesByAdapterLuid.Count);
             foreach (KeyValuePair<long, long> pair in reading.BytesByAdapterLuid)
             {
+#if WINDOWS
                 int? deviceIndex = WindowsDeviceEnumerator.QueryAdapterIndexByLuid(pair.Key);
+#else
+                // The device enumerator that owns the LUID mapping is only compiled for Windows.
+                int? deviceIndex = null;
+#endif
                 if (deviceIndex is null)
                 {
                     // The LUID is not among the host's usable adapters, so its bytes cannot be
