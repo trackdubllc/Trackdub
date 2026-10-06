@@ -126,24 +126,58 @@ public sealed class NvidiaAfxSpeechAudioEnhancementServiceTests
     {
         var logger = new CapturingLogger();
         var fallback = new FakeSpeechAudioEnhancementService();
-        string missingSource = Path.Join(Path.GetTempPath(), $"trackdub-afx-missing-{Guid.NewGuid():N}.wav");
-        string destination = Path.Join(Path.GetTempPath(), $"trackdub-afx-dest-{Guid.NewGuid():N}.wav");
-        var sut = new NvidiaAfxSpeechAudioEnhancementService(
-            new FakeReadinessService(new NvidiaAfxRuntimeReadiness(true, "Ready", "C:\afx", null)),
-            fallback,
-            logger: logger);
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-afx-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            // A valid source gets past the read, so the failure is the native create against a
+            // runtime folder that does not exist.
+            string source = Path.Join(directory, "source.wav");
+            WriteSilentMonoPcm16Wav(source, sampleRate: 48000, sampleFrames: 4800);
+            string destination = Path.Join(directory, "dest.wav");
+            var sut = new NvidiaAfxSpeechAudioEnhancementService(
+                new FakeReadinessService(new NvidiaAfxRuntimeReadiness(
+                    true, "Ready", Path.Join(directory, "no-such-runtime"), null)),
+                fallback,
+                logger: logger);
 
-        SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
-            new SpeechAudioEnhancementRequest(
-                missingSource,
-                destination,
-                new SpeechAudioEnhancementOptions(true, NvidiaAfxProfile.NoiseAndReverb, 1.0f)),
-            CancellationToken.None);
+            SpeechAudioEnhancementResult result = await sut.EnhanceAsync(
+                new SpeechAudioEnhancementRequest(
+                    source,
+                    destination,
+                    new SpeechAudioEnhancementOptions(true, NvidiaAfxProfile.NoiseAndReverb, 1.0f)),
+                CancellationToken.None);
 
-        Assert.True(fallback.WasCalled);
-        Assert.Equal(SpeechAudioEnhancementBackend.Ffmpeg, result.Backend);
-        Assert.NotNull(logger.Exception);
-        Assert.False(File.Exists(destination + ".partial"));
+            Assert.True(fallback.WasCalled);
+            Assert.Equal(SpeechAudioEnhancementBackend.Ffmpeg, result.Backend);
+            Assert.NotNull(logger.Exception);
+            Assert.Contains("dereverb_denoiser", logger.Message, StringComparison.Ordinal);
+            Assert.Empty(Directory.GetFiles(directory, "*.partial"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void WriteSilentMonoPcm16Wav(string path, int sampleRate, int sampleFrames)
+    {
+        int dataBytes = sampleFrames * sizeof(short);
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream);
+        writer.Write("RIFF"u8);
+        writer.Write(36 + dataBytes);
+        writer.Write("WAVEfmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)1);
+        writer.Write(sampleRate);
+        writer.Write(sampleRate * sizeof(short));
+        writer.Write((short)sizeof(short));
+        writer.Write((short)16);
+        writer.Write("data"u8);
+        writer.Write(dataBytes);
+        writer.Write(new byte[dataBytes]);
     }
 
     [Fact]

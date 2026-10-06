@@ -51,7 +51,9 @@ public sealed class NvidiaAfxSpeechAudioEnhancementService(
         }
 
         string fullDestinationPath = Path.GetFullPath(request.DestinationPath);
-        string partialPath = fullDestinationPath + ".partial";
+        // One partial file per attempt, so concurrent calls for the same destination never write or
+        // delete each other's file.
+        string partialPath = $"{fullDestinationPath}.{Guid.NewGuid():N}.partial";
         try
         {
             using IAudioSamples source = await WaveAudioReader
