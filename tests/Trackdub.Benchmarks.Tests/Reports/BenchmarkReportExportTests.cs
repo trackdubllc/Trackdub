@@ -72,6 +72,21 @@ public sealed class BenchmarkReportExportTests : IDisposable
         ],
     };
 
+    private static ExecutionProviderMatrixReport CreateSampleSimulatedMatrixReport() =>
+        ExecutionProviderMatrixRunner.CompareProviders(
+            scenario: "full-pipeline",
+            baselineProvider: "cpu",
+            providerStats: new Dictionary<string, (double P50, double Throughput, long PeakMemory, long ManagedAlloc)>
+            {
+                ["cpu"] = (100.0, 10.0, 0, 0),
+                ["directml"] = (50.0, 20.0, 0, 0),
+            },
+            simulatedLatencyBudgets: new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["cpu"] = 1000.0,
+                ["directml"] = 500.0,
+            });
+
     private static ExecutionProviderMatrixReport CreateSampleMatrixReport() =>
         ExecutionProviderMatrixRunner.CompareProviders(
             "full-pipeline",
@@ -409,19 +424,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
     {
         // A mock run's comparison demonstrates the simulation's contract, and the table alone
         // cannot say so; the budgets it was built from must be visible to a reader.
-        ExecutionProviderMatrixReport report = ExecutionProviderMatrixRunner.CompareProviders(
-            scenario: "full-pipeline",
-            baselineProvider: "cpu",
-            providerStats: new Dictionary<string, (double P50, double Throughput, long PeakMemory, long ManagedAlloc)>
-            {
-                ["cpu"] = (100.0, 10.0, 0, 0),
-                ["directml"] = (50.0, 20.0, 0, 0),
-            },
-            simulatedLatencyBudgets: new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["cpu"] = 1000.0,
-                ["directml"] = 500.0,
-            });
+        ExecutionProviderMatrixReport report = CreateSampleSimulatedMatrixReport();
 
         string markdown = BenchmarkReportExporter.RenderMatrixMarkdown(report);
 
@@ -442,19 +445,7 @@ public sealed class BenchmarkReportExportTests : IDisposable
     [Fact]
     public async Task ExportJsonAsync_MatrixReport_RoundTripsSimulatedBudgets()
     {
-        ExecutionProviderMatrixReport original = ExecutionProviderMatrixRunner.CompareProviders(
-            scenario: "full-pipeline",
-            baselineProvider: "cpu",
-            providerStats: new Dictionary<string, (double P50, double Throughput, long PeakMemory, long ManagedAlloc)>
-            {
-                ["cpu"] = (100.0, 10.0, 0, 0),
-                ["directml"] = (50.0, 20.0, 0, 0),
-            },
-            simulatedLatencyBudgets: new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["cpu"] = 1000.0,
-                ["directml"] = 500.0,
-            });
+        ExecutionProviderMatrixReport original = CreateSampleSimulatedMatrixReport();
         string outputPath = Path.Join(_tempDir, "matrix-budget-rt.json");
 
         await BenchmarkReportExporter.ExportJsonAsync(original, outputPath);
