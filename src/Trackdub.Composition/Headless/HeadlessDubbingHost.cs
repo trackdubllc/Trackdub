@@ -2,7 +2,6 @@ using Trackdub.Application.Dubbing;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Contracts;
 using Trackdub.Contracts.Benchmarking;
-using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Infrastructure.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -71,21 +70,8 @@ public sealed class HeadlessDubbingHost : IDisposable
         // entirely. Resolving here also pays the performance-counter warm-up during setup
         // rather than inside a measured stage. Best-effort: telemetry must never fail host
         // creation.
-        IProcessGpuMemoryReader? processGpuReader = null;
-#if WINDOWS
-        try
-        {
-            processGpuReader = serviceProvider.GetService<IProcessGpuMemoryReader>();
-            if (processGpuReader is not null)
-            {
-                SharedPoolOptions.UseProcessGpuMemoryReader(processGpuReader);
-            }
-        }
-        catch
-        {
-            processGpuReader = null;
-        }
-#endif
+        IProcessGpuMemoryReader? processGpuReader =
+            HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(serviceProvider);
 
         return new HeadlessDubbingHost(new HeadlessDubbingSessionFactory(serviceProvider), serviceProvider, processGpuReader);
     }
@@ -126,10 +112,7 @@ public sealed class HeadlessDubbingHost : IDisposable
         // only while it still refers to this host's reader, so a later host's registration is
         // never torn down and later tests never observe a stale reader. The clear is atomic:
         // a host disposing while another host registers cannot null the newer registration.
-        if (_processGpuReader is not null)
-        {
-            SharedPoolOptions.TryClearProcessGpuMemoryReader(_processGpuReader);
-        }
+        HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(_processGpuReader);
 
         _sessionFactory.Dispose();
     }

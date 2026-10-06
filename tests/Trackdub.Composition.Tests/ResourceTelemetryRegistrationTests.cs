@@ -126,6 +126,37 @@ public sealed class ResourceTelemetryRegistrationTests
     }
 
     [Fact]
+    public void Headless_composition_root_binds_and_clears_shared_pool_admission()
+    {
+        // The shared helper every headless composition owner calls — HeadlessDubbingHost and
+        // the SDK's TrackdubBuilder.Build — must bind the container's reader and release the
+        // binding on dispose without touching a previous registration.
+        IProcessGpuMemoryReader? previous = SharedPoolOptions.ProcessGpuMemoryReader;
+        var services = new ServiceCollection();
+        services.AddHeadlessTrackdub();
+        using var provider = services.BuildServiceProvider();
+
+        try
+        {
+            IProcessGpuMemoryReader? bound = HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(provider);
+#if WINDOWS
+            Assert.Same(provider.GetRequiredService<IProcessGpuMemoryReader>(), bound);
+            Assert.Same(bound, SharedPoolOptions.ProcessGpuMemoryReader);
+            HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(bound);
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+#else
+            // No platform reader here: the pool keeps its reservation-only model.
+            Assert.Null(bound);
+            Assert.Null(SharedPoolOptions.ProcessGpuMemoryReader);
+#endif
+        }
+        finally
+        {
+            SharedPoolOptions.UseProcessGpuMemoryReader(previous);
+        }
+    }
+
+    [Fact]
     public void Headless_preserves_pre_registered_resource_services()
     {
         var collector = new ProcessResourceTelemetryCollector();

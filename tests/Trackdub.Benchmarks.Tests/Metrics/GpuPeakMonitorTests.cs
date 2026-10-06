@@ -44,6 +44,19 @@ public sealed class GpuPeakMonitorTests
     }
 
     [Fact]
+    public void Stop_returns_null_with_reason_when_start_seeded_but_no_interval_sample_was_readable()
+    {
+        // A start-value seed is not interval evidence: when every real read is a gap the
+        // reported "peak" would just be the seeded endpoint value, so the monitor degrades
+        // to null with an unavailable reason instead of labelling the endpoint-only result
+        // as a sampled peak.
+        var monitor = new GpuPeakMonitor(new UnavailableGpuReader(), initialValue: 1000, TimeSpan.FromSeconds(1));
+
+        Assert.Null(monitor.Stop());
+        Assert.Equal("No process-GPU interval sample was readable.", monitor.UnavailableReason);
+    }
+
+    [Fact]
     public void Stop_returns_unavailable_if_a_read_is_negative()
     {
         var reader = new SequenceGpuReader(1000, -5);

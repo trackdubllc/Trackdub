@@ -1,5 +1,6 @@
 using Trackdub.Composition.Headless;
 using Trackdub.Contracts;
+using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -77,4 +78,24 @@ public static class HeadlessCompositionRoot
             ServiceConfigurator = options.ServiceConfigurator,
         };
     }
+
+    /// <summary>
+    /// Hands the container's process-GPU reader to the shared ONNX session pool so accelerator
+    /// admission accounts for this process's real dedicated GPU footprint (opt-out via
+    /// <c>TRACKDUB_SESSION_PROCESS_GPU_ADMISSION</c>). The SDK builds the headless composition
+    /// directly in <see cref="TrackdubBuilder.Build"/> — not through
+    /// <see cref="Trackdub.Composition.Headless.HeadlessDubbingHost"/> — so every SDK composition
+    /// owner must call this once the provider is built or the advertised default-on admission
+    /// silently stays reservation-only for that path. Best-effort.
+    /// </summary>
+    public static IProcessGpuMemoryReader? BindSharedPoolProcessGpuAdmission(IServiceProvider services) =>
+        Trackdub.Composition.Headless.HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(services);
+
+    /// <summary>
+    /// Releases the process-wide pool binding owned by <paramref name="reader"/> only while it
+    /// still refers to that reader, so disposing one composition owner never tears down a newer
+    /// owner's registration. Safe to call with null.
+    /// </summary>
+    public static void ClearSharedPoolProcessGpuAdmission(IProcessGpuMemoryReader? reader) =>
+        Trackdub.Composition.Headless.HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(reader);
 }

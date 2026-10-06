@@ -1,6 +1,7 @@
 using Trackdub.Application.Dubbing;
 using Trackdub.Composition.Headless;
 using Trackdub.Contracts;
+using Trackdub.Contracts.Benchmarking;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trackdub.Sdk;
@@ -13,11 +14,13 @@ public sealed class TrackdubSessionFactory : IDubbingSessionFactory, IDisposable
 {
     private readonly ServiceProvider _serviceProvider;
     private readonly HeadlessDubbingSessionFactory _inner;
+    private readonly IProcessGpuMemoryReader? _processGpuReader;
     private volatile bool _disposed;
 
-    internal TrackdubSessionFactory(ServiceProvider serviceProvider)
+    internal TrackdubSessionFactory(ServiceProvider serviceProvider, IProcessGpuMemoryReader? processGpuReader = null)
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _processGpuReader = processGpuReader;
         _inner = new HeadlessDubbingSessionFactory(serviceProvider);
     }
 
@@ -73,6 +76,9 @@ public sealed class TrackdubSessionFactory : IDubbingSessionFactory, IDisposable
             return;
 
         _disposed = true;
+        // TrackdubBuilder.Build bound this factory's reader to the shared pool: release the
+        // process-wide binding only while it still refers to this factory's reader.
+        HeadlessCompositionRoot.ClearSharedPoolProcessGpuAdmission(_processGpuReader);
         _inner.Dispose();
     }
 }
