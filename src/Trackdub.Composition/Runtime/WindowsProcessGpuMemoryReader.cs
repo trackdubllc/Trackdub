@@ -223,7 +223,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         int end = checked((int)characterCount);
         while (offset < end)
         {
-            string? value = Marshal.PtrToStringUni(buffer + offset * sizeof(char));
+            string? value = Marshal.PtrToStringUni(buffer + (offset * sizeof(char)));
             if (string.IsNullOrEmpty(value))
             {
                 yield break;
