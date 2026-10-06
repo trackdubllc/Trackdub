@@ -18,10 +18,10 @@ namespace Trackdub.Contracts.Benchmarking;
 /// platform or driver cannot report it.
 /// </para>
 /// <para>
-/// A host can also make this reading drive the shared ONNX session pool's accelerator admission
-/// instead of only reporting it, so GPU memory this process holds outside the pool's own
-/// reservations consumes the same per-device budget; see <c>SharedPoolOptions</c> in
-/// <c>Trackdub.Inference.Onnx</c>.
+/// The reading is also available to the shared ONNX session pool for telemetry. Because this
+/// interface reports one process-wide total rather than per-adapter values, the pool does not
+/// charge it to an individual device; accelerator admission remains reservation-only. See
+/// <c>SharedPoolOptions</c> in <c>Trackdub.Inference.Onnx</c>.
 /// </para>
 /// </remarks>
 public interface IProcessGpuMemoryReader

@@ -20,7 +20,7 @@ namespace Trackdub.Inference.Onnx.Pool;
 ///   <item><description><c>TRACKDUB_SESSION_VRAM_BUDGET_MB</c> — positive integer accelerator budget in MB, applied per device. Invalid values fall back to <see cref="InferenceSessionPool.DefaultMemoryBudgetMb"/>.</description></item>
 ///   <item><description><c>TRACKDUB_SESSION_RAM_BUDGET_MB</c> — positive integer host RAM budget in MB, shared by CPU/DNNL and OpenVINO CPU-proxy sessions. Invalid values fall back to <see cref="InferenceSessionPool.DefaultHostMemoryBudgetMb"/>.</description></item>
 ///   <item><description><c>TRACKDUB_SESSION_MAX_SESSIONS</c> — positive integer capacity (count mode). Invalid or overflowing values fall back to the pool default.</description></item>
-///   <item><description><c>TRACKDUB_SESSION_PROCESS_GPU_ADMISSION</c> — <c>0</c>/<c>false</c>/<c>off</c>/<c>disabled</c> to stop accelerator admission from accounting for this process's own dedicated GPU usage; anything else (including unset) keeps it on.</description></item>
+///   <item><description><c>TRACKDUB_SESSION_PROCESS_GPU_ADMISSION</c> — <c>0</c>/<c>false</c>/<c>off</c>/<c>disabled</c> to stop collecting this process's dedicated GPU usage for telemetry; anything else (including unset) keeps it on.</description></item>
 /// </list>
 /// <para>
 /// The environment values are captured once, when the shared pool is first resolved, so
@@ -48,8 +48,8 @@ public static class SharedPoolOptions
     public const string MaxSessionsVariable = "TRACKDUB_SESSION_MAX_SESSIONS";
 
     /// <summary>
-    /// Opt-out switch for process-isolated GPU admission: only an explicit negative stops the
-    /// pool from accounting for this process's own dedicated GPU usage.
+    /// Opt-out switch for collecting process-isolated GPU usage for telemetry: only an explicit
+    /// negative disables the observation.
     /// </summary>
     public const string ProcessGpuAdmissionVariable = "TRACKDUB_SESSION_PROCESS_GPU_ADMISSION";
 
@@ -69,10 +69,9 @@ public static class SharedPoolOptions
         ReadPositiveInt32(MaxSessionsVariable) ?? InferenceSessionPool.DefaultMaxSessions;
 
     /// <summary>
-    /// Whether accelerator admission also accounts for this process's real dedicated GPU
-    /// usage (see <see cref="ProcessGpuMemoryReader"/>). On by default: the reading only ever
-    /// tightens admission, and it is the only signal that can see GPU memory this process holds
-    /// outside the pool's own reservations (driver contexts, arenas, non-pooled consumers).
+    /// Whether the pool collects this process's real dedicated GPU usage
+    /// (see <see cref="ProcessGpuMemoryReader"/>) for telemetry. Device attribution is not
+    /// available from the process-wide reader, so accelerator admission remains reservation-only.
     /// </summary>
     public static bool EnableProcessGpuAdmission { get; } = ReadAdmissionFlag(ProcessGpuAdmissionVariable);
 

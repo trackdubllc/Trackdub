@@ -30,11 +30,10 @@ namespace Trackdub.Inference.Onnx.Pool;
 ///
 /// <para><strong>Process-isolated VRAM observation:</strong>
 /// When the host registers a process-GPU reader (see
-/// <see cref="SharedPoolOptions.UseProcessGpuMemoryReader"/>), accelerator admission also floors
-/// each device's admitted usage at this process's real dedicated GPU footprint, so GPU memory the
-/// pool does not account for — driver contexts, runtime arenas, non-pooled consumers — consumes
-/// the same per-device budget instead of being invisible to admission. Host-RAM buckets are
-/// unaffected, an unavailable reading leaves reservation accounting exactly as it was, and
+/// <see cref="SharedPoolOptions.UseProcessGpuMemoryReader"/>), the reading is retained for
+/// telemetry. Because it reports one total across all adapters rather than device-attributed
+/// usage, accelerator admission remains reservation-only to avoid charging memory on one device
+/// to another. An unavailable reading likewise leaves reservation accounting unchanged, and
 /// <c>TRACKDUB_SESSION_PROCESS_GPU_ADMISSION</c> disables the observation explicitly.</para>
 ///
 /// <para><strong>Single-flight creation:</strong>
@@ -1277,51 +1276,24 @@ internal sealed class InferenceSessionPool : IDisposable
     }
 
     /// <summary>
-    /// This process's dedicated GPU usage attributed to <paramref name="bucket"/>, in MB, or 0
-    /// when there is nothing to attribute.
+    /// Returns process GPU usage attributable to <paramref name="bucket"/>, in MB.
     /// </summary>
     /// <remarks>
-    /// The counter set reports a single total for the process, summed across every adapter it
-    /// touches, so the sibling accelerator buckets' own reservations are subtracted first. What
-    /// remains is GPU usage the pool cannot explain — driver contexts, runtime arenas, non-pooled
-    /// consumers — charged to the bucket under decision. Host buckets are never charged: their
-    /// sessions live in RAM, not on an adapter.
+    /// The process reader reports one total summed across all adapters and does not provide
+    /// device attribution. It therefore cannot safely be charged to the bucket under decision:
+    /// doing so could make a free adapter fail admission because this process uses memory on a
+    /// different adapter. Until per-adapter readings are available, admission remains
+    /// reservation-only; the process-wide reading is still retained for telemetry.
     /// </remarks>
-    private long ObservedProcessGpuUsageMb(AdmissionBucket bucket, long? observedProcessGpuMb)
-    {
-        if (bucket.IsHost || observedProcessGpuMb is not > 0)
-        {
-            return 0;
-        }
-
-        long committedElsewhereMb = 0;
-        foreach (SessionPoolKey key in entries.Keys)
-        {
-            if (BucketOf(key) is AdmissionBucket other && other != bucket && !other.IsHost)
-            {
-                committedElsewhereMb += ResolveReservationMb(key);
-            }
-        }
-
-        foreach (ExternalReservationState state in externalReservations.Values)
-        {
-            if (!state.Bucket.IsHost && state.Bucket != bucket)
-            {
-                committedElsewhereMb += state.EstimatedMemoryMb;
-            }
-        }
-
-        return Math.Max(0, observedProcessGpuMb.Value - committedElsewhereMb);
-    }
+    private static long ObservedProcessGpuUsageMb(AdmissionBucket bucket, long? observedProcessGpuMb) => 0;
 
     /// <summary>
-    /// Admission usage for <paramref name="bucket"/>: the pool's committed reservations, floored
-    /// by this process's real dedicated GPU usage for accelerator buckets. The floor is what makes
-    /// the process-isolated reading — and accelerator memory held outside the pool — part of the
-    /// admission decision rather than telemetry only.
+    /// Admission usage for <paramref name="bucket"/> based on reservations belonging to that
+    /// bucket. Process-wide GPU observations remain telemetry because they have no device
+    /// attribution.
     /// </summary>
     private long AdmissionUsageMb(AdmissionBucket bucket, long? observedProcessGpuMb) =>
-        Math.Max(CurrentReservedMb(bucket), ObservedProcessGpuUsageMb(bucket, observedProcessGpuMb));
+        CurrentReservedMb(bucket);
 
     private void AddPendingReservation(AdmissionBucket bucket, long mb)
     {
@@ -1445,8 +1417,7 @@ internal sealed class InferenceSessionPool : IDisposable
                 {
                     // Doesn't fit yet — poll instead of blocking a thread-pool thread on
                     // Monitor.Wait. Bounded delay; loops back to retake creationLock and
-                    // recheck (an eviction, a lease release, or the process's own GPU usage
-                    // draining may have freed headroom).
+                    // recheck (an eviction or a lease release may have freed headroom).
                     await Task.Delay(50, cancellationToken).ConfigureAwait(false);
                 }
             }
