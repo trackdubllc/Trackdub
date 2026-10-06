@@ -68,7 +68,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     {
         try
         {
-            _ = QueryDedicatedUsageBytes();
+            _ = QueryObservation();
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -89,7 +89,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     {
         try
         {
-            return QueryDedicatedUsageBytes();
+            return QueryObservation()?.TotalBytes;
         }
         catch (Exception exception) when (exception is DllNotFoundException or BadImageFormatException)
         {
@@ -101,7 +101,61 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         }
     }
 
-    private static long? QueryDedicatedUsageBytes()
+    public IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid()
+    {
+        try
+        {
+            return QueryObservation()?.ByAdapterLuid;
+        }
+        catch (Exception exception) when (exception is DllNotFoundException or BadImageFormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// One wildcard collection of this process's dedicated GPU instances: their total plus the
+    /// per-adapter breakdown keyed by adapter LUID (null when an instance cannot be attributed),
+    /// or null when the reading is unavailable.
+    /// </summary>
+    private sealed record GpuMemoryObservation(long TotalBytes, IReadOnlyDictionary<long, long>? ByAdapterLuid);
+
+    /// <summary>
+    /// Parses the adapter LUID out of a GPU Process Memory instance name
+    /// (<c>pid_&lt;pid&gt;_luid_&lt;high&gt;_&lt;low&gt;_phys_&lt;n&gt;</c>, components in hex
+    /// or decimal) into the <c>long</c> form DXGI reports (<c>(High &lt;&lt; 32) | Low</c>).
+    /// </summary>
+    internal static bool TryParseAdapterLuid(string instanceName, out long adapterLuid)
+    {
+        adapterLuid = 0;
+        // pid_<pid>_luid_<high>_<low>_phys_<n>
+        string[] parts = instanceName.Split('_');
+        if (parts.Length != 7
+            || !parts[0].Equals("pid", StringComparison.OrdinalIgnoreCase)
+            || !parts[2].Equals("luid", StringComparison.OrdinalIgnoreCase)
+            || !parts[5].Equals("phys", StringComparison.OrdinalIgnoreCase)
+            || !TryParseLuidPart(parts[3], out long high)
+            || !TryParseLuidPart(parts[4], out long low))
+        {
+            return false;
+        }
+
+        adapterLuid = checked((high << 32) | (uint)low);
+        return true;
+    }
+
+    private static bool TryParseLuidPart(string text, out long value)
+    {
+        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            && long.TryParse(text.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out value))
+        {
+            return true;
+        }
+
+        return long.TryParse(text, out value);
+    }
+
+    private static GpuMemoryObservation? QueryObservation()
     {
         if (NativeMethods.PdhOpenQueryW(null, 0, out nint query) != ErrorSuccess)
         {
@@ -141,7 +195,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
             {
                 // The counter set accepted the wildcard but publishes no instances at all:
                 // no process holds dedicated GPU memory, so neither does this one.
-                return 0;
+                return new GpuMemoryObservation(0, new Dictionary<long, long>());
             }
 
             nint buffer = Marshal.AllocHGlobal(checked((int)bufferSize));
@@ -161,6 +215,8 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                 int readings = 0;
                 bool matched = false;
                 bool invalid = false;
+                bool unattributed = false;
+                var byAdapter = new Dictionary<long, long>();
                 for (uint i = 0; i < itemCount; i++)
                 {
                     nint itemPtr = buffer + (int)(i * (uint)itemSize);
@@ -182,6 +238,19 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
 
                     total = checked(total + item.Value.LargeValue);
                     readings++;
+                    if (!TryParseAdapterLuid(name, out long adapterLuid))
+                    {
+                        // An instance that cannot be attributed to an adapter breaks the
+                        // per-adapter sum invariant, so the breakdown is withheld while the
+                        // process total still stands.
+                        unattributed = true;
+                        continue;
+                    }
+
+                    byAdapter[adapterLuid] = checked(
+                        byAdapter.TryGetValue(adapterLuid, out long attributed)
+                            ? attributed + item.Value.LargeValue
+                            : item.Value.LargeValue);
                 }
 
                 // The counter set exists but publishes no instance for this process: it holds
@@ -189,7 +258,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                 // (A missing counter set already returned null above.)
                 if (!matched)
                 {
-                    return 0;
+                    return new GpuMemoryObservation(0, new Dictionary<long, long>());
                 }
 
                 // A partial footprint would under-report the process's real usage and let
@@ -200,7 +269,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
                     return null;
                 }
 
-                return total;
+                return new GpuMemoryObservation(total, unattributed ? null : byAdapter);
             }
             finally
             {

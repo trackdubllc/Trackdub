@@ -105,6 +105,35 @@ public static class SharedPoolOptions
     public static bool TryClearProcessGpuMemoryReader(IProcessGpuMemoryReader? expected) =>
         ReferenceEquals(Interlocked.CompareExchange(ref processGpuMemoryReader, null, expected), expected);
 
+    private static IReadOnlyDictionary<int, long>? adapterLuidMap;
+
+    /// <summary>
+    /// Maps admission device ids to DXGI adapter LUIDs, or <see langword="null"/> when no host
+    /// has registered one. Lets the pool attribute the process-GPU observation per adapter
+    /// instead of charging the process total to every device. Absent entries and a missing map
+    /// fall back to the process-total accounting.
+    /// </summary>
+    public static IReadOnlyDictionary<int, long>? AdapterLuidMap =>
+        Volatile.Read(ref adapterLuidMap);
+
+    /// <summary>
+    /// Registers the host's device-id-to-adapter-LUID map, or clears it with
+    /// <see langword="null"/>. Composition builds it from <c>IDeviceEnumerator</c> when the
+    /// host is created; like <see cref="ProcessGpuMemoryReader"/> it is read on every
+    /// accelerator admission decision.
+    /// </summary>
+    public static void UseAdapterLuidMap(IReadOnlyDictionary<int, long>? map) =>
+        Volatile.Write(ref adapterLuidMap, map);
+
+    /// <summary>
+    /// Clears the adapter LUID map only while it still references <paramref name="expected"/>,
+    /// atomically. A host disposing while another host registers must never tear down the
+    /// newer registration.
+    /// </summary>
+    /// <returns><see langword="true"/> when the binding was cleared.</returns>
+    public static bool TryClearAdapterLuidMap(IReadOnlyDictionary<int, long>? expected) =>
+        ReferenceEquals(Interlocked.CompareExchange(ref adapterLuidMap, null, expected), expected);
+
     internal static bool ReadAdmissionFlag(string variable)
         => ParseAdmissionFlag(Environment.GetEnvironmentVariable(variable));
 

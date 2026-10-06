@@ -48,8 +48,11 @@ What the observation means in practice:
 - In-flight creates hold a pending reservation but have not allocated yet, so the process reading
   cannot contain them: pending reservations are charged on top of the observed floor, keeping
   concurrent admissions from overshooting the device budget.
-- The reading is process-wide and cannot be attributed to an adapter, so it is conservative on a
-  multi-GPU host: only the reservations the pool's *other* devices already explain are subtracted.
+- When the reader attributes usage per adapter (Windows) and the host registered its
+  device-to-LUID map, each accelerator device is charged exactly its own adapter's footprint:
+  usage on other adapters never blocks it and no sibling subtraction is needed. Without a
+  breakdown or a map, the pool falls back to the conservative process total minus the sibling
+  devices' reservations, so multi-GPU pipelines cannot lock themselves out.
 - Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) are never charged with it.
 - An unavailable reading — no GPU, a driver that does not publish the counter set, a GPU-idle
   process, or a failing probe — leaves admission exactly as it was.

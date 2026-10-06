@@ -1198,6 +1198,114 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
+    public async Task ProcessGpuAdmission_PerAdapterAttributionIsolatesDevices()
+    {
+        // With a per-adapter breakdown and a host LUID map, device 1's real usage is never
+        // charged to device 0: no sibling subtraction, no cross-adapter blocking.
+        var reader = new PerAdapterProcessGpuMemoryReader(
+            totalBytes: 5000L * 1024 * 1024,
+            byLuidBytes: new Dictionary<long, long>
+            {
+                [100] = 1500L * 1024 * 1024,
+                [200] = 3500L * 1024 * 1024,
+            });
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        IReadOnlyDictionary<int, long>? previous = SharedPoolOptions.AdapterLuidMap;
+        SharedPoolOptions.UseAdapterLuidMap(new Dictionary<int, long> { [0] = 100, [1] = 200 });
+        try
+        {
+            // 1500 MB on this adapter + 256 MB need fits the 4096 MB budget, even though the
+            // process total (5000 MB) would block under the fallback accounting.
+            using SessionLease lease = await pool.GetLeaseAsync(
+                AcceleratorKey("pa1", 256, deviceId: 0),
+                _ => Task.FromResult(CreateMinimalSession()),
+                CancellationToken.None);
+
+            Assert.NotNull(lease.Session);
+        }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previous);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_MissingMapFallsBackToProcessTotal()
+    {
+        // Without a host LUID map the pool keeps the conservative process-total accounting:
+        // the 5000 MB total blocks a 256 MB admission on a 4096 MB budget.
+        var reader = new PerAdapterProcessGpuMemoryReader(
+            totalBytes: 5000L * 1024 * 1024,
+            byLuidBytes: new Dictionary<long, long> { [100] = 1500L * 1024 * 1024 });
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        IReadOnlyDictionary<int, long>? previous = SharedPoolOptions.AdapterLuidMap;
+        SharedPoolOptions.UseAdapterLuidMap(null);
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+            int factoryCalls = 0;
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("pa2", 256, deviceId: 0),
+                _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
+                cts.Token));
+
+            Assert.Equal(0, factoryCalls);
+        }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previous);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_UnattributedBreakdownFallsBackToProcessTotal()
+    {
+        // A reader that cannot attribute per adapter (null breakdown) degrades to the same
+        // fallback even when the host registered a map.
+        var reader = new PerAdapterProcessGpuMemoryReader(totalBytes: 5000L * 1024 * 1024, byLuidBytes: null);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        IReadOnlyDictionary<int, long>? previous = SharedPoolOptions.AdapterLuidMap;
+        SharedPoolOptions.UseAdapterLuidMap(new Dictionary<int, long> { [0] = 100 });
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("pa3", 256, deviceId: 0),
+                _ => Task.FromResult(CreateMinimalSession()),
+                cts.Token));
+        }
+        finally
+        {
+            SharedPoolOptions.UseAdapterLuidMap(previous);
+        }
+    }
+
+    private sealed class PerAdapterProcessGpuMemoryReader(long? totalBytes, IReadOnlyDictionary<long, long>? byLuidBytes)
+        : IProcessGpuMemoryReader
+    {
+        public string UnavailableReason => "Test double: scripted per-adapter reading.";
+
+        public long? ReadDedicatedGpuMemoryBytes() => totalBytes;
+
+        public IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid() => byLuidBytes;
+    }
+
+    [Fact]
     public async Task ProcessGpuAdmission_UnavailableReading_LeavesAdmissionUnchanged()
     {
         // A reader that cannot report (no GPU, a driver without the counter set, a GPU-idle

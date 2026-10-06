@@ -32,6 +32,15 @@ public interface IProcessGpuMemoryReader
     /// </summary>
     long? ReadDedicatedGpuMemoryBytes();
 
+    /// <summary>
+    /// Dedicated GPU memory currently allocated by this process, broken down by adapter LUID,
+    /// or null when this platform, driver, or reader cannot attribute usage per adapter. The
+    /// values sum to <see cref="ReadDedicatedGpuMemoryBytes"/> when both are available. The
+    /// default implementation reports no per-adapter attribution, in which case consumers fall
+    /// back to the process-total reading.
+    /// </summary>
+    IReadOnlyDictionary<long, long>? ReadDedicatedGpuMemoryBytesByAdapterLuid() => null;
+
     /// <summary>Why the reading is unavailable, surfaced verbatim in benchmark evidence.</summary>
     string UnavailableReason { get; }
 }
