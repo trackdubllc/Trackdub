@@ -80,7 +80,7 @@ dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 
 ## Inference Session Pool & Memory Admission
 - ONNX session memory admission is enabled by default in `SharedPoolOptions` / `InferenceSessionPool` (4096 MiB per accelerator device, 4096 MiB shared host RAM).
-- Process GPU observation: on Windows, accelerator admission floors device usage at the process's real dedicated GPU footprint (`gpuBytes`). Non-pooled GPU memory (driver contexts, arenas) consumes the per-device budget. Eviction polls every 50 ms while over budget.
+- Process GPU observation: on Windows, accelerator admission floors device usage at the process's real dedicated GPU footprint (`gpuBytes`). Non-pooled GPU memory (driver contexts, arenas) consumes the per-device budget. Pending creates are charged on top of the observed floor; eviction polls every 50 ms while over budget, and an observation-held stall with nothing left to free fails fast with a diagnostic.
 - Opt-out & tuning: set `TRACKDUB_SESSION_PROCESS_GPU_ADMISSION=0` (or `false`/`off`) to disable process-isolated GPU admission and revert to reservation-only accounting. Adjust host RAM with `TRACKDUB_SESSION_RAM_BUDGET_MB` and accelerator limits with `TRACKDUB_SESSION_VRAM_BUDGET_MB`.
 - Detailed reference: `docs/reference/session-pool-memory-admission.md`.
 

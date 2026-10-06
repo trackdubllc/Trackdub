@@ -38,8 +38,9 @@ public sealed class HostCapacityBannerTests
     [Fact]
     public void Separates_detected_video_memory_from_the_effective_capacity()
     {
-        // The sum of both adapters is not the capacity: a floor applies to one adapter, so the
-        // ceiling is the largest adapter's dedicated plus shared memory.
+        // The sum of both adapters is not the capacity: a floor applies to the sampled
+        // adapter's local segment, so the ceiling is the discrete adapter's dedicated VRAM —
+        // neither the summed total nor the larger integrated total.
         string[] lines = [.. HostCapacityBanner.Describe(
             [
                 Device(DeviceKind.DiscreteGpu, 0, "GeForce RTX 4090", "NVIDIA", 8192, 4096),
@@ -50,7 +51,7 @@ public sealed class HostCapacityBannerTests
         Assert.Contains(lines, line =>
             line.Contains("Detected video memory: 20608 MB across 2 GPU adapters", StringComparison.Ordinal));
         Assert.Contains(lines, line =>
-            line.Contains("Effective VRAM capacity: 12288 MB", StringComparison.Ordinal));
+            line.Contains("Effective VRAM capacity: 8192 MB", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -69,7 +70,7 @@ public sealed class HostCapacityBannerTests
         Assert.Contains(lines, line =>
             line.Contains("Detected video memory: 12288 MB across 1 GPU adapter", StringComparison.Ordinal));
         Assert.Contains(lines, line =>
-            line.Contains("Effective VRAM capacity: 12288 MB", StringComparison.Ordinal));
+            line.Contains("Effective VRAM capacity: 8192 MB", StringComparison.Ordinal));
     }
 
     // ── Unknown capacity ────────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ public sealed class HostCapacityBannerTests
 
         string feasibility = Assert.Single(lines, line => line.Contains("Bound feasibility", StringComparison.Ordinal));
         Assert.Contains("--min-available-vram-mb 24576", feasibility, StringComparison.Ordinal);
-        Assert.Contains("12288 MB", feasibility, StringComparison.Ordinal);
+        Assert.Contains("8192 MB", feasibility, StringComparison.Ordinal);
         Assert.Contains("no run could leave that much VRAM headroom", feasibility, StringComparison.Ordinal);
     }
 
@@ -127,10 +128,10 @@ public sealed class HostCapacityBannerTests
     {
         string[] lines = [.. HostCapacityBanner.Describe(
             [Device(DeviceKind.DiscreteGpu, 0, "GeForce RTX 4090", "NVIDIA", 8192, 4096)],
-            new ResourceTelemetryBounds { MinAvailableVramMb = 12288 })];
+            new ResourceTelemetryBounds { MinAvailableVramMb = 8192 })];
 
         string feasibility = Assert.Single(lines, line => line.Contains("Bound feasibility", StringComparison.Ordinal));
-        Assert.Contains("--min-available-vram-mb 12288 MB is within", feasibility, StringComparison.Ordinal);
+        Assert.Contains("--min-available-vram-mb 8192 MB is within", feasibility, StringComparison.Ordinal);
     }
 
     [Fact]

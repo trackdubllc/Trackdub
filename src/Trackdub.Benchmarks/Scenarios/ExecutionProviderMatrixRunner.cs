@@ -283,7 +283,7 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
             var budgets = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             foreach (string provider in options.Providers)
             {
-                budgets[provider] = SimulatedLatencyBudgetMilliseconds(provider);
+                budgets[provider] = SimulatedLatencyBudgetMilliseconds(provider, options.Scenario);
             }
 
             simulatedLatencyBudgets = budgets;
@@ -350,16 +350,44 @@ public sealed class ExecutionProviderMatrixRunner : IDisposable
         SimulatedLatencyMultiplier(baselineProvider) / SimulatedLatencyMultiplier(provider);
 
     /// <summary>
-    /// Total simulated stage latency, in milliseconds, a mock matrix run configures for
-    /// <paramref name="provider"/> (1000 ms at a multiplier of 1.0). Every simulated stage waits
-    /// at least its configured delay, so a completed mock pipeline's measured percentile cannot be
-    /// below this budget, and the ratio between two providers' budgets is the speedup the
-    /// simulation is built to demonstrate. Mock matrix runs carry it on each comparison row as
-    /// <see cref="ProviderComparisonMetrics.SimulatedLatencyBudgetMilliseconds"/>, so consumers can
-    /// assert the contract from the report instead of from here.
+    /// Total simulated stage latency, in milliseconds, a full-pipeline mock matrix run configures
+    /// for <paramref name="provider"/> (1000 ms at a multiplier of 1.0). Every simulated stage
+    /// waits at least its configured delay, so a completed mock pipeline's measured percentile
+    /// cannot be below this budget, and the ratio between two providers' budgets is the speedup
+    /// the simulation is built to demonstrate. Mock matrix runs carry it on each comparison row
+    /// as <see cref="ProviderComparisonMetrics.SimulatedLatencyBudgetMilliseconds"/>, so consumers
+    /// can assert the contract from the report instead of from here.
     /// </summary>
     internal static double SimulatedLatencyBudgetMilliseconds(string provider) =>
-        SimulatedStageDelayTable.Sum(stage => stage.Milliseconds) * SimulatedLatencyMultiplier(provider);
+        SimulatedLatencyBudgetMilliseconds(provider, "full-pipeline");
+
+    /// <summary>
+    /// Simulated latency budget for the selected mock scenario. A full-pipeline run sums all
+    /// configured stage delays; a single-stage run budgets only the stage it actually measures
+    /// (the runner filters execution to <c>options.Scenario</c>), so reporting the full-pipeline
+    /// total there would overstate the measured floor. Scenarios without a matching configured
+    /// stage use the mock service's 5 ms fallback delay.
+    /// </summary>
+    internal static double SimulatedLatencyBudgetMilliseconds(string provider, string? scenario)
+    {
+        double multiplier = SimulatedLatencyMultiplier(provider);
+        if (string.IsNullOrWhiteSpace(scenario)
+            || scenario.Equals("full-pipeline", StringComparison.OrdinalIgnoreCase))
+        {
+            return SimulatedStageDelayTable.Sum(stage => stage.Milliseconds) * multiplier;
+        }
+
+        string canonicalScenario = MockDubbingPipelineServices.CanonicalBenchmarkStage(scenario);
+        double? stageMilliseconds = SimulatedStageDelayTable
+            .Where(stage => MockDubbingPipelineServices.CanonicalBenchmarkStage(stage.Stage).Equals(
+                canonicalScenario, StringComparison.OrdinalIgnoreCase))
+            .Select(stage => (double?)stage.Milliseconds)
+            .FirstOrDefault();
+
+        // The mock service waits its 5 ms fallback for a stage with no configured delay,
+        // unscaled by provider, so the budget is flat there too.
+        return stageMilliseconds is double milliseconds ? milliseconds * multiplier : 5.0;
+    }
 
     /// <summary>
     /// The simulated latency budget recorded for <paramref name="provider"/>, or

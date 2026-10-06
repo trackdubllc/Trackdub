@@ -37,7 +37,7 @@ internal static class HostCapacityBanner
                 .GetDevicesAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // Diagnostic only: the run's pre-flight treats an unenumerable host as an unknown
             // capacity, and this banner must not turn that into a failure.
@@ -101,8 +101,8 @@ internal static class HostCapacityBanner
 
         long capacityMb = ResourceBoundsPreflight.EffectiveVideoMemoryMb(devices);
         lines.Add(capacityMb > 0
-            ? $"  Effective VRAM capacity: {capacityMb} MB - the largest adapter's dedicated plus "
-                + "shared memory, which --min-available-vram-mb is checked against."
+            ? $"  Effective VRAM capacity: {capacityMb} MB - the sampled adapter's local-segment "
+                + "memory, which --min-available-vram-mb is checked against."
             : "  Effective VRAM capacity: unknown - no GPU adapter reported memory.");
 
         lines.Add(DescribeBoundFeasibility(bounds, capacityMb));

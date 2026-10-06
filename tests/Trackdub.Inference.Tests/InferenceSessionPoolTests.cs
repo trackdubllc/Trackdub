@@ -1026,6 +1026,105 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
+    public async Task ProcessGpuAdmission_PendingCreatesAreChargedOnTopOfTheObservation()
+    {
+        // A pending create holds a reservation but has not allocated yet, so the process reading
+        // cannot contain it. Charging it on top of the observed floor keeps a second concurrent
+        // admission from disappearing into the observation and overshooting the device budget.
+        var reader = new MutableProcessGpuMemoryReader(5120L * 1024 * 1024);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 8192,
+            hostMemoryBudgetMb: 8192,
+            processGpuMemoryReader: () => reader);
+
+        // One idle pooled session: the reservation total is 3072 MB against the 5120 MB observed.
+        SessionLease pooled = await pool.GetLeaseAsync(
+            AcceleratorKey("pend0", 3072), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        pooled.Dispose();
+
+        // Creator A reserves 2048 MB but its factory has not allocated yet.
+        var factoryGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<SessionLease> creatorA = pool.GetLeaseAsync(
+            AcceleratorKey("pendA", 2048),
+            async _ => { await factoryGate.Task; return CreateMinimalSession(); },
+            CancellationToken.None);
+
+        // Let A take its pending reservation before B decides, so the overlap is deterministic.
+        await Task.Delay(TimeSpan.FromMilliseconds(150));
+
+        // Creator B needs 2048 MB more: 5120 observed + 2048 pending + 2048 new = 9216 > 8192,
+        // so it must wait rather than slip into the observation's shadow.
+        int factoryCallsB = 0;
+        Task<SessionLease> creatorB = pool.GetLeaseAsync(
+            AcceleratorKey("pendB", 2048),
+            _ =>
+            {
+                Interlocked.Increment(ref factoryCallsB);
+                return Task.FromResult(CreateMinimalSession());
+            },
+            CancellationToken.None);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+        Assert.Equal(0, Volatile.Read(ref factoryCallsB));
+
+        // Once A's allocation lands and is published, B fits and proceeds.
+        factoryGate.TrySetResult(true);
+        using SessionLease leaseA = await creatorA.WaitAsync(TimeSpan.FromSeconds(5));
+        using SessionLease leaseB = await creatorB.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(leaseA.Session);
+        Assert.NotNull(leaseB.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_UnfreeableObservation_FailsFastWithoutEvictingIdleSessions()
+    {
+        // When the observation alone blocks and no pooled or external work can be freed, the
+        // wait must fail with a diagnostic instead of evicting the whole warm cache one idle
+        // session at a time and then parking until the caller cancels.
+        var reader = new MutableProcessGpuMemoryReader(0);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        SessionLease warm1 = await pool.GetLeaseAsync(
+            AcceleratorKey("stall1", 512), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        warm1.Dispose();
+        SessionLease warm2 = await pool.GetLeaseAsync(
+            AcceleratorKey("stall2", 512), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+        warm2.Dispose();
+
+        // Non-pooled GPU memory arrives after the warm cache is built: the reservation total
+        // (1024 MB) fits, but the 4096 MB observation alone blocks the next 256 MB admission.
+        reader.Set(4096L * 1024 * 1024);
+
+        int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 3;
+        try
+        {
+            InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(() => pool.GetLeaseAsync(
+                AcceleratorKey("stall3", 256),
+                _ => Task.FromResult(CreateMinimalSession()),
+                CancellationToken.None));
+            Assert.Contains("4096", failure.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+        }
+
+        // The warm cache survived: eviction is bounded by what it can achieve, and evicting
+        // cannot lower the observation snapshot.
+        Assert.True(pool.TryPinExisting(AcceleratorKey("stall1", 512), out SessionResidency? first));
+        first!.Dispose();
+        Assert.True(pool.TryPinExisting(AcceleratorKey("stall2", 512), out SessionResidency? second));
+        second!.Dispose();
+    }
+
+    [Fact]
     public async Task ProcessGpuAdmission_UnavailableReading_LeavesAdmissionUnchanged()
     {
         // A reader that cannot report (no GPU, a driver without the counter set, a GPU-idle

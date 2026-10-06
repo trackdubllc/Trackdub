@@ -148,14 +148,14 @@ public static class HeadlessCompositionRoot
             new WindowsAvailableVramReader(sp.GetRequiredService<IVramMonitor>()));
         // The GPU Process Memory performance counters give the process-isolated attribution the
         // adapter-wide DXGI reading cannot, so both readings are kept and reported separately.
-        // Creating the reader is also what binds it to the shared session pool's accelerator
-        // admission (see SharedPoolOptions.UseProcessGpuMemoryReader): from then on, GPU memory
-        // this process holds outside the pool's own reservations consumes the same per-device
-        // budget. Its first read initializes the performance-counter subsystem (~1 s once per
+        // Registering the reader has no process-wide side effect on its own: the host that owns
+        // this container hands it to the shared session pool explicitly when it is built (see
+        // HeadlessDubbingHost.Create), so resolving telemetry services can never silently arm
+        // accelerator admission, and a host-provided override binds exactly like the default.
+        // The reader's first read initializes the performance-counter subsystem (~1 s once per
         // process), so a host that measures stage timings should resolve the reader while
         // preparing rather than inside a measured stage.
-        services.TryAddSingleton<IProcessGpuMemoryReader>(static _ =>
-            BindProcessGpuAdmission(new WindowsProcessGpuMemoryReader()));
+        services.TryAddSingleton<IProcessGpuMemoryReader>(static _ => new WindowsProcessGpuMemoryReader());
 #else
         // No DXGI on this platform: telemetry records an explicit unavailable reading, and the
         // shared pool keeps accounting for its own reservations only.
@@ -171,18 +171,6 @@ public static class HeadlessCompositionRoot
 
         return services;
     }
-
-#if WINDOWS
-    /// <summary>
-    /// Hands the host's process-isolated GPU reader to the shared session pool so accelerator
-    /// admission accounts for GPU memory this process holds outside the pool's reservations.
-    /// </summary>
-    private static IProcessGpuMemoryReader BindProcessGpuAdmission(IProcessGpuMemoryReader reader)
-    {
-        SharedPoolOptions.UseProcessGpuMemoryReader(reader);
-        return reader;
-    }
-#endif
 }
 
 /// <summary>
