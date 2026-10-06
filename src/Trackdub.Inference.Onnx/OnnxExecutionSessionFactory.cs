@@ -285,7 +285,8 @@ internal static class OnnxExecutionSessionFactory
         SessionOptionsSelection sessionOptionsSelection = CreateSessionOptions(
             ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
             devicePolicy,
-            additionalTrtOptions);
+            additionalTrtOptions,
+            logId: ExtractLogId(modelPath));
         InferenceSession? session = null;
         try
         {
