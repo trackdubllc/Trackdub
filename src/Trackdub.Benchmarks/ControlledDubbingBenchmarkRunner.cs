@@ -456,7 +456,8 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             context.Host!.Services.GetRequiredService<IResourceTelemetryCollector>(),
             context.Host.Services.GetRequiredService<IResourceTelemetryValidator>(),
             options.ResourceTelemetryBounds, phase, iteration, stageClock,
-            context.Host.Services.GetRequiredService<IWorkingSetSampler>());
+            context.Host.Services.GetRequiredService<IWorkingSetSampler>(),
+            gpuMemoryReader: context.Host.Services.GetRequiredService<IProcessGpuMemoryReader>());
         try
         {
             DubbingRunResult result = await ExecuteAsync(context.Host, context.FixtureCopy, project, options,

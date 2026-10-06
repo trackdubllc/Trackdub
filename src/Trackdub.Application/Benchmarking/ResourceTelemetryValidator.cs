@@ -33,9 +33,11 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
                 bounds.MaxManagedAllocatedBytes, true, start?.MemoryUnavailableReason, end?.MemoryUnavailableReason),
             CheckMinimum("availableVramMb", end?.AvailableVramMb, bounds.MinAvailableVramMb,
                 end?.VramUnavailableReason),
-            // Process-isolated dedicated GPU memory: an endpoint maximum, unlike the adapter-wide
-            // free-VRAM floor above, so it attributes bytes to this run rather than to the GPU's
-            // remaining headroom (audit gap #1).
+            // Process-isolated dedicated GPU memory: an inclusive maximum over the stage's
+            // endpoints and its interval-sampled peak, unlike the adapter-wide free-VRAM floor
+            // above, so it attributes bytes to this run rather than to the GPU's remaining
+            // headroom (audit gap #1). A spike that drains before the terminal event still
+            // counts against the budget.
             //
             // A host that cannot report the reading is not a failure. Many benchmarks legitimately
             // never touch the GPU (a CPU execution provider leaves no GPU Process Memory instance),
@@ -44,7 +46,8 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
             // configured an unavailable reading is a genuine verification gap, so it degrades.
             CheckBytes("gpuBytes", start?.GpuBytes, end?.GpuBytes, bounds.MaxGpuBytes, false,
                 start?.GpuUnavailableReason, end?.GpuUnavailableReason,
-                bounds.MaxGpuBytes is null ? ResourceTelemetryStatus.Skipped : ResourceTelemetryStatus.Unavailable)
+                bounds.MaxGpuBytes is null ? ResourceTelemetryStatus.Skipped : ResourceTelemetryStatus.Unavailable,
+                end?.PeakGpuBytes, end?.PeakGpuUnavailableReason)
         ];
         return new ResourceTelemetryValidation
         {
@@ -179,19 +182,31 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
     private static ResourceTelemetryCheck CheckBytes(
         string metric, long? start, long? end, long? maximum, bool cumulative,
         string? startReason, string? endReason,
-        ResourceTelemetryStatus unavailableStatus = ResourceTelemetryStatus.Unavailable)
+        ResourceTelemetryStatus unavailableStatus = ResourceTelemetryStatus.Unavailable,
+        long? peak = null, string? peakReason = null)
     {
-        if (start < 0 || end < 0)
+        if (start < 0 || end < 0 || peak < 0)
         {
             return Failed(metric, maximum, "Byte counters must be nonnegative.");
         }
+        if (!peak.HasValue && !string.IsNullOrWhiteSpace(peakReason))
+        {
+            long? knownEndpoint = Maximum(start, end);
+            if (!cumulative && knownEndpoint.HasValue && maximum.HasValue && knownEndpoint.Value > maximum.Value)
+            {
+                return new(metric, ResourceTelemetryStatus.Failed, knownEndpoint.Value, maximum,
+                    "Available endpoint exceeds the configured upper bound; continuous peak sampling was unavailable.");
+            }
+            return Unavailable(metric, maximum, peakReason,
+                "Continuous peak sampling unavailable.", unavailableStatus);
+        }
         if (!start.HasValue || !end.HasValue)
         {
-            long? known = start ?? end;
+            long? known = Maximum(Maximum(start, end), peak);
             if (!cumulative && known.HasValue && maximum.HasValue && known.Value > maximum.Value)
             {
                 return new(metric, ResourceTelemetryStatus.Failed, known.Value, maximum,
-                    "Available endpoint exceeds the configured upper bound; the other endpoint is unavailable.");
+                    "Available reading exceeds the configured upper bound; an endpoint sample was unavailable.");
             }
             // Prefer whichever endpoint explains the gap: a missing start with no reason of its
             // own must not drop the end snapshot's unavailable reason.
@@ -204,6 +219,10 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
             return Failed(metric, maximum, "Managed allocation counter regressed between samples.");
         }
         long observed = cumulative ? end.Value - start.Value : Math.Max(start.Value, end.Value);
+        if (peak.HasValue && !cumulative)
+        {
+            observed = Math.Max(observed, peak.Value);
+        }
         // Compare as integers before converting for the shared evidence representation.
         bool exceeded = maximum.HasValue && observed > maximum.Value;
         return new ResourceTelemetryCheck(metric,
