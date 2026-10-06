@@ -30,7 +30,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     private const string DedicatedUsageCounterName = "Dedicated Usage";
 
     /// <summary>PDH_FMT_LARGE: return the counter as a 64-bit value rather than a double.</summary>
-    private const uint FormatLarge = 0x0000_0100;
+    private const uint FormatLarge = 0x0000_0400;
 
     /// <summary>PERF_DETAIL_WIZARD: enumerate every instance, not just the default subset.</summary>
     private const uint DetailWizard = 400;
