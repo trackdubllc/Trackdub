@@ -1391,6 +1391,16 @@ internal sealed class InferenceSessionPool : IDisposable
     internal static int ObservedBlockFailFastPasses { get; set; } = 100;
 
     /// <summary>
+    /// Same bound for passes where the bucket still holds live-but-unevictable entries (held
+    /// leases, pinned sessions, live external reservations): their turnover can still make
+    /// progress — a released lease becomes evictable — so they get a longer stall (~60 s)
+    /// before the same fail-fast. A lease held for a whole stage, a nested acquire by the
+    /// waiting caller itself, or a resident external without an eviction callback never turns
+    /// over while this waiter blocks, so the wait stays bounded for those too.
+    /// </summary>
+    internal static int ObservedBlockBusyFailFastPasses { get; set; } = 1200;
+
+    /// <summary>
     /// Waits until <paramref name="needMb"/> fits in <paramref name="bucket"/>'s budget
     /// (evicting idle sessions in that bucket as needed), then takes the reservation.
     /// Never holds a reservation while waiting. Host-backed providers share the host RAM budget;
@@ -1446,9 +1456,9 @@ internal sealed class InferenceSessionPool : IDisposable
 
                     if (observedBlocked)
                     {
-                        // Reservations already fit, so the loop above evicted nothing: evict at
-                        // most one idle entry per pass. Its real allocation sits inside the
-                        // observation, so the next pass re-observes lower once that memory
+                        // Reservations now fit (the loop above may have evicted to get here):
+                        // evict at most one idle entry per pass. Its real allocation sits inside
+                        // the observation, so the next pass re-observes lower once that memory
                         // drains; evicting more per pass would throw away warm sessions faster
                         // than the observation can confirm they were the blockage.
                         PoolEntry? single = TryEvictLruIdle(onlyBucket: bucket);
@@ -1536,29 +1546,23 @@ internal sealed class InferenceSessionPool : IDisposable
                 {
                     // Any eviction this pass may still drain: the next pass re-observes, so only
                     // consecutive passes that free nothing count toward the fail-fast bound.
+                    // Live-but-unevictable entries (held leases, pins, live externals) get the
+                    // longer busy bound since their turnover can still unblock the wait; an
+                    // empty bucket fails on the shorter bound.
                     bool progressed = toDispose is { Count: > 0 };
                     if (progressed)
                     {
                         observedStallPasses = 0;
                     }
-                    else if (BucketHasLiveEntries(bucket))
-                    {
-                        // Leased sessions turn idle on release (then evictable), and live
-                        // external reservations may yet be freed, so waiting can still make
-                        // progress: don't count toward fail-fast while the bucket holds any
-                        // pooled entry or external reservation.
-                        observedStallPasses = 0;
-                    }
                     else
                     {
-                        // Nothing in this bucket can turn over to lower the reading: no pooled
-                        // entries and no external reservations remain, yet the process's own
-                        // non-pooled usage still blocks. Keep waiting a bounded stall instead
-                        // of parking until the caller cancels with no diagnostic.
                         observedStallPasses++;
                     }
 
-                    if (observedStallPasses >= ObservedBlockFailFastPasses)
+                    int stallBound = BucketHasLiveEntries(bucket)
+                        ? ObservedBlockBusyFailFastPasses
+                        : ObservedBlockFailFastPasses;
+                    if (observedStallPasses >= stallBound)
                     {
                         throw new InvalidOperationException(
                             $"Accelerator admission for '{DescribeBucket(bucket)}' needs ~{needMb} MB, but this "

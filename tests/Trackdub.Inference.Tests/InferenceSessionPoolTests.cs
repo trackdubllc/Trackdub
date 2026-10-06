@@ -1106,11 +1106,11 @@ public sealed class InferenceSessionPoolTests
     }
 
     [Fact]
-    public async Task ProcessGpuAdmission_LeasedEntriesKeepWaitingInsteadOfFailingFast()
+    public async Task ProcessGpuAdmission_LiveButUnevictableEntriesGetALongerBound()
     {
-        // A held lease turns idle on release (then evictable), so its presence means the wait
-        // can still make progress: the stall bound must not fire while the bucket holds any
-        // pooled entry or external reservation.
+        // A held lease can still turn over (release, then evictable), so live-but-unevictable
+        // entries wait on a longer bound than an empty bucket — but the wait stays bounded:
+        // a lease held for a whole stage must not park the waiter until caller cancel.
         var reader = new MutableProcessGpuMemoryReader(0);
         using var pool = new InferenceSessionPool(
             maxSessions: 8,
@@ -1126,21 +1126,25 @@ public sealed class InferenceSessionPoolTests
         reader.Set(4096L * 1024 * 1024);
 
         int previousBound = InferenceSessionPool.ObservedBlockFailFastPasses;
-        InferenceSessionPool.ObservedBlockFailFastPasses = 3;
+        int previousBusyBound = InferenceSessionPool.ObservedBlockBusyFailFastPasses;
+        InferenceSessionPool.ObservedBlockFailFastPasses = 100;
+        InferenceSessionPool.ObservedBlockBusyFailFastPasses = 4;
         try
         {
             int factoryCalls = 0;
-            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(() => pool.GetLeaseAsync(
                 AcceleratorKey("leased1", 256),
                 _ => { Interlocked.Increment(ref factoryCalls); return Task.FromResult(CreateMinimalSession()); },
                 cts.Token));
 
+            Assert.Contains("4096", failure.Message, StringComparison.Ordinal);
             Assert.Equal(0, Volatile.Read(ref factoryCalls));
         }
         finally
         {
             InferenceSessionPool.ObservedBlockFailFastPasses = previousBound;
+            InferenceSessionPool.ObservedBlockBusyFailFastPasses = previousBusyBound;
         }
 
         held.Dispose();
