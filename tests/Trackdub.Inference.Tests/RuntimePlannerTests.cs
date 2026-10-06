@@ -508,9 +508,9 @@ public sealed class RuntimePlannerTests
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
         Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
-//         Assert.DoesNotContain(
-//             plan.Warnings,
-//             warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
+        //         Assert.DoesNotContain(
+        //             plan.Warnings,
+        //             warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
     }
 
     [Fact]
