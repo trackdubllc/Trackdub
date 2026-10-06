@@ -18,7 +18,9 @@ public sealed class TrackdubSessionFactory : IDubbingSessionFactory, IDisposable
     private readonly IReadOnlyDictionary<int, long>? _adapterLuidMap;
     private volatile bool _disposed;
 
-    internal TrackdubSessionFactory(ServiceProvider serviceProvider, IProcessGpuMemoryReader? processGpuReader = null,
+    internal TrackdubSessionFactory(
+        ServiceProvider serviceProvider,
+        IProcessGpuMemoryReader? processGpuReader = null,
         IReadOnlyDictionary<int, long>? adapterLuidMap = null)
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));

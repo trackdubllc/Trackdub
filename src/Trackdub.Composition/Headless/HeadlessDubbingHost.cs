@@ -67,10 +67,32 @@ public sealed class HeadlessDubbingHost : IDisposable
         services.AddHeadlessTrackdub(options);
         ServiceProvider serviceProvider = services.BuildServiceProvider();
 
-        IProcessGpuMemoryReader? processGpuReader =
-            HeadlessCompositionRoot.BindSharedPoolProcessGpuAdmission(serviceProvider);
-        IReadOnlyDictionary<int, long>? adapterLuidMap =
-            HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(serviceProvider);
+        // Arm the shared session pool's process-GPU admission explicitly at host construction:
+        // a lazy DI factory would only bind when something happens to resolve the telemetry
+        // reader, leaving normal host paths on reservation-only accounting despite admission
+        // being default-on, and a host-provided reader override would bypass the factory
+        // entirely. Resolving here also pays the performance-counter warm-up during setup
+        // rather than inside a measured stage. Best-effort: telemetry must never fail host
+        // creation.
+        IProcessGpuMemoryReader? processGpuReader = null;
+        IReadOnlyDictionary<int, long>? adapterLuidMap = null;
+#if WINDOWS
+        try
+        {
+            processGpuReader = serviceProvider.GetService<IProcessGpuMemoryReader>();
+            if (processGpuReader is not null)
+            {
+                SharedPoolOptions.UseProcessGpuMemoryReader(processGpuReader);
+            }
+
+            adapterLuidMap = HeadlessCompositionRoot.BindSharedPoolAdapterLuidMap(serviceProvider);
+        }
+        catch
+        {
+            processGpuReader = null;
+            adapterLuidMap = null;
+        }
+#endif
 
         return new HeadlessDubbingHost(new HeadlessDubbingSessionFactory(serviceProvider), serviceProvider, processGpuReader, adapterLuidMap);
     }

@@ -2,6 +2,7 @@ using Trackdub.Contracts;
 using Trackdub.Domain;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Contracts.Pipeline;
+using Trackdub.Domain;
 using Trackdub.Application.Benchmarking;
 using Trackdub.Application.Transcripts.Pipeline;
 using Trackdub.Composition.DeepFilterNet;
@@ -218,13 +219,48 @@ public static class HeadlessCompositionRoot
     }
 
     /// <summary>
-    /// Registers enumerated GPU device indexes and DXGI LUIDs for per-adapter pool admission.
-    /// Returns the registration so its owner can release it without clearing a newer host's map.
-    /// Enumeration failure leaves process-total admission available.
+    /// Hands the container's device-index to adapter-LUID map to the shared ONNX session pool so
+    /// the process-GPU observation can be attributed per adapter instead of charging every
+    /// device the process total. Every composition owner that binds the reader must bind this
+    /// too, or multi-GPU hosts over-restrict admission on otherwise-free adapters. Best-effort
+    /// and synchronous (device enumeration caches): telemetry must never fail composition.
     /// </summary>
+    /// <returns>The bound map (null when there is nothing to bind).</returns>
     public static IReadOnlyDictionary<int, long>? BindSharedPoolAdapterLuidMap(IServiceProvider services)
     {
+        IReadOnlyDictionary<int, long>? map = null;
 #if WINDOWS
+        try
+        {
+            map = QueryAdapterLuidMap(services);
+            if (map is not null)
+            {
+                SharedPoolOptions.UseAdapterLuidMap(map);
+            }
+        }
+        catch
+        {
+            map = null;
+        }
+#endif
+        return map;
+    }
+
+    /// <summary>
+    /// Clears the shared pool's adapter-LUID map only while it still refers to
+    /// <paramref name="map"/>. Safe to call with null.
+    /// </summary>
+    public static void ClearSharedPoolAdapterLuidMap(IReadOnlyDictionary<int, long>? map)
+    {
+        if (map is not null)
+        {
+            SharedPoolOptions.TryClearAdapterLuidMap(map);
+        }
+    }
+
+#if WINDOWS
+    private static IReadOnlyDictionary<int, long>? QueryAdapterLuidMap(IServiceProvider services)
+    {
         try
         {
             IDeviceEnumerator? enumerator = services.GetService<IDeviceEnumerator>();
@@ -233,8 +269,10 @@ public static class HeadlessCompositionRoot
                 return null;
             }
 
-            IReadOnlyList<DeviceEntry> devices = enumerator.GetDevicesAsync(CancellationToken.None)
-                .GetAwaiter().GetResult();
+            IReadOnlyList<DeviceEntry> devices = enumerator
+                .GetDevicesAsync(CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
             var map = new Dictionary<int, long>();
             foreach (DeviceEntry device in devices)
             {
@@ -245,28 +283,14 @@ public static class HeadlessCompositionRoot
                 }
             }
 
-            if (map.Count > 0)
-            {
-                SharedPoolOptions.UseAdapterLuidMap(map);
-                return map;
-            }
+            return map.Count == 0 ? null : map;
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch
         {
-            // Optional telemetry must never prevent host construction.
+            return null;
         }
+    }
 #endif
-        return null;
-    }
-
-    /// <summary>Releases this owner's map only while it is still the active registration.</summary>
-    public static void ClearSharedPoolAdapterLuidMap(IReadOnlyDictionary<int, long>? map)
-    {
-        if (map is not null)
-        {
-            SharedPoolOptions.TryClearAdapterLuidMap(map);
-        }
-    }
 }
 
 /// <summary>
