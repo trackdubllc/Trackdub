@@ -33,17 +33,13 @@ internal static class OnnxExecutionSessionFactory
         return Path.GetFileNameWithoutExtension(modelPath);
     }
 
-    private static void SafeDisposeOnCreationFailure(InferenceSession? session, ExecutionProviderKind provider)
+    private static void SafeDisposeOnCreationFailure(InferenceSession? session)
     {
         if (session is null) return;
-        if (provider is ExecutionProviderKind.TensorRTRtx)
-        {
-            GC.SuppressFinalize(session);
-        }
-        else
-        {
-            session.Dispose();
-        }
+
+        // A session is assigned only after its constructor succeeds, so a non-null session is
+        // a healthy partial creation and must be disposed before retrying another provider.
+        session.Dispose();
     }
 
     // Canonical EP names returned by ORT device discovery. TensorRT RTX uses the standalone
@@ -611,8 +607,8 @@ internal static class OnnxExecutionSessionFactory
             }
             catch (Exception ex)
             {
-                SafeDisposeOnCreationFailure(encoderSession, currentProvider);
-                SafeDisposeOnCreationFailure(decoderSession, currentProvider);
+                SafeDisposeOnCreationFailure(encoderSession);
+                SafeDisposeOnCreationFailure(decoderSession);
                 selections.Encoder.Options.Dispose();
                 selections.Decoder.Options.Dispose();
 
