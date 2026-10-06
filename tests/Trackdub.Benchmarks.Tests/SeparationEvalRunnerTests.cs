@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using Trackdub.Benchmarks;
 using Trackdub.Contracts.Benchmarking;
@@ -238,10 +239,10 @@ public sealed class SeparationEvalRunnerTests
         Assert.Equal(["dilated", "dilated"], results.Select(r => r.PeakWorkingSetSamplingWarning));
         string[] written = lines.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, written.Length);
-        foreach (string line in written)
+        foreach (JsonDocument document in written.Select(JsonDocument.Parse))
         {
-            using JsonDocument document = JsonDocument.Parse(line);
-            Assert.Equal("dilated", document.RootElement.GetProperty("peak_working_set_sampling_warning").GetString());
+            using JsonDocument disposable = document;
+            Assert.Equal("dilated", disposable.RootElement.GetProperty("peak_working_set_sampling_warning").GetString());
         }
     }
 
