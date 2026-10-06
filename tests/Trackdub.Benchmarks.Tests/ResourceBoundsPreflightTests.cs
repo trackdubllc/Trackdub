@@ -70,19 +70,54 @@ public sealed class ResourceBoundsPreflightTests
     // ── Capacity discovery ──────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Capacity_is_the_largest_adapter_dedicated_plus_shared_memory()
+    public async Task Capacity_is_the_sampled_adapter_local_segment_memory()
     {
         using ServiceProvider provider = Provider(new StubDeviceEnumerator(
         [
-            Device(DeviceKind.DiscreteGpu, dedicatedMb: 8192, sharedMb: 4096),
-            Device(DeviceKind.IntegratedGpu, dedicatedMb: 128, sharedMb: 8192),
-            Device(DeviceKind.Npu, dedicatedMb: 50, sharedMb: 0),
-            Device(DeviceKind.Cpu, dedicatedMb: 0, sharedMb: 0),
+            Device(DeviceKind.DiscreteGpu, index: 0, dedicatedMb: 8192, sharedMb: 4096),
+            Device(DeviceKind.IntegratedGpu, index: 1, dedicatedMb: 128, sharedMb: 8192),
+            Device(DeviceKind.Npu, index: 2, dedicatedMb: 50, sharedMb: 0),
+            Device(DeviceKind.Cpu, index: 3, dedicatedMb: 0, sharedMb: 0),
         ]));
 
-        // 8192 + 4096 wins over 128 + 8192; NPU and CPU entries carry no adapter memory.
+        // The telemetry floor is measured on the sampled adapter (device index 0), not on
+        // whichever adapter is largest: a discrete adapter's local segment is its dedicated
+        // VRAM, so shared memory and the larger integrated total must not inflate the ceiling.
         Assert.Equal(
-            12288L,
+            8192L,
+            await ResourceBoundsPreflight.QueryTotalVideoMemoryMbAsync(provider, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Capacity_on_an_integrated_sampled_adapter_covers_shared_memory()
+    {
+        using ServiceProvider provider = Provider(new StubDeviceEnumerator(
+        [
+            Device(DeviceKind.IntegratedGpu, index: 0, dedicatedMb: 128, sharedMb: 8192),
+            Device(DeviceKind.DiscreteGpu, index: 1, dedicatedMb: 8192, sharedMb: 4096),
+        ]));
+
+        // An integrated adapter's local segment spans the shared system memory it addresses,
+        // so a floor above dedicated VRAM alone is still satisfiable there — and the larger
+        // discrete adapter on index 1 must not shrink the ceiling either.
+        Assert.Equal(
+            8320L,
+            await ResourceBoundsPreflight.QueryTotalVideoMemoryMbAsync(provider, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Capacity_is_unknown_when_the_sampled_adapter_is_absent()
+    {
+        // Telemetry is sampled from device index 0: a host enumerating only some other GPU
+        // leaves the capacity unknown instead of borrowing an adapter the run never measures.
+        // A 2048 MB adapter at index 1 must not reject a 4096 MB floor meant for index 0.
+        using ServiceProvider provider = Provider(new StubDeviceEnumerator(
+        [
+            Device(DeviceKind.DiscreteGpu, index: 1, dedicatedMb: 2048, sharedMb: 0),
+        ]));
+
+        Assert.Equal(
+            0L,
             await ResourceBoundsPreflight.QueryTotalVideoMemoryMbAsync(provider, CancellationToken.None));
     }
 
@@ -200,8 +235,8 @@ public sealed class ResourceBoundsPreflightTests
     private static ServiceProvider Provider(IDeviceEnumerator enumerator) =>
         new ServiceCollection().AddSingleton(enumerator).BuildServiceProvider();
 
-    private static DeviceEntry Device(DeviceKind kind, int dedicatedMb, int sharedMb) =>
-        new(kind, 0, "Test Adapter", "Test Vendor", dedicatedMb, sharedMb, [ExecutionProviderKind.DirectMl]);
+    private static DeviceEntry Device(DeviceKind kind, int dedicatedMb, int sharedMb, int index = 0) =>
+        new(kind, index, "Test Adapter", "Test Vendor", dedicatedMb, sharedMb, [ExecutionProviderKind.DirectMl]);
 
     private sealed class StubDeviceEnumerator(IReadOnlyList<DeviceEntry>? devices) : IDeviceEnumerator
     {

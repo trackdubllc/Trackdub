@@ -405,13 +405,14 @@ public static class BenchmarkReportExporter
         if (simulated.Length > 0)
         {
             // Mock comparisons demonstrate the simulation's contract, not measured provider
-            // performance, and the table above cannot show that on its own.
+            // performance, and the table above cannot show that on its own. Budgets attach
+            // per row, so the note covers only the rows that carry one.
             sb.AppendLine();
             sb.AppendLine("**Simulated latency budgets:** " + string.Join(", ", simulated.Select(
                     comparison => string.Create(
                         CultureInfo.InvariantCulture,
                         $"{comparison.Provider} {comparison.SimulatedLatencyBudgetMilliseconds:0.###} ms")))
-                + " — this run used the mock pipeline, so the comparison demonstrates the simulation's contract rather than measured provider performance.");
+                + " — rows with a simulated budget used the mock pipeline, so those comparisons demonstrate the simulation's contract rather than measured provider performance.");
         }
 
         return sb.ToString();
