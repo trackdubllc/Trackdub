@@ -24,6 +24,7 @@ public static class Program
             ["separation-eval"] = RunSeparationEvalAsync,
             ["audio-prep"] = RunAudioPrepAsync,
             ["dubbing"] = RunDubbingBenchmarkAsync,
+            ["tts-bench"] = RunTtsBenchAsync,
         };
 
     public static async Task<int> Main(string[] args)
@@ -143,6 +144,33 @@ public static class Program
         {
             error.WriteLine(ex.ToString());
             return 1;
+        }
+    }
+
+    private static async Task<int> RunTtsBenchAsync(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        if (!TtsEvalOptions.TryParse(args, error, out TtsEvalOptions options))
+        {
+            error.WriteLine(TtsEvalOptions.Usage);
+            return 1;
+        }
+        if (options.ShowHelp)
+        {
+            output.WriteLine(TtsEvalOptions.Usage);
+            return 0;
+        }
+        try
+        {
+            return await TtsEvalRunner.RunAsync(options, output, error, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
     }
 
