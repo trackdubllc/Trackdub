@@ -165,6 +165,13 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     /// </summary>
     private static string[] EnumerateProcessInstances()
     {
+        // GPU process instances can be created after the reader is warmed up. Refresh PDH's
+        // cached object and instance list before enumerating so those late-created instances are
+        // visible to the sizing and retrieval calls below.
+        uint objectLength = 0;
+        _ = NativeMethods.PdhEnumObjectsW(
+            null, null, nint.Zero, ref objectLength, DetailWizard, true);
+
         uint counterLength = 0;
         uint instanceLength = 0;
         uint status = NativeMethods.PdhEnumObjectItemsW(
@@ -247,6 +254,11 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
 
         [DllImport("pdh.dll", ExactSpelling = true)]
         internal static extern uint PdhGetFormattedCounterValue(nint counter, uint format, out uint type, out PdhFmtCounterValue value);
+
+        [DllImport("pdh.dll", EntryPoint = "PdhEnumObjectsW", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        internal static extern uint PdhEnumObjectsW(
+            string? dataSource, string? machineName, nint objectList,
+            ref uint objectListLength, uint detailLevel, bool refresh);
 
         [DllImport("pdh.dll", EntryPoint = "PdhEnumObjectItemsW", CharSet = CharSet.Unicode, ExactSpelling = true)]
         internal static extern uint PdhEnumObjectItemsW(
