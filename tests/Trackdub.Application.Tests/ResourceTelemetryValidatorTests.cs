@@ -72,7 +72,7 @@ public sealed class ResourceTelemetryValidatorTests
 
         ResourceTelemetryCheck check = Check(result, "gpuBytes");
         Assert.Equal(ResourceTelemetryStatus.Unavailable, check.Status);
-        Assert.Null(check.ObservedValue);
+        Assert.Equal(Start.GpuBytes, check.ObservedValue);
         Assert.Equal("Windows reported no GPU Process Memory counter instance for this process.", check.Reason);
     }
 
@@ -272,7 +272,7 @@ public sealed class ResourceTelemetryValidatorTests
         // without turning a stage that could not touch the GPU into an unverified one.
         ResourceTelemetryCheck gpu = Check(result, "gpuBytes");
         Assert.Equal(ResourceTelemetryStatus.Skipped, gpu.Status);
-        Assert.Null(gpu.ObservedValue);
+        Assert.Equal(missingStart ? (missingEnd ? null : End.GpuBytes) : Start.GpuBytes, gpu.ObservedValue);
         Assert.NotNull(gpu.Reason);
         if (missingEnd)
         {
@@ -304,7 +304,7 @@ public sealed class ResourceTelemetryValidatorTests
 
         ResourceTelemetryCheck gpu = Check(result, "gpuBytes");
         Assert.Equal(ResourceTelemetryStatus.Unavailable, gpu.Status);
-        Assert.Null(gpu.ObservedValue);
+        Assert.Equal(Start.GpuBytes, gpu.ObservedValue);
         Assert.Equal(4096d, gpu.Threshold);
         Assert.NotNull(gpu.Reason);
     }

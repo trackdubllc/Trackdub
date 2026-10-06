@@ -30,15 +30,16 @@ the process if the actual workload exceeds physical memory.
 Reservations are estimates. On Windows the shared pool also accounts for this process's *actual*
 dedicated GPU memory: the host registers the process-isolated reading (`gpuBytes`, summed from the
 process's `GPU Process Memory` performance-counter instances) as the pool's observation source, and
-every accelerator admission decision then floors that device's admitted usage at the process's real
-dedicated footprint. GPU memory the pool never reserved — driver contexts, runtime arenas,
+each GPU admission decision uses its adapter's measured footprint when attribution is available,
+or the full process total as a conservative upper bound when it is not. GPU memory the pool never reserved — driver contexts, runtime arenas,
 non-pooled consumers — consumes the same per-device budget instead of being invisible to
 admission.
 
 What the observation means in practice:
 
-- A process already at or above the accelerator budget admits no new accelerator session until its
-  real usage drains. Each observation-blocked pass evicts at most one idle entry and re-observes,
+- A GPU bucket admits a request only when `max(resident reservations, observed GPU usage) +
+  pending reservations + request estimate` fits its budget. A mapped free adapter can admit work
+  while another adapter is over budget. Each blocked bucket waits until usage drains. Each observation-blocked pass evicts at most one idle entry and re-observes,
   so evicted memory gets a chance to drain before more cache is discarded. Passes that free
   nothing count toward a fail-fast: an empty bucket throws after ~5 s of continuous stall, while
   a bucket holding live-but-unevictable entries (held leases, pins, live externals) gets ~60 s
@@ -46,7 +47,7 @@ What the observation means in practice:
   an error, not a hang. The caller's cancellation token remains an escape hatch throughout,
   exactly as for an exhausted reservation budget.
 - In-flight creates hold a pending reservation but have not allocated yet, so the process reading
-  cannot contain them: pending reservations are charged on top of the observed floor, keeping
+  may contain partially allocated memory: pending reservations are charged on top of the observed floor, keeping
   concurrent admissions from overshooting the device budget.
 - When the reader attributes usage per adapter (Windows) and the host registered its
   device-to-LUID map, each accelerator device is charged exactly its own adapter's footprint:
@@ -61,8 +62,7 @@ What the observation means in practice:
   clearing a newer host's registration.
 - Host-RAM buckets (CPU, DNNL, and OpenVINO CPU-proxy) and OpenVINO NPU buckets are never
   charged with dedicated GPU observations.
-- An unavailable reading — no GPU, a driver that does not publish the counter set, a GPU-idle
-  process, or a failing probe — leaves admission exactly as it was.
+- An unavailable reading — no GPU, a driver that does not publish the counter set, a failing probe — leaves admission exactly as it was.
 
 Set `TRACKDUB_SESSION_PROCESS_GPU_ADMISSION` to `0`, `false`, `off`, or `disabled` to turn the
 observation off explicitly; anything else, including unset, keeps it on.

@@ -212,7 +212,10 @@ public sealed class ResourceTelemetryValidator : IResourceTelemetryValidator
             // own must not drop the end snapshot's unavailable reason.
             string? reason = !start.HasValue ? startReason ?? endReason : endReason;
             return Unavailable(metric, maximum, reason,
-                "Byte counter sample unavailable.", unavailableStatus);
+                "Byte counter sample unavailable.", unavailableStatus) with
+            {
+                ObservedValue = metric == "gpuBytes" ? known : null,
+            };
         }
         if (cumulative && end.Value < start.Value)
         {

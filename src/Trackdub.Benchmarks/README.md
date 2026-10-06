@@ -46,8 +46,8 @@ are not duplicated across call sites. Preserve them when extending the harness:
   Never re-open a bounds or shared-flag switch arm in an entry point.
 - **Telemetry exception filters** — `TelemetryExceptionFilters` names the swallowed
   exception sets for continuous working-set sampling, stage-boundary collection, and the
-  process snapshot probe. These sets differ on purpose (a periodic sampler can observe
-  disposal races a point-in-time probe cannot), so add a named predicate per boundary
+  process snapshot probe. These sets differ on purpose: each boundary has its own
+  supported OS and plugin failures, so add a named predicate per boundary
   rather than merging or widening an existing one.
   `tests/Trackdub.Benchmarks.Tests/Metrics/TelemetryExceptionFiltersTests` locks each
   accept/reject boundary.

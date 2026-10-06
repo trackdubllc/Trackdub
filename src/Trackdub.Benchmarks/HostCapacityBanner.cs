@@ -10,9 +10,9 @@ namespace Trackdub.Benchmarks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The reported capacity comes from the same device enumeration the run's own pre-flight uses
-/// (<see cref="ResourceBoundsPreflight"/>), so the banner and the pre-flight cannot disagree about
-/// whether a floor is reachable. The banner is diagnostic only: an enumeration failure leaves the
+/// The reported capacity uses the same projection as the run's pre-flight
+/// (<see cref="ResourceBoundsPreflight"/>), but an independent enumeration; transient adapter
+/// changes can produce different results. The banner is diagnostic only: an enumeration failure leaves the
 /// capacity unknown and never changes the run's outcome, exactly like the pre-flight.
 /// </para>
 /// <para>
