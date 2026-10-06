@@ -1,6 +1,7 @@
 using Trackdub.Application.Dubbing;
 using Trackdub.Contracts;
 using Trackdub.Licensing;
+using Trackdub.Inference.Onnx.Pool;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Trackdub.Composition.Headless;
@@ -26,6 +27,17 @@ public sealed class HeadlessDubbingSessionFactory : IDubbingSessionFactory
         // storage environment values before any session or static consumer can run. The
         // resolved singleton remains owned and disposed by this provider.
         serviceProvider.GetService<HeadlessStorageEnvironmentScope>();
+
+        // Bind the final IProcessGpuMemoryReader registration (including any host replacement
+        // applied by a ServiceConfigurator or a pre-registered reader) to the shared session
+        // pool's accelerator admission. This runs at host construction, not inside the reader's
+        // DI factory: if binding waited for someone to resolve telemetry services, ordinary
+        // inference would silently run reservation-only despite the default-on observation.
+        if (serviceProvider.GetService<Trackdub.Contracts.Benchmarking.IProcessGpuMemoryReader>()
+            is { } processGpuMemoryReader)
+        {
+            SharedPoolOptions.UseProcessGpuMemoryReader(processGpuMemoryReader);
+        }
 
         _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
     }

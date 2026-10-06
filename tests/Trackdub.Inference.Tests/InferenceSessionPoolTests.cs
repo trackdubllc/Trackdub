@@ -915,11 +915,14 @@ public sealed class InferenceSessionPoolTests
     // ── Process-isolated GPU admission (the reading drives admission, not only telemetry) ──
 
     [Fact]
-    public async Task ProcessGpuAdmission_ProcessAtDeviceCeiling_BlocksAcceleratorAdmission()
+    public async Task ProcessGpuAdmission_ProcessAtDeviceCeiling_FailsFastWithNothingIdleLeftToFree()
     {
         // This process already holds the device budget's worth of dedicated GPU memory outside
-        // the pool's reservations (driver context, runtime arenas, non-pooled consumers). A new
-        // accelerator session must wait rather than push the process past the ceiling.
+        // the pool's reservations (driver context, runtime arenas, non-pooled consumers). The
+        // reservation fits the configured budget on its own, the observation is what blocks, and
+        // there is no idle pooled session or external reservation to free — so admission fails
+        // fast with a diagnosis instead of polling a wait that can never succeed. It must never
+        // construct the session anyway.
         using var pool = new InferenceSessionPool(
             maxSessions: 8,
             memoryBudgetMb: 4096,
@@ -927,14 +930,14 @@ public sealed class InferenceSessionPoolTests
             processGpuMemoryReader: () => new StubProcessGpuMemoryReader(4096L * 1024 * 1024));
         int factoryCalls = 0;
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pool.GetLeaseAsync(
-            AcceleratorKey("pg1", 256),
-            _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
-            cts.Token));
+        InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => pool.GetLeaseAsync(
+                AcceleratorKey("pg1", 256),
+                _ => { factoryCalls++; return Task.FromResult(CreateMinimalSession()); },
+                CancellationToken.None));
 
-        // The reservation fits the configured budget on its own — the observation is what holds
-        // this back, and it must never construct the session anyway.
+        Assert.Contains("observed dedicated GPU usage", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("TRACKDUB_SESSION_PROCESS_GPU_ADMISSION", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, factoryCalls);
     }
 
@@ -1003,6 +1006,58 @@ public sealed class InferenceSessionPoolTests
             CancellationToken.None);
 
         Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_PerAdapterReading_ChargesOnlyTheBucketsOwnAdapter()
+    {
+        // With per-adapter attribution the pool reads the bucket's own adapter directly: another
+        // adapter's footprint is invisible to this decision, so a process holding 4 GB on
+        // adapter 1 cannot lock adapter 0's budget — which is exactly what the aggregate
+        // fallback (5000 MB total − 0 siblings) would have done.
+        var reader = new PerAdapterProcessGpuMemoryReader(
+            new Dictionary<int, long>
+            {
+                [0] = 1024L * 1024 * 1024,
+                [1] = 4096L * 1024 * 1024,
+            },
+            processTotalBytes: 5000L * 1024 * 1024);
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        using SessionLease lease = await pool.GetLeaseAsync(
+            AcceleratorKey("pg10", 2000), _ => Task.FromResult(CreateMinimalSession()), CancellationToken.None);
+
+        Assert.NotNull(lease.Session);
+    }
+
+    [Fact]
+    public async Task ProcessGpuAdmission_PerAdapterUsageAtCeiling_FailsFastWithNothingIdleLeftToFree()
+    {
+        // The bucket's own adapter is full — per-adapter attribution blocks exactly the device
+        // under decision, and with no idle work to free the wait fails fast rather than parking.
+        var reader = new PerAdapterProcessGpuMemoryReader(
+            new Dictionary<int, long>
+            {
+                [0] = 4096L * 1024 * 1024,
+                [1] = 0L,
+            });
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8,
+            memoryBudgetMb: 4096,
+            hostMemoryBudgetMb: 4096,
+            processGpuMemoryReader: () => reader);
+
+        InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => pool.GetLeaseAsync(
+                AcceleratorKey("pg11", 256),
+                _ => Task.FromResult(CreateMinimalSession()),
+                CancellationToken.None));
+
+        Assert.Contains("observed dedicated GPU usage", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1096,6 +1151,11 @@ public sealed class InferenceSessionPoolTests
         public string UnavailableReason => "Test double: no reading configured.";
 
         public long? ReadDedicatedGpuMemoryBytes() => bytes;
+
+        // Aggregate-only double: per-adapter attribution unavailable, so the pool falls back to
+        // the process total plus sibling subtraction — the shape production takes when the
+        // reader cannot map its LUIDs to device indices.
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
     }
 
     /// <summary>Stand-in whose reading follows the host's real usage over time.</summary>
@@ -1113,6 +1173,8 @@ public sealed class InferenceSessionPoolTests
             long value = Volatile.Read(ref current);
             return value < 0 ? null : value;
         }
+
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
     }
 
     /// <summary>Reports one hot reading, then drains — stands in for freed GPU memory.</summary>
@@ -1124,6 +1186,8 @@ public sealed class InferenceSessionPoolTests
 
         public long? ReadDedicatedGpuMemoryBytes() =>
             Interlocked.Increment(ref reads) == 1 ? firstBytes : 0;
+
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => null;
     }
 
     private sealed class ThrowingProcessGpuMemoryReader : IProcessGpuMemoryReader
@@ -1132,6 +1196,25 @@ public sealed class InferenceSessionPoolTests
 
         public long? ReadDedicatedGpuMemoryBytes() =>
             throw new InvalidOperationException("probe exploded.");
+
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() =>
+            throw new InvalidOperationException("probe exploded.");
+    }
+
+    /// <summary>
+    /// Double that attributes usage per adapter, exercising the pool's per-device observation
+    /// path: the reading for adapter <c>deviceId</c> is charged directly, with no sibling
+    /// subtraction, and other adapters' usage is invisible to this bucket.
+    /// </summary>
+    private sealed class PerAdapterProcessGpuMemoryReader(
+        IReadOnlyDictionary<int, long>? bytesByAdapter,
+        long? processTotalBytes = null) : IProcessGpuMemoryReader
+    {
+        public string UnavailableReason => "Test double: per-adapter reading configured.";
+
+        public IReadOnlyDictionary<int, long>? ReadDedicatedGpuMemoryBytesByAdapter() => bytesByAdapter;
+
+        public long? ReadDedicatedGpuMemoryBytes() => processTotalBytes;
     }
 
     // ── SharedPoolOptions (production activation contract) ────────────────────
@@ -1219,13 +1302,14 @@ public sealed class InferenceSessionPoolTests
     public void SharedPoolOptions_ProcessGpuAdmission_IsOptOutOnly()
     {
         // Process-isolated GPU admission is on by default and only an explicit negative token
-        // turns it off. The variable is cleared rather than set so this test can never capture a
-        // negative default when it happens to initialise SharedPoolOptions first.
+        // turns it off. This test exercises the pure readers against an isolated environment;
+        // it deliberately does not assert SharedPoolOptions.EnableProcessGpuAdmission, which is
+        // captured during type initialization and cannot be re-read — the admission tests above
+        // are what depend on that cached default staying on, so they fail if anything flips it.
         using var env = new ScopedEnvironment();
         env.Clear(SharedPoolOptions.ProcessGpuAdmissionVariable);
 
         Assert.Equal("TRACKDUB_SESSION_PROCESS_GPU_ADMISSION", SharedPoolOptions.ProcessGpuAdmissionVariable);
-        Assert.True(SharedPoolOptions.EnableProcessGpuAdmission);
         Assert.True(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.ProcessGpuAdmissionVariable));
         Assert.False(SharedPoolOptions.ParseAdmissionFlag("0"));
         Assert.False(SharedPoolOptions.ParseAdmissionFlag("false"));

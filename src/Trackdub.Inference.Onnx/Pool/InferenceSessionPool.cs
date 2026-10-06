@@ -746,7 +746,11 @@ internal sealed class InferenceSessionPool : IDisposable
                 bool reserved = false;
                 // Observe outside creationLock: the first Windows performance-counter read can
                 // block for around a second on a cold host, and it must not stall other creators.
-                long? observedProcessGpuMb = enableMemoryAdmission ? ReadObservedProcessGpuMb() : null;
+                // ReadObservedProcessGpuMb itself probes only for GPU buckets, so host and NPU
+                // decisions never pay the read.
+                ProcessGpuObservation observation = enableMemoryAdmission
+                    ? ReadObservedProcessGpuMb(bucket)
+                    : ProcessGpuObservation.None;
                 using (BenchmarkPhaseCapture.Start("pool-creation-lock-wait"))
                     await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
@@ -777,7 +781,7 @@ internal sealed class InferenceSessionPool : IDisposable
                             evictedForBudget.Dispose();
                         }
 
-                        if (AdmissionUsageMb(bucket, observedProcessGpuMb) + needMb <= BudgetFor(bucket))
+                        if (AdmissionUsageMb(bucket, observation) + needMb <= BudgetFor(bucket))
                         {
                             AddPendingReservation(bucket, needMb);
                             reserved = true;
@@ -1236,17 +1240,37 @@ internal sealed class InferenceSessionPool : IDisposable
     private const long BytesPerMegabyte = 1024L * 1024L;
 
     /// <summary>
-    /// One observation of this process's dedicated GPU footprint, in MB, for a single admission
-    /// decision. <see langword="null"/> whenever the reading cannot inform admission: no host
+    /// One observation of this process's dedicated GPU footprint for a single admission decision.
+    /// <see cref="TotalMb"/> is null whenever the reading cannot inform admission: no host
     /// registered a reader, the operator opted out, this platform or driver cannot report it (a
-    /// GPU-idle process publishes no counter instance at all), or the probe failed. A null
-    /// observation leaves reservation accounting exactly as it was.
+    /// GPU-idle process publishes no counter instance at all), or the probe failed.
+    /// <see cref="MbByAdapter"/> is non-null only when the reader attributed the usage per
+    /// adapter; callers then charge the bucket's own adapter directly. Both null leaves
+    /// reservation accounting exactly as it was.
     /// </summary>
-    private long? ReadObservedProcessGpuMb()
+    private readonly record struct ProcessGpuObservation(long? TotalMb, IReadOnlyDictionary<int, long>? MbByAdapter)
     {
-        if (!SharedPoolOptions.EnableProcessGpuAdmission)
+        /// <summary>No usable reading: reservation accounting only.</summary>
+        public static readonly ProcessGpuObservation None = new(null, null);
+    }
+
+    /// <summary>
+    /// Reads this process's dedicated GPU footprint, attributed per adapter when the host's
+    /// reader supports it and as a process total otherwise. Never throws: a failing probe (a
+    /// driver without the counter set, denied access) or a mis-wired source degrades the
+    /// observation, never the admission path.
+    /// </summary>
+    /// <param name="bucket">
+    /// The bucket under decision. The probe runs only for GPU buckets: host buckets hold
+    /// RAM-resident sessions and OpenVINO buckets hold NPU-resident ones — neither lives on a
+    /// graphics adapter, so probing there would attach a GPU reading (and its cold-start stall)
+    /// to a decision it cannot inform.
+    /// </param>
+    private ProcessGpuObservation ReadObservedProcessGpuMb(AdmissionBucket bucket)
+    {
+        if (!enableMemoryAdmission || !SharedPoolOptions.EnableProcessGpuAdmission || !IsGpuBucket(bucket))
         {
-            return null;
+            return ProcessGpuObservation.None;
         }
 
         try
@@ -1254,25 +1278,44 @@ internal sealed class InferenceSessionPool : IDisposable
             IProcessGpuMemoryReader? reader = processGpuMemoryReader?.Invoke();
             if (reader is null)
             {
-                return null;
+                return ProcessGpuObservation.None;
+            }
+
+            IReadOnlyDictionary<int, long>? bytesByAdapter = reader.ReadDedicatedGpuMemoryBytesByAdapter();
+            if (bytesByAdapter is not null)
+            {
+                // Per-adapter attribution: a non-null map is complete by contract (the reader
+                // declines rather than returning a partial attribution), so its sum is the
+                // process total and no separate aggregate read is needed.
+                var mbByAdapter = new Dictionary<int, long>(bytesByAdapter.Count);
+                long totalMb = 0;
+                foreach (KeyValuePair<int, long> pair in bytesByAdapter)
+                {
+                    long mb = pair.Value / BytesPerMegabyte;
+                    mbByAdapter[pair.Key] = mb;
+                    totalMb += mb;
+                }
+
+                BenchmarkPhaseCapture.ObserveMaximum("observedProcessGpuMb", totalMb);
+                return new ProcessGpuObservation(totalMb, mbByAdapter);
             }
 
             long? bytes = reader.ReadDedicatedGpuMemoryBytes();
             if (bytes is not > 0)
             {
-                return null;
+                return ProcessGpuObservation.None;
             }
 
-            long mb = bytes.Value / BytesPerMegabyte;
-            BenchmarkPhaseCapture.ObserveMaximum("observedProcessGpuMb", mb);
-            return mb;
+            long observedMb = bytes.Value / BytesPerMegabyte;
+            BenchmarkPhaseCapture.ObserveMaximum("observedProcessGpuMb", observedMb);
+            return new ProcessGpuObservation(observedMb, MbByAdapter: null);
         }
-        catch
+        catch (Exception)
         {
-            // A failing probe (missing pdh.dll, a driver without the counter set, denied access)
-            // or a mis-wired source must degrade the observation, never the admission path: an
-            // unobserved pool keeps its reservation-only behaviour.
-            return null;
+            // Any failure — missing pdh.dll, a mis-wired custom reader, a bug in it — is
+            // contained here: an unobserved pool keeps its reservation-only behaviour rather
+            // than failing an admission it has no reading for.
+            return ProcessGpuObservation.None;
         }
     }
 
@@ -1281,15 +1324,38 @@ internal sealed class InferenceSessionPool : IDisposable
     /// when there is nothing to attribute.
     /// </summary>
     /// <remarks>
-    /// The counter set reports a single total for the process, summed across every adapter it
-    /// touches, so the sibling accelerator buckets' own reservations are subtracted first. What
-    /// remains is GPU usage the pool cannot explain — driver contexts, runtime arenas, non-pooled
-    /// consumers — charged to the bucket under decision. Host buckets are never charged: their
-    /// sessions live in RAM, not on an adapter.
+    /// <para>
+    /// When the reading is attributed per adapter, the bucket's own adapter's value is used
+    /// directly — it already excludes every other adapter this process touches, so nothing else
+    /// needs subtracting. A bucket whose adapter reported nothing (or is not in the map — e.g.
+    /// production GPU keys carry no device id and resolve to adapter 0) is charged only what the
+    /// reader attributed to it.
+    /// </para>
+    /// <para>
+    /// The fallback for a reader that reports only a process total: the counter set reports one
+    /// number summed across every adapter, so the sibling GPU buckets' own reservations are
+    /// subtracted first (OpenVINO/NPU buckets excluded from both loops — their sessions do not
+    /// live on a graphics adapter and are not part of that sum). What remains is GPU usage the
+    /// pool cannot explain — driver contexts, runtime arenas, non-pooled consumers — charged to
+    /// the bucket under decision. Host buckets are never charged: their sessions live in RAM,
+    /// not on an adapter.
+    /// </para>
     /// </remarks>
-    private long ObservedProcessGpuUsageMb(AdmissionBucket bucket, long? observedProcessGpuMb)
+    private long ObservedProcessGpuUsageMb(AdmissionBucket bucket, ProcessGpuObservation observation)
     {
-        if (bucket.IsHost || observedProcessGpuMb is not > 0)
+        if (!IsGpuBucket(bucket))
+        {
+            return 0;
+        }
+
+        if (observation.MbByAdapter is not null)
+        {
+            return observation.MbByAdapter.TryGetValue(bucket.DeviceId, out long attributedMb)
+                ? Math.Max(0, attributedMb)
+                : 0;
+        }
+
+        if (observation.TotalMb is not > 0)
         {
             return 0;
         }
@@ -1297,7 +1363,7 @@ internal sealed class InferenceSessionPool : IDisposable
         long committedElsewhereMb = 0;
         foreach (SessionPoolKey key in entries.Keys)
         {
-            if (BucketOf(key) is AdmissionBucket other && other != bucket && !other.IsHost)
+            if (BucketOf(key) is AdmissionBucket other && other != bucket && IsGpuBucket(other))
             {
                 committedElsewhereMb += ResolveReservationMb(key);
             }
@@ -1305,23 +1371,36 @@ internal sealed class InferenceSessionPool : IDisposable
 
         foreach (ExternalReservationState state in externalReservations.Values)
         {
-            if (!state.Bucket.IsHost && state.Bucket != bucket)
+            if (state.Bucket != bucket && IsGpuBucket(state.Bucket))
             {
                 committedElsewhereMb += state.EstimatedMemoryMb;
             }
         }
 
-        return Math.Max(0, observedProcessGpuMb.Value - committedElsewhereMb);
+        return Math.Max(0, observation.TotalMb.Value - committedElsewhereMb);
     }
 
+    /// <summary>A bucket whose sessions run on a graphics adapter — not host RAM, not an NPU.</summary>
+    private static bool IsGpuBucket(AdmissionBucket bucket) =>
+        !bucket.IsHost && bucket.AcceleratorProvider is null;
+
     /// <summary>
-    /// Admission usage for <paramref name="bucket"/>: the pool's committed reservations, floored
-    /// by this process's real dedicated GPU usage for accelerator buckets. The floor is what makes
-    /// the process-isolated reading — and accelerator memory held outside the pool — part of the
-    /// admission decision rather than telemetry only.
+    /// Admission usage for <paramref name="bucket"/>: this process's real dedicated GPU usage
+    /// (for GPU buckets) as a floor over the pool's <em>resident</em> commitments, with pending
+    /// creations charged on top. The floor is what makes the process-isolated reading — and
+    /// accelerator memory held outside the pool — part of the admission decision rather than
+    /// telemetry only, and keeping pending <em>additive above</em> that floor is what stops an
+    /// in-flight creation from being swallowed by it: <c>max(resident, observed) + pending</c>
+    /// rather than <c>max(reserved, observed)</c>, where pending was invisible whenever the
+    /// observation exceeded the pool's own reservations — two concurrent creations could then
+    /// both pass a floor that already covered only one of them.
     /// </summary>
-    private long AdmissionUsageMb(AdmissionBucket bucket, long? observedProcessGpuMb) =>
-        Math.Max(CurrentReservedMb(bucket), ObservedProcessGpuUsageMb(bucket, observedProcessGpuMb));
+    private long AdmissionUsageMb(AdmissionBucket bucket, ProcessGpuObservation observation)
+    {
+        long pending = pendingCreateMbByBucket.TryGetValue(bucket, out long pendingMb) ? pendingMb : 0;
+        long resident = CurrentReservedMb(bucket) - pending;
+        return Math.Max(resident, ObservedProcessGpuUsageMb(bucket, observation)) + pending;
+    }
 
     private void AddPendingReservation(AdmissionBucket bucket, long mb)
     {
@@ -1337,10 +1416,16 @@ internal sealed class InferenceSessionPool : IDisposable
 
     /// <summary>
     /// Waits until <paramref name="needMb"/> fits in <paramref name="bucket"/>'s budget
-    /// (evicting idle sessions in that bucket as needed), then takes the reservation.
-    /// Never holds a reservation while waiting. Host-backed providers share the host RAM budget;
-    /// accelerator providers share their device's VRAM budget.
+    /// (evicting idle sessions in that bucket as needed — at most one per pass while only the
+    /// observed-usage floor binds, so each eviction gets a fresh reading), then takes the
+    /// reservation. Never holds a reservation while waiting. Host-backed providers share the
+    /// host RAM budget; accelerator providers share their device's VRAM budget.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Reservations fit the budget but this process's observed dedicated GPU usage is the
+    /// binding constraint and nothing idle (pooled or external) remains to evict. Waiting cannot
+    /// succeed, so the caller is told instead of polling forever.
+    /// </exception>
     private async Task WaitForAdmissionBudgetAsync(long needMb, AdmissionBucket bucket, CancellationToken cancellationToken)
     {
         BenchmarkPhaseCapture.ObserveMaximum("admissionWaiters", Interlocked.Increment(ref admissionWaiters));
@@ -1353,16 +1438,27 @@ internal sealed class InferenceSessionPool : IDisposable
 
                 // Re-observe every iteration: this loop evicts idle work and then waits, so the
                 // next pass can see the process's real usage fall as released sessions drain.
-                long? observedProcessGpuMb = ReadObservedProcessGpuMb();
+                ProcessGpuObservation observation = ReadObservedProcessGpuMb(bucket);
 
                 bool acquired = false;
+                bool observationBlocks = false;
+                bool reservationsFit = false;
+                bool freedPooledThisPass = false;
+                long observedUsageMb = 0;
+                long reservedMb = 0;
                 List<PoolEntry>? toDispose = null;
                 List<KeyValuePair<Guid, ExternalReservationState>>? idleExternals = null;
                 await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
                     ObjectDisposedException.ThrowIf(disposed, this);
-                    while (AdmissionUsageMb(bucket, observedProcessGpuMb) + needMb > BudgetFor(bucket))
+                    long budget = BudgetFor(bucket);
+
+                    // Eviction is driven by reservations: the observed term is a snapshot this
+                    // pass cannot lower, so evicting against it would drain the warm pool without
+                    // ever reaching the condition (the released sessions' memory only shows up
+                    // in the next pass's reading).
+                    while (CurrentReservedMb(bucket) + needMb > budget)
                     {
                         PoolEntry? evicted = TryEvictLruIdle(onlyBucket: bucket);
                         if (evicted is null)
@@ -1372,20 +1468,44 @@ internal sealed class InferenceSessionPool : IDisposable
 
                         toDispose ??= new List<PoolEntry>();
                         toDispose.Add(evicted);
+                        freedPooledThisPass = true;
                     }
 
-                    if (AdmissionUsageMb(bucket, observedProcessGpuMb) + needMb > BudgetFor(bucket))
+                    observedUsageMb = ObservedProcessGpuUsageMb(bucket, observation);
+                    reservationsFit = CurrentReservedMb(bucket) + needMb <= budget;
+
+                    if (reservationsFit && AdmissionUsageMb(bucket, observation) + needMb > budget)
                     {
-                        // No pooled ONNX entry in this bucket is evictable; offer every idle
-                        // external reservation a chance to release its resource, oldest first.
-                        idleExternals = OrderedIdleExternals(bucket);
+                        // Reservations fit — only this process's observed usage blocks. Free at
+                        // most one idle entry this pass so the next pass re-observes as its
+                        // memory drains, instead of wiping every idle session against a fixed
+                        // reading that a single eviction may already have relieved.
+                        observationBlocks = true;
+                        if (toDispose is null)
+                        {
+                            PoolEntry? evicted = TryEvictLruIdle(onlyBucket: bucket);
+                            if (evicted is not null)
+                            {
+                                toDispose = new List<PoolEntry> { evicted };
+                                freedPooledThisPass = true;
+                            }
+                        }
                     }
 
-                    if (AdmissionUsageMb(bucket, observedProcessGpuMb) + needMb <= BudgetFor(bucket))
+                    if (AdmissionUsageMb(bucket, observation) + needMb <= budget)
                     {
                         AddPendingReservation(bucket, needMb);
                         acquired = true;
                     }
+                    else if (toDispose is null || !reservationsFit)
+                    {
+                        // Nothing pooled was freed this pass (or reservations themselves still
+                        // overflow): idle external reservations are the last reservoir — offer
+                        // every one a chance to release its resource, oldest first.
+                        idleExternals = OrderedIdleExternals(bucket);
+                    }
+
+                    reservedMb = CurrentReservedMb(bucket);
                 }
                 finally
                 {
@@ -1441,14 +1561,27 @@ internal sealed class InferenceSessionPool : IDisposable
                     }
                 }
 
-                if (AdmissionUsageMb(bucket, observedProcessGpuMb) + needMb > BudgetFor(bucket))
+                if (reservationsFit && observationBlocks && !freedPooledThisPass)
                 {
-                    // Doesn't fit yet — poll instead of blocking a thread-pool thread on
-                    // Monitor.Wait. Bounded delay; loops back to retake creationLock and
-                    // recheck (an eviction, a lease release, or the process's own GPU usage
-                    // draining may have freed headroom).
-                    await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+                    // Fail fast: this pool's own reservations fit the budget, this process's
+                    // observed dedicated GPU usage is the binding constraint, and nothing idle
+                    // remains to free — not a pooled entry, not an external reservation. Waiting
+                    // cannot change any of those conditions: the observation only falls if
+                    // memory outside this loop drains, and no lease release is signalled here.
+                    // Surface it instead of polling a wait that can never succeed.
+                    throw new InvalidOperationException(
+                        $"Cannot admit {needMb} MB for {DescribeBucket(bucket)}: its budget is {BudgetFor(bucket)} MB " +
+                        $"and the pool's reservations ({reservedMb} MB) fit, but this process's observed dedicated " +
+                        $"GPU usage ({observedUsageMb} MB) leaves no room and no idle pooled session or external " +
+                        "reservation remains to evict. " +
+                        "Set TRACKDUB_SESSION_PROCESS_GPU_ADMISSION=0 to admit on reservations alone.");
                 }
+
+                // Doesn't fit yet — poll instead of blocking a thread-pool thread on
+                // Monitor.Wait. Bounded delay; loops back to retake creationLock and
+                // recheck (an eviction, a lease release, or the process's own GPU usage
+                // draining may have freed headroom).
+                await Task.Delay(50, cancellationToken).ConfigureAwait(false);
             }
         }
         finally

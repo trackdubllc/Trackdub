@@ -89,13 +89,16 @@ internal static class ControlledBenchmarkCliBinder
 
     /// <summary>
     /// Reads the value following <c>args[index]</c> (the option name) and advances the index.
-    /// Writes <c>Missing value for {option}.</c> and returns false when no value follows.
+    /// Writes <c>Missing value for {option}.</c> and returns false when no value follows, when the
+    /// next token looks like another option, or when the token is empty or quote-only — a value
+    /// the option grammar cannot use, which must not be swallowed as this option's value (the
+    /// caller would otherwise silently configure the wrong path or mode).
     /// </summary>
     public static bool TryReadValue(string[] args, ref int index, TextWriter error, out string value)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(error);
-        if (index + 1 >= args.Length)
+        if (index + 1 >= args.Length || IsUnusableValueToken(args[index + 1]))
         {
             error.WriteLine($"Missing value for {args[index]}.");
             value = string.Empty;
@@ -104,6 +107,19 @@ internal static class ControlledBenchmarkCliBinder
 
         value = args[++index];
         return true;
+    }
+
+    /// <summary>
+    /// Whether a token cannot serve as an option's value: another long option (the option's value
+    /// was simply omitted), or a token that is empty/whitespace or consists only of unpaired
+    /// quotes left behind by the shell.
+    /// </summary>
+    private static bool IsUnusableValueToken(string token)
+    {
+        string trimmed = token.Trim();
+        return trimmed.Length == 0
+            || trimmed.StartsWith("--", StringComparison.Ordinal)
+            || trimmed is "\"" or "'" or "\"\"" or "''";
     }
 
     /// <summary>

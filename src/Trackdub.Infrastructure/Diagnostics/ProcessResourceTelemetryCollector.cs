@@ -78,9 +78,9 @@ public sealed class ProcessResourceTelemetryCollector(
                 ? (null, "VRAM reader returned a negative reading.")
                 : (value, null);
         }
-        catch (Exception exception) when (IsPlatformReadFailure(exception) || exception is InvalidOperationException)
+        catch (Exception exception) when (IsGpuReadFailure(exception))
         {
-            // A failing GPU query must degrade the run's evidence, never abort the measurement.
+            // Expected GPU query failures degrade the run's evidence without aborting the measurement.
             return (null, $"Free VRAM measurement unavailable ({exception.GetType().Name}).");
         }
     }
@@ -108,9 +108,9 @@ public sealed class ProcessResourceTelemetryCollector(
                 ? (null, "Process GPU memory reader returned a negative reading.")
                 : (value, null);
         }
-        catch (Exception exception) when (IsPlatformReadFailure(exception) || exception is InvalidOperationException)
+        catch (Exception exception) when (IsGpuReadFailure(exception))
         {
-            // A failing GPU query must degrade the run's evidence, never abort the measurement.
+            // Expected GPU query failures degrade the run's evidence without aborting the measurement.
             return (null, $"Process GPU memory measurement unavailable ({exception.GetType().Name}).");
         }
     }
@@ -118,8 +118,16 @@ public sealed class ProcessResourceTelemetryCollector(
     private static IProcessGpuMemoryReader DefaultProcessGpuReader { get; } = new UnavailableProcessGpuMemoryReader();
 
     private static bool IsPlatformReadFailure(Exception exception) =>
-        exception is Win32Exception or NotSupportedException or UnauthorizedAccessException or
-        // Native probes (PDH, DXGI) surface an unusable host this way; a measurement must degrade
-        // rather than abort the run when a probe cannot be loaded or resolved.
-        DllNotFoundException or EntryPointNotFoundException;
+        exception is Win32Exception or NotSupportedException or UnauthorizedAccessException;
+
+    /// <summary>
+    /// GPU probes additionally load native DLLs (PDH, DXGI) that the BCL process reads never
+    /// touch: a missing library or export surfaces an unusable host and must degrade the reading
+    /// rather than abort the measurement. Kept separate from
+    /// <see cref="IsPlatformReadFailure"/> so those failures cannot silently mask themselves as
+    /// benign platform unavailability in the unrelated CPU and working-set reads.
+    /// </summary>
+    private static bool IsGpuReadFailure(Exception exception) =>
+        IsPlatformReadFailure(exception) ||
+        exception is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException;
 }
