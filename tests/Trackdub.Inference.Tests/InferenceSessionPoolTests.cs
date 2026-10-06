@@ -1324,7 +1324,7 @@ public sealed class InferenceSessionPoolTests
         env.Clear(SharedPoolOptions.ProcessGpuAdmissionVariable);
 
         Assert.Equal("TRACKDUB_SESSION_PROCESS_GPU_ADMISSION", SharedPoolOptions.ProcessGpuAdmissionVariable);
-        Assert.True(SharedPoolOptions.EnableProcessGpuAdmission);
+        Assert.True(SharedPoolOptions.ParseAdmissionFlag(null));
         Assert.True(SharedPoolOptions.ReadAdmissionFlag(SharedPoolOptions.ProcessGpuAdmissionVariable));
         Assert.False(SharedPoolOptions.ParseAdmissionFlag("0"));
         Assert.False(SharedPoolOptions.ParseAdmissionFlag("false"));

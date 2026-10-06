@@ -1280,22 +1280,16 @@ internal sealed class InferenceSessionPool : IDisposable
         }
 
         long committedElsewhereMb = 0;
-        foreach (SessionPoolKey key in entries.Keys)
+        foreach (SessionPoolKey key in entries.Keys.Where(key => BucketOf(key) is AdmissionBucket other && other != bucket && !other.IsHost
+                && other.AcceleratorProvider is not ExecutionProviderKind.OpenVino))
         {
-            if (BucketOf(key) is AdmissionBucket other && other != bucket && !other.IsHost
-                && other.AcceleratorProvider is not ExecutionProviderKind.OpenVino)
-            {
-                committedElsewhereMb += ResolveReservationMb(key);
-            }
+            committedElsewhereMb += ResolveReservationMb(key);
         }
 
-        foreach (ExternalReservationState state in externalReservations.Values)
+        foreach (ExternalReservationState state in externalReservations.Values.Where(state => !state.Bucket.IsHost && state.Bucket != bucket
+                && state.Bucket.AcceleratorProvider is not ExecutionProviderKind.OpenVino))
         {
-            if (!state.Bucket.IsHost && state.Bucket != bucket
-                && state.Bucket.AcceleratorProvider is not ExecutionProviderKind.OpenVino)
-            {
-                committedElsewhereMb += state.EstimatedMemoryMb;
-            }
+            committedElsewhereMb += state.EstimatedMemoryMb;
         }
 
         return Math.Max(0, observedProcessGpuMb.Value - committedElsewhereMb);

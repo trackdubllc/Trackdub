@@ -137,6 +137,8 @@ public sealed class ControlledBenchmarkCliBinderTests
             Mode = options.Mode,
             RunCount = options.RunCount,
             ResourceTelemetryBounds = options.ResourceTelemetryBounds,
+            ModelDirectory = options.ModelDirectory,
+            Provider = options.Provider,
         };
     }
 

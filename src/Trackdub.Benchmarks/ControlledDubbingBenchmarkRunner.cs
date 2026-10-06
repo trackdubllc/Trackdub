@@ -133,16 +133,20 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
         // Sanitize the resource bounds against this host's real adapter capacity before anything is
         // measured. A free-VRAM floor above the video memory the host can address is physically
         // impossible: rejecting it here keeps the run from burning a full benchmark only to report
-        // a bound the hardware could never have met.
-        long totalVideoMemoryMb = await ResourceBoundsPreflight
-            .QueryTotalVideoMemoryMbAsync(context.Host.Services, cancellationToken)
-            .ConfigureAwait(false);
-        if (ResourceBoundsPreflight.DescribeImpossibleBound(
-                options.ResourceTelemetryBounds, totalVideoMemoryMb) is string impossibleBound)
+        // a bound the hardware could never have met. Skip the query when no floor is configured
+        // to avoid pre-warming device discovery and altering cold-run measurements.
+        if (options.ResourceTelemetryBounds.MinAvailableVramMb > 0)
         {
-            context.Status = BenchmarkEvidenceStatus.Failed;
-            context.Reason = impossibleBound;
-            throw new PreparationIncompleteException();
+            long totalVideoMemoryMb = await ResourceBoundsPreflight
+                .QueryTotalVideoMemoryMbAsync(context.Host.Services, cancellationToken)
+                .ConfigureAwait(false);
+            if (ResourceBoundsPreflight.DescribeImpossibleBound(
+                    options.ResourceTelemetryBounds, totalVideoMemoryMb) is string impossibleBound)
+            {
+                context.Status = BenchmarkEvidenceStatus.Failed;
+                context.Reason = impossibleBound;
+                throw new PreparationIncompleteException();
+            }
         }
     }
 

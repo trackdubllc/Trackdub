@@ -50,6 +50,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
         WarmCounterSubsystem, LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static volatile string? warmupFailure;
+    private volatile string? lastReadFailure;
 
     public WindowsProcessGpuMemoryReader() => _ = Warmup.Value;
 
@@ -83,13 +84,17 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
     public string UnavailableReason =>
         warmupFailure is { } failure
             ? $"Windows performance counter initialization failed ({failure})."
-            : $"Windows reported no {CounterSetName} counter instance for this process.";
+            : lastReadFailure is { } readFailure
+                ? $"Windows GPU memory read failed ({readFailure})."
+                : $"Windows reported no {CounterSetName} counter instance for this process.";
 
     public long? ReadDedicatedGpuMemoryBytes()
     {
         try
         {
-            return QueryDedicatedUsageBytes();
+            long? result = QueryDedicatedUsageBytes();
+            lastReadFailure = result is null ? "PDH query returned no data." : null;
+            return result;
         }
         catch (Exception exception) when (exception is DllNotFoundException or BadImageFormatException)
         {
@@ -97,6 +102,7 @@ internal sealed class WindowsProcessGpuMemoryReader : IProcessGpuMemoryReader
             // missing entry point is deliberately not caught here: pdh.dll always exports these,
             // so that would mean a mistyped import and must fail loudly rather than silently
             // disable the feature. The telemetry collector still declines it in production.
+            lastReadFailure = exception.GetType().Name;
             return null;
         }
     }
