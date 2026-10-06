@@ -49,7 +49,7 @@ Preliminary read: on this hardware class the matrix lands on **"Kokoro RTF fine;
 
 **The embedded eSpeak-NG question — must be resolved, not assumed.** Piper embeds eSpeak-NG for phonemization. That means it addresses Kokoro's espeak failure **only if** its own phonemizer and `espeak-ng-data` equivalent are:
 1. **Packaged with the sidecar** — no reliance on system eSpeak-NG or a distro package;
-2. **Verified at readiness time** with the same health-check rigor as Kokoro's `EspeakNgHealthCheck` (data directory present, version pinned, phonemization smoke test), so a broken phonemizer surfaces as an explicit NotReady state instead of garbage output.
+2. **Verified at readiness time** with checks at least as strong as Kokoro's `EspeakNgHealthCheck` (which currently verifies the executable and data directory), plus a pinned version and a phonemization smoke test, so a broken phonemizer surfaces as an explicit NotReady state instead of garbage output.
 
 If piper's standalone binary packages its phonemizer data self-containedly (to be verified during Phase 0/1 investigation — per its README it embeds eSpeak-NG), it genuinely de-risks the fragility concern; if not, it inherits the same failure class and the case for it weakens to speed only.
 
