@@ -158,7 +158,7 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesCudaSinceTensorRtIsBlocked()
+    public async Task PlanAsync_WhenTensorRtAndCudaAvailableForVad_UsesTensorRtBeforeCuda()
     {
         // Global probe order lists TensorRT before Cuda; VAD allows both (non-RTX TensorRT).
         using var workspace = new RuntimePlannerTestWorkspace();
@@ -180,7 +180,7 @@ public sealed class RuntimePlannerTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Vad));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.Cuda, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.TensorRt, plan.ExecutionProvider);
         Assert.Equal("int8", plan.Variant);
     }
 
@@ -483,8 +483,8 @@ public sealed class RuntimePlannerTests
     [Fact]
     public async Task PlanAsync_RequiredTensorRTRtxForVad_FallsBackToDmlSinceBlocked()
     {
-        // VAD no longer excludes TensorRT families, so a required TRT RTX pin is honored
-        // (smoke-gated) rather than demoted to DirectML with a skip warning.
+        // VAD excludes TensorRT RTX (silero-vad fails its engine build, #329), so a required
+        // TRT RTX pin is demoted to DirectML with a visible skip warning, never silently.
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(
             CreateVadSpec("silero-vad", commercialAllowed: true, license: "MIT"));
@@ -508,9 +508,9 @@ public sealed class RuntimePlannerTests
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
         Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
-        //         Assert.DoesNotContain(
-        //             plan.Warnings,
-        //             warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
+        Assert.Contains(
+            plan.Warnings,
+            warning => warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine);
     }
 
     [Fact]

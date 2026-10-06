@@ -3,6 +3,7 @@ using System.Linq;
 using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.Benchmarking;
 using Trackdub.Domain;
+using Trackdub.Inference.Onnx.TensorRtRtx;
 
 namespace Trackdub.Inference.Onnx.Pool;
 
@@ -193,7 +194,7 @@ internal sealed class InferenceSessionPool : IDisposable
     /// </summary>
     private const long RecentReleaseWindowMs = 120_000;
 
-    private sealed class PoolEntry(InferenceSession session, ExecutionProviderKind provider, bool ephemeral) : IDisposable
+    private sealed class PoolEntry(InferenceSession session, bool ephemeral) : IDisposable
     {
         private long lastReleasedTicks = Environment.TickCount64;
         private volatile bool evicted;
@@ -201,8 +202,6 @@ internal sealed class InferenceSessionPool : IDisposable
         private int pinCount;
 
         public InferenceSession Session { get; } = session;
-
-        public ExecutionProviderKind Provider { get; } = provider;
 
         /// <summary>Per-entry gate that serialises access (one user at a time).</summary>
         public SemaphoreSlim Gate { get; } = new(0, 1); // Starts unavailable because the creator immediately owns the first lease.
@@ -286,18 +285,10 @@ internal sealed class InferenceSessionPool : IDisposable
             if (Interlocked.Exchange(ref disposeState, 1) == 0)
             {
                 Gate.Dispose();
-                if (Provider is ExecutionProviderKind.TensorRTRtx)
-                {
-                    // TensorRT RTX native teardown is unsafe when native EP state is poisoned
-                    // (e.g. by CUDA OOM or engine compilation failure) or during unmanaged deallocation,
-                    // which causes an uncatchable access violation (0xC0000005) in ScopedCudaStream/MyelinGraphContext.
-                    // Suppress finalization to avoid calling native Session.Dispose() and keep the process alive safely.
-                    GC.SuppressFinalize(Session);
-                }
-                else
-                {
-                    Session.Dispose();
-                }
+                // Healthy sessions always release their native memory. Only a TensorRT-RTX session
+                // in a process whose runtime was poisoned by a CUDA OOM skips teardown (see
+                // TensorRtRtxTeardownGuard); dispose of such a session can fault uncatchably.
+                TensorRtRtxTeardownGuard.DisposeSafely(Session);
             }
         }
     }
@@ -815,7 +806,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     throw;
                 }
 
-                var freshEntry = new PoolEntry(session, key.Provider, ephemeral);
+                var freshEntry = new PoolEntry(session, ephemeral);
 
                 if (freshEntry.Ephemeral)
                 {
