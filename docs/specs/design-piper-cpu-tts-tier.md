@@ -39,6 +39,10 @@ This pitch does **not** assume either is a live problem. It proposes benchmarkin
 | Kokoro RTF fine, fragility real | Prefer hardening Kokoro's espeak-ng path (bundle `espeak-ng-data`, tighten the health check); piper only if hardening fails |
 | Kokoro RTF unacceptable on target class | Phase 1: piper fallback tier |
 
+**Phase 0 initial results (constrained-CPU sandbox; full data in PR #386 comments):** 5 vCPU Intel Xeon 6985P-C @ 2.30 GHz, no GPU, 5.9 GB RAM. Kokoro-82M fp32 ONNX (CPU EP, voice `af_heart`): aggregate RTF **0.208** (short-segment 0.338, long-sentence 0.187), peak RSS 807 MB, load 0.81 s. Piper `en_US-lessac-medium`: aggregate RTF **0.028**, peak RSS 327 MB, load 0.78 s. Both engines phonemize via eSpeak-NG (Kokoro through `espeakng-loader`, piper embedded) — piper does **not** de-risk the espeak chain by substitution, only by self-contained packaging.
+
+Preliminary read: on this hardware class the matrix lands on **"Kokoro RTF fine; fragility is a packaging/health-check question, not an engine question"** → hardening over a second runtime. This is a server-class constrained environment, not a true low-end consumer laptop; the numbers must be re-validated on the actual target profile (2–4 core / ≤4 GB class) before closing.
+
 ## 4. Phase 1 (conditional) — piper tier, planner-integrated
 
 **Fallback selection belongs to the runtime planner.** TTS selection already flows through `RoutedTtsEngine` → `StageRuntimePlanningRequest`/`RuntimePlanner`; the piper engine family joins `StageRuntimeRequirements` for TTS as an allowed family on the CPU provider, and the planner makes the Kokoro-vs-piper call under its existing rules (with piper ranked below Kokoro). No engine-internal fallback logic and no second selection path — the planner is the single decision point, consistent with how every other stage routes.
