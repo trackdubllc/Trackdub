@@ -173,7 +173,7 @@ public sealed class NvidiaAfxLiveRuntimeTests(Xunit.ITestOutputHelper output)
         NvidiaAfxProfileDefinition definition = NvidiaAfxProfileCatalog.GetDefinition(NvidiaAfxProfile.NoiseAndReverb);
         const int sampleRate = 48000;
         // 2.5 s is more than two one-second chunks and ends mid-frame, so padding and trimming are exercised.
-        float[] input = BuildNoisySpeechLikeSignal(sampleRate, seconds: 3)[..(sampleRate * 5 / 2 - 7)];
+        float[] input = BuildNoisySpeechLikeSignal(sampleRate, seconds: 3)[..((sampleRate * 5 / 2) - 7)];
 
         using NvidiaAfxSession whole = NvidiaAfxSession.Create(definition, root, sampleRate, 1.0f, architecture);
         float[] expected = whole.Process(input);
