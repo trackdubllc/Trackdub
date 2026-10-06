@@ -220,10 +220,10 @@ public static class TtsEvalRunner
             using IServiceScope scope = host.Services.CreateScope();
             ITtsEngineAdapter? engine = scope.ServiceProvider
                 .GetServices<ITtsEngineAdapter>()
-                .FirstOrDefault(e => string.Equals(e.EngineFamily, options.Model, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(e => string.Equals(e.EngineFamily, KokoroTtsEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase));
             if (engine is null)
             {
-                error.WriteLine($"No TTS engine with family '{options.Model}' is registered.");
+                error.WriteLine("No Kokoro TTS engine is registered.");
                 return 1;
             }
             IReadOnlyList<TtsEvalResult> all = await RunJobsAsync(
