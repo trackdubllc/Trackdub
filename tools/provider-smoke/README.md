@@ -10,12 +10,18 @@ provisioning or pipeline setup.
 
 Status semantics (never fabricated):
 
-- `ok` — session created and inference ran; the requested provider is in use.
-- `fallback` — session created and inference ran, but all nodes landed on
-  `CPUExecutionProvider` (the EP either rejected the graph or has no device).
+- `ok` — session created and inference ran; the requested provider executed at
+  least one graph node. Node placement is measured from the ONNX Runtime
+  profiler (one profiling run per provider), and per-EP node counts are
+  recorded under `node_counts`.
+- `fallback` — session created and inference ran, but zero nodes executed on
+  the requested provider — every node landed on CPU or another EP (the EP
+  either rejected the graph or has no device).
 - `fail` — session creation or inference raised; `detail` carries the error.
-- `absent` — platform/provider-library prerequisite missing (expected on the
-  wrong host OS or without the accelerator stack).
+- `absent` — provider/platform prerequisite missing: the EP is not compiled
+  into the installed wheel, a required native library (e.g. ROCm
+  `libmigraphx`) is missing on the host, or the platform is wrong (e.g.
+  CoreML off macOS).
 
 ## Usage
 
@@ -27,13 +33,16 @@ python tools/provider-smoke/smoke_execution_providers.py \
   --providers cpu,openvino
 ```
 
-- `--feed` is an `.npz` file mapping input names to float32 tensors. It is
-  required whenever the model has non-batch dynamic input dims (the harness
-  refuses to guess; guessed feeds produce misleading smoke results).
+- `--feed` is an `.npz` file mapping input names to tensors; stored dtypes are
+  preserved (float32, int64, bool, ...). It is required whenever the model has
+  non-batch dynamic input dims or inputs the harness has no safe generated
+  tensor for (the harness refuses to guess; guessed feeds produce misleading
+  smoke results).
 - `--providers` accepts short tokens matched case-insensitively against the
   wheel's available providers: `cpu`, `openvino`, `qnn`, `migraphx`, `dnnl`,
-  `coreml`, `cuda`, ... Each entry may carry options after a colon, e.g.
-  `openvino:performance_hint=THROUGHPUT`.
+  `coreml`, `cuda`, ... Each entry may carry options after a colon, with
+  options separated by `;` — e.g.
+  `openvino:device_type=CPU;performance_hint=THROUGHPUT`.
 - `--warmup-runs` (default 2) and `--repeat-runs` (default 5) control timing;
   `best_ms`/`mean_ms` are recorded per provider when status is `ok` or
   `fallback`.
@@ -67,5 +76,6 @@ encoder, 80×3000 features) are posted alongside the CPU-tier spec discussion
 (#385) and the tts-bench PR (#388). Summary of status behavior on a
 GPU/NPU-less host: `cpu` ok; `openvino` ok on CPU plugin (slower than CPU EP
 on transformer encoders; rejects Kokoro's dynamic-rank STFT graph);
-`qnn` fallback (clean load, no Hexagon); `migraphx` fallback (missing ROCm
-`libmigraphx`); `coreml` absent (not macOS).
+`qnn` fallback (clean load, no Hexagon device); `migraphx` absent (EP compiled
+into the wheel but ROCm `libmigraphx` is missing on the host); `coreml` absent
+(not macOS).

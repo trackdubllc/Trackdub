@@ -7,29 +7,38 @@ dependency-light EP capability matrix: which execution providers load, which dev
 they discover, and whether a reference ONNX model can be created/run through each.
 
 The harness never fabricates success: each EP records one of
-  ok            - session created and inference ran on that EP
-  fallback      - session created but nodes landed on CPUExecutionProvider
+  ok            - session created, inference ran, and >= 1 node executed on that EP
+  fallback      - session created and inference ran, but 0 nodes executed on the
+                  requested EP (every node landed elsewhere, typically CPU)
   fail          - session creation or run raised, with the error message
   absent        - EP library/platform prerequisite missing (expected on wrong hosts)
+
+Node placement is derived from the ONNX Runtime profiler: each provider smoke runs
+once with profiling enabled and counts kernel events by their `provider` field, so
+`ok`/`fallback` reflect where nodes actually executed rather than which providers
+the session merely registered. Per-EP node counts are recorded under `node_counts`.
 
 Usage:
   python smoke_execution_providers.py --model <path.onnx> --results <out.json>
                                       [--providers openvino,qnn,migraphx,cpu]
-                                      [--feed <npz-or-json>] [--repeat-runs 5]
+                                      [--feed <npz>] [--repeat-runs 5]
 
 Feed defaults to a 1x80x3000 float32 tensor named `input_features` (Whisper encoder
 shape); pass `--feed` with a .npz file to smoke other models. Results are written
 as JSON and echo to stdout. Requires the same ORT wheel variant as the EP under
 test (e.g. `onnxruntime-openvino`, `onnxruntime-qnn`, `onnxruntime-migraphx`);
 run each variant in its own virtual environment, or use `--providers` to scope.
+Provider options use `;` as the separator after a colon, e.g.
+`openvino:device_type=CPU;performance_hint=THROUGHPUT`.
 """
 import argparse
-import ctypes
 import glob
 import json
 import os
 import platform
+import shutil
 import sys
+import tempfile
 import time
 
 try:
@@ -51,13 +60,22 @@ QNN_PROVIDER_LIB_CANDIDATES = (
 )
 
 
-def qnn_provider_library():
-    for package, linux_name, windows_name in QNN_PROVIDER_LIB_CANDIDATES:
+def _qnn_package_dir():
+    """Directory of the onnxruntime-qnn sibling package, or None if not installed."""
+    for package, _, _ in QNN_PROVIDER_LIB_CANDIDATES:
         try:
             module = __import__(package)
         except ImportError:
             continue
-        lib_dir = os.path.dirname(os.path.abspath(module.__file__))
+        return os.path.dirname(os.path.abspath(module.__file__))
+    return None
+
+
+def qnn_provider_library():
+    lib_dir = _qnn_package_dir()
+    if not lib_dir:
+        return None
+    for _, linux_name, windows_name in QNN_PROVIDER_LIB_CANDIDATES:
         for name in (linux_name, windows_name):
             path = os.path.join(lib_dir, name)
             if os.path.isfile(path):
@@ -66,12 +84,12 @@ def qnn_provider_library():
 
 
 def qnn_backend_path():
-    module = __import__("onnxruntime_qnn")
-    lib_dir = os.path.dirname(os.path.abspath(module.__file__))
+    lib_dir = _qnn_package_dir()
+    if not lib_dir:
+        return None
     candidates = sorted(glob.glob(os.path.join(lib_dir, "libQnnHtp.so"))) or \
         sorted(glob.glob(os.path.join(lib_dir, "QnnHtp.dll")))
     return candidates[0] if candidates else None
-
 
 
 def resolve_provider_name(name):
@@ -97,14 +115,30 @@ def register_qnn():
     return None
 
 
-DEFAULT_DYNAMIC_DIM = 3000
 MAX_FEED_ELEMENTS = 12_000_000
+
+# Generated feeds must match each input's declared ONNX type; unmapped types
+# require an explicit --feed npz rather than a guessed tensor.
+TYPE_TO_NUMPY = {
+    "tensor(float)": np.float32,
+    "tensor(float16)": np.float16,
+    "tensor(double)": np.float64,
+    "tensor(int64)": np.int64,
+    "tensor(int32)": np.int32,
+    "tensor(int16)": np.int16,
+    "tensor(int8)": np.int8,
+    "tensor(uint8)": np.uint8,
+    "tensor(uint16)": np.uint16,
+    "tensor(uint32)": np.uint32,
+    "tensor(uint64)": np.uint64,
+    "tensor(bool)": np.bool_,
+}
 
 
 def build_feed(model_path, feed_path):
     if feed_path:
-        data = dict(np.load(feed_path))
-        return {k: np.asarray(v, dtype=np.float32) for k, v in data.items()}
+        with np.load(feed_path) as data:
+            return {k: np.asarray(v) for k, v in data.items()}
     sess = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
     rng = np.random.default_rng(42)
     feed = {}
@@ -127,14 +161,21 @@ def build_feed(model_path, feed_path):
             raise ValueError(
                 f"Input '{spec.name}' shape {spec.shape} exceeds the smoke feed budget; "
                 "provide an explicit --feed npz file.")
-        if not shape:
-            feed[spec.name] = np.zeros((), dtype=np.float32)
+        dtype = TYPE_TO_NUMPY.get(spec.type)
+        if dtype is None:
+            raise ValueError(
+                f"Input '{spec.name}' has type '{spec.type}' with no safe generated feed; "
+                "provide an explicit --feed npz file.")
+        if np.issubdtype(dtype, np.floating):
+            feed[spec.name] = rng.standard_normal(shape).astype(dtype)
         else:
-            feed[spec.name] = rng.standard_normal(shape).astype(np.float32)
+            feed[spec.name] = np.zeros(shape, dtype=dtype)
     return feed
 
 
 def bench_run(sess, feed, warmup, repeats):
+    if repeats < 1:
+        raise ValueError("repeat_runs must be >= 1")
     for _ in range(warmup):
         sess.run(None, feed)
     times = []
@@ -148,14 +189,72 @@ def bench_run(sess, feed, warmup, repeats):
     }
 
 
-def smoke(model_path, provider_spec, feed, warmup, repeats):
-    entry = {"provider_spec": provider_spec, "status": None, "detail": None}
-    name, _, options = provider_spec.partition(":")
+def parse_provider_options(options):
     provider_options = {}
-    for part in options.split(",") if options else []:
+    for part in options.split(";") if options else []:
         if "=" in part:
             key, value = part.split("=", 1)
             provider_options[key] = value
+    return provider_options
+
+
+def create_session(model_path, requested, provider_options):
+    opts = ort.SessionOptions()
+    if provider_options:
+        return ort.InferenceSession(
+            model_path, sess_options=opts, providers=[(requested, provider_options)])
+    return ort.InferenceSession(model_path, sess_options=opts, providers=[requested])
+
+
+def count_provider_nodes(profile_path):
+    """Count kernel-time events per EP from an ORT profiling file."""
+    counts = {}
+    try:
+        with open(profile_path, "r", encoding="utf-8") as handle:
+            profile = json.load(handle)
+    except (OSError, ValueError):
+        return counts
+    events = profile.get("traceEvents") if isinstance(profile, dict) else profile
+    for event in events or []:
+        if event.get("cat") != "Node":
+            continue
+        provider = (event.get("args") or {}).get("provider")
+        if provider:
+            counts[provider] = counts.get(provider, 0) + 1
+    return counts
+
+
+def profile_node_counts(model_path, requested, provider_options, feed):
+    """Run the model once with profiling enabled and count node events per EP."""
+    profiling_dir = tempfile.mkdtemp(prefix="provider-smoke-profile-")
+    try:
+        opts = ort.SessionOptions()
+        opts.enable_profiling = True
+        opts.profile_file_prefix = os.path.join(profiling_dir, "profile")
+        if provider_options:
+            sess = ort.InferenceSession(
+                model_path, sess_options=opts, providers=[(requested, provider_options)])
+        else:
+            sess = ort.InferenceSession(model_path, sess_options=opts, providers=[requested])
+        sess.run(None, feed)
+        profile_path = sess.end_profiling()
+        return count_provider_nodes(profile_path)
+    finally:
+        shutil.rmtree(profiling_dir, ignore_errors=True)
+
+
+PREREQUISITE_MISSING_HINTS = (
+    "Failed to load library",
+    "Cannot load library",
+    "cannot open shared object file",
+    "Failed to load '",
+)
+
+
+def smoke(model_path, provider_spec, feed, warmup, repeats):
+    entry = {"provider_spec": provider_spec, "status": None, "detail": None}
+    name, _, options = provider_spec.partition(":")
+    provider_options = parse_provider_options(options)
     if name.lower() == "qnn":
         problem = register_qnn()
         if problem:
@@ -167,24 +266,36 @@ def smoke(model_path, provider_spec, feed, warmup, repeats):
             provider_options["backend_path"] = backend
     try:
         requested = resolve_provider_name(name)
+        if requested not in ort.get_available_providers():
+            entry["status"] = "absent"
+            entry["detail"] = (
+                f"provider '{name}' is not available in this onnxruntime wheel "
+                f"({ort.__version__}); install the matching EP wheel "
+                "(e.g. onnxruntime-openvino for 'openvino').")
+            return entry
         start = time.perf_counter()
-        if provider_options:
-            sess = ort.InferenceSession(model_path, providers=[(requested, provider_options)])
-        else:
-            sess = ort.InferenceSession(model_path, providers=[requested])
+        sess = create_session(model_path, requested, provider_options)
         entry["session_create_s"] = round(time.perf_counter() - start, 2)
-        providers_in_use = sess.get_providers()
-        sess.run(None, feed)
+        entry["providers_in_use"] = sess.get_providers()
+        node_counts = profile_node_counts(model_path, requested, provider_options, feed)
+        entry["node_counts"] = node_counts
         timing = bench_run(sess, feed, warmup, repeats)
         entry.update(timing)
-        if any(p == requested for p in providers_in_use):
+        if node_counts.get(requested, 0) > 0:
             entry["status"] = "ok"
         else:
             entry["status"] = "fallback"
-        entry["providers_in_use"] = providers_in_use
+            entry["detail"] = (
+                "session ran but 0 nodes executed on the requested provider; "
+                f"nodes were placed on: {', '.join(sorted(node_counts)) or 'none'}")
     except Exception as ex:
-        entry["status"] = "fail"
-        entry["detail"] = str(ex)[:500]
+        message = str(ex)
+        if any(hint in message for hint in PREREQUISITE_MISSING_HINTS):
+            entry["status"] = "absent"
+            entry["detail"] = f"provider prerequisite missing on this host: {message[:500]}"
+        else:
+            entry["status"] = "fail"
+            entry["detail"] = message[:500]
     return entry
 
 
@@ -197,6 +308,10 @@ def main():
     parser.add_argument("--warmup-runs", type=int, default=2)
     parser.add_argument("--repeat-runs", type=int, default=5)
     args = parser.parse_args()
+    if args.warmup_runs < 0:
+        parser.error("--warmup-runs must be >= 0")
+    if args.repeat_runs < 1:
+        parser.error("--repeat-runs must be >= 1")
 
     report = {
         "onnxruntime_version": ort.__version__,
