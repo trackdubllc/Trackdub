@@ -73,14 +73,21 @@ def _import_model_stack():
     return torch, ChatterboxTTS
 
 
-def _resolve_device():
-    try:
-        import torch
-    except ImportError:
-        return "cpu"
-    if torch.cuda.is_available():
-        return "cuda"
-    return "cpu"
+def _resolve_device(torch, plan):
+    """Choose an available device from the planner's ordered allow-list."""
+    providers = plan.get("providers")
+    if not isinstance(providers, list) or not providers:
+        raise ValueError("load plan requires an ordered providers list")
+    available = {"CPU": True, "CUDA": bool(torch.cuda.is_available())}
+    normalized = [str(provider).upper() for provider in providers]
+    if plan.get("requirePreferred"):
+        normalized = normalized[:1]
+    for provider in normalized:
+        if provider not in available:
+            continue
+        if available[provider]:
+            return "cuda" if provider == "CUDA" else "cpu"
+    raise RuntimeError("no planned provider is available")
 
 
 def handle_load(request_id, plan):
@@ -91,24 +98,31 @@ def handle_load(request_id, plan):
         return
     try:
         torch, ChatterboxTTS = _import_model_stack()
+        device = _resolve_device(torch, plan)
     except ImportError as ex:
         respond(request_id, "error", reason="dependency-missing", detail=str(ex))
         return
-    device = _resolve_device()
+    except (RuntimeError, ValueError) as ex:
+        respond(request_id, "error", reason="bad-plan", detail=str(ex))
+        return
+    model_name = str(plan["model"])
+    if model_name != CHATTERBOX_REPO:
+        respond(request_id, "error", reason="model-not-found",
+                detail=f"unsupported Chatterbox model: {model_name}")
+        return
     try:
-        # from_pretrained resolves HF repo ids AND local snapshot dirs, so the
-        # planner can hand either a cache path or ResembleAI/chatterbox.
-        # NOTE (verify against installed chatterbox-tts at integration time):
-        # current API is ChatterboxTTS.from_pretrained(device).
-        _model = ChatterboxTTS.from_pretrained(plan["model"] if "/" in plan["model"] or "\\" in plan["model"] else CHATTERBOX_REPO)
-        if device == "cuda" and hasattr(_model, "to"):
+        # Chatterbox's API takes the execution device, not a model id.  Only
+        # load the repository the worker implements; never silently substitute
+        # it for another planner-selected model.
+        _model = ChatterboxTTS.from_pretrained(device=device)
+        if hasattr(_model, "to"):
             _model = _model.to(device)
         _model_device = device
     except Exception as ex:  # model download / native load failure: report, don't crash
         _model, _model_device = None, "none"
         respond(request_id, "error", reason="load-failed", detail=f"{type(ex).__name__}: {ex}")
         return
-    respond(request_id, "loaded", activeProvider=_model_device, model=str(plan["model"]))
+    respond(request_id, "loaded", activeProvider=_model_device, model=model_name)
 
 
 def _tensor_envelope(dtype, shape, raw_bytes):
