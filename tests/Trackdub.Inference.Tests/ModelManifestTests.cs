@@ -2720,8 +2720,10 @@ public sealed class LocalModelCacheRecordStoreTests
 
 public sealed class LocalModelCacheRecordLookupTests
 {
-    [Fact]
-    public async Task Find_returns_matching_record_and_ignores_integrity_failed()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Find_uses_authoritative_integrity_state_without_falling_back_to_stale_duplicates(bool newestFailed)
     {
         string rootPath = Path.Join(Path.GetTempPath(), "trackdub-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(rootPath);
@@ -2732,14 +2734,21 @@ public sealed class LocalModelCacheRecordLookupTests
 
         await store.MutateAsync(_ =>
         [
-            new LocalModelCacheRecord("example/model", modelRoot, "rev-a", ValidSha256, DateTimeOffset.UtcNow),
-            new LocalModelCacheRecord("example/model", modelRoot, "rev-b", ValidSha256, DateTimeOffset.UtcNow, IntegrityFailed: true),
+            new LocalModelCacheRecord("example/model", modelRoot, "rev-a", ValidSha256, DateTimeOffset.UnixEpoch, IntegrityFailed: !newestFailed),
+            new LocalModelCacheRecord("example/model", modelRoot, "rev-b", ValidSha256, DateTimeOffset.UnixEpoch.AddDays(1), IntegrityFailed: newestFailed),
         ]);
 
         LocalModelCacheRecord? found = lookup.Find("example/model", modelRoot);
 
-        Assert.NotNull(found);
-        Assert.Equal("rev-a", found.Revision);
+        if (newestFailed)
+        {
+            Assert.Null(found);
+        }
+        else
+        {
+            Assert.NotNull(found);
+            Assert.Equal("rev-b", found.Revision);
+        }
     }
 
     private const string ValidSha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

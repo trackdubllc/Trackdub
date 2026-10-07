@@ -73,7 +73,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
             json,
             LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray);
 
-        return Task.FromResult<IReadOnlyList<LocalModelCacheRecord>>(records ?? []);
+        return Task.FromResult<IReadOnlyList<LocalModelCacheRecord>>(NormalizeRecords(records ?? []));
     }
 
     /// <summary>
@@ -102,9 +102,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
             {
                 // The generated metadata is bound to LocalModelCacheRecord[], so materialize
                 // IReadOnlyList<T> implementations (e.g. single-element wrappers) before serializing.
-                LocalModelCacheRecord[] materialized = records is LocalModelCacheRecord[] array
-                    ? array
-                    : [.. records];
+                LocalModelCacheRecord[] materialized = [.. NormalizeRecords(records)];
                 await JsonSerializer.SerializeAsync(stream, materialized, LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray, cancellationToken)
                     .ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -118,6 +116,35 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
             throw;
         }
     }
+
+    public static bool RootsEqual(string left, string right) =>
+        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), StringComparison.OrdinalIgnoreCase);
+
+    public static IReadOnlyList<LocalModelVariantRecord> CompatibleVariants(
+        LocalModelCacheRecord record, IEnumerable<LocalModelVariantRecord> variants) =>
+        variants.Where(variant =>
+                string.Equals(variant.SourceModelRevision, record.Revision, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(variant.SourceModelSha256) ||
+                 string.Equals(variant.SourceModelSha256, record.Sha256, StringComparison.OrdinalIgnoreCase)))
+            .GroupBy(variant => variant.Alias, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(variant => variant.CreatedAtUtc)
+                .ThenByDescending(variant => variant.IntegrityFailed).First())
+            .ToArray();
+
+    private static IReadOnlyList<LocalModelCacheRecord> NormalizeRecords(IReadOnlyList<LocalModelCacheRecord> records) =>
+        records.GroupBy(record => record.ModelId, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(model => model.GroupBy(record =>
+                Path.TrimEndingDirectorySeparator(Path.GetFullPath(record.RootPath)), StringComparer.OrdinalIgnoreCase))
+            .Select(group =>
+            {
+                LocalModelCacheRecord newest = group.OrderByDescending(record => record.CachedAtUtc)
+                    .ThenByDescending(record => record.IntegrityFailed).First();
+                return group.Count() == 1 ? newest : newest with
+                {
+                    Variants = CompatibleVariants(newest, group.SelectMany(record => record.Variants))
+                };
+            }).ToArray();
 
     private static void TryDeleteFile(string path)
     {

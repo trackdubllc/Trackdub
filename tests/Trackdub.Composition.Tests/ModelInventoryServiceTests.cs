@@ -15,6 +15,21 @@ public sealed class ModelInventoryServiceTests : IDisposable
         Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task Inventory_reports_manifest_hash_mismatch_as_corrupt()
+    {
+        var (registry, paths) = CreateRegistry("", sha256: new string('a', 64));
+        LocalModelCacheRecordStore store = await InstallModelAsync(paths, "model.onnx");
+        await store.MutateAsync(records => records.Select(record => record with { Sha256 = new string('b', 64) }).ToArray(),
+            TestContext.Current.CancellationToken);
+        var service = new ModelInventoryService(registry, store, paths);
+
+        ModelInventoryEntry entry = Assert.Single(await service.GetAllAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(ModelCacheState.Corrupt, entry.State);
+        Assert.Contains("repair", entry.FailureReason);
+        Assert.Null(entry.ModelRootPath);
+    }
+
+    [Fact]
     public async Task GetAllAsync_excludes_deprecated_models()
     {
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths) = CreateRegistry(
@@ -547,7 +562,8 @@ public sealed class ModelInventoryServiceTests : IDisposable
         string engineFamily = "opus-mt",
         string revision = "main",
         string benchmarkEntry = "model.onnx",
-        string extraModelJson = "")
+        string extraModelJson = "",
+        string sha256 = "")
     {
         TrackdubStoragePaths storagePaths = new(tempRoot);
         string manifestPath = Path.Join(storagePaths.ModelCacheDirectory, "_inventory", "manifest.json");
@@ -574,7 +590,7 @@ public sealed class ModelInventoryServiceTests : IDisposable
                   "commercial_use_verified": false,
                   "source_url": "https://huggingface.co/example/translation-model",
                   "revision": "{{revision}}",
-                  "sha256": "",
+                  "sha256": "{{sha256}}",
                   "aliases": [ "example-translation" ],
                   "root_path": "../example-model",
                   "benchmark_entry": "{{benchmarkEntry}}",

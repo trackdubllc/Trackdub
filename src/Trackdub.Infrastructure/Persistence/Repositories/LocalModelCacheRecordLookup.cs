@@ -17,7 +17,7 @@ public sealed class LocalModelCacheRecordLookup(LocalModelCacheRecordStore recor
 
         return records.FirstOrDefault(candidate =>
             string.Equals(candidate.ModelId, modelId, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(Path.GetFullPath(candidate.RootPath), normalizedRootPath, StringComparison.OrdinalIgnoreCase) &&
+            LocalModelCacheRecordStore.RootsEqual(candidate.RootPath, normalizedRootPath) &&
             !candidate.IntegrityFailed);
     }
 }
