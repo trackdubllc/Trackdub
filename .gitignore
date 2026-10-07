@@ -68,6 +68,8 @@ src/Trackdub.Inference.Onnx/.mono/
 projects/
 !src/**/Projects/
 !src/**/Projects/**
+!tests/**/fixtures/
+!tests/**/fixtures/**
 tests/Trackdub.Sdk.Tests/Fixtures/smoke.mp4
 
 # --- Logs and temp files ---
