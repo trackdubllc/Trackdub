@@ -44,4 +44,6 @@ echo '{"id":"h","op":"health"}' | uv run worker.py
 - [x] Model env: `uv.lock` committed (torch 2.11+cu128, chatterbox-tts 0.1.7,
   Python 3.12); `uv sync --locked --extra model` reproduces it
 - [x] First synthesis through the protocol (CUDA, 3.36 s, peak 29377, RMS 4275)
-- [ ] Voice-clone prompt plumbing (`audio_prompt_path` from the load plan)
+- [x] Voice-clone plumbing (`voicePromptPath` plan → `audio_prompt_path`;
+  unreadable prompt fails load loudly, never silent default; same text
+  default vs cloned differs in pacing and samples)

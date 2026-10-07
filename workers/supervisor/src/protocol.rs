@@ -60,6 +60,11 @@ pub struct LoadPlan {
     /// Honor `RequirePreferredExecutionProvider`: no silent fallback.
     #[serde(default, rename = "requirePreferred")]
     pub require_preferred: bool,
+    /// Optional reference-voice audio path for cloning. The worker fails the
+    /// load loudly when it is set but unreadable — never silently falls back
+    /// to the default voice.
+    #[serde(default, rename = "voicePromptPath")]
+    pub voice_prompt_path: Option<String>,
 }
 
 /// One inbound request line.
@@ -183,6 +188,17 @@ mod tests {
         let plan = req.plan.expect("plan present");
         assert!(plan.require_preferred);
         assert_eq!(plan.providers, vec!["CPU".to_string()]);
+        assert_eq!(plan.voice_prompt_path, None);
+    }
+
+    #[test]
+    fn load_plan_carries_voice_prompt_path() {
+        let req: RawRequest = serde_json::from_str(
+            r#"{"id":"req-2","op":"load","plan":{"model":"m","voicePromptPath":"/v/ref.wav"}}"#,
+        )
+        .expect("plan parses");
+        let plan = req.plan.expect("plan present");
+        assert_eq!(plan.voice_prompt_path.as_deref(), Some("/v/ref.wav"));
     }
 
     #[test]

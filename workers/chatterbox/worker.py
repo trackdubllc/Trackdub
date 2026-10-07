@@ -29,6 +29,7 @@ CHATTERBOX_REPO = "ResembleAI/chatterbox"
 
 _model = None
 _model_device = "none"
+_voice_prompt = None
 
 
 def respond(request_id, status, reason=None, **extra):
@@ -84,11 +85,21 @@ def _resolve_device():
 
 
 def handle_load(request_id, plan):
-    global _model, _model_device
+    global _model, _model_device, _voice_prompt
     if not isinstance(plan, dict) or not plan.get("model"):
         respond(request_id, "error", reason="bad-plan",
                 detail="load requires plan.model (repo id or local path)")
         return
+    # Validate cheap things before touching the model stack: a voice prompt
+    # that cannot be read fails the load loudly. No silent fallback to the
+    # default voice — a dubbing take with the wrong voice is a wrong take.
+    voice_prompt = plan.get("voicePromptPath")
+    if voice_prompt is not None:
+        from pathlib import Path as _Path
+        if not _Path(str(voice_prompt)).is_file():
+            respond(request_id, "error", reason="bad-plan",
+                    detail=f"voicePromptPath unreadable: {voice_prompt}")
+            return
     try:
         torch, ChatterboxTTS = _import_model_stack()
     except ImportError as ex:
@@ -110,11 +121,15 @@ def handle_load(request_id, plan):
         else:
             _model = ChatterboxTTS.from_local(ckpt, device)
         _model_device = device
+        _voice_prompt = str(voice_prompt) if voice_prompt is not None else None
     except Exception as ex:  # model download / native load failure: report, don't crash
-        _model, _model_device = None, "none"
+        _model, _model_device, _voice_prompt = None, "none", None
         respond(request_id, "error", reason="load-failed", detail=f"{type(ex).__name__}: {ex}")
         return
-    respond(request_id, "loaded", activeProvider=_model_device, model=str(plan["model"]))
+    loaded = {"activeProvider": _model_device, "model": str(plan["model"])}
+    if _voice_prompt is not None:
+        loaded["voicePrompt"] = _voice_prompt
+    respond(request_id, "loaded", **loaded)
 
 
 def _tensor_envelope(dtype, shape, raw_bytes):
@@ -144,21 +159,22 @@ def handle_infer(request_id, inputs):
         import torch
 
         with torch.inference_mode():
-            # Voice to clone comes from the load plan in the full build
-            # (audio_prompt_path); v0.1 synthesizes the default voice so the
-            # protocol path is exercisable before voice plumbing lands.
-            wav = _model.generate(str(text))
+            generate_kwargs = {}
+            if _voice_prompt is not None:
+                generate_kwargs["audio_prompt_path"] = _voice_prompt
+            wav = _model.generate(str(text), **generate_kwargs)
         pcm = (wav.cpu().numpy().clip(-1.0, 1.0) * 32767).astype("<i2").tobytes()
         sample_rate = int(getattr(_model, "sr", 24000))
     except Exception as ex:
         respond(request_id, "error", reason="infer-failed", detail=f"{type(ex).__name__}: {ex}")
         return
-    respond(
-        request_id,
-        "ok",
-        outputs={"audio": _tensor_envelope("int16", [len(pcm) // 2], pcm)},
-        sampleRate=sample_rate,
-    )
+    ok = {
+        "outputs": {"audio": _tensor_envelope("int16", [len(pcm) // 2], pcm)},
+        "sampleRate": sample_rate,
+    }
+    if _voice_prompt is not None:
+        ok["voicePrompt"] = _voice_prompt
+    respond(request_id, "ok", **ok)
 
 
 def handle_line(line):

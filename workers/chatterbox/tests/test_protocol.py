@@ -84,3 +84,31 @@ def test_every_response_carries_protocol_version():
         json.dumps({"id": "y", "op": "health"}),
     ])
     assert resps and all(r["protocolVersion"] == PROTOCOL_VERSION for r in resps)
+
+
+def test_unreadable_voice_prompt_fails_load_loudly():
+    (resp,) = run_worker([json.dumps({"id": "v1", "op": "load",
+                                      "plan": {"model": "somewhere",
+                                               "voicePromptPath": "/no/such/voice.wav"}})])
+    assert resp["status"] == "error"
+    assert resp["reason"] == "bad-plan"
+    assert "voicePromptPath" in resp["detail"]
+
+
+def test_readable_voice_prompt_passes_plan_validation():
+    import tempfile, os
+    fd, prompt = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        (resp,) = run_worker([json.dumps({"id": "v2", "op": "load",
+                                          "plan": {"model": "somewhere",
+                                                   "voicePromptPath": prompt}})])
+    finally:
+        os.unlink(prompt)
+    # Whatever the model stack does next (loaded / load-failed /
+    # dependency-missing), the prompt itself must not be the complaint.
+    assert resp["status"] in ("loaded", "error")
+    if resp["status"] == "error":
+        assert resp["reason"] != "bad-plan" or "voicePromptPath" not in resp.get("detail", "")
+    else:
+        assert resp["voicePrompt"] == prompt

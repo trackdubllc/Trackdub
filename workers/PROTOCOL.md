@@ -11,7 +11,8 @@ line, strictly ordered (no interleaving). Every response carries
 { "id": "req-2", "op": "load", "plan": {
     "model": "<repo id or local path>",
     "providers": ["CUDA", "CPU"],       // ordered, planner-approved
-    "requirePreferred": false } }       // honor hard-pin: no silent fallback
+    "requirePreferred": false,          // honor hard-pin: no silent fallback
+    "voicePromptPath": "<reference voice wav, optional>" } }
 { "id": "req-3", "op": "infer", "inputs": {
     "input_ids": { "dtype": "int64", "shape": [1, 3], "data": "<base64>" } } }
 ```
