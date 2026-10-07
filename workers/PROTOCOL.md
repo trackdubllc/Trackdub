@@ -14,10 +14,15 @@ line, strictly ordered (no interleaving). Every response carries
     "requirePreferred": false,          // honor hard-pin: no silent fallback
     "voicePromptPath": "<reference voice wav, optional>" } }
 { "id": "req-3", "op": "infer", "inputs": {
-    "input_ids": { "dtype": "int64", "shape": [1, 3], "data": "<base64>" } } }
+    "text": { "dtype": "utf8", "shape": [12], "data": "<base64 utf-8 bytes>" } } }
 ```
 
 `id` may be null on responses to unparseable lines (nothing to echo).
+
+For TTS workers, `inputs.text` is the text to synthesize. The wire form is a
+`utf8` tensor envelope whose `shape[0]` is the encoded byte count; a plain
+string `text` is tolerated by the Chatterbox worker but is not what a host
+coded against this document should send.
 
 ## Responses (worker → host)
 

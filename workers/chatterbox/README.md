@@ -1,9 +1,11 @@
 # Chatterbox worker
 
 Real `.pt` TTS worker behind the sidecar protocol (`workers/PROTOCOL.md`).
-Upstream weights: `ResembleAI/chatterbox` (MIT — license evidence in ADR-0006
-for the Chatterbox family; the `.pt` artifact gets manifest-grade treatment
-at `src/` promotion, not here).
+Upstream weights: `ResembleAI/chatterbox`. License note: ADR-0006's MIT
+evidence covered the **ONNX** Chatterbox entries and has been superseded by
+the manifest hash-integrity policy — it does **not** cover this `.pt`
+repository. The `.pt` artifact gets manifest-grade provenance treatment at
+`src/` promotion, not here.
 
 ## Layout
 
@@ -23,8 +25,9 @@ uv sync --extra model   # installs torch (CUDA) + chatterbox-tts, writes uv.lock
 ```
 
 Rules: never the system Python (3.14 on this host cannot run torch), no
-`pip install` outside the lockfile, version stamp checked at startup by the
-supervisor. The worker refuses to serve on mismatch rather than degrading.
+`pip install` outside the lockfile. The supervisor checks the worker's
+`protocolVersion` at startup and refuses to serve a worker whose version does
+not match rather than degrading.
 
 ## Running
 
@@ -40,7 +43,7 @@ echo '{"id":"h","op":"health"}' | uv run worker.py
 
 - [x] Protocol loop: health / load / infer / errors, typed envelopes
 - [x] Lazy model stack (dependency-missing, never crash on import)
-- [x] 8 conformance tests green without torch
+- [x] 15 conformance tests green without torch
 - [x] Model env: `uv.lock` committed (torch 2.11+cu128, chatterbox-tts 0.1.7,
   Python 3.12); `uv sync --locked --extra model` reproduces it
 - [x] First synthesis through the protocol (CUDA, 3.36 s, peak 29377, RMS 4275)

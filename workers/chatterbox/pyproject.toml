@@ -15,6 +15,11 @@ model = [
     "chatterbox-tts==0.1.7",
 ]
 
+# Conformance tests (`python -m pytest tests/ -q`) are stdlib-only, but the
+# pytest runner itself must be declared so a clean `uv sync` can run them.
+[dependency-groups]
+dev = ["pytest>=8.3,<9"]
+
 # torch/torchaudio MUST come from the CUDA index (PyPI wheels are CPU-only,
 # which silently works but never touches the GPU). The pin above plus this
 # index is what makes `uv lock`/`uv sync` reproduce the exact CUDA stack.

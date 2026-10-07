@@ -1,10 +1,11 @@
 //! trackdub-supervisor: health-gate (and later, supervise) inference workers.
 //!
 //! Usage: `trackdub-supervisor --check <program> [args...]`
-//! Spawns the worker, runs the protocol health gate, prints the readiness
-//! verdict as JSON, and exits 0 on `alive` / nonzero otherwise. A successful
-//! gate hands a live, resident worker to the caller, so main deliberately
-//! does not kill it on the success path.
+//! `--check` is an explicit one-shot probe: it spawns the worker, runs the
+//! protocol health gate, prints the readiness verdict as JSON, then reaps the
+//! child (via `SupervisedWorker`'s `Drop`) and exits 0 on `alive` / nonzero
+//! otherwise. No resident worker is handed off here — keeping a worker alive
+//! across requests is the C# host's job (a follow-up integration).
 
 use trackdub_supervisor::{protocol, supervisor};
 
@@ -24,9 +25,8 @@ fn main() -> anyhow::Result<()> {
     });
     println!("{}", serde_json::to_string(&verdict)?);
 
-    // A successful gate hands a live, warmed worker to the caller (later: the
-    // C# host). Dropping SupervisedWorker here would kill the child on scope
-    // exit; forgetting keeps it resident, which is the entire point.
-    std::mem::forget(worker);
+    // One-shot probe: the worker drops here, killing and reaping the child we
+    // just gate-checked. Nothing is leaked or left orphaned.
+    drop(worker);
     Ok(())
 }
