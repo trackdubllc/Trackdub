@@ -36,11 +36,12 @@ python -m pytest tests/ -q
 echo '{"id":"h","op":"health"}' | uv run worker.py
 ```
 
-## Status (day one)
+## Status
 
 - [x] Protocol loop: health / load / infer / errors, typed envelopes
 - [x] Lazy model stack (dependency-missing, never crash on import)
 - [x] 8 conformance tests green without torch
-- [ ] Real model load + first synthesis (needs `uv sync --extra model` + weights)
+- [x] Model env: `uv.lock` committed (torch 2.11+cu128, chatterbox-tts 0.1.7,
+  Python 3.12); `uv sync --locked --extra model` reproduces it
+- [x] First synthesis through the protocol (CUDA, 3.36 s, peak 29377, RMS 4275)
 - [ ] Voice-clone prompt plumbing (`audio_prompt_path` from the load plan)
-- [ ] `uv.lock` committed

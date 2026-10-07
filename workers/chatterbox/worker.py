@@ -96,13 +96,19 @@ def handle_load(request_id, plan):
         return
     device = _resolve_device()
     try:
-        # from_pretrained resolves HF repo ids AND local snapshot dirs, so the
-        # planner can hand either a cache path or ResembleAI/chatterbox.
-        # NOTE (verify against installed chatterbox-tts at integration time):
-        # current API is ChatterboxTTS.from_pretrained(device).
-        _model = ChatterboxTTS.from_pretrained(plan["model"] if "/" in plan["model"] or "\\" in plan["model"] else CHATTERBOX_REPO)
-        if device == "cuda" and hasattr(_model, "to"):
-            _model = _model.to(device)
+        # from_pretrained(device) always resolves through the default HF cache,
+        # which the supervisor cannot fingerprint — so load from the planner's
+        # integrity-qualified path via from_local instead. Verified against
+        # chatterbox-tts 0.1.7: from_local(ckpt_dir, device).
+        from pathlib import Path
+
+        ckpt = Path(str(plan["model"]))
+        if not ckpt.is_dir():
+            # Bare repo id (offline-hostile, fingerprint-unfriendly): resolve
+            # through from_pretrained so upstream fetching still works.
+            _model = ChatterboxTTS.from_pretrained(device)
+        else:
+            _model = ChatterboxTTS.from_local(ckpt, device)
         _model_device = device
     except Exception as ex:  # model download / native load failure: report, don't crash
         _model, _model_device = None, "none"

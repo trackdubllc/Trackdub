@@ -10,9 +10,29 @@ dependencies = []
 
 [project.optional-dependencies]
 model = [
-    "torch>=2.4",
-    "chatterbox-tts>=0.1",
+    "torch==2.11.*",
+    "torchaudio==2.11.*",
+    "chatterbox-tts==0.1.7",
 ]
+
+# torch/torchaudio MUST come from the CUDA index (PyPI wheels are CPU-only,
+# which silently works but never touches the GPU). The pin above plus this
+# index is what makes `uv lock`/`uv sync` reproduce the exact CUDA stack.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
+torchaudio = [{ index = "pytorch-cu128" }]
+
+# chatterbox-tts 0.1.7 pins torch==2.6.0 exactly, but torch 2.6 has no CUDA
+# build new enough for Blackwell (sm_120 needs CUDA 12.8+). Override to the
+# 2.11 CUDA stack and prove compatibility by running the model, not by
+# trusting the pin. Revisit if chatterbox-tts relaxes its torch requirement.
+[tool.uv]
+override-dependencies = ["torch==2.11.*", "torchaudio==2.11.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
