@@ -587,7 +587,8 @@ public sealed class AtomicRevisionCommitBoundaryTests
                 await Store.CommitNewAsync(prepared.Handle, prepared.Receipt, Ct);
                 await Media.SaveArtifactAsync(prepared.Artifact, Ct);
                 var take = TtsTake.CreateStock(Project.Id, Assignment.Id, segment.Id, segment.SegmentIndex, TtsTextHash.Compute(segment.SegmentIndex, segment.Text))
-                    .Complete(prepared.Artifact.Id, null, 24000, 24000, "test", "test", "test", null) with { PreStretchDurationSeconds = 1.2, StretchRatioApplied = 1.2 };
+                    .Complete(prepared.Artifact.Id, null, 24000, 24000, "test", "test", "test", null) with
+                { PreStretchDurationSeconds = 1.2, StretchRatioApplied = 1.2 };
                 await Takes.SaveAsync(take, Ct);
             }
             return revision;

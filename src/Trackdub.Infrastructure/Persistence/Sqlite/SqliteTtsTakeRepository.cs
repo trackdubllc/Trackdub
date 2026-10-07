@@ -167,7 +167,6 @@ public sealed class SqliteTtsTakeRepository(
         await SaveAsync(connection, null, take, cancellationToken).ConfigureAwait(false);
     }
 
-
     internal static async Task SaveAsync(SqliteConnection connection, SqliteTransaction? transaction,
         TtsTake take, CancellationToken cancellationToken, bool createOnly = false)
     {

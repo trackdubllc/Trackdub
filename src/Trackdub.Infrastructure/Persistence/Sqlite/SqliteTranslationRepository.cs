@@ -278,7 +278,6 @@ public sealed class SqliteTranslationRepository(
                 await wordCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
         }
-
     }
 
     private static TranslationRevision ReadRevision(SqliteDataReader reader) =>

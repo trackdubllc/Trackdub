@@ -80,7 +80,6 @@ public sealed record RuntimeModelSelections(
 
 public enum RuntimeModelSelectionIntent { Automatic, Explicit }
 
-
 public static class RuntimeModelRequestFactory
 {
     public static RuntimeModelSelections CreateSelectionsFromPreferences(
@@ -146,29 +145,44 @@ public static class RuntimeModelRequestFactory
         {
             string key = stage switch
             {
-                RuntimeStage.Asr => StageNames.Asr, RuntimeStage.Translation => StageNames.Translation,
-                RuntimeStage.Tts => StageNames.Tts, RuntimeStage.Separation => StageNames.Separation,
-                RuntimeStage.Vad => StageNames.Vad, RuntimeStage.Diarization => StageNames.Diarization,
+                RuntimeStage.Asr => StageNames.Asr,
+                RuntimeStage.Translation => StageNames.Translation,
+                RuntimeStage.Tts => StageNames.Tts,
+                RuntimeStage.Separation => StageNames.Separation,
+                RuntimeStage.Vad => StageNames.Vad,
+                RuntimeStage.Diarization => StageNames.Diarization,
                 RuntimeStage.TextRefinement => StageNames.TextRefinementAsr,
-                RuntimeStage.LipSync => StageNames.LipSync, RuntimeStage.LipSynthesis => StageNames.LipSynthesis,
-                RuntimeStage.OverlapRescue => StageNames.OverlapRescue, _ => stage.ToString()
+                RuntimeStage.LipSync => StageNames.LipSync,
+                RuntimeStage.LipSynthesis => StageNames.LipSynthesis,
+                RuntimeStage.OverlapRescue => StageNames.OverlapRescue,
+                _ => stage.ToString()
             };
             string? callerAlias = stage switch
             {
-                RuntimeStage.Asr => preferences?.AsrModelAlias, RuntimeStage.Translation => preferences?.TranslationModelAlias,
-                RuntimeStage.Tts => preferences?.TtsModelAlias, RuntimeStage.Separation => preferences?.SeparationModelAlias,
-                RuntimeStage.Vad => preferences?.VadModelAlias, RuntimeStage.Diarization => preferences?.DiarizationModelAlias,
-                RuntimeStage.TextRefinement => preferences?.TextRefinementModelAlias, RuntimeStage.LipSync => preferences?.LipSyncModelAlias,
-                RuntimeStage.LipSynthesis => preferences?.LipSynthesisModelAlias, RuntimeStage.OverlapRescue => preferences?.OverlapRescueModelAlias,
+                RuntimeStage.Asr => preferences?.AsrModelAlias,
+                RuntimeStage.Translation => preferences?.TranslationModelAlias,
+                RuntimeStage.Tts => preferences?.TtsModelAlias,
+                RuntimeStage.Separation => preferences?.SeparationModelAlias,
+                RuntimeStage.Vad => preferences?.VadModelAlias,
+                RuntimeStage.Diarization => preferences?.DiarizationModelAlias,
+                RuntimeStage.TextRefinement => preferences?.TextRefinementModelAlias,
+                RuntimeStage.LipSync => preferences?.LipSyncModelAlias,
+                RuntimeStage.LipSynthesis => preferences?.LipSynthesisModelAlias,
+                RuntimeStage.OverlapRescue => preferences?.OverlapRescueModelAlias,
                 _ => null
             };
             string? resolvedAlias = stage switch
             {
-                RuntimeStage.Asr => selections.AsrModelAlias, RuntimeStage.Translation => selections.TranslationModelAlias,
-                RuntimeStage.Tts => selections.TtsModelAlias, RuntimeStage.Separation => selections.SeparationModelAlias,
-                RuntimeStage.Vad => selections.VadModelAlias, RuntimeStage.Diarization => selections.DiarizationModelAlias,
-                RuntimeStage.TextRefinement => selections.TextRefinementModelAlias, RuntimeStage.LipSync => selections.LipSyncModelAlias,
-                RuntimeStage.LipSynthesis => selections.LipSynthesisModelAlias, RuntimeStage.OverlapRescue => selections.OverlapRescueModelAlias,
+                RuntimeStage.Asr => selections.AsrModelAlias,
+                RuntimeStage.Translation => selections.TranslationModelAlias,
+                RuntimeStage.Tts => selections.TtsModelAlias,
+                RuntimeStage.Separation => selections.SeparationModelAlias,
+                RuntimeStage.Vad => selections.VadModelAlias,
+                RuntimeStage.Diarization => selections.DiarizationModelAlias,
+                RuntimeStage.TextRefinement => selections.TextRefinementModelAlias,
+                RuntimeStage.LipSync => selections.LipSyncModelAlias,
+                RuntimeStage.LipSynthesis => selections.LipSynthesisModelAlias,
+                RuntimeStage.OverlapRescue => selections.OverlapRescueModelAlias,
                 _ => null
             };
             if (string.IsNullOrWhiteSpace(callerAlias) && !TryGetStageAlias(settings.StageModelAliases, key, out _)
