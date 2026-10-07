@@ -110,4 +110,5 @@ dotnet run --project src/Trackdub.Benchmarks.Micro -c Release -- --list flat
 - Bundled inventory: `src/Trackdub.Inference/Runtime/ModelManifest/bundled-models.manifest.json`.
 - Commercial license only. Unknown license = unsafe.
 - Do not add end-user runtime dependencies (Python, Conda, Docker, CUDA Toolkit).
+  Sole exception: the Rust-supervised inference worker under ADR-0016; no other path.
 - Preserve original artifacts on skipped or failed stages; record explicit skip/failure reasons.
