@@ -162,7 +162,14 @@ public sealed class SqliteMediaAssetRepository(
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         await using SqliteConnectionLease connectionLease = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         SqliteConnection connection = connectionLease.Connection;
+        await SaveArtifactAsync(connection, null, artifact, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task SaveArtifactAsync(SqliteConnection connection, SqliteTransaction? transaction,
+        ProjectArtifact artifact, CancellationToken cancellationToken, bool createOnly = false)
+    {
         await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
             INSERT INTO artifacts (
@@ -225,6 +232,10 @@ public sealed class SqliteMediaAssetRepository(
                 degradation_code = excluded.degradation_code,
                 degradation_stage = excluded.degradation_stage;
             """;
+        if (createOnly)
+        {
+            command.CommandText = command.CommandText[..command.CommandText.IndexOf("ON CONFLICT", StringComparison.Ordinal)] + ";";
+        }
         BindArtifact(command, artifact);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }

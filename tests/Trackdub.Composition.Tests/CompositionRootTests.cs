@@ -268,6 +268,9 @@ public sealed class CompositionRootTests : IDisposable
         using TranscriptWorkspaceSession first = factory.Create(CreateTempDirectory());
         using TranscriptWorkspaceSession second = factory.Create(CreateTempDirectory());
 
+        Assert.IsType<AtomicRevisionCommitBoundary>(first.Services.GetRequiredService<IAtomicRevisionCommitBoundary>());
+        Assert.IsType<SqliteAtomicRevisionPersistence>(first.Services.GetRequiredService<Trackdub.Contracts.Transcripts.IAtomicRevisionPersistence>());
+
         var firstDatabase = first.Services.GetRequiredService<SqliteProjectDatabase>();
         var secondDatabase = second.Services.GetRequiredService<SqliteProjectDatabase>();
         var firstStore = Assert.IsType<FileSystemArtifactStore>(first.Services.GetRequiredService<IArtifactStore>());

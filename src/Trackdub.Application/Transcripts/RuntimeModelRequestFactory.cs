@@ -45,7 +45,41 @@ public sealed record RuntimeModelSelections(
     SeparationModelOverride SeparationModelOverride = SeparationModelOverride.Auto,
     IReadOnlyDictionary<string, string>? ModelVariantOverrides = null,
     bool RequirePreferredExecutionProviders = false,
-    string? VadModelAlias = null);
+    string? VadModelAlias = null,
+    IReadOnlyDictionary<RuntimeStage, RuntimeModelSelectionIntent>? SelectionIntents = null)
+{
+    public RuntimeModelSelectionIntent GetSelectionIntent(RuntimeStage stage)
+    {
+        if (SelectionIntents?.TryGetValue(stage, out var intent) == true) return intent;
+        string? alias = stage switch
+        {
+            RuntimeStage.Asr => AsrModelAlias,
+            RuntimeStage.Translation => TranslationModelAlias,
+            RuntimeStage.Tts => TtsModelAlias,
+            RuntimeStage.Separation => SeparationModelAlias,
+            RuntimeStage.Diarization => DiarizationModelAlias,
+            RuntimeStage.Vad => VadModelAlias,
+            RuntimeStage.OverlapRescue => OverlapRescueModelAlias,
+            RuntimeStage.TextRefinement => TextRefinementModelAlias,
+            RuntimeStage.LipSync => LipSyncModelAlias,
+            RuntimeStage.LipSynthesis => LipSynthesisModelAlias,
+            _ => null
+        };
+        bool configuredOverride = stage switch
+        {
+            RuntimeStage.Asr => AsrModelOverride != AsrModelOverride.Auto,
+            RuntimeStage.Translation => TranslationModelOverride != TranslationModelOverride.Auto,
+            RuntimeStage.Tts => TtsModelOverride != TtsModelOverride.Auto,
+            RuntimeStage.Separation => SeparationModelOverride != SeparationModelOverride.Auto,
+            _ => false
+        };
+        return configuredOverride || !string.IsNullOrWhiteSpace(alias)
+            ? RuntimeModelSelectionIntent.Explicit : RuntimeModelSelectionIntent.Automatic;
+    }
+}
+
+public enum RuntimeModelSelectionIntent { Automatic, Explicit }
+
 
 public static class RuntimeModelRequestFactory
 {
@@ -56,7 +90,7 @@ public static class RuntimeModelRequestFactory
     {
         preferences ??= InferenceModelPreferences.Empty;
 
-        return new RuntimeModelSelections(
+        return CaptureSelectionIntents(new RuntimeModelSelections(
             asrModelOverride,
             isDevBuild,
             CreateHardwareOverrides(preferences, asrModelOverride),
@@ -71,7 +105,7 @@ public static class RuntimeModelRequestFactory
             LipSynthesisModelAlias: preferences.LipSynthesisModelAlias,
             EnableAsrTextRefinement: preferences.EnableAsrTextRefinement,
             ModelVariantOverrides: CreateModelVariantOverridesFromPreferences(preferences),
-            VadModelAlias: preferences.VadModelAlias);
+            VadModelAlias: preferences.VadModelAlias));
     }
 
     public static RuntimeModelSelections CreateSelectionsFromSettings(
@@ -81,7 +115,7 @@ public static class RuntimeModelRequestFactory
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        return new RuntimeModelSelections(
+        return CaptureSettingsSelectionIntents(settings, explicitPreferences, new RuntimeModelSelections(
             settings.AsrModelOverride,
             isDevBuild,
             settings.HardwareOverrides ?? new Dictionary<string, ExecutionProviderKind>(),
@@ -100,8 +134,53 @@ public static class RuntimeModelRequestFactory
             SeparationModelOverride: settings.SeparationModelOverride,
             ModelVariantOverrides: settings.ModelVariantOverrides,
             RequirePreferredExecutionProviders: settings.RequirePreferredExecutionProviders,
-            VadModelAlias: ResolveVadAlias(settings, explicitPreferences));
+            VadModelAlias: ResolveVadAlias(settings, explicitPreferences)));
     }
+
+    private static RuntimeModelSelections CaptureSettingsSelectionIntents(StudioSettings settings,
+        InferenceModelPreferences? preferences, RuntimeModelSelections selections)
+    {
+        selections = CaptureSelectionIntents(selections);
+        var intents = selections.SelectionIntents!.ToDictionary(pair => pair.Key, pair => pair.Value);
+        foreach (RuntimeStage stage in Enum.GetValues<RuntimeStage>())
+        {
+            string key = stage switch
+            {
+                RuntimeStage.Asr => StageNames.Asr, RuntimeStage.Translation => StageNames.Translation,
+                RuntimeStage.Tts => StageNames.Tts, RuntimeStage.Separation => StageNames.Separation,
+                RuntimeStage.Vad => StageNames.Vad, RuntimeStage.Diarization => StageNames.Diarization,
+                RuntimeStage.TextRefinement => StageNames.TextRefinementAsr,
+                RuntimeStage.LipSync => StageNames.LipSync, RuntimeStage.LipSynthesis => StageNames.LipSynthesis,
+                RuntimeStage.OverlapRescue => StageNames.OverlapRescue, _ => stage.ToString()
+            };
+            string? callerAlias = stage switch
+            {
+                RuntimeStage.Asr => preferences?.AsrModelAlias, RuntimeStage.Translation => preferences?.TranslationModelAlias,
+                RuntimeStage.Tts => preferences?.TtsModelAlias, RuntimeStage.Separation => preferences?.SeparationModelAlias,
+                RuntimeStage.Vad => preferences?.VadModelAlias, RuntimeStage.Diarization => preferences?.DiarizationModelAlias,
+                RuntimeStage.TextRefinement => preferences?.TextRefinementModelAlias, RuntimeStage.LipSync => preferences?.LipSyncModelAlias,
+                RuntimeStage.LipSynthesis => preferences?.LipSynthesisModelAlias, RuntimeStage.OverlapRescue => preferences?.OverlapRescueModelAlias,
+                _ => null
+            };
+            string? resolvedAlias = stage switch
+            {
+                RuntimeStage.Asr => selections.AsrModelAlias, RuntimeStage.Translation => selections.TranslationModelAlias,
+                RuntimeStage.Tts => selections.TtsModelAlias, RuntimeStage.Separation => selections.SeparationModelAlias,
+                RuntimeStage.Vad => selections.VadModelAlias, RuntimeStage.Diarization => selections.DiarizationModelAlias,
+                RuntimeStage.TextRefinement => selections.TextRefinementModelAlias, RuntimeStage.LipSync => selections.LipSyncModelAlias,
+                RuntimeStage.LipSynthesis => selections.LipSynthesisModelAlias, RuntimeStage.OverlapRescue => selections.OverlapRescueModelAlias,
+                _ => null
+            };
+            if (string.IsNullOrWhiteSpace(callerAlias) && !TryGetStageAlias(settings.StageModelAliases, key, out _)
+                && settings.AutomaticModelAliases?.TryGetValue(key, out string? defaultAlias) == true
+                && string.Equals(defaultAlias, resolvedAlias, StringComparison.OrdinalIgnoreCase))
+                intents[stage] = RuntimeModelSelectionIntent.Automatic;
+        }
+        return selections with { SelectionIntents = intents };
+    }
+
+    private static RuntimeModelSelections CaptureSelectionIntents(RuntimeModelSelections selections) =>
+        selections with { SelectionIntents = Enum.GetValues<RuntimeStage>().ToDictionary(stage => stage, selections.GetSelectionIntent) };
 
     private static string? ResolveAsrAlias(StudioSettings settings, InferenceModelPreferences? explicitPreferences)
     {

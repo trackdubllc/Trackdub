@@ -338,6 +338,34 @@ public sealed class TranscriptArtifactWriter(
         await mediaAssetRepository.SaveArtifactAsync(artifact, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<Trackdub.Contracts.Transcripts.PreparedCommitArtifact> PrepareTranslationArtifactAsync(
+        Guid projectId, MediaAsset mediaAsset, TranslationRevision revision,
+        IReadOnlyList<TranslatedSegment> segments, Guid? stageRunId, string provenance, CancellationToken cancellationToken)
+    {
+        string relativePath = $"artifacts/translation/{revision.TargetLanguage}/translation-revision-{revision.RevisionNumber:D4}-{revision.Id:N}.json";
+        ArtifactWriteHandle handle = artifactStore.CreateWriteHandle(relativePath);
+        try
+        {
+            await using (var file = new FileStream(handle.TemporaryPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await System.Text.Json.JsonSerializer.SerializeAsync(file,
+                    TranslationRevisionArtifactDocument.From(revision, segments, provenance),
+                    new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase, WriteIndented = true },
+                    cancellationToken).ConfigureAwait(false);
+            }
+            FileFingerprint fingerprint = await fileFingerprintService.ComputeAsync(handle.TemporaryPath, cancellationToken).ConfigureAwait(false);
+            var artifact = new ProjectArtifact(Guid.NewGuid(), projectId, mediaAsset.Id, ArtifactKind.TranslationRevision,
+                relativePath, fingerprint.Sha256, fingerprint.SizeBytes, null, null, null, DateTimeOffset.UtcNow,
+                stageRunId, provenance);
+            return new Trackdub.Contracts.Transcripts.PreparedCommitArtifact(artifact, handle);
+        }
+        catch
+        {
+            await handle.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     private sealed record SpeechRegionsArtifactDocument(
         Guid StageRunId,
         IReadOnlyList<SpeechRegion> Regions,

@@ -22,6 +22,6 @@ public sealed record StageReadiness(
 
     /// <summary>
     /// Opaque resolve-action code for the panel "Resolve" button.
-    /// One of: null | "download" | "import" | "install-runtime" | "review-license" | "set-api-key" | "grant-consent" | "grant-egress-consent"
+    /// One of: null | "bundle-needed" | "download" | "import" | "install-runtime" | "review-license" | "set-api-key" | "grant-consent" | "grant-egress-consent"
     /// </summary>
     string? ResolveAction);
