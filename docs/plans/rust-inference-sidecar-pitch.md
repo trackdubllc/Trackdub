@@ -25,9 +25,9 @@ Two pressures are colliding:
    Toolkit dependency* — and breaks the single-installer story on macOS/Linux.
 
 So: we are building a sidecar story that keeps warm calls in the milliseconds,
-ships as a small native binary with colocated provider libs (not a language
-runtime), and contains Python under supervision instead of pretending we can
-avoid it.
+ships the Rust supervisor as a small native binary with colocated provider
+libs, and contains the one Python runtime ADR-0016 allows under that
+supervisor instead of pretending we can avoid it.
 
 ## 2. Options considered (kept for the record — decision made)
 

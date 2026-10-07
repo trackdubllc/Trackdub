@@ -1395,7 +1395,7 @@ This ADR holds the surface documented so future agents do not re-derive the reco
 
 - Status: Accepted
 - Date: 2026-10-06
-- Decided by: Tony (recorded in PR #394, `docs/plans/rust-inference-sidecar-pitch.md`)
+- Decided by: Tony, 2026-10-06 (recorded in PR #401, following pitch PR #394; `docs/plans/rust-inference-sidecar-pitch.md`)
 
 ## Context
 
