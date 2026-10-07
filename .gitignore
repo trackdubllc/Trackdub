@@ -345,3 +345,4 @@ __pycache__/
 # Local agent/tooling state (never part of the source tree)
 /.freebuff/
 /docs/Video Cleanup-1.0.1-v1
+/workers/supervisor/target
