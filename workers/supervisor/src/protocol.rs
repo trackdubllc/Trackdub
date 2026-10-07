@@ -62,6 +62,21 @@ pub struct LoadPlan {
     pub require_preferred: bool,
 }
 
+/// Inference inputs shared by the TTS worker and the supervisor. TTS uses a
+/// plain text value; tensor models may use the tensor map representation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum InferInputs {
+    Text { text: String },
+    Tensors(HashMap<String, TensorEnvelope>),
+}
+
+impl Default for InferInputs {
+    fn default() -> Self {
+        Self::Tensors(HashMap::new())
+    }
+}
+
 /// One inbound request line.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RawRequest {
@@ -71,7 +86,7 @@ pub struct RawRequest {
     #[serde(default)]
     pub plan: Option<LoadPlan>,
     #[serde(default)]
-    pub inputs: HashMap<String, TensorEnvelope>,
+    pub inputs: InferInputs,
 }
 
 /// One outbound response line.
@@ -116,10 +131,12 @@ impl Response {
     }
 
     /// Boundary-validate every inbound tensor envelope before dispatch.
-    pub fn validate_inputs(inputs: &HashMap<String, TensorEnvelope>) -> anyhow::Result<()> {
-        for (name, env) in inputs {
-            env.validate()
-                .with_context(|| format!("input tensor '{name}' is malformed"))?;
+    pub fn validate_inputs(inputs: &InferInputs) -> anyhow::Result<()> {
+        if let InferInputs::Tensors(tensors) = inputs {
+            for (name, env) in tensors {
+                env.validate()
+                    .with_context(|| format!("input tensor '{name}' is malformed"))?;
+            }
         }
         Ok(())
     }
@@ -220,7 +237,19 @@ mod tests {
                 data: String::new(),
             },
         );
-        let err = Response::validate_inputs(&inputs).expect_err("bad tensor must fail");
+        let err = Response::validate_inputs(&InferInputs::Tensors(inputs))
+            .expect_err("bad tensor must fail");
         assert!(err.to_string().contains("'bad'"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn text_inputs_round_trip_for_tts() {
+        let input = InferInputs::Text {
+            text: "hello".to_string(),
+        };
+        let encoded = serde_json::to_string(&input).expect("text input serializes");
+        assert_eq!(encoded, r#"{"text":"hello"}"#);
+        let decoded: InferInputs = serde_json::from_str(&encoded).expect("text input parses");
+        assert_eq!(decoded, input);
     }
 }

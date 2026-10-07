@@ -12,8 +12,7 @@ line, strictly ordered (no interleaving). Every response carries
     "model": "<repo id or local path>",
     "providers": ["CUDA", "CPU"],       // ordered, planner-approved
     "requirePreferred": false } }       // honor hard-pin: no silent fallback
-{ "id": "req-3", "op": "infer", "inputs": {
-    "input_ids": { "dtype": "int64", "shape": [1, 3], "data": "<base64>" } } }
+{ "id": "req-3", "op": "infer", "inputs": { "text": "Hello from Trackdub" } }
 ```
 
 `id` may be null on responses to unparseable lines (nothing to echo).
