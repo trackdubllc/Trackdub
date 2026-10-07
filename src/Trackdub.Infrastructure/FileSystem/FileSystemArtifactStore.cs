@@ -87,16 +87,28 @@ public sealed class FileSystemArtifactStore : IArtifactStore
             cancellationToken).ConfigureAwait(false);
     }
 
-    public Task CommitNewAsync(ArtifactWriteHandle handle, Trackdub.Contracts.Transcripts.ArtifactPromotionReceipt receipt, CancellationToken cancellationToken)
+    public async Task CommitNewAsync(ArtifactWriteHandle handle, Trackdub.Contracts.Transcripts.ArtifactPromotionReceipt receipt, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (receipt.CreatedByAttempt || receipt.TemporaryPath != handle.TemporaryPath || receipt.FinalPath != handle.FinalPath)
             throw new InvalidOperationException("Promotion receipt does not identify this uncommitted write handle.");
         Directory.CreateDirectory(Path.GetDirectoryName(handle.FinalPath)!);
-        File.Move(handle.TemporaryPath, handle.FinalPath, overwrite: false);
-        // No cancellation check or fallible work between the successful move and ownership recording.
-        receipt.MarkCreated();
-        return Task.CompletedTask;
+        await RetryHelper.ExecuteAsync(
+            async _ =>
+            {
+                File.Move(handle.TemporaryPath, handle.FinalPath, overwrite: false);
+                // No cancellation check or fallible work between the successful move and ownership recording.
+                receipt.MarkCreated();
+                return true;
+            },
+            RetryPolicy.FileSystem,
+            // A destination-exists collision is also an IOException, but it is real — not
+            // transient — so bail out instead of retrying a doomed move until the policy runs out.
+            ex => IsTransientCommitFailure(ex) && !File.Exists(handle.FinalPath),
+            (attempt, ex) => logger.LogWarning(
+                $"Artifact create-only commit for '{handle.RelativePath}' was blocked by a transient file access error. Retrying attempt {attempt}.",
+                ex),
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task WriteJsonAsync<T>(string relativePath, T value, CancellationToken cancellationToken)
