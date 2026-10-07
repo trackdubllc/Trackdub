@@ -1,0 +1,18 @@
+[project]
+name = "trackdub-chatterbox-worker"
+version = "0.1.0"
+description = "Trackdub inference worker: Chatterbox TTS behind the sidecar JSON-lines protocol."
+requires-python = ">=3.11,<3.14"
+# torch + chatterbox-tts are intentionally lazy imports inside worker.py, so
+# `pytest` (protocol conformance) runs with nothing but the stdlib. Install
+# the model stack with: uv sync --extra model  (writes uv.lock — commit it).
+dependencies = []
+
+[project.optional-dependencies]
+model = [
+    "torch>=2.4",
+    "chatterbox-tts>=0.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
