@@ -445,6 +445,10 @@ public static class CompositionRoot
         services.TryAddScoped<IPreviewRangeRenderer, PreviewRangeRenderer>();
         services.TryAddScoped<TtsTimingOptions>(sp =>
             CreateTtsTimingOptions(sp.GetRequiredService<TranscriptWorkspaceContext>().Settings.TtsTiming));
+        services.TryAddScoped<TtsExecutionOptions>(sp =>
+            CreateTtsExecutionOptions(
+                sp.GetRequiredService<TranscriptWorkspaceContext>().Settings.TtsMaxConcurrency,
+                sp.GetRequiredService<IHardwareProfileProvider>().GetCurrentAsync().GetAwaiter().GetResult()));
 
         services.TryAddScoped<MixPlanBuilder>();
         services.TryAddScoped<MixPlanStore>();
@@ -765,6 +769,15 @@ public static class CompositionRoot
             RubberbandStretchThreshold = normalized.RubberbandStretchThreshold
         };
     }
+
+    private static TtsExecutionOptions CreateTtsExecutionOptions(
+        int? configuredMaxConcurrency,
+        HardwareProfile hardwareProfile) =>
+        new(
+            ConfiguredMaxConcurrency: configuredMaxConcurrency is int value && value >= TtsExecutionOptions.MinConcurrency
+                ? Math.Min(value, TtsExecutionOptions.AbsoluteMaxConcurrency)
+                : null,
+            MaxAcceleratorVramMb: hardwareProfile.DedicatedVramMb);
 
 #if LINUX
     [SupportedOSPlatform("linux")]

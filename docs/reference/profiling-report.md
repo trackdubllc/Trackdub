@@ -1,7 +1,7 @@
 # Trackdub performance profiling report
 
-> **Status:** MIXED — controlled dubbing-pipeline samples are recorded below; reference-machine, startup, idle working-set, and TRT-RTX EP rows measured 2026-10-06; project-open/model-manager startup, steady-state memory, export, and waveform rows marked *pending local run* remain unmeasured.
-> **Last updated:** 2026-10-06
+> **Status:** MIXED — controlled dubbing-pipeline samples are recorded below; reference-machine, startup, idle working-set, TRT-RTX EP rows measured 2026-10-06, and audio-preparation matrix rows (cold ×5 isolated + cold ×5 compatible + warm ×32 + silence) measured 2026-10-07; project-open/model-manager startup, steady-state memory, export, and waveform rows marked *pending local run* remain unmeasured.
+> **Last updated:** 2026-10-07
 > **Report branch:** core performance-audit stack beginning at `17c4a66` (not the revision used for the older samples)
 
 ## Measurement methodology (fill before claiming budgets)
@@ -58,6 +58,19 @@ These fresh local runs used a clean checkout of `4eea0cc954f745ada80cac2be9e8992
 | Short `9c32c7f661a04b689d2683dac3b31cfe` | Artifact resume / audio preparation | Skipped: `EXISTING_ARTIFACTS_VALID`; excluded from throughput comparisons | 389 ms |
 
 The ASR run spent another 30,251 ms preparing prerequisite stages; that duration is separate from the 60,417 ms timed ASR pipeline. Cache and OS state were not normalized across the historical and replacement runs. Repeat each mode in independent processes before treating these numbers as a stable performance baseline.
+
+### Audio-preparation matrix, 2026-10-07
+
+Measured on the reference machine at the `46dead0f` working tree (clean, Release `net10.0`, ORT 1.30.0.0, .NET 10.0.12, RTX 5070 12227 MiB driver 617.14; OS caches not cleared). Fixture: short.mp4 `c4640c3f8062b4d928eeef25c52f845f4867c10f26aeb4f5d5ce6be1c295bd85` (matches manifest), silence `e7df589267ecde30673ffcdf9da443f56ea1e698b2d6c71ac637d31d501ec5eb`. Stage measured: `audio-preparation` (no engine cache involved — cache-cold and cache-warm are statistically indistinguishable). Raw data, per-run reports, and provenance: `D:\Dev\Trackdub_Workspace\c7-evidence\2026-10-07-step22\` (`STEP22-RUN-NOTES.md`, per-run console logs and matrix JSON).
+
+| Scenario | n | Stage ms (median) | Stage ms (range) | Pipeline ms (median) | Peak working set |
+|---|---|---|---|---|---|
+| Cold, fresh process, isolated engine cache | 5 | 5483.2 | 4748.0–5610.5 | 7515.6 | 416.9 MB (401.3–447.1) |
+| Cold, fresh process, compatible (warm) cache | 5 | 5473.6 | 4604.0–9304.1 (rep 2 contention outlier) | — | — |
+| Warm host | 32 | p50 4328.0 (mean 4508.9) | 2190.0–8785.4; p90 7255.7, p99 8513.4 | p50 5157.7, p90 8341.5 | min 461.4 / p50 512.9 / max 648.2 MB |
+| Silence fixture, cold | 1 | 3227.5 | — | 5702.5 | 249.9 MB |
+
+Warm-host CPU%: p50 15.7, p95 23.8. GPU memory: harness `gpuBytes` = Skipped and `availableVramMb` = Unavailable on the portable `net10.0` TFM (no VRAM reader registered); adapter-wide `nvidia-smi` snapshots only (11388 MiB after cold / 9433 after warm / 2021 after TTS of 12227 — not attributable to the process). Provider matrix on `audio-preparation` is rejected by the harness ("Provider pin requires a runtime-backed focused stage"); it needs model-backed stages (ASR/TTS) with staged models.
 
 ## Reference machine (fill before claiming budgets)
 

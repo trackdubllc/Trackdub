@@ -57,14 +57,15 @@ public sealed class StartTtsStageHandler(
     IApplicationLogger? logger = null,
     PipelineDegradationWriter? degradationWriter = null,
     IRuntimePlanningPreferences? runtimePlanningPreferences = null,
-    IAtomicRevisionCommitBoundary? commitBoundary = null)
+    IAtomicRevisionCommitBoundary? commitBoundary = null,
+    TtsExecutionOptions? executionOptions = null)
     : IDisposable
 {
     private const string TtsAudioPostProcessVersion = "tts-audio-trim-v1";
-    private const int TtsMaxConcurrency = 4;
 
     private readonly DurationAnalysisService durationAnalysisService = durationAnalysisService ?? new DurationAnalysisService();
     private readonly TtsTimingOptions timingOptions = (timingOptions ?? TtsTimingOptions.Default).Normalize();
+    private readonly TtsExecutionOptions executionOptions = executionOptions ?? TtsExecutionOptions.Default;
     private readonly SemaphoreSlim persistenceGate = new(1, 1);
 
     public async Task<StartTtsStageResult> HandleAsync(
@@ -166,6 +167,19 @@ public sealed class StartTtsStageHandler(
 
             if (voiceCompatible)
             {
+                // Resolve the effective TTS degree of parallelism once per run: the configured
+                // max, tightened by a VRAM-aware bound for the model class this run routes to.
+                // The same CreateTtsRequestOptions logic used for synthesis decides the alias,
+                // so the cap cannot drift from the model that actually executes.
+                InferenceRequestOptions representativeOptions = CreateTtsRequestOptions(
+                    request,
+                    voice,
+                    isVoiceCloning);
+                string? modelAlias = representativeOptions.NormalizedPreferredModelAlias;
+                int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(modelAlias);
+                logger?.LogInformation(
+                    $"TTS parallelism: {effectiveMaxConcurrency} (configured {executionOptions.ConfiguredMaxConcurrency?.ToString() ?? "default"}, VRAM {executionOptions.MaxAcceleratorVramMb} MB, model '{modelAlias ?? "default stock"}').");
+
                 var ctx = new SegmentProcessingContext(takes, targetSegments.Length);
                 PipelineProgressReporter.Determinate(
                     progress,
@@ -178,7 +192,7 @@ public sealed class StartTtsStageHandler(
                     targetSegments,
                     new ParallelOptions
                     {
-                        MaxDegreeOfParallelism = TtsMaxConcurrency,
+                        MaxDegreeOfParallelism = effectiveMaxConcurrency,
                         CancellationToken = cancellationToken
                     },
                     (translatedSegment, ct) => ProcessTranslatedSegmentAsync(

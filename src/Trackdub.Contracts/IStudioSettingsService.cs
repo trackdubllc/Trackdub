@@ -22,6 +22,12 @@ public sealed record StudioSettings(
     WindowLayoutSettings WindowLayout,
     IReadOnlyList<RecentProjectEntry> RecentProjects,
     TtsTimingSettings? TtsTiming = null,
+    /// <summary>
+    /// Configured maximum TTS degree of parallelism (before the per-model VRAM-aware cap
+    /// applied in <c>TtsExecutionOptions</c>). Null means the historical default (4).
+    /// Not exposed in Settings UI yet; CLI/SDK and settings.json can set it.
+    /// </summary>
+    int? TtsMaxConcurrency = null,
     double TranscriptConfidenceThreshold = StudioSettings.DefaultTranscriptConfidenceThreshold,
     AsrModelOverride AsrModelOverride = AsrModelOverride.Auto,
     TranslationModelOverride TranslationModelOverride = TranslationModelOverride.Madlad,
