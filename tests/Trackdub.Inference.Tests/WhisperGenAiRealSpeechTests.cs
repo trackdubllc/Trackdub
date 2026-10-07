@@ -29,7 +29,9 @@ public sealed class WhisperGenAiRealSpeechTests
         "whisper-tiny-genai/genai_config.json",
         "whisper-tiny-genai/audio_processor_config.json",
         "whisper-tiny-genai/encoder.onnx",
-        "whisper-tiny-genai/decoder.onnx")]
+        "whisper-tiny-genai/decoder.onnx",
+        "whisper-tiny-genai/encoder.onnx.data",
+        "whisper-tiny-genai/decoder.onnx.data")]
     [Trait("Category", "Integration")]
     public async Task WhisperGenAi_TranscribesRealEnglishSpeech()
     {
@@ -48,7 +50,7 @@ public sealed class WhisperGenAiRealSpeechTests
             "The engine produced no transcript for real speech audio.");
         // Real-speech guard, mirroring the engine's own degenerate-text classifier: a transcript
         // of only punctuation/whitespace (the classic whisper hallucination on noise) must fail.
-        Assert.Contains(transcript, char.IsLetter);
+        Assert.True(transcript.Any(char.IsLetter), "Transcript must contain at least one letter to be valid speech output.");
         Assert.All(segments, static segment => Assert.InRange(segment.EndSeconds, segment.StartSeconds, 6.0 + 0.01));
         Assert.NotNull(engine.LastExecutionSummary);
         Assert.Equal("cpu", engine.LastExecutionSummary!.SelectedProvider);
@@ -59,7 +61,9 @@ public sealed class WhisperGenAiRealSpeechTests
         "whisper-tiny-genai/genai_config.json",
         "whisper-tiny-genai/audio_processor_config.json",
         "whisper-tiny-genai/encoder.onnx",
-        "whisper-tiny-genai/decoder.onnx")]
+        "whisper-tiny-genai/decoder.onnx",
+        "whisper-tiny-genai/encoder.onnx.data",
+        "whisper-tiny-genai/decoder.onnx.data")]
     [Trait("Category", "Integration")]
     public async Task WhisperGenAi_RealSpeechTranscript_IsDeterministicAcrossRuns()
     {
