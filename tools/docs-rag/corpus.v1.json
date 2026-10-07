@@ -137,6 +137,10 @@
         ["winml-eps", "https://learn.microsoft.com/windows/ai/new-windows-ml/supported-execution-providers"],
         ["winml-select", "https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers"],
         ["winml-init", "https://learn.microsoft.com/windows/ai/new-windows-ml/initialize-execution-providers"],
+        ["winml-cli", "https://learn.microsoft.com/en-us/windows/ai/new-windows-ml/winml-cli"],
+        ["winml-cli-installation", "https://microsoft.github.io/winml-cli/latest/getting-started/installation/"],
+        ["winml-cli-supported-models", "https://microsoft.github.io/winml-cli/latest/reference/supported-models/"],
+        ["winml-efficiency-tips", "https://learn.microsoft.com/en-us/windows/ai/new-windows-ml/efficiency-tips"],
         ["directml", "https://learn.microsoft.com/windows/ai/directml/dml"]
       ]
     },
@@ -145,6 +149,7 @@
       "prefix": "vendor/onnxruntime",
       "sources": [
         ["ep-overview", "https://onnxruntime.ai/docs/execution-providers/"],
+        ["pykeio-ort", "https://github.com/pykeio/ort"],
         ["trt-rtx-ep", "https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html"],
         ["plugin-ep", "https://onnxruntime.ai/docs/execution-providers/plugin-ep-libraries/usage.html"],
         ["cuda-ep", "https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html"],
