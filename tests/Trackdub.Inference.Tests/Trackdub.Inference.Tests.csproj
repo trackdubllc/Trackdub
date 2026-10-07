@@ -75,7 +75,7 @@
           Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
     <PropertyGroup>
       <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_GenAiNativeRid>
-      <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">win-arm64</_GenAiNativeRid>
+      <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' == 'Arm64'">win-arm64</_GenAiNativeRid>
       <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$(_GenAiNativeRid)' == ''">win-x64</_GenAiNativeRid>
       <_GenAiNativeDir>$(PkgMicrosoft_ML_OnnxRuntime)\runtimes\$(_GenAiNativeRid)\native\</_GenAiNativeDir>
     </PropertyGroup>

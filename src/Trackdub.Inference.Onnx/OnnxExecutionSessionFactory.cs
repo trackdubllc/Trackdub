@@ -282,10 +282,12 @@ internal static class OnnxExecutionSessionFactory
             .ConfigureAwait(false);
         WindowsMlExecutionDevicePolicy devicePolicy = await ResolveDevicePolicyAsync(cancellationToken)
             .ConfigureAwait(false);
+        string logId = ExtractLogId(modelPath);
         SessionOptionsSelection sessionOptionsSelection = CreateSessionOptions(
             ResolveSessionOptionsProvider(provider, bootstrapResult.SelectedProvider),
             devicePolicy,
-            additionalTrtOptions);
+            additionalTrtOptions,
+            logId: logId);
         InferenceSession? session = null;
         try
         {
@@ -296,7 +298,8 @@ internal static class OnnxExecutionSessionFactory
                 additionalTrtOptions,
                 sessionFactory: null,
                 cancellationToken,
-                allowTrtInitFallback);
+                allowTrtInitFallback,
+                logId: logId);
             bool useCatalogDevicePolicy = ShouldUseCatalogDevicePolicy(devicePolicy, sessionOptionsSelection.SelectedProvider);
             ExecutionProviderKind effectiveProvider = ResolveEffectiveProviderKindFromSession(
                 session,
@@ -362,7 +365,8 @@ internal static class OnnxExecutionSessionFactory
         IReadOnlyDictionary<string, string>? additionalTrtOptions,
         Func<string, SessionOptions, InferenceSession>? sessionFactory,
         CancellationToken cancellationToken,
-        bool allowTrtInitFallback = true)
+        bool allowTrtInitFallback = true,
+        string? logId = null)
     {
         // Honest skip: graphs with com.microsoft contrib fusions cannot be imported by
         // TensorRT-RTX (all-or-nothing ONNX catalog). Do not attempt TRT and do not emit
@@ -381,7 +385,7 @@ internal static class OnnxExecutionSessionFactory
             }
 
             return CreateUnsupportedGraphFallback(modelPath, initialSelection, devicePolicy,
-                sessionFactory, cancellationToken, skipReason);
+                sessionFactory, cancellationToken, skipReason, logId: logId);
         }
 
         try
@@ -400,18 +404,18 @@ internal static class OnnxExecutionSessionFactory
             && LooksLikeTrtSessionInitFailure(ex))
         {
             return CreateTrtInitFailureFallback(modelPath, initialSelection, devicePolicy,
-                sessionFactory, cancellationToken, ex);
+                sessionFactory, cancellationToken, ex, logId: logId);
         }
     }
 
     private static (InferenceSession Session, SessionOptionsSelection Selection) CreateUnsupportedGraphFallback(
         string modelPath, SessionOptionsSelection initialSelection, WindowsMlExecutionDevicePolicy devicePolicy,
         Func<string, SessionOptions, InferenceSession>? sessionFactory, CancellationToken cancellationToken,
-        string skipReason)
+        string skipReason, string? logId = null)
     {
         Exception? lastFailure = null;
         foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
-                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
+                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null, logId: logId)))
         {
             try
             {
@@ -438,13 +442,13 @@ internal static class OnnxExecutionSessionFactory
     private static (InferenceSession Session, SessionOptionsSelection Selection) CreateTrtInitFailureFallback(
         string modelPath, SessionOptionsSelection initialSelection, WindowsMlExecutionDevicePolicy devicePolicy,
         Func<string, SessionOptions, InferenceSession>? sessionFactory, CancellationToken cancellationToken,
-        Exception originalFailure)
+        Exception originalFailure, string? logId = null)
     {
         string trtError = SummarizeExceptionMessage(originalFailure);
         TensorRtRtxTeardownGuard.MarkPoisonedIfCudaOutOfMemory(originalFailure);
         Exception lastFailure = originalFailure;
         foreach (SessionOptionsSelection fallbackSelection in EnumerateTrtInitFallbackProviders()
-                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null)))
+                     .Select(provider => CreateSessionOptions(provider, devicePolicy, additionalTrtOptions: null, logId: logId)))
         {
             try
             {
