@@ -73,10 +73,13 @@ public sealed class WhisperGenAiRealSpeechTests
         IReadOnlyList<RecognizedTranscriptSegment> second =
             await secondEngine.TranscribeAsync(wavePath, [new SpeechRegion(0, 0.0, 6.0)], CancellationToken.None);
 
-        // Parity between two independent runs on the same audio: same segment count, same
-        // per-segment text, same timings. GenAI decoding is greedy, so a mismatch means the
-        // engine introduced nondeterminism (session reuse, chunk boundary drift, or state
-        // leakage between engines) — exactly what the D1 streaming work needs to rule out.
+        // Parity between two runs on the same audio: same segment count, same per-segment
+        // text, same timings. GenAI decoding here is beam search (num_beams=5) with no
+        // sampling, so a mismatch means the engine introduced nondeterminism (state leaking
+        // through the shared pooled model, or chunk boundary drift), which is what the D1
+        // streaming work needs to rule out.
+        Assert.NotEmpty(first);
+        Assert.NotEmpty(second);
         Assert.Equal(
             first.Select(static segment => (segment.Index, segment.StartSeconds, segment.EndSeconds, segment.Text)),
             second.Select(static segment => (segment.Index, segment.StartSeconds, segment.EndSeconds, segment.Text)));
