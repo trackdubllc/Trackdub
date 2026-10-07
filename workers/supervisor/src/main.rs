@@ -2,9 +2,8 @@
 //!
 //! Usage: `trackdub-supervisor --check <program> [args...]`
 //! Spawns the worker, runs the protocol health gate, prints the readiness
-//! verdict as JSON, and exits 0 on `alive` / nonzero otherwise. A successful
-//! gate hands a live, resident worker to the caller, so main deliberately
-//! does not kill it on the success path.
+//! verdict as JSON, and exits 0 on `alive` / nonzero otherwise. `--check` is
+//! a transient probe; a long-lived host retains its own supervisor handle.
 
 use trackdub_supervisor::{protocol, supervisor};
 
@@ -24,9 +23,8 @@ fn main() -> anyhow::Result<()> {
     });
     println!("{}", serde_json::to_string(&verdict)?);
 
-    // A successful gate hands a live, warmed worker to the caller (later: the
-    // C# host). Dropping SupervisedWorker here would kill the child on scope
-    // exit; forgetting keeps it resident, which is the entire point.
-    std::mem::forget(worker);
+    // `--check` is intentionally transient: close and reap the probe instead
+    // of claiming that dropping a local handle transfers ownership to a caller.
+    worker.shutdown()?;
     Ok(())
 }

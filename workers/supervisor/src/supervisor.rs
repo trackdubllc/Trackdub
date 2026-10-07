@@ -108,6 +108,17 @@ impl SupervisedWorker {
             _ => false,
         }
     }
+
+    /// End a transient health-gate probe and reap its child. `--check` is a
+    /// readiness probe, not the long-lived supervisor; a future host that
+    /// needs a resident worker will retain this handle instead.
+    pub fn shutdown(mut self) -> anyhow::Result<()> {
+        drop(self.stdin);
+        let _ = self.child.kill();
+        self.child.wait().context("waiting for health-gate worker")?;
+        let _ = self._reader.join();
+        Ok(())
+    }
 }
 
 /// Health-gate a worker target: spawn, ask health, require `alive` with a
