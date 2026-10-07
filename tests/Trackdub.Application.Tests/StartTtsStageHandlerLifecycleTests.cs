@@ -236,7 +236,8 @@ public sealed class StartTtsStageHandlerLifecycleTests
             new FakeMediaAssetRepository(),
             new FakeTtsTakeRepository(),
             stageRunStore,
-            degradationWriter: degradationWriter);
+            degradationWriter: degradationWriter,
+            commitBoundary: TestAtomicCommitBoundary.Create(null, new FakeTtsTakeRepository(), artifactStore, new FakeMediaAssetRepository()));
         StartTtsStageRequest request = CreateRequest(targetLanguage: "es") with
         {
             PreferredModelAlias = VoiceCloningDefaults.ChatterboxMultilingualAlias,
@@ -269,15 +270,19 @@ public sealed class StartTtsStageHandlerLifecycleTests
         IVoiceCatalog? voiceCatalog = null,
         IApplicationLogger? logger = null)
     {
+        var artifactStore = new FakeArtifactStore();
+        var mediaRepository = new FakeMediaAssetRepository();
+        ITtsTakeRepository takeRepository = ttsTakeRepository ?? new FakeTtsTakeRepository();
         return new StartTtsStageHandler(
             ttsEngine ?? new FakeTtsEngine(),
             voiceCatalog ?? new FakeVoiceCatalog(),
-            new FakeArtifactStore(),
+            artifactStore,
             new FakeFileFingerprintService(new FileFingerprint("tts-hash", 42, DateTimeOffset.UtcNow)),
-            new FakeMediaAssetRepository(),
-            ttsTakeRepository ?? new FakeTtsTakeRepository(),
+            mediaRepository,
+            takeRepository,
             stageRunStore,
-            logger: logger);
+            logger: logger,
+            commitBoundary: TestAtomicCommitBoundary.Create(null, takeRepository, artifactStore, mediaRepository));
     }
 
     private sealed class CancelingJsonArtifactStore : IArtifactStore

@@ -73,7 +73,8 @@ public sealed class PipelineReadinessService(
         ExecutionProviderKind? PreferredProvider,
         bool RequirePreferredProvider,
         string? PreferredVariantAlias,
-        string? PreferredModelTier);
+        string? PreferredModelTier,
+        RuntimeModelSelectionIntent SelectionIntent);
 
     private readonly ConcurrentDictionary<ReadinessCacheKey, StageReadiness> _cache = new();
 
@@ -216,7 +217,7 @@ public sealed class PipelineReadinessService(
             planningRequest.PreferredExecutionProvider,
             planningRequest.RequirePreferredExecutionProvider,
             planningRequest.PreferredModelVariantAlias,
-            preferredModelTier);
+            preferredModelTier, selections.GetSelectionIntent(stage));
 
         if (!_cache.TryGetValue(cacheKey, out StageReadiness? readiness))
         {
@@ -226,6 +227,7 @@ public sealed class PipelineReadinessService(
                     planningRequest,
                     stage,
                     preferredModelTier,
+                    selections.GetSelectionIntent(stage),
                     cancellationToken).ConfigureAwait(false);
             _cache[cacheKey] = readiness;
         }
@@ -324,6 +326,7 @@ public sealed class PipelineReadinessService(
         StageRuntimePlanningRequest request,
         RuntimeStage stage,
         string? preferredModelTier,
+        RuntimeModelSelectionIntent selectionIntent,
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(preferredModelTier))
@@ -335,12 +338,13 @@ public sealed class PipelineReadinessService(
             .PlanAsync(request, cancellationToken)
             .ConfigureAwait(false);
 
-        return MapPlanToReadiness(stage, plan, runtimeValidated: !request.SkipProviderSmokeTest);
+        return MapPlanToReadiness(stage, plan, selectionIntent, runtimeValidated: !request.SkipProviderSmokeTest);
     }
 
     private static StageReadiness MapPlanToReadiness(
         RuntimeStage stage,
         StageRuntimePlan plan,
+        RuntimeModelSelectionIntent selectionIntent,
         bool runtimeValidated)
     {
         string stageName = StageNameFor(stage);
@@ -374,7 +378,8 @@ public sealed class PipelineReadinessService(
                 Detail: $"Model '{plan.ModelId}' needs to be downloaded",
                 ModelId: plan.ModelId,
                 ModelAlias: plan.ModelAlias,
-                ResolveAction: "download");
+                ResolveAction: plan.Fallback?.Code == RuntimePlanFallbackCode.ModelIntegrityMismatch
+                    || selectionIntent == RuntimeModelSelectionIntent.Explicit ? "download" : "bundle-needed");
         }
 
         // Blocked — inspect fallback code

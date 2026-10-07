@@ -56,7 +56,8 @@ public sealed class StartTtsStageHandler(
     IReferenceClipAnalyzer? referenceClipAnalyzer = null,
     IApplicationLogger? logger = null,
     PipelineDegradationWriter? degradationWriter = null,
-    IRuntimePlanningPreferences? runtimePlanningPreferences = null)
+    IRuntimePlanningPreferences? runtimePlanningPreferences = null,
+    IAtomicRevisionCommitBoundary? commitBoundary = null)
     : IDisposable
 {
     private const string TtsAudioPostProcessVersion = "tts-audio-trim-v1";
@@ -414,6 +415,11 @@ public sealed class StartTtsStageHandler(
         ConcurrentDictionary<string, byte> reservedArtifactRelativePaths,
         CancellationToken cancellationToken)
     {
+        IAtomicRevisionCommitBoundary boundary = commitBoundary
+            ?? throw new InvalidOperationException("Atomic take commit boundary is not configured.");
+        var takeInput = new AtomicTakeInput(request.ProjectId, request.TargetLanguage,
+            sourceSegment.TranscriptRevisionId, translatedSegment.TranslationRevisionId, translatedSegment);
+        await boundary.ValidateTakeInputAsync(takeInput, cancellationToken).ConfigureAwait(false);
         InferenceRequestOptions options = CreateTtsRequestOptions(request, voice, voiceCloneReference is not null);
         string inputFingerprint = ComputeInputFingerprint(
             translatedSegment.Id,
@@ -473,6 +479,8 @@ public sealed class StartTtsStageHandler(
             translatedSegment.Id,
             existingTakes,
             reservedArtifactRelativePaths);
+        Guid takeId = Guid.NewGuid();
+        relativePath = relativePath[..^4] + $"-{takeId:N}.wav";
 
         if (voiceCloneReference is not null)
         {
@@ -573,11 +581,8 @@ public sealed class StartTtsStageHandler(
             }
         }
 
-        await tx.CommitAsync(artifactStore, cancellationToken).ConfigureAwait(false);
-
-        string finalPath = artifactStore.GetPath(relativePath);
         FileFingerprint fingerprint = await fileFingerprintService
-            .ComputeAsync(finalPath, cancellationToken)
+            .ComputeAsync(tx.TemporaryPath, cancellationToken)
             .ConfigureAwait(false);
 
         var artifact = new ProjectArtifact(
@@ -624,13 +629,10 @@ public sealed class StartTtsStageHandler(
                 stretchRatioApplied,
                 stretchMode,
                 stretchEngine);
+        take = take with { Id = takeId };
         await RunSerializedPersistenceAsync(
-            async ct =>
-            {
-                await mediaAssetRepository.SaveArtifactAsync(artifact, ct).ConfigureAwait(false);
-                await ttsTakeRepository.SaveAsync(take, ct).ConfigureAwait(false);
-            },
-            cancellationToken).ConfigureAwait(false);
+            ct => boundary.CommitTakeAsync(new AtomicTakeCommitRequest(takeInput, take),
+                new PreparedCommitArtifact(artifact, tx.Handle), ct), cancellationToken).ConfigureAwait(false);
         LogTtsTakeProvenance(
             translatedSegment.SegmentIndex,
             take,

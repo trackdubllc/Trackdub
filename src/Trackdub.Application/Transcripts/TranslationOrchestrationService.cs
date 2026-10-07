@@ -30,7 +30,8 @@ public sealed class TranslationOrchestrationService(
     ITranslatedWordAlignmentService? translatedWordAlignmentService = null,
     ILogger<TranslationOrchestrationService>? logger = null,
     IApplicationLogger? applicationLogger = null,
-    IRuntimePlanningPreferences? runtimePlanningPreferences = null)
+    IRuntimePlanningPreferences? runtimePlanningPreferences = null,
+    IAtomicRevisionCommitBoundary? commitBoundary = null)
 {
     // Sentinel language code meaning "follow the transcript's persisted or detected language".
     private const string AutoLanguageCode = "auto";
@@ -228,9 +229,12 @@ public sealed class TranslationOrchestrationService(
             .StartAsync(stageRunStore, currentState.ProjectState.Project.Id, StageNames.Translation, cancellationToken)
             .ConfigureAwait(false);
 
+        TranslationStreamCommit? streamCommit = null;
         IReadOnlyList<TranslatedTextSegment> translatedTextSegments;
         try
         {
+            TranslationRevision? expectedPrevious = await translationRepository.GetCurrentRevisionAsync(
+                currentState.ProjectState.Project.Id, targetLanguage, cancellationToken).ConfigureAwait(false);
             PipelineProgressReporter.Phase(progress, StageNames.Translation, "Preparing segments");
             IReadOnlyList<GlossaryEntry> glossaryEntries = await glossaryService.GetMergedEntriesAsync(
                 currentState.ProjectState.Project.Id,
@@ -266,7 +270,7 @@ public sealed class TranslationOrchestrationService(
                 PreferredModelVariantAlias: request.PreferredModelVariantAlias);
             if (request.EnableSegmentStreaming && translationEngine is IStreamingTranslationEngine streamingEngine)
             {
-                translatedTextSegments = await CollectTranslationStreamAsync(
+                streamCommit = await CollectTranslationStreamAsync(
                     streamingEngine,
                     translationRequest,
                     translationStageRun.Id,
@@ -275,6 +279,7 @@ public sealed class TranslationOrchestrationService(
                     translationInputSegments.Length,
                     progress,
                     cancellationToken).ConfigureAwait(false);
+                translatedTextSegments = streamCommit.Items.Select(item => item.Payload).ToArray();
             }
             else
             {
@@ -283,10 +288,6 @@ public sealed class TranslationOrchestrationService(
                     cancellationToken).ConfigureAwait(false);
             }
 
-            int nextRevisionNumber = await translationRepository.GetNextRevisionNumberAsync(
-                currentState.ProjectState.Project.Id,
-                targetLanguage,
-                cancellationToken).ConfigureAwait(false);
             DateTimeOffset now = DateTimeOffset.UtcNow;
             TranslationExecutionMetadata? executionMetadata = GetTranslationExecutionMetadata(translationEngine);
             TranslationRevision translationRevision = TranslationRevision.Create(
@@ -294,7 +295,7 @@ public sealed class TranslationOrchestrationService(
                 translationStageRun.Id,
                 currentTranscriptRevision.Id,
                 targetLanguage,
-                nextRevisionNumber,
+                revisionNumber: 1,
                 now,
                 translationProvider: executionMetadata?.ProviderName ?? route.ProviderName,
                 modelId: executionMetadata?.ModelId ?? route.ModelId,
@@ -302,46 +303,6 @@ public sealed class TranslationOrchestrationService(
             Dictionary<int, TranscriptSegment> sourceSegmentsByIndex = currentState.TranscriptSegments
                 .OrderBy(segment => segment.SegmentIndex)
                 .ToDictionary(segment => segment.SegmentIndex);
-
-            if (degradationWriter is not null)
-            {
-                int[] emptyIndices = translatedTextSegments
-                    .Where(static s => string.IsNullOrEmpty(s.Text))
-                    .Select(static s => s.Index)
-                    .ToArray();
-
-                if (emptyIndices.Length > 0)
-                {
-                    // Aggregate all empty-output segments into a single degradation record so
-                    // long transcripts with widespread engine failures don't flood the artifact
-                    // store with one record per segment.
-                    const int maxListed = 10;
-                    string indexSummary = emptyIndices.Length <= maxListed
-                        ? string.Join(", ", emptyIndices)
-                        : string.Join(", ", emptyIndices.Take(maxListed)) + $" … ({emptyIndices.Length - maxListed} more)";
-
-                    try
-                    {
-                        await degradationWriter.WriteAsync(
-                            new PipelineDegradationRecord(
-                                StageNames.Translation,
-                                "TRANSLATION_EMPTY_OUTPUT",
-                                $"Translation engine returned empty output for {emptyIndices.Length} segment(s) (indices: {indexSummary}); source text used as fallback.",
-                                Detail: null,
-                                SelectedFallback: "source-text",
-                                RecommendedAction: "Review source text for the affected segments or try a different translation model.",
-                                DateTimeOffset.UtcNow,
-                                translationStageRun.Id),
-                            currentState.ProjectState.Project.Id,
-                            TranscriptWorkflowUtilities.GetRequiredMediaAsset(currentState).Id,
-                            cancellationToken).ConfigureAwait(false);
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        // Degradation write is best-effort; failure must not abort the translation persistence path.
-                    }
-                }
-            }
 
             List<TranslatedSegment> translatedSegments = [];
             TranslatedTextSegment[] orderedTranslatedTextSegments = translatedTextSegments
@@ -414,6 +375,56 @@ public sealed class TranslationOrchestrationService(
                     currentItemLabel: $"Segment {segment.Index}");
             }
 
+            PipelineProgressReporter.Phase(progress, StageNames.Translation, "Saving translation");
+            IAtomicRevisionCommitBoundary boundary = commitBoundary
+                ?? throw new InvalidOperationException("Atomic revision commit boundary is not configured.");
+            translationRevision = await boundary.CommitRevisionAsync(
+                new AtomicRevisionCommitRequest(translationRevision, expectedPrevious?.Id, translatedSegments, streamCommit),
+                (revision, ct) => artifactWriter.PrepareTranslationArtifactAsync(
+                    currentState.ProjectState.Project.Id, TranscriptWorkflowUtilities.GetRequiredMediaAsset(currentState),
+                    revision, translatedSegments, translationStageRun.Id, "generated-translation", ct),
+                cancellationToken).ConfigureAwait(false);
+
+            if (degradationWriter is not null)
+            {
+                int[] emptyIndices = translatedTextSegments
+                    .Where(static s => string.IsNullOrEmpty(s.Text))
+                    .Select(static s => s.Index)
+                    .ToArray();
+
+                if (emptyIndices.Length > 0)
+                {
+                    // Aggregate all empty-output segments into a single degradation record so
+                    // long transcripts with widespread engine failures don't flood the artifact
+                    // store with one record per segment.
+                    const int maxListed = 10;
+                    string indexSummary = emptyIndices.Length <= maxListed
+                        ? string.Join(", ", emptyIndices)
+                        : string.Join(", ", emptyIndices.Take(maxListed)) + $" … ({emptyIndices.Length - maxListed} more)";
+
+                    try
+                    {
+                        await degradationWriter.WriteAsync(
+                            new PipelineDegradationRecord(
+                                StageNames.Translation,
+                                "TRANSLATION_EMPTY_OUTPUT",
+                                $"Translation engine returned empty output for {emptyIndices.Length} segment(s) (indices: {indexSummary}); source text used as fallback.",
+                                Detail: null,
+                                SelectedFallback: "source-text",
+                                RecommendedAction: "Review source text for the affected segments or try a different translation model.",
+                                DateTimeOffset.UtcNow,
+                                translationStageRun.Id),
+                            currentState.ProjectState.Project.Id,
+                            TranscriptWorkflowUtilities.GetRequiredMediaAsset(currentState).Id,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // Degradation write is best-effort; failure must not abort the translation persistence path.
+                    }
+                }
+            }
+
             if (degradationWriter is not null)
             {
                 // Identify segments where both the engine output and the source-text fallback
@@ -459,48 +470,6 @@ public sealed class TranslationOrchestrationService(
                     }
                 }
             }
-
-            PipelineProgressReporter.Phase(progress, StageNames.Translation, "Saving translation");
-            await translationRepository.SaveRevisionAsync(
-                translationRevision,
-                translatedSegments,
-                cancellationToken).ConfigureAwait(false);
-
-            // Mark TTS takes stale for any segments whose translated text changed (or is newly present).
-            // This mirrors the per-segment and bulk-edit paths (RetranslateSegmentAsync,
-            // SaveTranslationEditsAsync) and prevents TTS from replaying stale audio after a bulk
-            // re-translation. The fingerprint-based cache check in TtsOrchestrationService would
-            // already catch this on the next TTS run, but marking eagerly keeps project state consistent.
-            Dictionary<int, string> previousTextByIndex = currentState.TranslatedSegments
-                .ToDictionary(static s => s.SegmentIndex, static s => s.Text);
-            HashSet<int> changedIndices = [];
-            foreach (TranslatedSegment segment in translatedSegments)
-            {
-                if (!previousTextByIndex.TryGetValue(segment.SegmentIndex, out string? previousText) ||
-                    !string.Equals(previousText, segment.Text, StringComparison.Ordinal))
-                {
-                    changedIndices.Add(segment.SegmentIndex);
-                }
-            }
-
-            if (changedIndices.Count > 0)
-            {
-                PipelineProgressReporter.Phase(progress, StageNames.Translation, "Marking stale TTS");
-                await ttsTakeRepository.MarkBySegmentIndicesStaleAsync(
-                    currentState.ProjectState.Project.Id,
-                    changedIndices,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            PipelineProgressReporter.Phase(progress, StageNames.Translation, "Writing artifact");
-            await artifactWriter.WriteTranslationArtifactAsync(
-                currentState.ProjectState.Project.Id,
-                TranscriptWorkflowUtilities.GetRequiredMediaAsset(currentState),
-                translationRevision,
-                translatedSegments,
-                stageRunId: translationStageRun.Id,
-                provenance: "generated-translation",
-                cancellationToken).ConfigureAwait(false);
 
             int[] allSegmentIndices = currentState.TranscriptSegments
                 .Select(static segment => segment.SegmentIndex)
@@ -888,86 +857,36 @@ public sealed class TranslationOrchestrationService(
 
     /// <summary>
     /// Opt-in (<see cref="GenerateTranslationRequest.EnableSegmentStreaming"/>): drives a
-    /// streaming translation engine through the bounded channel and validates every item's
-    /// identity before accumulation. Persistence still happens once, after the stream
-    /// completes — nothing here commits a partial revision.
+    /// streaming translation engine through the bounded channel, retaining every item's
+    /// envelope for final identity validation at the commit boundary. Persistence
+    /// happens once after the complete stream; nothing here commits a partial revision.
     /// </summary>
-    private static async Task<IReadOnlyList<TranslatedTextSegment>> CollectTranslationStreamAsync(
-        IStreamingTranslationEngine streamingEngine,
-        TranslationRequest translationRequest,
-        Guid runId,
-        Guid sourceRevisionId,
-        string targetLanguage,
-        int inputSegmentCount,
-        IProgress<PipelineProgressEvent>? progress,
-        CancellationToken cancellationToken)
+    private static async Task<TranslationStreamCommit> CollectTranslationStreamAsync(
+        IStreamingTranslationEngine streamingEngine, TranslationRequest translationRequest, Guid runId,
+        Guid sourceRevisionId, string targetLanguage, int inputSegmentCount,
+        IProgress<PipelineProgressEvent>? progress, CancellationToken cancellationToken)
     {
         string snapshotId = $"{sourceRevisionId:N}:{targetLanguage}";
-        List<TranslatedTextSegment> collected = [];
-        HashSet<int> expectedSegmentIndexes = translationRequest.Segments
-            .Select(static segment => segment.Index)
-            .ToHashSet();
-        HashSet<int> receivedSegmentIndexes = [];
-
+        List<PipelineStreamItem<TranslatedTextSegment>> collected = [];
         await BoundedPipelineRunner.RunAsync<TranslatedTextSegment>(
             new BoundedPipelineChannelOptions(itemCapacity: 8, byteCapacity: 4 * 1024 * 1024),
             async (channel, ct) =>
             {
-                await foreach (PipelineStreamItem<TranslatedTextSegment> streamItem in streamingEngine
-                    .TranslateStreamAsync(translationRequest, runId, snapshotId, sourceRevisionId, ct)
-                    .ConfigureAwait(false))
-                {
-                    await channel.WriteAsync(streamItem, ct).ConfigureAwait(false);
-                }
+                await foreach (var item in streamingEngine.TranslateStreamAsync(translationRequest, runId, snapshotId, sourceRevisionId, ct).ConfigureAwait(false))
+                    await channel.WriteAsync(item, ct).ConfigureAwait(false);
             },
             async (items, ct) =>
             {
-                long expectedSequence = 0;
-                int lastSegmentIndex = -1;
-                await foreach (PipelineStreamItem<TranslatedTextSegment> streamItem in items
-                    .WithCancellation(ct)
-                    .ConfigureAwait(false))
+                await foreach (var item in items.WithCancellation(ct).ConfigureAwait(false))
                 {
-                    PipelineStreamIdentity identity = streamItem.Identity;
-                    TranslatedTextSegment segment = streamItem.Payload;
-                    if (identity.RunId != runId
-                        || !string.Equals(identity.SnapshotId, snapshotId, StringComparison.Ordinal)
-                        || identity.Stage != RuntimeStage.Translation
-                        || identity.RevisionId != sourceRevisionId
-                        || identity.Sequence != expectedSequence
-                        || identity.SegmentIndex != segment.Index
-                        || !expectedSegmentIndexes.Contains(segment.Index)
-                        || !receivedSegmentIndexes.Add(segment.Index)
-                        || segment.Index <= lastSegmentIndex)
-                    {
-                        throw new InvalidDataException(
-                            $"Translation stream item failed identity validation "
-                                + $"(expected seq {expectedSequence}, got "
-                                + $"{identity.Sequence}; segment {identity.SegmentIndex} vs "
-                                + $"payload {segment.Index}; run {identity.RunId}; "
-                                + $"revision {identity.RevisionId}).");
-                    }
-
-                    expectedSequence++;
-                    lastSegmentIndex = segment.Index;
-                    collected.Add(segment);
-                    PipelineProgressReporter.Phase(
-                        progress,
-                        StageNames.Translation,
-                        "Translating",
+                    // Retain the complete envelope. Revision acceptance belongs to the real commit boundary.
+                    collected.Add(item);
+                    PipelineProgressReporter.Phase(progress, StageNames.Translation, "Translating",
                         $"{collected.Count}/{inputSegmentCount} segment(s) translated.");
                 }
-            },
-            cancellationToken).ConfigureAwait(false);
-
-        if (receivedSegmentIndexes.Count != expectedSegmentIndexes.Count)
-        {
-            throw new InvalidDataException(
-                $"Translation stream ended after {receivedSegmentIndexes.Count} of "
-                    + $"{expectedSegmentIndexes.Count} requested segment(s).");
-        }
-
-        return collected;
+            }, cancellationToken).ConfigureAwait(false);
+        return new TranslationStreamCommit(runId, snapshotId, sourceRevisionId,
+            translationRequest.Segments.Select(segment => segment.Index).ToArray(), collected);
     }
 
     private static TranslationExecutionMetadata? GetTranslationExecutionMetadata(object stageEngine) =>

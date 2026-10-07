@@ -1053,7 +1053,7 @@ public sealed class OrchestrationServiceTests
             context.MediaAssetRepository.Artifacts,
             artifact => artifact.Id == take.ArtifactId);
         Assert.Equal(
-            ProjectArtifactPaths.GetTtsTakeRelativePath(speakerId, translatedSegmentId, takeNumber: 2),
+            ProjectArtifactPaths.GetTtsTakeRelativePath(speakerId, translatedSegmentId, takeNumber: 2)[..^4] + $"-{take.Id:N}.wav",
             artifact.RelativePath);
     }
 
@@ -1991,7 +1991,8 @@ public sealed class OrchestrationServiceTests
             stageRunStore,
             artifactStore,
             artifactWriter,
-            translatedWordAlignmentService: translatedWordAlignmentService);
+            translatedWordAlignmentService: translatedWordAlignmentService,
+            commitBoundary: TestAtomicCommitBoundary.Create(translationRepository, ttsTakeRepository, artifactStore, mediaAssetRepository));
 
         return new TranslationServiceContext(
             service,
@@ -2032,7 +2033,8 @@ public sealed class OrchestrationServiceTests
             durationAnalysisService,
             consentService: consentService,
             voiceCloneAuditLog: auditLog,
-            referenceClipAnalyzer: referenceClipAnalyzer);
+            referenceClipAnalyzer: referenceClipAnalyzer,
+            commitBoundary: TestAtomicCommitBoundary.Create(null, ttsTakeRepository, artifactStore, mediaAssetRepository));
         var service = new TtsOrchestrationService(
             startTtsStageHandler,
             voiceAssignmentRepository,
