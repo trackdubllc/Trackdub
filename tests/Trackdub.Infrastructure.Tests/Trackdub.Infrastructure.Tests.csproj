@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Trackdub.TestDoubles\FakeVoiceCatalog.cs" Link="TestDoubles\FakeVoiceCatalog.cs" />
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -33,6 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Trackdub.TestDoubles\FakeTranslationLanguageRouter.cs" Link="TestDoubles\FakeTranslationLanguageRouter.cs" />
     <Compile Include="..\Trackdub.TestDoubles\FakeStudioSettingsService.cs" Link="TestDoubles\FakeStudioSettingsService.cs" />
   </ItemGroup>
 

@@ -2210,7 +2210,10 @@ public sealed class DubbingPipelineEngine(
                 // CreateSelectionsFromSettings. ApplyPresetVoiceModelSelection may still
                 // retarget TTS when the voices that will speak are Qwen presets, because
                 // synthesis will not use a non-CustomVoice model for those voices.
-                selections = ApplyModelPreferenceAliases(provided, preferences);
+                selections = ApplyModelPreferenceAliases(provided with
+                {
+                    SelectionIntents = Enum.GetValues<RuntimeStage>().ToDictionary(stage => stage, provided.GetSelectionIntent)
+                }, preferences);
                 selections = ApplyPresetVoiceModelSelection(selections, options, state);
                 return ApplyExecutionProviderPins(selections, options, preferences);
             }
@@ -2254,7 +2257,11 @@ public sealed class DubbingPipelineEngine(
             ResolveUnattendedVoicePlan(state, options),
             options.TargetLanguageCode).ToList();
         return allVoiceIds.Count > 0 && allVoiceIds.All(Qwen3TtsDefaults.IsPresetVoiceId)
-            ? selections with { TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null) }
+            ? selections with
+            {
+                TtsModelAlias = Qwen3TtsDefaults.ResolveCustomVoiceAlias(tier: null),
+                SelectionIntents = Enum.GetValues<RuntimeStage>().ToDictionary(stage => stage, selections.GetSelectionIntent)
+            }
             : selections;
     }
 
@@ -2457,8 +2464,12 @@ public sealed class DubbingPipelineEngine(
             return selections;
         }
 
+        RuntimeModelSelections requested = RuntimeModelRequestFactory.CreateSelectionsFromPreferences(preferences);
         return selections with
         {
+            SelectionIntents = Enum.GetValues<RuntimeStage>().ToDictionary(stage => stage,
+                stage => requested.GetSelectionIntent(stage) == RuntimeModelSelectionIntent.Explicit
+                    ? RuntimeModelSelectionIntent.Explicit : selections.GetSelectionIntent(stage)),
             VadModelAlias = preferences.VadModelAlias ?? selections.VadModelAlias,
             DiarizationModelAlias = preferences.DiarizationModelAlias ?? selections.DiarizationModelAlias,
             SeparationModelAlias = preferences.SeparationModelAlias ?? selections.SeparationModelAlias,

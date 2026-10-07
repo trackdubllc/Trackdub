@@ -164,7 +164,14 @@ public sealed class SqliteTtsTakeRepository(
         await database.InitializeAsync(cancellationToken).ConfigureAwait(false);
         await using SqliteConnectionLease connectionLease = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         SqliteConnection connection = connectionLease.Connection;
+        await SaveAsync(connection, null, take, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task SaveAsync(SqliteConnection connection, SqliteTransaction? transaction,
+        TtsTake take, CancellationToken cancellationToken, bool createOnly = false)
+    {
         await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
             INSERT INTO tts_takes (
@@ -245,10 +252,13 @@ public sealed class SqliteTtsTakeRepository(
                 candidate_index = excluded.candidate_index,
                 candidate_variant = excluded.candidate_variant;
             """;
+        if (createOnly)
+        {
+            command.CommandText = command.CommandText[..command.CommandText.IndexOf("ON CONFLICT", StringComparison.Ordinal)] + ";";
+        }
         BindTake(command, take);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
-
     private const string SelectColumns =
         """
         SELECT id,

@@ -657,7 +657,8 @@ public sealed class TranscriptWorkspacePipelineGuardTests
             durationAnalysisService,
             new FakeAudioTimeStretchService(),
             TtsTimingOptions.Default,
-            new FakeTtsAudioPostProcessor());
+            new FakeTtsAudioPostProcessor(),
+            commitBoundary: TestAtomicCommitBoundary.Create(null, ttsTakeRepository, artifactStore, mediaRepository));
         var ttsOrchestrationService = new TtsOrchestrationService(
             startTtsStageHandler,
             voiceAssignmentRepository,
@@ -710,7 +711,8 @@ public sealed class TranscriptWorkspacePipelineGuardTests
             ttsTakeRepository,
             stageRunStore,
             artifactStore,
-            artifactWriter);
+            artifactWriter,
+            commitBoundary: TestAtomicCommitBoundary.Create(translationRepository, ttsTakeRepository, artifactStore, mediaRepository));
         var stateService = new TranscriptProjectStateService(
             projectMediaIngestService,
             transcriptRepository,

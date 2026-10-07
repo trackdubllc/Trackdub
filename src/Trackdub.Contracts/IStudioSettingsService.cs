@@ -79,7 +79,11 @@ public sealed record StudioSettings(
     float NvidiaAfxIntensityRatio = 1.0f,
     string? UiLanguage = null,
     string? TensorRtRtxPluginDirectory = null,
-    UpdateChannel UpdateChannelPreference = UpdateChannel.Stable)
+    UpdateChannel UpdateChannelPreference = UpdateChannel.Stable,
+    /// <summary>Application-generated default aliases, keyed by stage. Configured stage aliases and
+    /// caller preferences are explicit even when they equal these defaults. Legacy settings without
+    /// this provenance treat non-Auto overrides as explicit.</summary>
+    IReadOnlyDictionary<string, string>? AutomaticModelAliases = null)
 {
     public const double DefaultTranscriptConfidenceThreshold = 0.75d;
 
@@ -103,7 +107,11 @@ public sealed record StudioSettings(
         StageModelAliases: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
         AppliedStarterPackId: null,
         AppliedStarterPackProfileId: null,
-        ModelOptimizationPrecisionOverrides: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        ModelOptimizationPrecisionOverrides: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+        AutomaticModelAliases: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [Trackdub.Domain.StageRuns.StageNames.Translation] = TranslationModelOverrideSettings.MadladModelAlias
+        });
 }
 
 /// <summary>

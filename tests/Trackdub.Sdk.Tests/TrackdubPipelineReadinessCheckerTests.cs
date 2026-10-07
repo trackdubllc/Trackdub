@@ -1,8 +1,11 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 
 using Trackdub.Cli;
 using Trackdub.Cli.Handlers;
 using Trackdub.Contracts.Pipeline;
+using Trackdub.Contracts;
+using Trackdub.TestDoubles;
 using Trackdub.Sdk;
 
 namespace Trackdub.Sdk.Tests;
@@ -31,6 +34,8 @@ public sealed class TrackdubPipelineReadinessCheckerTests : IDisposable
         Assert.False(report.IsRunReady);
         Assert.NotEmpty(report.BlockingStages);
         Assert.Contains(report.Stages, stage => stage.Status == ReadinessState.DownloadRequired);
+        Assert.All(report.Stages.Where(stage => stage.Status == ReadinessState.DownloadRequired),
+            stage => Assert.Equal("bundle-needed", stage.ResolveAction));
     }
 
     [Fact]
@@ -51,12 +56,15 @@ public sealed class TrackdubPipelineReadinessCheckerTests : IDisposable
         Assert.Contains(
             stages.EnumerateArray(),
             element => element.GetProperty("readinessState").GetString() == "downloadRequired");
+        Assert.All(stages.EnumerateArray().Where(element => element.GetProperty("readinessState").GetString() == "downloadRequired"),
+            element => Assert.Equal("bundle-needed", element.GetProperty("resolveAction").GetString()));
     }
 
     private TrackdubSessionFactory CreateFactoryWithoutModels() =>
         new TrackdubBuilder()
             .WithModelDirectory(_emptyModelDirectory)
             .WithModelCacheDirectory(_emptyModelDirectory)
+            .ConfigureServices(services => services.AddSingleton<IStudioSettingsService>(new FakeStudioSettingsService()))
             .Build();
 
     public void Dispose()

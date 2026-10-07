@@ -141,6 +141,14 @@ public sealed class GenAiTensorRtExclusionTests
 
         TrtRtxStarterPackSmokeTargetResult result = Assert.Single(report.Targets);
         Assert.Equal(TrtRtxStarterPackSmokeTargetStatus.Skipped, result.Status);
+        // Progress<T> posts callbacks asynchronously (no SynchronizationContext under
+        // xUnit), so the delivery can lose a race with this assert on loaded machines.
+        // Wait boundedly for the single expected delivery instead of assuming it landed.
+        for (int i = 0; i < 200 && reported.Count == 0; i++)
+        {
+            await Task.Delay(25);
+        }
+
         Assert.Single(reported);
         Assert.Equal("missing-model", reported[0].Label);
     }
