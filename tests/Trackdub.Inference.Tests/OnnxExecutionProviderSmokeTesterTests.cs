@@ -152,6 +152,21 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
     }
 
     [Fact]
+    public void CreateTtsInputValue_uses_unit_speed_for_kokoro_speed_input()
+    {
+        MethodInfo method = typeof(OnnxExecutionProviderSmokeTester)
+            .GetMethod("CreateTtsInputValue", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Could not locate TTS smoke-input helper.");
+
+        object? rawResult = method.Invoke(null, ["speed", typeof(float), new[] { 1 }]);
+        NamedOnnxValue value = Assert.IsType<NamedOnnxValue>(rawResult);
+        Tensor<float> tensor = Assert.IsAssignableFrom<Tensor<float>>(value.Value);
+
+        Assert.Equal([1], tensor.Dimensions.ToArray());
+        Assert.Equal(1f, tensor[0]);
+    }
+
+    [Fact]
     public void ResolveTtsProbeModelPath_uses_chatterbox_conditional_decoder_for_planned_provider_probe()
     {
         string root = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString("N"));

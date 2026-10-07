@@ -1323,7 +1323,15 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
         if (elementType == typeof(float))
         {
-            return NamedOnnxValue.CreateFromTensor(inputName, new DenseTensor<float>(new float[elementCount], dims));
+            float[] data = new float[elementCount];
+            // Kokoro divides predicted durations by speed; zero yields an empty frame axis and
+            // the graph fails in /encoder/shared/Reshape.
+            if (string.Equals(inputName, "speed", StringComparison.Ordinal))
+            {
+                Array.Fill(data, 1f);
+            }
+
+            return NamedOnnxValue.CreateFromTensor(inputName, new DenseTensor<float>(data, dims));
         }
 
         if (elementType == typeof(Half))
