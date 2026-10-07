@@ -87,18 +87,6 @@ public sealed class FileSystemArtifactStore : IArtifactStore
             cancellationToken).ConfigureAwait(false);
     }
 
-    public Task CommitNewAsync(ArtifactWriteHandle handle, Trackdub.Contracts.Transcripts.ArtifactPromotionReceipt receipt, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (receipt.CreatedByAttempt || receipt.TemporaryPath != handle.TemporaryPath || receipt.FinalPath != handle.FinalPath)
-            throw new InvalidOperationException("Promotion receipt does not identify this uncommitted write handle.");
-        Directory.CreateDirectory(Path.GetDirectoryName(handle.FinalPath)!);
-        File.Move(handle.TemporaryPath, handle.FinalPath, overwrite: false);
-        // No cancellation check or fallible work between the successful move and ownership recording.
-        receipt.MarkCreated();
-        return Task.CompletedTask;
-    }
-
     public async Task WriteJsonAsync<T>(string relativePath, T value, CancellationToken cancellationToken)
     {
         using var phase = BenchmarkPhaseCapture.Start("artifact-json-write");

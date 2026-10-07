@@ -10,8 +10,6 @@ internal sealed class ArtifactWriteTransaction(ArtifactWriteHandle handle) : IAs
 {
     private bool _committed;
 
-    public ArtifactWriteHandle Handle => handle;
-
     public string TemporaryPath => handle.TemporaryPath;
     public string FinalPath => handle.FinalPath;
 

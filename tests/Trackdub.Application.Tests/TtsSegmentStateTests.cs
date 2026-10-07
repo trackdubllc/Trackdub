@@ -329,8 +329,7 @@ public sealed class TtsSegmentStateTests
             mediaAssetRepository,
             ttsTakeRepository,
             stageRunStore,
-            durationAnalysisService,
-            commitBoundary: TestAtomicCommitBoundary.Create(null, ttsTakeRepository, artifactStore, mediaAssetRepository));
+            durationAnalysisService);
 
         return new TtsOrchestrationService(
             startHandler,

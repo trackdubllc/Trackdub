@@ -223,8 +223,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
             durationAnalysisService,
             audioTimeStretchService,
             normalizedTimingOptions,
-            ttsAudioPostProcessor,
-            commitBoundary: TestAtomicCommitBoundary.Create(null, ttsTakeRepository, artifactStore, mediaRepository));
+            ttsAudioPostProcessor);
         var ttsOrchestrationService = new TtsOrchestrationService(
             startTtsStageHandler,
             voiceAssignmentRepository,
@@ -268,8 +267,7 @@ public sealed partial class TranscriptProjectServiceTests : IDisposable
             ttsTakeRepository,
             stageRunStore,
             artifactStore,
-            artifactWriter,
-            commitBoundary: TestAtomicCommitBoundary.Create(translationRepository, ttsTakeRepository, artifactStore, mediaRepository));
+            artifactWriter);
         var stateService = new TranscriptProjectStateService(
             projectMediaIngestService,
             transcriptRepository,

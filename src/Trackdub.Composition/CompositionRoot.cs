@@ -356,8 +356,6 @@ public static class CompositionRoot
         services.TryAddScoped<IProjectStageRunStore, ObservedProjectStageRunStore>();
         services.TryAddScoped<ITranscriptRepository, SqliteTranscriptRepository>();
         services.TryAddScoped<ITranslationRepository, SqliteTranslationRepository>();
-        services.TryAddScoped<IAtomicRevisionPersistence, SqliteAtomicRevisionPersistence>();
-        services.TryAddScoped<IAtomicRevisionCommitBoundary, AtomicRevisionCommitBoundary>();
         services.TryAddScoped<IGlossaryRepository, SqliteGlossaryRepository>();
         services.TryAddSingleton<SqliteUserGlossaryDatabase>(sp =>
             new SqliteUserGlossaryDatabase(sp.GetRequiredService<IAppStoragePaths>().UserDataRoot));

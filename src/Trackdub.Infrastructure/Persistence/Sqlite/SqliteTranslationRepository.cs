@@ -143,15 +143,6 @@ public sealed class SqliteTranslationRepository(
         SqliteConnection connection = connectionLease.Connection;
         await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-        await SaveRevisionAsync(connection, transaction, revision, segments, cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    internal static async Task SaveRevisionAsync(
-        SqliteConnection connection, SqliteTransaction transaction, TranslationRevision revision,
-        IReadOnlyList<DomainTranslatedSegment> segments, CancellationToken cancellationToken,
-        bool guardExpectedHeads = false, Guid? expectedPrevious = null)
-    {
         await using (SqliteCommand revisionCommand = connection.CreateCommand())
         {
             revisionCommand.Transaction = transaction;
@@ -168,7 +159,7 @@ public sealed class SqliteTranslationRepository(
                     execution_provider,
                     revision_number,
                     created_at_utc)
-                SELECT
+                VALUES (
                     $id,
                     $projectId,
                     $stageRunId,
@@ -178,10 +169,7 @@ public sealed class SqliteTranslationRepository(
                     $modelId,
                     $executionProvider,
                     $revisionNumber,
-                    $createdAtUtc
-                WHERE $guard = 0 OR (
-                    (SELECT id FROM transcript_revisions WHERE project_id = $projectId ORDER BY revision_number DESC LIMIT 1) = $sourceTranscriptRevisionId
-                    AND (SELECT id FROM translation_revisions WHERE project_id = $projectId AND target_language = $targetLanguage ORDER BY revision_number DESC LIMIT 1) IS $expectedPrevious);
+                    $createdAtUtc);
                 """;
             revisionCommand.Parameters.AddWithValue("$id", revision.Id.ToString("D"));
             revisionCommand.Parameters.AddWithValue("$projectId", revision.ProjectId.ToString("D"));
@@ -193,12 +181,7 @@ public sealed class SqliteTranslationRepository(
             revisionCommand.Parameters.AddWithValue("$executionProvider", revision.ExecutionProvider ?? (object)DBNull.Value);
             revisionCommand.Parameters.AddWithValue("$revisionNumber", revision.RevisionNumber);
             revisionCommand.Parameters.AddWithValue("$createdAtUtc", revision.CreatedAtUtc.UtcDateTime);
-            revisionCommand.Parameters.AddWithValue("$guard", guardExpectedHeads ? 1 : 0);
-            revisionCommand.Parameters.AddWithValue("$expectedPrevious", expectedPrevious?.ToString("D") ?? (object)DBNull.Value);
-            if (await revisionCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
-            {
-                throw new InvalidDataException("Revision publication conflicted with the expected revision heads.");
-            }
+            await revisionCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
         await using SqliteCommand segmentCommand = connection.CreateCommand();
@@ -279,6 +262,7 @@ public sealed class SqliteTranslationRepository(
             }
         }
 
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static TranslationRevision ReadRevision(SqliteDataReader reader) =>

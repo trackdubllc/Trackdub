@@ -142,8 +142,7 @@ public sealed class StageContractsTests
             fingerprintService,
             mediaAssetRepository,
             ttsTakeRepository,
-            new FakeProjectStageRunStore(),
-            commitBoundary: TestAtomicCommitBoundary.Create(null, ttsTakeRepository, artifactStore, mediaAssetRepository));
+            new FakeProjectStageRunStore());
 
         StartTtsStageResult result = await handler.HandleAsync(
             new StartTtsStageRequest(
@@ -163,7 +162,7 @@ public sealed class StageContractsTests
         Assert.Equal("tts-hash", artifact.Sha256);
         Assert.Equal(42, artifact.SizeBytes);
         Assert.Equal(artifact.Id, take.ArtifactId);
-        Assert.EndsWith(".tmp", Assert.Single(fingerprintService.RequestedPaths));
+        Assert.Equal(artifact.RelativePath, Assert.Single(fingerprintService.RequestedPaths));
         Assert.True(artifactStore.Exists(artifact.RelativePath));
     }
 
@@ -353,8 +352,7 @@ public sealed class StageContractsTests
             fingerprintService,
             mediaAssetRepository,
             ttsTakeRepository,
-            new FakeProjectStageRunStore(),
-            commitBoundary: TestAtomicCommitBoundary.Create(null, ttsTakeRepository, artifactStore, mediaAssetRepository));
+            new FakeProjectStageRunStore());
 
         StartTtsStageRequest request = new(
             projectId, mediaAsset, speakerId, "es", voiceAssignment,
@@ -388,17 +386,14 @@ public sealed class StageContractsTests
         VoiceAssignment voiceAssignment = VoiceAssignment.Create(projectId, speakerId, "af_heart");
         var ttsTakeRepository = new FakeTtsTakeRepository();
         var fakeTtsEngine = new FakeTtsEngine();
-        var artifactStore = new FakeArtifactStore();
-        var mediaRepository = new FakeMediaAssetRepository();
         using var handler = new StartTtsStageHandler(
             fakeTtsEngine,
             new FakeVoiceCatalog(),
-            artifactStore,
+            new FakeArtifactStore(),
             new FakeFileFingerprintService(new FileFingerprint("tts-hash", 42, now)),
-            mediaRepository,
+            new FakeMediaAssetRepository(),
             ttsTakeRepository,
-            new FakeProjectStageRunStore(),
-            commitBoundary: TestAtomicCommitBoundary.Create(null, ttsTakeRepository, artifactStore, mediaRepository));
+            new FakeProjectStageRunStore());
 
         StartTtsStageRequest request = new(
             projectId, mediaAsset, speakerId, "es", voiceAssignment,
@@ -455,16 +450,14 @@ public sealed class StageContractsTests
         var probe = new PersistenceConcurrencyProbe();
         var mediaAssetRepository = new ProbedMediaAssetRepository(probe);
         var ttsTakeRepository = new ProbedTtsTakeRepository(probe);
-        var artifactStore = new FakeArtifactStore();
         using var handler = new StartTtsStageHandler(
             new DelayingTtsEngine(),
             new FakeVoiceCatalog(),
-            artifactStore,
+            new FakeArtifactStore(),
             new FakeFileFingerprintService(new FileFingerprint("tts-hash", 42, now)),
             mediaAssetRepository,
             ttsTakeRepository,
-            new FakeProjectStageRunStore(),
-            commitBoundary: TestAtomicCommitBoundary.Create(null, ttsTakeRepository, artifactStore, mediaAssetRepository));
+            new FakeProjectStageRunStore());
 
         StartTtsStageResult result = await handler.HandleAsync(
             new StartTtsStageRequest(

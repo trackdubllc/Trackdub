@@ -65,10 +65,6 @@ public sealed class FakeArtifactStore(string? rootDirectory = null) : IArtifactS
     public async Task CommitAsync(ArtifactWriteHandle handle, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(handle);
-        if (FailingJsonWriteFileName is not null && Path.GetFileName(handle.RelativePath).StartsWith(
-            Path.GetFileNameWithoutExtension(FailingJsonWriteFileName), StringComparison.OrdinalIgnoreCase))
-            throw new IOException("Simulated artifact promotion failure.");
-
         if (File.Exists(handle.TemporaryPath))
         {
             byte[] bytes = await File.ReadAllBytesAsync(
@@ -89,13 +85,6 @@ public sealed class FakeArtifactStore(string? rootDirectory = null) : IArtifactS
         }
 
         pendingCommits.Remove(handle.TemporaryPath);
-    }
-
-    public async Task CommitNewAsync(ArtifactWriteHandle handle, Trackdub.Contracts.Transcripts.ArtifactPromotionReceipt receipt, CancellationToken cancellationToken)
-    {
-        if (Exists(handle.RelativePath)) throw new IOException("Artifact destination already exists.");
-        await CommitAsync(handle, cancellationToken);
-        receipt.MarkCreated();
     }
 
     public async Task WriteJsonAsync<T>(string relativePath, T value, CancellationToken cancellationToken)

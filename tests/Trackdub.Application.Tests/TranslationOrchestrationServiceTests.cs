@@ -47,8 +47,7 @@ public sealed class TranslationOrchestrationServiceTests
             ttsTakeRepository,
             stageRunStore,
             artifactStore,
-            artifactWriter,
-            commitBoundary: TestAtomicCommitBoundary.Create(translationRepository, ttsTakeRepository, artifactStore, mediaAssetRepository));
+            artifactWriter);
 
         TranscriptProjectState state = BuildStateWithTranslationRevision();
 
@@ -100,8 +99,7 @@ public sealed class TranslationOrchestrationServiceTests
             new TranscriptArtifactWriter(
                 artifactStore,
                 new FakeFileFingerprintService(),
-                new FakeMediaAssetRepository()),
-            commitBoundary: TestAtomicCommitBoundary.Create(new FakeTranslationRepository(), new FakeTtsTakeRepository(), artifactStore, new FakeMediaAssetRepository()));
+                new FakeMediaAssetRepository()));
 
         TranscriptProjectState state = BuildStateWithTranslationRevision();
         RetranslateSegmentRequest request = new(
@@ -140,8 +138,7 @@ public sealed class TranslationOrchestrationServiceTests
             new TranscriptArtifactWriter(
                 artifactStore,
                 new FakeFileFingerprintService(),
-                new FakeMediaAssetRepository()),
-            commitBoundary: TestAtomicCommitBoundary.Create(new FakeTranslationRepository(), new FakeTtsTakeRepository(), artifactStore, new FakeMediaAssetRepository()));
+                new FakeMediaAssetRepository()));
 
         TranscriptProjectState state = BuildStateWithTranslationRevision();
         RetranslateSegmentRequest request = new(
@@ -590,8 +587,7 @@ public sealed class TranslationOrchestrationServiceTests
             ttsTakeRepository,
             stageRunStore,
             artifactStore,
-            artifactWriter,
-            commitBoundary: TestAtomicCommitBoundary.Create(translationRepository, ttsTakeRepository, artifactStore, mediaAssetRepository));
+            artifactWriter);
 
         TranscriptProjectState state = BuildStateWithTranslationRevision(transcriptLanguage, segmentDetectedLanguage, segmentCount);
         return new TranslationHarness(service, state, stageRunStore, artifactStore, () => capturedSourceLanguage, translationRepository);
