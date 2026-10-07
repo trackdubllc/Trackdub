@@ -135,6 +135,7 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
         Assert.Equal(0f, (float)tensor[0, 1]);
     }
 
+    /// <summary>Verifies that Half conditioning inputs retain their declared shape and zero-filled values.</summary>
     [Fact]
     public void CreateTtsInputValue_supports_half_metadata()
     {
@@ -151,6 +152,7 @@ public sealed class OnnxExecutionProviderSmokeTesterTests
         Assert.Equal((Half)0f, tensor[0, 1]);
     }
 
+    /// <summary>Verifies that the Kokoro probe receives unit speed to prevent a zero-duration Reshape failure.</summary>
     [Fact]
     public void CreateTtsInputValue_uses_unit_speed_for_kokoro_speed_input()
     {
