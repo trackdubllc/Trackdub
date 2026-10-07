@@ -68,6 +68,7 @@ src/Trackdub.Inference.Onnx/.mono/
 projects/
 !src/**/Projects/
 !src/**/Projects/**
+!tests/Trackdub.Inference.Tests/fixtures/whisper-real-speech-16k-mono.wav
 tests/Trackdub.Sdk.Tests/Fixtures/smoke.mp4
 
 # --- Logs and temp files ---
