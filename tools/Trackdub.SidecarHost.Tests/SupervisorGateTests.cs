@@ -43,7 +43,11 @@ public sealed class SupervisorGateTests
         catch (OperationCanceledException)
         {
             try { proc.Kill(entireProcessTree: true); }
-            catch { /* best-effort: the test fails below regardless */ }
+            catch (Exception ex) when (ex is InvalidOperationException
+                or System.ComponentModel.Win32Exception)
+            {
+                // best-effort: the test fails below regardless
+            }
             throw new InvalidOperationException("supervisor --check produced no verdict within 200s (stdout read timed out)");
         }
         Assert.True(proc.WaitForExit(200_000), "supervisor --check timed out");

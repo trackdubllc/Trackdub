@@ -202,15 +202,26 @@ internal static class FakeWorkerPublish
         using var proc = Process.Start(psi) ?? throw new InvalidOperationException("failed to start dotnet publish");
 
         // Drain both pipes concurrently: reading stdout to EOF before stderr can
-        // deadlock when the child fills the stderr buffer while we wait.
-        Task<string> stdoutTask = proc.StandardOutput.ReadToEndAsync();
-        Task<string> stderrTask = proc.StandardError.ReadToEndAsync();
-        string output = stdoutTask.Result + stderrTask.Result;
-
-        if (!proc.WaitForExit(120_000))
+        // deadlock when the child fills the stderr buffer while we wait. The
+        // 120s budget applies to the WHOLE publish (drain + exit), so a hung
+        // dotnet publish fails here instead of blocking the test run forever.
+        using var publishCts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+        Task<string> stdoutTask = proc.StandardOutput.ReadToEndAsync(publishCts.Token);
+        Task<string> stderrTask = proc.StandardError.ReadToEndAsync(publishCts.Token);
+        string output;
+        try
         {
-            try { proc.Kill(entireProcessTree: true); }
-            catch { /* best-effort: we fail below with the collected output */ }
+            output = stdoutTask.GetAwaiter().GetResult() + stderrTask.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            KillBestEffort(proc);
+            throw new InvalidOperationException("dotnet publish timed out after 120s (no output)");
+        }
+
+        if (!proc.WaitForExit(5_000))
+        {
+            KillBestEffort(proc);
             throw new InvalidOperationException($"dotnet publish timed out after 120s: {output}");
         }
         if (proc.ExitCode != 0)
@@ -219,6 +230,22 @@ internal static class FakeWorkerPublish
         }
 
         return dll;
+
+        static void KillBestEffort(Process proc)
+        {
+            try
+            {
+                proc.Kill(entireProcessTree: true);
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // best-effort: the caller fails below with the collected output
+            }
+            catch (InvalidOperationException)
+            {
+                // process already exited — nothing to kill
+            }
+        }
 
         static string FindRepoRoot()
         {
