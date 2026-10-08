@@ -277,7 +277,8 @@ public sealed class ExportStageHandler(
             request.DuckingGainDb,
             RestoreOriginalPan: request.RestoreOriginalPan,
             ApplyTimbrePolish: request.ApplyTimbrePolish,
-            CandidateGroups: candidateGroups));
+            CandidateGroups: candidateGroups,
+            MediaDurationSeconds: mediaAsset.DurationSeconds));
         await mixPlanStore.SaveAsync(mixPlan, cancellationToken).ConfigureAwait(false);
         if (mixPlan.Warnings.Count > 0)
         {
