@@ -87,11 +87,7 @@ public sealed class StartTtsStageHandler(
                 .ResolvePlacementAsync(options, languageCode, cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
         {
             logger?.LogWarning("TTS placement could not be resolved; using the host-wide VRAM bound.", ex);
             return null;
