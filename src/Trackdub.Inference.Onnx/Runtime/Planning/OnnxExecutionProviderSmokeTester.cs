@@ -1304,6 +1304,8 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         return (waveformName, lengthName);
     }
 
+    /// <summary>Resolves a one-second, 16 kHz probe waveform for rank-one or rank-two diarization inputs.</summary>
+    /// <exception cref="InvalidOperationException">The model declares an unsupported waveform rank.</exception>
     private static int[] ResolveDiarizationWaveformShape(IReadOnlyList<int> modelDimensions) =>
         modelDimensions.Count switch
         {
@@ -1312,6 +1314,11 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             _ => throw new InvalidOperationException("Smoke test diarization waveform input must be rank 1 or 2.")
         };
 
+    /// <summary>
+    /// Creates a TTS probe tensor with the declared shape and element type, using unit speed for
+    /// the float <c>speed</c> input to avoid Kokoro's zero-speed duration failure and zeros otherwise.
+    /// </summary>
+    /// <returns>The probe input, or <see langword="null"/> when the element type is unsupported.</returns>
     private static NamedOnnxValue? CreateTtsInputValue(string inputName, Type elementType, int[] dims)
     {
         int elementCount = dims.Aggregate(1, static (a, b) => checked(a * b));
@@ -1323,7 +1330,15 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
         if (elementType == typeof(float))
         {
-            return NamedOnnxValue.CreateFromTensor(inputName, new DenseTensor<float>(new float[elementCount], dims));
+            float[] data = new float[elementCount];
+            // Kokoro divides predicted durations by speed; zero yields an empty frame axis and
+            // the graph fails in /encoder/shared/Reshape.
+            if (string.Equals(inputName, "speed", StringComparison.Ordinal))
+            {
+                Array.Fill(data, 1f);
+            }
+
+            return NamedOnnxValue.CreateFromTensor(inputName, new DenseTensor<float>(data, dims));
         }
 
         if (elementType == typeof(Half))

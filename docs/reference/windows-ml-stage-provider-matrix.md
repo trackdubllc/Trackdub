@@ -91,7 +91,7 @@ TRT RTX is **not** a Windows ML catalog EP and is **not** selected by `WindowsMl
 |-------|---------------------|-------------------|-----------|-----------|-------|
 | VAD | `onnx-community/silero-vad` | `Trackdub.Benchmarks.DevHost --provider trt-rtx` | pending | *pending local GPU run* | Requires NVIDIA GPU + plugin bundle |
 | Headless status | — | `trackdub providers trt-rtx status` | pass | `tensorrt-rtx-plugin-ep-abi` | ready=true on net10.0 + net10.0-windows (RTX 5070 host) |
-| Headless install | — | `trackdub providers trt-rtx install --accept-license` | pending | — | License-gated bundle download |
+| Headless install | — | `trackdub providers trt-rtx install --accept-license` | pass | `tensorrt-rtx-plugin-ep-abi` | 2026-10-07: bundle already installed at 0.4.2 cu13, re-registered cleanly |
 | DubBench | same as benchmark | DubBench ONNX run after shared bootstrap | pending | — | Uses `BenchmarkOnnxExecutionBootstrap` |
 
 `trackdub providers trt-rtx smoke` (net10.0, RTX 5070, plugin 0.3.0 cu12) per-target results:
@@ -107,6 +107,15 @@ TRT RTX is **not** a Windows ML catalog EP and is **not** selected by `WindowsMl
 | chatterbox (onnx-community) | model-dependent | stage exclusion stands for real runs; smoke probe subgraphs may still pass |
 | cosyvoice | pass on smoke probe | family exclusion lifted; smoke creates every graph session (TRT-pinned) and runs the primary probe |
 | qwen3-tts | pass on smoke probe | stage exclusion remains; probe coverage is partial |
+
+### 0.4.2 cu13 re-verification (2026-10-07, RTX 5070, ORT 1.30)
+
+`trackdub providers trt-rtx status` → ready, plugin registered from `Providers/trt-rtx/0.4.2/cu13/win-x64`.
+`verify` on staged SortFormer fp16 → passed. Full `RemainingOnnxGpu` smoke: 35/35 targets completed,
+15 passed / 20 failed / 0 skipped, zero native crashes. All 20 failures are the strict-harness kind —
+"requested tensorrt-rtx but session selected cpu" on shape-dynamic graphs the planner routes around
+(Oct 2026 triage pattern); production runs of those models fall back to DirectML/CPU by design.
+Unit suite: 59/59 TensorRtRtx tests green. The 0.3.0 cu12 table above is retained as history.
 
 Prerequisites: [tensorrt-rtx-ep-abi-plugin.md](tensorrt-rtx-ep-abi-plugin.md) (Model Manager, `Fetch-TrtRtxEp.ps1`, or license-accepted auto-download). Optional CI: `.github/workflows/trt-rtx-smoke.yml` when repository variable `TRACKDUB_TRT_RTX_SMOKE=true`.
 

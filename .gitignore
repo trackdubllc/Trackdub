@@ -130,6 +130,8 @@ yarn.lock
 .python-version
 .venv/
 venv/
+workers/supervisor/target/
+workers/chatterbox/.cache/
 *.egg-info/
 tools/stemlab/
 tools/win-x64/
