@@ -61,6 +61,7 @@ internal sealed class MadladTokenizerDecoder
         return tokenizer
             .EncodeToIds($"{targetLanguageTag} {text.Trim()}")
             .Select(static tokenId => (long)tokenId)
+            .Append(EndOfSentenceTokenId)
             .ToArray();
     }
 
