@@ -767,6 +767,7 @@ public sealed class ExportStageHandler(
             MixPlanWarningCode.StaleTake => "stale-take",
             MixPlanWarningCode.MissingTakeArtifact => "missing-take-artifact",
             MixPlanWarningCode.LipSyncArtifactMissing => "lip-sync-artifact-missing",
+            MixPlanWarningCode.TakeExceedsSourceAudio => "take-exceeds-source-audio",
             _ => "invalid-take"
         };
 

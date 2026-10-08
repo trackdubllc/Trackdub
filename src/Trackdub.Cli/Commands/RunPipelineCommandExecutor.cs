@@ -43,6 +43,7 @@ internal sealed class PipelineRunState
     public bool? TtsRubberbandStretch;
     public bool NoTtsRubberbandStretch;
     public double? TtsRubberbandThreshold;
+    public double? TtsAutoStretchMaxOverrun;
 }
 
 internal sealed record BatchExecutionContext(
@@ -113,6 +114,7 @@ internal static class RunPipelineCommandExecutor
         state.TtsRubberbandStretch = parseResult.GetValue(options.TtsRubberbandStretch);
         state.NoTtsRubberbandStretch = parseResult.GetValue(options.NoTtsRubberbandStretch);
         state.TtsRubberbandThreshold = parseResult.GetValue(options.TtsRubberbandThreshold);
+        state.TtsAutoStretchMaxOverrun = parseResult.GetValue(options.TtsAutoStretchMaxOverrun);
     }
 
     private static void ParseBatchInputs(ParseResult parseResult, PipelineCommandOptions options, PipelineRunState state)
@@ -278,7 +280,8 @@ internal static class RunPipelineCommandExecutor
             state.MatchLoudness, state.VoiceOverrides, state.SubtitleFormats,
             state.SubtitleSource, state.BurnInSubtitles, state.VideoEncoderKey,
             stageFilter, state.ForceRerun,
-            state.TtsRubberbandStretch, state.NoTtsRubberbandStretch, state.TtsRubberbandThreshold);
+            state.TtsRubberbandStretch, state.NoTtsRubberbandStretch, state.TtsRubberbandThreshold,
+            state.TtsAutoStretchMaxOverrun);
 
         var batchOptions = new BatchOptions
         {
@@ -293,6 +296,7 @@ internal static class RunPipelineCommandExecutor
             state.TtsRubberbandStretch,
             state.NoTtsRubberbandStretch,
             state.TtsRubberbandThreshold,
+            state.TtsAutoStretchMaxOverrun,
             cancellationToken).ConfigureAwait(false);
         if (timingExitCode != Program.ExitSuccess)
         {
@@ -637,7 +641,8 @@ internal static class RunPipelineCommandExecutor
                     state.TimbrePolish, state.RestorePan, state.MatchLoudness,
                     state.VoiceOverrides, state.SubtitleFormats, state.SubtitleSource,
                     state.BurnInSubtitles, state.VideoEncoderKey, stageFilter, state.ForceRerun,
-                    state.TtsRubberbandStretch, state.NoTtsRubberbandStretch, state.TtsRubberbandThreshold),
+                    state.TtsRubberbandStretch, state.NoTtsRubberbandStretch, state.TtsRubberbandThreshold,
+                    state.TtsAutoStretchMaxOverrun),
                 progress, Console.Out, ct),
             cancellationToken);
     }

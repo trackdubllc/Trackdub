@@ -33,7 +33,8 @@ internal sealed record PipelineCommandOptions(
     Option<bool> ContinueOnError,
     Option<bool?> TtsRubberbandStretch,
     Option<bool> NoTtsRubberbandStretch,
-    Option<double?> TtsRubberbandThreshold);
+    Option<double?> TtsRubberbandThreshold,
+    Option<double?> TtsAutoStretchMaxOverrun);
 
 internal static class RunPipelineCommandOptions
 {
@@ -68,14 +69,14 @@ internal static class RunPipelineCommandOptions
         var videoEncoder = CreateVideoEncoderOption();
         var preset = CreatePresetOption();
         var batch = CreateBatchOptions(out Option<string?> inputGlob, out Option<bool> recursive, out Option<bool> continueOnError);
-        var ttsRubberband = CreateTtsRubberbandOptions(out Option<bool> noTtsRubberband, out Option<double?> ttsRubberbandThreshold);
+        var ttsRubberband = CreateTtsRubberbandOptions(out Option<bool> noTtsRubberband, out Option<double?> ttsRubberbandThreshold, out Option<double?> ttsAutoStretchMaxOverrun);
 
         return new PipelineCommandOptions(
             media, targetLanguage, sourceLanguage, output, model, exportFormat,
             fromStage, only, lipSync, repairLips, forceRerun, refinement, voiceClone, timbre, noTimbre,
             restorePan, matchLoudness, voice, subtitleFormat, subtitleSource,
             burnIn, videoEncoder, preset, batch, inputGlob, recursive, continueOnError,
-            ttsRubberband, noTtsRubberband, ttsRubberbandThreshold);
+            ttsRubberband, noTtsRubberband, ttsRubberbandThreshold, ttsAutoStretchMaxOverrun);
     }
 
     public static void AddTo(Command command, PipelineCommandOptions options)
@@ -110,6 +111,7 @@ internal static class RunPipelineCommandOptions
         command.Add(options.TtsRubberbandStretch);
         command.Add(options.NoTtsRubberbandStretch);
         command.Add(options.TtsRubberbandThreshold);
+        command.Add(options.TtsAutoStretchMaxOverrun);
     }
 
     private static Option<string?> CreateMediaOption() => new("--media")
@@ -303,7 +305,8 @@ internal static class RunPipelineCommandOptions
 
     private static Option<bool?> CreateTtsRubberbandOptions(
         out Option<bool> noTtsRubberband,
-        out Option<double?> ttsRubberbandThreshold)
+        out Option<double?> ttsRubberbandThreshold,
+        out Option<double?> ttsAutoStretchMaxOverrun)
     {
         var ttsRubberbandStretch = new Option<bool?>("--tts-rubberband-stretch")
         {
@@ -317,6 +320,10 @@ internal static class RunPipelineCommandOptions
         ttsRubberbandThreshold = new Option<double?>("--tts-rubberband-threshold")
         {
             Description = "Rubberband stretch mismatch threshold in 0..1 (fraction of source duration). Optional; overrides host settings when Rubberband stretch is on.",
+        };
+        ttsAutoStretchMaxOverrun = new Option<double?>("--tts-auto-stretch-max-overrun")
+        {
+            Description = "Maximum take overhang (fraction of source duration, 0..1) that auto time-stretch is allowed to fix. Takes overrunning by more are flagged for manual stretching instead. Optional; overrides host TTS timing settings for this run.",
         };
         return ttsRubberbandStretch;
     }

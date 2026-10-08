@@ -762,7 +762,8 @@ public static class CompositionRoot
         return TtsTimingOptions.Default with
         {
             EnableRubberbandStretch = normalized.EnableRubberbandStretch,
-            RubberbandStretchThreshold = normalized.RubberbandStretchThreshold
+            RubberbandStretchThreshold = normalized.RubberbandStretchThreshold,
+            AutoStretchMaxOverrun = normalized.AutoStretchMaxOverrun ?? TtsTimingOptions.Default.AutoStretchMaxOverrun
         };
     }
 

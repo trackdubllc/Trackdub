@@ -23,7 +23,8 @@ public sealed class JsonStudioSettingsServiceTests
             ],
             TtsTiming: new TtsTimingSettings(
                 EnableRubberbandStretch: true,
-                RubberbandStretchThreshold: 0.25d),
+                RubberbandStretchThreshold: 0.25d,
+                AutoStretchMaxOverrun: 0.4d),
             TranscriptConfidenceThreshold: 0.63d,
             AsrModelOverride: AsrModelOverride.OnnxRuntime,
             Export: new StudioExportSettings(
@@ -54,6 +55,7 @@ public sealed class JsonStudioSettingsServiceTests
             Assert.Single(loaded.RecentProjects);
             Assert.True(loaded.TtsTiming!.EnableRubberbandStretch);
             Assert.Equal(0.25d, loaded.TtsTiming.RubberbandStretchThreshold);
+            Assert.Equal(0.4d, loaded.TtsTiming.AutoStretchMaxOverrun);
             Assert.Equal(0.63d, loaded.TranscriptConfidenceThreshold);
             Assert.Equal(AsrModelOverride.OnnxRuntime, loaded.AsrModelOverride);
             Assert.NotNull(loaded.Export);
@@ -315,6 +317,7 @@ public sealed class JsonStudioSettingsServiceTests
             Assert.NotNull(loaded.TtsTiming);
             Assert.False(loaded.TtsTiming!.EnableRubberbandStretch);
             Assert.Equal(0.15d, loaded.TtsTiming.RubberbandStretchThreshold);
+            Assert.Null(loaded.TtsTiming.AutoStretchMaxOverrun);
         }
         finally
         {

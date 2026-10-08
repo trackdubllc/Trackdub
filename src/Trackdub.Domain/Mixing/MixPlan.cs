@@ -153,5 +153,6 @@ public enum MixPlanWarningCode
     MissingTake,
     StaleTake,
     MissingTakeArtifact,
-    LipSyncArtifactMissing
+    LipSyncArtifactMissing,
+    TakeExceedsSourceAudio
 }

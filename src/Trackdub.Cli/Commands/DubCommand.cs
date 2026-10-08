@@ -169,6 +169,11 @@ internal static class DubCommand
             Description = "Rubberband stretch mismatch threshold in 0..1 (fraction of source duration). Optional; overrides host settings when Rubberband stretch is on.",
         };
 
+        var ttsAutoStretchMaxOverrunOption = new Option<double?>("--tts-auto-stretch-max-overrun")
+        {
+            Description = "Maximum take overhang (fraction of source duration, 0..1) that auto time-stretch is allowed to fix. Takes overrunning by more are flagged for manual stretching instead. Optional; overrides host TTS timing settings for this run.",
+        };
+
         var command = new Command("dub", """
             Execute a full dubbing pipeline from media ingest through export.
 
@@ -207,6 +212,7 @@ internal static class DubCommand
             ttsRubberbandStretchOption,
             noTtsRubberbandStretchOption,
             ttsRubberbandThresholdOption,
+            ttsAutoStretchMaxOverrunOption,
         };
 
         command.SetAction(async (ParseResult parseResult, CancellationToken cancellationToken) =>
@@ -235,6 +241,7 @@ internal static class DubCommand
             bool? ttsRubberbandStretch = parseResult.GetValue(ttsRubberbandStretchOption);
             bool noTtsRubberbandStretch = parseResult.GetValue(noTtsRubberbandStretchOption);
             double? ttsRubberbandThreshold = parseResult.GetValue(ttsRubberbandThresholdOption);
+            double? ttsAutoStretchMaxOverrun = parseResult.GetValue(ttsAutoStretchMaxOverrunOption);
 
             Dictionary<string, string>? voiceOverrides = CliModelOverrides.ParseVoiceOverrides(voiceOverrideTokens);
             if (voiceOverrides is null)
@@ -340,7 +347,8 @@ internal static class DubCommand
                     videoEncoderKey,
                     ttsRubberbandStretch: ttsRubberbandStretch,
                     noTtsRubberbandStretch: noTtsRubberbandStretch,
-                    ttsRubberbandThreshold: ttsRubberbandThreshold);
+                    ttsRubberbandThreshold: ttsRubberbandThreshold,
+                    ttsAutoStretchMaxOverrun: ttsAutoStretchMaxOverrun);
 
                 // Build BatchOptions
                 var batchOptions = new BatchOptions
@@ -366,6 +374,7 @@ internal static class DubCommand
                         ttsRubberbandStretch,
                         noTtsRubberbandStretch,
                         ttsRubberbandThreshold,
+                        ttsAutoStretchMaxOverrun,
                         cancellationToken).ConfigureAwait(false);
                     if (timingExitCode != Program.ExitSuccess)
                     {
@@ -485,7 +494,8 @@ internal static class DubCommand
                             videoEncoderKey,
                             ttsRubberbandStretch: ttsRubberbandStretch,
                             noTtsRubberbandStretch: noTtsRubberbandStretch,
-                            ttsRubberbandThreshold: ttsRubberbandThreshold),
+                            ttsRubberbandThreshold: ttsRubberbandThreshold,
+                            ttsAutoStretchMaxOverrun: ttsAutoStretchMaxOverrun),
                         progress,
                         Console.Out,
                         ct).ConfigureAwait(false),
