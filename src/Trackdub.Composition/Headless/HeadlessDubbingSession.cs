@@ -21,7 +21,27 @@ internal sealed class HeadlessDubbingSession : IDubbingSession
         _scope = scope;
 
         var context = _scope.ServiceProvider.GetRequiredService<TranscriptWorkspaceContext>();
-        context.Initialize(projectRootPath, settings);
+        StudioSettings? effectiveSettings = settings;
+        if (effectiveSettings is null)
+        {
+            effectiveSettings = _scope.ServiceProvider
+                .GetRequiredService<IStudioSettingsService>()
+                .LoadAsync(CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        else if (effectiveSettings.TtsMaxConcurrency is null)
+        {
+            int? persistedTtsMaxConcurrency = _scope.ServiceProvider
+                .GetRequiredService<IStudioSettingsService>()
+                .LoadAsync(CancellationToken.None)
+                .GetAwaiter()
+                .GetResult()
+                .TtsMaxConcurrency;
+            effectiveSettings = effectiveSettings with { TtsMaxConcurrency = persistedTtsMaxConcurrency };
+        }
+
+        context.Initialize(projectRootPath, effectiveSettings);
 
         ProjectRootPath = context.ProjectRootPath;
         Workspace = _scope.ServiceProvider.GetRequiredService<TranscriptWorkspace>();
