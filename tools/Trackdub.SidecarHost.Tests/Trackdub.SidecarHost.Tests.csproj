@@ -6,6 +6,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <!-- FakeWorker is a standalone console project published on demand by the tests;
+       keep its sources out of the test compilation (top-level statements clash). -->
+  <ItemGroup>
+    <Compile Remove="FakeWorker\**" />
+    <None Remove="FakeWorker\**" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
