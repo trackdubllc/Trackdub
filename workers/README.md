@@ -37,7 +37,7 @@ lane + `ISidecarHost` + stage integration) is explicitly out of scope.
 ```bash
 cargo test --manifest-path workers/supervisor/Cargo.toml   # Rust supervisor: 14 tests
 cd workers/chatterbox && uv sync --dev && uv run pytest tests -q && cd ../..   # Python protocol: 15 tests
-dotnet test tools/Trackdub.SidecarHost.Tests -m:1          # C# host: 9 pass, 3 honest skips
+dotnet test tools/Trackdub.SidecarHost.Tests -m:1          # C# host: 13 pass, 3 honest skips
 ```
 
 Live-worker tests (`ChatterboxLiveWorkerTests`, `SupervisorGateTests`,
@@ -52,9 +52,13 @@ cd workers/chatterbox && uv sync --extra model && cd ../..
 TRACKDUB_SIDECAR_TESTS=1 dotnet test tools/Trackdub.SidecarHost.Tests -m:1
 ```
 
-The first `load` downloads the 2.7 GB Chatterbox weights once (or reuses the
-Trackdub model-cache snapshot at `%LOCALAPPDATA%/Trackdub/model-cache/ResembleAI/chatterbox`;
-override with `TRACKDUB_CHATTERBOX_SNAPSHOT`). The Rust supervisor gate test
+**Stage the model snapshot first.** The live tests assert the snapshot
+directory exists *before* spawning the worker and fail fast when it is
+missing — there is no download-on-first-load here. Stage the Chatterbox
+snapshot where `from_local` expects it
+(`%LOCALAPPDATA%/Trackdub/model-cache/ResembleAI/chatterbox`, override with
+`TRACKDUB_CHATTERBOX_SNAPSHOT`), e.g. by populating that directory from the
+Trackdub model cache or a prior supervised run. The Rust supervisor gate test
 additionally needs `cargo build --release --manifest-path
 workers/supervisor/Cargo.toml` first.
 

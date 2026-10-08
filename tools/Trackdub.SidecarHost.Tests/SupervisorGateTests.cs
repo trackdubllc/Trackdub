@@ -11,7 +11,9 @@ public sealed class SupervisorGateTests
         // The shipped supervision path: the Rust binary gates the real Python
         // worker through the protocol health check and prints its verdict JSON.
         string repoRoot = FindRepoRoot();
-        string supervisorExe = Path.Join(repoRoot, "workers", "supervisor", "target", "release", "trackdub-supervisor.exe");
+        // cargo names the binary trackdub-supervisor on Linux/macOS, with .exe on Windows.
+        string supervisorExe = Path.Join(repoRoot, "workers", "supervisor", "target", "release",
+            OperatingSystem.IsWindows() ? "trackdub-supervisor.exe" : "trackdub-supervisor");
         Assert.True(File.Exists(supervisorExe),
             $"supervisor binary missing at {supervisorExe} — run: cargo build --release --manifest-path workers/supervisor/Cargo.toml");
 
@@ -29,7 +31,21 @@ public sealed class SupervisorGateTests
         }
 
         using var proc = Process.Start(psi) ?? throw new InvalidOperationException("failed to start supervisor");
-        string output = await proc.StandardOutput.ReadToEndAsync();
+        // Bound the stdout read too: it completes only when the supervisor closes
+        // stdout (normally at exit), so without a token a hung supervisor would
+        // outlive the WaitForExit guard and hang the test indefinitely.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(200));
+        string output;
+        try
+        {
+            output = await proc.StandardOutput.ReadToEndAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try { proc.Kill(entireProcessTree: true); }
+            catch { /* best-effort: the test fails below regardless */ }
+            throw new InvalidOperationException("supervisor --check produced no verdict within 200s (stdout read timed out)");
+        }
         Assert.True(proc.WaitForExit(200_000), "supervisor --check timed out");
         Assert.Equal(0, proc.ExitCode);
         Assert.Contains("\"status\":\"accepted\"", output);

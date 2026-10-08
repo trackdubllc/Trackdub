@@ -35,8 +35,8 @@ public sealed class ChatterboxLiveWorkerTests
         Assert.False(health.ModelLoaded, "fresh worker must not claim a loaded model");
 
         SidecarResponse load = worker.Request(new SidecarRequest("l1", "load",
-            Plan: new SidecarLoadPlan(ModelSnapshotDir, ["CUDA", "CPU"], RequirePreferred: false)),
-            timeout: SupervisedSidecarWorker.LoadTimeout);
+            Plan: new SidecarLoadPlan(ModelSnapshotDir, ["CUDA", "CPU"], RequirePreferred: false)));
+        // No explicit timeout needed: Request applies LoadTimeout for op "load".
         Assert.Equal("loaded", load.Status);
         Assert.Contains(load.ActiveProvider, new[] { "cuda", "cpu" });
 
@@ -49,7 +49,22 @@ public sealed class ChatterboxLiveWorkerTests
         Assert.Equal(24000, infer.SampleRate);
         // Real audio: >0.5s of non-silent 16-bit PCM (24k samples/s).
         Assert.NotNull(infer.Outputs);
-        Assert.True(infer.Outputs!["audio"].Shape[0] > 12000, $"expected more than 0.5s of audio, got {infer.Outputs!["audio"].Shape[0]} samples");
+        SidecarTensor audio = infer.Outputs!["audio"];
+        Assert.True(audio.Shape[0] > 12000, $"expected more than 0.5s of audio, got {audio.Shape[0]} samples");
+        // The envelope must carry the samples it claims: int16 => 2 bytes/sample.
+        Assert.True(audio.Data.Length == audio.Shape[0] * 2,
+            $"audio envelope carries {audio.Data.Length} bytes for {audio.Shape[0]} int16 samples");
+        // ... and at least one sample must be non-zero, or the output is silence.
+        bool anyNonZero = false;
+        for (int i = 0; i < audio.Data.Length; i += 2)
+        {
+            if (audio.Data[i] != 0 || audio.Data[i + 1] != 0)
+            {
+                anyNonZero = true;
+                break;
+            }
+        }
+        Assert.True(anyNonZero, "audio is all-zero PCM: the worker produced silence, not real speech");
         Assert.True(sw.Elapsed.TotalSeconds > 0, "infer wall time must be positive");
         await Task.CompletedTask;
     }

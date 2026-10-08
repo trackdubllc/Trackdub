@@ -150,7 +150,13 @@ def handle_load(request_id, plan):
                           f"(expected {CHATTERBOX_REPO} or a local snapshot dir)")
             return
     try:
-        torch, ChatterboxTTS = _import_model_stack()
+        # Import inside the protocol-stdout guard: torch/chatterbox/transformers
+        # imports can print banners at import time (the perth class of bug), and
+        # any import-time stdout write would land in the protocol stream ahead
+        # of the "loaded" response. Only Python-level writes are redirected;
+        # native-fd writes cannot be swapped this way and remain a known gap.
+        with _protocol_stdout():
+            torch, ChatterboxTTS = _import_model_stack()
     except ImportError as ex:
         respond(request_id, "error", reason="dependency-missing", detail=str(ex))
         return
