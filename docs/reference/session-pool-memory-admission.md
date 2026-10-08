@@ -102,9 +102,11 @@ TTS synthesizes segments in parallel. The effective degree of parallelism is
   - Runtime device fallback after an out-of-memory error can move sessions to another device
     after the bound is set; the bound is not recomputed mid-run.
 
-When adapter memory cannot be read (CPU-only machines, probe failure), the VRAM bound is
-skipped and the configured value applies unchanged. The effective value is logged at the
-start of every TTS stage (`TTS parallelism: N (configured …, VRAM … MB, model …)`).
+A per-device reading applies even when the host-wide probe returns 0. Only when neither a
+per-device reading nor the host-wide probe is available (CPU-only machines, probe failure)
+is the VRAM bound skipped and the configured value applied unchanged. The effective value is
+logged at the start of every TTS stage (`TTS parallelism: N (configured …, device VRAM … MB,
+host max VRAM … MB, accelerator …, model …)`).
 
 ```json
 { "ttsMaxConcurrency": 4 }
