@@ -22,10 +22,13 @@ public sealed record MixPlanBuildRequest(
     double DuckingTailSeconds = 0.18d,
     bool RestoreOriginalPan = false,
     bool ApplyTimbrePolish = true,
-    IReadOnlyList<TtsCandidateGroup>? CandidateGroups = null);
+    IReadOnlyList<TtsCandidateGroup>? CandidateGroups = null,
+    double? MediaDurationSeconds = null);
 
 public sealed class MixPlanBuilder(IArtifactStore? artifactStore = null)
 {
+    private const double OverrunToleranceSeconds = 0.010d;
+
     public const double CleanAmbianceDefaultDuckingGainDb = 0d;
     public const double OriginalMixDefaultDuckingGainDb = -13d;
 
@@ -69,6 +72,14 @@ public sealed class MixPlanBuilder(IArtifactStore? artifactStore = null)
                                         sourceDuration > 0d
             ? sourceDuration
             : null;
+        if (request.MediaDurationSeconds is double mediaDuration &&
+            double.IsFinite(mediaDuration) &&
+            mediaDuration > 0d)
+        {
+            sourceAudioEndSeconds = sourceAudioEndSeconds is double sourceEnd
+                ? Math.Min(sourceEnd, mediaDuration)
+                : mediaDuration;
+        }
         foreach (TranscriptSegment segment in request.TranscriptSegments.OrderBy(static segment => segment.SegmentIndex))
         {
             MixSpeechClip clip = BuildSpeechClip(
@@ -96,7 +107,7 @@ public sealed class MixPlanBuilder(IArtifactStore? artifactStore = null)
                 if (sourceAudioEndSeconds is double sourceAudioEndSecondsValue &&
                     clip.TakeDurationSeconds is double takeDuration &&
                     double.IsFinite(takeDuration) &&
-                    clip.StartSeconds + takeDuration > sourceAudioEndSecondsValue)
+                    clip.StartSeconds + takeDuration - sourceAudioEndSecondsValue > OverrunToleranceSeconds)
                 {
                     double overhangSeconds = clip.StartSeconds + takeDuration - sourceAudioEndSecondsValue;
                     warnings.Add(new MixPlanWarning(
