@@ -36,9 +36,10 @@ public static class SidecarBenchmark
         }
 
         double[] sorted = [.. samplesMs.Order()];
+        int mid = sorted.Length / 2;
         double median = sorted.Length % 2 == 1
-            ? sorted[sorted.Length / 2]
-            : (sorted[sorted.Length / 2 - 1] + sorted[sorted.Length / 2]) / 2;
+            ? sorted[mid]
+            : (sorted[mid - 1] + sorted[mid]) / 2;
         return (median, samplesMs);
     }
 }
