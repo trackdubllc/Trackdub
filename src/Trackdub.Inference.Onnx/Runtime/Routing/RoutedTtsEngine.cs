@@ -118,9 +118,10 @@ public sealed class RoutedTtsEngine(IRuntimePlanner runtimePlanner,
     /// <summary>
     /// Memory of the device the run executes on: the plan's device when it names one, otherwise
     /// the device sessions bind (ORT device 0 for the provider). Integrated GPUs count shared
-    /// memory, since their allocations come from it. When no device can be identified or it
-    /// reports no memory, assumes the smallest GPU so the bound never exceeds what the executing
-    /// device allows. Null when no GPU memory reading exists.
+    /// memory, since their allocations come from it. When the device cannot be identified or
+    /// reports no memory, assumes the smallest GPU with a positive reading. Null when no GPU
+    /// reports memory; the caller then uses the host-wide reading, or the configured value when
+    /// that is also unknown, so no VRAM tightening applies.
     /// </summary>
     internal static long? ResolvePlannedDeviceVramMb(
         int? deviceIndex,
