@@ -255,7 +255,7 @@ public sealed class JsonStudioSettingsService(
             : TtsTimingSettings.Default.RubberbandStretchThreshold;
         double? autoStretchMaxOverrun = settings.AutoStretchMaxOverrun is double autoStretch &&
                                         double.IsFinite(autoStretch) &&
-                                        autoStretch >= 0d
+                                        autoStretch is >= 0d and <= 1d
             ? autoStretch
             : null;
         return settings with

@@ -2746,6 +2746,11 @@ public sealed class DubbingPipelineEngine(
             snapshot["TtsTiming.EnableRubberbandStretch"] = options.TtsTiming.EnableRubberbandStretch.ToString();
             snapshot["TtsTiming.RubberbandStretchThreshold"] =
                 options.TtsTiming.RubberbandStretchThreshold.ToString("G17", CultureInfo.InvariantCulture);
+            if (options.TtsTiming.AutoStretchMaxOverrun is double autoStretchMaxOverrun)
+            {
+                snapshot["TtsTiming.AutoStretchMaxOverrun"] =
+                    autoStretchMaxOverrun.ToString("G17", CultureInfo.InvariantCulture);
+            }
         }
 
         // Audio/subtitle/encoder flags (and the pre-existing ExportFormat) gate the Export

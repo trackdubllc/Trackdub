@@ -313,7 +313,12 @@ public sealed class ModelDownloadOrchestrator(
         }
 
         LocalModelCacheRecord? record = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
-        ModelCacheState currentState = ResolveRecordState(record);
+        ModelCacheState currentState = record is not null &&
+            !string.IsNullOrWhiteSpace(entry.Sha256) &&
+            !string.IsNullOrWhiteSpace(record.Sha256) &&
+            !string.Equals(entry.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase)
+                ? ModelCacheState.Corrupt
+                : ResolveRecordState(record);
         string modelRootDirectory = ResolveVerificationModelRootDirectory(entry, record);
 
         IReadOnlyList<string> requiredFiles = ModelDownloadManifestFiles.ResolveRequiredFiles(entry);
@@ -675,9 +680,10 @@ public sealed class ModelDownloadOrchestrator(
         {
             return ModelCacheState.Missing;
         }
-        string root = ModelDownloadPathGuard.ResolveConfiguredModelRootDirectory(entry.ModelId, storagePaths.ModelCacheDirectory);
-        LocalModelCacheRecord? record = records.FirstOrDefault(r =>
-            r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase) && LocalModelCacheRecordStore.RootsEqual(r.RootPath, root));
+        LocalModelCacheRecord? record = ModelInventoryService.SelectBestCacheRecord(
+            entry,
+            records.Where(r => r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase)).ToArray(),
+            storagePaths.ModelCacheDirectory);
         return record is not null && !string.IsNullOrWhiteSpace(entry.Sha256) &&
             !string.IsNullOrWhiteSpace(record.Sha256) &&
             !string.Equals(entry.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase)
@@ -744,7 +750,7 @@ public sealed class ModelDownloadOrchestrator(
             .Where(record => record.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase))
             .Select(record => record.RootPath)
             .Append(configuredRoot)
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         foreach (string root in roots)
         {

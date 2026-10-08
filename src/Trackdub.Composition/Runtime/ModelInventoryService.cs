@@ -62,7 +62,7 @@ public sealed class ModelInventoryService(
         ModelCacheState state = DetermineState(manifest, cacheRecord);
         bool canAutoDownload = ModelDownloadManifestFiles.CanAutoDownloadAll(manifest);
         string? failureReason = state == ModelCacheState.Corrupt
-            ? cacheRecord is not null && (cacheRecord.IntegrityFailed || HasManifestHashMismatch(manifest, cacheRecord))
+            ? (cacheRecord!.IntegrityFailed || HasManifestHashMismatch(manifest, cacheRecord!))
                 ? "Model failed integrity verification; use repair or re-download."
                 : "Model files missing or corrupted on disk."
             : state == ModelCacheState.Blocked
@@ -665,7 +665,7 @@ public sealed class ModelInventoryService(
             .ThenByDescending(record =>
                 DetermineState(manifest, record) == ModelCacheState.Installed ? 1 : 0)
             .ThenByDescending(record => record.CachedAtUtc)
-            .ThenBy(record => record.RootPath, StringComparer.OrdinalIgnoreCase);
+            .ThenBy(record => record.RootPath, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         return ordered.FirstOrDefault(record =>
                 DetermineState(manifest, record) == ModelCacheState.Installed)

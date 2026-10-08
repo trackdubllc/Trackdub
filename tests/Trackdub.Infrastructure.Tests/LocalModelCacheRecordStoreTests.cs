@@ -107,8 +107,12 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
         await store.SaveAsync([original], TestContext.Current.CancellationToken);
         var replacement = original with
         {
-            RootPath = Path.Join(tempRoot, "."), Revision = "new-revision", Sha256 = new string('d', 64),
-            Variants = [], IntegrityFailed = false, CachedAtUtc = original.CachedAtUtc.AddDays(1)
+            RootPath = Path.Join(tempRoot, "."),
+            Revision = "new-revision",
+            Sha256 = new string('d', 64),
+            Variants = [],
+            IntegrityFailed = false,
+            CachedAtUtc = original.CachedAtUtc.AddDays(1)
         };
         var registrar = new LocalModelCacheRegistrar(store);
         await registrar.RegisterAsync(replacement, TestContext.Current.CancellationToken);

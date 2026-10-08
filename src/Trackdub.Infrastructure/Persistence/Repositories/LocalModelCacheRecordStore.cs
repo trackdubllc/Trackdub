@@ -117,9 +117,18 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
         }
     }
 
-    public static bool RootsEqual(string left, string right) =>
-        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)), StringComparison.OrdinalIgnoreCase);
+    public static bool RootsEqual(string left, string right)
+    {
+        if (TryNormalizeRoot(left, out string? normalizedLeft) &&
+            TryNormalizeRoot(right, out string? normalizedRight))
+        {
+            return string.Equals(normalizedLeft, normalizedRight, RootPathComparison);
+        }
+
+        // Never throw from equality: fall back to a raw trimmed comparison when
+        // either path is missing or cannot be normalized.
+        return string.Equals(left?.Trim(), right?.Trim(), RootPathComparison);
+    }
 
     public static IReadOnlyList<LocalModelVariantRecord> CompatibleVariants(
         LocalModelCacheRecord record, IEnumerable<LocalModelVariantRecord> variants) =>
@@ -134,8 +143,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
 
     private static IReadOnlyList<LocalModelCacheRecord> NormalizeRecords(IReadOnlyList<LocalModelCacheRecord> records) =>
         records.GroupBy(record => record.ModelId, StringComparer.OrdinalIgnoreCase)
-            .SelectMany(model => model.GroupBy(record =>
-                Path.TrimEndingDirectorySeparator(Path.GetFullPath(record.RootPath)), StringComparer.OrdinalIgnoreCase))
+            .SelectMany(model => model.GroupBy(record => NormalizeRootKey(record.RootPath), RootPathComparer))
             .Select(group =>
             {
                 LocalModelCacheRecord newest = group.OrderByDescending(record => record.CachedAtUtc)
@@ -145,6 +153,36 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
                     Variants = CompatibleVariants(newest, group.SelectMany(record => record.Variants))
                 };
             }).ToArray();
+
+    private static StringComparer RootPathComparer =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static StringComparison RootPathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private static string NormalizeRootKey(string rootPath) =>
+        TryNormalizeRoot(rootPath, out string? normalized)
+            ? normalized
+            : (rootPath ?? string.Empty).Trim();
+
+    private static bool TryNormalizeRoot(string path, out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            normalized = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
 
     private static void TryDeleteFile(string path)
     {
