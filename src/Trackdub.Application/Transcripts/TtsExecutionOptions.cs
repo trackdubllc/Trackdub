@@ -129,7 +129,9 @@ public sealed record TtsExecutionOptions(
         }
 
         string normalized = alias.Trim();
-        return VoiceCloningDefaults.IsVoiceCloningModelAlias(normalized) ||
+        return normalized.Equals("chatterbox-turbo", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals("chatterbox", StringComparison.OrdinalIgnoreCase) ||
+               VoiceCloningDefaults.IsVoiceCloningModelAlias(normalized) ||
                VoiceCloningDefaults.IsF5VoiceCloningModelAlias(normalized) ||
                Qwen3TtsDefaults.IsAnyQwen3Alias(normalized);
     }
