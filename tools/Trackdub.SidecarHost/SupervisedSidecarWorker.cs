@@ -24,6 +24,7 @@ public sealed class SupervisedSidecarWorker : IAsyncDisposable
     private readonly Process _process;
     private readonly StreamReader _stdout;
     private readonly StreamWriter _stdin;
+    private readonly object _requestLock = new();
     private bool _poisoned;
 
     private SupervisedSidecarWorker(Process process, StreamReader stdout, StreamWriter stdin)
@@ -73,49 +74,63 @@ public sealed class SupervisedSidecarWorker : IAsyncDisposable
 
     public SidecarResponse Request(SidecarRequest request, TimeSpan? timeout = null)
     {
-        if (_poisoned)
+        lock (_requestLock)
         {
-            throw new InvalidOperationException("worker connection is unusable after a timeout or out-of-order response; respawn first");
+            if (_poisoned)
+            {
+                throw new InvalidOperationException("worker connection is unusable after a timeout or out-of-order response; respawn first");
+            }
+
+            TimeSpan responseTimeout = timeout ?? (request.Op == "load" ? LoadTimeout : ResponseTimeout);
+
+            _stdin.WriteLine(JsonSerializer.Serialize(request, ProtocolJson.Options));
+            _stdin.Flush();
+
+            Task<string?> read = _stdout.ReadLineAsync();
+            if (!read.Wait(responseTimeout))
+            {
+                Poison();
+                throw new InvalidOperationException($"worker response timed out after {responseTimeout.TotalSeconds}s");
+            }
+
+            string? line = read.Result;
+            if (line is null)
+            {
+                Poison();
+                throw new InvalidOperationException("worker stdout closed");
+            }
+
+            var response = JsonSerializer.Deserialize<SidecarResponse>(line, ProtocolJson.Options)
+                ?? throw new InvalidOperationException($"unparseable worker response: {line}");
+            if (response.ProtocolVersion != ExpectedProtocolVersion)
+            {
+                Poison();
+                throw new InvalidOperationException($"worker protocol version {response.ProtocolVersion} != {ExpectedProtocolVersion}; refusing to serve");
+            }
+            if (response.Id != request.Id)
+            {
+                Poison();
+                throw new InvalidOperationException($"worker response id {response.Id} != request id {request.Id}; stream out of order");
+            }
+
+            return response;
         }
-
-        TimeSpan responseTimeout = timeout ?? ResponseTimeout;
-
-        _stdin.WriteLine(JsonSerializer.Serialize(request, ProtocolJson.Options));
-        _stdin.Flush();
-
-        Task<string?> read = _stdout.ReadLineAsync();
-        if (!read.Wait(responseTimeout))
-        {
-            Poison();
-            throw new InvalidOperationException($"worker response timed out after {responseTimeout.TotalSeconds}s");
-        }
-
-        string? line = read.Result;
-        if (line is null)
-        {
-            Poison();
-            throw new InvalidOperationException("worker stdout closed");
-        }
-
-        var response = JsonSerializer.Deserialize<SidecarResponse>(line, ProtocolJson.Options)
-            ?? throw new InvalidOperationException($"unparseable worker response: {line}");
-        if (response.ProtocolVersion != ExpectedProtocolVersion)
-        {
-            Poison();
-            throw new InvalidOperationException($"worker protocol version {response.ProtocolVersion} != {ExpectedProtocolVersion}; refusing to serve");
-        }
-        if (response.Id != request.Id)
-        {
-            Poison();
-            throw new InvalidOperationException($"worker response id {response.Id} != request id {request.Id}; stream out of order");
-        }
-
-        return response;
     }
 
     private void Poison()
     {
         _poisoned = true;
+        try
+        {
+            if (!_process.HasExited)
+            {
+                _process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+            // The child may have exited between HasExited and Kill.
+        }
     }
 
     public async ValueTask DisposeAsync()
