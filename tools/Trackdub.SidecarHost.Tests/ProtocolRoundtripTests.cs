@@ -46,6 +46,17 @@ public sealed class ProtocolRoundtripTests
     }
 
     [Fact]
+    public void SidecarTensor_Int16_RoundtripsBase64Data()
+    {
+        var tensor = new SidecarTensor("int16", [2], [0x01, 0x02, 0x03, 0x04]);
+        string json = JsonSerializer.Serialize(tensor, ProtocolJson.Options);
+        var back = JsonSerializer.Deserialize<SidecarTensor>(json, ProtocolJson.Options);
+        Assert.NotNull(back);
+        Assert.Equal(tensor.Data, back.Data);
+        Assert.Equal([2L], back.Shape);
+    }
+
+    [Fact]
     public void SidecarResponse_ErrorResponse_ParsesReasonVocabulary()
     {
         const string wire = "{\"id\":null,\"status\":\"error\",\"reason\":\"invalid-json\",\"detail\":\"boom\",\"protocolVersion\":1}";

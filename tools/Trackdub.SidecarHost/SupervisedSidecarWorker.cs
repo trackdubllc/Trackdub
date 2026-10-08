@@ -14,6 +14,13 @@ public sealed class SupervisedSidecarWorker : IAsyncDisposable
     public const int ExpectedProtocolVersion = 1;
     private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(120);
 
+    /// <summary>
+    /// One-in-flight request timeout. Mirrors the supervisor's gate window for
+    /// short ops (health/infer), but cold model loads legitimately take several
+    /// minutes, so <see cref="Request"/> accepts an explicit longer timeout.
+    /// </summary>
+    public static readonly TimeSpan LoadTimeout = TimeSpan.FromMinutes(10);
+
     private readonly Process _process;
     private readonly StreamReader _stdout;
     private readonly StreamWriter _stdin;
@@ -64,21 +71,23 @@ public sealed class SupervisedSidecarWorker : IAsyncDisposable
         return new SupervisedSidecarWorker(process, process.StandardOutput, process.StandardInput);
     }
 
-    public SidecarResponse Request(SidecarRequest request)
+    public SidecarResponse Request(SidecarRequest request, TimeSpan? timeout = null)
     {
         if (_poisoned)
         {
             throw new InvalidOperationException("worker connection is unusable after a timeout or out-of-order response; respawn first");
         }
 
+        TimeSpan responseTimeout = timeout ?? ResponseTimeout;
+
         _stdin.WriteLine(JsonSerializer.Serialize(request, ProtocolJson.Options));
         _stdin.Flush();
 
         Task<string?> read = _stdout.ReadLineAsync();
-        if (!read.Wait(ResponseTimeout))
+        if (!read.Wait(responseTimeout))
         {
             Poison();
-            throw new InvalidOperationException($"worker response timed out after {ResponseTimeout.TotalSeconds}s");
+            throw new InvalidOperationException($"worker response timed out after {responseTimeout.TotalSeconds}s");
         }
 
         string? line = read.Result;
