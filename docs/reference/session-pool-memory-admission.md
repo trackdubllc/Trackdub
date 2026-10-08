@@ -85,8 +85,10 @@ TTS synthesizes segments in parallel. The effective degree of parallelism is
 - **VRAM-derived bound** — computed from the dedicated memory of the device the TTS plan
   selects and the memory class of the preferred model (`NormalizedPreferredModelAlias`). The
   stage plans TTS with the same request synthesis uses. If the plan names no device, the
-  smallest GPU with dedicated memory is assumed. If no per-device reading exists, the largest
-  adapter's memory is used. One worker is
+  device sessions bind is used: ORT device 0 for the provider (the first hardware adapter for
+  DirectML, the first NVIDIA GPU for CUDA and TensorRT). Integrated GPUs count shared memory.
+  If that device cannot be identified or reports no memory, the smallest GPU is assumed. If no
+  per-device reading exists at all, the largest adapter's memory is used. One worker is
   assumed to need approximately 1 GB (small: Kokoro-82M), 4 GB (medium: CosyVoice-300M,
   Chatterbox, Qwen3-TTS-0.6B, F5) or 16 GB (large: Qwen3-TTS-1.7B) of accelerator memory,
   with each additional concurrent worker adding ~512 MB. The bound never exceeds the

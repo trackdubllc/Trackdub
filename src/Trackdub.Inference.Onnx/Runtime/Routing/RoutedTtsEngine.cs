@@ -112,29 +112,55 @@ public sealed class RoutedTtsEngine(IRuntimePlanner runtimePlanner,
             : await deviceEnumerator.GetDevicesAsync(cancellationToken).ConfigureAwait(false);
         return new TtsAcceleratorPlacement(
             AcceleratorRouted: true,
-            DeviceVramMb: ResolvePlannedDeviceVramMb(plan.DeviceIndex, devices));
+            DeviceVramMb: ResolvePlannedDeviceVramMb(plan.DeviceIndex, provider, devices));
     }
 
     /// <summary>
-    /// Dedicated memory of the planned device. When the plan names no device, assumes the
-    /// smallest GPU so the bound never exceeds what the executing device allows. Null when the
-    /// planned device reports no dedicated memory or no GPU reading exists.
+    /// Memory of the device the run executes on: the plan's device when it names one, otherwise
+    /// the device sessions bind (ORT device 0 for the provider). Integrated GPUs count shared
+    /// memory, since their allocations come from it. When no device can be identified or it
+    /// reports no memory, assumes the smallest GPU so the bound never exceeds what the executing
+    /// device allows. Null when no GPU memory reading exists.
     /// </summary>
-    internal static long? ResolvePlannedDeviceVramMb(int? deviceIndex, IReadOnlyList<DeviceEntry> devices)
+    internal static long? ResolvePlannedDeviceVramMb(
+        int? deviceIndex,
+        ExecutionProviderKind provider,
+        IReadOnlyList<DeviceEntry> devices)
     {
-        if (deviceIndex is int index &&
-            devices.FirstOrDefault(device => device.DeviceIndex == index) is DeviceEntry planned)
+        DeviceEntry? device = deviceIndex is int index
+            ? devices.FirstOrDefault(entry => entry.DeviceIndex == index)
+            : ResolveBoundDevice(provider, devices);
+        if (device is not null && ResolveDeviceMemoryMb(device) is > 0 and var memoryMb)
         {
-            return planned.DedicatedVramMb > 0 ? planned.DedicatedVramMb : null;
+            return memoryMb;
         }
 
-        int[] gpuVramMb = devices
-            .Where(static device => device.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu &&
-                                    device.DedicatedVramMb > 0)
-            .Select(static device => device.DedicatedVramMb)
+        long[] gpuMemoryMb = devices
+            .Where(static entry => entry.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu)
+            .Select(ResolveDeviceMemoryMb)
+            .Where(static memoryMb => memoryMb > 0)
             .ToArray();
-        return gpuVramMb.Length > 0 ? gpuVramMb.Min() : null;
+        return gpuMemoryMb.Length > 0 ? gpuMemoryMb.Min() : null;
     }
+
+    // Sessions append the provider with device id 0 (DirectML: first hardware DXGI adapter;
+    // CUDA/TensorRT: first NVIDIA GPU), so mirror that when the plan names no device.
+    private static DeviceEntry? ResolveBoundDevice(ExecutionProviderKind provider, IReadOnlyList<DeviceEntry> devices)
+    {
+        IEnumerable<DeviceEntry> gpus = devices
+            .Where(static entry => entry.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu)
+            .OrderBy(static entry => entry.DeviceIndex);
+        return provider is ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRt or ExecutionProviderKind.TensorRTRtx
+            ? gpus.FirstOrDefault(static entry =>
+                entry.VendorName.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) ||
+                entry.SupportedProviders.Contains(ExecutionProviderKind.Cuda))
+            : gpus.FirstOrDefault(entry => entry.SupportedProviders.Contains(provider));
+    }
+
+    private static long ResolveDeviceMemoryMb(DeviceEntry device) =>
+        device.Kind is DeviceKind.IntegratedGpu
+            ? (long)device.DedicatedVramMb + device.SharedMemoryMb
+            : device.DedicatedVramMb;
 
     private async Task<(ITtsEngineAdapter Adapter, StageRuntimePlan Plan)> SelectAdapterAsync(
         TtsSynthesisRequest request,

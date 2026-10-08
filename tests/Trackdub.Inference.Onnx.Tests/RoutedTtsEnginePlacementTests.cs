@@ -18,23 +18,46 @@ public sealed class RoutedTtsEnginePlacementTests
     [Fact]
     public void PlannedDevice_UsesThatDevicesVram()
     {
-        Assert.Equal(4096, RoutedTtsEngine.ResolvePlannedDeviceVramMb(1, [LargeGpu, SmallGpu]));
-        Assert.Equal(24576, RoutedTtsEngine.ResolvePlannedDeviceVramMb(0, [LargeGpu, SmallGpu]));
+        Assert.Equal(4096, Resolve(1, ExecutionProviderKind.DirectMl, LargeGpu, SmallGpu));
+        Assert.Equal(24576, Resolve(0, ExecutionProviderKind.DirectMl, LargeGpu, SmallGpu));
     }
 
     [Fact]
-    public void UnknownDevice_AssumesSmallestGpuWithDedicatedMemory()
+    public void NoPlannedDevice_DirectMl_UsesDeviceZero()
     {
-        Assert.Equal(4096, RoutedTtsEngine.ResolvePlannedDeviceVramMb(null, [LargeGpu, SmallGpu, IntegratedGpu]));
-        Assert.Equal(4096, RoutedTtsEngine.ResolvePlannedDeviceVramMb(7, [LargeGpu, SmallGpu]));
+        // DirectML binds device id 0, the first hardware adapter.
+        Assert.Equal(24576, Resolve(null, ExecutionProviderKind.DirectMl, LargeGpu, SmallGpu));
     }
 
     [Fact]
-    public void PlannedDeviceWithoutDedicatedMemory_IsUnknown()
+    public void NoPlannedDevice_HybridLaptop_NvidiaProviderUsesNvidiaGpu()
     {
-        Assert.Null(RoutedTtsEngine.ResolvePlannedDeviceVramMb(2, [LargeGpu, IntegratedGpu]));
-        Assert.Null(RoutedTtsEngine.ResolvePlannedDeviceVramMb(null, []));
+        // iGPU enumerates first, but CUDA/TensorRT RTX device 0 is the first NVIDIA GPU.
+        DeviceEntry iGpu = Gpu(index: 0, DeviceKind.IntegratedGpu, vramMb: 128, vendor: "Intel", sharedMb: 16384);
+        DeviceEntry nvidia = Gpu(index: 1, DeviceKind.DiscreteGpu, vramMb: 8192, vendor: "NVIDIA");
+
+        Assert.Equal(8192, Resolve(null, ExecutionProviderKind.TensorRTRtx, iGpu, nvidia));
+        Assert.Equal(8192, Resolve(null, ExecutionProviderKind.Cuda, iGpu, nvidia));
+        // DirectML device 0 is the iGPU here; its allocations come from shared memory.
+        Assert.Equal(128 + 16384, Resolve(null, ExecutionProviderKind.DirectMl, iGpu, nvidia));
     }
+
+    [Fact]
+    public void UnidentifiedDevice_AssumesSmallestGpuMemory()
+    {
+        Assert.Equal(4096, Resolve(7, ExecutionProviderKind.DirectMl, LargeGpu, SmallGpu));
+        Assert.Equal(4096, Resolve(null, ExecutionProviderKind.Migraphx, LargeGpu, SmallGpu));
+    }
+
+    [Fact]
+    public void DeviceWithoutMemoryReading_AssumesSmallestGpuMemory()
+    {
+        Assert.Equal(4096, Resolve(2, ExecutionProviderKind.DirectMl, LargeGpu, SmallGpu, IntegratedGpu));
+        Assert.Null(Resolve(null, ExecutionProviderKind.DirectMl));
+    }
+
+    private static long? Resolve(int? deviceIndex, ExecutionProviderKind provider, params DeviceEntry[] devices) =>
+        RoutedTtsEngine.ResolvePlannedDeviceVramMb(deviceIndex, provider, devices);
 
     [Fact]
     public async Task ResolvePlacementAsync_GpuPlan_ReportsPlannedDeviceVram()
@@ -75,8 +98,8 @@ public sealed class RoutedTtsEnginePlacementTests
             InferenceRequestOptions.Default, "en", TestContext.Current.CancellationToken));
     }
 
-    private static DeviceEntry Gpu(int index, DeviceKind kind, int vramMb) =>
-        new(kind, index, $"GPU {index}", "Test", vramMb, SharedMemoryMb: 0, SupportedProviders: [ExecutionProviderKind.DirectMl]);
+    private static DeviceEntry Gpu(int index, DeviceKind kind, int vramMb, string vendor = "Test", int sharedMb = 0) =>
+        new(kind, index, $"GPU {index}", vendor, vramMb, sharedMb, SupportedProviders: [ExecutionProviderKind.DirectMl]);
 
     private sealed class FixedPlanner(ExecutionProviderKind? provider, int? deviceIndex) : IRuntimePlanner
     {
