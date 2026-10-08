@@ -60,7 +60,7 @@ public sealed record TtsExecutionOptions(
     /// unknown (0), the configured value applies unchanged — the cap only ever tightens.
     /// </summary>
     /// <param name="modelAlias">Resolved TTS model alias for the run (normalized; may be null).</param>
-    /// <param name="acceleratorRouted">False when the run is pinned to a CPU provider, so accelerator VRAM does not bound it.</param>
+    /// <param name="acceleratorRouted">False when a required CPU/DNNL pin keeps the run off accelerators, so accelerator VRAM does not bound it.</param>
     public int ResolveEffectiveConcurrency(string? modelAlias, bool acceleratorRouted = true)
     {
         // Null or non-positive configured values fall back to the legacy default; the

@@ -83,12 +83,18 @@ TTS synthesizes segments in parallel. The effective degree of parallelism is
   (or `TtsMaxConcurrency` in `SdkSessionOptions`). Unset or non-positive keeps the
   historical default of 4; values above 8 are clamped to 8.
 - **VRAM-derived bound** — computed from the largest adapter's dedicated memory and the
-  memory class of the model the run actually routes to. One worker is assumed to need
-  approximately 1 GB (small: Kokoro-82M), 4 GB (medium: CosyVoice-300M, Chatterbox,
-  Qwen3-TTS-0.6B, F5) or 16 GB (large: Qwen3-TTS-1.7B) of accelerator memory, with each
-  additional concurrent worker adding ~512 MB. The bound never exceeds the configured
-  value and the cap never fails a run: a budget that cannot cover even one worker
-  synthesizes one segment at a time.
+  memory class of the preferred model (`NormalizedPreferredModelAlias`). One worker is
+  assumed to need approximately 1 GB (small: Kokoro-82M), 4 GB (medium: CosyVoice-300M,
+  Chatterbox, Qwen3-TTS-0.6B, F5) or 16 GB (large: Qwen3-TTS-1.7B) of accelerator memory,
+  with each additional concurrent worker adding ~512 MB. The bound never exceeds the
+  configured value and the cap never fails a run: a budget that cannot cover even one
+  worker synthesizes one segment at a time.
+  - When the preferred alias is not required, the planner may fall back to a model in
+    another memory class. The bound does not cover that fallback model.
+  - The run may be placed on a smaller adapter than the largest one. In that case the bound
+    can be looser than that adapter allows.
+  - A run pinned to a CPU or DNNL provider that is required is not bounded by VRAM. A
+    non-required CPU pin can still fall back to an accelerator, so it stays bounded.
 
 When adapter memory cannot be read (CPU-only machines, probe failure), the VRAM bound is
 skipped and the configured value applies unchanged. The effective value is logged at the

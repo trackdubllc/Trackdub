@@ -177,8 +177,10 @@ public sealed class StartTtsStageHandler(
                     voice,
                     isVoiceCloning);
                 string? modelAlias = representativeOptions.NormalizedPreferredModelAlias;
-                bool acceleratorRouted = request.PreferredExecutionProvider
-                    is not (ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl);
+                // Only a required CPU/DNNL pin keeps the run off the accelerator; a non-required
+                // pin can still fall back to a GPU provider, which the VRAM bound must cover.
+                bool acceleratorRouted = !(request.RequirePreferredExecutionProvider &&
+                    request.PreferredExecutionProvider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl);
                 int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(modelAlias, acceleratorRouted);
                 logger?.LogInformation(
                     $"TTS parallelism: {effectiveMaxConcurrency} (configured {executionOptions.ConfiguredMaxConcurrency?.ToString() ?? "default"}, VRAM {executionOptions.MaxAcceleratorVramMb} MB, model '{modelAlias ?? "default stock"}').");
