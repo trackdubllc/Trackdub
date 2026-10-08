@@ -179,8 +179,17 @@ public sealed class SupervisedSidecarWorker : IAsyncDisposable
 
             // Closed vocabularies (workers/PROTOCOL.md): an out-of-set status or
             // reason must not cross the host boundary — parity with the Rust
-            // supervisor, which rejects these at deserialization.
-            ProtocolVocabulary.Validate(response);
+            // supervisor, which rejects these at deserialization. Like every
+            // other response-validation branch, a failure poisons.
+            try
+            {
+                ProtocolVocabulary.Validate(response);
+            }
+            catch (InvalidOperationException)
+            {
+                Poison();
+                throw;
+            }
 
             return response;
         }
