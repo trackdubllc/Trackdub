@@ -277,7 +277,8 @@ public sealed class ExportStageHandler(
             request.DuckingGainDb,
             RestoreOriginalPan: request.RestoreOriginalPan,
             ApplyTimbrePolish: request.ApplyTimbrePolish,
-            CandidateGroups: candidateGroups));
+            CandidateGroups: candidateGroups,
+            MediaDurationSeconds: mediaAsset.DurationSeconds));
         await mixPlanStore.SaveAsync(mixPlan, cancellationToken).ConfigureAwait(false);
         if (mixPlan.Warnings.Count > 0)
         {
@@ -767,6 +768,7 @@ public sealed class ExportStageHandler(
             MixPlanWarningCode.StaleTake => "stale-take",
             MixPlanWarningCode.MissingTakeArtifact => "missing-take-artifact",
             MixPlanWarningCode.LipSyncArtifactMissing => "lip-sync-artifact-missing",
+            MixPlanWarningCode.TakeExceedsSourceAudio => "take-exceeds-source-audio",
             _ => "invalid-take"
         };
 

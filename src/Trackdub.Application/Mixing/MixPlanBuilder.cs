@@ -22,10 +22,13 @@ public sealed record MixPlanBuildRequest(
     double DuckingTailSeconds = 0.18d,
     bool RestoreOriginalPan = false,
     bool ApplyTimbrePolish = true,
-    IReadOnlyList<TtsCandidateGroup>? CandidateGroups = null);
+    IReadOnlyList<TtsCandidateGroup>? CandidateGroups = null,
+    double? MediaDurationSeconds = null);
 
 public sealed class MixPlanBuilder(IArtifactStore? artifactStore = null)
 {
+    private const double OverrunToleranceSeconds = 0.010d;
+
     public const double CleanAmbianceDefaultDuckingGainDb = 0d;
     public const double OriginalMixDefaultDuckingGainDb = -13d;
 
@@ -61,6 +64,22 @@ public sealed class MixPlanBuilder(IArtifactStore? artifactStore = null)
         var duckingRegions = new List<MixDuckRegion>();
         var warnings = new List<MixPlanWarning>();
         double duckingGainDb = ResolveDuckingGainDb(request.DuckingGainDb, sourceArtifact.Kind);
+        // The mix renderer clamps output to the source audio duration, so a take that extends
+        // past it would be silently truncated at export. Detect that here and fail loudly
+        // instead of dropping speech without a trace.
+        double? sourceAudioEndSeconds = sourceArtifact.DurationSeconds is double sourceDuration &&
+                                        double.IsFinite(sourceDuration) &&
+                                        sourceDuration > 0d
+            ? sourceDuration
+            : null;
+        if (request.MediaDurationSeconds is double mediaDuration &&
+            double.IsFinite(mediaDuration) &&
+            mediaDuration > 0d)
+        {
+            sourceAudioEndSeconds = sourceAudioEndSeconds is double sourceEnd
+                ? Math.Min(sourceEnd, mediaDuration)
+                : mediaDuration;
+        }
         foreach (TranscriptSegment segment in request.TranscriptSegments.OrderBy(static segment => segment.SegmentIndex))
         {
             MixSpeechClip clip = BuildSpeechClip(
@@ -84,6 +103,21 @@ public sealed class MixPlanBuilder(IArtifactStore? artifactStore = null)
                     Math.Max(0d, clip.StartSeconds - duckingLeadSeconds),
                     ResolveClipDuckingEndSeconds(clip, segment.EndSeconds) + duckingTailSeconds,
                     duckingGainDb));
+
+                if (sourceAudioEndSeconds is double sourceAudioEndSecondsValue &&
+                    clip.TakeDurationSeconds is double takeDuration &&
+                    double.IsFinite(takeDuration) &&
+                    clip.StartSeconds + takeDuration - sourceAudioEndSecondsValue > OverrunToleranceSeconds)
+                {
+                    double overhangSeconds = clip.StartSeconds + takeDuration - sourceAudioEndSecondsValue;
+                    warnings.Add(new MixPlanWarning(
+                        segment.SegmentIndex,
+                        segment.Id,
+                        string.Create(
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            $"Dubbed take extends {overhangSeconds:0.###} s past the end of the source audio ({sourceAudioEndSecondsValue:0.###} s) and would be cut off at export. Stretch the take to fit, trim it, or raise the auto-stretch limit."),
+                        MixPlanWarningCode.TakeExceedsSourceAudio));
+                }
             }
         }
 

@@ -253,7 +253,16 @@ public sealed class JsonStudioSettingsService(
                            settings.RubberbandStretchThreshold is >= 0d and <= 1d
             ? settings.RubberbandStretchThreshold
             : TtsTimingSettings.Default.RubberbandStretchThreshold;
-        return settings with { RubberbandStretchThreshold = threshold };
+        double? autoStretchMaxOverrun = settings.AutoStretchMaxOverrun is double autoStretch &&
+                                        double.IsFinite(autoStretch) &&
+                                        autoStretch is >= 0d and <= 1d
+            ? autoStretch
+            : null;
+        return settings with
+        {
+            RubberbandStretchThreshold = threshold,
+            AutoStretchMaxOverrun = autoStretchMaxOverrun
+        };
     }
 
     private static double NormalizeConfidenceThreshold(double threshold) =>

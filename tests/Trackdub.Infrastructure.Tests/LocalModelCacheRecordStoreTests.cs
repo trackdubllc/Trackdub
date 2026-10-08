@@ -11,7 +11,7 @@ namespace Trackdub.Infrastructure.Tests;
 public sealed class LocalModelCacheRecordStoreTests : IDisposable
 {
     // Pinned output for BuildGoldenRecords(), with newlines normalised so the guard is cross-platform.
-    private const string ExpectedIndexJson = """
+    private static readonly string ExpectedIndexJson = """
         [
           {
             "ModelId": "example/model",
@@ -68,12 +68,91 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
             "Variants": []
           }
         ]
-        """;
+        """.Replace("\r\n", "\n", StringComparison.Ordinal);
 
     private readonly string tempRoot = Path.Join(
         Path.GetTempPath(),
         "Trackdub.LocalModelCacheRecordStore.Tests",
         Guid.NewGuid().ToString("N"));
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Legacy_duplicates_choose_newest_and_fail_closed_on_ties(bool tie)
+    {
+        LocalModelCacheRecordStore store = CreateStore();
+        LocalModelCacheRecord original = BuildGoldenRecords()[0] with { RootPath = tempRoot, Variants = [] };
+        LocalModelCacheRecord newer = original with
+        {
+            ModelId = original.ModelId.ToUpperInvariant(),
+            RootPath = Path.Join(tempRoot, "."),
+            CachedAtUtc = tie ? original.CachedAtUtc : original.CachedAtUtc.AddDays(1),
+            IntegrityFailed = true
+        };
+        TrackdubStoragePaths paths = CreateStoragePaths();
+        Directory.CreateDirectory(paths.ModelCacheDirectory);
+        await File.WriteAllTextAsync(paths.ModelCacheIndexPath,
+            JsonSerializer.Serialize(new[] { original, newer }), TestContext.Current.CancellationToken);
+
+        Assert.True(Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken)).IntegrityFailed);
+        await store.MutateAsync(records => records, TestContext.Current.CancellationToken);
+        Assert.Single(JsonSerializer.Deserialize<LocalModelCacheRecord[]>(File.ReadAllText(paths.ModelCacheIndexPath))!);
+    }
+
+    [Fact]
+    public async Task Registrar_replaces_normalized_root_and_invalidates_stale_variants()
+    {
+        LocalModelCacheRecordStore store = CreateStore();
+        LocalModelCacheRecord original = BuildGoldenRecords()[0] with { RootPath = tempRoot };
+        await store.SaveAsync([original], TestContext.Current.CancellationToken);
+        var replacement = original with
+        {
+            RootPath = Path.Join(tempRoot, "."),
+            Revision = "new-revision",
+            Sha256 = new string('d', 64),
+            Variants = [],
+            IntegrityFailed = false,
+            CachedAtUtc = original.CachedAtUtc.AddDays(1)
+        };
+        var registrar = new LocalModelCacheRegistrar(store);
+        await registrar.RegisterAsync(replacement, TestContext.Current.CancellationToken);
+        LocalModelCacheRecord result = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(replacement.Revision, result.Revision);
+        Assert.Empty(result.Variants);
+        Assert.NotNull(new LocalModelCacheRecordLookup(store).Find(original.ModelId, tempRoot));
+    }
+
+    [Fact]
+    public async Task Cancelled_mutation_preserves_existing_index()
+    {
+        LocalModelCacheRecordStore store = CreateStore();
+        await store.SaveAsync(BuildGoldenRecords(), TestContext.Current.CancellationToken);
+        byte[] before = File.ReadAllBytes(CreateStoragePaths().ModelCacheIndexPath);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.MutateAsync(_ => [], cancellation.Token));
+        Assert.Equal(before, File.ReadAllBytes(CreateStoragePaths().ModelCacheIndexPath));
+    }
+
+    [Fact]
+    public async Task Dedupe_preserves_distinct_roots_and_only_compatible_variants()
+    {
+        LocalModelCacheRecordStore store = CreateStore();
+        LocalModelCacheRecord original = BuildGoldenRecords()[0] with { RootPath = tempRoot };
+        LocalModelVariantRecord compatible = original.Variants[0] with { SourceModelSha256 = original.Sha256 };
+        LocalModelVariantRecord incompatible = compatible with { Alias = "stale", SourceModelRevision = "old" };
+        LocalModelCacheRecord newer = original with { CachedAtUtc = original.CachedAtUtc.AddDays(1), Variants = [] };
+        await store.SaveAsync([original with { Variants = [compatible, incompatible] }, newer,
+            original with { RootPath = Path.Join(tempRoot, "other"), Variants = [] }], TestContext.Current.CancellationToken);
+
+        IReadOnlyList<LocalModelCacheRecord> records = await store.LoadAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, records.Count);
+        LocalModelVariantRecord retained = Assert.Single(records[0].Variants);
+        Assert.Equal(compatible.Alias, retained.Alias);
+        Assert.Equal(compatible.SourceModelSha256, retained.SourceModelSha256);
+        Assert.Equal(compatible.ComponentRelativePaths, retained.ComponentRelativePaths);
+        Assert.Equal(newer.CachedAtUtc, records[0].CachedAtUtc);
+    }
 
     [Fact]
     public async Task LoadAsync_returns_empty_when_index_file_is_absent()

@@ -313,7 +313,12 @@ public sealed class ModelDownloadOrchestrator(
         }
 
         LocalModelCacheRecord? record = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
-        ModelCacheState currentState = ResolveRecordState(record);
+        ModelCacheState currentState = record is not null &&
+            !string.IsNullOrWhiteSpace(entry.Sha256) &&
+            !string.IsNullOrWhiteSpace(record.Sha256) &&
+            !string.Equals(entry.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase)
+                ? ModelCacheState.Corrupt
+                : ResolveRecordState(record);
         string modelRootDirectory = ResolveVerificationModelRootDirectory(entry, record);
 
         IReadOnlyList<string> requiredFiles = ModelDownloadManifestFiles.ResolveRequiredFiles(entry);
@@ -534,7 +539,13 @@ public sealed class ModelDownloadOrchestrator(
             entry.ModelId,
             storagePaths.ModelCacheDirectory);
 
-        string candidate = record?.RootPath ?? configuredRoot;
+        // Verification is read-only for model files and must inspect the same installation as inventory.
+        if (record is not null)
+        {
+            return Path.GetFullPath(record.RootPath);
+        }
+
+        string candidate = configuredRoot;
         if (ModelDownloadPathGuard.IsModelRootUnderConfiguredCache(
                 candidate,
                 storagePaths.ModelCacheDirectory,
@@ -617,14 +628,14 @@ public sealed class ModelDownloadOrchestrator(
             {
                 LocalModelCacheRecord? existing = records.FirstOrDefault(r =>
                     r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase) &&
-                    r.RootPath.Equals(modelRootDirectory, StringComparison.OrdinalIgnoreCase));
+                    LocalModelCacheRecordStore.RootsEqual(r.RootPath, modelRootDirectory));
                 string identitySha256 = ModelDownloadManifestFiles.ResolveCacheIdentitySha256(
                     entry,
                     hashResult.ActualSha256);
                 var updated = records
                     .Where(r =>
                         !(r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase) &&
-                          r.RootPath.Equals(modelRootDirectory, StringComparison.OrdinalIgnoreCase)))
+                          LocalModelCacheRecordStore.RootsEqual(r.RootPath, modelRootDirectory)))
                     .ToList();
                 updated.Add(existing is null
                     ? new LocalModelCacheRecord(
@@ -638,10 +649,10 @@ public sealed class ModelDownloadOrchestrator(
                     {
                         Revision = string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision,
                         Sha256 = identitySha256,
-                        CachedAtUtc = string.Equals(existing.Sha256, identitySha256, StringComparison.OrdinalIgnoreCase)
-                            ? existing.CachedAtUtc
-                            : DateTimeOffset.UtcNow,
-                        IntegrityFailed = false
+                        CachedAtUtc = DateTimeOffset.UtcNow,
+                        IntegrityFailed = false,
+                        Variants = LocalModelCacheRecordStore.CompatibleVariants(
+                            existing with { Revision = string.IsNullOrWhiteSpace(entry.Revision) ? "main" : entry.Revision, Sha256 = identitySha256 }, existing.Variants)
                     });
                 return updated;
             },
@@ -655,13 +666,29 @@ public sealed class ModelDownloadOrchestrator(
     private async Task<LocalModelCacheRecord?> GetCurrentRecordAsync(string modelId, CancellationToken cancellationToken)
     {
         IReadOnlyList<LocalModelCacheRecord> records = await cacheStore.LoadAsync(cancellationToken).ConfigureAwait(false);
-        return records.FirstOrDefault(r => r.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase));
+        BundledModelManifestEntry? entry = FindEntry(modelId);
+        return entry is null ? null : ModelInventoryService.SelectBestCacheRecord(entry,
+            records.Where(r => r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase)).ToArray(),
+            storagePaths.ModelCacheDirectory);
     }
 
     private async Task<ModelCacheState> GetCurrentStateAsync(string modelId, CancellationToken cancellationToken)
     {
-        LocalModelCacheRecord? record = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
-        return ResolveRecordState(record);
+        IReadOnlyList<LocalModelCacheRecord> records = await cacheStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+        BundledModelManifestEntry? entry = FindEntry(modelId);
+        if (entry is null)
+        {
+            return ModelCacheState.Missing;
+        }
+        LocalModelCacheRecord? record = ModelInventoryService.SelectBestCacheRecord(
+            entry,
+            records.Where(r => r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase)).ToArray(),
+            storagePaths.ModelCacheDirectory);
+        return record is not null && !string.IsNullOrWhiteSpace(entry.Sha256) &&
+            !string.IsNullOrWhiteSpace(record.Sha256) &&
+            !string.Equals(entry.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase)
+                ? ModelCacheState.Corrupt
+                : ResolveRecordState(record);
     }
 
     private static ModelCacheState ResolveRecordState(LocalModelCacheRecord? record) =>
@@ -682,14 +709,14 @@ public sealed class ModelDownloadOrchestrator(
             {
                 LocalModelCacheRecord? existing = records.FirstOrDefault(r =>
                     r.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase) &&
-                    r.RootPath.Equals(modelRootDirectory, StringComparison.OrdinalIgnoreCase));
+                    LocalModelCacheRecordStore.RootsEqual(r.RootPath, modelRootDirectory));
 
                 if (existing is not null)
                 {
                     return records
                         .Select(record =>
                             record.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase) &&
-                            record.RootPath.Equals(modelRootDirectory, StringComparison.OrdinalIgnoreCase)
+                            LocalModelCacheRecordStore.RootsEqual(record.RootPath, modelRootDirectory)
                                 ? record with { IntegrityFailed = integrityFailed }
                                 : record)
                         .ToList();
@@ -723,7 +750,7 @@ public sealed class ModelDownloadOrchestrator(
             .Where(record => record.ModelId.Equals(modelId, StringComparison.OrdinalIgnoreCase))
             .Select(record => record.RootPath)
             .Append(configuredRoot)
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         foreach (string root in roots)
         {

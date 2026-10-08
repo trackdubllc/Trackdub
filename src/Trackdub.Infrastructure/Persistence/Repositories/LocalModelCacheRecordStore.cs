@@ -73,7 +73,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
             json,
             LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray);
 
-        return Task.FromResult<IReadOnlyList<LocalModelCacheRecord>>(records ?? []);
+        return Task.FromResult<IReadOnlyList<LocalModelCacheRecord>>(NormalizeRecords(records ?? []));
     }
 
     /// <summary>
@@ -102,9 +102,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
             {
                 // The generated metadata is bound to LocalModelCacheRecord[], so materialize
                 // IReadOnlyList<T> implementations (e.g. single-element wrappers) before serializing.
-                LocalModelCacheRecord[] materialized = records is LocalModelCacheRecord[] array
-                    ? array
-                    : [.. records];
+                LocalModelCacheRecord[] materialized = [.. NormalizeRecords(records)];
                 await JsonSerializer.SerializeAsync(stream, materialized, LocalModelCacheSerializationContext.Default.LocalModelCacheRecordArray, cancellationToken)
                     .ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -116,6 +114,73 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
         {
             TryDeleteFile(tempPath);
             throw;
+        }
+    }
+
+    public static bool RootsEqual(string left, string right)
+    {
+        if (TryNormalizeRoot(left, out string? normalizedLeft) &&
+            TryNormalizeRoot(right, out string? normalizedRight))
+        {
+            return string.Equals(normalizedLeft, normalizedRight, RootPathComparison);
+        }
+
+        // Never throw from equality: fall back to a raw trimmed comparison when
+        // either path is missing or cannot be normalized.
+        return string.Equals(left?.Trim(), right?.Trim(), RootPathComparison);
+    }
+
+    public static IReadOnlyList<LocalModelVariantRecord> CompatibleVariants(
+        LocalModelCacheRecord record, IEnumerable<LocalModelVariantRecord> variants) =>
+        variants.Where(variant =>
+                string.Equals(variant.SourceModelRevision, record.Revision, StringComparison.OrdinalIgnoreCase) &&
+                (string.IsNullOrWhiteSpace(variant.SourceModelSha256) ||
+                 string.Equals(variant.SourceModelSha256, record.Sha256, StringComparison.OrdinalIgnoreCase)))
+            .GroupBy(variant => variant.Alias, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(variant => variant.CreatedAtUtc)
+                .ThenByDescending(variant => variant.IntegrityFailed).First())
+            .ToArray();
+
+    private static IReadOnlyList<LocalModelCacheRecord> NormalizeRecords(IReadOnlyList<LocalModelCacheRecord> records) =>
+        records.GroupBy(record => record.ModelId, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(model => model.GroupBy(record => NormalizeRootKey(record.RootPath), RootPathComparer))
+            .Select(group =>
+            {
+                LocalModelCacheRecord newest = group.OrderByDescending(record => record.CachedAtUtc)
+                    .ThenByDescending(record => record.IntegrityFailed).First();
+                return group.Count() == 1 ? newest : newest with
+                {
+                    Variants = CompatibleVariants(newest, group.SelectMany(record => record.Variants))
+                };
+            }).ToArray();
+
+    private static StringComparer RootPathComparer =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static StringComparison RootPathComparison =>
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private static string NormalizeRootKey(string rootPath) =>
+        TryNormalizeRoot(rootPath, out string? normalized)
+            ? normalized
+            : (rootPath ?? string.Empty).Trim();
+
+    private static bool TryNormalizeRoot(string path, out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            normalized = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
         }
     }
 

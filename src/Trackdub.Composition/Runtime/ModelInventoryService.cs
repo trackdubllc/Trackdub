@@ -57,12 +57,12 @@ public sealed class ModelInventoryService(
         IReadOnlyList<ProviderCapability> providerCapabilities)
     {
         cacheIndex.TryGetValue(manifest.ModelId, out LocalModelCacheRecord[]? cacheRecords);
-        LocalModelCacheRecord? cacheRecord = SelectBestCacheRecord(manifest, cacheRecords);
+        LocalModelCacheRecord? cacheRecord = SelectBestCacheRecord(manifest, cacheRecords, configuredModelCacheDirectory);
 
         ModelCacheState state = DetermineState(manifest, cacheRecord);
         bool canAutoDownload = ModelDownloadManifestFiles.CanAutoDownloadAll(manifest);
         string? failureReason = state == ModelCacheState.Corrupt
-            ? cacheRecord?.IntegrityFailed == true
+            ? (cacheRecord!.IntegrityFailed || HasManifestHashMismatch(manifest, cacheRecord!))
                 ? "Model failed integrity verification; use repair or re-download."
                 : "Model files missing or corrupted on disk."
             : state == ModelCacheState.Blocked
@@ -618,12 +618,12 @@ public sealed class ModelInventoryService(
             : null;
     }
 
-    private static ModelCacheState DetermineState(BundledModelManifestEntry manifest, LocalModelCacheRecord? cacheRecord)
+    internal static ModelCacheState DetermineState(BundledModelManifestEntry manifest, LocalModelCacheRecord? cacheRecord)
     {
         if (cacheRecord is null)
             return ModelCacheState.Missing;
 
-        if (cacheRecord.IntegrityFailed)
+        if (cacheRecord.IntegrityFailed || HasManifestHashMismatch(manifest, cacheRecord))
             return ModelCacheState.Corrupt;
 
         string modelRootDirectory = cacheRecord.RootPath;
@@ -652,26 +652,29 @@ public sealed class ModelInventoryService(
         return ModelCacheState.Installed;
     }
 
-    private LocalModelCacheRecord? SelectBestCacheRecord(
+    internal static LocalModelCacheRecord? SelectBestCacheRecord(
         BundledModelManifestEntry manifest,
-        IReadOnlyList<LocalModelCacheRecord>? cacheRecords)
+        IReadOnlyList<LocalModelCacheRecord>? cacheRecords,
+        string configuredModelCacheDirectory)
     {
         if (cacheRecords is null || cacheRecords.Count == 0)
             return null;
 
         IEnumerable<LocalModelCacheRecord> ordered = cacheRecords
-            .OrderByDescending(record => IsRecordRootUnderConfiguredCache(record.RootPath) ? 1 : 0)
+            .OrderByDescending(record => ModelDownloadPathGuard.IsModelRootUnderConfiguredCache(record.RootPath, configuredModelCacheDirectory, out _) ? 1 : 0)
             .ThenByDescending(record =>
-                !record.IntegrityFailed && File.Exists(ResolveCachedBenchmarkEntryPath(manifest, record)) ? 1 : 0);
+                DetermineState(manifest, record) == ModelCacheState.Installed ? 1 : 0)
+            .ThenByDescending(record => record.CachedAtUtc)
+            .ThenBy(record => record.RootPath, OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         return ordered.FirstOrDefault(record =>
-                !record.IntegrityFailed &&
-                File.Exists(ResolveCachedBenchmarkEntryPath(manifest, record)))
+                DetermineState(manifest, record) == ModelCacheState.Installed)
             ?? ordered.FirstOrDefault();
     }
 
-    private bool IsRecordRootUnderConfiguredCache(string rootPath) =>
-        ModelDownloadPathGuard.IsModelRootUnderConfiguredCache(rootPath, configuredModelCacheDirectory, out _);
+    private static bool HasManifestHashMismatch(BundledModelManifestEntry manifest, LocalModelCacheRecord record) =>
+        !string.IsNullOrWhiteSpace(manifest.Sha256) && !string.IsNullOrWhiteSpace(record.Sha256) &&
+        !string.Equals(manifest.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase);
 
     private static string ResolveCachedBenchmarkEntryPath(
         BundledModelManifestEntry manifest,

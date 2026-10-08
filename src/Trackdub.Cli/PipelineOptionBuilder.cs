@@ -33,7 +33,8 @@ internal static class PipelineOptionBuilder
         bool forceRerun = false,
         bool? ttsRubberbandStretch = null,
         bool noTtsRubberbandStretch = false,
-        double? ttsRubberbandThreshold = null)
+        double? ttsRubberbandThreshold = null,
+        double? ttsAutoStretchMaxOverrun = null)
     {
         return new DubbingSessionOptions
         {
@@ -55,7 +56,7 @@ internal static class PipelineOptionBuilder
             VideoEncoder = VideoEncoderPreferenceSettings.FromKey(videoEncoderKey),
             StageFilter = stageFilter,
             ForceRerun = forceRerun,
-            TtsTiming = BuildTtsTimingPlaceholder(ttsRubberbandStretch, noTtsRubberbandStretch, ttsRubberbandThreshold),
+            TtsTiming = BuildTtsTimingPlaceholder(ttsRubberbandStretch, noTtsRubberbandStretch, ttsRubberbandThreshold, ttsAutoStretchMaxOverrun),
         };
     }
 
@@ -83,7 +84,8 @@ internal static class PipelineOptionBuilder
         bool forceRerun = false,
         bool? ttsRubberbandStretch = null,
         bool noTtsRubberbandStretch = false,
-        double? ttsRubberbandThreshold = null)
+        double? ttsRubberbandThreshold = null,
+        double? ttsAutoStretchMaxOverrun = null)
     {
         return new Handlers.RunPipelineHandler.RunPipelineRequest
         {
@@ -108,6 +110,7 @@ internal static class PipelineOptionBuilder
             TtsRubberbandStretch = ttsRubberbandStretch,
             NoTtsRubberbandStretch = noTtsRubberbandStretch,
             TtsRubberbandThreshold = ttsRubberbandThreshold,
+            TtsAutoStretchMaxOverrun = ttsAutoStretchMaxOverrun,
         };
     }
 
@@ -118,9 +121,10 @@ internal static class PipelineOptionBuilder
     private static TtsTimingSettings? BuildTtsTimingPlaceholder(
         bool? ttsRubberbandStretch,
         bool noTtsRubberbandStretch,
-        double? ttsRubberbandThreshold)
+        double? ttsRubberbandThreshold,
+        double? ttsAutoStretchMaxOverrun)
     {
-        if (ttsRubberbandStretch is null && !noTtsRubberbandStretch && ttsRubberbandThreshold is null)
+        if (ttsRubberbandStretch is null && !noTtsRubberbandStretch && ttsRubberbandThreshold is null && ttsAutoStretchMaxOverrun is null)
         {
             return null;
         }
@@ -133,7 +137,8 @@ internal static class PipelineOptionBuilder
 
         return new TtsTimingSettings(
             EnableRubberbandStretch: enable,
-            RubberbandStretchThreshold: ttsRubberbandThreshold ?? TtsTimingSettings.Default.RubberbandStretchThreshold);
+            RubberbandStretchThreshold: ttsRubberbandThreshold ?? TtsTimingSettings.Default.RubberbandStretchThreshold,
+            AutoStretchMaxOverrun: ttsAutoStretchMaxOverrun);
     }
 }
 

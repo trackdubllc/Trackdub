@@ -248,7 +248,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task VerifyAsync_does_not_bump_CachedAtUtc_when_identity_sha_already_matches()
+    public async Task VerifyAsync_refreshes_CachedAtUtc_when_identity_sha_already_matches()
     {
         const string expectedSha = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
         DateTimeOffset cachedAt = new(2024, 1, 2, 3, 4, 5, TimeSpan.Zero);
@@ -277,7 +277,7 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         Assert.True(verification.HashMatch, verification.FailureReason);
         LocalModelCacheRecord record = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
         Assert.Equal(expectedSha, record.Sha256);
-        Assert.Equal(cachedAt, record.CachedAtUtc);
+        Assert.True(record.CachedAtUtc > cachedAt);
         Assert.False(record.IntegrityFailed);
     }
 
@@ -866,6 +866,33 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         Assert.Equal(ModelCacheState.Installed, verification.NewState);
         IReadOnlyList<LocalModelCacheRecord> records = await store.LoadAsync(TestContext.Current.CancellationToken);
         Assert.False(Assert.Single(records).IntegrityFailed);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VerifyAsync_selects_same_usable_root_as_inventory_and_preserves_other_installations(bool externalRoot)
+    {
+        const string hash = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        var (registry, paths, _) = CreateRegistryWithKnownSha256(hash);
+        var store = new LocalModelCacheRecordStore(paths);
+        string goodRoot = Path.Join(externalRoot ? tempRoot : paths.ModelCacheDirectory, "alternate");
+        Directory.CreateDirectory(Path.Join(goodRoot, "onnx"));
+        await File.WriteAllTextAsync(Path.Join(goodRoot, "onnx", "model.onnx"), "hello", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Join(goodRoot, "tokenizer.json"), "{}", TestContext.Current.CancellationToken);
+        var bad = new LocalModelCacheRecord("example/model", Path.Join(paths.ModelCacheDirectory, "old"),
+            "main", hash, DateTimeOffset.UtcNow, IntegrityFailed: true);
+        var good = bad with { RootPath = goodRoot, IntegrityFailed = false, CachedAtUtc = bad.CachedAtUtc.AddDays(-1) };
+        await store.SaveAsync([bad, good], TestContext.Current.CancellationToken);
+        var inventory = new ModelInventoryService(registry, store, paths);
+        Assert.Equal(goodRoot, (await inventory.GetByModelIdAsync("example/model", TestContext.Current.CancellationToken))!.ModelRootPath);
+        using var orchestrator = new ModelDownloadOrchestrator(registry, store, new StubDownloader(), paths);
+        ModelVerificationResult result = await orchestrator.VerifyAsync("example/model", TestContext.Current.CancellationToken);
+        Assert.True(result.HashMatch, result.FailureReason);
+        IReadOnlyList<LocalModelCacheRecord> records = await store.LoadAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, records.Count);
+        Assert.True(records.Single(record => record.RootPath == bad.RootPath).IntegrityFailed);
+        Assert.False(records.Single(record => record.RootPath == goodRoot).IntegrityFailed);
     }
 
     public void Dispose()

@@ -56,6 +56,173 @@ public sealed class MixPlanBuilderTests
     }
 
     [Fact]
+    public void Build_warns_when_take_extends_past_source_audio_end()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 8.0d, 9.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            createdOffsetSeconds: 0,
+            durationSeconds: 10.0d);
+        ProjectArtifact takeArtifact = CreateArtifact(
+            context,
+            ArtifactKind.TtsTake,
+            "artifacts/tts/take.wav",
+            createdOffsetSeconds: 2,
+            durationSeconds: 3.0d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 72000, sampleRate: 24000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [],
+            [take]));
+
+        // Take starts at 8.0s and runs 3.0s, ending at 11.0s — 1.0s past the 10.0s source audio.
+        MixPlanWarning warning = Assert.Single(plan.Warnings);
+        Assert.Equal(MixPlanWarningCode.TakeExceedsSourceAudio, warning.Code);
+        Assert.Equal(segment.SegmentIndex, warning.SegmentIndex);
+        Assert.Contains("1", warning.Message);
+    }
+
+    [Theory]
+    [InlineData(10.0d)]
+    [InlineData(null)]
+    public void Build_warns_when_take_extends_past_shorter_media_duration(double? sourceDurationSeconds)
+    {
+        // Export renders only through the media duration, so a take that fits the longer (or
+        // unknown) source audio but passes the media end must still warn.
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 5.0d, 6.0d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            createdOffsetSeconds: 0,
+            durationSeconds: sourceDurationSeconds);
+        ProjectArtifact takeArtifact = CreateArtifact(
+            context,
+            ArtifactKind.TtsTake,
+            "artifacts/tts/take.wav",
+            createdOffsetSeconds: 2,
+            durationSeconds: 2.0d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 24000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [],
+            [take],
+            MediaDurationSeconds: 6.0d));
+
+        // Take runs 5.0s–7.0s: inside the 10.0s source audio but 1.0s past the 6.0s media end.
+        MixPlanWarning warning = Assert.Single(plan.Warnings);
+        Assert.Equal(MixPlanWarningCode.TakeExceedsSourceAudio, warning.Code);
+        Assert.Contains("(6 s)", warning.Message);
+    }
+
+    [Fact]
+    public void Build_does_not_warn_when_take_fits_within_source_audio()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 1.0d, 9.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            createdOffsetSeconds: 0,
+            durationSeconds: 10.0d);
+        ProjectArtifact takeArtifact = CreateArtifact(
+            context,
+            ArtifactKind.TtsTake,
+            "artifacts/tts/take.wav",
+            createdOffsetSeconds: 2,
+            durationSeconds: 8.0d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 192000, sampleRate: 24000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [],
+            [take]));
+
+        Assert.Empty(plan.Warnings);
+    }
+
+    [Fact]
+    public void Build_does_not_warn_on_take_overrun_without_source_duration()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 8.0d, 9.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            createdOffsetSeconds: 0,
+            durationSeconds: null);
+        ProjectArtifact takeArtifact = CreateArtifact(
+            context,
+            ArtifactKind.TtsTake,
+            "artifacts/tts/take.wav",
+            createdOffsetSeconds: 2,
+            durationSeconds: 3.0d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 72000, sampleRate: 24000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [],
+            [take]));
+
+        Assert.Empty(plan.Warnings);
+    }
+
+    [Fact]
+    public void Build_does_not_warn_when_take_fits_exactly_to_source_audio_end()
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 7.0d, 9.5d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            createdOffsetSeconds: 0,
+            durationSeconds: 10.0d);
+        ProjectArtifact takeArtifact = CreateArtifact(
+            context,
+            ArtifactKind.TtsTake,
+            "artifacts/tts/take.wav",
+            createdOffsetSeconds: 2,
+            durationSeconds: 3.0d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 72000, sampleRate: 24000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [],
+            [take]));
+
+        Assert.Empty(plan.Warnings);
+    }
+
+    [Fact]
     public void Build_uses_normalized_audio_for_original_pan_reference_when_ambiance_is_source_lane()
     {
         TestProjectContext context = CreateContext();

@@ -66,7 +66,8 @@ public sealed class PreviewMixWorkflow(
                 request.DuckingGainDb,
                 RestoreOriginalPan: request.RestoreOriginalPan,
                 ApplyTimbrePolish: request.ApplyTimbrePolish,
-                CandidateGroups: candidateGroups));
+                CandidateGroups: candidateGroups,
+                MediaDurationSeconds: mediaAsset.DurationSeconds));
             await mixPlanStore.SaveAsync(mixPlan, cancellationToken).ConfigureAwait(false);
 
             string previewRelativePath = ProjectArtifactPaths.GetPreviewMixRelativePath(stageRun.Id);

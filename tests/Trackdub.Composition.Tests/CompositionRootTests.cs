@@ -303,6 +303,37 @@ public sealed class CompositionRootTests : IDisposable
     }
 
     [Fact]
+    public void Workspace_session_applies_auto_stretch_max_overrun_setting()
+    {
+        using ServiceProvider provider = BuildProvider();
+        TranscriptWorkspaceFactory factory = provider.GetRequiredService<TranscriptWorkspaceFactory>();
+        StudioSettings settings = StudioSettings.Default with
+        {
+            TtsTiming = new TtsTimingSettings(
+                EnableRubberbandStretch: false,
+                RubberbandStretchThreshold: 0.15d,
+                AutoStretchMaxOverrun: 0.45d)
+        };
+
+        using TranscriptWorkspaceSession session = factory.Create(CreateTempDirectory(), settings);
+        TtsTimingOptions options = session.Services.GetRequiredService<TtsTimingOptions>();
+
+        Assert.Equal(0.45d, options.AutoStretchMaxOverrun);
+    }
+
+    [Fact]
+    public void Workspace_session_keeps_default_auto_stretch_max_overrun_when_unset()
+    {
+        using ServiceProvider provider = BuildProvider();
+        TranscriptWorkspaceFactory factory = provider.GetRequiredService<TranscriptWorkspaceFactory>();
+
+        using TranscriptWorkspaceSession session = factory.Create(CreateTempDirectory());
+        TtsTimingOptions options = session.Services.GetRequiredService<TtsTimingOptions>();
+
+        Assert.Equal(TtsTimingOptions.Default.AutoStretchMaxOverrun, options.AutoStretchMaxOverrun);
+    }
+
+    [Fact]
     public void Workspace_session_owns_scoped_engine_lifetime()
     {
         using ServiceProvider provider = BuildProvider(services =>

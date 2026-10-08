@@ -14,6 +14,7 @@ internal static class CliTtsTimingResolver
         bool? enableRubberbandStretch,
         bool noRubberbandStretch,
         double? rubberbandStretchThreshold,
+        double? autoStretchMaxOverrun,
         CancellationToken cancellationToken)
     {
         if (rubberbandStretchThreshold is double threshold &&
@@ -23,6 +24,16 @@ internal static class CliTtsTimingResolver
                 ErrorCode.InvalidArgument,
                 $"Option '--tts-rubberband-threshold' must be between 0 and 1 inclusive (got {rubberbandStretchThreshold}).",
                 "--tts-rubberband-threshold");
+            return (null, Program.ExitArgumentError);
+        }
+
+        if (autoStretchMaxOverrun is double autoStretch &&
+            (!double.IsFinite(autoStretch) || autoStretch is < 0d or > 1d))
+        {
+            CliErrorReporter.ReportValidationError(
+                ErrorCode.InvalidArgument,
+                $"Option '--tts-auto-stretch-max-overrun' must be between 0 and 1 inclusive (got {autoStretch}).",
+                "--tts-auto-stretch-max-overrun");
             return (null, Program.ExitArgumentError);
         }
 
@@ -43,7 +54,7 @@ internal static class CliTtsTimingResolver
 
         TtsTimingSettings baseline = await LoadBaselineAsync(factory, cancellationToken).ConfigureAwait(false);
 
-        if (enable is null && rubberbandStretchThreshold is null)
+        if (enable is null && rubberbandStretchThreshold is null && autoStretchMaxOverrun is null)
         {
             // No flags: keep host/default settings as-is for this run.
             return (baseline, Program.ExitSuccess);
@@ -51,7 +62,8 @@ internal static class CliTtsTimingResolver
 
         var resolved = new TtsTimingSettings(
             EnableRubberbandStretch: enable ?? baseline.EnableRubberbandStretch,
-            RubberbandStretchThreshold: rubberbandStretchThreshold ?? baseline.RubberbandStretchThreshold);
+            RubberbandStretchThreshold: rubberbandStretchThreshold ?? baseline.RubberbandStretchThreshold,
+            AutoStretchMaxOverrun: autoStretchMaxOverrun ?? baseline.AutoStretchMaxOverrun);
         return (resolved, Program.ExitSuccess);
     }
 

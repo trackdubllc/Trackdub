@@ -19,16 +19,16 @@ public sealed class LocalModelCacheRegistrar(LocalModelCacheRecordStore recordSt
                 {
                     LocalModelCacheRecord? existing = existingRecords.FirstOrDefault(candidate =>
                         string.Equals(candidate.ModelId, record.ModelId, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(candidate.RootPath, record.RootPath, StringComparison.OrdinalIgnoreCase));
+                        LocalModelCacheRecordStore.RootsEqual(candidate.RootPath, record.RootPath));
 
                     LocalModelCacheRecord merged = existing is null
                         ? record
-                        : record with { Variants = existing.Variants };
+                        : record with { Variants = LocalModelCacheRecordStore.CompatibleVariants(record, existing.Variants.Concat(record.Variants)) };
 
                     return existingRecords
                         .Where(candidate =>
                             !string.Equals(candidate.ModelId, record.ModelId, StringComparison.OrdinalIgnoreCase) ||
-                            !string.Equals(candidate.RootPath, record.RootPath, StringComparison.OrdinalIgnoreCase))
+                            !LocalModelCacheRecordStore.RootsEqual(candidate.RootPath, record.RootPath))
                         .Append(merged)
                         .ToArray();
                 },

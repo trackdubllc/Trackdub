@@ -806,6 +806,48 @@ public sealed class ExportStageHandlerTests
     }
 
     [Fact]
+    public async Task ExportAsync_reports_take_exceeding_source_audio_before_rendering()
+    {
+        using var temp = new TempDirectory();
+        TestExportContext context = CreateContext(temp.Path, includeCompletedTake: true, durationSeconds: 6.0d);
+        // Make the take overrun the source: 1.0s start + 5.5s take = 6.5s > 6.0s source.
+        var state = context.State;
+        var artifacts = state.ProjectState.Artifacts
+            .Select(artifact => artifact.Kind == ArtifactKind.TtsTake
+                ? artifact with { DurationSeconds = 5.5d }
+                : artifact)
+            .ToList();
+        state = state with { ProjectState = state.ProjectState with { Artifacts = artifacts } };
+        var mixRenderer = new FakeMixRenderer();
+        var loudnessNormalizer = new FakeLoudnessNormalizer();
+        var exportRenderer = new FakeExportRenderer();
+        var stageRunStore = new FakeProjectStageRunStore();
+        ExportStageHandler handler = CreateHandler(
+            new FakeArtifactStore(temp.Path),
+            mixRenderer,
+            loudnessNormalizer,
+            exportRenderer,
+            new FakeMediaProbe { Snapshot = CreateProbeSnapshot(6.0d) },
+            new FakeMediaAssetRepository(),
+            stageRunStore);
+        string outputPath = Path.Join(temp.Path, "delivery", "lesson-dub.mp4");
+
+        ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() =>
+            handler.ExportAsync(
+                state,
+                new ExportStageRequest(context.Project.Id, outputPath, []),
+                TestContext.Current.CancellationToken));
+
+        ExportFailureCause cause = Assert.Single(exception.Report.Causes);
+        Assert.Equal("take-exceeds-source-audio", cause.Code);
+        Assert.Contains("past the end", cause.Message);
+        Assert.Empty(mixRenderer.Calls);
+        Assert.Empty(loudnessNormalizer.Calls);
+        Assert.Empty(exportRenderer.Calls);
+        Assert.Equal(StageRunStatus.Failed, Assert.Single(stageRunStore.All).Status);
+    }
+
+    [Fact]
     public async Task ExportAsync_marks_stage_failed_when_unexpected_error_report_write_fails()
     {
         using var temp = new TempDirectory();
