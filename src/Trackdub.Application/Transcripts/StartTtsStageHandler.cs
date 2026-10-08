@@ -57,15 +57,42 @@ public sealed class StartTtsStageHandler(
     IApplicationLogger? logger = null,
     PipelineDegradationWriter? degradationWriter = null,
     IRuntimePlanningPreferences? runtimePlanningPreferences = null,
-    IAtomicRevisionCommitBoundary? commitBoundary = null)
+    IAtomicRevisionCommitBoundary? commitBoundary = null,
+    TtsExecutionOptions? executionOptions = null,
+    ITtsAcceleratorPlacementResolver? placementResolver = null)
     : IDisposable
 {
     private const string TtsAudioPostProcessVersion = "tts-audio-trim-v1";
-    private const int TtsMaxConcurrency = 4;
 
     private readonly DurationAnalysisService durationAnalysisService = durationAnalysisService ?? new DurationAnalysisService();
     private readonly TtsTimingOptions timingOptions = (timingOptions ?? TtsTimingOptions.Default).Normalize();
+    private readonly TtsExecutionOptions executionOptions = executionOptions ?? TtsExecutionOptions.Default;
     private readonly SemaphoreSlim persistenceGate = new(1, 1);
+
+    // Placement only tunes concurrency, so a planning failure falls back to the host-wide bound
+    // rather than failing the stage; synthesis surfaces real planning errors itself.
+    private async Task<TtsAcceleratorPlacement?> TryResolvePlacementAsync(
+        InferenceRequestOptions options,
+        string? languageCode,
+        CancellationToken cancellationToken)
+    {
+        if (placementResolver is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await placementResolver
+                .ResolvePlacementAsync(options, languageCode, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
+        {
+            logger?.LogWarning("TTS placement could not be resolved; using the host-wide VRAM bound.", ex);
+            return null;
+        }
+    }
 
     public async Task<StartTtsStageResult> HandleAsync(
         StartTtsStageRequest request,
@@ -166,6 +193,34 @@ public sealed class StartTtsStageHandler(
 
             if (voiceCompatible)
             {
+                // Resolve the effective TTS degree of parallelism once per run: the configured
+                // max, tightened by a VRAM-aware bound for the preferred model class. The alias
+                // comes from the same CreateTtsRequestOptions used for synthesis, but when the
+                // alias is not required the planner may fall back to another class, so this
+                // bound is an estimate for that path, not a guarantee.
+                InferenceRequestOptions representativeOptions = CreateTtsRequestOptions(
+                    request,
+                    voice,
+                    isVoiceCloning);
+                string? modelAlias = representativeOptions.NormalizedPreferredModelAlias;
+                // Prefer the planned placement: the provider synthesis will use and that device's
+                // memory. Without one, only a required CPU/DNNL pin keeps the run off the
+                // accelerator; a non-required pin can still fall back to a GPU provider.
+                TtsAcceleratorPlacement? placement = await TryResolvePlacementAsync(
+                    representativeOptions,
+                    request.TargetLanguage,
+                    cancellationToken).ConfigureAwait(false);
+                bool acceleratorRouted = placement?.AcceleratorRouted ??
+                    !(request.RequirePreferredExecutionProvider &&
+                      request.PreferredExecutionProvider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl);
+                long? deviceVramMb = placement?.DeviceVramMb;
+                int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(
+                    modelAlias,
+                    acceleratorRouted,
+                    deviceVramMb);
+                logger?.LogInformation(
+                    $"TTS parallelism: {effectiveMaxConcurrency} (configured {executionOptions.ConfiguredMaxConcurrency?.ToString() ?? "default"}, device VRAM {deviceVramMb?.ToString(CultureInfo.InvariantCulture) ?? "unknown"} MB, host max VRAM {executionOptions.MaxAcceleratorVramMb} MB, accelerator {acceleratorRouted}, model '{modelAlias ?? "default stock"}').");
+
                 var ctx = new SegmentProcessingContext(takes, targetSegments.Length);
                 PipelineProgressReporter.Determinate(
                     progress,
@@ -178,7 +233,7 @@ public sealed class StartTtsStageHandler(
                     targetSegments,
                     new ParallelOptions
                     {
-                        MaxDegreeOfParallelism = TtsMaxConcurrency,
+                        MaxDegreeOfParallelism = effectiveMaxConcurrency,
                         CancellationToken = cancellationToken
                     },
                     (translatedSegment, ct) => ProcessTranslatedSegmentAsync(

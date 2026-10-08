@@ -8,8 +8,9 @@ namespace Trackdub.Inference.Onnx.Runtime.Routing;
 
 public sealed class RoutedTtsEngine(IRuntimePlanner runtimePlanner,
     IEnumerable<ITtsEngineAdapter> adapters,
-    IRuntimePlanningPreferences? runtimePlanningPreferences = null)
-    : ITtsEngine, ITtsEngineWithExecutionSummary, IStageRuntimeExecutionReporter
+    IRuntimePlanningPreferences? runtimePlanningPreferences = null,
+    IDeviceEnumerator? deviceEnumerator = null)
+    : ITtsEngine, ITtsEngineWithExecutionSummary, IStageRuntimeExecutionReporter, ITtsAcceleratorPlacementResolver
 {
     private readonly IRuntimePlanner runtimePlanner = runtimePlanner ?? throw new ArgumentNullException(nameof(runtimePlanner));
     private readonly IReadOnlyList<ITtsEngineAdapter> adapters = (adapters ?? throw new ArgumentNullException(nameof(adapters))).ToArray();
@@ -89,16 +90,101 @@ public sealed class RoutedTtsEngine(IRuntimePlanner runtimePlanner,
             BootstrapDetail: plan.Fallback?.Detail);
     }
 
+    public async Task<TtsAcceleratorPlacement?> ResolvePlacementAsync(
+        InferenceRequestOptions options,
+        string? languageCode,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        StageRuntimePlan plan = await PlanAsync(options, languageCode, cancellationToken).ConfigureAwait(false);
+        if (plan.ExecutionProvider is not ExecutionProviderKind provider)
+        {
+            return null;
+        }
+
+        if (provider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl)
+        {
+            return new TtsAcceleratorPlacement(AcceleratorRouted: false, DeviceVramMb: null);
+        }
+
+        IReadOnlyList<DeviceEntry> devices = deviceEnumerator is null
+            ? []
+            : await deviceEnumerator.GetDevicesAsync(cancellationToken).ConfigureAwait(false);
+        return new TtsAcceleratorPlacement(
+            AcceleratorRouted: true,
+            DeviceVramMb: ResolvePlannedDeviceVramMb(plan.DeviceIndex, provider, devices));
+    }
+
+    /// <summary>
+    /// Memory of the device the run executes on: the plan's device when it names one, otherwise
+    /// the device sessions bind (ORT device 0 for the provider). Integrated GPUs count shared
+    /// memory, since their allocations come from it. When the device cannot be identified or
+    /// reports no memory, assumes the smallest GPU with a positive reading. Null when no GPU
+    /// reports memory; the caller then uses the host-wide reading, or the configured value when
+    /// that is also unknown, so no VRAM tightening applies.
+    /// </summary>
+    internal static long? ResolvePlannedDeviceVramMb(
+        int? deviceIndex,
+        ExecutionProviderKind provider,
+        IReadOnlyList<DeviceEntry> devices)
+    {
+        DeviceEntry? device = deviceIndex is int index
+            ? devices.FirstOrDefault(entry => entry.DeviceIndex == index)
+            : ResolveBoundDevice(provider, devices);
+        if (device is not null && ResolveDeviceMemoryMb(device) is > 0 and var memoryMb)
+        {
+            return memoryMb;
+        }
+
+        long[] gpuMemoryMb = devices
+            .Where(static entry => entry.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu)
+            .Select(ResolveDeviceMemoryMb)
+            .Where(static memoryMb => memoryMb > 0)
+            .ToArray();
+        return gpuMemoryMb.Length > 0 ? gpuMemoryMb.Min() : null;
+    }
+
+    // Sessions append the provider with device id 0 (DirectML: first hardware DXGI adapter;
+    // CUDA/TensorRT: first NVIDIA GPU), so mirror that when the plan names no device.
+    private static DeviceEntry? ResolveBoundDevice(ExecutionProviderKind provider, IReadOnlyList<DeviceEntry> devices)
+    {
+        IEnumerable<DeviceEntry> gpus = devices
+            .Where(static entry => entry.Kind is DeviceKind.DiscreteGpu or DeviceKind.IntegratedGpu)
+            .OrderBy(static entry => entry.DeviceIndex);
+        return provider is ExecutionProviderKind.Cuda or ExecutionProviderKind.TensorRt or ExecutionProviderKind.TensorRTRtx
+            ? gpus.FirstOrDefault(static entry =>
+                entry.VendorName.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) ||
+                entry.SupportedProviders.Contains(ExecutionProviderKind.Cuda))
+            : gpus.FirstOrDefault(entry => entry.SupportedProviders.Contains(provider));
+    }
+
+    private static long ResolveDeviceMemoryMb(DeviceEntry device) =>
+        device.Kind is DeviceKind.IntegratedGpu
+            ? (long)device.DedicatedVramMb + device.SharedMemoryMb
+            : device.DedicatedVramMb;
+
     private async Task<(ITtsEngineAdapter Adapter, StageRuntimePlan Plan)> SelectAdapterAsync(
         TtsSynthesisRequest request,
         InferenceRequestOptions options,
+        CancellationToken cancellationToken)
+    {
+        StageRuntimePlan plan = await PlanAsync(options, request.LanguageCode, cancellationToken).ConfigureAwait(false);
+
+        ITtsEngineAdapter adapter = InferenceEngineAdapterSelector.SelectForPlan(RuntimeStage.Tts, plan, adapters);
+        return (adapter, plan);
+    }
+
+    // Shared by synthesis and placement so the concurrency bound reads the same plan synthesis runs.
+    private async Task<StageRuntimePlan> PlanAsync(
+        InferenceRequestOptions options,
+        string? languageCode,
         CancellationToken cancellationToken)
     {
         StageRuntimePlanningRequest planningRequest = await StageRuntimePlanningRequestFactory.ApplyPreferredModelTierAsync(
             new StageRuntimePlanningRequest(
                 RuntimeStage.Tts,
                 options.NormalizedPreferredModelAlias,
-                SourceLanguage: request.LanguageCode,
+                SourceLanguage: languageCode,
                 RequirePreferredModelAlias: options.RequirePreferredModelAlias,
                 PreferredExecutionProvider: ExecutionProviderRequest.ParsePreferredExecutionProvider(
                     options.PreferredExecutionProvider,
@@ -108,9 +194,6 @@ public sealed class RoutedTtsEngine(IRuntimePlanner runtimePlanner,
             runtimePlanningPreferences,
             cancellationToken).ConfigureAwait(false);
 
-        StageRuntimePlan plan = await runtimePlanner.PlanAsync(planningRequest, cancellationToken).ConfigureAwait(false);
-
-        ITtsEngineAdapter adapter = InferenceEngineAdapterSelector.SelectForPlan(RuntimeStage.Tts, plan, adapters);
-        return (adapter, plan);
+        return await runtimePlanner.PlanAsync(planningRequest, cancellationToken).ConfigureAwait(false);
     }
 }

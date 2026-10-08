@@ -83,7 +83,13 @@ public sealed record StudioSettings(
     /// <summary>Application-generated default aliases, keyed by stage. Configured stage aliases and
     /// caller preferences are explicit even when they equal these defaults. Legacy settings without
     /// this provenance treat non-Auto overrides as explicit.</summary>
-    IReadOnlyDictionary<string, string>? AutomaticModelAliases = null)
+    IReadOnlyDictionary<string, string>? AutomaticModelAliases = null,
+    /// <summary>
+    /// Configured maximum TTS degree of parallelism (before the per-model VRAM-aware cap
+    /// applied in <c>TtsExecutionOptions</c>). Null means the historical default (4).
+    /// Not exposed in Settings UI yet; CLI/SDK and settings.json can set it.
+    /// </summary>
+    int? TtsMaxConcurrency = null)
 {
     public const double DefaultTranscriptConfidenceThreshold = 0.75d;
 

@@ -73,3 +73,42 @@ $env:TRACKDUB_SESSION_PROCESS_GPU_ADMISSION = "0"
 
 The process reading is reported as the `gpuBytes` evidence metric as well; that reporting is
 independent of admission. See [benchmark-evidence.md](../development/benchmark-evidence.md).
+
+## TTS synthesis concurrency
+
+TTS synthesizes segments in parallel. The effective degree of parallelism is
+`min(configured, VRAM-derived bound)`:
+
+- **Configured** — `ttsMaxConcurrency` in `%LOCALAPPDATA%\Trackdub\settings.json`
+  (or `TtsMaxConcurrency` in `SdkSessionOptions`). Unset or non-positive keeps the
+  historical default of 4; values above 8 are clamped to 8.
+- **VRAM-derived bound** — computed from the dedicated memory of the device the TTS plan
+  selects and the memory class of the preferred model (`NormalizedPreferredModelAlias`). The
+  stage plans TTS with the same request synthesis uses. If the plan names no device, the
+  device sessions bind is used: ORT device 0 for the provider (the first hardware adapter for
+  DirectML, the first NVIDIA GPU for CUDA and TensorRT). Integrated GPUs count shared memory.
+  If that device cannot be identified or reports no memory, the smallest GPU is assumed. If no
+  per-device reading exists at all, the largest adapter's memory is used. One worker is
+  assumed to need approximately 1 GB (small: Kokoro-82M), 4 GB (medium: CosyVoice-300M,
+  Chatterbox, Qwen3-TTS-0.6B, F5) or 16 GB (large: Qwen3-TTS-1.7B) of accelerator memory,
+  with each additional concurrent worker adding ~512 MB. The bound never exceeds the
+  configured value and the cap never fails a run: a budget that cannot cover even one
+  worker synthesizes one segment at a time.
+  - When the preferred alias is not required, the planner may fall back to a model in
+    another memory class. The bound does not cover that fallback model.
+  - A run whose plan selects a CPU or DNNL provider is not bounded by VRAM. If placement
+    cannot be resolved, only a required CPU or DNNL pin skips the bound, since a non-required
+    pin can still fall back to an accelerator.
+  - Runtime device fallback after an out-of-memory error can move sessions to another device
+    after the bound is set; the bound is not recomputed mid-run.
+
+A per-device reading applies even when the host-wide probe returns 0. Only when neither a
+per-device reading nor the host-wide probe is available (CPU-only machines, probe failure)
+is the VRAM bound skipped and the configured value applied unchanged. The effective value is
+logged at the start of every TTS stage (`TTS parallelism: N (configured …, device VRAM … MB,
+host max VRAM … MB, accelerator …, model …)`).
+
+```json
+{ "ttsMaxConcurrency": 4 }
+```
+

@@ -445,6 +445,10 @@ public static class CompositionRoot
         services.TryAddScoped<IPreviewRangeRenderer, PreviewRangeRenderer>();
         services.TryAddScoped<TtsTimingOptions>(sp =>
             CreateTtsTimingOptions(sp.GetRequiredService<TranscriptWorkspaceContext>().Settings.TtsTiming));
+        services.TryAddScoped<TtsExecutionOptions>(sp =>
+            CreateTtsExecutionOptions(
+                sp.GetRequiredService<TranscriptWorkspaceContext>().Settings.TtsMaxConcurrency,
+                AcceleratorVramDetector.DetectMaxDedicatedVramMb()));
 
         services.TryAddScoped<MixPlanBuilder>();
         services.TryAddScoped<MixPlanStore>();
@@ -723,6 +727,7 @@ public static class CompositionRoot
                 sp.GetRequiredService<OpenAiCloudTranslationEngine>(),
                 sp.GetRequiredService<GeminiCloudTranslationEngine>()));
         services.TryAddScoped<RoutedTtsEngine>();
+        services.TryAddScoped<ITtsAcceleratorPlacementResolver>(sp => sp.GetRequiredService<RoutedTtsEngine>());
         services.TryAddScoped<ITtsEngine>(sp =>
             new CloudAwareTtsEngine(
                 sp.GetRequiredService<RoutedTtsEngine>(),
@@ -766,6 +771,15 @@ public static class CompositionRoot
             AutoStretchMaxOverrun = normalized.AutoStretchMaxOverrun ?? TtsTimingOptions.Default.AutoStretchMaxOverrun
         };
     }
+
+    private static TtsExecutionOptions CreateTtsExecutionOptions(
+        int? configuredMaxConcurrency,
+        long maxAcceleratorVramMb) =>
+        new(
+            ConfiguredMaxConcurrency: configuredMaxConcurrency is int value && value >= TtsExecutionOptions.MinConcurrency
+                ? Math.Min(value, TtsExecutionOptions.AbsoluteMaxConcurrency)
+                : null,
+            MaxAcceleratorVramMb: maxAcceleratorVramMb);
 
 #if LINUX
     [SupportedOSPlatform("linux")]
