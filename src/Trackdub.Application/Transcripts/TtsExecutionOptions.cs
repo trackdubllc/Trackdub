@@ -11,7 +11,7 @@ namespace Trackdub.Application.Transcripts;
 /// </param>
 /// <param name="MaxAcceleratorVramMb">
 /// Largest dedicated GPU adapter memory in MB, or 0 when unknown/unavailable (CPU-only
-/// hosts, detection failure). Derived from the same hardware profile the planner uses.
+/// hosts, detection failure). Used only when the planned device's memory is unknown.
 /// </param>
 public sealed record TtsExecutionOptions(
     int? ConfiguredMaxConcurrency,
@@ -60,8 +60,16 @@ public sealed record TtsExecutionOptions(
     /// unknown (0), the configured value applies unchanged — the cap only ever tightens.
     /// </summary>
     /// <param name="modelAlias">Resolved TTS model alias for the run (normalized; may be null).</param>
-    /// <param name="acceleratorRouted">False when a required CPU/DNNL pin keeps the run off accelerators, so accelerator VRAM does not bound it.</param>
-    public int ResolveEffectiveConcurrency(string? modelAlias, bool acceleratorRouted = true)
+    /// <param name="acceleratorRouted">False when the run executes off accelerators (CPU/DNNL), so accelerator VRAM does not bound it.</param>
+    public int ResolveEffectiveConcurrency(string? modelAlias, bool acceleratorRouted = true) =>
+        ResolveEffectiveConcurrency(modelAlias, acceleratorRouted, deviceVramMb: null);
+
+    /// <inheritdoc cref="ResolveEffectiveConcurrency(string?, bool)"/>
+    /// <param name="deviceVramMb">
+    /// Dedicated memory of the device the run is planned on. Null or non-positive falls back to
+    /// <see cref="MaxAcceleratorVramMb"/>.
+    /// </param>
+    public int ResolveEffectiveConcurrency(string? modelAlias, bool acceleratorRouted, long? deviceVramMb)
     {
         // Null or non-positive configured values fall back to the legacy default; the
         // composition root normalizes them, but the record is robust on its own.
@@ -70,19 +78,20 @@ public sealed record TtsExecutionOptions(
             : LegacyMaxConcurrency;
         int configured = Math.Clamp(configuredValue, MinConcurrency, AbsoluteMaxConcurrency);
 
-        if (!acceleratorRouted || MaxAcceleratorVramMb <= 0)
+        long vramMb = deviceVramMb is > 0 ? deviceVramMb.Value : MaxAcceleratorVramMb;
+        if (!acceleratorRouted || vramMb <= 0)
         {
             return configured;
         }
 
-        return Math.Min(configured, ResolveVramBound(modelAlias));
+        return Math.Min(configured, ResolveVramBound(modelAlias, vramMb));
     }
 
-    /// <summary>VRAM-derived worker bound for the model class of <paramref name="modelAlias"/>.</summary>
-    internal int ResolveVramBound(string? modelAlias)
+    /// <summary>VRAM-derived worker bound for the model class of <paramref name="modelAlias"/> on a device with <paramref name="vramMb"/>.</summary>
+    internal int ResolveVramBound(string? modelAlias, long vramMb)
     {
         long modelBudgetMb = ResolveModelVramBudgetMb(modelAlias);
-        long available = MaxAcceleratorVramMb - modelBudgetMb;
+        long available = vramMb - modelBudgetMb;
         if (available < 0)
         {
             return MinConcurrency;

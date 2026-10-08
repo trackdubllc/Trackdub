@@ -81,6 +81,24 @@ public sealed class TtsExecutionOptionsTests
     }
 
     [Fact]
+    public void Resolve_PlannedDeviceVram_OverridesHostMax()
+    {
+        // 24 GB host max would allow 8 medium workers; the planned 4 GB adapter allows 1.
+        var options = new TtsExecutionOptions(ConfiguredMaxConcurrency: 8, MaxAcceleratorVramMb: 24576);
+
+        Assert.Equal(1, options.ResolveEffectiveConcurrency("cosyvoice-300m", acceleratorRouted: true, deviceVramMb: 4096));
+        Assert.Equal(8, options.ResolveEffectiveConcurrency("cosyvoice-300m", acceleratorRouted: true, deviceVramMb: null));
+    }
+
+    [Fact]
+    public void Resolve_PlannedDeviceVramWithUnknownHostMax_StillBounds()
+    {
+        var options = new TtsExecutionOptions(ConfiguredMaxConcurrency: 8, MaxAcceleratorVramMb: 0);
+
+        Assert.Equal(1, options.ResolveEffectiveConcurrency("qwen3-tts-1.7b-base", acceleratorRouted: true, deviceVramMb: 12227));
+    }
+
+    [Fact]
     public void Resolve_CpuRouted_IgnoresAcceleratorVramCap()
     {
         var options = new TtsExecutionOptions(ConfiguredMaxConcurrency: 8, MaxAcceleratorVramMb: 6144);

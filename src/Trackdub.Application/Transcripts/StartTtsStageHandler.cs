@@ -58,7 +58,8 @@ public sealed class StartTtsStageHandler(
     PipelineDegradationWriter? degradationWriter = null,
     IRuntimePlanningPreferences? runtimePlanningPreferences = null,
     IAtomicRevisionCommitBoundary? commitBoundary = null,
-    TtsExecutionOptions? executionOptions = null)
+    TtsExecutionOptions? executionOptions = null,
+    ITtsAcceleratorPlacementResolver? placementResolver = null)
     : IDisposable
 {
     private const string TtsAudioPostProcessVersion = "tts-audio-trim-v1";
@@ -67,6 +68,35 @@ public sealed class StartTtsStageHandler(
     private readonly TtsTimingOptions timingOptions = (timingOptions ?? TtsTimingOptions.Default).Normalize();
     private readonly TtsExecutionOptions executionOptions = executionOptions ?? TtsExecutionOptions.Default;
     private readonly SemaphoreSlim persistenceGate = new(1, 1);
+
+    // Placement only tunes concurrency, so a planning failure falls back to the host-wide bound
+    // rather than failing the stage; synthesis surfaces real planning errors itself.
+    private async Task<TtsAcceleratorPlacement?> TryResolvePlacementAsync(
+        InferenceRequestOptions options,
+        string? languageCode,
+        CancellationToken cancellationToken)
+    {
+        if (placementResolver is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await placementResolver
+                .ResolvePlacementAsync(options, languageCode, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning("TTS placement could not be resolved; using the host-wide VRAM bound.", ex);
+            return null;
+        }
+    }
 
     public async Task<StartTtsStageResult> HandleAsync(
         StartTtsStageRequest request,
@@ -177,13 +207,23 @@ public sealed class StartTtsStageHandler(
                     voice,
                     isVoiceCloning);
                 string? modelAlias = representativeOptions.NormalizedPreferredModelAlias;
-                // Only a required CPU/DNNL pin keeps the run off the accelerator; a non-required
-                // pin can still fall back to a GPU provider, which the VRAM bound must cover.
-                bool acceleratorRouted = !(request.RequirePreferredExecutionProvider &&
-                    request.PreferredExecutionProvider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl);
-                int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(modelAlias, acceleratorRouted);
+                // Prefer the planned placement: the provider synthesis will use and that device's
+                // memory. Without one, only a required CPU/DNNL pin keeps the run off the
+                // accelerator; a non-required pin can still fall back to a GPU provider.
+                TtsAcceleratorPlacement? placement = await TryResolvePlacementAsync(
+                    representativeOptions,
+                    request.TargetLanguage,
+                    cancellationToken).ConfigureAwait(false);
+                bool acceleratorRouted = placement?.AcceleratorRouted ??
+                    !(request.RequirePreferredExecutionProvider &&
+                      request.PreferredExecutionProvider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl);
+                long? deviceVramMb = placement?.DeviceVramMb;
+                int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(
+                    modelAlias,
+                    acceleratorRouted,
+                    deviceVramMb);
                 logger?.LogInformation(
-                    $"TTS parallelism: {effectiveMaxConcurrency} (configured {executionOptions.ConfiguredMaxConcurrency?.ToString() ?? "default"}, VRAM {executionOptions.MaxAcceleratorVramMb} MB, model '{modelAlias ?? "default stock"}').");
+                    $"TTS parallelism: {effectiveMaxConcurrency} (configured {executionOptions.ConfiguredMaxConcurrency?.ToString() ?? "default"}, device VRAM {deviceVramMb?.ToString(CultureInfo.InvariantCulture) ?? "unknown"} MB, host max VRAM {executionOptions.MaxAcceleratorVramMb} MB, accelerator {acceleratorRouted}, model '{modelAlias ?? "default stock"}').");
 
                 var ctx = new SegmentProcessingContext(takes, targetSegments.Length);
                 PipelineProgressReporter.Determinate(

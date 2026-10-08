@@ -727,6 +727,7 @@ public static class CompositionRoot
                 sp.GetRequiredService<OpenAiCloudTranslationEngine>(),
                 sp.GetRequiredService<GeminiCloudTranslationEngine>()));
         services.TryAddScoped<RoutedTtsEngine>();
+        services.TryAddScoped<ITtsAcceleratorPlacementResolver>(sp => sp.GetRequiredService<RoutedTtsEngine>());
         services.TryAddScoped<ITtsEngine>(sp =>
             new CloudAwareTtsEngine(
                 sp.GetRequiredService<RoutedTtsEngine>(),

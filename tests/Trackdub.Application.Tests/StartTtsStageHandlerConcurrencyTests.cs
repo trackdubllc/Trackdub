@@ -74,10 +74,62 @@ public sealed class StartTtsStageHandlerConcurrencyTests
         Assert.True(engine.PeakConcurrency <= 1, $"Expected peak <= 1 under large-model cap, got {engine.PeakConcurrency}.");
     }
 
+    [Fact]
+    public async Task HandleAsync_PlannedSmallAdapter_CapsByThatAdapterNotHostMax()
+    {
+        // Host max 24 GB would allow 8 medium-model workers; the plan places synthesis on a
+        // 4 GB adapter, whose budget allows 1.
+        var engine = new ConcurrencyTrackingEngine(TimeSpan.FromMilliseconds(50));
+        var stageRunStore = new FakeProjectStageRunStore();
+        var resolver = new FixedPlacementResolver(new TtsAcceleratorPlacement(AcceleratorRouted: true, DeviceVramMb: 4096));
+        using var handler = CreateHandler(engine, stageRunStore, new TtsExecutionOptions(8, 24576), resolver);
+        StartTtsStageRequest request = CreateMultiSegmentRequest(
+            segmentCount: 4, voiceId: "af_heart", preferredModelAlias: "qwen3-tts-0.6b-customvoice");
+
+        await handler.HandleAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, engine.CompletedCount);
+        Assert.Equal(1, resolver.CallCount);
+        Assert.True(engine.PeakConcurrency <= 1, $"Expected peak concurrency <= 1, got {engine.PeakConcurrency}.");
+    }
+
+    [Fact]
+    public async Task HandleAsync_PlacementResolverFails_FallsBackToHostBound()
+    {
+        var engine = new ConcurrencyTrackingEngine(TimeSpan.FromMilliseconds(50));
+        var stageRunStore = new FakeProjectStageRunStore();
+        var resolver = new FixedPlacementResolver(failure: new InvalidOperationException("planner down"));
+        using var handler = CreateHandler(engine, stageRunStore, new TtsExecutionOptions(8, 6144), resolver);
+        StartTtsStageRequest request = CreateMultiSegmentRequest(
+            segmentCount: 4, voiceId: "af_heart", preferredModelAlias: "qwen3-tts-1.7b-customvoice");
+
+        await handler.HandleAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StageRunStatus.Completed, Assert.Single(stageRunStore.All).Status);
+        Assert.True(engine.PeakConcurrency <= 1, $"Expected host-bound peak <= 1, got {engine.PeakConcurrency}.");
+    }
+
+    private sealed class FixedPlacementResolver(
+        TtsAcceleratorPlacement? placement = null,
+        Exception? failure = null) : ITtsAcceleratorPlacementResolver
+    {
+        public int CallCount { get; private set; }
+
+        public Task<TtsAcceleratorPlacement?> ResolvePlacementAsync(
+            InferenceRequestOptions options,
+            string? languageCode,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return failure is null ? Task.FromResult(placement) : Task.FromException<TtsAcceleratorPlacement?>(failure);
+        }
+    }
+
     private static StartTtsStageHandler CreateHandler(
         FakeTtsEngine engine,
         FakeProjectStageRunStore stageRunStore,
-        TtsExecutionOptions executionOptions)
+        TtsExecutionOptions executionOptions,
+        ITtsAcceleratorPlacementResolver? placementResolver = null)
     {
         var artifactStore = new FakeArtifactStore();
         var mediaRepository = new FakeMediaAssetRepository();
@@ -92,7 +144,8 @@ public sealed class StartTtsStageHandlerConcurrencyTests
             stageRunStore,
             logger: null,
             commitBoundary: TestAtomicCommitBoundary.Create(null, takeRepository, artifactStore, mediaRepository),
-            executionOptions: executionOptions);
+            executionOptions: executionOptions,
+            placementResolver: placementResolver);
     }
 
     private static StartTtsStageRequest CreateMultiSegmentRequest(
