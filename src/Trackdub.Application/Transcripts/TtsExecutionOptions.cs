@@ -89,7 +89,7 @@ public sealed record TtsExecutionOptions(
         }
 
         // The model budget already covers the first worker; each additional worker adds PerWorkerVramMb.
-        return (int)Math.Clamp(1 + available / PerWorkerVramMb, MinConcurrency, MaxVramDerivedConcurrency);
+        return (int)Math.Clamp(1 + (available / PerWorkerVramMb), MinConcurrency, MaxVramDerivedConcurrency);
     }
 
     /// <summary>
