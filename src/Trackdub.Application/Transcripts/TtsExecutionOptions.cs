@@ -60,7 +60,8 @@ public sealed record TtsExecutionOptions(
     /// unknown (0), the configured value applies unchanged — the cap only ever tightens.
     /// </summary>
     /// <param name="modelAlias">Resolved TTS model alias for the run (normalized; may be null).</param>
-    public int ResolveEffectiveConcurrency(string? modelAlias)
+    /// <param name="acceleratorRouted">False when the run is pinned to a CPU provider, so accelerator VRAM does not bound it.</param>
+    public int ResolveEffectiveConcurrency(string? modelAlias, bool acceleratorRouted = true)
     {
         // Null or non-positive configured values fall back to the legacy default; the
         // composition root normalizes them, but the record is robust on its own.
@@ -69,7 +70,7 @@ public sealed record TtsExecutionOptions(
             : LegacyMaxConcurrency;
         int configured = Math.Clamp(configuredValue, MinConcurrency, AbsoluteMaxConcurrency);
 
-        if (MaxAcceleratorVramMb <= 0)
+        if (!acceleratorRouted || MaxAcceleratorVramMb <= 0)
         {
             return configured;
         }
@@ -82,12 +83,13 @@ public sealed record TtsExecutionOptions(
     {
         long modelBudgetMb = ResolveModelVramBudgetMb(modelAlias);
         long available = MaxAcceleratorVramMb - modelBudgetMb;
-        if (available <= 0)
+        if (available < 0)
         {
             return MinConcurrency;
         }
 
-        return (int)Math.Clamp(available / PerWorkerVramMb, MinConcurrency, MaxVramDerivedConcurrency);
+        // The model budget already covers the first worker; each additional worker adds PerWorkerVramMb.
+        return (int)Math.Clamp(1 + available / PerWorkerVramMb, MinConcurrency, MaxVramDerivedConcurrency);
     }
 
     /// <summary>
@@ -121,6 +123,15 @@ public sealed record TtsExecutionOptions(
         return Qwen3TtsDefaults.IsLargeAlias(normalized);
     }
 
+    // Manifest aliases for Chatterbox models that VoiceCloningDefaults does not name; without
+    // these they would be budgeted as the small class.
+    private static readonly HashSet<string> ChatterboxManifestAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "chatterbox",
+        "chatterbox-turbo",
+        "chatterbox-multilingual-onnx"
+    };
+
     private static bool IsMediumModelAlias(string? alias)
     {
         if (string.IsNullOrWhiteSpace(alias))
@@ -131,6 +142,7 @@ public sealed record TtsExecutionOptions(
         string normalized = alias.Trim();
         return VoiceCloningDefaults.IsVoiceCloningModelAlias(normalized) ||
                VoiceCloningDefaults.IsF5VoiceCloningModelAlias(normalized) ||
+               ChatterboxManifestAliases.Contains(normalized) ||
                Qwen3TtsDefaults.IsAnyQwen3Alias(normalized);
     }
 }

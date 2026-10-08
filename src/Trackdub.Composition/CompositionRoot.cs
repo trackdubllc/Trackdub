@@ -448,7 +448,7 @@ public static class CompositionRoot
         services.TryAddScoped<TtsExecutionOptions>(sp =>
             CreateTtsExecutionOptions(
                 sp.GetRequiredService<TranscriptWorkspaceContext>().Settings.TtsMaxConcurrency,
-                sp.GetRequiredService<IHardwareProfileProvider>().GetCurrentAsync().GetAwaiter().GetResult()));
+                AcceleratorVramDetector.DetectMaxDedicatedVramMb()));
 
         services.TryAddScoped<MixPlanBuilder>();
         services.TryAddScoped<MixPlanStore>();
@@ -772,12 +772,12 @@ public static class CompositionRoot
 
     private static TtsExecutionOptions CreateTtsExecutionOptions(
         int? configuredMaxConcurrency,
-        HardwareProfile hardwareProfile) =>
+        long maxAcceleratorVramMb) =>
         new(
             ConfiguredMaxConcurrency: configuredMaxConcurrency is int value && value >= TtsExecutionOptions.MinConcurrency
                 ? Math.Min(value, TtsExecutionOptions.AbsoluteMaxConcurrency)
                 : null,
-            MaxAcceleratorVramMb: hardwareProfile.DedicatedVramMb);
+            MaxAcceleratorVramMb: maxAcceleratorVramMb);
 
 #if LINUX
     [SupportedOSPlatform("linux")]

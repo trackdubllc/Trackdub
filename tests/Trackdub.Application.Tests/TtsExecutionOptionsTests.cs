@@ -66,10 +66,26 @@ public sealed class TtsExecutionOptionsTests
     [Fact]
     public void Resolve_MediumModelOnSmallerVram_Tightens()
     {
-        // Budget: (8192 - 4096) / 512 = 8 -> unchanged; use a smaller adapter to force a tighten.
+        // Workers: 1 + (6144 - 4096) / 512 = 5.
         var options = new TtsExecutionOptions(ConfiguredMaxConcurrency: 8, MaxAcceleratorVramMb: 6144);
 
-        Assert.Equal(4, options.ResolveEffectiveConcurrency("chatterbox-turbo-onnx"));
+        Assert.Equal(5, options.ResolveEffectiveConcurrency("chatterbox-turbo-onnx"));
+    }
+
+    [Fact]
+    public void Resolve_MediumModel_CountsFirstWorkerInBudget()
+    {
+        // The 4096 MB model budget covers worker one; 512 MB more admits a second worker.
+        Assert.Equal(1, new TtsExecutionOptions(8, 4096).ResolveEffectiveConcurrency("cosyvoice-300m"));
+        Assert.Equal(2, new TtsExecutionOptions(8, 4608).ResolveEffectiveConcurrency("cosyvoice-300m"));
+    }
+
+    [Fact]
+    public void Resolve_CpuRouted_IgnoresAcceleratorVramCap()
+    {
+        var options = new TtsExecutionOptions(ConfiguredMaxConcurrency: 8, MaxAcceleratorVramMb: 6144);
+
+        Assert.Equal(8, options.ResolveEffectiveConcurrency("chatterbox-turbo-onnx", acceleratorRouted: false));
     }
 
     [Fact]
@@ -111,6 +127,9 @@ public sealed class TtsExecutionOptionsTests
         Assert.Equal(TtsExecutionOptions.MediumModelVramMb, TtsExecutionOptionsTestAccess.ModelBudget("qwen3-tts-0.6b-customvoice"));
         Assert.Equal(TtsExecutionOptions.MediumModelVramMb, TtsExecutionOptionsTestAccess.ModelBudget("chatterbox-multilingual"));
         Assert.Equal(TtsExecutionOptions.MediumModelVramMb, TtsExecutionOptionsTestAccess.ModelBudget("cosyvoice"));
+        Assert.Equal(TtsExecutionOptions.MediumModelVramMb, TtsExecutionOptionsTestAccess.ModelBudget("chatterbox"));
+        Assert.Equal(TtsExecutionOptions.MediumModelVramMb, TtsExecutionOptionsTestAccess.ModelBudget("chatterbox-turbo"));
+        Assert.Equal(TtsExecutionOptions.MediumModelVramMb, TtsExecutionOptionsTestAccess.ModelBudget("chatterbox-multilingual-onnx"));
     }
 
     [Fact]

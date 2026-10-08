@@ -45,6 +45,7 @@ public sealed class InMemoryStudioSettingsService : IStudioSettingsService
                 options.TensorRtRtxPluginDirectory ?? persisted.TensorRtRtxPluginDirectory,
             // Preserve host/user timing prefs so CLI/SDK runs honor settings.json.
             TtsTiming = persisted.TtsTiming ?? StudioSettings.Default.TtsTiming,
+            TtsMaxConcurrency = persisted.TtsMaxConcurrency,
             // Preserve AFX preferences from desktop settings.json for headless CLI/SDK runs.
             EnableNvidiaAfx = persisted.EnableNvidiaAfx,
             NvidiaAfxProfile = persisted.NvidiaAfxProfile,

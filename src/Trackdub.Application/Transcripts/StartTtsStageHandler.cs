@@ -168,15 +168,18 @@ public sealed class StartTtsStageHandler(
             if (voiceCompatible)
             {
                 // Resolve the effective TTS degree of parallelism once per run: the configured
-                // max, tightened by a VRAM-aware bound for the model class this run routes to.
-                // The same CreateTtsRequestOptions logic used for synthesis decides the alias,
-                // so the cap cannot drift from the model that actually executes.
+                // max, tightened by a VRAM-aware bound for the preferred model class. The alias
+                // comes from the same CreateTtsRequestOptions used for synthesis, but when the
+                // alias is not required the planner may fall back to another class, so this
+                // bound is an estimate for that path, not a guarantee.
                 InferenceRequestOptions representativeOptions = CreateTtsRequestOptions(
                     request,
                     voice,
                     isVoiceCloning);
                 string? modelAlias = representativeOptions.NormalizedPreferredModelAlias;
-                int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(modelAlias);
+                bool acceleratorRouted = request.PreferredExecutionProvider
+                    is not (ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl);
+                int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(modelAlias, acceleratorRouted);
                 logger?.LogInformation(
                     $"TTS parallelism: {effectiveMaxConcurrency} (configured {executionOptions.ConfiguredMaxConcurrency?.ToString() ?? "default"}, VRAM {executionOptions.MaxAcceleratorVramMb} MB, model '{modelAlias ?? "default stock"}').");
 
