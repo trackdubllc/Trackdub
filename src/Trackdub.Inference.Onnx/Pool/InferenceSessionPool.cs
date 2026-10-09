@@ -1081,20 +1081,9 @@ internal sealed class InferenceSessionPool : IDisposable
 
         if (enableMemoryAdmission)
         {
-            // Aggregate preflight: a bundle whose graphs jointly exceed a bucket's budget
-            // can never fit, so fail before invoking any factory.
-            foreach (IGrouping<AdmissionBucket, SessionLeaseRequest> group in
-                     ordered.GroupBy(request => BucketOf(request.Key)))
-            {
-                long totalMb = group.Sum(request => ResolveReservationMb(request.Key));
-                long budgetMb = BudgetFor(group.Key);
-                if (totalMb > budgetMb)
-                {
-                    throw new InvalidOperationException(
-                        $"Session bundle needs ~{totalMb} MB across {group.Count()} graph(s) on " +
-                        $"{DescribeBucket(group.Key)}, which exceeds its admission budget of {budgetMb} MB.");
-                }
-            }
+            // Use the bucket of an already-published entry: a factory can fall back to a
+            // different provider, so the key's bucket is not necessarily where its memory lives.
+            ValidateBundleAdmission(ordered);
         }
 
         // Serialize preparation and acquisition: while one bundle is pinning or acquiring,
@@ -1117,6 +1106,10 @@ internal sealed class InferenceSessionPool : IDisposable
                     {
                         pins.Add(await GetResidencyAsync(request.Key, request.Factory, cancellationToken)
                             .ConfigureAwait(false));
+                        // GetResidencyAsync may have just published a provider fallback. Recheck
+                        // using the entry's actual bucket before pinning another graph whose
+                        // admission could otherwise wait on this pin indefinitely.
+                        ValidateBundleAdmission(ordered);
                     }
                     else
                     {
@@ -1168,6 +1161,7 @@ internal sealed class InferenceSessionPool : IDisposable
                                 {
                                     pins.Add(await GetResidencyAsync(request.Key, request.Factory, cancellationToken)
                                         .ConfigureAwait(false));
+                                    ValidateBundleAdmission(ordered);
                                 }
                                 else
                                 {
@@ -1219,6 +1213,29 @@ internal sealed class InferenceSessionPool : IDisposable
         finally
         {
             bundleAcquireLock.Release();
+        }
+    }
+
+    private void ValidateBundleAdmission(SessionLeaseRequest[] requests)
+    {
+        // A published entry records the provider that actually created the session. In
+        // particular, a GPU-keyed CPU fallback must be charged to host RAM rather than the
+        // accelerator bucket implied by its key. Missing entries are still checked against
+        // their requested bucket; the check is repeated after each preparation so newly
+        // discovered fallbacks are included before another residency pin is taken.
+        foreach (IGrouping<AdmissionBucket, SessionLeaseRequest> group in requests.GroupBy(request =>
+                     entries.TryGetValue(request.Key, out PoolEntry? entry) && entry is not null
+                         ? entry.Bucket
+                         : BucketOf(request.Key)))
+        {
+            long totalMb = group.Sum(request => ResolveReservationMb(request.Key));
+            long budgetMb = BudgetFor(group.Key);
+            if (totalMb > budgetMb)
+            {
+                throw new InvalidOperationException(
+                    $"Session bundle needs ~{totalMb} MB across {group.Count()} graph(s) on " +
+                    $"{DescribeBucket(group.Key)}, which exceeds its admission budget of {budgetMb} MB.");
+            }
         }
     }
 
