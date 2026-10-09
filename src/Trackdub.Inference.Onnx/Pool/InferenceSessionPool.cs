@@ -25,7 +25,9 @@ namespace Trackdub.Inference.Onnx.Pool;
 /// sessions to fit, and wait — never allocate an unbudgeted ephemeral session. CPU, DNNL,
 /// and OpenVINO CPU-proxy sessions are accounted against the host RAM budget; OpenVINO NPU
 /// sessions and other accelerators are accounted per device, so CPU work no longer
-/// collides with GPU 0. When admission is explicitly
+/// collides with GPU 0. A session whose factory falls back to a provider in another bucket
+/// while it is created (see <see cref="GetLeaseReportingProviderAsync"/>) is re-admitted and
+/// accounted in that bucket instead of its key's. When admission is explicitly
 /// disabled and the count limit is reached with every entry leased, the new session is
 /// created outside the pool (ephemeral) and disposed when its lease is released.</para>
 ///
@@ -197,7 +199,7 @@ internal sealed class InferenceSessionPool : IDisposable
     /// </summary>
     private const long RecentReleaseWindowMs = 120_000;
 
-    private sealed class PoolEntry(InferenceSession session, bool ephemeral) : IDisposable
+    private sealed class PoolEntry(InferenceSession session, bool ephemeral, AdmissionBucket bucket) : IDisposable
     {
         private long lastReleasedTicks = Environment.TickCount64;
         private volatile bool evicted;
@@ -205,6 +207,12 @@ internal sealed class InferenceSessionPool : IDisposable
         private int pinCount;
 
         public InferenceSession Session { get; } = session;
+
+        /// <summary>
+        /// Admission bucket the session's memory is accounted in: the bucket of the provider it
+        /// was created with, which is not always the bucket of its key's provider.
+        /// </summary>
+        public AdmissionBucket Bucket { get; } = bucket;
 
         /// <summary>Per-entry gate that serialises access (one user at a time).</summary>
         public SemaphoreSlim Gate { get; } = new(0, 1); // Starts unavailable because the creator immediately owns the first lease.
@@ -357,6 +365,11 @@ internal sealed class InferenceSessionPool : IDisposable
             : provider is ExecutionProviderKind.OpenVino
                 ? new(false, ExecutionProviderKind.OpenVino, deviceId ?? 0)
                 : new(false, null, deviceId ?? 0);
+
+    private static AdmissionBucket BucketOf(SessionPoolKey key, ExecutionProviderKind createdProvider) =>
+        createdProvider == key.Provider
+            ? BucketOf(key)
+            : BucketOf(createdProvider, key.DeviceId, key.UseOpenVinoCpuProxy);
 
     private long BudgetFor(AdmissionBucket bucket) =>
         bucket.IsHost ? hostMemoryBudgetMb : memoryBudgetMb;
@@ -649,6 +662,31 @@ internal sealed class InferenceSessionPool : IDisposable
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(factory);
 
+        return await GetLeaseReportingProviderAsync(
+            key,
+            async ct => new CreatedPoolSession(await factory(ct).ConfigureAwait(false), key.Provider),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// <see cref="GetLeaseAsync"/> for a factory whose provider fallback can create the session
+    /// on a different provider than <see cref="SessionPoolKey.Provider"/>. The key is admitted
+    /// against its own provider's bucket before the factory runs; when the session lands in
+    /// another bucket (TensorRT RTX falling back to CPU moves it from the device budget to host
+    /// RAM), the pool releases the first reservation and re-admits the session against the
+    /// bucket it was created in before publishing it, under the same rules as a direct request
+    /// there: an estimate over that budget fails, otherwise idle sessions in the bucket are
+    /// evicted to fit or the create waits. The published entry stays accounted, and evictable,
+    /// in that bucket. Single-flight creation and lease semantics are unchanged.
+    /// </summary>
+    public async Task<SessionLease> GetLeaseReportingProviderAsync(
+        SessionPoolKey key,
+        Func<CancellationToken, Task<CreatedPoolSession>> factory,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(factory);
+
         bool cacheMissRecorded = false;
 
         // Snapshot the creation wave at arrival: a caller that arrives while a creator is
@@ -791,11 +829,15 @@ internal sealed class InferenceSessionPool : IDisposable
                 }
 
                 InferenceSession session;
+                ExecutionProviderKind createdProvider;
                 try
                 {
                     BenchmarkPhaseCapture.Increment("sessionCreate");
+                    CreatedPoolSession created;
                     using (BenchmarkPhaseCapture.Start("session-create"))
-                        session = await factory(cancellationToken).ConfigureAwait(false);
+                        created = await factory(cancellationToken).ConfigureAwait(false);
+                    session = created.Session;
+                    createdProvider = created.Provider;
                 }
                 catch
                 {
@@ -809,7 +851,34 @@ internal sealed class InferenceSessionPool : IDisposable
                     throw;
                 }
 
-                var freshEntry = new PoolEntry(session, ephemeral);
+                AdmissionBucket createdBucket = BucketOf(key, createdProvider);
+                if (createdBucket != bucket)
+                {
+                    // The factory's provider fallback created the session outside the bucket its
+                    // key was admitted against, so that bucket never holds this memory.
+                    if (reserved)
+                    {
+                        ReleaseReservation(bucket, needMb);
+                        reserved = false;
+                    }
+
+                    bucket = createdBucket;
+                    if (enableMemoryAdmission)
+                    {
+                        try
+                        {
+                            await ReadmitCreatedSessionAsync(key, createdProvider, needMb, bucket, cancellationToken).ConfigureAwait(false);
+                            reserved = true;
+                        }
+                        catch
+                        {
+                            TensorRtRtxTeardownGuard.DisposeSafely(session);
+                            throw;
+                        }
+                    }
+                }
+
+                var freshEntry = new PoolEntry(session, ephemeral, bucket);
 
                 if (freshEntry.Ephemeral)
                 {
@@ -948,6 +1017,45 @@ internal sealed class InferenceSessionPool : IDisposable
             {
                 createGate.Release();
             }
+        }
+    }
+
+    /// <summary>
+    /// Admits a session that already exists against <paramref name="bucket"/>, the bucket of the
+    /// provider it was created with, and takes the pending reservation there. The session is not
+    /// yet published, so it is never an eviction candidate for its own admission.
+    /// </summary>
+    private async Task ReadmitCreatedSessionAsync(
+        SessionPoolKey key,
+        ExecutionProviderKind createdProvider,
+        long needMb,
+        AdmissionBucket bucket,
+        CancellationToken cancellationToken)
+    {
+        if (needMb > BudgetFor(bucket))
+        {
+            throw new InvalidOperationException(
+                $"'{key.EngineFamily}' was admitted for {key.Provider} but its session was created on " +
+                $"{createdProvider} and needs ~{needMb} MB, which exceeds the {DescribeBucket(bucket)} " +
+                $"admission budget of {BudgetFor(bucket)} MB.");
+        }
+
+        ProcessGpuObservation? observation = bucket.IsHost ? null : ReadObservedProcessGpu();
+        bool reserved;
+        await creationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            reserved = TryReserveAdmissionBudget(bucket, needMb, observation);
+        }
+        finally
+        {
+            creationLock.Release();
+        }
+
+        if (!reserved)
+        {
+            await WaitForAdmissionBudgetAsync(needMb, bucket, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -1202,7 +1310,7 @@ internal sealed class InferenceSessionPool : IDisposable
     private long CurrentReservedMb(AdmissionBucket bucket)
     {
         long pooled = 0;
-        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries.Where(pair => BucketOf(pair.Key) == bucket))
+        foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries.Where(pair => pair.Value.Bucket == bucket))
         {
             pooled += ResolveReservationMb(pair.Key);
         }
@@ -1348,7 +1456,7 @@ internal sealed class InferenceSessionPool : IDisposable
     {
         foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
         {
-            if (BucketOf(pair.Key) == bucket)
+            if (pair.Value.Bucket == bucket)
             {
                 return true;
             }
@@ -2031,7 +2139,7 @@ internal sealed class InferenceSessionPool : IDisposable
         long candidateLastReleasedTicks = long.MaxValue;
         foreach (KeyValuePair<SessionPoolKey, PoolEntry> pair in entries)
         {
-            if (onlyBucket is not null && BucketOf(pair.Key) != onlyBucket.Value)
+            if (onlyBucket is not null && pair.Value.Bucket != onlyBucket.Value)
             {
                 continue;
             }
