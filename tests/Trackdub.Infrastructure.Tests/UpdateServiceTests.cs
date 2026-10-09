@@ -192,6 +192,126 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
+    public async Task CheckForUpdateAsync_StableChannel_RequestsStableManifest()
+    {
+        var manifest = new ReleaseManifestSchema(
+            LatestVersion: "2.0.0",
+            DownloadUrl: TestDownloadUrl.ToString(),
+            Sha256: "a".Repeat(64),
+            ReleaseNotesUrl: null,
+            PublishedAt: DateTimeOffset.UtcNow,
+            IsPrerelease: false);
+
+        using var handler = new StaticHttpMessageHandler(
+            HttpStatusCode.OK,
+            JsonSerializer.Serialize(manifest));
+
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(httpClient);
+
+        var result = await service.CheckForUpdateAsync("1.0.0", UpdateChannel.Stable);
+
+        Assert.True(result.UpdateAvailable);
+        Assert.Equal("https://releases.trackdub.ai/manifest.json", handler.LastRequest?.RequestUri?.ToString());
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_PreviewChannel_RequestsPreviewManifest()
+    {
+        var manifest = new ReleaseManifestSchema(
+            LatestVersion: "2.0.0",
+            DownloadUrl: TestDownloadUrl.ToString(),
+            Sha256: "a".Repeat(64),
+            ReleaseNotesUrl: null,
+            PublishedAt: DateTimeOffset.UtcNow,
+            IsPrerelease: true);
+
+        using var handler = new StaticHttpMessageHandler(
+            HttpStatusCode.OK,
+            JsonSerializer.Serialize(manifest));
+
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(httpClient);
+
+        var result = await service.CheckForUpdateAsync("1.0.0", UpdateChannel.Preview);
+
+        Assert.True(result.UpdateAvailable);
+        Assert.Equal("https://releases.trackdub.ai/manifest-preview.json", handler.LastRequest?.RequestUri?.ToString());
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_StableChannel_IgnoresPrereleaseManifest()
+    {
+        var manifest = new ReleaseManifestSchema(
+            LatestVersion: "2.0.0",
+            DownloadUrl: TestDownloadUrl.ToString(),
+            Sha256: "a".Repeat(64),
+            ReleaseNotesUrl: null,
+            PublishedAt: DateTimeOffset.UtcNow,
+            IsPrerelease: true);
+
+        using var handler = new StaticHttpMessageHandler(
+            HttpStatusCode.OK,
+            JsonSerializer.Serialize(manifest));
+
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(httpClient);
+
+        var result = await service.CheckForUpdateAsync("1.0.0", UpdateChannel.Stable);
+
+        Assert.False(result.UpdateAvailable);
+        Assert.Null(result.Release);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task CheckForUpdatesAsync_LegacyService_UsesUnifiedReleaseFeed()
+    {
+        const string manifestJson = """
+        {
+          "latestVersion": "2.0.0",
+          "releaseNotesUrl": null,
+          "downloadUrl": "https://releases.trackdub.ai/downloads/Trackdub-2.0.0-setup.exe",
+          "releaseDate": null
+        }
+        """;
+
+        using var handler = new StaticHttpMessageHandler(HttpStatusCode.OK, manifestJson);
+        using var httpClient = new HttpClient(handler);
+        var service = new ReleaseManifestUpdateService(httpClient);
+
+        Contracts.UpdateCheckResult result = await service.CheckForUpdatesAsync(UpdateChannel.Preview, "1.0.0");
+
+        Assert.True(result.IsUpdateAvailable);
+        Assert.Equal("https://releases.trackdub.ai/manifest-preview.json", handler.LastRequest?.RequestUri?.ToString());
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_PreviewChannel_AcceptsPrereleaseVersion()
+    {
+        var manifest = new ReleaseManifestSchema(
+            LatestVersion: "2.0.1-beta.1",
+            DownloadUrl: TestDownloadUrl.ToString(),
+            Sha256: "a".Repeat(64),
+            ReleaseNotesUrl: null,
+            PublishedAt: DateTimeOffset.UtcNow,
+            IsPrerelease: true);
+
+        using var handler = new StaticHttpMessageHandler(
+            HttpStatusCode.OK,
+            JsonSerializer.Serialize(manifest));
+
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(httpClient);
+
+        var result = await service.CheckForUpdateAsync("2.0.0", UpdateChannel.Preview);
+
+        Assert.True(result.UpdateAvailable);
+        Assert.NotNull(result.Release);
+        Assert.Equal("2.0.1-beta.1", result.Release.Version);
+    }
+
+    [Fact]
     public async Task CheckForUpdateAsync_Cancelled_ReturnsCancelledError()
     {
         var manifest = new ReleaseManifestSchema(
@@ -442,6 +562,8 @@ public sealed class UpdateServiceTests
         private readonly byte[] payloadBytes;
         private readonly string? payloadString;
 
+        public HttpRequestMessage? LastRequest { get; private set; }
+
         public StaticHttpMessageHandler(HttpStatusCode statusCode, byte[] payload)
         {
             this.statusCode = statusCode;
@@ -468,6 +590,7 @@ public sealed class UpdateServiceTests
             };
 
             response.Content.Headers.ContentLength = payloadBytes.Length;
+            LastRequest = request;
             return Task.FromResult(response);
         }
     }
