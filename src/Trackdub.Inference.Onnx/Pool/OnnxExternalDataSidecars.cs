@@ -231,7 +231,7 @@ internal static class OnnxExternalDataSidecars
             }
         });
 
-    // SparseTensorProto: values = 1, indices = 2.
+    // SparseTensorProto: values = 1, indices = 2 (dims = 3 is packed int64, not a tensor).
     private static void WalkSparseTensor(Stream stream, long end, HashSet<string> locations) =>
         ForEachMessageField(stream, end, (field, fieldEnd) =>
         {

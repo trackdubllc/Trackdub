@@ -102,6 +102,22 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
     }
 
     [Fact]
+    public void EstimateVramMb_IncludesSidecarsReferencedFromSparseInitializer()
+    {
+        // GraphProto.sparse_initializer = 15 → SparseTensorProto (onnx.proto): values = 1,
+        // indices = 2, dims = 3. Packed int64 dims arrive length-delimited and must be skipped.
+        byte[] sparse = Concat(
+            MessageField(1, Tensor("sparse_values", "sparse_values.bin")),
+            MessageField(2, Tensor("sparse_indices", "sparse_indices.bin")),
+            MessageField(3, Concat(Varint(64), Varint(64))));
+        string model = WriteModel("model.onnx", MessageField(15, sparse));
+        WriteBytes("sparse_values.bin", 6 * MiB);
+        WriteBytes("sparse_indices.bin", 4 * MiB);
+
+        Assert.Equal(148, SessionPoolKey.EstimateVramMb(model, ExecutionProviderKind.Cpu));
+    }
+
+    [Fact]
     public void EstimateVramMb_IgnoresLocationsOutsideModelDirectory()
     {
         string modelDirectory = Path.Join(directory, "model");
@@ -280,9 +296,10 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
 
     // GraphProto.initializer = 5 → TensorProto: dims = 1, data_type = 2, name = 8,
     // external_data = 13 (key = 1, value = 2), data_location = 14 (EXTERNAL = 1).
-    private static byte[] Initializer(string name, string? location)
-    {
-        byte[] tensor = location is null
+    private static byte[] Initializer(string name, string? location) => MessageField(5, Tensor(name, location));
+
+    private static byte[] Tensor(string name, string? location) =>
+        location is null
             ? Concat(VarintField(1, 4), VarintField(2, 1), StringField(8, name), MessageField(9, new byte[16]))
             : Concat(
                 VarintField(1, 4),
@@ -292,8 +309,6 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
                 MessageField(13, Concat(StringField(1, "offset"), StringField(2, "0"))),
                 MessageField(13, Concat(StringField(1, "length"), StringField(2, "16"))),
                 VarintField(14, 1));
-        return MessageField(5, tensor);
-    }
 
     private static byte[] StringField(int field, string value) =>
         MessageField(field, Encoding.UTF8.GetBytes(value));
