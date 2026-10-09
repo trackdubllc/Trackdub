@@ -4089,7 +4089,16 @@
         "spiece.model": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/spiece.model",
         "tokenizer_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/tokenizer_config.json",
         "encoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/encoder_model_quantized.onnx",
-        "decoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/decoder_model_quantized.onnx"
+        "decoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/decoder_model_quantized.onnx",
+        "mixed_fp16_int4/encoder_model.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/encoder_model.onnx",
+        "mixed_fp16_int4/encoder_model.onnx.data": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/encoder_model.onnx.data",
+        "mixed_fp16_int4/decoder_model_merged.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/decoder_model_merged.onnx",
+        "mixed_fp16_int4/decoder_model_merged.onnx.data": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/decoder_model_merged.onnx.data",
+        "mixed_fp16_int4/spiece.model": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/spiece.model",
+        "mixed_fp16_int4/config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/config.json",
+        "mixed_fp16_int4/generation_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/generation_config.json",
+        "mixed_fp16_int4/tokenizer_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/tokenizer_config.json",
+        "mixed_fp16_int4/special_tokens_map.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/special_tokens_map.json"
       },
       "variants": [
         {
