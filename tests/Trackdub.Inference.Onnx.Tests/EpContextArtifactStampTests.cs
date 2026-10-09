@@ -127,4 +127,95 @@ public sealed class EpContextArtifactStampTests
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    [Fact]
+    public void Optimum_onnx_data_sidecar_counts_as_external_data()
+    {
+        // Optimum exports name the weights sidecar <model>.onnx_data; replacing it must invalidate the
+        // artifact, and its bytes decide whether the engine can be embedded under protobuf's 2 GB limit.
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-epc-onnxdata-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Join(directory, "decoder_model.onnx");
+        try
+        {
+            File.WriteAllBytes(sourcePath, [1, 2, 3, 4]);
+            File.WriteAllBytes(sourcePath + "_data", [5, 6, 7, 8, 9, 10]);
+
+            Assert.Equal(sourcePath + "_data", EpContextArtifact.GetSourceExternalDataPath(sourcePath));
+            Assert.Equal(10, EpContextArtifact.GetSourceTotalBytes(sourcePath));
+
+            File.WriteAllBytes(EpContextArtifact.GetEpContextPath(sourcePath), [11]);
+            EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
+                sourcePath, new FileInfo(sourcePath), sourceSha256: null,
+                gpuArchitecture: "Blackwell", driverVersion: "32.0.16.1714");
+            Assert.Equal(6, stamp.ExternalDataLengthBytes);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Published_artifact_requires_its_engine_files_and_replaces_the_previous_set()
+    {
+        string directory = Path.Join(Path.GetTempPath(), $"trackdub-epc-publish-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string sourcePath = Path.Join(directory, "encoder_model.onnx");
+        string epContextName = Path.GetFileName(EpContextArtifact.GetEpContextPath(sourcePath));
+        try
+        {
+            File.WriteAllBytes(sourcePath, [1, 2, 3, 4]);
+
+            IReadOnlyList<EpContextArtifact.ArtifactFile> first = Publish(directory, sourcePath, epContextName, "old.engine", [7, 7]);
+            Assert.Equal([new EpContextArtifact.ArtifactFile("old.engine", 2)], first);
+            string fingerprint = WriteStamp(sourcePath, first);
+            Assert.Equal(
+                EpContextArtifact.GetEpContextPath(sourcePath),
+                EpContextArtifact.TryResolveValidLoadPath(sourcePath, fingerprint));
+
+            // A truncated or missing engine invalidates the artifact even though the stamp and model remain.
+            File.WriteAllBytes(Path.Join(directory, "old.engine"), [7]);
+            Assert.Null(EpContextArtifact.TryResolveValidLoadPath(sourcePath, fingerprint));
+
+            // Republishing drops the previous stamp and the engine files it recorded.
+            IReadOnlyList<EpContextArtifact.ArtifactFile> second = Publish(directory, sourcePath, epContextName, "new.engine", [8, 8, 8]);
+            Assert.False(File.Exists(Path.Join(directory, "old.engine")));
+            Assert.False(File.Exists(EpContextArtifact.GetStampPath(sourcePath)));
+            fingerprint = WriteStamp(sourcePath, second);
+            Assert.Equal(
+                EpContextArtifact.GetEpContextPath(sourcePath),
+                EpContextArtifact.TryResolveValidLoadPath(sourcePath, fingerprint));
+
+            EpContextArtifact.DeleteArtifact(sourcePath);
+            Assert.False(File.Exists(Path.Join(directory, "new.engine")));
+            Assert.False(File.Exists(EpContextArtifact.GetEpContextPath(sourcePath)));
+            Assert.True(File.Exists(sourcePath));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+
+        static IReadOnlyList<EpContextArtifact.ArtifactFile> Publish(
+            string directory, string sourcePath, string epContextName, string engineName, byte[] engineBytes)
+        {
+            string staging = Path.Join(directory, ".epc-staging-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(staging);
+            File.WriteAllBytes(Path.Join(staging, epContextName), [5, 6]);
+            File.WriteAllBytes(Path.Join(staging, engineName), engineBytes);
+            IReadOnlyList<EpContextArtifact.ArtifactFile> files = EpContextArtifact.PublishStagedArtifact(staging, sourcePath);
+            Directory.Delete(staging, recursive: true);
+            return files;
+        }
+
+        static string WriteStamp(string sourcePath, IReadOnlyList<EpContextArtifact.ArtifactFile> files)
+        {
+            EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
+                sourcePath, new FileInfo(sourcePath), sourceSha256: null,
+                gpuArchitecture: "Blackwell", driverVersion: "32.0.16.1714", files);
+            EpContextArtifact.WriteStamp(sourcePath, stamp);
+            return stamp.EnvironmentFingerprint;
+        }
+    }
 }

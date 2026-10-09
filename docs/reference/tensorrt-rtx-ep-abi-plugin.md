@@ -140,6 +140,30 @@ $env:TRACKDUB_CACHE_ROOT = "D:\TrackdubCache"
 
 `TRACKDUB_ENGINE_CACHE_ROOT` wins. Otherwise `TRACKDUB_CACHE_ROOT\EngineCache` is used. Otherwise Trackdub falls back to `%LOCALAPPDATA%\Trackdub\EngineCache`.
 
+### EP-context artifacts
+
+The runtime cache keeps JIT kernels, not engines, so each new process would otherwise rebuild every
+engine from the source graph. An EP-context artifact (`<model>.epc.onnx`, its `<model>.epc.stamp.json`,
+and for large models the serialized `*.engine` files it references) sits next to the source model.
+TRT RTX sessions load it instead of the source whenever its stamp still matches the model bytes
+(including `<model>.onnx.data` / `<model>.onnx_data` external weights), GPU architecture, driver,
+and EP/runtime version.
+
+Artifacts are produced two ways:
+
+- **Captured on first build.** When a TRT RTX session is created for a graph of at least 256 MB
+  (model plus external weights) without a current artifact, the session builds with EP-context
+  generation on and publishes the artifact afterwards. The capture rides on the build the session
+  performs anyway; it only adds writing the engine. Capture is skipped when the volume lacks room
+  for twice the model bytes, and a capture failure retries the session without capture.
+- **Ahead of time** with `trackdub cache warm` (or the desktop Settings warm action).
+
+Engines above protobuf's 2 GB limit are written as separate `*.engine` files whose names and sizes
+the stamp records; a missing or truncated engine invalidates the artifact. Measured on MADLAD-400 3B
+fp16 (RTX 5070): the encoder session builds from source in ~48 s and loads its artifact in 5-13 s
+(3.36 GB engine; the low end with the file in the OS cache). Artifacts roughly double the model's
+disk footprint.
+
 ## Readiness states
 
 Keep these states separate:

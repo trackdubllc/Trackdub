@@ -108,7 +108,8 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
             // stamping before CompileModel would record the previous sidecar (or none).
             EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
                 sourcePath, new FileInfo(sourcePath), sourceSha256: null,
-                hardware.NvidiaGpuArchitecture.ToString(), hardware.GpuDriverVersion);
+                hardware.NvidiaGpuArchitecture.ToString(), hardware.GpuDriverVersion,
+                compile.ArtifactFiles);
             EpContextArtifact.WriteStamp(sourcePath, stamp);
         }
 
