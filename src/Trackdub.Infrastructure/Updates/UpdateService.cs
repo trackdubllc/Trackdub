@@ -64,8 +64,8 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
                 return new Trackdub.Application.Updates.UpdateCheckResult(false, null, null);
             }
 
-            if (!Version.TryParse(schema.LatestVersion, out Version? latest) ||
-                !Version.TryParse(currentVersion, out Version? current))
+            if (!Version.TryParse(StripVersionSuffix(schema.LatestVersion), out Version? latest) ||
+                !Version.TryParse(StripVersionSuffix(currentVersion), out Version? current))
             {
                 return new Trackdub.Application.Updates.UpdateCheckResult(false, null,
                     "Version format in manifest is invalid.");
@@ -452,6 +452,12 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
             >= kb => $"{(double)bytes / kb:F1} KB",
             _ => $"{bytes} B"
         };
+    }
+
+    private static string StripVersionSuffix(string versionString)
+    {
+        int separatorIndex = versionString.IndexOfAny(['-', '+']);
+        return separatorIndex >= 0 ? versionString[..separatorIndex] : versionString;
     }
 
     private void ThrowIfDisposed()

@@ -287,6 +287,31 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
+    public async Task CheckForUpdateAsync_PreviewChannel_AcceptsPrereleaseVersion()
+    {
+        var manifest = new ReleaseManifestSchema(
+            LatestVersion: "2.0.1-beta.1",
+            DownloadUrl: TestDownloadUrl.ToString(),
+            Sha256: "a".Repeat(64),
+            ReleaseNotesUrl: null,
+            PublishedAt: DateTimeOffset.UtcNow,
+            IsPrerelease: true);
+
+        using var handler = new StaticHttpMessageHandler(
+            HttpStatusCode.OK,
+            JsonSerializer.Serialize(manifest));
+
+        using var httpClient = new HttpClient(handler);
+        var service = CreateService(httpClient);
+
+        var result = await service.CheckForUpdateAsync("2.0.0", UpdateChannel.Preview);
+
+        Assert.True(result.UpdateAvailable);
+        Assert.NotNull(result.Release);
+        Assert.Equal("2.0.1-beta.1", result.Release.Version);
+    }
+
+    [Fact]
     public async Task CheckForUpdateAsync_Cancelled_ReturnsCancelledError()
     {
         var manifest = new ReleaseManifestSchema(
