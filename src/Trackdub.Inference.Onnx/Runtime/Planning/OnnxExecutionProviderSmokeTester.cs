@@ -402,15 +402,23 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     }
 
     // ORT GenAI's NvTensorRtRtx device terminates the host process (native stack overflow) on
-    // bundled GenAI models such as qwen-instruct (Qwen2.5-1.5B). A fatal crash cannot be caught
-    // and reported as a smoke failure, so the attempt must be refused before touching native code.
+    // bundled GenAI models such as qwen-instruct (Qwen2.5-1.5B), and its DirectML device segfaults
+    // running the bundled Whisper export (GenAI 0.17.1 on Windows ML 2.4). A fatal crash cannot be
+    // caught and reported as a smoke failure, so the attempt must be refused before touching native code.
     private static void ThrowIfGenAiTensorRtProvider(ExecutionProviderKind provider)
     {
         if (provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
         {
             throw new NotSupportedException(
                 "ORT GenAI NvTensorRtRtx is excluded for GenAI model loads: it terminates the host "
-                + "process (native stack overflow) on bundled GenAI models. Use dml or cpu.");
+                + "process (native stack overflow) on bundled GenAI models. Use cpu.");
+        }
+
+        if (provider is ExecutionProviderKind.DirectMl)
+        {
+            throw new NotSupportedException(
+                "ORT GenAI DirectML is excluded for GenAI model loads: the bundled GenAI exports are "
+                + "CPU/CUDA exports, and running the Whisper one on DirectML terminates the host process. Use cpu.");
         }
     }
 

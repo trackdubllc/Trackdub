@@ -16,7 +16,7 @@ internal static class GenAiNativeCompatibility
         }
 
         string nativePath = Path.Join(AppContext.BaseDirectory, "onnxruntime.dll");
-        if (!File.Exists(nativePath))
+        if (!File.Exists(nativePath) || IsWindowsMlRuntime(AppContext.BaseDirectory))
         {
             return;
         }
@@ -38,4 +38,9 @@ internal static class GenAiNativeCompatibility
 
     internal static bool IsCompatible(Version managedVersion, int nativeMajor, int nativeMinor) =>
         nativeMajor == managedVersion.Major && nativeMinor == managedVersion.Minor;
+
+    // The Windows build ships GenAI's .WinML package, which is built against the Windows ML
+    // runtime it sits beside rather than against the managed ORT package's version.
+    internal static bool IsWindowsMlRuntime(string directory) =>
+        File.Exists(Path.Join(directory, "Microsoft.Windows.AI.MachineLearning.dll"));
 }

@@ -28,7 +28,7 @@ public interface IInferenceWorkerClient
 /// client). A failed or mismatched worker fails the call with its reason; nothing falls back to
 /// in-process execution silently.
 /// </summary>
-public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDisposable
+public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDisposable, IDisposable
 {
     public const string WorkerPathEnvironmentVariable = "TRACKDUB_INFERENCE_WORKER_PATH";
     public const string WorkerDirectoryName = "inference-worker";
@@ -321,6 +321,9 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         {
         }
     }
+
+    // DI containers disposed synchronously (console hosts) require IDisposable on singletons.
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
 
     public async ValueTask DisposeAsync()
     {

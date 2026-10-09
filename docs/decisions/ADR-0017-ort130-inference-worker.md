@@ -1,6 +1,6 @@
 # ADR-0017: Out-of-process ORT 1.30 inference worker on Windows
 
-- Status: Proposed
+- Status: Proposed (amended 2026-10-09: GenAI runs in-process on Windows ML 2.4; see Amendment)
 - Date: 2026-10-08
 - Decided by: Tony, 2026-10-08 (choice of "split GenAI out of process" over downgrading GenAI or
   dropping DirectML)
@@ -74,3 +74,40 @@ Negative:
   non-NVIDIA GPUs) unusable.
 - **Windows ML 1.24 root plus a GenAI downgrade:** restores DirectML but loses GenAI 0.15-0.17 work
   and keeps Kokoro on the CPU.
+
+## Amendment (2026-10-09): GenAI moves to Windows ML, not to the worker
+
+A Microsoft-supported route removes the GenAI half of the conflict. ORT GenAI ships a Windows ML
+flavor, `Microsoft.ML.OnnxRuntimeGenAI.WinML` (same 0.17.1 release; it depends on
+`Microsoft.Windows.AI.MachineLearning` 2.1.1 or later). Microsoft Learn's "Run LLMs and other
+generative models using ONNX Runtime and Windows ML" points Windows apps at it. It runs GenAI on
+the Windows ML runtime instead of shipping its own `onnxruntime.dll`.
+
+Core now references `Microsoft.Windows.AI.MachineLearning` 2.4.89 (ONNX Runtime 1.27.1 with
+DirectML; previously 2.0.300 with 1.24), and the Windows build references the `.WinML` GenAI
+package. The Windows output carries a single `onnxruntime.dll`, Windows ML's, serving DirectML,
+the catalog EPs, the TensorRT RTX plugin and GenAI. `GenAiNativeCompatibility` accepts that pairing.
+
+Measured in the core bench host on an RTX 5070 (`clip.mp4`, full pipeline, fresh process):
+
+| Stage | Provider |
+|---|---|
+| VAD | `dml` |
+| Diarization | `tensorrt-rtx` |
+| ASR | qwen3-asr on `dml` |
+| Text refinement | GenAI on CPU |
+| Translation | `cpu` |
+| TTS | `cpu` |
+
+GenAI on DirectML does not work with the bundled exports, which are CPU/CUDA exports:
+
+- Whisper-GenAI rejects the default graph capture. With capture off, it segfaults in the encoder
+  pass.
+- Qwen2.5 fails its first DirectML kernel (`0x80070057`).
+
+So the GenAI families exclude DirectML as well as TensorRT, and run on CPU, as they effectively
+did under the old ORT 1.30 root.
+
+Decision 2 therefore narrows: **the worker hosts only native-CUDA engines** (Kokoro). GenAI stays
+in-process on Windows ML. The desktop removes `AlignOnnxRuntimeNativeForGenAi` once it consumes
+this core.

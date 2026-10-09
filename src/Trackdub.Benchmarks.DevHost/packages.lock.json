@@ -258,7 +258,7 @@
           "Microsoft.Extensions.Http": "[10.0.11, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.30.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.1, )",
-          "Microsoft.Windows.AI.MachineLearning": "[2.0.300, )",
+          "Microsoft.Windows.AI.MachineLearning": "[2.4.89, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )",
           "Trackdub.Inference.Onnx": "[1.0.0, )",
@@ -507,9 +507,9 @@
       },
       "Microsoft.Windows.AI.MachineLearning": {
         "type": "CentralTransitive",
-        "requested": "[2.0.300, )",
-        "resolved": "2.0.300",
-        "contentHash": "OiJX15N198kG30Lop7LH8WjmBfk2/9iU9it9eLPnkNZ49Yi/vAa4ntONGiGOgv5mb8/fvFHV5trCWSPM+OQhSw=="
+        "requested": "[2.4.89, )",
+        "resolved": "2.4.89",
+        "contentHash": "uc+Lej0vmZJprvHEuNJs7xMegoParROM9pZ2a7uMeXQiELva42V1wAUoYHCsw/u5ho/nwkYasiSFWZ95ABot3A=="
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "CentralTransitive",
@@ -720,42 +720,6 @@
           "System.Numerics.Tensors": "9.0.0"
         }
       },
-      "Microsoft.Windows.SDK.BuildTools": {
-        "type": "Transitive",
-        "resolved": "10.0.26100.4654",
-        "contentHash": "2mgcOlj/t2RfSyyw+pVESfO+Tk1RkfQzto9Vrq42M1lUQIfQEwbi8QLha9GXWIOj+TFzeHIEJckIoF25mgiM8A=="
-      },
-      "Microsoft.Windows.SDK.BuildTools.MSIX": {
-        "type": "Transitive",
-        "resolved": "1.7.20250829.1",
-        "contentHash": "IMdvRmCIZnBS5GkYnv0po1bcx6U1OF39pqA4TphQ9evDzpCRoSE19/PkDvlUNNrBavTsLIEJgd/TAIFner75ow=="
-      },
-      "Microsoft.WindowsAppSDK.Base": {
-        "type": "Transitive",
-        "resolved": "1.8.250831001",
-        "contentHash": "8LlfXBS2Hpw+OoVXViJmIOPXl0nMbqMaFR3j6+QHFNc62VULwPEcXiMRcP2WbV/+mtC7W2LH6yx6uu/Hrr9lVw==",
-        "dependencies": {
-          "Microsoft.Windows.SDK.BuildTools": "10.0.26100.4654",
-          "Microsoft.Windows.SDK.BuildTools.MSIX": "1.7.20250829.1"
-        }
-      },
-      "Microsoft.WindowsAppSDK.Foundation": {
-        "type": "Transitive",
-        "resolved": "1.8.251104000",
-        "contentHash": "vvL3zpC8klGcaxUA7RbMuUMVAABD7jEMFhNKGAewOvey18i64mslbU0aIQM3+Bu4tQKsaGXSWYrJFsAU/Op4OA==",
-        "dependencies": {
-          "Microsoft.WindowsAppSDK.Base": "1.8.250831001",
-          "Microsoft.WindowsAppSDK.InteractiveExperiences": "1.8.251104001"
-        }
-      },
-      "Microsoft.WindowsAppSDK.InteractiveExperiences": {
-        "type": "Transitive",
-        "resolved": "1.8.251104001",
-        "contentHash": "t4Vs1eMJqUpa5CbZ5SvO4j5VdyhNwtarNfYJAWar8dHejpNol3g+/t0l0ovKye+DKQpinWdGkuQSUX8Oc8M3ug==",
-        "dependencies": {
-          "Microsoft.WindowsAppSDK.Base": "1.8.250831001"
-        }
-      },
       "SourceGear.sqlite3": {
         "type": "Transitive",
         "resolved": "3.50.4.5",
@@ -813,7 +777,7 @@
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "[10.0.12, )",
           "Microsoft.Extensions.Http": "[10.0.11, )",
-          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.1, )",
+          "Microsoft.ML.OnnxRuntimeGenAI.WinML": "[0.17.1, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )",
           "Trackdub.Inference.Onnx": "[1.0.0, )",
@@ -845,10 +809,9 @@
         "dependencies": {
           "MathNet.Numerics": "[5.0.0, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.30.0, )",
-          "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.1, )",
+          "Microsoft.ML.OnnxRuntimeGenAI.WinML": "[0.17.1, )",
           "Microsoft.ML.Tokenizers": "[3.0.0-preview.26502.1, )",
-          "Microsoft.WindowsAppSDK.ML": "[1.8.2109, )",
-          "Microsoft.WindowsAppSDK.Runtime": "[1.8.251106002, )",
+          "Microsoft.Windows.AI.MachineLearning": "[2.4.89, )",
           "Trackdub.Contracts": "[1.0.0, )",
           "Trackdub.Domain": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )"
@@ -1005,15 +968,6 @@
           "Microsoft.Extensions.Primitives": "10.0.11"
         }
       },
-      "Microsoft.ML.OnnxRuntime": {
-        "type": "CentralTransitive",
-        "requested": "[1.30.0, )",
-        "resolved": "1.30.0",
-        "contentHash": "RaF3KjPXB/IbNvvrcQtrxS/NZjB9dEHnZQTsdJCLP5Fnn1Jj3LomeqR1mMAoRFKinJ0pIe85PLhLlfGBYqzgWA==",
-        "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
-        }
-      },
       "Microsoft.ML.OnnxRuntime.Gpu": {
         "type": "CentralTransitive",
         "requested": "[1.30.0, )",
@@ -1025,16 +979,6 @@
           "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
         }
       },
-      "Microsoft.ML.OnnxRuntimeGenAI": {
-        "type": "CentralTransitive",
-        "requested": "[0.17.1, )",
-        "resolved": "0.17.1",
-        "contentHash": "ilVYETKd71LXTiQtFqZ0wI7VS68h2J74J4CB7hO/0tXLeZZg0UshaJ4/tH1KL9N1CT4hocFMzYlH1gQqpmUfGw==",
-        "dependencies": {
-          "Microsoft.ML.OnnxRuntime": "1.30.0",
-          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.1"
-        }
-      },
       "Microsoft.ML.OnnxRuntimeGenAI.Managed": {
         "type": "CentralTransitive",
         "requested": "[0.17.1, )",
@@ -1044,30 +988,29 @@
           "Microsoft.Extensions.AI.Abstractions": "9.8.0"
         }
       },
+      "Microsoft.ML.OnnxRuntimeGenAI.WinML": {
+        "type": "CentralTransitive",
+        "requested": "[0.17.1, )",
+        "resolved": "0.17.1",
+        "contentHash": "ZSZiTD75YU7vaXEcPp480IZPrLcvEJEvPMPYtvcy78NXti6ILKQoUaqzBrnqVW20EYF/TrxwOI+/GcnGqLCO3A==",
+        "dependencies": {
+          "Microsoft.ML.OnnxRuntimeGenAI.Managed": "0.17.1",
+          "Microsoft.Windows.AI.MachineLearning": "2.1.1"
+        }
+      },
       "Microsoft.ML.Tokenizers": {
         "type": "CentralTransitive",
         "requested": "[3.0.0-preview.26502.1, )",
         "resolved": "3.0.0-preview.26502.1",
         "contentHash": "Z+ZFKkR3iRMpSWpuB42vNrR30TxpH24LmHibaKNe27F3qmIF2JO4dzA3RIO0jZsc9nW01r/vDyEZdWy4ET3AvA=="
       },
-      "Microsoft.WindowsAppSDK.ML": {
+      "Microsoft.Windows.AI.MachineLearning": {
         "type": "CentralTransitive",
-        "requested": "[1.8.2109, )",
-        "resolved": "1.8.2109",
-        "contentHash": "gfsSXBJrlsfnl1IID3AEasUvZXFFZk6n4iD2JP5BfheySaoWr/1JJVbqKYyRr7APe2kRzyztVW3eaj7KMfgR5A==",
+        "requested": "[2.4.89, )",
+        "resolved": "2.4.89",
+        "contentHash": "uc+Lej0vmZJprvHEuNJs7xMegoParROM9pZ2a7uMeXQiELva42V1wAUoYHCsw/u5ho/nwkYasiSFWZ95ABot3A==",
         "dependencies": {
-          "Microsoft.WindowsAppSDK.Base": "1.8.250831001",
-          "Microsoft.WindowsAppSDK.Foundation": "1.8.251104000",
           "System.Numerics.Tensors": "9.0.0"
-        }
-      },
-      "Microsoft.WindowsAppSDK.Runtime": {
-        "type": "CentralTransitive",
-        "requested": "[1.8.251106002, )",
-        "resolved": "1.8.251106002",
-        "contentHash": "5piaqsoXOTFXdtiGoqLhVPkG0HE3UD0g/S4D2i7I8MPO48eoaESJ4y/oUHzZFmSaqLQROWe8NJ9rXXNxxiL/gw==",
-        "dependencies": {
-          "Microsoft.WindowsAppSDK.Base": "1.8.250831001"
         }
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {

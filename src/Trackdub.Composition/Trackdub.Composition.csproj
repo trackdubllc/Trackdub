@@ -50,12 +50,8 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
-    <!-- Sidecar only for OGA NvTensorRtRtx. Do not let this package replace the CPU GenAI loader. -->
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" GeneratePathProperty="true">
-      <PrivateAssets>all</PrivateAssets>
-      <ExcludeAssets>compile;runtime;native;contentFiles;analyzers;build;buildTransitive</ExcludeAssets>
-    </PackageReference>
+    <!-- GenAI on the Windows ML runtime: one onnxruntime.dll serves DirectML, catalog EPs and GenAI. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.WinML" />
   </ItemGroup>
 
   <!-- Keep the portable TFM's package graph identical across restore hosts; locked restores share
@@ -81,6 +77,9 @@
                       Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
                       ExcludeAssets="runtime" />
     <PackageReference Update="Microsoft.ML.OnnxRuntimeGenAI"
+                      Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
+                      ExcludeAssets="runtime" />
+    <PackageReference Update="Microsoft.ML.OnnxRuntimeGenAI.WinML"
                       Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'"
                       ExcludeAssets="runtime" />
     <PackageReference Update="Microsoft.Windows.AI.MachineLearning"
