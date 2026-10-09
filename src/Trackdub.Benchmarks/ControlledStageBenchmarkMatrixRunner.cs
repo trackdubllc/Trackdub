@@ -59,6 +59,7 @@ public sealed class ControlledStageBenchmarkMatrixRunner : IDisposable
                     Provider = options.Provider,
                     Mode = options.Mode,
                     ReuseEngineCache = options.ReuseEngineCache,
+                    TranslationStreaming = options.TranslationStreaming,
                     TargetLanguage = options.TargetLanguage,
                     SourceLanguage = options.SourceLanguage,
                     ModelDirectory = options.ModelDirectory,

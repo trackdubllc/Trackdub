@@ -34,6 +34,7 @@ internal sealed class ControlledBenchmarkCliOptions
     public string Mode { get; set; } = "fresh-process";
 
     public bool ReuseEngineCache { get; set; }
+    public bool TranslationStreaming { get; set; }
 
     public bool Mock { get; set; }
 
@@ -74,6 +75,9 @@ internal static class ControlledBenchmarkCliBinder
         {
             case "--reuse-engine-cache":
                 state.ReuseEngineCache = true;
+                return true;
+            case "--translation-streaming":
+                state.TranslationStreaming = true;
                 return true;
             case "--mock":
                 state.Mock = true;
