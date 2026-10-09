@@ -108,7 +108,7 @@ internal static class StageRuntimeRequirementsCatalog
                 ModelTask.Translation,
                 ["opus-en-es", "helsinki-opus-en-es", "opus-en-fr", "opus-en-de", "opus-en-it", "opus-en-pt", "opus-es-en", "helsinki-opus-es-en", "madlad400-mt", "madlad400"],
                 DefaultOnnxStageAllowedProviders,
-                ["merged-decoder", "quantized", "fp16"],
+                ["fp16-kv", "merged-decoder", "quantized", "fp16"],
                 ["merged-decoder", "quantized", "int8", "fp16"],
                 // Encoder-decoder InferenceSession ctor stack-overflows under TensorRT RTX (ORT 1.24.5).
                 // phi-genai loads through ORT GenAI, whose NvTensorRtRtx device can terminate

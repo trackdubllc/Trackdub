@@ -251,7 +251,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
         return await runtimePlanner.PlanAsync(cpuRequest, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<string> TranslateSegmentAsync(
+    private static Task<string> TranslateSegmentAsync(
         OnnxExecutionSessionFactory.OpusSessionLease sessionLease,
         MadladTokenizerDecoder tokenizer,
         string targetLanguageTag,
@@ -271,81 +271,21 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             .Single(static result => result.Name == "last_hidden_state")
             .AsTensor<float>();
 
-        List<long> generatedTokens = await GreedyDecodeAsync(
+        List<long> generatedTokens = Seq2SeqGreedyDecoder.Decode(
             sessionLease.DecoderSession,
-            tokenizer,
             encoderHiddenStates,
             attentionMask,
-            cancellationToken).ConfigureAwait(false);
+            tokenizer.DecoderStartTokenId,
+            tokenizer.EndOfSentenceTokenId,
+            tokenizer.PadTokenId,
+            Math.Max(8, tokenizer.MaxGenerationLength),
+            provider: null,
+            cancellationToken);
         string translatedText = tokenizer.DecodeTargetText(generatedTokens);
 
-        return string.IsNullOrWhiteSpace(translatedText)
+        return Task.FromResult(string.IsNullOrWhiteSpace(translatedText)
             ? string.Empty
-            : translatedText;
-    }
-
-    private static Task<List<long>> GreedyDecodeAsync(
-        InferenceSession decoderSession,
-        MadladTokenizerDecoder tokenizer,
-        Tensor<float> encoderHiddenStates,
-        IReadOnlyList<long> attentionMask,
-        CancellationToken cancellationToken)
-    {
-        var generatedTokens = new List<long> { tokenizer.DecoderStartTokenId };
-        int maxSteps = Math.Max(8, tokenizer.MaxGenerationLength);
-
-        for (int step = 0; step < maxSteps; step++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            using var decoderInputs = CreateDecoderInputs(
-                decoderSession.InputMetadata,
-                encoderHiddenStates,
-                attentionMask,
-                generatedTokens);
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> decoderResults = decoderSession.RunWithRetry(decoderInputs.Values, cancellationToken: cancellationToken);
-            Tensor<float> logits = decoderResults
-                .Single(static result => result.Name == "logits")
-                .AsTensor<float>();
-
-            int sequenceLength = logits.Dimensions[1];
-            int vocabularySize = logits.Dimensions[2];
-            int nextToken = SelectNextToken(logits, sequenceLength - 1, vocabularySize, tokenizer.PadTokenId);
-            if (nextToken == tokenizer.EndOfSentenceTokenId || nextToken < 0)
-            {
-                break;
-            }
-
-            generatedTokens.Add(nextToken);
-        }
-
-        return Task.FromResult(generatedTokens.Skip(1).ToList());
-    }
-
-    private static int SelectNextToken(
-        Tensor<float> logits,
-        int timeIndex,
-        int vocabularySize,
-        int padTokenId)
-    {
-        int bestToken = -1;
-        float bestValue = float.NegativeInfinity;
-        for (int tokenIndex = 0; tokenIndex < vocabularySize; tokenIndex++)
-        {
-            if (tokenIndex == padTokenId)
-            {
-                continue;
-            }
-
-            float value = logits[0, timeIndex, tokenIndex];
-            if (value > bestValue)
-            {
-                bestValue = value;
-                bestToken = tokenIndex;
-            }
-        }
-
-        return bestToken;
+            : translatedText);
     }
 
     private static InputSet CreateEncoderInputs(
@@ -369,45 +309,6 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
         }
 
         return new InputSet(values);
-    }
-
-    private static InputSet CreateDecoderInputs(
-        IReadOnlyDictionary<string, NodeMetadata> inputMetadata,
-        Tensor<float> encoderHiddenStates,
-        IReadOnlyList<long> attentionMask,
-        IReadOnlyList<long> generatedTokens)
-    {
-        var values = new List<NamedOnnxValue>(inputMetadata.Count);
-        DenseTensor<long> inputIdsTensor = new(generatedTokens.ToArray(), [1, generatedTokens.Count]);
-        DenseTensor<long> attentionMaskTensor = new(attentionMask.ToArray(), [1, attentionMask.Count]);
-
-        foreach ((string inputName, _) in inputMetadata)
-        {
-            values.Add(inputName switch
-            {
-                "input_ids" => NamedOnnxValue.CreateFromTensor("input_ids", inputIdsTensor),
-                "encoder_hidden_states" => NamedOnnxValue.CreateFromTensor("encoder_hidden_states", encoderHiddenStates),
-                "attention_mask" => NamedOnnxValue.CreateFromTensor("attention_mask", attentionMaskTensor),
-                "encoder_attention_mask" => NamedOnnxValue.CreateFromTensor("encoder_attention_mask", attentionMaskTensor),
-                "use_cache_branch" => NamedOnnxValue.CreateFromTensor("use_cache_branch", new DenseTensor<bool>(new[] { false }, new[] { 1 })),
-                _ when inputName.StartsWith("past_key_values.", StringComparison.Ordinal) =>
-                    NamedOnnxValue.CreateFromTensor(inputName, CreateEmptyPastTensor(inputMetadata[inputName])),
-                _ => throw new NotSupportedException($"MADLAD decoder input '{inputName}' is not supported.")
-            });
-        }
-
-        return new InputSet(values);
-    }
-
-    private static DenseTensor<float> CreateEmptyPastTensor(NodeMetadata metadata)
-    {
-        int[] sourceDims = metadata.Dimensions;
-        int[] dims = new int[sourceDims.Length];
-        for (int i = 0; i < sourceDims.Length; i++)
-            dims[i] = sourceDims[i] > 0 ? sourceDims[i] : 1;
-        dims[0] = 1;                       // batch = 1
-        if (dims.Length > 2) dims[2] = 0; // sequence = 0 (empty cache)
-        return new(Array.Empty<float>(), dims);
     }
 
     private static void EnsurePlanReady(StageRuntimePlan plan, RuntimeStage stage)
@@ -453,7 +354,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
     private string ResolveDecoderModelPath(StageRuntimePlan plan, string encoderModelPath)
     {
         string modelRootPath = ResolveModelRootPath(encoderModelPath);
-        foreach (string fileName in new[] { "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx", "decoder_model_merged.onnx" })
+        foreach (string fileName in new[] { "decoder_model_merged.onnx", "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx" })
         {
             string candidatePath = Path.Join(modelRootPath, fileName);
             if (File.Exists(candidatePath))
@@ -472,7 +373,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             }
         }
 
-        foreach (string fileName in new[] { "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx", "decoder_model_merged.onnx" })
+        foreach (string fileName in new[] { "decoder_model_merged.onnx", "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx" })
         {
             string candidatePath = Path.Join(modelRootPath, fileName);
             if (File.Exists(candidatePath))

@@ -4089,7 +4089,16 @@
         "spiece.model": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/spiece.model",
         "tokenizer_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/tokenizer_config.json",
         "encoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/encoder_model_quantized.onnx",
-        "decoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/decoder_model_quantized.onnx"
+        "decoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/decoder_model_quantized.onnx",
+        "trt_rtx_mixed_fp16_fp32/encoder_model.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/encoder_model.onnx",
+        "trt_rtx_mixed_fp16_fp32/encoder_model.onnx_data": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/encoder_model.onnx_data",
+        "trt_rtx_mixed_fp16_fp32/decoder_model_merged.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/decoder_model_merged.onnx",
+        "trt_rtx_mixed_fp16_fp32/decoder_model_merged.onnx_data": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/decoder_model_merged.onnx_data",
+        "trt_rtx_mixed_fp16_fp32/spiece.model": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/spiece.model",
+        "trt_rtx_mixed_fp16_fp32/config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/config.json",
+        "trt_rtx_mixed_fp16_fp32/generation_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/generation_config.json",
+        "trt_rtx_mixed_fp16_fp32/tokenizer_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/tokenizer_config.json",
+        "trt_rtx_mixed_fp16_fp32/special_tokens_map.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/f7dd95c4da8327cc017c616cca44242bd55921c3/trt_rtx_mixed_fp16_fp32/special_tokens_map.json"
       },
       "variants": [
         {
@@ -4098,6 +4107,26 @@
           "download_files": [
             "decoder_model_quantized.onnx"
           ]
+        },
+        {
+          "alias": "fp16-kv",
+          "entry_path": "trt_rtx_mixed_fp16_fp32/encoder_model.onnx",
+          "download_files": [
+            "trt_rtx_mixed_fp16_fp32/encoder_model.onnx",
+            "trt_rtx_mixed_fp16_fp32/encoder_model.onnx_data",
+            "trt_rtx_mixed_fp16_fp32/decoder_model_merged.onnx",
+            "trt_rtx_mixed_fp16_fp32/decoder_model_merged.onnx_data",
+            "trt_rtx_mixed_fp16_fp32/spiece.model",
+            "trt_rtx_mixed_fp16_fp32/config.json",
+            "trt_rtx_mixed_fp16_fp32/generation_config.json",
+            "trt_rtx_mixed_fp16_fp32/tokenizer_config.json",
+            "trt_rtx_mixed_fp16_fp32/special_tokens_map.json"
+          ],
+          "supported_providers": [
+            "dml",
+            "cuda",
+            "trt-rtx"
+          ]
         }
       ],
       "download_file_hashes": {
@@ -4105,7 +4134,16 @@
         "spiece.model": "ef11ac9a22c7503492f56d48dce53be20e339b63605983e9f27d2cd0e0f3922c",
         "tokenizer_config.json": "21de89977129392c6f079c6fe3f8f5f616dd09c7c85d468084aec278111dcb1a",
         "encoder_model_quantized.onnx": "3ab4690aab2174ca29a9ce30cdb8152d9b639606cf2cf48e77112314e064e393",
-        "decoder_model_quantized.onnx": "1894294807c530df6a17e773fe8753833866838fcd41084bdd21cad17e0b50c1"
+        "decoder_model_quantized.onnx": "1894294807c530df6a17e773fe8753833866838fcd41084bdd21cad17e0b50c1",
+        "trt_rtx_mixed_fp16_fp32/encoder_model.onnx": "57b32c9aa009811da07d51e9cfadf12f73fcbb11916ff9065e5c7469e52d52f7",
+        "trt_rtx_mixed_fp16_fp32/encoder_model.onnx_data": "4eb7d71dd36f8f623e34202045a321e6f859eb8a662ec6dcc0ff9eb303481baa",
+        "trt_rtx_mixed_fp16_fp32/decoder_model_merged.onnx": "9c6cfafcccb0494bc27682a4405985b4079311fe28b9e2aa4d37b6bebf6d781c",
+        "trt_rtx_mixed_fp16_fp32/decoder_model_merged.onnx_data": "09a94597b959dc453d0d3feeb70aa17191540362ce0ae061868ba7af6876bce8",
+        "trt_rtx_mixed_fp16_fp32/spiece.model": "ef11ac9a22c7503492f56d48dce53be20e339b63605983e9f27d2cd0e0f3922c",
+        "trt_rtx_mixed_fp16_fp32/config.json": "8235de5df0aafb667662e02571aef4dd54f40958460b73d465c3d081b4803940",
+        "trt_rtx_mixed_fp16_fp32/generation_config.json": "53eda8ba8ebbf3b341354d74a5d3b997a685c6b9bf17271cbd4cc842d0ed5a7c",
+        "trt_rtx_mixed_fp16_fp32/tokenizer_config.json": "4235d93cc064bfff45727f48ddedcb3e2857410406fa1ebac3e5add05964cf7f",
+        "trt_rtx_mixed_fp16_fp32/special_tokens_map.json": "7f79f1d5063d56c4b980eec0692f3c7429bdef335071d34e566bd00fd4b5e3e0"
       },
       "hash_verification": {
         "mode": "required"
