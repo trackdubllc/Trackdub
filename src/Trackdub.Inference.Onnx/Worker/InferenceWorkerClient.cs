@@ -1,0 +1,349 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
+using Trackdub.Contracts.Pipeline;
+using Trackdub.Inference.Runtime.Planning;
+
+namespace Trackdub.Inference.Onnx.Worker;
+
+/// <summary>Runs engines that need ORT 1.30 in the out-of-process inference worker (ADR-0017).</summary>
+public interface IInferenceWorkerClient
+{
+    /// <summary>Whether a worker executable was found; says nothing about whether it starts.</summary>
+    bool IsInstalled { get; }
+
+    /// <summary>Starts the worker if needed and returns its handshake, or null when it is unusable.</summary>
+    Task<WorkerHelloResult?> TryGetHelloAsync(CancellationToken cancellationToken);
+
+    Task<TtsSynthesisResult> SynthesizeTtsAsync(
+        TtsSynthesisRequest request,
+        StageRuntimePlan plan,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Supervises one worker process: lazy start, version handshake, request correlation,
+/// cancellation forwarding, and restart after a crash (at most <see cref="MaxStarts"/> starts per
+/// client). A failed or mismatched worker fails the call with its reason; nothing falls back to
+/// in-process execution silently.
+/// </summary>
+public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDisposable
+{
+    public const string WorkerPathEnvironmentVariable = "TRACKDUB_INFERENCE_WORKER_PATH";
+    public const string WorkerDirectoryName = "inference-worker";
+    public const string WorkerExecutableName = "Trackdub.InferenceWorker.exe";
+    private const int MaxStarts = 3;
+    private const int StderrTailLines = 40;
+
+    private readonly string? executablePath;
+    private readonly SemaphoreSlim startGate = new(1, 1);
+    private readonly SemaphoreSlim writeGate = new(1, 1);
+    private readonly ConcurrentDictionary<long, TaskCompletionSource<WorkerMessage>> pending = new();
+    private readonly Queue<string> stderrTail = new();
+    private Process? process;
+    private WorkerHelloResult? hello;
+    private string? unusableReason;
+    private long nextId;
+    private int starts;
+
+    public InferenceWorkerClient(string? executablePath = null)
+    {
+        this.executablePath = executablePath ?? LocateExecutable();
+    }
+
+    public bool IsInstalled => executablePath is not null;
+
+    public static string? LocateExecutable()
+    {
+        string? configured = Environment.GetEnvironmentVariable(WorkerPathEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return File.Exists(configured) ? Path.GetFullPath(configured) : null;
+        }
+
+        string candidate = Path.Join(AppContext.BaseDirectory, WorkerDirectoryName, WorkerExecutableName);
+        return File.Exists(candidate) ? candidate : null;
+    }
+
+    public async Task<WorkerHelloResult?> TryGetHelloAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await EnsureStartedAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (InferenceWorkerException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<TtsSynthesisResult> SynthesizeTtsAsync(
+        TtsSynthesisRequest request,
+        StageRuntimePlan plan,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(plan);
+        if (request.VoiceCloneReference is not null)
+        {
+            throw new NotSupportedException("The inference worker does not run voice cloning.");
+        }
+
+        WorkerMessage response = await SendAsync(
+            InferenceWorkerProtocol.TtsSynthesize,
+            InferenceWorkerProtocol.ToPayload(new WorkerTtsRequest(
+                request.Text,
+                request.LanguageCode,
+                request.Voice,
+                request.Speed,
+                request.PhonemeOverride,
+                request.TargetDurationSeconds,
+                WorkerPlan.From(plan))),
+            cancellationToken).ConfigureAwait(false);
+        WorkerTtsResult result = InferenceWorkerProtocol.FromPayload<WorkerTtsResult>(response.Payload);
+        LastTtsExecutionSummary = result.ExecutionSummary;
+        return new TtsSynthesisResult(
+            Convert.FromBase64String(result.WavBase64),
+            result.DurationSamples,
+            result.SampleRate,
+            result.ModelId,
+            result.VoiceId,
+            result.Provider);
+    }
+
+    /// <summary>Execution summary the worker reported for the most recent synthesis.</summary>
+    public StageRuntimeExecutionSummary? LastTtsExecutionSummary { get; private set; }
+
+    private async Task<WorkerMessage> SendAsync(string kind, JsonElement payload, CancellationToken cancellationToken)
+    {
+        await EnsureStartedAsync(cancellationToken).ConfigureAwait(false);
+        Process running = process!;
+        long id = Interlocked.Increment(ref nextId);
+        var completion = new TaskCompletionSource<WorkerMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        pending[id] = completion;
+        try
+        {
+            await WriteAsync(running, new WorkerMessage(id, kind, payload), cancellationToken).ConfigureAwait(false);
+            using CancellationTokenRegistration registration = cancellationToken.Register(() =>
+                _ = WriteAsync(running, new WorkerMessage(Interlocked.Increment(ref nextId), InferenceWorkerProtocol.Cancel,
+                    InferenceWorkerProtocol.ToPayload(id)), CancellationToken.None));
+            WorkerMessage response = await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            if (response.Kind == InferenceWorkerProtocol.Error)
+            {
+                if (response.ErrorType == nameof(OperationCanceledException))
+                {
+                    throw new OperationCanceledException(response.Error, cancellationToken);
+                }
+
+                throw new InferenceWorkerException($"Inference worker failed ({response.ErrorType}): {response.Error}");
+            }
+
+            return response;
+        }
+        finally
+        {
+            pending.TryRemove(id, out _);
+        }
+    }
+
+    private async Task<WorkerHelloResult> EnsureStartedAsync(CancellationToken cancellationToken)
+    {
+        if (process is { HasExited: false } && hello is not null)
+        {
+            return hello;
+        }
+
+        await startGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (process is { HasExited: false } && hello is not null)
+            {
+                return hello;
+            }
+
+            if (unusableReason is not null)
+            {
+                throw new InferenceWorkerException(unusableReason);
+            }
+
+            if (executablePath is null)
+            {
+                throw new InferenceWorkerException(
+                    $"The inference worker is not installed (expected {WorkerDirectoryName}/{WorkerExecutableName} next to the application, or {WorkerPathEnvironmentVariable}).");
+            }
+
+            if (++starts > MaxStarts)
+            {
+                unusableReason = $"The inference worker stopped {MaxStarts} times; not restarting it again. Last output: {StderrSnapshot()}";
+                throw new InferenceWorkerException(unusableReason);
+            }
+
+            Process started = Start(executablePath);
+            process = started;
+            WorkerMessage response;
+            long id = Interlocked.Increment(ref nextId);
+            var completion = new TaskCompletionSource<WorkerMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+            pending[id] = completion;
+            try
+            {
+                await WriteAsync(started, new WorkerMessage(id, InferenceWorkerProtocol.Hello), cancellationToken).ConfigureAwait(false);
+                response = await completion.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                throw new InferenceWorkerException($"The inference worker did not answer the handshake. Output: {StderrSnapshot()}");
+            }
+            finally
+            {
+                pending.TryRemove(id, out _);
+            }
+
+            if (response.Kind == InferenceWorkerProtocol.Error)
+            {
+                throw new InferenceWorkerException($"Inference worker handshake failed: {response.Error}");
+            }
+
+            WorkerHelloResult result = InferenceWorkerProtocol.FromPayload<WorkerHelloResult>(response.Payload);
+            if (result.ProtocolVersion != InferenceWorkerProtocol.Version ||
+                !string.Equals(result.BuildStamp, InferenceWorkerProtocol.BuildStamp, StringComparison.Ordinal))
+            {
+                unusableReason =
+                    $"The inference worker at '{executablePath}' is from a different build (protocol {result.ProtocolVersion}, " +
+                    $"build {result.BuildStamp}; expected protocol {InferenceWorkerProtocol.Version}, build {InferenceWorkerProtocol.BuildStamp}).";
+                KillQuietly(started);
+                throw new InferenceWorkerException(unusableReason);
+            }
+
+            hello = result;
+            return result;
+        }
+        finally
+        {
+            startGate.Release();
+        }
+    }
+
+    private Process Start(string path)
+    {
+        var startInfo = new ProcessStartInfo(path)
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(path)!,
+        };
+        Process started = Process.Start(startInfo)
+            ?? throw new InferenceWorkerException($"The inference worker at '{path}' did not start.");
+        started.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is null)
+            {
+                return;
+            }
+
+            lock (stderrTail)
+            {
+                stderrTail.Enqueue(e.Data);
+                while (stderrTail.Count > StderrTailLines)
+                {
+                    stderrTail.Dequeue();
+                }
+            }
+        };
+        started.BeginErrorReadLine();
+        _ = Task.Run(() => ReadLoopAsync(started));
+        return started;
+    }
+
+    private async Task ReadLoopAsync(Process owner)
+    {
+        Stream output = owner.StandardOutput.BaseStream;
+        try
+        {
+            while (await InferenceWorkerProtocol.ReadAsync(output, CancellationToken.None).ConfigureAwait(false) is { } message)
+            {
+                if (pending.TryGetValue(message.Id, out TaskCompletionSource<WorkerMessage>? completion))
+                {
+                    completion.TrySetResult(message);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or ObjectDisposedException)
+        {
+        }
+
+        // The worker exited or its stream broke: every outstanding call fails with what it said.
+        string reason = $"The inference worker exited unexpectedly. Output: {StderrSnapshot()}";
+        foreach (TaskCompletionSource<WorkerMessage> completion in pending.Values)
+        {
+            completion.TrySetException(new InferenceWorkerException(reason));
+        }
+    }
+
+    private async Task WriteAsync(Process target, WorkerMessage message, CancellationToken cancellationToken)
+    {
+        await writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await InferenceWorkerProtocol.WriteAsync(target.StandardInput.BaseStream, message, cancellationToken).ConfigureAwait(false);
+        }
+        catch (IOException ex)
+        {
+            throw new InferenceWorkerException($"The inference worker is not accepting requests: {ex.Message}. Output: {StderrSnapshot()}");
+        }
+        finally
+        {
+            writeGate.Release();
+        }
+    }
+
+    private string StderrSnapshot()
+    {
+        lock (stderrTail)
+        {
+            return stderrTail.Count == 0 ? "(none)" : string.Join(Environment.NewLine, stderrTail);
+        }
+    }
+
+    private static void KillQuietly(Process target)
+    {
+        try
+        {
+            if (!target.HasExited)
+            {
+                target.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (process is { HasExited: false } running)
+        {
+            try
+            {
+                await WriteAsync(running, new WorkerMessage(Interlocked.Increment(ref nextId), InferenceWorkerProtocol.Shutdown), CancellationToken.None)
+                    .ConfigureAwait(false);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await running.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is InferenceWorkerException or OperationCanceledException)
+            {
+            }
+
+            KillQuietly(running);
+        }
+
+        process?.Dispose();
+        startGate.Dispose();
+        writeGate.Dispose();
+    }
+}
+
+public sealed class InferenceWorkerException(string message) : InvalidOperationException(message);

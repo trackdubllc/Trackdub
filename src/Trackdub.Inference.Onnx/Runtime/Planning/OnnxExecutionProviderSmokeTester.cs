@@ -12,6 +12,8 @@ using Trackdub.Inference.Onnx.SortFormer;
 using Trackdub.Inference.Onnx.Whisper;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using Trackdub.Inference.Onnx.Worker;
+using Trackdub.Contracts.Pipeline;
 
 namespace Trackdub.Inference.Onnx.Runtime.Planning;
 
@@ -29,12 +31,72 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         this.genAiModelPool = genAiModelPool;
     }
 
+    /// <summary>
+    /// Smoke-tests engine families hosted by the ORT 1.30 inference worker on CUDA through that
+    /// worker, since this process's ONNX Runtime cannot create CUDA sessions (ADR-0017).
+    /// </summary>
+    public OnnxExecutionProviderSmokeTester(IInferenceWorkerClient workerClient)
+        : this(GenAiModelPool.Shared)
+    {
+        this.workerClient = workerClient ?? throw new ArgumentNullException(nameof(workerClient));
+    }
+
+    private readonly IInferenceWorkerClient? workerClient;
+
+    private async Task<ExecutionProviderSmokeTestResult> SmokeTestThroughWorkerAsync(
+        ExecutionProviderSmokeTestRequest request,
+        CancellationToken cancellationToken)
+    {
+        var plan = new StageRuntimePlan
+        {
+            Stage = request.Stage,
+            Status = StageRuntimePlanStatus.Ready,
+            ModelId = request.ModelId,
+            ModelAlias = request.ModelAlias,
+            EngineFamily = request.EngineFamily,
+            Variant = request.Variant,
+            ExecutionProvider = request.ExecutionProvider,
+            RequirePreferredExecutionProvider = true,
+            ModelEntryPath = request.EntryPath,
+            ModelRootPath = request.ModelRootPath,
+            ModelRevisionHash = request.ModelRevisionHash,
+        };
+        try
+        {
+            TtsSynthesisResult result = await workerClient!.SynthesizeTtsAsync(
+                new TtsSynthesisRequest("Hello.", "en", new VoiceCatalogEntry("af_heart", "en-us", "female", "Heart")),
+                plan,
+                cancellationToken).ConfigureAwait(false);
+            bool onRequestedProvider = string.Equals(
+                result.Provider,
+                FormatProviderLabel(request.ExecutionProvider),
+                StringComparison.OrdinalIgnoreCase);
+            return new ExecutionProviderSmokeTestResult(
+                onRequestedProvider && result.DurationSamples > 0,
+                onRequestedProvider
+                    ? $"Inference worker synthesized {result.DurationSamples} samples on {result.Provider}."
+                    : $"Inference worker ran on '{result.Provider}' instead of the requested provider.");
+        }
+        catch (Exception ex) when (ex is InferenceWorkerException or InvalidOperationException or IOException)
+        {
+            return new ExecutionProviderSmokeTestResult(false, $"Inference worker smoke failed: {ex.Message}");
+        }
+    }
+
     public async Task<ExecutionProviderSmokeTestResult> SmokeTestAsync(
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (request.ExecutionProvider is ExecutionProviderKind.Cuda &&
+            workerClient is not null &&
+            OnnxExecutionProviderDiscovery.WorkerCudaEngineFamilies.Contains(request.EngineFamily, StringComparer.OrdinalIgnoreCase) &&
+            !CudaOrtProbe.IsCudaProviderListed())
+        {
+            return await SmokeTestThroughWorkerAsync(request, cancellationToken).ConfigureAwait(false);
+        }
 
         try
         {

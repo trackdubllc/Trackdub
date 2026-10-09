@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ORT 1.30 inference worker (ADR-0017). The application process loads Windows ML's ORT for
+    DirectML; this process loads the ORT 1.30 GPU build for engines that need it (ORT GenAI, the
+    native CUDA execution provider). It ships in its own inference-worker/ folder so the two
+    onnxruntime.dll files never share a directory.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- No Windows App SDK runtime is needed: this process never uses Windows ML. -->
+    <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
+    <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj"
+                      SetTargetFramework="TargetFramework=net10.0-windows10.0.19041.0" />
+  </ItemGroup>
+
+  <!--
+    The Windows build of Trackdub.Inference.Onnx also carries Windows ML's ORT; this process must
+    load the ORT 1.30 GPU build instead, whose onnxruntime.dll hosts the CUDA provider bridge and
+    matches ORT GenAI. Overwrite the root copy after every build.
+  -->
+  <Target Name="UseOrtGpuRuntimeAtRoot" AfterTargets="CopyFilesToOutputDirectory">
+    <PropertyGroup>
+      <_OrtGpuNativeDir>$(NuGetPackageRoot)microsoft.ml.onnxruntime.gpu.windows\$(OnnxRuntimeVersion)\runtimes\win-x64\native\</_OrtGpuNativeDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_OrtGpuNative Include="$(_OrtGpuNativeDir)*.dll" />
+    </ItemGroup>
+    <Error Condition="'@(_OrtGpuNative)' == ''" Text="ORT GPU runtime not found at $(_OrtGpuNativeDir)." />
+    <Copy SourceFiles="@(_OrtGpuNative)" DestinationFolder="$(TargetDir)" OverwriteReadOnlyFiles="true" SkipUnchangedFiles="false" />
+  </Target>
+
+</Project>

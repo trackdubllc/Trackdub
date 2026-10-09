@@ -84,10 +84,15 @@ public sealed record HardwareProfile(
     NvidiaGpuArchitectureBucket NvidiaGpuArchitecture = NvidiaGpuArchitectureBucket.Unknown,
     string? GpuDriverVersion = null);
 
+/// <param name="EngineFamilies">
+/// When set, only these engine families may run on the provider: it is reachable only through a
+/// host that runs those engines (for example the ORT 1.30 inference worker, ADR-0017).
+/// </param>
 public sealed record ExecutionProviderAvailability(
     ExecutionProviderKind Provider,
     bool IsAvailable,
-    string? Detail = null);
+    string? Detail = null,
+    IReadOnlyList<string>? EngineFamilies = null);
 
 public sealed record ExecutionProviderSmokeTestRequest(
     RuntimeStage Stage,

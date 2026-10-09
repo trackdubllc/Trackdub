@@ -381,6 +381,18 @@ internal sealed class RuntimePlanFactory
         }
 
         ExecutionProviderAvailability availability = GetAvailability(providerAvailabilities, provider);
+        if (availability.IsAvailable &&
+            availability.EngineFamilies is { } hostedFamilies &&
+            !hostedFamilies.Contains(candidate.Entry.EngineFamily, StringComparer.OrdinalIgnoreCase))
+        {
+            availability = availability with
+            {
+                IsAvailable = false,
+                Detail = $"{provider} is only available to {string.Join(", ", hostedFamilies)} on this machine; " +
+                         $"'{candidate.Entry.EngineFamily}' runs in-process. {availability.Detail}",
+            };
+        }
+
         if (provider is not ExecutionProviderKind.Cpu && !availability.IsAvailable)
         {
             if (requirePreferredExecutionProvider)

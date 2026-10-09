@@ -48,6 +48,7 @@ using Trackdub.Infrastructure.Transcription;
 using Trackdub.Infrastructure.Tts;
 using Trackdub.Infrastructure.Dubbing;
 using Trackdub.Inference.Onnx;
+using Trackdub.Inference.Onnx.Worker;
 using Trackdub.Inference.Onnx.Dnnl;
 using Trackdub.Inference.Onnx.Chatterbox;
 using Trackdub.Inference.Onnx.CosyVoice;
@@ -575,6 +576,7 @@ public static class CompositionRoot
         services.TryAddSingleton<IHardwareInfoService, HardwareInfoService>();
         services.TryAddSingleton<IMediaGpuHintProvider, MediaGpuHintProvider>();
         services.TryAddSingleton<IMediaHardwareCapabilitiesService, MediaHardwareCapabilitiesService>();
+        services.TryAddSingleton<IInferenceWorkerClient>(_ => new InferenceWorkerClient());
         services.TryAddSingleton<IExecutionProviderDiscovery>(sp =>
             new OnnxExecutionProviderDiscovery(
                 sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
@@ -590,7 +592,8 @@ public static class CompositionRoot
                     (await sp.GetRequiredService<IStudioSettingsService>()
                         .LoadAsync(cancellationToken)
                         .ConfigureAwait(false))
-                    .NvidiaTensorRtRtxLicenseAccepted));
+                    .NvidiaTensorRtRtxLicenseAccepted,
+                workerClient: sp.GetService<IInferenceWorkerClient>()));
         services.TryAddSingleton<IExecutionProviderSmokeTester, OnnxExecutionProviderSmokeTester>();
         services.TryAddSingleton<ISmokeVerdictStore>(sp =>
             new FileSmokeVerdictStore(Path.Join(

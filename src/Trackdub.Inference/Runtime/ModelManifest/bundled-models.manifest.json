@@ -2417,14 +2417,16 @@
           "entry_path": "onnx/model.onnx",
           "is_default": true,
           "supported_providers": [
-            "cpu"
+            "cpu",
+            "cuda"
           ]
         },
         {
           "alias": "fp16",
           "entry_path": "onnx/model_fp16.onnx",
           "supported_providers": [
-            "cpu"
+            "cpu",
+            "cuda"
           ]
         },
         {

@@ -173,11 +173,13 @@ internal static class StageRuntimeRequirementsCatalog
                 // Per-graph TrtRtxUnsupportedOpScanner + session-init fallback isolate failures.
                 // CosyVoice multi-graph packages compile under TRT RTX in micro-benchmarks
                 // (token_generator 788MB, text_encoder, speech_tokenizer); the family-level
-                // deny was over-broad. kokoro stays CPU (ConvTranspose / DirectML incompatible).
+                // deny was over-broad. kokoro runs on CUDA or CPU only: DirectML fails its decoder
+                // ConvTranspose (0x80070057) and TensorRT RTX cannot infer its duration-dependent
+                // shapes; on Windows CUDA comes from the ORT 1.30 inference worker (ADR-0017).
                 // chatterbox/qwen3-tts keep the deny until their multi-graph init is smoke-clean.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["kokoro"] = [ExecutionProviderKind.Cpu],
+                    ["kokoro"] = [ExecutionProviderKind.Cuda, ExecutionProviderKind.Cpu],
                     ["chatterbox"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["qwen3-tts"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 },
