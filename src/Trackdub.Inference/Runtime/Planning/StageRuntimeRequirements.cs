@@ -43,6 +43,10 @@ internal static class StageRuntimeRequirementsCatalog
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx and not ExecutionProviderKind.TensorRt)];
 
+    private static IReadOnlyList<ExecutionProviderKind> CpuFirst(
+        IReadOnlyList<ExecutionProviderKind> providers) =>
+        [ExecutionProviderKind.Cpu, .. providers.Where(static p => p is not ExecutionProviderKind.Cpu)];
+
     private static IReadOnlyList<ExecutionProviderKind> WithoutTensorRtRtx(
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx)];
@@ -108,15 +112,19 @@ internal static class StageRuntimeRequirementsCatalog
                 ModelTask.Translation,
                 ["opus-en-es", "helsinki-opus-en-es", "opus-en-fr", "opus-en-de", "opus-en-it", "opus-en-pt", "opus-es-en", "helsinki-opus-es-en", "madlad400-mt", "madlad400"],
                 DefaultOnnxStageAllowedProviders,
-                ["fp16-kv", "merged-decoder", "quantized", "fp16"],
-                ["merged-decoder", "quantized", "int8", "fp16"],
+                ["int4-kv", "merged-decoder", "quantized", "fp16"],
+                ["int4-kv", "merged-decoder", "quantized", "int8", "fp16"],
                 // Encoder-decoder InferenceSession ctor stack-overflows under TensorRT RTX (ORT 1.24.5).
                 // phi-genai loads through ORT GenAI, whose NvTensorRtRtx device can terminate
                 // the process (native stack overflow) during model init/generation.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["opus-mt"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                    ["madlad"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    // MADLAD-400 3B runs CPU-first: with the int4 KV-cache decoder a warm clip translates in
+                    // ~8 s on CPU, while DirectML pages on a 12 GB card (int4 81-89 s, fp16 160+ s) because
+                    // the model and DirectML's working set do not fit beside the desktop. GPU providers stay
+                    // reachable through an explicit provider pin.
+                    ["madlad"] = CpuFirst(WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders)),
                     ["phi-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 }),
             [RuntimeStage.Diarization] = new(

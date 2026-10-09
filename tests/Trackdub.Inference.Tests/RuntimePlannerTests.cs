@@ -560,7 +560,7 @@ public sealed class RuntimePlannerTests
     }
 
     [Fact]
-    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForMadlad_PlansDirectMlWithoutTrtSmoke()
+    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForMadlad_PlansCpuFirstWithoutTrtSmoke()
     {
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(CreateMadladTranslationSpec());
@@ -596,7 +596,7 @@ public sealed class RuntimePlannerTests
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
         Assert.Equal("google/madlad400-3b-mt", plan.ModelId);
         Assert.Equal("madlad", plan.EngineFamily);
-        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
         Assert.Contains(
             plan.Warnings,
             warning =>
