@@ -136,17 +136,13 @@ internal static class OnnxExternalDataSidecars
             });
         }
 
-        var sidecars = new HashSet<string>(PathComparer);
-        foreach (string location in locations)
-        {
-            if (TryResolveLocation(modelDirectory, location, out string? sidecar) &&
-                !PathComparer.Equals(sidecar, fullPath))
-            {
-                sidecars.Add(sidecar);
-            }
-        }
-
-        return sidecars.Order(PathComparer).ToArray();
+        return locations
+            .Select(location => TryResolveLocation(modelDirectory, location, out string? sidecar) ? sidecar : null)
+            .OfType<string>()
+            .Where(sidecar => !PathComparer.Equals(sidecar, fullPath))
+            .Distinct(PathComparer)
+            .Order(PathComparer)
+            .ToArray();
     }
 
     private static bool TryResolveLocation(
@@ -315,10 +311,60 @@ internal static class OnnxExternalDataSidecars
                     onLengthDelimited((int)field, fieldEnd);
                     stream.Position = fieldEnd;
                     break;
+                case 3:
+                    SkipGroup(stream, end, field, depth: 0);
+                    break;
                 default:
+                    // Wire type 4 (end group) is only valid inside a group SkipGroup consumes.
                     throw new InvalidDataException("Unsupported ONNX wire type.");
             }
         }
+    }
+
+    /// <summary>
+    /// Skips a deprecated protobuf group (wire type 3) through its matching end-group tag. ONNX
+    /// defines no groups, but an unknown one must not discard every location found so far.
+    /// </summary>
+    private static void SkipGroup(Stream stream, long end, ulong groupField, int depth)
+    {
+        if (depth > MaxGraphDepth)
+        {
+            throw new InvalidDataException("ONNX group nesting is too deep.");
+        }
+
+        while (stream.Position < end)
+        {
+            ulong tag = ReadVarint(stream, end);
+            ulong field = tag >> 3;
+            int wireType = (int)(tag & 7);
+            if (field == 0)
+            {
+                throw new InvalidDataException("Invalid ONNX field tag.");
+            }
+
+            switch (wireType)
+            {
+                case 0:
+                    ReadVarint(stream, end);
+                    break;
+                case 1:
+                case 5:
+                    Skip(stream, wireType == 1 ? 8 : 4, end);
+                    break;
+                case 2:
+                    Skip(stream, checked((long)ReadVarint(stream, end)), end);
+                    break;
+                case 3:
+                    SkipGroup(stream, end, field, depth + 1);
+                    break;
+                case 4 when field == groupField:
+                    return;
+                default:
+                    throw new InvalidDataException("Mismatched or unsupported ONNX group tag.");
+            }
+        }
+
+        throw new InvalidDataException("Unterminated ONNX group.");
     }
 
     private static void Skip(Stream stream, long count, long end)

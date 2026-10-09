@@ -7,7 +7,9 @@ namespace Trackdub.Inference.Onnx.Pool;
 
 /// <summary>
 /// Composite key that uniquely identifies a pooled ONNX <see cref="Microsoft.ML.OnnxRuntime.InferenceSession"/>.
-/// All properties participate in equality and hash code so pool lookups are exact.
+/// Every identity property participates in equality and hash code so pool lookups are exact.
+/// <see cref="EstimatedVramMb"/> is admission sizing, not identity: it is excluded so a sidecar
+/// re-measurement or transient IO glitch never maps the same model to a second pooled session.
 /// </summary>
 /// <remarks>
 /// <para><strong>EngineFamily:</strong>
@@ -144,8 +146,40 @@ internal sealed record SessionPoolKey
     /// <summary>True when standalone OpenVINO is configured to execute on the CPU proxy.</summary>
     public bool UseOpenVinoCpuProxy { get; init; }
 
-    /// <summary>Estimated VRAM footprint of this session in MB. Used for VRAM-budget eviction.</summary>
+    /// <summary>
+    /// Estimated VRAM footprint of this session in MB. Used for VRAM-budget eviction; not part
+    /// of key equality.
+    /// </summary>
     public long EstimatedVramMb { get; init; } = 0;
+
+    public bool Equals(SessionPoolKey? other) =>
+        other is not null &&
+        string.Equals(_engineFamily, other._engineFamily, StringComparison.Ordinal) &&
+        string.Equals(_modelId, other._modelId, StringComparison.Ordinal) &&
+        string.Equals(_variant, other._variant, StringComparison.Ordinal) &&
+        string.Equals(_pathHash, other._pathHash, StringComparison.Ordinal) &&
+        string.Equals(_modelContentHash, other._modelContentHash, StringComparison.Ordinal) &&
+        string.Equals(_graphRole, other._graphRole, StringComparison.Ordinal) &&
+        string.Equals(_optionsFingerprint, other._optionsFingerprint, StringComparison.Ordinal) &&
+        Provider == other.Provider &&
+        DeviceId == other.DeviceId &&
+        UseOpenVinoCpuProxy == other.UseOpenVinoCpuProxy;
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(_engineFamily, StringComparer.Ordinal);
+        hash.Add(_modelId, StringComparer.Ordinal);
+        hash.Add(_variant, StringComparer.Ordinal);
+        hash.Add(_pathHash, StringComparer.Ordinal);
+        hash.Add(_modelContentHash, StringComparer.Ordinal);
+        hash.Add(_graphRole, StringComparer.Ordinal);
+        hash.Add(_optionsFingerprint, StringComparer.Ordinal);
+        hash.Add(Provider);
+        hash.Add(DeviceId);
+        hash.Add(UseOpenVinoCpuProxy);
+        return hash.ToHashCode();
+    }
 
     /// <summary>
     /// Reservation used when a key carries no <see cref="EstimatedVramMb"/> and when the
@@ -163,26 +197,38 @@ internal sealed record SessionPoolKey
     /// weights. 125% plus the per-graph allowance covers that measurement. Every other
     /// provider is unmeasured and keeps the conservative 2× (weights, initialization and
     /// pre-packing copies, activation slack).
+    /// <para>
+    /// Set <paramref name="providerMayFallBack"/> when session creation can still fall back
+    /// from TensorRT RTX to another provider after the key is admitted (the pooled
+    /// single-session TRT init fallback). The admitted reservation cannot follow the session to
+    /// its effective provider, so it uses the conservative factor.
+    /// </para>
     /// </remarks>
-    internal static int ResidentPercentOfWeights(ExecutionProviderKind provider) =>
-        provider is ExecutionProviderKind.TensorRTRtx ? 125 : 200;
+    internal static int ResidentPercentOfWeights(ExecutionProviderKind provider, bool providerMayFallBack = false) =>
+        provider is ExecutionProviderKind.TensorRTRtx && !providerMayFallBack ? 125 : 200;
 
     /// <summary>
     /// Resident estimate for <paramref name="weightBytes"/> of model weights on
     /// <paramref name="provider"/>: weights scaled by <see cref="ResidentPercentOfWeights"/>,
     /// plus 128 MB per graph for runtime and activation overhead.
     /// </summary>
-    internal static long EstimateFromWeightBytes(long weightBytes, ExecutionProviderKind provider)
+    internal static long EstimateFromWeightBytes(
+        long weightBytes,
+        ExecutionProviderKind provider,
+        bool providerMayFallBack = false)
     {
         long weightMb = weightBytes / (1024L * 1024L);
-        return (weightMb * ResidentPercentOfWeights(provider) / 100L) + 128L;
+        return (weightMb * ResidentPercentOfWeights(provider, providerMayFallBack) / 100L) + 128L;
     }
 
     /// <summary>
     /// Estimates a session's resident footprint from the <c>.onnx</c> file plus every
     /// external-data sidecar its tensors reference (see <see cref="OnnxExternalDataSidecars"/>).
     /// </summary>
-    internal static long EstimateVramMb(string? modelPath, ExecutionProviderKind provider)
+    internal static long EstimateVramMb(
+        string? modelPath,
+        ExecutionProviderKind provider,
+        bool providerMayFallBack = false)
     {
         if (string.IsNullOrWhiteSpace(modelPath))
         {
@@ -195,7 +241,7 @@ internal sealed record SessionPoolKey
             if (info.Exists)
             {
                 long weightBytes = info.Length + OnnxExternalDataSidecars.GetTotalBytes(modelPath);
-                return EstimateFromWeightBytes(weightBytes, provider);
+                return EstimateFromWeightBytes(weightBytes, provider, providerMayFallBack);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)

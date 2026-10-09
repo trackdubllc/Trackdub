@@ -1,6 +1,9 @@
 using System.Text;
+using Microsoft.ML.OnnxRuntime;
 using Trackdub.Domain;
+using Trackdub.Inference.Onnx;
 using Trackdub.Inference.Onnx.Pool;
+using Trackdub.Inference.Onnx.TensorRtRtx;
 
 namespace Trackdub.Inference.Tests;
 
@@ -8,6 +11,7 @@ namespace Trackdub.Inference.Tests;
 /// Tests for <see cref="SessionPoolKey.EstimateVramMb"/>: external-data sidecars are counted
 /// and the resident factor follows the execution provider.
 /// </summary>
+[Collection(nameof(TensorRtRtxTeardownGuardCollection))]
 public sealed class SessionPoolKeyVramEstimateTests : IDisposable
 {
     private const int MiB = 1024 * 1024;
@@ -17,10 +21,12 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
     public SessionPoolKeyVramEstimateTests()
     {
         Directory.CreateDirectory(directory);
+        TensorRtRtxTeardownGuard.ResetForTests();
     }
 
     public void Dispose()
     {
+        TensorRtRtxTeardownGuard.ResetForTests();
         OnnxExternalDataSidecars.ResetCache();
         Directory.Delete(directory, recursive: true);
     }
@@ -73,6 +79,24 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
             MessageField(5, Concat(StringField(1, "then_branch"), MessageField(6, thenBranch))));
         string model = WriteModel("model.onnx", MessageField(1, ifNode));
         WriteBytes("branch.bin", 10 * MiB);
+
+        Assert.Equal(148, SessionPoolKey.EstimateVramMb(model, ExecutionProviderKind.Cpu));
+    }
+
+    [Fact]
+    public void EstimateVramMb_SkipsUnknownGroupFieldsAndKeepsReferencedSidecar()
+    {
+        // Field 99 as a (deprecated) protobuf group holding a varint, a nested group, and bytes.
+        byte[] unknownGroup = Concat(
+            Varint((99UL << 3) | 3),
+            VarintField(1, 7),
+            Varint((2UL << 3) | 3),
+            VarintField(1, 1),
+            Varint((2UL << 3) | 4),
+            StringField(3, "payload"),
+            Varint((99UL << 3) | 4));
+        string model = WriteModel("model.onnx", unknownGroup, Initializer("w0", "weights/custom.bin"));
+        WriteBytes(Path.Join("weights", "custom.bin"), 10 * MiB);
 
         Assert.Equal(148, SessionPoolKey.EstimateVramMb(model, ExecutionProviderKind.Cpu));
     }
@@ -145,6 +169,15 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
         Assert.Equal(expectedMb, SessionPoolKey.EstimateFromWeightBytes(100L * MiB, provider));
     }
 
+    [Theory]
+    [InlineData(ExecutionProviderKind.TensorRTRtx)]
+    [InlineData(ExecutionProviderKind.DirectMl)]
+    [InlineData(ExecutionProviderKind.Cpu)]
+    public void EstimateFromWeightBytes_ProviderMayFallBack_UsesConservativeFactor(ExecutionProviderKind provider)
+    {
+        Assert.Equal(328, SessionPoolKey.EstimateFromWeightBytes(100L * MiB, provider, providerMayFallBack: true));
+    }
+
     [Fact]
     public void EstimateFromWeightBytes_SubMegabyteWeights_KeepPerGraphAllowance()
     {
@@ -177,6 +210,28 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
 
         Assert.Equal(253, key.EstimatedVramMb);
         Assert.Equal(SessionPoolKey.HashModelContent(decoder), key.ModelContentHash);
+    }
+
+    [Fact]
+    public async Task CreatePooledSingleAsync_TensorRtRtxWithInitFallback_ReservesForFallbackProvider()
+    {
+        // The session factory may still fall back from TRT RTX after the key is admitted, so the
+        // reservation must cover the 2x fallback provider whichever provider the key records.
+        string model = WriteModel("single.onnx", Initializer("w0", "single.onnx.data"));
+        WriteBytes("single.onnx.data", 10 * MiB);
+        using var pool = new InferenceSessionPool(maxSessions: 2);
+
+        using OnnxExecutionSessionFactory.SingleSessionLease lease = await OnnxExecutionSessionFactory.CreatePooledSingleAsync(
+            "test-engine",
+            model,
+            ExecutionProviderKind.TensorRTRtx,
+            CancellationToken.None,
+            pool,
+            sessionFactory: (_, _) => new InferenceSession(IdentityModel),
+            allowTrtInitFallback: true);
+
+        Assert.NotNull(lease.ResolvedPoolKey);
+        Assert.Equal(148, lease.ResolvedPoolKey.EstimatedVramMb);
     }
 
     /// <summary>
@@ -264,4 +319,13 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
     }
 
     private static byte[] Concat(params byte[][] parts) => [.. parts.SelectMany(static part => part)];
+
+    private static readonly byte[] IdentityModel =
+    [
+        0x08, 0x07, 0x3A, 0x3A, 0x0A, 0x10, 0x0A, 0x01, 0x78, 0x12, 0x01, 0x79, 0x22, 0x08,
+        0x49, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x74, 0x79, 0x12, 0x04, 0x74, 0x65, 0x73, 0x74,
+        0x5A, 0x0F, 0x0A, 0x01, 0x78, 0x12, 0x0A, 0x0A, 0x08, 0x08, 0x01, 0x12, 0x04, 0x0A,
+        0x02, 0x08, 0x01, 0x62, 0x0F, 0x0A, 0x01, 0x79, 0x12, 0x0A, 0x0A, 0x08, 0x08, 0x01,
+        0x12, 0x04, 0x0A, 0x02, 0x08, 0x01, 0x42, 0x04, 0x0A, 0x00, 0x10, 0x09,
+    ];
 }

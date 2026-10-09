@@ -30,8 +30,16 @@ plus every external-data sidecar its tensors reference:
 | TensorRT RTX | 1.25× | Measured: MADLAD-400 3B `trt_rtx_mixed_fp16_fp32` encoder + decoder (6.55 GB of external weights) raised process GPU usage by ~8 GB on a 12 GB RTX 5070, about 1.2× weights. The compiled engines for that pair total 7.94 GB (1.21×). |
 | All others (CPU, DNNL, DirectML, CUDA, TensorRT, OpenVINO, …) | 2× | Not measured; conservative allowance for weights, initialization and pre-packing copies, and activation slack. |
 
-The pool key records the provider the session will actually use, after any TensorRT RTX
-fallback chosen before session creation, so the factor follows that provider.
+The pool key records the provider chosen before session creation, after any TensorRT RTX
+fallback decided at that point, so the factor follows that provider. A pooled single-session
+model can still fall back from TensorRT RTX to DirectML or CPU while its session is being
+created, after the key is admitted, so those keys reserve at 2× unless the route is hard-pinned
+(`RequirePreferredExecutionProvider`). Multi-graph bundles such as MADLAD create their sessions
+without that fallback and keep 1.25×.
+
+The estimate is admission sizing, not pool identity: two keys that differ only in their estimate
+(for example after a sidecar is re-measured) share one pooled session, which keeps the
+reservation it was admitted with.
 
 Worked examples on a 12 GB GPU (default accelerator budget about 9200 MiB):
 
