@@ -64,8 +64,9 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
 
         // GPU-first with CPU fallback: the 3B MADLAD encoder+decoder bundle (~6.4GB)
         // can exceed the accelerator admission budget on smaller GPUs (e.g. 4GB DML
-        // budget on RTX 5070). On that specific preflight failure, re-plan pinned to
-        // CPU and retry instead of failing the stage. An explicitly required GPU pin
+        // budget on RTX 5070), and a TensorRT RTX engine build can fail for lack of
+        // free VRAM. On either failure, re-plan pinned to CPU and retry instead of
+        // failing the stage. An explicitly required GPU pin
         // (RequirePreferredExecutionProvider) is honored — no silent fallback.
         StageRuntimePlan effectivePlan = plan;
         string effectiveEncoderModelPath = encoderModelPath;
@@ -75,11 +76,11 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
         {
             try
             {
-                sessionLease = await OnnxExecutionSessionFactory
-                    .CreatePooledOpusAsync("madlad", effectiveEncoderModelPath, effectiveDecoderModelPath, effectivePlan.ExecutionProvider!.Value, cancellationToken)
+                sessionLease = await AcquireLeaseAsync(
+                    effectivePlan, effectiveEncoderModelPath, effectiveDecoderModelPath, cancellationToken)
                     .ConfigureAwait(false);
             }
-            catch (InvalidOperationException ex) when (IsAdmissionBudgetFailure(ex) && CanFallBackToCpu(request, effectivePlan))
+            catch (Exception ex) when (IsAcceleratorSessionFailure(ex, effectivePlan) && CanFallBackToCpu(request, effectivePlan))
             {
                 effectivePlan = await ReplanForCpuAsync(request, cancellationToken).ConfigureAwait(false);
                 EnsurePlanReady(effectivePlan, RuntimeStage.Translation);
@@ -187,7 +188,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
                     LastExecutionSummary = CreateExecutionSummary(effectivePlan, sessionLease);
                 }
             }
-            catch (InvalidOperationException ex) when (IsAdmissionBudgetFailure(ex) && CanFallBackToCpu(request, effectivePlan))
+            catch (Exception ex) when (IsAcceleratorSessionFailure(ex, effectivePlan) && CanFallBackToCpu(request, effectivePlan))
             {
                 effectivePlan = await ReplanForCpuAsync(request, cancellationToken).ConfigureAwait(false);
                 EnsurePlanReady(effectivePlan, RuntimeStage.Translation);
@@ -218,14 +219,38 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
         StageRuntimePlan plan,
         string encoderModelPath,
         string decoderModelPath,
-        CancellationToken cancellationToken) =>
-        await OnnxExecutionSessionFactory
-            .CreatePooledOpusAsync("madlad", encoderModelPath, decoderModelPath, plan.ExecutionProvider!.Value, cancellationToken)
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyDictionary<string, string>? trtOptions = plan.ExecutionProvider is ExecutionProviderKind.TensorRTRtx
+            ? TensorRtRtxStaticShapeOptions
+            : null;
+        return await OnnxExecutionSessionFactory
+            .CreatePooledOpusAsync(
+                "madlad",
+                encoderModelPath,
+                decoderModelPath,
+                plan.ExecutionProvider!.Value,
+                cancellationToken,
+                additionalTrtEncoderOptions: trtOptions,
+                additionalTrtDecoderOptions: trtOptions)
             .ConfigureAwait(false);
+    }
+
+    // Static-shape decoding feeds TensorRT RTX the same few padded shapes, so it can replay one CUDA
+    // graph per shape; capture halves the decoder step time. The fixed-shape integration test pins the
+    // output across buckets.
+    private static readonly IReadOnlyDictionary<string, string> TensorRtRtxStaticShapeOptions =
+        new Dictionary<string, string>(StringComparer.Ordinal) { ["enable_cuda_graph"] = "1" };
 
     private static bool IsAdmissionBudgetFailure(Exception ex) =>
         ex is InvalidOperationException &&
         ex.Message.Contains("admission budget", StringComparison.OrdinalIgnoreCase);
+
+    // TensorRT RTX builds its engines while the session is created, so too little free VRAM
+    // surfaces there as an ONNX Runtime error rather than as an admission-budget refusal.
+    private static bool IsAcceleratorSessionFailure(Exception ex, StageRuntimePlan plan) =>
+        IsAdmissionBudgetFailure(ex) ||
+        (plan.ExecutionProvider is ExecutionProviderKind.TensorRTRtx && ex is OnnxRuntimeException);
 
     private static bool CanFallBackToCpu(TranslationRequest request, StageRuntimePlan plan) =>
         !request.RequirePreferredExecutionProvider &&
@@ -260,6 +285,18 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
     {
         long[] inputIds = tokenizer.EncodeSourceText(text, targetLanguageTag);
         long[] attentionMask = Enumerable.Repeat(1L, inputIds.Length).ToArray();
+        // TensorRT RTX compiles kernels per input shape, so feed it a few padded lengths; the
+        // attention mask hides the padding from the encoder and from cross-attention.
+        bool staticShapes = sessionLease.SelectedProviderKind is ExecutionProviderKind.TensorRTRtx;
+        if (staticShapes)
+        {
+            int paddedLength = Seq2SeqGreedyDecoder.BucketLength(inputIds.Length);
+            long[] paddedIds = new long[paddedLength];
+            inputIds.CopyTo(paddedIds);
+            Array.Fill(paddedIds, (long)tokenizer.PadTokenId, inputIds.Length, paddedLength - inputIds.Length);
+            inputIds = paddedIds;
+            Array.Resize(ref attentionMask, paddedLength);
+        }
 
         using var encoderInputs = CreateEncoderInputs(
             sessionLease.EncoderSession.InputMetadata,
@@ -280,7 +317,8 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             tokenizer.PadTokenId,
             Math.Max(8, tokenizer.MaxGenerationLength),
             provider: null,
-            cancellationToken);
+            cancellationToken,
+            staticShapes);
         string translatedText = tokenizer.DecodeTargetText(generatedTokens);
 
         return Task.FromResult(string.IsNullOrWhiteSpace(translatedText)
@@ -354,7 +392,12 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
     private string ResolveDecoderModelPath(StageRuntimePlan plan, string encoderModelPath)
     {
         string modelRootPath = ResolveModelRootPath(encoderModelPath);
-        foreach (string fileName in new[] { "decoder_model_merged.onnx", "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx" })
+        // TensorRT RTX decodes with static shapes, which re-run the plain decoder; the merged
+        // decoder's cache branch would change shape every step.
+        string[] decoderFileNames = plan.ExecutionProvider is ExecutionProviderKind.TensorRTRtx
+            ? ["decoder_model.onnx", "decoder_model_merged.onnx", "decoder_model_quantized.onnx", "decoder_model_int8.onnx"]
+            : ["decoder_model_merged.onnx", "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx"];
+        foreach (string fileName in decoderFileNames)
         {
             string candidatePath = Path.Join(modelRootPath, fileName);
             if (File.Exists(candidatePath))
@@ -373,7 +416,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             }
         }
 
-        foreach (string fileName in new[] { "decoder_model_merged.onnx", "decoder_model_quantized.onnx", "decoder_model_int8.onnx", "decoder_model.onnx" })
+        foreach (string fileName in decoderFileNames)
         {
             string candidatePath = Path.Join(modelRootPath, fileName);
             if (File.Exists(candidatePath))

@@ -70,7 +70,6 @@ public sealed class GenAiTensorRtExclusionTests
 
     [Theory]
     [InlineData("opus-mt")]
-    [InlineData("madlad")]
     public async Task SmokeTest_FatalEncoderDecoderFamilyOnTensorRtRtx_FailsWithoutTouchingNativeCode(
         string engineFamily)
     {
@@ -96,7 +95,6 @@ public sealed class GenAiTensorRtExclusionTests
 
     [Theory]
     [InlineData(RuntimeStage.Translation, "opus-mt")]
-    [InlineData(RuntimeStage.Translation, "madlad")]
     public void FatalEncoderDecoderFamily_StageOverride_ExcludesTensorRtProviders(
         RuntimeStage stage,
         string engineFamily)
@@ -107,6 +105,19 @@ public sealed class GenAiTensorRtExclusionTests
             requirements.AllowedProvidersByEngineFamily!.TryGetValue(
                 engineFamily, out IReadOnlyList<ExecutionProviderKind>? allowed));
         Assert.DoesNotContain(ExecutionProviderKind.TensorRTRtx, allowed);
+        Assert.DoesNotContain(ExecutionProviderKind.TensorRt, allowed);
+    }
+
+    [Fact]
+    public void MadladStageOverride_TriesTensorRtRtxThenCpu_AndExcludesClassicTensorRt()
+    {
+        // MADLAD's trt-fp16 export runs under the TensorRT RTX EP ABI plugin; the classic TensorRT
+        // EP is still unproven for it. Without TensorRT RTX, CPU (int4 KV-cache) beats DirectML,
+        // which pages on a 12 GB card.
+        Assert.True(
+            StageRuntimeRequirementsCatalog.All[RuntimeStage.Translation].AllowedProvidersByEngineFamily!
+                .TryGetValue("madlad", out IReadOnlyList<ExecutionProviderKind>? allowed));
+        Assert.Equal([ExecutionProviderKind.TensorRTRtx, ExecutionProviderKind.Cpu], allowed!.Take(2));
         Assert.DoesNotContain(ExecutionProviderKind.TensorRt, allowed);
     }
 

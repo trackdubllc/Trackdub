@@ -559,13 +559,18 @@ public sealed class RuntimePlannerTests
                 && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForMadlad_PlansCpuFirstWithoutTrtSmoke()
+    [Theory]
+    [InlineData(true, ExecutionProviderKind.TensorRTRtx)]
+    [InlineData(false, ExecutionProviderKind.Cpu)]
+    public async Task PlanAsync_Madlad_TriesTensorRtRtxFirstThenCpuBeforeDirectMl(
+        bool tensorRtRtxSmokePasses,
+        ExecutionProviderKind expectedProvider)
     {
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(CreateMadladTranslationSpec());
         string cacheRoot = workspace.CreateCacheRoot("google/madlad400-3b-mt");
         workspace.WriteCacheFile(cacheRoot, "encoder_model.onnx");
+        var smoked = new List<ExecutionProviderKind>();
 
         RuntimePlanner planner = CreatePlanner(
             registry,
@@ -576,33 +581,24 @@ public sealed class RuntimePlannerTests
             ],
             request =>
             {
-                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
-                {
-                    throw new InvalidOperationException("TensorRT families must not be smoked for madlad.");
-                }
-
-                return new ExecutionProviderSmokeTestResult(true);
+                smoked.Add(request.ExecutionProvider);
+                return request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx && !tensorRtRtxSmokePasses
+                    ? new ExecutionProviderSmokeTestResult(false, "TensorRT RTX smoke failed for this test.")
+                    : new ExecutionProviderSmokeTestResult(true);
             });
 
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
             RuntimeStage.Translation,
             PreferredModelAlias: "madlad400-mt",
             RequirePreferredModelAlias: true,
-            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
-            RequirePreferredExecutionProvider: true,
             SourceLanguage: "es",
             TargetLanguage: "en"));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal("google/madlad400-3b-mt", plan.ModelId);
         Assert.Equal("madlad", plan.EngineFamily);
-        Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
-        Assert.Contains(
-            plan.Warnings,
-            warning =>
-                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
-                && warning.Detail is not null
-                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+        Assert.Equal(expectedProvider, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, smoked[0]);
+        Assert.DoesNotContain(ExecutionProviderKind.DirectMl, smoked);
     }
 
     [Fact]

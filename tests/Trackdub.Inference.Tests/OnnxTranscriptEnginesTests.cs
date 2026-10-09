@@ -1073,6 +1073,49 @@ public sealed class OnnxTranscriptEnginesTests
         });
     }
 
+    [FixtureFact("TRACKDUB_MADLAD_TRT_FIXTURE_ROOT", "decoder_model.onnx")]
+    [Trait("Category", "Integration")]
+    public async Task MadladTranslationEngine_TensorRtRtx_StaticShapesMatchUnpaddedFp16Reference()
+    {
+        // The trt-fp16 variant on TensorRT RTX pads encoder and decoder inputs to length buckets.
+        // The expected texts are unpadded fp16 greedy decodes of the same export, so any leak of
+        // padding into attention would change tokens.
+        string fixtureRoot = RequireFixtureRoot("TRACKDUB_MADLAD_TRT_FIXTURE_ROOT");
+        string encoderModelPath = RequireFixtureFile(fixtureRoot, "encoder_model.onnx");
+
+        var engine = new MadladTranslationEngine(
+            new StubRuntimePlanner(new StageRuntimePlan
+            {
+                Stage = RuntimeStage.Translation,
+                Status = StageRuntimePlanStatus.Ready,
+                ModelId = "fixture/madlad400",
+                ModelAlias = "fixture-madlad400",
+                Variant = "trt-fp16",
+                ExecutionProvider = ExecutionProviderKind.TensorRTRtx
+            }),
+            BenchmarkModelPathResolver.CreateDefault());
+
+        IReadOnlyList<TranslatedTextSegment> segments = await engine.TranslateAsync(
+            new TranslationRequest(
+                "en",
+                "fr",
+                [
+                    new TranslationInputSegment(0, 0.0, 1.0, "The quick brown fox jumps over the lazy dog near the riverbank every morning."),
+                    new TranslationInputSegment(1, 1.0, 2.0, "We will meet at the station at eight o'clock and then take the train to the coast.")
+                ],
+                PreferredModelAlias: "fixture-madlad400",
+                ResolvedModelEntryPath: encoderModelPath),
+            CancellationToken.None);
+
+        Assert.Equal("tensorrt-rtx", engine.LastExecutionSummary!.SelectedProvider);
+        Assert.Equal(
+            [
+                "Le renard brun rapide saute par-dessus le chien paresseux près de la rive chaque matin.",
+                "Nous nous retrouverons à la gare à huit heures et prendrons ensuite le train pour la côte."
+            ],
+            segments.Select(static segment => segment.Text).ToArray());
+    }
+
     [FixtureFact("TRACKDUB_MADLAD_FIXTURE_ROOT", "spiece.model")]
     [Trait("Category", "Integration")]
     public async Task MadladTokenizerDecoder_EncodeSourceText_TerminatesWithEndOfSentence()

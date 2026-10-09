@@ -13,6 +13,12 @@ namespace Trackdub.Inference.Onnx.Translation;
 /// key/value cache: step 0 runs the no-cache branch over the start token and yields the self-attention
 /// and cross-attention caches; every later step feeds only the newest token. Decoders without a cache
 /// re-run the whole generated prefix every step, which is quadratic in the output length.
+/// <para>
+/// Static-shape decoding serves TensorRT RTX, which JIT-compiles kernels for every new input shape: the
+/// prefix is re-run padded to a length bucket and the logits are read at the last real position.
+/// Causal self-attention keeps the padding from influencing earlier positions, so the result matches
+/// unpadded decoding, while the engine only ever sees a handful of shapes.
+/// </para>
 /// </remarks>
 internal static class Seq2SeqGreedyDecoder
 {
@@ -20,10 +26,27 @@ internal static class Seq2SeqGreedyDecoder
     private const string PastPrefix = "past_key_values.";
     private const string PresentPrefix = "present.";
 
+    private static readonly int[] StaticShapeBuckets = [16, 32, 64, 128, 256, 512];
+    private static readonly string[] LogitsOutput = ["logits"];
+
     internal static bool SupportsKeyValueCache(InferenceSession decoderSession) =>
         decoderSession.InputMetadata.ContainsKey(UseCacheBranchInput) &&
         decoderSession.InputMetadata.Keys.Any(static name => name.StartsWith(PastPrefix, StringComparison.Ordinal)) &&
         decoderSession.OutputMetadata.Keys.Any(static name => name.StartsWith(PresentPrefix, StringComparison.Ordinal));
+
+    /// <summary>Smallest static-shape bucket holding <paramref name="length"/>; longer inputs keep their length.</summary>
+    internal static int BucketLength(int length)
+    {
+        foreach (int bucket in StaticShapeBuckets)
+        {
+            if (length <= bucket)
+            {
+                return bucket;
+            }
+        }
+
+        return length;
+    }
 
     internal static List<long> Decode(
         InferenceSession decoderSession,
@@ -34,12 +57,13 @@ internal static class Seq2SeqGreedyDecoder
         int padTokenId,
         int maxSteps,
         ExecutionProviderKind? provider,
-        CancellationToken cancellationToken) =>
-        SupportsKeyValueCache(decoderSession)
+        CancellationToken cancellationToken,
+        bool staticShapes = false) =>
+        !staticShapes && SupportsKeyValueCache(decoderSession)
             ? DecodeWithCache(decoderSession, encoderHiddenStates, encoderAttentionMask, decoderStartTokenId,
                 endOfSentenceTokenId, padTokenId, maxSteps, provider, cancellationToken)
             : DecodeWithoutCache(decoderSession, encoderHiddenStates, encoderAttentionMask, decoderStartTokenId,
-                endOfSentenceTokenId, padTokenId, maxSteps, provider, cancellationToken);
+                endOfSentenceTokenId, padTokenId, maxSteps, provider, cancellationToken, staticShapes);
 
     private static List<long> DecodeWithCache(
         InferenceSession decoderSession,
@@ -150,7 +174,8 @@ internal static class Seq2SeqGreedyDecoder
         int padTokenId,
         int maxSteps,
         ExecutionProviderKind? provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool staticShapes)
     {
         var tokens = new List<long> { decoderStartTokenId };
         var maskTensor = new DenseTensor<long>(encoderAttentionMask, [1, encoderAttentionMask.Length]);
@@ -158,7 +183,9 @@ internal static class Seq2SeqGreedyDecoder
         {
             cancellationToken.ThrowIfCancellationRequested();
             var inputs = new List<NamedOnnxValue>(decoderSession.InputMetadata.Count);
-            DenseTensor<long> idsTensor = new(tokens.ToArray(), [1, tokens.Count]);
+            DenseTensor<long> idsTensor = staticShapes
+                ? PadToBucket(tokens, padTokenId)
+                : new(tokens.ToArray(), [1, tokens.Count]);
             foreach ((string name, NodeMetadata metadata) in decoderSession.InputMetadata)
             {
                 inputs.Add(name switch
@@ -173,10 +200,13 @@ internal static class Seq2SeqGreedyDecoder
                 });
             }
 
+            // Only the logits are read; fetching the unused present.* caches would copy them back
+            // from the device every step.
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> outputs =
-                decoderSession.RunWithRetry(inputs, cancellationToken: cancellationToken, provider: provider);
-            int nextToken = ArgMaxLastPosition(
+                decoderSession.RunWithRetry(inputs, cancellationToken: cancellationToken, provider: provider, outputNames: LogitsOutput);
+            int nextToken = ArgMaxAtPosition(
                 outputs.Single(static value => value.Name == "logits").AsTensor<float>(),
+                tokens.Count - 1,
                 padTokenId);
             if (nextToken < 0 || nextToken == endOfSentenceTokenId)
             {
@@ -187,6 +217,14 @@ internal static class Seq2SeqGreedyDecoder
         }
 
         return tokens.Skip(1).ToList();
+    }
+
+    private static DenseTensor<long> PadToBucket(List<long> tokens, int padTokenId)
+    {
+        long[] padded = new long[BucketLength(tokens.Count)];
+        tokens.CopyTo(padded);
+        Array.Fill(padded, padTokenId, tokens.Count, padded.Length - tokens.Count);
+        return new DenseTensor<long>(padded, [1, padded.Length]);
     }
 
     private static DenseTensor<float> CreateEmptyPast(NodeMetadata metadata)
@@ -201,15 +239,17 @@ internal static class Seq2SeqGreedyDecoder
         return new DenseTensor<float>(Array.Empty<float>(), dims);
     }
 
-    internal static int ArgMaxLastPosition(Tensor<float> logits, int padTokenId)
+    internal static int ArgMaxLastPosition(Tensor<float> logits, int padTokenId) =>
+        ArgMaxAtPosition(logits, logits.Dimensions[1] - 1, padTokenId);
+
+    internal static int ArgMaxAtPosition(Tensor<float> logits, int position, int padTokenId)
     {
-        int sequenceLength = logits.Dimensions[1];
         int vocabularySize = logits.Dimensions[2];
         int bestToken = -1;
         float bestValue = float.NegativeInfinity;
         if (logits is DenseTensor<float> dense)
         {
-            ReadOnlySpan<float> row = dense.Buffer.Span.Slice((sequenceLength - 1) * vocabularySize, vocabularySize);
+            ReadOnlySpan<float> row = dense.Buffer.Span.Slice(position * vocabularySize, vocabularySize);
             for (int token = 0; token < row.Length; token++)
             {
                 if (token != padTokenId && row[token] > bestValue)
@@ -224,7 +264,7 @@ internal static class Seq2SeqGreedyDecoder
 
         for (int token = 0; token < vocabularySize; token++)
         {
-            float value = logits[0, sequenceLength - 1, token];
+            float value = logits[0, position, token];
             if (token != padTokenId && value > bestValue)
             {
                 bestValue = value;

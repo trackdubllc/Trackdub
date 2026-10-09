@@ -1883,7 +1883,9 @@ public sealed class ModelManifestLoaderTests
         Assert.Contains("encoder_model_quantized.onnx", manifest.DownloadFileSources.Keys);
         Assert.Contains("decoder_model_quantized.onnx", manifest.DownloadFileSources.Keys);
         Assert.All(
-            manifest.DownloadFileSources.Where(source => !source.Key.StartsWith("mixed_fp16_int4/", StringComparison.Ordinal)),
+            manifest.DownloadFileSources.Where(source =>
+                !source.Key.StartsWith("mixed_fp16_int4/", StringComparison.Ordinal) &&
+                !source.Key.StartsWith("trt_rtx_mixed_fp16_fp32/", StringComparison.Ordinal)),
             source => Assert.StartsWith(
                 "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/",
                 source.Value,
@@ -1896,6 +1898,25 @@ public sealed class ModelManifestLoaderTests
         Assert.Contains("mixed_fp16_int4/decoder_model_merged.onnx.data", kvVariant.DownloadFiles);
         Assert.Contains("mixed_fp16_int4/encoder_model.onnx.data", kvVariant.DownloadFiles);
         Assert.All(kvVariant.DownloadFiles, file =>
+        {
+            Assert.StartsWith(
+                "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/",
+                manifest.DownloadFileSources[file],
+                StringComparison.Ordinal);
+            Assert.True(manifest.DownloadFileHashes.ContainsKey(file), $"Missing pinned hash for {file}.");
+        });
+
+        // TensorRT RTX decodes with static shapes over the plain decoder, so the variant ships the
+        // encoder and decoder_model only (no decoder_with_past) and is reserved for trt-rtx.
+        ModelVariantManifest trtVariant = Assert.Single(manifest.Variants, variant =>
+            variant.Alias.Equals("trt-fp16", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("trt_rtx_mixed_fp16_fp32/encoder_model.onnx", trtVariant.EntryPath);
+        Assert.Equal(["trt-rtx"], trtVariant.SupportedProviders);
+        Assert.Contains("trt_rtx_mixed_fp16_fp32/encoder_model.onnx_data", trtVariant.DownloadFiles);
+        Assert.Contains("trt_rtx_mixed_fp16_fp32/decoder_model.onnx", trtVariant.DownloadFiles);
+        Assert.Contains("trt_rtx_mixed_fp16_fp32/decoder_model.onnx_data", trtVariant.DownloadFiles);
+        Assert.DoesNotContain(trtVariant.DownloadFiles, file => file.Contains("with_past", StringComparison.Ordinal));
+        Assert.All(trtVariant.DownloadFiles, file =>
         {
             Assert.StartsWith(
                 "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/",

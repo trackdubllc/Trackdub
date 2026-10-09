@@ -352,16 +352,16 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         }
     }
 
-    // Encoder-decoder InferenceSession construction for these families terminates the host
-    // process (stack overflow) under TensorRT providers; the reason their stage allow-list
-    // overrides exist. The smoke sweep bypasses stage allow-lists, so refuse the attempt
-    // before session creation; a fatal crash cannot be caught and reported.
+    // Encoder-decoder InferenceSession construction for OPUS-MT terminates the host process
+    // (stack overflow) under TensorRT providers; the reason its stage allow-list override exists.
+    // The smoke sweep bypasses stage allow-lists, so refuse the attempt before session creation;
+    // a fatal crash cannot be caught and reported. MADLAD's trt-fp16 export constructs and runs
+    // under the TensorRT RTX EP ABI plugin, so it is smoke-tested like any other pair.
     private static void ThrowIfFatalTensorRtFamily(string? engineFamily, ExecutionProviderKind provider)
     {
         if (provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt
             && engineFamily is not null
-            && (engineFamily.Equals("opus-mt", StringComparison.OrdinalIgnoreCase)
-                || engineFamily.Equals("madlad", StringComparison.OrdinalIgnoreCase)))
+            && engineFamily.Equals("opus-mt", StringComparison.OrdinalIgnoreCase))
         {
             throw new NotSupportedException(
                 $"Engine family '{engineFamily}' is excluded from TensorRT providers: "

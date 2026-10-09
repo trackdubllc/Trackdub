@@ -631,7 +631,10 @@ internal static class OnnxExecutionSessionFactory
                 decoderSession,
                 bootstrap.RequestedProviderLabel,
                 FormatProviderLabel(metadata.SelectedProvider),
-                metadata.BootstrapDetail);
+                metadata.BootstrapDetail)
+            {
+                SelectedProviderKind = metadata.SelectedProvider
+            };
         }
         catch
         {
@@ -1364,6 +1367,7 @@ internal static class OnnxExecutionSessionFactory
             pair.EncoderLease.Session, pair.DecoderLease.Session,
             pair.RequestedProviderLabel, FormatProviderLabel(pair.SelectedProvider), pair.BootstrapDetail)
         {
+            SelectedProviderKind = pair.SelectedProvider,
             EncoderPoolLease = pair.EncoderLease,
             DecoderPoolLease = pair.DecoderLease
         };
@@ -2406,6 +2410,9 @@ internal static class OnnxExecutionSessionFactory
         string SelectedProvider,
         string? BootstrapDetail) : IDisposable
     {
+        /// <summary>Provider the sessions actually run on, after any downgrade.</summary>
+        internal ExecutionProviderKind SelectedProviderKind { get; init; } = ExecutionProviderKind.Cpu;
+
         internal SessionLease? EncoderPoolLease { get; init; }
         internal SessionLease? DecoderPoolLease { get; init; }
 
