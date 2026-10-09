@@ -100,6 +100,8 @@ public sealed class TtsStreamingPrefetch : ITranslatedSegmentObserver, IAsyncDis
     /// <summary>Speaker voice plans resolved before translation; the TTS stage reuses them.</summary>
     internal IReadOnlyDictionary<Guid, TtsSpeakerPlan> SpeakerPlans { get; }
 
+    internal string StagingDirectory => stagingDirectory;
+
     public int ScheduledCount => Volatile.Read(ref scheduled);
 
     public int ClaimedCount => Volatile.Read(ref claimed);

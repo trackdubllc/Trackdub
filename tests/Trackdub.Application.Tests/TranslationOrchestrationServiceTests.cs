@@ -395,6 +395,40 @@ public sealed class TranslationOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task GenerateTranslationAsync_WithStreamingEngine_NotifiesObserverForEverySegmentAsItArrives()
+    {
+        var engine = new StreamingFakeTranslationEngine();
+        TranslationHarness harness = CreateTranslationHarness(
+            transcriptLanguage: "en",
+            segmentDetectedLanguage: "en",
+            segmentCount: 3,
+            engine: engine);
+        var observer = new RecordingSegmentObserver();
+
+        await harness.Service.GenerateTranslationAsync(
+            harness.State,
+            new GenerateTranslationRequest(SourceLanguage: "auto", TargetLanguage: "es", EnableSegmentStreaming: true),
+            TestContext.Current.CancellationToken,
+            progress: null,
+            observer);
+
+        Assert.Equal([0, 1, 2], observer.Segments.Select(segment => segment.Index).ToArray());
+        TranslationRevision revision = Assert.Single(harness.TranslationRepository.Revisions);
+        IReadOnlyList<TranslatedSegment> committed =
+            await harness.TranslationRepository.GetSegmentsAsync(revision.Id, TestContext.Current.CancellationToken);
+        Assert.Equal(
+            committed.OrderBy(segment => segment.SegmentIndex).Select(segment => segment.Text).ToArray(),
+            observer.Segments.Select(segment => segment.Text).ToArray());
+    }
+
+    private sealed class RecordingSegmentObserver : ITranslatedSegmentObserver
+    {
+        public List<(int Index, string Text)> Segments { get; } = [];
+
+        public void OnSegmentTranslated(int segmentIndex, string text) => Segments.Add((segmentIndex, text));
+    }
+
+    [Fact]
     public async Task GenerateTranslationAsync_WithStreamingFault_CommitsNoRevisionAndStageFailed()
     {
         var engine = new StreamingFakeTranslationEngine
