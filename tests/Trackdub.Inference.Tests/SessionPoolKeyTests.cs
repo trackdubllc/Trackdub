@@ -109,6 +109,26 @@ public sealed class SessionPoolKeyTests
         Assert.NotEqual(a, b);
     }
 
+    [Fact]
+    public void RecordEquality_DifferentEstimatedVramMb_AreEqual()
+    {
+        // Admission sizing is not identity: a re-measured sidecar must reuse the pooled session.
+        var a = new SessionPoolKey("madlad", null, null, ExecutionProviderKind.TensorRTRtx, "abc", 0, "encoder") { EstimatedVramMb = 3314 };
+        var b = a with { EstimatedVramMb = 5226 };
+
+        Assert.Equal(a, b);
+        Assert.Equal(a.GetHashCode(), b.GetHashCode());
+    }
+
+    [Fact]
+    public void RecordEquality_DifferentOpenVinoCpuProxy_NotEqual()
+    {
+        var a = new SessionPoolKey("kokoro", null, null, ExecutionProviderKind.OpenVino, "abc", 0, "default");
+        var b = a with { UseOpenVinoCpuProxy = true };
+
+        Assert.NotEqual(a, b);
+    }
+
     // ── HashPath ──────────────────────────────────────────────────────────────
 
     [Fact]

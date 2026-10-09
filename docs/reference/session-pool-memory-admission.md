@@ -1,15 +1,63 @@
 # ONNX session-pool memory admission
 
-ONNX session memory admission is enabled by default. The pool starts with a 4096 MiB budget
-for each accelerator device and a separate 4096 MiB host-RAM budget shared by CPU and DNNL
-sessions (plus OpenVINO when CPU-proxy mode is enabled). A model-file estimate is twice the
-file size plus 128 MiB, with a 64 MiB floor. Multi-graph models are admitted against the sum
-of their graph estimates.
+ONNX session memory admission is enabled by default. Each accelerator device gets three-quarters
+of the largest adapter's dedicated VRAM (clamped to 4096–16384 MiB), and a separate host-RAM
+budget of a quarter of physical RAM (same clamp) is shared by CPU and DNNL sessions (plus
+OpenVINO when CPU-proxy mode is enabled). When the size cannot be detected, each budget falls
+back to 4096 MiB. Multi-graph models are admitted against the sum of their graph estimates.
+
+## Per-graph estimate
+
+A graph's estimate is `weights × provider factor + 128 MiB`, where *weights* is the `.onnx` file
+plus every external-data sidecar its tensors reference:
+
+- The pool reads the `location` of each external-data tensor (initializers, sparse initializers,
+  and node attributes, including subgraphs) from the graph without loading the weights, and sums
+  the sizes of the distinct files. `<name>.onnx.data`, `<name>.onnx_data`, and any other
+  location inside the model's directory count. Locations that are rooted or leave the model's
+  directory are ignored, matching ONNX Runtime's path validation.
+- If the graph cannot be parsed, the adjacent `<name>.onnx.data` and `<name>.onnx_data` files
+  count instead. A graph that parses and references no external data counts only the `.onnx`
+  file, even when a stray `.data` file sits next to it.
+- The referenced locations are cached per graph file (path, length, and last-write time).
+  Sidecar sizes are re-read on every key build, so a replaced sidecar is re-measured. The
+  pool key's content hash still covers the `.onnx` file only.
+- Two graphs that reference the same sidecar file each count the whole file, because each
+  ONNX Runtime session loads its own copy.
+
+| Provider | Factor | Basis |
+|---|---|---|
+| TensorRT RTX | 1.25× | Measured: MADLAD-400 3B `trt_rtx_mixed_fp16_fp32` encoder + decoder (6.55 GB of external weights) raised process GPU usage by ~8 GB on a 12 GB RTX 5070, about 1.2× weights. The compiled engines for that pair total 7.94 GB (1.21×). |
+| All others (CPU, DNNL, DirectML, CUDA, TensorRT, OpenVINO, …) | 2× | Not measured; conservative allowance for weights, initialization and pre-packing copies, and activation slack. |
+
+The pool key records the provider chosen before session creation, after any TensorRT RTX
+fallback decided at that point, so the factor follows that provider. A pooled single-session
+model can still fall back from TensorRT RTX to DirectML or CPU while its session is being
+created, after the key is admitted, so those keys reserve at 2× unless the route is hard-pinned
+(`RequirePreferredExecutionProvider`). Multi-graph bundles such as MADLAD create their sessions
+without that fallback and keep 1.25×.
+
+The estimate is admission sizing, not pool identity: two keys that differ only in their estimate
+(for example after a sidecar is re-measured) share one pooled session, which keeps the
+reservation it was admitted with.
+
+Worked examples on a 12 GB GPU (default accelerator budget about 9200 MiB):
+
+| Bundle | Weights | Estimate | Result |
+|---|---|---|---|
+| MADLAD `trt_rtx_mixed_fp16_fp32` on TensorRT RTX | 2549 + 3702 MiB | 3314 + 4755 = 8069 MiB | Admitted; it runs with ~800 MB of VRAM to spare. |
+| Same files at 2× (DirectML, CUDA) | 2549 + 3702 MiB | 5226 + 7532 = 12758 MiB | Refused; MADLAD falls back to CPU. |
+| MADLAD bundled `quantized` (inline weights) at 2× | 1275 + 1782 MiB | 2678 + 3692 = 6370 MiB | Admitted on GPU. On CPU it needs a host budget of at least 6370 MiB. |
+
+Before external-data sidecars were counted, the `trt_rtx_mixed_fp16_fp32` pair reserved about
+260 MiB, so admission never refused or evicted anything for it.
+
+## Raising the limits
 
 These are safety limits, not a promise that every supported model fits on every machine. For
-example, a single model file around 1985 MiB already estimates above the default host budget;
-larger files and multi-graph bundles need more headroom. Increase the host limit only when the
-machine has enough available RAM:
+example, a single graph with about 1985 MiB of weights (in the `.onnx` file plus its sidecars)
+already exceeds the 4096 MiB host floor at 2×. Larger graphs and multi-graph bundles need more
+headroom. Increase the host limit only when the machine has enough available RAM:
 
 ```powershell
 $env:TRACKDUB_SESSION_RAM_BUDGET_MB = "12288"
@@ -19,7 +67,7 @@ $env:TRACKDUB_SESSION_RAM_BUDGET_MB = "12288"
 export TRACKDUB_SESSION_RAM_BUDGET_MB=12288
 ```
 
-The value is in MiB and must be a positive integer. Invalid or unset values retain the 4096 MiB
+The value is in MiB and must be a positive integer. Invalid or unset values keep the scaled
 default. The accelerator limit can be adjusted independently with
 `TRACKDUB_SESSION_VRAM_BUDGET_MB`; it applies per device. Raising either limit permits more
 resident sessions and can increase memory pressure or cause the operating system to terminate

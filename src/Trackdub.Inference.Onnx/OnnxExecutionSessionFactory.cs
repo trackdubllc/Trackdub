@@ -729,6 +729,16 @@ internal static class OnnxExecutionSessionFactory
             graphRole: "default",
             optionsFingerprint,
             cancellationToken).ConfigureAwait(false));
+        if (allowTrtInitFallback && optionsSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx)
+        {
+            // TRT RTX init can still fall back to DirectML/CPU inside the pool factory, after this
+            // key is admitted; reserve for the fallback provider, not TRT RTX's measured factor.
+            key = key with
+            {
+                EstimatedVramMb = SessionPoolKey.EstimateVramMb(
+                    modelPath, optionsSelection.SelectedProvider, providerMayFallBack: true),
+            };
+        }
 
         SessionLease? poolLease = null;
         try

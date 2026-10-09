@@ -7,7 +7,9 @@ namespace Trackdub.Inference.Onnx.Pool;
 
 /// <summary>
 /// Composite key that uniquely identifies a pooled ONNX <see cref="Microsoft.ML.OnnxRuntime.InferenceSession"/>.
-/// All properties participate in equality and hash code so pool lookups are exact.
+/// Every identity property participates in equality and hash code so pool lookups are exact.
+/// <see cref="EstimatedVramMb"/> is admission sizing, not identity: it is excluded so a sidecar
+/// re-measurement or transient IO glitch never maps the same model to a second pooled session.
 /// </summary>
 /// <remarks>
 /// <para><strong>EngineFamily:</strong>
@@ -144,17 +146,89 @@ internal sealed record SessionPoolKey
     /// <summary>True when standalone OpenVINO is configured to execute on the CPU proxy.</summary>
     public bool UseOpenVinoCpuProxy { get; init; }
 
-    /// <summary>Estimated VRAM footprint of this session in MB. Used for VRAM-budget eviction.</summary>
+    /// <summary>
+    /// Estimated VRAM footprint of this session in MB. Used for VRAM-budget eviction; not part
+    /// of key equality.
+    /// </summary>
     public long EstimatedVramMb { get; init; } = 0;
 
+    public bool Equals(SessionPoolKey? other) =>
+        other is not null &&
+        string.Equals(_engineFamily, other._engineFamily, StringComparison.Ordinal) &&
+        string.Equals(_modelId, other._modelId, StringComparison.Ordinal) &&
+        string.Equals(_variant, other._variant, StringComparison.Ordinal) &&
+        string.Equals(_pathHash, other._pathHash, StringComparison.Ordinal) &&
+        string.Equals(_modelContentHash, other._modelContentHash, StringComparison.Ordinal) &&
+        string.Equals(_graphRole, other._graphRole, StringComparison.Ordinal) &&
+        string.Equals(_optionsFingerprint, other._optionsFingerprint, StringComparison.Ordinal) &&
+        Provider == other.Provider &&
+        DeviceId == other.DeviceId &&
+        UseOpenVinoCpuProxy == other.UseOpenVinoCpuProxy;
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(_engineFamily, StringComparer.Ordinal);
+        hash.Add(_modelId, StringComparer.Ordinal);
+        hash.Add(_variant, StringComparer.Ordinal);
+        hash.Add(_pathHash, StringComparer.Ordinal);
+        hash.Add(_modelContentHash, StringComparer.Ordinal);
+        hash.Add(_graphRole, StringComparer.Ordinal);
+        hash.Add(_optionsFingerprint, StringComparer.Ordinal);
+        hash.Add(Provider);
+        hash.Add(DeviceId);
+        hash.Add(UseOpenVinoCpuProxy);
+        return hash.ToHashCode();
+    }
+
     /// <summary>
-    /// Conservative resident estimate when the caller does not supply
-    /// <see cref="EstimatedVramMb"/>: 2× model file size (weights + init/activation slack)
-    /// with a floor. Unknown/missing files get the floor so admission stays pessimistic.
+    /// Reservation used when a key carries no <see cref="EstimatedVramMb"/> and when the
+    /// model file is missing or unreadable, so admission stays pessimistic.
     /// </summary>
     public const long DefaultEstimatedVramMb = 256;
 
-    internal static long EstimateVramMb(string? modelPath)
+    /// <summary>
+    /// Resident memory per weight byte, in percent, for <paramref name="provider"/>.
+    /// </summary>
+    /// <remarks>
+    /// TensorRT RTX builds its engine from the initializers and holds the weights roughly
+    /// once: MADLAD-400 3B <c>trt_rtx_mixed_fp16_fp32</c> encoder + decoder (6.55 GB of
+    /// external weights) raised process GPU usage by ~8 GB on a 12 GB RTX 5070, about 1.2×
+    /// weights. 125% plus the per-graph allowance covers that measurement. Every other
+    /// provider is unmeasured and keeps the conservative 2× (weights, initialization and
+    /// pre-packing copies, activation slack).
+    /// <para>
+    /// Set <paramref name="providerMayFallBack"/> when session creation can still fall back
+    /// from TensorRT RTX to another provider after the key is admitted (the pooled
+    /// single-session TRT init fallback). The admitted reservation cannot follow the session to
+    /// its effective provider, so it uses the conservative factor.
+    /// </para>
+    /// </remarks>
+    internal static int ResidentPercentOfWeights(ExecutionProviderKind provider, bool providerMayFallBack = false) =>
+        provider is ExecutionProviderKind.TensorRTRtx && !providerMayFallBack ? 125 : 200;
+
+    /// <summary>
+    /// Resident estimate for <paramref name="weightBytes"/> of model weights on
+    /// <paramref name="provider"/>: weights scaled by <see cref="ResidentPercentOfWeights"/>,
+    /// plus 128 MB per graph for runtime and activation overhead.
+    /// </summary>
+    internal static long EstimateFromWeightBytes(
+        long weightBytes,
+        ExecutionProviderKind provider,
+        bool providerMayFallBack = false)
+    {
+        long weightMb = weightBytes / (1024L * 1024L);
+        return (weightMb * ResidentPercentOfWeights(provider, providerMayFallBack) / 100L) + 128L;
+    }
+
+    /// <summary>
+    /// Estimates a session's resident footprint from the <c>.onnx</c> file plus every
+    /// external-data sidecar its tensors reference (see <see cref="OnnxExternalDataSidecars"/>).
+    /// </summary>
+    internal static long EstimateVramMb(
+        string? modelPath,
+        ExecutionProviderKind provider,
+        bool providerMayFallBack = false)
     {
         if (string.IsNullOrWhiteSpace(modelPath))
         {
@@ -166,8 +240,8 @@ internal sealed record SessionPoolKey
             var info = new FileInfo(modelPath);
             if (info.Exists)
             {
-                long sizeMb = info.Length / (1024L * 1024L);
-                return Math.Max(64L, (sizeMb * 2L) + 128L);
+                long weightBytes = info.Length + OnnxExternalDataSidecars.GetTotalBytes(modelPath);
+                return EstimateFromWeightBytes(weightBytes, provider, providerMayFallBack);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
@@ -336,7 +410,7 @@ internal sealed record SessionPoolKey
             graphRole,
             optionsFingerprint)
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = contentHash,
         };
     }
@@ -456,7 +530,7 @@ internal sealed record SessionPoolKey
         string? optionsFingerprint = null) =>
         new(engineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "default", optionsFingerprint)
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
@@ -471,7 +545,7 @@ internal sealed record SessionPoolKey
         string? optionsFingerprint = null) =>
         new(engineFamily, modelId, variant, provider, HashPath(encoderPath), deviceId, "encoder", optionsFingerprint)
         {
-            EstimatedVramMb = EstimateVramMb(encoderPath),
+            EstimatedVramMb = EstimateVramMb(encoderPath, provider),
             ModelContentHash = HashModelContent(encoderPath),
         };
 
@@ -486,7 +560,7 @@ internal sealed record SessionPoolKey
         string? optionsFingerprint = null) =>
         new(engineFamily, modelId, variant, provider, HashPath(decoderPath), deviceId, "decoder", optionsFingerprint)
         {
-            EstimatedVramMb = EstimateVramMb(decoderPath),
+            EstimatedVramMb = EstimateVramMb(decoderPath, provider),
             ModelContentHash = HashModelContent(decoderPath),
         };
 
@@ -500,7 +574,7 @@ internal sealed record SessionPoolKey
         string? optionsFingerprint = null) =>
         new(engineFamily, modelId, variant, provider, HashPath(decoderInitPath), deviceId, "decoder-init", optionsFingerprint)
         {
-            EstimatedVramMb = EstimateVramMb(decoderInitPath),
+            EstimatedVramMb = EstimateVramMb(decoderInitPath, provider),
             ModelContentHash = HashModelContent(decoderInitPath),
         };
 
@@ -514,7 +588,7 @@ internal sealed record SessionPoolKey
         string? optionsFingerprint = null) =>
         new(engineFamily, modelId, variant, provider, HashPath(decoderStepPath), deviceId, "decoder-step", optionsFingerprint)
         {
-            EstimatedVramMb = EstimateVramMb(decoderStepPath),
+            EstimatedVramMb = EstimateVramMb(decoderStepPath, provider),
             ModelContentHash = HashModelContent(decoderStepPath),
         };
 
@@ -533,7 +607,7 @@ internal sealed record SessionPoolKey
         int? deviceId = null) =>
         new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "speech-encoder")
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
@@ -550,7 +624,7 @@ internal sealed record SessionPoolKey
         int? deviceId = null) =>
         new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "embed-tokens")
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
@@ -567,7 +641,7 @@ internal sealed record SessionPoolKey
         int? deviceId = null) =>
         new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "lm")
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
@@ -584,7 +658,7 @@ internal sealed record SessionPoolKey
         int? deviceId = null) =>
         new(ChatterboxEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "conditional-decoder")
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
@@ -601,7 +675,7 @@ internal sealed record SessionPoolKey
         int? deviceId = null) =>
         new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "unet")
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
@@ -613,7 +687,7 @@ internal sealed record SessionPoolKey
         int? deviceId = null) =>
         new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "vae-encoder")
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
@@ -625,7 +699,7 @@ internal sealed record SessionPoolKey
         int? deviceId = null) =>
         new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "vae-decoder")
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
@@ -637,7 +711,7 @@ internal sealed record SessionPoolKey
         int? deviceId = null) =>
         new(LatentSyncEngineFamily, modelId, variant, provider, HashPath(modelPath), deviceId, "whisper-encoder")
         {
-            EstimatedVramMb = EstimateVramMb(modelPath),
+            EstimatedVramMb = EstimateVramMb(modelPath, provider),
             ModelContentHash = HashModelContent(modelPath),
         };
 
