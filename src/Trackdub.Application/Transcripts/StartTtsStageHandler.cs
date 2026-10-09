@@ -94,10 +94,17 @@ public sealed class StartTtsStageHandler(
         }
     }
 
-    public async Task<StartTtsStageResult> HandleAsync(
+    public Task<StartTtsStageResult> HandleAsync(
         StartTtsStageRequest request,
         CancellationToken cancellationToken,
-        IProgress<PipelineProgressEvent>? progress = null)
+        IProgress<PipelineProgressEvent>? progress = null) =>
+        HandleAsync(request, cancellationToken, progress, prefetch: null);
+
+    internal async Task<StartTtsStageResult> HandleAsync(
+        StartTtsStageRequest request,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        TtsStreamingPrefetch? prefetch)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -198,28 +205,10 @@ public sealed class StartTtsStageHandler(
                 // comes from the same CreateTtsRequestOptions used for synthesis, but when the
                 // alias is not required the planner may fall back to another class, so this
                 // bound is an estimate for that path, not a guarantee.
-                InferenceRequestOptions representativeOptions = CreateTtsRequestOptions(
+                int effectiveMaxConcurrency = await ResolveEffectiveConcurrencyAsync(
                     request,
-                    voice,
-                    isVoiceCloning);
-                string? modelAlias = representativeOptions.NormalizedPreferredModelAlias;
-                // Prefer the planned placement: the provider synthesis will use and that device's
-                // memory. Without one, only a required CPU/DNNL pin keeps the run off the
-                // accelerator; a non-required pin can still fall back to a GPU provider.
-                TtsAcceleratorPlacement? placement = await TryResolvePlacementAsync(
-                    representativeOptions,
-                    request.TargetLanguage,
+                    CreateTtsRequestOptions(request, voice, isVoiceCloning),
                     cancellationToken).ConfigureAwait(false);
-                bool acceleratorRouted = placement?.AcceleratorRouted ??
-                    !(request.RequirePreferredExecutionProvider &&
-                      request.PreferredExecutionProvider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl);
-                long? deviceVramMb = placement?.DeviceVramMb;
-                int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(
-                    modelAlias,
-                    acceleratorRouted,
-                    deviceVramMb);
-                logger?.LogInformation(
-                    $"TTS parallelism: {effectiveMaxConcurrency} (configured {executionOptions.ConfiguredMaxConcurrency?.ToString() ?? "default"}, device VRAM {deviceVramMb?.ToString(CultureInfo.InvariantCulture) ?? "unknown"} MB, host max VRAM {executionOptions.MaxAcceleratorVramMb} MB, accelerator {acceleratorRouted}, model '{modelAlias ?? "default stock"}').");
 
                 var ctx = new SegmentProcessingContext(takes, targetSegments.Length);
                 PipelineProgressReporter.Determinate(
@@ -246,6 +235,7 @@ public sealed class StartTtsStageHandler(
                         voiceCloneReference,
                         ctx,
                         progress,
+                        prefetch,
                         ct)).ConfigureAwait(false);
             }
 
@@ -296,6 +286,60 @@ public sealed class StartTtsStageHandler(
         return new StartTtsStageResult(stageRun, [.. takes.OrderBy(static take => take.SegmentIndex)]);
     }
 
+    private async Task<int> ResolveEffectiveConcurrencyAsync(
+        StartTtsStageRequest request,
+        InferenceRequestOptions representativeOptions,
+        CancellationToken cancellationToken)
+    {
+        string? modelAlias = representativeOptions.NormalizedPreferredModelAlias;
+        // Prefer the planned placement: the provider synthesis will use and that device's
+        // memory. Without one, only a required CPU/DNNL pin keeps the run off the
+        // accelerator; a non-required pin can still fall back to a GPU provider.
+        TtsAcceleratorPlacement? placement = await TryResolvePlacementAsync(
+            representativeOptions,
+            request.TargetLanguage,
+            cancellationToken).ConfigureAwait(false);
+        bool acceleratorRouted = placement?.AcceleratorRouted ??
+            !(request.RequirePreferredExecutionProvider &&
+              request.PreferredExecutionProvider is ExecutionProviderKind.Cpu or ExecutionProviderKind.Dnnl);
+        long? deviceVramMb = placement?.DeviceVramMb;
+        int effectiveMaxConcurrency = executionOptions.ResolveEffectiveConcurrency(
+            modelAlias,
+            acceleratorRouted,
+            deviceVramMb);
+        logger?.LogInformation(
+            $"TTS parallelism: {effectiveMaxConcurrency} (configured {executionOptions.ConfiguredMaxConcurrency?.ToString() ?? "default"}, device VRAM {deviceVramMb?.ToString(CultureInfo.InvariantCulture) ?? "unknown"} MB, host max VRAM {executionOptions.MaxAcceleratorVramMb} MB, accelerator {acceleratorRouted}, model '{modelAlias ?? "default stock"}').");
+        return effectiveMaxConcurrency;
+    }
+
+    /// <summary>
+    /// Resolves the stock-voice render inputs for one speaker exactly as <see cref="HandleAsync(StartTtsStageRequest, CancellationToken, IProgress{PipelineProgressEvent}?)"/>
+    /// will, so prefetched clips match the stage's render keys. Returns null for voice-cloned or
+    /// language-incompatible speakers, which are never prefetched.
+    /// </summary>
+    internal async Task<(TtsPrefetchSpeaker Speaker, int MaxConcurrency)?> PreparePrefetchSpeakerAsync(
+        StartTtsStageRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.UseReferenceClipForVoiceCloning && request.VoiceAssignment.ReferenceClipArtifactId is not null)
+        {
+            return null;
+        }
+
+        VoiceCatalogEntry voice = ResolveVoice(request, isVoiceCloning: false);
+        if (!IsVoiceLanguageCompatible(voice.LanguageCode, request.TargetLanguage))
+        {
+            return null;
+        }
+
+        InferenceRequestOptions options = CreateTtsRequestOptions(request, voice, isVoiceCloning: false);
+        int maxConcurrency = await ResolveEffectiveConcurrencyAsync(request, options, cancellationToken).ConfigureAwait(false);
+        Dictionary<int, TranscriptSegment> sourceSegments = request.TranscriptSegments
+            .Where(segment => segment.SpeakerId == request.SpeakerId)
+            .ToDictionary(segment => segment.SegmentIndex);
+        return (new TtsPrefetchSpeaker(request.TargetLanguage, voice, options, sourceSegments), maxConcurrency);
+    }
+
     /// <summary>Shared mutable state threaded through <see cref="ProcessTranslatedSegmentAsync"/>.</summary>
     private sealed class SegmentProcessingContext(ConcurrentBag<TtsTake> takes, int totalSegments)
     {
@@ -314,6 +358,7 @@ public sealed class StartTtsStageHandler(
         VoiceCloneReference? voiceCloneReference,
         SegmentProcessingContext ctx,
         IProgress<PipelineProgressEvent>? progress,
+        TtsStreamingPrefetch? prefetch,
         CancellationToken cancellationToken)
     {
         void ReportProgress(int completed, string detail) =>
@@ -338,6 +383,7 @@ public sealed class StartTtsStageHandler(
                 voice,
                 voiceCloneReference,
                 reservedArtifactRelativePaths,
+                prefetch,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (TtsReferenceTextRequiredException)
@@ -468,6 +514,7 @@ public sealed class StartTtsStageHandler(
         VoiceCatalogEntry voice,
         VoiceCloneReference? voiceCloneReference,
         ConcurrentDictionary<string, byte> reservedArtifactRelativePaths,
+        TtsStreamingPrefetch? prefetch,
         CancellationToken cancellationToken)
     {
         IAtomicRevisionCommitBoundary boundary = commitBoundary
@@ -576,64 +623,34 @@ public sealed class StartTtsStageHandler(
             effectiveCloneReference = voiceCloneReference with { ReferenceTranscript = referenceTranscript };
         }
 
-        TtsSynthesisResult result = await ttsEngine.SynthesizeAsync(
-            new TtsSynthesisRequest(
+        await using var tx = new ArtifactWriteTransaction(artifactStore.CreateWriteHandle(relativePath));
+        Directory.CreateDirectory(Path.GetDirectoryName(tx.TemporaryPath)!);
+        TtsRenderOutput render;
+        TtsPrefetchedClip? prefetched = effectiveCloneReference is null && prefetch is not null
+            ? await prefetch.TryClaimAsync(
+                ComputeRenderKey(translatedSegment.Text, request.TargetLanguage, voice, options, sourceSegment),
+                cancellationToken).ConfigureAwait(false)
+            : null;
+        if (prefetched is not null)
+        {
+            using (prefetched)
+            {
+                File.Copy(prefetched.AudioPath, tx.TemporaryPath, overwrite: true);
+            }
+
+            render = prefetched.Output;
+        }
+        else
+        {
+            render = await RenderToPathAsync(
                 translatedSegment.Text,
                 request.TargetLanguage,
                 voice,
-                Options: options,
-                VoiceCloneReference: effectiveCloneReference,
-                TargetDurationSeconds: sourceSegment.EndSeconds - sourceSegment.StartSeconds),
-            cancellationToken).ConfigureAwait(false);
-
-        double? rawDurationSeconds = result.SampleRate > 0
-            ? (double)result.DurationSamples / result.SampleRate
-            : null;
-        DurationAnalysisResult analysis = durationAnalysisService.Analyze(sourceSegment, rawDurationSeconds, timingOptions);
-        double? artifactDurationSeconds = rawDurationSeconds;
-        int artifactDurationSamples = result.DurationSamples;
-        int artifactSampleRate = result.SampleRate;
-        double? preStretchDurationSeconds = null;
-        double? stretchRatioApplied = null;
-        TtsStretchMode stretchMode = TtsStretchMode.None;
-        TtsStretchEngine stretchEngine = TtsStretchEngine.None;
-        await using var tx = new ArtifactWriteTransaction(artifactStore.CreateWriteHandle(relativePath));
-        Directory.CreateDirectory(Path.GetDirectoryName(tx.TemporaryPath)!);
-        await File.WriteAllBytesAsync(tx.TemporaryPath, result.WavBytes, cancellationToken)
-            .ConfigureAwait(false);
-        TtsAudioPostProcessResult postProcessResult = await PostProcessTemporaryTakeAsync(
-            tx.TemporaryPath,
-            result,
-            cancellationToken).ConfigureAwait(false);
-        artifactDurationSamples = postProcessResult.DurationSamples;
-        artifactSampleRate = postProcessResult.SampleRate > 0 ? postProcessResult.SampleRate : result.SampleRate;
-        rawDurationSeconds = postProcessResult.DurationSeconds ??
-                             (artifactSampleRate > 0
-                                 ? (double)artifactDurationSamples / artifactSampleRate
-                                 : null);
-        artifactDurationSeconds = rawDurationSeconds;
-        analysis = durationAnalysisService.Analyze(sourceSegment, rawDurationSeconds, timingOptions);
-
-        if (analysis.AutoStretchEligible && analysis.TempoRatio is double tempoRatio)
-        {
-            if (audioTimeStretchService is null)
-            {
-                throw new InvalidOperationException("Audio time stretching is not configured.");
-            }
-
-            AudioTimeStretchResult stretchResult = await StretchTemporaryTakeAsync(
+                options,
+                effectiveCloneReference,
+                sourceSegment,
                 tx.TemporaryPath,
-                tempoRatio,
                 cancellationToken).ConfigureAwait(false);
-            preStretchDurationSeconds = rawDurationSeconds;
-            stretchRatioApplied = tempoRatio;
-            stretchMode = TtsStretchMode.Automatic;
-            stretchEngine = stretchResult.Engine;
-            artifactDurationSeconds = analysis.OriginalDurationSeconds;
-            if (artifactSampleRate > 0)
-            {
-                artifactDurationSamples = Math.Max(1, (int)Math.Round(analysis.OriginalDurationSeconds * artifactSampleRate));
-            }
         }
 
         FileFingerprint fingerprint = await fileFingerprintService
@@ -648,12 +665,12 @@ public sealed class StartTtsStageHandler(
             relativePath,
             fingerprint.Sha256,
             fingerprint.SizeBytes,
-            artifactDurationSeconds,
-            artifactSampleRate,
+            render.ArtifactDurationSeconds,
+            render.ArtifactSampleRate,
             ChannelCount: 1,
             DateTimeOffset.UtcNow,
             stageRunId,
-            $"tts:{result.ModelId}:{result.VoiceId}");
+            $"tts:{render.ModelId}:{render.VoiceId}");
         string translatedTextHash = TtsTextHash.Compute(translatedSegment.SegmentIndex, translatedSegment.Text);
         TtsTake take = (voiceCloneReference is null
                 ? TtsTake.CreateStock(
@@ -674,16 +691,16 @@ public sealed class StartTtsStageHandler(
             .Complete(
                 artifact.Id,
                 stageRunId,
-                artifactDurationSamples,
-                artifactSampleRate,
-                result.Provider,
-                result.ModelId,
-                result.VoiceId,
-                analysis.OverrunRatio,
-                preStretchDurationSeconds,
-                stretchRatioApplied,
-                stretchMode,
-                stretchEngine);
+                render.ArtifactDurationSamples,
+                render.ArtifactSampleRate,
+                render.Provider,
+                render.ModelId,
+                render.VoiceId,
+                render.Analysis.OverrunRatio,
+                render.PreStretchDurationSeconds,
+                render.StretchRatioApplied,
+                render.StretchMode,
+                render.StretchEngine);
         take = take with { Id = takeId };
         await RunSerializedPersistenceAsync(
             ct => boundary.CommitTakeAsync(new AtomicTakeCommitRequest(takeInput, take),
@@ -694,6 +711,119 @@ public sealed class StartTtsStageHandler(
             "TTS synthesized",
             options);
         return take;
+    }
+
+    /// <summary>
+    /// Produces the finished take audio for one segment at <paramref name="outputPath"/>: synthesis,
+    /// post-processing, duration analysis and automatic stretching. Shared by the TTS stage and
+    /// <see cref="TtsStreamingPrefetch"/>, so a prefetched clip is exactly what the stage would
+    /// have rendered for the same inputs.
+    /// </summary>
+    internal async Task<TtsRenderOutput> RenderToPathAsync(
+        string text,
+        string targetLanguage,
+        VoiceCatalogEntry voice,
+        InferenceRequestOptions options,
+        VoiceCloneReference? cloneReference,
+        TranscriptSegment sourceSegment,
+        string outputPath,
+        CancellationToken cancellationToken)
+    {
+        TtsSynthesisResult result = await ttsEngine.SynthesizeAsync(
+            new TtsSynthesisRequest(
+                text,
+                targetLanguage,
+                voice,
+                Options: options,
+                VoiceCloneReference: cloneReference,
+                TargetDurationSeconds: sourceSegment.EndSeconds - sourceSegment.StartSeconds),
+            cancellationToken).ConfigureAwait(false);
+
+        double? preStretchDurationSeconds = null;
+        double? stretchRatioApplied = null;
+        TtsStretchMode stretchMode = TtsStretchMode.None;
+        TtsStretchEngine stretchEngine = TtsStretchEngine.None;
+        await File.WriteAllBytesAsync(outputPath, result.WavBytes, cancellationToken)
+            .ConfigureAwait(false);
+        TtsAudioPostProcessResult postProcessResult = await PostProcessTemporaryTakeAsync(
+            outputPath,
+            result,
+            cancellationToken).ConfigureAwait(false);
+        int artifactDurationSamples = postProcessResult.DurationSamples;
+        int artifactSampleRate = postProcessResult.SampleRate > 0 ? postProcessResult.SampleRate : result.SampleRate;
+        double? rawDurationSeconds = postProcessResult.DurationSeconds ??
+                                     (artifactSampleRate > 0
+                                         ? (double)artifactDurationSamples / artifactSampleRate
+                                         : null);
+        double? artifactDurationSeconds = rawDurationSeconds;
+        DurationAnalysisResult analysis = durationAnalysisService.Analyze(sourceSegment, rawDurationSeconds, timingOptions);
+
+        if (analysis.AutoStretchEligible && analysis.TempoRatio is double tempoRatio)
+        {
+            if (audioTimeStretchService is null)
+            {
+                throw new InvalidOperationException("Audio time stretching is not configured.");
+            }
+
+            AudioTimeStretchResult stretchResult = await StretchTemporaryTakeAsync(
+                outputPath,
+                tempoRatio,
+                cancellationToken).ConfigureAwait(false);
+            preStretchDurationSeconds = rawDurationSeconds;
+            stretchRatioApplied = tempoRatio;
+            stretchMode = TtsStretchMode.Automatic;
+            stretchEngine = stretchResult.Engine;
+            artifactDurationSeconds = analysis.OriginalDurationSeconds;
+            if (artifactSampleRate > 0)
+            {
+                artifactDurationSamples = Math.Max(1, (int)Math.Round(analysis.OriginalDurationSeconds * artifactSampleRate));
+            }
+        }
+
+        return new TtsRenderOutput(
+            result.ModelId,
+            result.VoiceId,
+            result.Provider,
+            artifactDurationSamples,
+            artifactSampleRate,
+            artifactDurationSeconds,
+            analysis,
+            preStretchDurationSeconds,
+            stretchRatioApplied,
+            stretchMode,
+            stretchEngine);
+    }
+
+    /// <summary>
+    /// Identifies rendered audio by everything that shapes it (text, voice, model selection, source
+    /// timing as the stretch target, post-processing) and nothing about which revision or segment
+    /// row will own it, so audio rendered before the translation commits can be matched to the
+    /// committed segment.
+    /// </summary>
+    internal string ComputeRenderKey(
+        string text,
+        string targetLanguage,
+        VoiceCatalogEntry voice,
+        InferenceRequestOptions options,
+        TranscriptSegment sourceSegment)
+    {
+        string input = string.Concat(
+            text, "\0",
+            targetLanguage, "\0",
+            voice.VoiceId, "\0",
+            options.NormalizedPreferredModelAlias ?? string.Empty, "\0",
+            options.RequirePreferredModelAlias ? "1" : "0", "\0",
+            options.NormalizedPreferredModelVariantAlias ?? string.Empty, "\0",
+            options.PreferredExecutionProvider ?? string.Empty, "\0",
+            options.RequirePreferredExecutionProvider ? "1" : "0", "\0",
+            sourceSegment.StartSeconds.ToString("G17", CultureInfo.InvariantCulture), "\0",
+            sourceSegment.EndSeconds.ToString("G17", CultureInfo.InvariantCulture), "\0",
+            timingOptions.AutoStretchMaxOverrun.ToString("G17", CultureInfo.InvariantCulture), "\0",
+            timingOptions.MinimumStretchableDurationSeconds.ToString("G17", CultureInfo.InvariantCulture), "\0",
+            timingOptions.EnableRubberbandStretch ? "1" : "0", "\0",
+            timingOptions.RubberbandStretchThreshold.ToString("G17", CultureInfo.InvariantCulture), "\0",
+            TtsAudioPostProcessVersion);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input))).ToLowerInvariant();
     }
 
     private void LogTtsTakeProvenance(

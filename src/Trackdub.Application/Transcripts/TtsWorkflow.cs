@@ -47,17 +47,50 @@ public sealed class TtsWorkflow(
             cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<TranscriptProjectState> GenerateTtsForAllSpeakersAsync(
+    public Task<TranscriptProjectState> GenerateTtsForAllSpeakersAsync(
         GenerateTtsForAllSpeakersRequest request,
         CancellationToken cancellationToken,
-        IProgress<PipelineProgressEvent>? progress = null)
+        IProgress<PipelineProgressEvent>? progress = null) =>
+        GenerateTtsForAllSpeakersAsync(request, cancellationToken, progress, prefetch: null);
+
+    internal async Task<TtsStreamingPrefetch> CreateStreamingPrefetchAsync(
+        GenerateTtsForAllSpeakersRequest request,
+        string targetLanguage,
+        IApplicationLogger? logger,
+        CancellationToken cancellationToken,
+        CancellationToken runCancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!operationGate.Wait(0))
+        {
+            throw new InvalidOperationException(ConcurrentOperationMessage);
+        }
+
+        try
+        {
+            TranscriptProjectState currentState = await OpenAsync(cancellationToken).ConfigureAwait(false);
+            return await ttsOrchestrationService
+                .CreateStreamingPrefetchAsync(currentState, request, targetLanguage, logger, cancellationToken, runCancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            operationGate.Release();
+        }
+    }
+
+    internal async Task<TranscriptProjectState> GenerateTtsForAllSpeakersAsync(
+        GenerateTtsForAllSpeakersRequest request,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        TtsStreamingPrefetch? prefetch)
     {
         return await RunExclusiveAsync(
             async token =>
             {
                 TranscriptProjectState currentState = await OpenAsync(token).ConfigureAwait(false);
                 await ttsOrchestrationService
-                    .GenerateTtsForAllSpeakersAsync(currentState, request, token, progress)
+                    .GenerateTtsForAllSpeakersAsync(currentState, request, token, progress, prefetch)
                     .ConfigureAwait(false);
                 return await ReloadAsync(currentState.SelectedTranslationTargetLanguage, token).ConfigureAwait(false);
             },
