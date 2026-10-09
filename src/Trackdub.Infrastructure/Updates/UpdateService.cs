@@ -11,6 +11,7 @@ namespace Trackdub.Infrastructure.Updates;
 public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService, IDisposable
 {
     private const string DefaultReleaseManifestUrl = "https://releases.trackdub.ai/manifest.json";
+    private const string PreviewReleaseManifestUrl = "https://releases.trackdub.ai/manifest-preview.json";
     private static readonly string UpdateTempSubDir = Path.Join("Trackdub", "updates");
     private const int BufferSize = 65536;
 
@@ -32,8 +33,14 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
         ownsHttpClient = false;
     }
 
+    public Task<Trackdub.Application.Updates.UpdateCheckResult> CheckForUpdateAsync(
+        string currentVersion,
+        CancellationToken cancellationToken = default) =>
+        CheckForUpdateAsync(currentVersion, UpdateChannel.Stable, cancellationToken);
+
     public async Task<Trackdub.Application.Updates.UpdateCheckResult> CheckForUpdateAsync(
         string currentVersion,
+        UpdateChannel channel,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -41,13 +48,20 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
         try
         {
             string json = await httpClient
-                .GetStringAsync(DefaultReleaseManifestUrl, cancellationToken)
+                .GetStringAsync(BuildManifestUrl(channel), cancellationToken)
                 .ConfigureAwait(false);
 
             var schema = JsonSerializer.Deserialize<ReleaseManifestSchema>(json);
             if (schema is null || string.IsNullOrWhiteSpace(schema.LatestVersion))
             {
                 return new Trackdub.Application.Updates.UpdateCheckResult(false, null, "Release manifest could not be parsed.");
+            }
+
+            if (channel == UpdateChannel.Stable && schema.IsPrerelease)
+            {
+                logger.LogInformation(
+                    $"Ignoring prerelease {schema.LatestVersion} on the Stable channel.");
+                return new Trackdub.Application.Updates.UpdateCheckResult(false, null, null);
             }
 
             if (!Version.TryParse(schema.LatestVersion, out Version? latest) ||
@@ -384,6 +398,9 @@ public sealed class UpdateService : Trackdub.Application.Updates.IUpdateService,
             return false;
         }
     }
+
+    private static string BuildManifestUrl(UpdateChannel channel) =>
+        channel == UpdateChannel.Preview ? PreviewReleaseManifestUrl : DefaultReleaseManifestUrl;
 
     private string GetUpdateTempDirectory()
     {
