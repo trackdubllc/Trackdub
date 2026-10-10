@@ -11,6 +11,9 @@
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows10.0.18362.0</TargetFramework>
+    <!-- Lets repository-wide restores on Linux (dependency submission) resolve this Windows-only sample. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PlatformTarget>x64</PlatformTarget>
     <ImplicitUsings>enable</ImplicitUsings>
