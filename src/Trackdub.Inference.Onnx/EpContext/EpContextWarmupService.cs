@@ -103,14 +103,7 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
                 return (new EpContextWarmItem(sourcePath, "failed", null, compileMs, 0, compile.FailureReason), false, false);
             }
 
-            // Create the stamp only after compilation has produced the final artifact. For
-            // large graphs ORT writes an external-initializers sidecar alongside the model;
-            // stamping before CompileModel would record the previous sidecar (or none).
-            EpContextArtifact.Stamp stamp = EpContextArtifact.CreateStamp(
-                sourcePath, new FileInfo(sourcePath), sourceSha256: null,
-                hardware.NvidiaGpuArchitecture.ToString(), hardware.GpuDriverVersion,
-                compile.ArtifactFiles);
-            EpContextArtifact.WriteStamp(sourcePath, stamp);
+            // Compilation publishes the artifact and stamp under one cross-process lock.
         }
 
         // Residual JIT: load once so nv_runtime_cache_path stores CUDA kernels for this GPU.

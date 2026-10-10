@@ -168,7 +168,10 @@ public sealed class EpContextArtifactStampTests
             File.WriteAllBytes(sourcePath, [1, 2, 3, 4]);
 
             IReadOnlyList<EpContextArtifact.ArtifactFile> first = Publish(directory, sourcePath, epContextName, "old.engine", [7, 7]);
-            Assert.Equal([new EpContextArtifact.ArtifactFile("old.engine", 2)], first);
+            EpContextArtifact.ArtifactFile engine = Assert.Single(first);
+            Assert.Equal("old.engine", engine.Name);
+            Assert.Equal(2, engine.LengthBytes);
+            Assert.Equal(File.GetLastWriteTimeUtc(Path.Join(directory, engine.Name)).Ticks, engine.LastWriteUtcTicks);
             string fingerprint = WriteStamp(sourcePath, first);
             Assert.Equal(
                 EpContextArtifact.GetEpContextPath(sourcePath),

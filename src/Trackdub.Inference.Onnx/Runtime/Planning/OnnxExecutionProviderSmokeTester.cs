@@ -47,7 +47,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
                 ThrowIfGenAiTensorRtProvider(request.ExecutionProvider);
             }
 
-            ThrowIfFatalTensorRtFamily(request.EngineFamily, request.ExecutionProvider);
+            ThrowIfFatalTensorRtFamily(request.EngineFamily, request.ExecutionProvider, request.Variant, request.EntryPath);
 
             // Register/validate the requested EP before any probe session. When the bootstrapper
             // cannot keep the requested provider selected (e.g. TRT RTX plugin missing and
@@ -357,11 +357,17 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     // The smoke sweep bypasses stage allow-lists, so refuse the attempt before session creation;
     // a fatal crash cannot be caught and reported. MADLAD's trt-fp16 export constructs and runs
     // under the TensorRT RTX EP ABI plugin, so it is smoke-tested like any other pair.
-    private static void ThrowIfFatalTensorRtFamily(string? engineFamily, ExecutionProviderKind provider)
+    internal static void ThrowIfFatalTensorRtFamily(
+        string? engineFamily, ExecutionProviderKind provider, string variant, string entryPath)
     {
+        bool unsafeMadlad = string.Equals(engineFamily, "madlad", StringComparison.OrdinalIgnoreCase) &&
+            (provider == ExecutionProviderKind.TensorRt ||
+             (provider == ExecutionProviderKind.TensorRTRtx &&
+                (!variant.Equals("trt-fp16", StringComparison.OrdinalIgnoreCase) ||
+                 !string.Equals(Path.GetFileName(Path.GetDirectoryName(entryPath)),
+                     "trt_rtx_mixed_fp16_fp32", StringComparison.OrdinalIgnoreCase))));
         if (provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt
-            && engineFamily is not null
-            && engineFamily.Equals("opus-mt", StringComparison.OrdinalIgnoreCase))
+            && (unsafeMadlad || string.Equals(engineFamily, "opus-mt", StringComparison.OrdinalIgnoreCase)))
         {
             throw new NotSupportedException(
                 $"Engine family '{engineFamily}' is excluded from TensorRT providers: "
@@ -1359,7 +1365,7 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
         ExecutionProviderSmokeTestRequest request,
         CancellationToken cancellationToken)
     {
-        ThrowIfFatalTensorRtFamily(request.EngineFamily, request.ExecutionProvider);
+        ThrowIfFatalTensorRtFamily(request.EngineFamily, request.ExecutionProvider, request.Variant, request.EntryPath);
 
         if (UsesOrtGenAiTranslationSmoke(request.EngineFamily))
         {
@@ -1376,6 +1382,13 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
 
         string encoderModelPath = ResolveTranslationEncoderPath(request.EntryPath);
         string decoderModelPath = ResolveOpusDecoderPath(encoderModelPath, request.ModelAlias);
+        if (string.Equals(request.EngineFamily, "madlad", StringComparison.OrdinalIgnoreCase))
+        {
+            await Madlad.MadladTranslationEngine.SmokeTestAsync(
+                request, encoderModelPath, decoderModelPath, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         using OnnxExecutionSessionFactory.OpusSessionLease sessionLease = await OnnxExecutionSessionFactory
             .CreateOpusAsync(encoderModelPath, decoderModelPath, request.ExecutionProvider, cancellationToken)
             .ConfigureAwait(false);

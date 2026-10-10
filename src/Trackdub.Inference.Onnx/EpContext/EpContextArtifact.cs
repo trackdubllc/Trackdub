@@ -71,7 +71,8 @@ public static class EpContextArtifact
             ArtifactFiles.All(file =>
             {
                 var info = new FileInfo(Path.Join(artifactDirectory, file.Name));
-                return info.Exists && info.Length == file.LengthBytes;
+                return info.Exists && info.Length == file.LengthBytes &&
+                    info.LastWriteTimeUtc.Ticks == file.LastWriteUtcTicks;
             });
 
         private static string Normalize(string? value) =>
@@ -79,7 +80,7 @@ public static class EpContextArtifact
     }
 
     /// <summary>A file published beside the EP-context model, such as a serialized engine.</summary>
-    public sealed record ArtifactFile(string Name, long LengthBytes);
+    public sealed record ArtifactFile(string Name, long LengthBytes, long LastWriteUtcTicks = 0);
 
     public static bool IsEpContextPath(string path) =>
         path.EndsWith(EpContextSuffix + ".onnx", StringComparison.OrdinalIgnoreCase);
@@ -211,11 +212,12 @@ public static class EpContextArtifact
         string? sourceSha256,
         string gpuArchitecture,
         string? driverVersion,
-        IReadOnlyList<ArtifactFile>? artifactFiles = null)
+        IReadOnlyList<ArtifactFile>? artifactFiles = null,
+        string? outputPath = null)
     {
         string externalDataPath = GetSourceExternalDataPath(sourceModelPath);
         var externalData = new FileInfo(externalDataPath);
-        string epContextPath = GetEpContextPath(sourceModelPath);
+        string epContextPath = outputPath ?? GetEpContextPath(sourceModelPath);
         var artifactSidecar = new FileInfo(GetArtifactExternalInitializersPath(epContextPath));
         return new(
             SchemaVersion: 1,
@@ -242,39 +244,124 @@ public static class EpContextArtifact
     /// published engine files (everything except the EP-context model and its
     /// external-initializers sidecar) for the new stamp.
     /// </summary>
-    public static IReadOnlyList<ArtifactFile> PublishStagedArtifact(string stagingDirectory, string sourceModelPath)
+    public static IReadOnlyList<ArtifactFile> PublishStagedArtifact(
+        string stagingDirectory,
+        string sourceModelPath,
+        string? outputPath = null,
+        Func<IReadOnlyList<ArtifactFile>, Stamp>? createStamp = null)
     {
-        string epContextPath = GetEpContextPath(sourceModelPath);
+        string epContextPath = Path.GetFullPath(outputPath ?? GetEpContextPath(sourceModelPath));
         string targetDirectory = Path.GetDirectoryName(Path.GetFullPath(epContextPath))!;
         string epContextName = Path.GetFileName(epContextPath);
         string sidecarName = Path.GetFileName(GetArtifactExternalInitializersPath(epContextPath));
-
-        DeleteArtifact(sourceModelPath);
-
-        var published = new List<ArtifactFile>();
-        foreach (string stagedPath in Directory.EnumerateFiles(stagingDirectory))
+        string stampPath = GetOutputStampPath(epContextPath);
+        // Validate before touching a previous artifact, including for noncanonical output paths.
+        if (!File.Exists(Path.Join(stagingDirectory, epContextName)))
         {
-            string name = Path.GetFileName(stagedPath);
-            if (name.Equals(epContextName, StringComparison.OrdinalIgnoreCase) ||
-                name.Equals(sidecarName, StringComparison.OrdinalIgnoreCase))
+            throw new FileNotFoundException("Staged EP-context model is missing.", epContextPath);
+        }
+
+        // FileShare.None serializes publishers across processes, not just sessions in this host.
+        // Keep the lock file: deleting it after releasing would let waiters lock different inodes.
+        using FileStream publicationLock = AcquirePublicationLock(epContextPath + ".publish.lock");
+        if (createStamp is not null && File.Exists(epContextPath) && File.Exists(stampPath) &&
+            HasMatchingSourceStamp(sourceModelPath, epContextPath, stampPath,
+                createStamp([]).EnvironmentFingerprint) is not null)
+        {
+            return TryReadStamp(stampPath)!.ArtifactFiles ?? [];
+        }
+
+        string rollbackDirectory = Path.Join(targetDirectory, ".epc-rollback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(rollbackDirectory);
+        var movedPaths = new List<string>();
+        var backups = new List<(string Original, string Backup)>();
+        var published = new List<ArtifactFile>();
+        bool mayDeleteRollback = true;
+        try
+        {
+            Stamp? previous = File.Exists(stampPath) ? TryReadStamp(stampPath) : null;
+            Backup(stampPath);
+            foreach (ArtifactFile file in previous?.ArtifactFiles ?? [])
             {
-                continue;
+                if (Path.GetFileName(file.Name) == file.Name)
+                {
+                    Backup(Path.Join(targetDirectory, file.Name));
+                }
             }
 
-            long length = new FileInfo(stagedPath).Length;
-            File.Move(stagedPath, Path.Join(targetDirectory, name), overwrite: true);
-            published.Add(new ArtifactFile(name, length));
-        }
+            Backup(GetArtifactExternalInitializersPath(epContextPath));
+            Backup(epContextPath);
+            foreach (string stagedPath in Directory.EnumerateFiles(stagingDirectory)
+                .OrderBy(path => Path.GetFileName(path).Equals(epContextName, StringComparison.OrdinalIgnoreCase)))
+            {
+                string name = Path.GetFileName(stagedPath);
+                string target = Path.Join(targetDirectory, name);
+                Backup(target);
+                File.Move(stagedPath, target);
+                movedPaths.Add(target);
+                if (!name.Equals(epContextName, StringComparison.OrdinalIgnoreCase) &&
+                    !name.Equals(sidecarName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var info = new FileInfo(target);
+                    published.Add(new ArtifactFile(name, info.Length, info.LastWriteTimeUtc.Ticks));
+                }
+            }
 
-        string stagedSidecar = Path.Join(stagingDirectory, sidecarName);
-        if (File.Exists(stagedSidecar))
+            if (createStamp is not null)
+            {
+                WriteStamp(sourceModelPath, createStamp(published), epContextPath);
+                movedPaths.Add(stampPath);
+            }
+
+            return published;
+        }
+        catch
         {
-            File.Move(stagedSidecar, Path.Join(targetDirectory, sidecarName), overwrite: true);
+            // This list also covers engines moved before a stamp could record them.
+            mayDeleteRollback = false;
+            foreach (string path in movedPaths) File.Delete(path);
+            // Restore the old stamp last so readers cannot validate a partially restored set.
+            foreach ((string original, string backup) in backups.AsEnumerable().Reverse())
+            {
+                File.Move(backup, original, overwrite: true);
+            }
+            mayDeleteRollback = true;
+            throw;
+        }
+        finally
+        {
+            // If restoration itself fails, preserve the backup files for recovery.
+            if (mayDeleteRollback) EpContextCompiler.TryDeleteDirectory(rollbackDirectory);
         }
 
-        File.Move(Path.Join(stagingDirectory, epContextName), epContextPath, overwrite: true);
-        return published;
+        void Backup(string path)
+        {
+            if (!File.Exists(path)) return;
+            string backup = Path.Join(rollbackDirectory, backups.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            File.Move(path, backup);
+            backups.Add((path, backup));
+        }
     }
+
+    private static FileStream AcquirePublicationLock(string path)
+    {
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (timer.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                // Another process may be publishing; wait briefly, with a bounded failure path.
+                Thread.Sleep(25);
+            }
+        }
+    }
+
+    private static string GetOutputStampPath(string epContextPath) =>
+        Path.ChangeExtension(epContextPath, ".stamp.json");
 
     /// <summary>Removes the artifact for <paramref name="sourceModelPath"/>: stamp first, then its files.</summary>
     public static void DeleteArtifact(string sourceModelPath)
@@ -284,22 +371,19 @@ public static class EpContextArtifact
         Stamp? stamp = File.Exists(stampPath) ? TryReadStamp(stampPath) : null;
         TryDeleteFile(stampPath);
         string directory = Path.GetDirectoryName(Path.GetFullPath(epContextPath))!;
-        foreach (ArtifactFile file in stamp?.ArtifactFiles ?? [])
+        // Recorded names come from our own staging directory; never follow a path out of it.
+        foreach (ArtifactFile file in (stamp?.ArtifactFiles ?? []).Where(file => Path.GetFileName(file.Name) == file.Name))
         {
-            // Recorded names come from our own staging directory; never follow a path out of it.
-            if (Path.GetFileName(file.Name) == file.Name)
-            {
-                TryDeleteFile(Path.Join(directory, file.Name));
-            }
+            TryDeleteFile(Path.Join(directory, file.Name));
         }
 
         TryDeleteFile(GetArtifactExternalInitializersPath(epContextPath));
         TryDeleteFile(epContextPath);
     }
 
-    public static void WriteStamp(string sourceModelPath, Stamp stamp)
+    public static void WriteStamp(string sourceModelPath, Stamp stamp, string? outputPath = null)
     {
-        string stampPath = GetStampPath(sourceModelPath);
+        string stampPath = outputPath is null ? GetStampPath(sourceModelPath) : GetOutputStampPath(outputPath);
         string? directory = Path.GetDirectoryName(stampPath);
         if (!string.IsNullOrEmpty(directory))
         {

@@ -34,7 +34,7 @@ internal static class EpContextCapture
     /// <summary>
     /// Creates the session with EP-context generation enabled, then publishes the artifact next to
     /// <paramref name="sourceModelPath"/>. A capture problem never costs the session: creation is
-    /// retried once without capture, and a failed publish only leaves the source to rebuild next time.
+    /// retried once without capture for capture I/O failures; native engine failures propagate.
     /// </summary>
     internal static InferenceSession CreateSession(
         string sourceModelPath,
@@ -56,12 +56,18 @@ internal static class EpContextCapture
             options.AddSessionConfigEntry("ep.context_embed_mode", EpContextArtifact.ShouldEmbedEpContext(fullSource) ? "1" : "0");
             session = createSession(sourceModelPath, options);
         }
-        catch (Exception ex) when (ex is OnnxRuntimeException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ShouldRetryWithoutCapture(ex))
         {
             MarkFailed(fullSource, ex.Message);
             EpContextCompiler.TryDeleteDirectory(stagingDirectory);
             options.AddSessionConfigEntry("ep.context_enable", "0");
             return createSession(sourceModelPath, options);
+        }
+        catch (OnnxRuntimeException ex)
+        {
+            MarkFailed(fullSource, ex.Message);
+            EpContextCompiler.TryDeleteDirectory(stagingDirectory);
+            throw;
         }
 
         try
@@ -71,7 +77,6 @@ internal static class EpContextCapture
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             MarkFailed(fullSource, ex.Message);
-            EpContextArtifact.DeleteArtifact(fullSource);
         }
         finally
         {
@@ -92,12 +97,9 @@ internal static class EpContextCapture
             return;
         }
 
-        IReadOnlyList<EpContextArtifact.ArtifactFile> artifactFiles =
-            EpContextArtifact.PublishStagedArtifact(stagingDirectory, sourceModelPath);
         (string gpuArchitecture, string? driverVersion) = EpContextLoadPathResolver.CurrentHardware;
-        EpContextArtifact.WriteStamp(
-            sourceModelPath,
-            EpContextArtifact.CreateStamp(
+        EpContextArtifact.PublishStagedArtifact(stagingDirectory, sourceModelPath,
+            createStamp: artifactFiles => EpContextArtifact.CreateStamp(
                 sourceModelPath,
                 new FileInfo(sourceModelPath),
                 sourceSha256: null,
@@ -105,6 +107,16 @@ internal static class EpContextCapture
                 driverVersion,
                 artifactFiles));
     }
+
+    internal static bool ShouldRetryWithoutCapture(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException ||
+        (exception is OnnxRuntimeException && IsCaptureWriteFailure(exception.Message));
+
+    internal static bool IsCaptureWriteFailure(string message) =>
+        message.Contains("ep.context", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("EP-context", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("EPContext", StringComparison.OrdinalIgnoreCase) ||
+        message.Contains("failed to write", StringComparison.OrdinalIgnoreCase);
 
     private static void MarkFailed(string sourceModelPath, string reason)
     {
@@ -121,6 +133,7 @@ internal static class EpContextCapture
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
+            // An inaccessible drive is treated as insufficient space: capture is optional.
             return false;
         }
     }

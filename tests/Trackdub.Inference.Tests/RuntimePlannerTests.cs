@@ -1955,6 +1955,38 @@ public sealed class RuntimePlannerTests
         Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("default")]
+    public async Task PlanAsync_OnlyCachedMadladQuantizedFiles_NeverSmokeTensorRtRtx(string? preferredVariant)
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateMadladTranslationSpec() with
+        {
+            BenchmarkEntry = "encoder_model_quantized.onnx",
+            Variants =
+            [
+                new ManifestVariantSpec("quantized", "encoder_model_quantized.onnx", ["cpu", "dml", "cuda"]),
+                new ManifestVariantSpec("trt-fp16", "trt_rtx_mixed_fp16_fp32/encoder_model.onnx", ["trt-rtx"])
+            ]
+        });
+        string cacheRoot = workspace.CreateCacheRoot("google/madlad400-3b-mt");
+        workspace.WriteCacheFile(cacheRoot, "encoder_model_quantized.onnx");
+        var probes = new List<ExecutionProviderSmokeTestRequest>();
+        RuntimePlanner planner = CreatePlanner(registry,
+            [new("google/madlad400-3b-mt", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [new(ExecutionProviderKind.TensorRTRtx, true)],
+            request => { probes.Add(request); return new ExecutionProviderSmokeTestResult(true); });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Translation,
+            PreferredModelAlias: "madlad400-mt", SourceLanguage: "en", TargetLanguage: "fr",
+            PreferredModelVariantAlias: preferredVariant));
+
+        Assert.True(plan.IsRunnable(), $"Expected CPU plan, got {plan.Status}: {plan.Fallback?.Detail}");
+        Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
+        Assert.DoesNotContain(probes, probe => probe.ExecutionProvider == ExecutionProviderKind.TensorRTRtx);
+    }
+
     [Fact]
     public async Task PlanAsync_WhenMadladQuantizedExportIsMissing_RequestsQuantizedVariantBeforeDefault()
     {
@@ -3009,7 +3041,8 @@ public sealed class RuntimePlannerTests
                         variants = model.Variants.Select(variant => new
                         {
                             alias = variant.Alias,
-                            entry_path = variant.EntryPath
+                            entry_path = variant.EntryPath,
+                            supported_providers = variant.SupportedProviders ?? []
                         })
                     })
                 },
@@ -3191,5 +3224,6 @@ public sealed class RuntimePlannerTests
 
     private sealed record ManifestVariantSpec(
         string Alias,
-        string EntryPath);
+        string EntryPath,
+        IReadOnlyList<string>? SupportedProviders = null);
 }

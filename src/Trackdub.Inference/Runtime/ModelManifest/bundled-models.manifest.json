@@ -4073,7 +4073,7 @@
             "cpu",
             "dml",
             "cuda",
-            "tensorrt"
+            "trt-rtx"
           ]
         }
       },
@@ -4115,6 +4115,11 @@
           "entry_path": "encoder_model_quantized.onnx",
           "download_files": [
             "decoder_model_quantized.onnx"
+          ],
+          "supported_providers": [
+            "cpu",
+            "dml",
+            "cuda"
           ]
         },
         {

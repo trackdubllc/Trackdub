@@ -1877,6 +1877,7 @@ public sealed class ModelManifestLoaderTests
         ModelVariantManifest variant = Assert.Single(manifest.Variants, variant =>
             variant.Alias.Equals("quantized", StringComparison.OrdinalIgnoreCase));
         Assert.Equal("encoder_model_quantized.onnx", variant.EntryPath);
+        Assert.Equal(["cpu", "dml", "cuda"], variant.SupportedProviders);
         Assert.Equal(["decoder_model_quantized.onnx"], variant.DownloadFiles);
         Assert.Contains("spiece.model", manifest.DownloadFiles);
         Assert.Contains("config.json", manifest.DownloadFiles);

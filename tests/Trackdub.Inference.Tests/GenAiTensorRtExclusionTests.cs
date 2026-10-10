@@ -121,6 +121,27 @@ public sealed class GenAiTensorRtExclusionTests
         Assert.DoesNotContain(ExecutionProviderKind.TensorRt, allowed);
     }
 
+    [Theory]
+    [InlineData(ExecutionProviderKind.TensorRt, "trt-fp16", "trt_rtx_mixed_fp16_fp32/encoder_model.onnx", true)]
+    [InlineData(ExecutionProviderKind.TensorRTRtx, "quantized", "encoder_model_quantized.onnx", true)]
+    [InlineData(ExecutionProviderKind.TensorRTRtx, "trt-fp16", "encoder_model_quantized.onnx", true)]
+    [InlineData(ExecutionProviderKind.TensorRTRtx, "int4-kv", "mixed_fp16_int4/encoder_model.onnx", true)]
+    [InlineData(ExecutionProviderKind.TensorRTRtx, "trt-fp16", "trt_rtx_mixed_fp16_fp32/encoder_model.onnx", false)]
+    [InlineData(ExecutionProviderKind.Cpu, "quantized", "encoder_model_quantized.onnx", false)]
+    public void Madlad_smoke_guard_only_permits_validated_export_on_rtx(
+        ExecutionProviderKind provider, string variant, string entryPath, bool rejected)
+    {
+        if (rejected)
+        {
+            Assert.Throws<NotSupportedException>(() => OnnxExecutionProviderSmokeTester.ThrowIfFatalTensorRtFamily(
+                "madlad", provider, variant, entryPath));
+        }
+        else
+        {
+            OnnxExecutionProviderSmokeTester.ThrowIfFatalTensorRtFamily("madlad", provider, variant, entryPath);
+        }
+    }
+
     [Fact]
     public void VadStage_ExcludesTensorRtRtxButKeepsClassicTensorRt()
     {

@@ -150,15 +150,16 @@ public sealed class EpContextCompiler
             }
 
             IReadOnlyList<EpContextArtifact.ArtifactFile> artifactFiles =
-                EpContextArtifact.PublishStagedArtifact(tempDir, sourceModelPath);
+                EpContextArtifact.PublishStagedArtifact(tempDir, sourceModelPath, epContextPath,
+                    files => EpContextArtifact.CreateStamp(sourceModelPath, new FileInfo(sourceModelPath), null,
+                        EpContextLoadPathResolver.CurrentHardware.GpuArchitecture,
+                        EpContextLoadPathResolver.CurrentHardware.DriverVersion, files, epContextPath));
             return new CompileResult(true, epContextPath, stopwatch.Elapsed.TotalMilliseconds, null, selectedLabel, artifactFiles);
         }
-        catch (Exception ex) when (ex is OnnxRuntimeException or InvalidOperationException or IOException or DllNotFoundException or EntryPointNotFoundException)
+        catch (Exception ex) when (ex is OnnxRuntimeException or InvalidOperationException or IOException or UnauthorizedAccessException or DllNotFoundException or EntryPointNotFoundException)
         {
             stopwatch.Stop();
-            // Best-effort removal of a half-published artifact (its stamp is gone already, so it
-            // would never validate, but its files would linger).
-            EpContextArtifact.DeleteArtifact(sourceModelPath);
+            // Publication rolls back its own files; failures before it must preserve old artifacts.
             return new CompileResult(false, null, stopwatch.Elapsed.TotalMilliseconds, ex.Message);
         }
         finally
