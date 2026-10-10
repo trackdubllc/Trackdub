@@ -47,7 +47,7 @@ internal static class Program
                     throw new PlatformNotSupportedException("Catalog EPs require Windows 11 24H2/build 26100 or later.");
                 if (!await PrepareProviderAsync(epName, allowDownload))
                     return 3;
-                registeredWebGpu = epName == WebGpuName;
+                registeredWebGpu = string.Equals(epName, WebGpuName, StringComparison.OrdinalIgnoreCase);
             }
 
             var devices = environment.GetEpDevices()
