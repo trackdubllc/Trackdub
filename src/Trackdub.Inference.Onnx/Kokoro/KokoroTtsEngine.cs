@@ -7,6 +7,7 @@ using Trackdub.Inference.Onnx.Runtime.Planning;
 using Trackdub.Inference.Runtime.Planning;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using Trackdub.Inference.Onnx.Worker;
 
 namespace Trackdub.Inference.Onnx.Kokoro;
 
@@ -24,6 +25,7 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
     private readonly SidecarCache<KokoroTokenizer> tokenizerCache;
     private readonly SidecarCache<KokoroVoiceCatalog> voiceCatalogCache;
     private readonly SemaphoreSlim sessionGate = new(1, 1);
+    private readonly IInferenceWorkerClient? workerClient;
     private PinnedSession? pinnedSession;
     private int disposed;
 
@@ -39,6 +41,20 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         IGraphemeToPhoneme phonemizer)
         : this(runtimePlanner, modelPathResolver, phonemizer, null, null, null)
     {
+    }
+
+    /// <summary>
+    /// Creates a <see cref="KokoroTtsEngine"/> that runs CUDA plans in the ORT 1.30 inference worker
+    /// when this process's ONNX Runtime cannot host the CUDA execution provider (ADR-0017).
+    /// </summary>
+    public KokoroTtsEngine(
+        IRuntimePlanner runtimePlanner,
+        BenchmarkModelPathResolver modelPathResolver,
+        IGraphemeToPhoneme phonemizer,
+        IInferenceWorkerClient workerClient)
+        : this(runtimePlanner, modelPathResolver, phonemizer, null, null, null)
+    {
+        this.workerClient = workerClient ?? throw new ArgumentNullException(nameof(workerClient));
     }
 
     /// <summary>
@@ -111,6 +127,19 @@ public sealed class KokoroTtsEngine : ITtsEngineAdapter, IStageRuntimeExecutionR
         ArgumentNullException.ThrowIfNull(plan);
         cancellationToken.ThrowIfCancellationRequested();
         EnsurePlanReady(plan);
+
+        if (plan.ExecutionProvider is ExecutionProviderKind.Cuda &&
+            workerClient is not null &&
+            !CudaOrtProbe.IsCudaProviderListed())
+        {
+            TtsSynthesisResult workerResult = await workerClient
+                .SynthesizeTtsAsync(request, plan, cancellationToken)
+                .ConfigureAwait(false);
+            LastExecutionSummary = (workerClient as InferenceWorkerClient)?.LastTtsExecutionSummary
+                ?? new StageRuntimeExecutionSummary("cuda", workerResult.Provider, plan.ModelId, plan.ModelAlias, plan.Variant,
+                    "Ran in the ORT 1.30 inference worker.");
+            return workerResult;
+        }
 
         BenchmarkModelCandidate candidate = PlannedRuntimeModelResolver.ResolveCandidate(plan, modelPathResolver);
         // Prefer the manifest-declared model root (which contains tokenizer.json and voices/).

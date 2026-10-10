@@ -43,6 +43,18 @@ internal static class StageRuntimeRequirementsCatalog
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx and not ExecutionProviderKind.TensorRt)];
 
+    // ORT GenAI families: no TensorRT (NvTensorRtRtx crashes the host) and no DirectML. With GenAI
+    // 0.17.1 on Windows ML 2.4, the bundled Whisper export segfaults in the encoder pass on DirectML
+    // and the bundled Qwen2.5 export fails its first DirectML kernel (0x80070057); both are CPU/CUDA
+    // exports, not DirectML ones.
+    private static IReadOnlyList<ExecutionProviderKind> GenAiProviders(
+        IReadOnlyList<ExecutionProviderKind> providers) =>
+        [.. WithoutTensorRtFamilies(providers).Where(static p => p is not ExecutionProviderKind.DirectMl)];
+
+    private static IReadOnlyList<ExecutionProviderKind> CpuFirst(
+        IReadOnlyList<ExecutionProviderKind> providers) =>
+        [ExecutionProviderKind.Cpu, .. providers.Where(static p => p is not ExecutionProviderKind.Cpu)];
+
     private static IReadOnlyList<ExecutionProviderKind> WithoutTensorRtRtx(
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx)];
@@ -97,7 +109,7 @@ internal static class StageRuntimeRequirementsCatalog
                     // TensorRT RTX as a fallback or explicit provider choice.
                     ["qwen3-asr"] = PreferDirectMl(DefaultOnnxStageAllowedProviders),
                     ["whisper-onnx"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                    ["whisper-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["whisper-genai"] = GenAiProviders(DefaultOnnxStageAllowedProviders),
                 },
                 // Nemotron ASR is not in the shipping auto-planning lane: quality-tier ranking
                 // previously selected it ahead of working ONNX models and produced empty
@@ -108,16 +120,20 @@ internal static class StageRuntimeRequirementsCatalog
                 ModelTask.Translation,
                 ["opus-en-es", "helsinki-opus-en-es", "opus-en-fr", "opus-en-de", "opus-en-it", "opus-en-pt", "opus-es-en", "helsinki-opus-es-en", "madlad400-mt", "madlad400"],
                 DefaultOnnxStageAllowedProviders,
-                ["merged-decoder", "quantized", "fp16"],
-                ["merged-decoder", "quantized", "int8", "fp16"],
+                ["int4-kv", "merged-decoder", "quantized", "fp16"],
+                ["int4-kv", "merged-decoder", "quantized", "int8", "fp16"],
                 // Encoder-decoder InferenceSession ctor stack-overflows under TensorRT RTX (ORT 1.24.5).
                 // phi-genai loads through ORT GenAI, whose NvTensorRtRtx device can terminate
                 // the process (native stack overflow) during model init/generation.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["opus-mt"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                    ["madlad"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                    ["phi-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    // MADLAD-400 3B runs CPU-first: with the int4 KV-cache decoder a warm clip translates in
+                    // ~8 s on CPU, while DirectML pages on a 12 GB card (int4 81-89 s, fp16 160+ s) because
+                    // the model and DirectML's working set do not fit beside the desktop. GPU providers stay
+                    // reachable through an explicit provider pin.
+                    ["madlad"] = CpuFirst(WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders)),
+                    ["phi-genai"] = GenAiProviders(DefaultOnnxStageAllowedProviders),
                 }),
             [RuntimeStage.Diarization] = new(
                 RuntimeStage.Diarization,
@@ -165,11 +181,13 @@ internal static class StageRuntimeRequirementsCatalog
                 // Per-graph TrtRtxUnsupportedOpScanner + session-init fallback isolate failures.
                 // CosyVoice multi-graph packages compile under TRT RTX in micro-benchmarks
                 // (token_generator 788MB, text_encoder, speech_tokenizer); the family-level
-                // deny was over-broad. kokoro stays CPU (ConvTranspose / DirectML incompatible).
+                // deny was over-broad. kokoro runs on CUDA or CPU only: DirectML fails its decoder
+                // ConvTranspose (0x80070057) and TensorRT RTX cannot infer its duration-dependent
+                // shapes; on Windows CUDA comes from the ORT 1.30 inference worker (ADR-0017).
                 // chatterbox/qwen3-tts keep the deny until their multi-graph init is smoke-clean.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["kokoro"] = [ExecutionProviderKind.Cpu],
+                    ["kokoro"] = [ExecutionProviderKind.Cuda, ExecutionProviderKind.Cpu],
                     ["chatterbox"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["qwen3-tts"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 },
@@ -195,8 +213,8 @@ internal static class StageRuntimeRequirementsCatalog
                 // smoke failure cannot gate a fatal crash, so GenAI families never see TRT RTX.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["qwen-instruct"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                    ["phi-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["qwen-instruct"] = GenAiProviders(DefaultOnnxStageAllowedProviders),
+                    ["phi-genai"] = GenAiProviders(DefaultOnnxStageAllowedProviders),
                 }),
             [RuntimeStage.LipSynthesis] = new(
                 RuntimeStage.LipSynthesis,

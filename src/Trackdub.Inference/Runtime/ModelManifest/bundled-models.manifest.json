@@ -2417,14 +2417,16 @@
           "entry_path": "onnx/model.onnx",
           "is_default": true,
           "supported_providers": [
-            "cpu"
+            "cpu",
+            "cuda"
           ]
         },
         {
           "alias": "fp16",
           "entry_path": "onnx/model_fp16.onnx",
           "supported_providers": [
-            "cpu"
+            "cpu",
+            "cuda"
           ]
         },
         {
@@ -4079,8 +4081,6 @@
       },
       "download_files": [
         "config.json",
-        "decoder_model_quantized.onnx",
-        "encoder_model_quantized.onnx",
         "spiece.model",
         "tokenizer_config.json"
       ],
@@ -4089,14 +4089,44 @@
         "spiece.model": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/spiece.model",
         "tokenizer_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/tokenizer_config.json",
         "encoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/encoder_model_quantized.onnx",
-        "decoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/decoder_model_quantized.onnx"
+        "decoder_model_quantized.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/decoder_model_quantized.onnx",
+        "mixed_fp16_int4/encoder_model.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/encoder_model.onnx",
+        "mixed_fp16_int4/encoder_model.onnx.data": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/encoder_model.onnx.data",
+        "mixed_fp16_int4/decoder_model_merged.onnx": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/decoder_model_merged.onnx",
+        "mixed_fp16_int4/decoder_model_merged.onnx.data": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/decoder_model_merged.onnx.data",
+        "mixed_fp16_int4/spiece.model": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/spiece.model",
+        "mixed_fp16_int4/config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/config.json",
+        "mixed_fp16_int4/generation_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/generation_config.json",
+        "mixed_fp16_int4/tokenizer_config.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/tokenizer_config.json",
+        "mixed_fp16_int4/special_tokens_map.json": "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/mixed_fp16_int4/special_tokens_map.json"
       },
       "variants": [
         {
           "alias": "quantized",
           "entry_path": "encoder_model_quantized.onnx",
+          "is_default": true,
           "download_files": [
             "decoder_model_quantized.onnx"
+          ]
+        },
+        {
+          "alias": "int4-kv",
+          "entry_path": "mixed_fp16_int4/encoder_model.onnx",
+          "download_files": [
+            "mixed_fp16_int4/encoder_model.onnx",
+            "mixed_fp16_int4/encoder_model.onnx.data",
+            "mixed_fp16_int4/decoder_model_merged.onnx",
+            "mixed_fp16_int4/decoder_model_merged.onnx.data",
+            "mixed_fp16_int4/spiece.model",
+            "mixed_fp16_int4/config.json",
+            "mixed_fp16_int4/generation_config.json",
+            "mixed_fp16_int4/tokenizer_config.json",
+            "mixed_fp16_int4/special_tokens_map.json"
+          ],
+          "supported_providers": [
+            "cpu",
+            "dml",
+            "cuda"
           ]
         }
       ],
@@ -4105,7 +4135,16 @@
         "spiece.model": "ef11ac9a22c7503492f56d48dce53be20e339b63605983e9f27d2cd0e0f3922c",
         "tokenizer_config.json": "21de89977129392c6f079c6fe3f8f5f616dd09c7c85d468084aec278111dcb1a",
         "encoder_model_quantized.onnx": "3ab4690aab2174ca29a9ce30cdb8152d9b639606cf2cf48e77112314e064e393",
-        "decoder_model_quantized.onnx": "1894294807c530df6a17e773fe8753833866838fcd41084bdd21cad17e0b50c1"
+        "decoder_model_quantized.onnx": "1894294807c530df6a17e773fe8753833866838fcd41084bdd21cad17e0b50c1",
+        "mixed_fp16_int4/encoder_model.onnx": "2be68c85bb5c9468e389aed3d4d7563b503f05918f244c560bf3729709380bb2",
+        "mixed_fp16_int4/encoder_model.onnx.data": "612c552d68ff5e702f95bcc56996da5069a4c5e50895599e797f7bb27cd0c422",
+        "mixed_fp16_int4/decoder_model_merged.onnx": "0b2dcd996563fea546576cb38e2195da5f0069f01fd08c77c6b6b9408ea1dbc5",
+        "mixed_fp16_int4/decoder_model_merged.onnx.data": "62d253bc68aca845129dbba3c04a6e21d2fcf080ab4cb8cad982622a8374e3f9",
+        "mixed_fp16_int4/spiece.model": "ef11ac9a22c7503492f56d48dce53be20e339b63605983e9f27d2cd0e0f3922c",
+        "mixed_fp16_int4/config.json": "8235de5df0aafb667662e02571aef4dd54f40958460b73d465c3d081b4803940",
+        "mixed_fp16_int4/generation_config.json": "53eda8ba8ebbf3b341354d74a5d3b997a685c6b9bf17271cbd4cc842d0ed5a7c",
+        "mixed_fp16_int4/tokenizer_config.json": "4235d93cc064bfff45727f48ddedcb3e2857410406fa1ebac3e5add05964cf7f",
+        "mixed_fp16_int4/special_tokens_map.json": "7f79f1d5063d56c4b980eec0692f3c7429bdef335071d34e566bd00fd4b5e3e0"
       },
       "hash_verification": {
         "mode": "required"

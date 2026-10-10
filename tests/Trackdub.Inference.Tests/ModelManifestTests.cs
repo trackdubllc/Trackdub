@@ -1878,16 +1878,35 @@ public sealed class ModelManifestLoaderTests
             variant.Alias.Equals("quantized", StringComparison.OrdinalIgnoreCase));
         Assert.Equal("encoder_model_quantized.onnx", variant.EntryPath);
         Assert.Equal(["decoder_model_quantized.onnx"], variant.DownloadFiles);
+        Assert.True(variant.IsDefault);
+        // Quantized exports belong to their variant only, so int4-kv neither requires nor downloads them.
+        Assert.DoesNotContain("encoder_model_quantized.onnx", manifest.DownloadFiles);
+        Assert.DoesNotContain("decoder_model_quantized.onnx", manifest.DownloadFiles);
         Assert.Contains("spiece.model", manifest.DownloadFiles);
         Assert.Contains("config.json", manifest.DownloadFiles);
         Assert.Contains("encoder_model_quantized.onnx", manifest.DownloadFileSources.Keys);
         Assert.Contains("decoder_model_quantized.onnx", manifest.DownloadFileSources.Keys);
         Assert.All(
-            manifest.DownloadFileSources.Values,
+            manifest.DownloadFileSources.Where(source => !source.Key.StartsWith("mixed_fp16_int4/", StringComparison.Ordinal)),
             source => Assert.StartsWith(
                 "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/67037ad42f58d6c0fc3dafaa45f3ec97a46e7eb9/",
-                source,
+                source.Value,
                 StringComparison.Ordinal));
+
+        ModelVariantManifest kvVariant = Assert.Single(manifest.Variants, variant =>
+            variant.Alias.Equals("int4-kv", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("mixed_fp16_int4/encoder_model.onnx", kvVariant.EntryPath);
+        Assert.Contains("mixed_fp16_int4/decoder_model_merged.onnx", kvVariant.DownloadFiles);
+        Assert.Contains("mixed_fp16_int4/decoder_model_merged.onnx.data", kvVariant.DownloadFiles);
+        Assert.Contains("mixed_fp16_int4/encoder_model.onnx.data", kvVariant.DownloadFiles);
+        Assert.All(kvVariant.DownloadFiles, file =>
+        {
+            Assert.StartsWith(
+                "https://huggingface.co/tonythethompson/madlad400-3b-mt-onnx/resolve/c165d741425c82365761aae98d0891bd9e7995ed/",
+                manifest.DownloadFileSources[file],
+                StringComparison.Ordinal);
+            Assert.True(manifest.DownloadFileHashes.ContainsKey(file), $"Missing pinned hash for {file}.");
+        });
     }
 
     [Theory]

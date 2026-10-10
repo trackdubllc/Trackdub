@@ -116,10 +116,11 @@ public sealed class RuntimePlannerBlackwellVariantTests
     }
 
     [Fact]
-    public async Task PlanAsync_OnBlackwell_QwenInstructFamily_SelectsDirectMlNotTensorRtRtx()
+    public async Task PlanAsync_OnBlackwell_QwenInstructFamily_SelectsCpuNotTensorRtRtxOrDirectMl()
     {
         // qwen-instruct loads through ORT GenAI, whose NvTensorRtRtx device terminates the
-        // process (native stack overflow), so the planner must not even smoke TRT RTX.
+        // process (native stack overflow) and whose DirectML device cannot run the bundled
+        // Qwen2.5 export, so the planner must not even smoke either.
         using var workspace = new RuntimePlannerBlackwellTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteTextRefinerManifest();
 
@@ -147,11 +148,11 @@ public sealed class RuntimePlannerBlackwellVariantTests
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.TextRefinement));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal(ExecutionProviderKind.DirectMl, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
         Assert.Equal("default", plan.Variant);
         Assert.DoesNotContain(
             smokeRequests,
-            provider => provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt);
+            provider => provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt or ExecutionProviderKind.DirectMl);
     }
 
     [Fact]

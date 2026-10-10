@@ -1118,6 +1118,7 @@ public sealed class ControlledDubbingBenchmarkRunner : IDisposable
             StageFilter = stages,
             ModelPreferences = models,
             ForceRerun = forceRerun,
+            EnableTranslationSegmentStreaming = options.TranslationStreaming,
         }, progress, cancellationToken);
     }
 

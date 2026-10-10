@@ -13,6 +13,7 @@ public sealed record ControlledStageBenchmarkMatrixOptions
     public string? SourceLanguage { get; init; }
     public string Mode { get; init; } = "fresh-process";
     public bool ReuseEngineCache { get; init; }
+    public bool TranslationStreaming { get; init; }
     public string? ModelDirectory { get; init; }
     public string? Provider { get; init; }
     public string? FfmpegPath { get; init; }

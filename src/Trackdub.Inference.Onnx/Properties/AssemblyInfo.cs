@@ -5,3 +5,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Trackdub.Composition")]
 [assembly: InternalsVisibleTo("Trackdub.Composition.Tests")]
 [assembly: InternalsVisibleTo("Trackdub.Benchmarks.Micro")]
+[assembly: InternalsVisibleTo("Trackdub.InferenceWorker")]

@@ -1073,6 +1073,21 @@ public sealed class OnnxTranscriptEnginesTests
         });
     }
 
+    [FixtureFact("TRACKDUB_MADLAD_FIXTURE_ROOT", "spiece.model")]
+    [Trait("Category", "Integration")]
+    public async Task MadladTokenizerDecoder_EncodeSourceText_TerminatesWithEndOfSentence()
+    {
+        // T5-family encoders are trained on inputs closed by </s>. Without it greedy decoding
+        // repeats the sentence or appends invented clauses.
+        string fixtureRoot = RequireFixtureRoot("TRACKDUB_MADLAD_FIXTURE_ROOT");
+        MadladTokenizerDecoder tokenizer = await MadladTokenizerDecoder.LoadAsync(fixtureRoot);
+
+        long[] ids = tokenizer.EncodeSourceText("Hello, how are you today?", "<2fr>");
+
+        Assert.Equal(tokenizer.EndOfSentenceTokenId, ids[^1]);
+        Assert.Single(ids, id => id == tokenizer.EndOfSentenceTokenId);
+    }
+
     [RequiresBundledModelFact("opus/onnx-community-opus-mt-en-fr")]
     public async Task OpusMtTranslationEngine_ConfiglessModelRoot_TranslatesWithVocabDerivedSpecialTokens()
     {

@@ -41,6 +41,9 @@ public sealed class GenAiTensorRtExclusionTests
         Assert.NotNull(allowed);
         Assert.DoesNotContain(ExecutionProviderKind.TensorRTRtx, allowed);
         Assert.DoesNotContain(ExecutionProviderKind.TensorRt, allowed);
+        // The bundled GenAI exports are not DirectML exports (Whisper crashes the host on DirectML).
+        Assert.DoesNotContain(ExecutionProviderKind.DirectMl, allowed);
+        Assert.Contains(ExecutionProviderKind.Cpu, allowed);
     }
 
     [Theory]

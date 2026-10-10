@@ -768,7 +768,13 @@ internal static class OnnxExecutionSessionFactory
                             optionsHolder.Current = selection.Options;
                         }
 
-                        return Task.FromResult(new CreatedPoolSession(session, selection.SelectedProvider));
+                        // Report where ORT actually placed the graph: a device EP that initialised
+                        // but left every node on the CPU must be charged to host RAM.
+                        ExecutionProviderKind placed = ResolveEffectiveProviderKindFromSession(
+                            session,
+                            selection.SelectedProvider,
+                            useCatalogDevicePolicy);
+                        return Task.FromResult(new CreatedPoolSession(session, placed));
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
