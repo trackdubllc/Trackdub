@@ -39,7 +39,8 @@ internal static class EpContextCapture
     internal static InferenceSession CreateSession(
         string sourceModelPath,
         SessionOptions options,
-        Func<string, SessionOptions, InferenceSession> createSession)
+        Func<string, SessionOptions, InferenceSession> createSession,
+        IReadOnlyDictionary<string, string>? providerOptions = null)
     {
         string fullSource = Path.GetFullPath(sourceModelPath);
         string epContextPath = EpContextArtifact.GetEpContextPath(fullSource);
@@ -72,7 +73,7 @@ internal static class EpContextCapture
 
         try
         {
-            Publish(fullSource, stagingDirectory);
+            Publish(fullSource, stagingDirectory, providerOptions);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -86,7 +87,10 @@ internal static class EpContextCapture
         return session;
     }
 
-    private static void Publish(string sourceModelPath, string stagingDirectory)
+    private static void Publish(
+        string sourceModelPath,
+        string stagingDirectory,
+        IReadOnlyDictionary<string, string>? providerOptions)
     {
         string stagedModel = Path.Join(stagingDirectory, Path.GetFileName(EpContextArtifact.GetEpContextPath(sourceModelPath)));
         // A graph the EP did not claim yields a plain reserialized model that would not skip the
@@ -99,7 +103,7 @@ internal static class EpContextCapture
 
         (string gpuArchitecture, string? driverVersion) = EpContextLoadPathResolver.CurrentHardware;
         string compileOptionsIdentity = EpContextArtifact.BuildCompileOptionsIdentity(
-            EpContextTrtProfiles.Resolve(sourceModelPath),
+            providerOptions ?? EpContextTrtProfiles.Resolve(sourceModelPath),
             EpContextArtifact.ShouldEmbedEpContext(sourceModelPath));
         EpContextArtifact.PublishStagedArtifact(stagingDirectory, sourceModelPath,
             createStamp: artifactFiles => EpContextArtifact.CreateStamp(

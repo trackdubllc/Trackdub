@@ -25,10 +25,12 @@ internal static class EpContextLoadPathResolver
     /// Valid EP-context sibling for <paramref name="sourceModelPath"/>, or <see langword="null"/>.
     /// Stamp identity and selected-device compatibility both have to pass.
     /// </summary>
-    public static string? TryResolveLoadPath(string sourceModelPath)
+    public static string? TryResolveLoadPath(
+        string sourceModelPath,
+        IReadOnlyDictionary<string, string>? providerOptions = null)
     {
         string compileOptionsIdentity = EpContextArtifact.BuildCompileOptionsIdentity(
-            EpContextTrtProfiles.Resolve(sourceModelPath),
+            providerOptions ?? EpContextTrtProfiles.Resolve(sourceModelPath),
             EpContextArtifact.ShouldEmbedEpContext(sourceModelPath));
         string? compiledPath = EpContextArtifact.TryResolveValidLoadPath(
             sourceModelPath,

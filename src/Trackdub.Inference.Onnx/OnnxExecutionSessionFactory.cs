@@ -243,10 +243,20 @@ internal static class OnnxExecutionSessionFactory
             [
                 new SessionLeaseRequest(
                     encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, selections.Encoder.Options, sessionFactory, ct, selections.Encoder.SelectedProvider))),
+                    ct => Task.FromResult(CreateSession(
+                        encoderModelPath, selections.Encoder.Options, sessionFactory, ct,
+                        selections.Encoder.SelectedProvider,
+                        selections.Encoder.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+                            ? BuildTensorRtRtxOptions(additionalTrtEncoderOptions, enableEncoderCudaGraph)
+                            : null))),
                 new SessionLeaseRequest(
                     decoderKey,
-                    ct => Task.FromResult(CreateSession(decoderModelPath, selections.Decoder.Options, sessionFactory, ct, selections.Decoder.SelectedProvider))),
+                    ct => Task.FromResult(CreateSession(
+                        decoderModelPath, selections.Decoder.Options, sessionFactory, ct,
+                        selections.Decoder.SelectedProvider,
+                        selections.Decoder.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+                            ? BuildTensorRtRtxOptions(additionalTrtDecoderOptions)
+                            : null))),
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -332,14 +342,15 @@ internal static class OnnxExecutionSessionFactory
         SessionOptions options,
         Func<string, SessionOptions, InferenceSession>? sessionFactory,
         CancellationToken cancellationToken,
-        ExecutionProviderKind selectedProvider)
+        ExecutionProviderKind selectedProvider,
+        IReadOnlyDictionary<string, string>? trtProviderOptions = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var phase = BenchmarkPhaseCapture.Start("onnx-session-create");
         // EP-context artifacts embed a TensorRT-RTX-serialized engine that only that EP can
         // deserialize; only TRT-RTX sessions may load one (see EpContextWarmupService).
         string loadPath = selectedProvider is ExecutionProviderKind.TensorRTRtx
-            ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath
+            ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath, trtProviderOptions) ?? modelPath
             : modelPath;
         // Without a current artifact, a large graph's engine build is captured as one, so the next
         // process loads engines instead of rebuilding them (minutes for multi-GB models).
@@ -348,7 +359,8 @@ internal static class OnnxExecutionSessionFactory
             selectedProvider is ExecutionProviderKind.TensorRTRtx &&
             string.Equals(loadPath, modelPath, StringComparison.Ordinal) &&
             EpContext.EpContextCapture.ShouldCapture(modelPath)
-                ? EpContext.EpContextCapture.CreateSession(modelPath, options, static (path, o) => new InferenceSession(path, o))
+                ? EpContext.EpContextCapture.CreateSession(
+                    modelPath, options, static (path, o) => new InferenceSession(path, o), trtProviderOptions)
                 : sessionFactory is null
                     ? new InferenceSession(loadPath, options)
                     : sessionFactory(loadPath, options);
@@ -403,7 +415,10 @@ internal static class OnnxExecutionSessionFactory
                 initialSelection.Options,
                 sessionFactory,
                 cancellationToken,
-                initialSelection.SelectedProvider);
+                initialSelection.SelectedProvider,
+                initialSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+                    ? BuildTensorRtRtxOptions(additionalTrtOptions)
+                    : null);
             return (session, initialSelection);
         }
         catch (Exception ex) when (
@@ -588,8 +603,16 @@ internal static class OnnxExecutionSessionFactory
         {
             // Through CreateSession so smoke probes load (or capture) EP-context artifacts like
             // pooled sessions do, instead of rebuilding every engine from source.
-            encoderSession = CreateSession(encoderModelPath, encoderOptions, null, cancellationToken, selections.Encoder.SelectedProvider);
-            decoderSession = CreateSession(decoderModelPath, decoderOptions, null, cancellationToken, selections.Decoder.SelectedProvider);
+            encoderSession = CreateSession(
+                encoderModelPath, encoderOptions, null, cancellationToken, selections.Encoder.SelectedProvider,
+                selections.Encoder.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+                    ? BuildTensorRtRtxOptions(additionalTrtEncoderOptions)
+                    : null);
+            decoderSession = CreateSession(
+                decoderModelPath, decoderOptions, null, cancellationToken, selections.Decoder.SelectedProvider,
+                selections.Decoder.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+                    ? BuildTensorRtRtxOptions(additionalTrtDecoderOptions)
+                    : null);
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 provider, bootstrap, selections, encoderSession, decoderSession);
             CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
@@ -631,8 +654,16 @@ internal static class OnnxExecutionSessionFactory
         {
             // Through CreateSession so smoke probes load (or capture) EP-context artifacts like
             // pooled sessions do, instead of rebuilding every engine from source.
-            encoderSession = CreateSession(encoderModelPath, encoderOptions, null, cancellationToken, selections.Encoder.SelectedProvider);
-            decoderSession = CreateSession(decoderModelPath, decoderOptions, null, cancellationToken, selections.Decoder.SelectedProvider);
+            encoderSession = CreateSession(
+                encoderModelPath, encoderOptions, null, cancellationToken, selections.Encoder.SelectedProvider,
+                selections.Encoder.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+                    ? BuildTensorRtRtxOptions(additionalTrtEncoderOptions)
+                    : null);
+            decoderSession = CreateSession(
+                decoderModelPath, decoderOptions, null, cancellationToken, selections.Decoder.SelectedProvider,
+                selections.Decoder.SelectedProvider is ExecutionProviderKind.TensorRTRtx
+                    ? BuildTensorRtRtxOptions(additionalTrtDecoderOptions)
+                    : null);
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 provider, bootstrap, selections, encoderSession, decoderSession);
             CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
@@ -1082,13 +1113,26 @@ internal static class OnnxExecutionSessionFactory
             [
                 new SessionLeaseRequest(
                     encoderKey,
-                    ct => Task.FromResult(CreateSession(encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct, encoderOptionsSelection.SelectedProvider))),
+                    ct => Task.FromResult(CreateSession(
+                        encoderModelPath, encoderOptionsSelection.Options, sessionFactory, ct,
+                        encoderOptionsSelection.SelectedProvider,
+                        encoderOptionsSelectedProvider is ExecutionProviderKind.TensorRTRtx
+                            ? BuildTensorRtRtxOptions(additionalTrtEncoderOptions)
+                            : null))),
                 new SessionLeaseRequest(
                     decoderInitKey,
-                    ct => Task.FromResult(CreateSession(decoderInitModelPath, decoderInitOptions, sessionFactory, ct, decoderOptionsSelectedProvider))),
+                    ct => Task.FromResult(CreateSession(
+                        decoderInitModelPath, decoderInitOptions, sessionFactory, ct, decoderOptionsSelectedProvider,
+                        decoderOptionsSelectedProvider is ExecutionProviderKind.TensorRTRtx
+                            ? BuildTensorRtRtxOptions(additionalTrtDecoderOptions)
+                            : null))),
                 new SessionLeaseRequest(
                     decoderStepKey,
-                    ct => Task.FromResult(CreateSession(decoderStepModelPath, decoderStepOptions, sessionFactory, ct, decoderOptionsSelectedProvider))),
+                    ct => Task.FromResult(CreateSession(
+                        decoderStepModelPath, decoderStepOptions, sessionFactory, ct, decoderOptionsSelectedProvider,
+                        decoderOptionsSelectedProvider is ExecutionProviderKind.TensorRTRtx
+                            ? BuildTensorRtRtxOptions(additionalTrtDecoderOptions)
+                            : null))),
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -2013,7 +2057,7 @@ internal static class OnnxExecutionSessionFactory
     /// for a session whose call site is verified to feed stable, IoBinding-backed device buffers
     /// across iterations.
     /// </param>
-    private static IReadOnlyDictionary<string, string> BuildTensorRtRtxOptions(
+    internal static IReadOnlyDictionary<string, string> BuildTensorRtRtxOptions(
         IReadOnlyDictionary<string, string>? additionalTrtOptions,
         bool enableCudaGraph = false)
     {
