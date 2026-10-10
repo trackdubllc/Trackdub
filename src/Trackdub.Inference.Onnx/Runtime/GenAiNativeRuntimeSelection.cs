@@ -85,10 +85,10 @@ internal static class GenAiNativeRuntimeSelection
     private static IReadOnlyList<NativePairManifest> ReadManifests()
     {
         var result = new List<NativePairManifest>();
-        foreach (var attribute in typeof(GenAiNativeRuntimeSelection).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>())
+        foreach (var attribute in typeof(GenAiNativeRuntimeSelection).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+                     .Where(attribute => attribute.Key == "Trackdub.NativePair" && attribute.Value is not null))
         {
-            if (attribute.Key != "Trackdub.NativePair" || attribute.Value is null) continue;
-            string[] parts = attribute.Value.Split('|');
+            string[] parts = attribute.Value!.Split('|');
             if (parts.Length == 8)
                 result.Add(new(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6], parts[7]));
         }

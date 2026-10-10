@@ -83,7 +83,12 @@ public static class InferenceWorkerProtocol
             int n = await stream.ReadAsync(buffer.AsMemory(read), cancellationToken).ConfigureAwait(false);
             if (n == 0)
             {
-                return read == 0 ? false : throw new EndOfStreamException("Inference worker stream ended inside a message.");
+                if (read == 0)
+                {
+                    return false;
+                }
+
+                throw new EndOfStreamException("Inference worker stream ended inside a message.");
             }
 
             read += n;

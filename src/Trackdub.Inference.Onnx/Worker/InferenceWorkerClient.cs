@@ -39,7 +39,7 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
     private readonly string? executablePath;
     private readonly SemaphoreSlim startGate = new(1, 1);
     private readonly SemaphoreSlim writeGate = new(1, 1);
-    private readonly ConcurrentDictionary<long, TaskCompletionSource<WorkerMessage>> pending = new();
+    private readonly ConcurrentDictionary<long, PendingCall> pending = new();
     private readonly Queue<string> stderrTail = new();
     private Process? process;
 
@@ -124,13 +124,11 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         Process running = (await EnsureStartedAsync(cancellationToken).ConfigureAwait(false)).Process;
         long id = Interlocked.Increment(ref nextId);
         var completion = new TaskCompletionSource<WorkerMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-        pending[id] = completion;
+        pending[id] = new PendingCall(running, completion);
         try
         {
             await WriteAsync(running, new WorkerMessage(id, kind, payload), cancellationToken).ConfigureAwait(false);
-            using CancellationTokenRegistration registration = cancellationToken.Register(() =>
-                _ = WriteAsync(running, new WorkerMessage(Interlocked.Increment(ref nextId), InferenceWorkerProtocol.Cancel,
-                    InferenceWorkerProtocol.ToPayload(id)), CancellationToken.None));
+            using CancellationTokenRegistration registration = cancellationToken.Register(() => _ = SendCancelAsync(running, id));
             WorkerMessage response = await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             if (response.Kind == InferenceWorkerProtocol.Error)
             {
@@ -185,47 +183,78 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
 
             Process started = Start(executablePath);
             process = started;
-            WorkerMessage response;
-            long id = Interlocked.Increment(ref nextId);
-            var completion = new TaskCompletionSource<WorkerMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
-            pending[id] = completion;
+            bool handshaken = false;
             try
             {
-                await WriteAsync(started, new WorkerMessage(id, InferenceWorkerProtocol.Hello), cancellationToken).ConfigureAwait(false);
-                response = await completion.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false);
-            }
-            catch (TimeoutException)
-            {
-                throw new InferenceWorkerException($"The inference worker did not answer the handshake. Output: {StderrSnapshot()}");
+                RunningWorker worker = await HandshakeAsync(started, cancellationToken).ConfigureAwait(false);
+                handshaken = true;
+                current = worker;
+                return worker;
             }
             finally
             {
-                pending.TryRemove(id, out _);
+                // A worker that never completed the handshake must not linger holding GPU memory.
+                if (!handshaken)
+                {
+                    KillQuietly(started);
+                }
             }
-
-            if (response.Kind == InferenceWorkerProtocol.Error)
-            {
-                throw new InferenceWorkerException($"Inference worker handshake failed: {response.Error}");
-            }
-
-            WorkerHelloResult result = InferenceWorkerProtocol.FromPayload<WorkerHelloResult>(response.Payload);
-            if (result.ProtocolVersion != InferenceWorkerProtocol.Version ||
-                !string.Equals(result.BuildStamp, InferenceWorkerProtocol.BuildStamp, StringComparison.Ordinal))
-            {
-                unusableReason =
-                    $"The inference worker at '{executablePath}' is from a different build (protocol {result.ProtocolVersion}, " +
-                    $"build {result.BuildStamp}; expected protocol {InferenceWorkerProtocol.Version}, build {InferenceWorkerProtocol.BuildStamp}).";
-                KillQuietly(started);
-                throw new InferenceWorkerException(unusableReason);
-            }
-
-            var worker = new RunningWorker(started, result);
-            current = worker;
-            return worker;
         }
         finally
         {
             startGate.Release();
+        }
+    }
+
+    private async Task<RunningWorker> HandshakeAsync(Process started, CancellationToken cancellationToken)
+    {
+        WorkerMessage response;
+        long id = Interlocked.Increment(ref nextId);
+        var completion = new TaskCompletionSource<WorkerMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        pending[id] = new PendingCall(started, completion);
+        try
+        {
+            await WriteAsync(started, new WorkerMessage(id, InferenceWorkerProtocol.Hello), cancellationToken).ConfigureAwait(false);
+            response = await completion.Task.WaitAsync(TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            throw new InferenceWorkerException($"The inference worker did not answer the handshake. Output: {StderrSnapshot()}");
+        }
+        finally
+        {
+            pending.TryRemove(id, out _);
+        }
+
+        if (response.Kind == InferenceWorkerProtocol.Error)
+        {
+            throw new InferenceWorkerException($"Inference worker handshake failed: {response.Error}");
+        }
+
+        WorkerHelloResult result = InferenceWorkerProtocol.FromPayload<WorkerHelloResult>(response.Payload);
+        if (result.ProtocolVersion != InferenceWorkerProtocol.Version ||
+            !string.Equals(result.BuildStamp, InferenceWorkerProtocol.BuildStamp, StringComparison.Ordinal))
+        {
+            unusableReason =
+                $"The inference worker at '{executablePath}' is from a different build (protocol {result.ProtocolVersion}, " +
+                $"build {result.BuildStamp}; expected protocol {InferenceWorkerProtocol.Version}, build {InferenceWorkerProtocol.BuildStamp}).";
+            throw new InferenceWorkerException(unusableReason);
+        }
+
+        return new RunningWorker(started, result);
+    }
+
+    // Runs from a cancellation callback that nothing awaits, so it must never fault.
+    private async Task SendCancelAsync(Process target, long requestId)
+    {
+        try
+        {
+            await WriteAsync(target, new WorkerMessage(Interlocked.Increment(ref nextId), InferenceWorkerProtocol.Cancel,
+                InferenceWorkerProtocol.ToPayload(requestId)), CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InferenceWorkerException or ObjectDisposedException or InvalidOperationException)
+        {
+            // The worker is gone or the client is disposed; the caller's wait is already cancelled.
         }
     }
 
@@ -271,14 +300,16 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
             Stream output = owner.StandardOutput.BaseStream;
             while (await InferenceWorkerProtocol.ReadAsync(output, CancellationToken.None).ConfigureAwait(false) is { } message)
             {
-                if (pending.TryGetValue(message.Id, out TaskCompletionSource<WorkerMessage>? completion))
+                if (pending.TryGetValue(message.Id, out PendingCall? call))
                 {
-                    completion.TrySetResult(message);
+                    call.Completion.TrySetResult(message);
                 }
             }
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or ObjectDisposedException)
         {
+            // A broken or closed pipe is how a worker exit shows up; the calls below fail with it.
+            reason = $"The inference worker stream closed ({ex.GetType().Name}: {ex.Message}).";
         }
         catch (Exception ex)
         {
@@ -288,9 +319,10 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
 
         // The worker exited or its stream broke: every outstanding call fails with what it said.
         reason = $"{reason} Output: {StderrSnapshot()}";
-        foreach (TaskCompletionSource<WorkerMessage> completion in pending.Values)
+        // Only this process's calls: a replacement worker's requests share the map.
+        foreach (PendingCall call in pending.Values.Where(call => ReferenceEquals(call.Owner, owner)))
         {
-            completion.TrySetException(new InferenceWorkerException(reason));
+            call.Completion.TrySetException(new InferenceWorkerException(reason));
         }
     }
 
@@ -365,6 +397,8 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
     }
 
     private sealed record RunningWorker(Process Process, WorkerHelloResult Hello);
+
+    private sealed record PendingCall(Process Owner, TaskCompletionSource<WorkerMessage> Completion);
 }
 
 public sealed class InferenceWorkerException(string message) : InvalidOperationException(message);
