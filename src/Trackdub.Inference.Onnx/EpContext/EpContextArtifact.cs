@@ -281,12 +281,9 @@ public static class EpContextArtifact
         {
             Stamp? previous = File.Exists(stampPath) ? TryReadStamp(stampPath) : null;
             Backup(stampPath);
-            foreach (ArtifactFile file in previous?.ArtifactFiles ?? [])
+            foreach (ArtifactFile file in (previous?.ArtifactFiles ?? []).Where(file => Path.GetFileName(file.Name) == file.Name))
             {
-                if (Path.GetFileName(file.Name) == file.Name)
-                {
-                    Backup(Path.Join(targetDirectory, file.Name));
-                }
+                Backup(Path.Join(targetDirectory, file.Name));
             }
 
             Backup(GetArtifactExternalInitializersPath(epContextPath));
