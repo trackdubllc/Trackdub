@@ -18,14 +18,55 @@ import json
 import struct
 import sys
 import wave
+from pathlib import Path
+
+SUPPORTED_PROVIDERS = {"CPU": "cpu", "CUDA": "cuda"}
+SUPPORTED_TEXT_DTYPE = "utf8"
+
+_MODEL_NOT_FOUND = "model path must be an existing local directory"
+_VOICE_CLONING_DISABLED = "voice cloning is not authorized through the sidecar"
+
+# No remote/default resolution is permitted here: the host must provide a
+# planner-approved, integrity-qualified local model directory.
+
+# Consent is deliberately not represented by a client-controlled wire value.
+# Until the trusted host can attach a session-scoped authorization, reference
+# voices are refused rather than allowing direct sidecar requests to bypass it.
+_VOICE_CLONING_REQUIRES_HOST_AUTHORIZATION = True
+
+
+def _planned_device(plan, torch):
+    providers = plan.get("providers")
+    if not isinstance(providers, list) or not providers:
+        raise ValueError("load requires a non-empty providers list")
+    candidates = []
+    for provider in providers:
+        device = SUPPORTED_PROVIDERS.get(str(provider).upper())
+        if device is not None and device not in candidates:
+            candidates.append(device)
+    if not candidates:
+        raise ValueError("plan has no supported providers (expected CUDA or CPU)")
+    if plan.get("requirePreferred"):
+        candidates = candidates[:1]
+    for device in candidates:
+        if device == "cpu" or torch.cuda.is_available():
+            return device
+    raise RuntimeError("no planned provider is available")
+
+
+def _decode_text_envelope(value):
+    if not isinstance(value, dict):
+        raise ValueError("inputs.text must be a utf8 tensor envelope")
+    if value.get("dtype") != SUPPORTED_TEXT_DTYPE:
+        raise ValueError("inputs.text dtype must be utf8")
+    raw = base64.b64decode(value["data"], validate=True)
+    shape = value.get("shape")
+    if shape != [len(raw)]:
+        raise ValueError("inputs.text shape must equal its UTF-8 byte count")
+    return raw.decode("utf-8")
 
 PROTOCOL_VERSION = 1
 WORKER_STAMP = "trackdub-chatterbox-worker/0.1.0"
-
-# Upstream model id (MIT, per ADR-0006 license evidence for the Chatterbox family).
-# The .pt weights are fetched on first load into the Trackdub model cache and
-# never vendored in the repo.
-CHATTERBOX_REPO = "ResembleAI/chatterbox"
 
 _model = None
 _model_device = "none"
@@ -74,54 +115,42 @@ def _import_model_stack():
     return torch, ChatterboxTTS
 
 
-def _resolve_device():
-    try:
-        import torch
-    except ImportError:
-        return "cpu"
-    if torch.cuda.is_available():
-        return "cuda"
-    return "cpu"
-
-
 def handle_load(request_id, plan):
     global _model, _model_device, _voice_prompt
     if not isinstance(plan, dict) or not plan.get("model"):
         respond(request_id, "error", reason="bad-plan",
-                detail="load requires plan.model (repo id or local path)")
+                detail="load requires plan.model (local model directory)")
         return
     # Validate cheap things before touching the model stack: a voice prompt
     # that cannot be read fails the load loudly. No silent fallback to the
     # default voice — a dubbing take with the wrong voice is a wrong take.
     voice_prompt = plan.get("voicePromptPath")
     if voice_prompt is not None:
-        from pathlib import Path as _Path
-        if not _Path(str(voice_prompt)).is_file():
+        if not Path(str(voice_prompt)).is_file():
             respond(request_id, "error", reason="bad-plan",
                     detail=f"voicePromptPath unreadable: {voice_prompt}")
+            return
+        if _VOICE_CLONING_REQUIRES_HOST_AUTHORIZATION:
+            respond(request_id, "error", reason="load-not-implemented",
+                    detail=_VOICE_CLONING_DISABLED)
             return
     try:
         torch, ChatterboxTTS = _import_model_stack()
     except ImportError as ex:
         respond(request_id, "error", reason="dependency-missing", detail=str(ex))
         return
-    device = _resolve_device()
     try:
-        # from_pretrained(device) always resolves through the default HF cache,
-        # which the supervisor cannot fingerprint — so load from the planner's
-        # integrity-qualified path via from_local instead. Verified against
-        # chatterbox-tts 0.1.7: from_local(ckpt_dir, device).
-        from pathlib import Path
-
+        device = _planned_device(plan, torch)
         ckpt = Path(str(plan["model"]))
+        # from_pretrained(device) ignores the requested identity and can fetch
+        # an unrelated default model. Only the planner-approved local directory
+        # form is supported until repository resolution can preserve identity.
         if not ckpt.is_dir():
-            # Bare repo id (offline-hostile, fingerprint-unfriendly): resolve
-            # through from_pretrained so upstream fetching still works.
-            _model = ChatterboxTTS.from_pretrained(device)
-        else:
-            _model = ChatterboxTTS.from_local(ckpt, device)
+            respond(request_id, "error", reason="model-not-found", detail=_MODEL_NOT_FOUND)
+            return
+        _model = ChatterboxTTS.from_local(ckpt, device)
         _model_device = device
-        _voice_prompt = str(voice_prompt) if voice_prompt is not None else None
+        _voice_prompt = None
     except Exception as ex:  # model download / native load failure: report, don't crash
         _model, _model_device, _voice_prompt = None, "none", None
         respond(request_id, "error", reason="load-failed", detail=f"{type(ex).__name__}: {ex}")
@@ -146,15 +175,13 @@ def handle_infer(request_id, inputs):
         return
     if not isinstance(inputs, dict) or "text" not in inputs:
         respond(request_id, "error", reason="bad-inputs",
-                detail="infer requires inputs.text ({dtype, shape, data} envelope is reserved for tensor models)")
+                detail="infer requires inputs.text as a utf8 tensor envelope")
         return
-    text = inputs["text"]
-    if isinstance(text, dict):
-        try:
-            text = base64.b64decode(text["data"]).decode("utf-8")
-        except Exception as ex:
-            respond(request_id, "error", reason="bad-inputs", detail=f"text envelope undecodable: {ex}")
-            return
+    try:
+        text = _decode_text_envelope(inputs["text"])
+    except (KeyError, TypeError, ValueError) as ex:
+        respond(request_id, "error", reason="bad-inputs", detail=f"text envelope undecodable: {ex}")
+        return
     try:
         import torch
 

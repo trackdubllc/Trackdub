@@ -9,12 +9,17 @@ line, strictly ordered (no interleaving). Every response carries
 ```jsonc
 { "id": "req-1", "op": "health" }
 { "id": "req-2", "op": "load", "plan": {
-    "model": "<repo id or local path>",
+    "model": "<planner-approved local model directory>",
     "providers": ["CUDA", "CPU"],       // ordered, planner-approved
-    "requirePreferred": false,          // honor hard-pin: no silent fallback
-    "voicePromptPath": "<reference voice wav, optional>" } }
+    "requirePreferred": false } }
 { "id": "req-3", "op": "infer", "inputs": {
-    "input_ids": { "dtype": "int64", "shape": [1, 3], "data": "<base64>" } } }
+    "text": { "dtype": "utf8", "shape": [<UTF-8 byte count>],
+               "data": "<base64 UTF-8 text>" } } }
+
+The Chatterbox sidecar does not accept repository IDs, arbitrary weight files,
+or `voicePromptPath`. Reference-voice synthesis requires a session-scoped
+consent authorization from the trusted host; a direct sidecar request cannot
+supply that authorization.
 ```
 
 `id` may be null on responses to unparseable lines (nothing to echo).

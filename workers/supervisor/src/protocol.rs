@@ -51,7 +51,8 @@ impl TensorEnvelope {
 /// models or providers itself (mirrors `StageRuntimePlan`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LoadPlan {
-    /// Integrity-qualified model path or HF repo id.
+    /// Planner-approved local model directory. Repository IDs and arbitrary
+    /// weight files are not accepted by the Chatterbox worker.
     pub model: String,
     /// Ordered provider fallback, already authorized by `IRuntimePlanner`.
     #[serde(default)]
