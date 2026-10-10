@@ -1,0 +1,76 @@
+<Project>
+  <UsingTask TaskName="TrackdubGenerateNativePairMetadata" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <OrtRoot ParameterType="System.String" />
+      <StockOrtRoot ParameterType="System.String" />
+      <GenAiRoot ParameterType="System.String" />
+      <CpuGenAiRoot ParameterType="System.String" />
+      <GenAiFlavor ParameterType="System.String" />
+      <OutputFile ParameterType="System.String" Required="true" />
+      <Disabled ParameterType="System.Boolean" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Security.Cryptography" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var code = new StringBuilder("// Generated native package provenance. Do not edit.\n");
+        if (!Disabled && !string.IsNullOrEmpty(GenAiRoot))
+        {
+          foreach (var genAiRoot in new[] { GenAiRoot, CpuGenAiRoot })
+          {
+          if (string.IsNullOrEmpty(genAiRoot)) continue;
+          var genAiFlavor = genAiRoot == CpuGenAiRoot ? "Cpu" : GenAiFlavor;
+          foreach (var rid in new[] { "win-x64", "win-arm64" })
+          {
+            var genAi = Path.Combine(genAiRoot, "runtimes", rid, "native", "onnxruntime-genai.dll");
+            if (!File.Exists(genAi)) continue;
+            var genAiVersion = Path.GetFileName(genAiRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            foreach (var root in new[] { OrtRoot, StockOrtRoot })
+            {
+              if (string.IsNullOrEmpty(root)) continue;
+              var ort = Path.Combine(root, "runtimes", rid, "native", "onnxruntime.dll");
+              if (!File.Exists(ort)) continue;
+              var version = Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+              var flavor = root.ToLowerInvariant().Contains("microsoft.windows.ai.machinelearning") ? "WindowsML" : "Stock";
+              var nativeVersion = flavor == "WindowsML" && version == "2.4.89" ? "1.27.1" : version;
+              string ortHash, genAiHash;
+              using (var sha = SHA256.Create())
+              using (var input = File.OpenRead(ort)) ortHash = BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "");
+              using (var sha = SHA256.Create())
+              using (var input = File.OpenRead(genAi)) genAiHash = BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "");
+              var value = string.Join("|", flavor, version, nativeVersion, genAiFlavor, genAiVersion, rid, ortHash, genAiHash);
+              code.AppendLine("[assembly: System.Reflection.AssemblyMetadata(\"Trackdub.NativePair\", \"" + value + "\")]");
+            }
+          }
+        }
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(OutputFile));
+        File.WriteAllText(OutputFile, code.ToString(), new UTF8Encoding(false));
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="GenerateTrackdubNativePairMetadata" BeforeTargets="CoreCompile" DependsOnTargets="ResolvePackageAssets">
+    <PropertyGroup>
+      <_TrackdubPairOrtRoot>$(PkgMicrosoft_Windows_AI_MachineLearning)</_TrackdubPairOrtRoot>
+      <_TrackdubPairGenAiRoot>$(PkgMicrosoft_ML_OnnxRuntimeGenAI_WinML)</_TrackdubPairGenAiRoot>
+      <_TrackdubPairGenAiFlavor>WinML</_TrackdubPairGenAiFlavor>
+      <_TrackdubPairCpuGenAiRoot Condition="'$(TargetFramework)' == 'net10.0'">$(PkgMicrosoft_ML_OnnxRuntimeGenAI)</_TrackdubPairCpuGenAiRoot>
+      <_TrackdubPairOrtRoot Condition="'$(TargetFramework)' == 'net10.0'">$(NuGetPackageRoot)microsoft.ml.onnxruntime.gpu.windows/$(OnnxRuntimeVersion)</_TrackdubPairOrtRoot>
+      <_TrackdubPairGenAiRoot Condition="'$(TargetFramework)' == 'net10.0'">$(PkgMicrosoft_ML_OnnxRuntimeGenAI_Cuda)</_TrackdubPairGenAiRoot>
+      <_TrackdubPairGenAiFlavor Condition="'$(TargetFramework)' == 'net10.0'">Cuda</_TrackdubPairGenAiFlavor>
+      <_TrackdubPairDisabled>false</_TrackdubPairDisabled>
+      <_TrackdubPairDisabled Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'">true</_TrackdubPairDisabled>
+    </PropertyGroup>
+    <TrackdubGenerateNativePairMetadata OrtRoot="$(_TrackdubPairOrtRoot)"
+        StockOrtRoot="$(PkgMicrosoft_ML_OnnxRuntime)" GenAiRoot="$(_TrackdubPairGenAiRoot)"
+        GenAiFlavor="$(_TrackdubPairGenAiFlavor)" CpuGenAiRoot="$(_TrackdubPairCpuGenAiRoot)" Disabled="$(_TrackdubPairDisabled)"
+        OutputFile="$(IntermediateOutputPath)Trackdub.NativePair.g.cs" />
+    <ItemGroup>
+      <Compile Remove="$(IntermediateOutputPath)Trackdub.NativePair.g.cs" />
+      <Compile Include="$(IntermediateOutputPath)Trackdub.NativePair.g.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

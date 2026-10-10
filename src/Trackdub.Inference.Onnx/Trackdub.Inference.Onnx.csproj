@@ -59,8 +59,8 @@
   <!-- Windows: Windows ML owns the ORT environment and catalog EP registration, and GenAI runs on the
        same Windows ML runtime through its .WinML package. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
-    <PackageReference Include="Microsoft.Windows.AI.MachineLearning" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.WinML" />
+    <PackageReference Include="Microsoft.Windows.AI.MachineLearning" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.WinML" GeneratePathProperty="true" />
     <!-- Managed ORT API surface only. The native runtime is Windows ML's (see Trackdub.Composition);
          this package's ORT build must not land beside onnxruntime-genai.dll, where GenAI would
          load it instead of Windows ML's. -->
@@ -71,9 +71,9 @@
        one net10.0 graph; runtime asset selection below remains RID-specific. -->
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'">
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" GeneratePathProperty="true" />
   </ItemGroup>
 
   <!-- Non-Windows: exclude Windows-specific sources -->
@@ -110,4 +110,5 @@
     <Compile Remove="WindowsMl\WindowsMlExecutionProviderBootstrapper.Deferred.cs" />
   </ItemGroup>
 
+  <Import Project="../../build/Trackdub.NativePair.targets" />
 </Project>

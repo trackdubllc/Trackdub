@@ -16,7 +16,7 @@
     <PackageReference Include="FsCheck.Xunit" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI" Condition="'$(TargetFramework)' == 'net10.0'" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.Managed" Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'" ExcludeAssets="native" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
@@ -60,30 +60,6 @@
     <Compile Include="..\Trackdub.TestDoubles\RequiresBundledModelFactAttribute.cs" Link="TestDoubles\RequiresBundledModelFactAttribute.cs" />
   </ItemGroup>
 
-  <!--
-    Align root onnxruntime.dll with the managed-package pair, mirroring the desktop app's
-    AlignOnnxRuntimeNativeForGenAi step. Composition force-copies Windows ML's older ORT to the
-    output root; the managed ORT/GenAI pair in this graph is 1.30, and GenAiNativeCompatibility
-    rejects the mismatch before any GenAI model can load, so real-model GenAI tests (Phi, Qwen,
-    Whisper GenAI) cannot run on the Windows TFM without this. Resolve the matching DLL from the
-    NuGet package rather than $(TargetDir)runtimes/<rid>/native, because a RID-pinned build
-    flattens native assets into the output root and never produces that folder; skipped for the
-    Dnnl flavor, where Trackdub.OnnxRuntime.Dnnl.Native owns libonnxruntime.*.
-  -->
-  <Target Name="AlignOnnxRuntimeNativeForGenAi"
-          AfterTargets="CopyFilesToOutputDirectory"
-          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
-    <PropertyGroup>
-      <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_GenAiNativeRid>
-      <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)' == 'Arm64'">win-arm64</_GenAiNativeRid>
-      <_GenAiNativeRid Condition="'$(RuntimeIdentifier)' == '' And '$(_GenAiNativeRid)' == ''">win-x64</_GenAiNativeRid>
-      <_GenAiNativeDir>$(PkgMicrosoft_ML_OnnxRuntime)\runtimes\$(_GenAiNativeRid)\native\</_GenAiNativeDir>
-    </PropertyGroup>
-    <Copy SourceFiles="$(_GenAiNativeDir)onnxruntime.dll"
-          DestinationFiles="$(TargetDir)onnxruntime.dll"
-          Condition="'$(_GenAiNativeRid)' != '' And Exists('$(_GenAiNativeDir)onnxruntime.dll')"
-          OverwriteReadOnlyFiles="true"
-          SkipUnchangedFiles="false" />
-  </Target>
+  <!-- Windows tests use the same Windows ML / GenAI.WinML native pair as production. -->
 
 </Project>
