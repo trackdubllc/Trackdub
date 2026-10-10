@@ -361,7 +361,9 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
     {
         if (provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt
             && engineFamily is not null
-            && engineFamily.Equals("opus-mt", StringComparison.OrdinalIgnoreCase))
+            && (engineFamily.Equals("opus-mt", StringComparison.OrdinalIgnoreCase)
+                || (provider is ExecutionProviderKind.TensorRt
+                    && engineFamily.Equals("madlad", StringComparison.OrdinalIgnoreCase))))
         {
             throw new NotSupportedException(
                 $"Engine family '{engineFamily}' is excluded from TensorRT providers: "
