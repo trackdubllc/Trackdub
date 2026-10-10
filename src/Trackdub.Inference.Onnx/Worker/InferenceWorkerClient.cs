@@ -16,6 +16,11 @@ public interface IInferenceWorkerClient
     /// <summary>Starts the worker if needed and returns its handshake, or null when it is unusable.</summary>
     Task<WorkerHelloResult?> TryGetHelloAsync(CancellationToken cancellationToken);
 
+    /// <remarks>
+    /// Cancelling a call while its request is still being written kills the worker, because its
+    /// input pipe may then hold a partial frame. Other calls in flight on that worker fail with
+    /// <see cref="InferenceWorkerException"/>, and the next call starts a fresh worker.
+    /// </remarks>
     Task<TtsSynthesisResult> SynthesizeTtsAsync(
         TtsSynthesisRequest request,
         StageRuntimePlan plan,
