@@ -142,6 +142,17 @@
 
   <!-- NuGet selects Windows ML's managed ORT for this TFM. The worker host swaps that reference
        for stock ORT 1.30 so its compile identity matches the CUDA native it loads. -->
+  <!-- The inference worker handshake compares this source revision (InferenceWorkerProtocol.BuildStamp).
+       The application's and the worker's compilations of this assembly share it, unlike their module IDs. -->
+  <Target Name="StampTrackdubSourceRevision"
+          DependsOnTargets="AddSourceRevisionToInformationalVersion"
+          BeforeTargets="GetAssemblyAttributes"
+          Condition="'$(GenerateAssemblyInfo)' != 'false'">
+    <ItemGroup Condition="'$(SourceRevisionId)' != ''">
+      <AssemblyMetadata Include="TrackdubSourceRevision" Value="$(SourceRevisionId)" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="ReferenceStockManagedOrt"
           AfterTargets="ResolveAssemblyReferences"
           BeforeTargets="FindReferenceAssembliesForReferences"

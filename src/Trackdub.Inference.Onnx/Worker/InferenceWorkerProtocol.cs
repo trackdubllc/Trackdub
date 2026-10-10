@@ -30,8 +30,25 @@ public static class InferenceWorkerProtocol
     };
 
     /// <summary>Identifies the exact build; the worker must match the application.</summary>
-    public static string BuildStamp { get; } =
-        typeof(InferenceWorkerProtocol).Assembly.ManifestModule.ModuleVersionId.ToString("N");
+    public static string BuildStamp { get; } = ComputeBuildStamp(typeof(InferenceWorkerProtocol).Assembly);
+
+    internal const string SourceRevisionMetadataKey = "TrackdubSourceRevision";
+
+    // The worker compiles this assembly separately (TrackdubOrtHost=Stock), so module IDs never
+    // match across the two compilations. Both carry the source revision the build stamped
+    // (StampTrackdubSourceRevision). A build without source control has no revision to compare;
+    // both compilations then fall back to the assembly version, which they also share, so a
+    // packaged worker still pairs with its application.
+    internal static string ComputeBuildStamp(System.Reflection.Assembly assembly)
+    {
+        string? revision = assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), inherit: false)
+            .Cast<System.Reflection.AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute => attribute.Key == SourceRevisionMetadataKey)?.Value;
+        return string.IsNullOrWhiteSpace(revision)
+            ? "unrevised:" + assembly.GetName().Version
+            : "revision:" + revision;
+    }
 
     public static async Task WriteAsync(Stream stream, WorkerMessage message, CancellationToken cancellationToken)
     {
