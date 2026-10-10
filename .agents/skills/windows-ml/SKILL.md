@@ -63,7 +63,7 @@ Cover all providers equally; do not default to NVIDIA-specific configuration. [s
 
 ## Looking things up
 
-Use the Microsoft Learn MCP: `microsoft_docs_search`, then `microsoft_docs_fetch`, and `microsoft_code_sample_search` with `language: "csharp"` for API examples. Keep each query to one concept. If MCP is unavailable, use `npx @microsoft/learn-cli search|fetch|code-search` and accept only `learn.microsoft.com` results for Tier 1.
+Use the Microsoft Learn MCP: `microsoft_docs_search`, then `microsoft_docs_fetch`, and `microsoft_code_sample_search` with `language: "csharp"` for API examples. Keep each query to one concept. If MCP is unavailable, use the reviewed CLI version, `npx @microsoft/learn-cli@1.0.0 search|fetch|code-search` (bump that version only after reviewing the release), and accept only `learn.microsoft.com` results for Tier 1.
 
 | Topic | Query |
 | --- | --- |
