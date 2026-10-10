@@ -45,13 +45,15 @@
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI" Version="0.17.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.Cuda" Version="0.17.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.Managed" Version="0.17.1" />
+    <!-- GenAI built against the Windows ML runtime (one onnxruntime.dll shared with DirectML and the
+         catalog EPs). Windows TFM only; the portable TFM keeps the CPU/CUDA GenAI packages. -->
+    <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.WinML" Version="0.17.1" />
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="3.0.0-preview.26502.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="$(OnnxRuntimeVersion)" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime.Gpu" Version="$(OnnxRuntimeVersion)" />
 
-    <PackageVersion Include="Microsoft.Windows.AI.MachineLearning" Version="2.0.300" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.ML" Version="1.8.2109" />
-    <PackageVersion Include="Microsoft.WindowsAppSDK.Runtime" Version="1.8.251106002" />
+    <!-- Windows ML 2.4 ships ONNX Runtime 1.27.1 with DirectML. -->
+    <PackageVersion Include="Microsoft.Windows.AI.MachineLearning" Version="2.4.89" />
     <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

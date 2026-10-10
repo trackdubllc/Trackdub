@@ -86,6 +86,7 @@ public static class ControlledStageBenchmarkMatrixOptionsParser
             SourceLanguage = shared.SourceLanguage,
             Mode = shared.Mode,
             ReuseEngineCache = shared.ReuseEngineCache,
+            TranslationStreaming = shared.TranslationStreaming,
             ModelDirectory = shared.ModelDirectory,
             Provider = shared.Provider,
             FfmpegPath = shared.FfmpegPath,

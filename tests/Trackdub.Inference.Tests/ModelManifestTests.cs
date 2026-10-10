@@ -1879,6 +1879,10 @@ public sealed class ModelManifestLoaderTests
         Assert.Equal("encoder_model_quantized.onnx", variant.EntryPath);
         Assert.Equal(["cpu", "dml", "cuda"], variant.SupportedProviders);
         Assert.Equal(["decoder_model_quantized.onnx"], variant.DownloadFiles);
+        Assert.True(variant.IsDefault);
+        // Quantized exports belong to their variant only, so int4-kv neither requires nor downloads them.
+        Assert.DoesNotContain("encoder_model_quantized.onnx", manifest.DownloadFiles);
+        Assert.DoesNotContain("decoder_model_quantized.onnx", manifest.DownloadFiles);
         Assert.Contains("spiece.model", manifest.DownloadFiles);
         Assert.Contains("config.json", manifest.DownloadFiles);
         Assert.Contains("encoder_model_quantized.onnx", manifest.DownloadFileSources.Keys);

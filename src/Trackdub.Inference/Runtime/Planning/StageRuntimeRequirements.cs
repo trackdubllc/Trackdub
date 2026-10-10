@@ -43,6 +43,14 @@ internal static class StageRuntimeRequirementsCatalog
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx and not ExecutionProviderKind.TensorRt)];
 
+    // ORT GenAI families: no TensorRT (NvTensorRtRtx crashes the host) and no DirectML. With GenAI
+    // 0.17.1 on Windows ML 2.4, the bundled Whisper export segfaults in the encoder pass on DirectML
+    // and the bundled Qwen2.5 export fails its first DirectML kernel (0x80070057); both are CPU/CUDA
+    // exports, not DirectML ones.
+    private static IReadOnlyList<ExecutionProviderKind> GenAiProviders(
+        IReadOnlyList<ExecutionProviderKind> providers) =>
+        [.. WithoutTensorRtFamilies(providers).Where(static p => p is not ExecutionProviderKind.DirectMl)];
+
     private static IReadOnlyList<ExecutionProviderKind> CpuFirst(
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [ExecutionProviderKind.Cpu, .. providers.Where(static p => p is not ExecutionProviderKind.Cpu)];
@@ -101,7 +109,7 @@ internal static class StageRuntimeRequirementsCatalog
                     // TensorRT RTX as a fallback or explicit provider choice.
                     ["qwen3-asr"] = PreferDirectMl(DefaultOnnxStageAllowedProviders),
                     ["whisper-onnx"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                    ["whisper-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["whisper-genai"] = GenAiProviders(DefaultOnnxStageAllowedProviders),
                 },
                 // Nemotron ASR is not in the shipping auto-planning lane: quality-tier ranking
                 // previously selected it ahead of working ONNX models and produced empty
@@ -127,7 +135,7 @@ internal static class StageRuntimeRequirementsCatalog
                     // DirectML's working set do not fit beside the desktop. DirectML stays reachable through
                     // an explicit provider pin.
                     ["madlad"] = [ExecutionProviderKind.TensorRTRtx, .. CpuFirst(WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders))],
-                    ["phi-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["phi-genai"] = GenAiProviders(DefaultOnnxStageAllowedProviders),
                 }),
             [RuntimeStage.Diarization] = new(
                 RuntimeStage.Diarization,
@@ -175,11 +183,13 @@ internal static class StageRuntimeRequirementsCatalog
                 // Per-graph TrtRtxUnsupportedOpScanner + session-init fallback isolate failures.
                 // CosyVoice multi-graph packages compile under TRT RTX in micro-benchmarks
                 // (token_generator 788MB, text_encoder, speech_tokenizer); the family-level
-                // deny was over-broad. kokoro stays CPU (ConvTranspose / DirectML incompatible).
+                // deny was over-broad. kokoro runs on CUDA or CPU only: DirectML fails its decoder
+                // ConvTranspose (0x80070057) and TensorRT RTX cannot infer its duration-dependent
+                // shapes; on Windows CUDA comes from the ORT 1.30 inference worker (ADR-0017).
                 // chatterbox/qwen3-tts keep the deny until their multi-graph init is smoke-clean.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["kokoro"] = [ExecutionProviderKind.Cpu],
+                    ["kokoro"] = [ExecutionProviderKind.Cuda, ExecutionProviderKind.Cpu],
                     ["chatterbox"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                     ["qwen3-tts"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
                 },
@@ -205,8 +215,8 @@ internal static class StageRuntimeRequirementsCatalog
                 // smoke failure cannot gate a fatal crash, so GenAI families never see TRT RTX.
                 new Dictionary<string, IReadOnlyList<ExecutionProviderKind>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["qwen-instruct"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
-                    ["phi-genai"] = WithoutTensorRtFamilies(DefaultOnnxStageAllowedProviders),
+                    ["qwen-instruct"] = GenAiProviders(DefaultOnnxStageAllowedProviders),
+                    ["phi-genai"] = GenAiProviders(DefaultOnnxStageAllowedProviders),
                 }),
             [RuntimeStage.LipSynthesis] = new(
                 RuntimeStage.LipSynthesis,

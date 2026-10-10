@@ -91,7 +91,8 @@ public sealed class OnnxExecutionProviderDiscoveryTests
             new StubTensorRtRtxReadinessProbe(),
             new StubWinMlCatalogReadinessProbe(),
             new StubWinMlCatalogReadinessProbe(),
-            new StubWinMlCatalogReadinessProbe());
+            new StubWinMlCatalogReadinessProbe(),
+            directMlUnavailableReason: static () => null);
 
         IReadOnlyList<ExecutionProviderAvailability> availabilities = await discovery.DiscoverAsync(
             new HardwareProfile("windows", "x64", HasGpu: true, GpuDescription: "NVIDIA RTX 5070"),
@@ -107,6 +108,34 @@ public sealed class OnnxExecutionProviderDiscoveryTests
         {
             Assert.False(directMl.IsAvailable);
             Assert.Contains("net10.0-windows10.0.19041.0", directMl.Detail);
+        }
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_Windows_LoadedRuntimeWithoutDirectMl_ReportsDirectMlUnavailable()
+    {
+        var discovery = new OnnxExecutionProviderDiscovery(
+            new StubOpenVinoProvider(false),
+            new StubLinuxNativeGpuRuntimeProbe(nvidiaDriverLoaded: false, nativeTensorRtAvailable: false),
+            new StubNativeCudaTensorRtWindowsPolicy(allowed: false),
+            new StubMigraphxReadinessProbe(),
+            new StubDnnlReadinessProbe(isReady: false),
+            new StubTensorRtRtxReadinessProbe(),
+            new StubWinMlCatalogReadinessProbe(),
+            new StubWinMlCatalogReadinessProbe(),
+            new StubWinMlCatalogReadinessProbe(),
+            directMlUnavailableReason: static () => "The loaded ONNX Runtime (1.30.0) cannot run DirectML.");
+
+        IReadOnlyList<ExecutionProviderAvailability> availabilities = await discovery.DiscoverAsync(
+            new HardwareProfile("windows", "x64", HasGpu: true, GpuDescription: "NVIDIA RTX 5070"),
+            CancellationToken.None);
+
+        ExecutionProviderAvailability directMl = Assert.Single(
+            availabilities, a => a.Provider == ExecutionProviderKind.DirectMl);
+        Assert.False(directMl.IsAvailable);
+        if (OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes)
+        {
+            Assert.Equal("The loaded ONNX Runtime (1.30.0) cannot run DirectML.", directMl.Detail);
         }
     }
 

@@ -15,6 +15,9 @@ public sealed record ControlledDubbingBenchmarkOptions
     public string? Provider { get; init; }
     public string Mode { get; init; } = "fresh-process";
     public bool ReuseEngineCache { get; init; }
+
+    /// <summary>Streams translation segments and overlaps TTS with them.</summary>
+    public bool TranslationStreaming { get; init; }
     public string? ModelDirectory { get; init; }
     public string? FfmpegPath { get; init; }
     public string? FfprobePath { get; init; }

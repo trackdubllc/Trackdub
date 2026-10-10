@@ -267,7 +267,7 @@
           "Microsoft.Extensions.Http": "[10.0.11, )",
           "Microsoft.ML.OnnxRuntime.Gpu": "[1.30.0, )",
           "Microsoft.ML.OnnxRuntimeGenAI": "[0.17.1, )",
-          "Microsoft.Windows.AI.MachineLearning": "[2.0.300, )",
+          "Microsoft.Windows.AI.MachineLearning": "[2.4.89, )",
           "Trackdub.Application": "[1.0.0, )",
           "Trackdub.Inference": "[1.0.0, )",
           "Trackdub.Inference.Onnx": "[1.0.0, )",
@@ -532,9 +532,9 @@
       },
       "Microsoft.Windows.AI.MachineLearning": {
         "type": "CentralTransitive",
-        "requested": "[2.0.300, )",
-        "resolved": "2.0.300",
-        "contentHash": "OiJX15N198kG30Lop7LH8WjmBfk2/9iU9it9eLPnkNZ49Yi/vAa4ntONGiGOgv5mb8/fvFHV5trCWSPM+OQhSw=="
+        "requested": "[2.4.89, )",
+        "resolved": "2.4.89",
+        "contentHash": "uc+Lej0vmZJprvHEuNJs7xMegoParROM9pZ2a7uMeXQiELva42V1wAUoYHCsw/u5ho/nwkYasiSFWZ95ABot3A=="
       },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "CentralTransitive",
