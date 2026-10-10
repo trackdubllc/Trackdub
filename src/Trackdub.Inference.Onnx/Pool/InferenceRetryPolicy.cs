@@ -55,12 +55,17 @@ internal static class InferenceRetryPolicy
     /// The execution provider the session was created with, if known. Narrows retry of an
     /// unclassified "[ErrorCode:RuntimeException]" — see remarks on <see cref="InferenceRetryPolicy"/>.
     /// </param>
+    /// <param name="outputNames">
+    /// Outputs to fetch; every output when <see langword="null"/>. Naming only the outputs a caller
+    /// reads avoids copying unused tensors back from the device.
+    /// </param>
     public static IDisposableReadOnlyCollection<DisposableNamedOnnxValue> RunWithRetry(
         this InferenceSession session,
         IReadOnlyCollection<NamedOnnxValue> inputs,
         int maxAttempts = DefaultMaxAttempts,
         CancellationToken cancellationToken = default,
-        ExecutionProviderKind? provider = null)
+        ExecutionProviderKind? provider = null,
+        IReadOnlyCollection<string>? outputNames = null)
     {
         if (!cancellationToken.CanBeCanceled)
         {
@@ -68,7 +73,7 @@ internal static class InferenceRetryPolicy
                 () =>
                 {
                     using IDisposable? permit = CpuExecutionAdmission.Shared.Acquire(session, provider, cancellationToken);
-                    return session.Run(inputs);
+                    return outputNames is null ? session.Run(inputs) : session.Run(inputs, outputNames);
                 },
                 maxAttempts,
                 cancellationToken,
@@ -80,7 +85,7 @@ internal static class InferenceRetryPolicy
             () =>
             {
                 using IDisposable? permit = CpuExecutionAdmission.Shared.Acquire(session, provider, cancellationToken);
-                return session.Run(inputs, session.OutputNames, runOptions);
+                return session.Run(inputs, outputNames ?? session.OutputNames, runOptions);
             },
             maxAttempts,
             cancellationToken,

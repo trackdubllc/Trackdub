@@ -14,10 +14,22 @@ Stream output = Console.OpenStandardOutput();
 var writeGate = new SemaphoreSlim(1, 1);
 var inFlight = new ConcurrentDictionary<long, CancellationTokenSource>();
 var handlers = new ConcurrentDictionary<long, Task>();
-var kokoro = new Lazy<KokoroTtsEngine>(() => new KokoroTtsEngine(
-    new PlanSuppliedByApplication(),
-    BenchmarkModelPathResolver.CreateDefault(),
-    new EspeakNgPhonemizer()));
+// Created on first use but never cached as a failure, unlike Lazy<T>: a transient construction
+// error (an unreadable manifest, a model cache still being written) must not poison every later
+// request for the life of the worker.
+var kokoroGate = new object();
+KokoroTtsEngine? kokoro = null;
+
+KokoroTtsEngine GetKokoro()
+{
+    lock (kokoroGate)
+    {
+        return kokoro ??= new KokoroTtsEngine(
+            new PlanSuppliedByApplication(),
+            BenchmarkModelPathResolver.CreateDefault(),
+            new EspeakNgPhonemizer());
+    }
+}
 
 async Task RespondAsync(WorkerMessage message)
 {
@@ -68,7 +80,7 @@ async Task<WorkerTtsResult> SynthesizeAsync(WorkerTtsRequest request, Cancellati
 {
     StageRuntimePlan plan = request.Plan.ToStageRuntimePlan();
     KokoroTtsEngine engine = string.Equals(plan.EngineFamily, KokoroTtsEngine.EngineFamilyName, StringComparison.OrdinalIgnoreCase)
-        ? kokoro.Value
+        ? GetKokoro()
         : throw new NotSupportedException($"The inference worker does not host TTS engine family '{plan.EngineFamily}'.");
     TtsSynthesisResult result = await engine.SynthesizeAsync(
         new TtsSynthesisRequest(
@@ -144,9 +156,9 @@ async Task DrainAsync()
         Console.Error.WriteLine($"[worker] An in-flight request failed during shutdown: {ex.Message}");
     }
 
-    if (kokoro.IsValueCreated)
+    lock (kokoroGate)
     {
-        kokoro.Value.Dispose();
+        kokoro?.Dispose();
     }
 }
 

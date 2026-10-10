@@ -630,7 +630,6 @@ internal sealed class RuntimePlanFactory
                 string preferredDefaultRelativeEntryPath = Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath);
                 BundledModelManifestVariant? preferredDefaultVariant = entry.Variants
                     .FirstOrDefault(variant =>
-                        variant.Alias.Equals("default", StringComparison.OrdinalIgnoreCase) &&
                         Path.GetRelativePath(entry.RootDirectory, variant.EntryPath)
                             .Equals(preferredDefaultRelativeEntryPath, StringComparison.OrdinalIgnoreCase));
                 if (preferredDefaultVariant is null ||
@@ -662,7 +661,6 @@ internal sealed class RuntimePlanFactory
         string defaultRelativeEntryPath = Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath);
         BundledModelManifestVariant? defaultVariant = entry.Variants
             .FirstOrDefault(variant =>
-                variant.Alias.Equals("default", StringComparison.OrdinalIgnoreCase) &&
                 Path.GetRelativePath(entry.RootDirectory, variant.EntryPath)
                     .Equals(defaultRelativeEntryPath, StringComparison.OrdinalIgnoreCase));
         if (defaultVariant is null ||

@@ -18,7 +18,7 @@ Milestone probe order (2026-06): `TensorRTRtx` → `Migraphx` → `OpenVinoCatal
 |-|-|-|
 |VAD|Milestone default (TensorRT RTX allowed)|—|
 |ASR|Milestone default|`whisper-onnx`, `whisper-genai` → no TensorRT|
-|Translation|Milestone default|`opus-mt`, `madlad`, `phi-genai` → no TensorRT|
+|Translation|Milestone default|`opus-mt`, `phi-genai` → no TensorRT; `madlad` → TensorRT RTX, CPU, then the rest without classic TensorRT|
 |Diarization|Milestone default|—|
 |Separation|Milestone default|`spleeter` (family allow-list)|
 |OverlapRescue|Milestone default|`sepformer` (family allow-list)|
@@ -103,7 +103,8 @@ TRT RTX is **not** a Windows ML catalog EP and is **not** selected by `WindowsMl
 | nemotron | shape fixes applied | encoder `processed_signal` is `[B,128,T]` mel-major; decoder `encoder_outputs` is `[B,H,T]`; layout now resolved via `NemotronAsrEncodedTensorLayout` |
 | qwen-instruct (Qwen2.5-1.5B) | fail (refused) | Same GenAI fatal-crash guard |
 | phi-genai (`microsoft/Phi-4-mini-instruct-onnx` gpu-int4) | fail (refused) | Same GenAI fatal-crash guard |
-| opus-mt (9 pairs), madlad | fail (refused) | InferenceSession ctor stack overflow under TRT; guard refuses before native call |
+| opus-mt (9 pairs) | fail (refused) | InferenceSession ctor stack overflow under TRT; guard refuses before native call |
+| madlad (`trt-fp16`) | pass | Encoder + plain decoder construct and run under the EP ABI plugin (ORT 1.24 Windows ML root and ORT 1.30) |
 | chatterbox (onnx-community) | model-dependent | stage exclusion stands for real runs; smoke probe subgraphs may still pass |
 | cosyvoice | pass on smoke probe | family exclusion lifted; smoke creates every graph session (TRT-pinned) and runs the primary probe |
 | qwen3-tts | pass on smoke probe | stage exclusion remains; probe coverage is partial |

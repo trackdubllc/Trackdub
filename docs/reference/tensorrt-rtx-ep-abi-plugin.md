@@ -140,6 +140,30 @@ $env:TRACKDUB_CACHE_ROOT = "D:\TrackdubCache"
 
 `TRACKDUB_ENGINE_CACHE_ROOT` wins. Otherwise `TRACKDUB_CACHE_ROOT\EngineCache` is used. Otherwise Trackdub falls back to `%LOCALAPPDATA%\Trackdub\EngineCache`.
 
+### EP-context artifacts
+
+The runtime cache keeps JIT kernels, not engines, so each new process would otherwise rebuild every
+engine from the source graph. An EP-context artifact (`<model>.epc.onnx`, its `<model>.epc.stamp.json`,
+and for large models the serialized `*.engine` files it references) sits next to the source model.
+TRT RTX sessions load it instead of the source whenever its stamp still matches the model bytes
+(including `<model>.onnx.data` / `<model>.onnx_data` external weights), GPU architecture, driver,
+and EP/runtime version.
+
+Artifacts are produced two ways:
+
+- **Captured on first build.** When a TRT RTX session is created for a graph of at least 256 MB
+  (model plus external weights) without a current artifact, the session builds with EP-context
+  generation on and publishes the artifact afterwards. The capture rides on the build the session
+  performs anyway; it only adds writing the engine. Capture is skipped when the volume lacks room
+  for twice the model bytes, and a capture failure retries the session without capture.
+- **Ahead of time** with `trackdub cache warm` (or the desktop Settings warm action).
+
+Engines above protobuf's 2 GB limit are written as separate `*.engine` files whose names and sizes
+the stamp records; a missing or truncated engine invalidates the artifact. Measured on MADLAD-400 3B
+fp16 (RTX 5070): the encoder session builds from source in ~48 s and loads its artifact in 5-13 s
+(3.36 GB engine; the low end with the file in the OS cache). Artifacts roughly double the model's
+disk footprint.
+
 ## Readiness states
 
 Keep these states separate:
@@ -166,7 +190,7 @@ trackdub dub ... --execution-provider trt-rtx --require-execution-provider
 
 SDK equivalent: `WithExecutionProvider(ExecutionProviderKind.TensorRTRtx)` soft-prefers; pass `require: true` for a hard pin.
 
-Engine-family allow-lists deny TensorRT families for graphs that hard-fail session init under TRT RTX (examples: `whisper-onnx`, `opus-mt` / `madlad`, `chatterbox`, `qwen3-tts`, `latentsync-diffusion`). Those stages still run under a global `trt-rtx` soft prefer by selecting DirectML/CPU. CosyVoice is intentionally **not** denied: the per-graph `TrtRtxUnsupportedOpScanner` plus session-init fallback isolate its failures, and the TTS smoke proves all nine graph sessions before a hard pin trusts them. Do **not** treat this as hybrid VRAM spillover / `supports_partial_offload`; Trackdub does not claim partial offload for TRT RTX.
+Engine-family allow-lists deny TensorRT families for graphs that hard-fail session init under TRT RTX (examples: `whisper-onnx`, `opus-mt`, `chatterbox`, `qwen3-tts`, `latentsync-diffusion`). Those stages still run under a global `trt-rtx` soft prefer by selecting DirectML/CPU. CosyVoice is intentionally **not** denied: the per-graph `TrtRtxUnsupportedOpScanner` plus session-init fallback isolate its failures, and the TTS smoke proves all nine graph sessions before a hard pin trusts them. Do **not** treat this as hybrid VRAM spillover / `supports_partial_offload`; Trackdub does not claim partial offload for TRT RTX.
 
 **ORT GenAI loads are excluded from TensorRT entirely** (`whisper-genai`, `phi-genai`, `qwen-instruct` engine-family overrides). ORT GenAI's `NvTensorRtRtx` device can terminate the host process with a native stack overflow during model init/generation (observed on `qwen-instruct`, Qwen2.5-1.5B). A fatal crash cannot surface as a catchable smoke failure, so the planner never offers TensorRT to GenAI-loaded families and the smoke tester refuses the combination before touching native code.
 

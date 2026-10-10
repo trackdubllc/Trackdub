@@ -55,12 +55,21 @@ these as `AllowedProvidersByEngineFamily` overrides:
 |-------|--------|--------|
 | ASR | `whisper-onnx` | Olive exports use contrib ops TRT RTX cannot import |
 | ASR | `whisper-genai` | ORT GenAI `NvTensorRtRtx` can terminate the process |
-| Translation | `opus-mt`, `madlad` | InferenceSession ctor stack overflow under TRT RTX |
+| Translation | `opus-mt` | InferenceSession ctor stack overflow under TRT RTX |
+| Translation | `madlad` | Not excluded: TRT RTX first (the `trt-fp16` variant), then CPU, then DirectML |
 | Translation | `phi-genai` | Same GenAI crash class as `whisper-genai` |
 | TextRefinement | `qwen-instruct`, `phi-genai` | Same GenAI crash class (observed on Qwen2.5-1.5B) |
 | TTS | `kokoro` | CPU-only (ConvTranspose block) |
 | TTS | `chatterbox`, `qwen3-tts` | Contrib ops / graphs TRT RTX cannot import |
 | LipSynthesis | `latentsync-diffusion` | `MultiHeadAttention` TRT RTX cannot import |
+
+MADLAD-400 3B runs on TRT RTX through its `trt-fp16` variant (the mixed fp16/fp32 export, the
+only variant listing `trt-rtx`). TRT RTX compiles kernels for every new input shape, so the engine
+pads encoder and decoder inputs to length buckets (16/32/64/128/256/512), re-runs the decoder prefix
+each step, and reads the logits at the last real position; the sessions replay a CUDA graph per
+bucket. On an RTX 5070 a warm one-segment clip translates in ~2.1 s versus ~7.9 s for the int4
+KV-cache decoder on CPU, with output matching unpadded fp16 decoding. The sessions hold ~8 GB of
+VRAM, and a failed TRT RTX session falls back to CPU unless the provider was hard-pinned.
 
 CosyVoice is deliberately **not** excluded: its multi-graph package compiles under
 TRT RTX, and two guards isolate per-graph failures — the per-graph
@@ -72,8 +81,7 @@ CosyVoice graph up front).
 Because a fatal crash cannot be caught and reported as a smoke failure, the
 smoke tester also **refuses** the combinations outright before touching native
 code: `ThrowIfGenAiTensorRtProvider` for ORT GenAI model loads, and
-`ThrowIfFatalTensorRtFamily` for `opus-mt` / `madlad` encoder-decoder session
-construction. The smoke sweep bypasses stage allow-lists by design, so these
+`ThrowIfFatalTensorRtFamily` for `opus-mt` encoder-decoder session construction. The smoke sweep bypasses stage allow-lists by design, so these
 guards live at the point of danger; affected targets report `FAIL` in
 `trackdub providers trt-rtx smoke` rather than attempting the load.
 

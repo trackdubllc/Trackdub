@@ -559,13 +559,18 @@ public sealed class RuntimePlannerTests
                 && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task PlanAsync_RequiredTensorRTRtxNotAllowedForMadlad_PlansCpuFirstWithoutTrtSmoke()
+    [Theory]
+    [InlineData(true, ExecutionProviderKind.TensorRTRtx)]
+    [InlineData(false, ExecutionProviderKind.Cpu)]
+    public async Task PlanAsync_Madlad_TriesTensorRtRtxFirstThenCpuBeforeDirectMl(
+        bool tensorRtRtxSmokePasses,
+        ExecutionProviderKind expectedProvider)
     {
         using var workspace = new RuntimePlannerTestWorkspace();
         BundledModelManifestRegistry registry = workspace.WriteManifest(CreateMadladTranslationSpec());
         string cacheRoot = workspace.CreateCacheRoot("google/madlad400-3b-mt");
         workspace.WriteCacheFile(cacheRoot, "encoder_model.onnx");
+        var smoked = new List<ExecutionProviderKind>();
 
         RuntimePlanner planner = CreatePlanner(
             registry,
@@ -576,33 +581,24 @@ public sealed class RuntimePlannerTests
             ],
             request =>
             {
-                if (request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
-                {
-                    throw new InvalidOperationException("TensorRT families must not be smoked for madlad.");
-                }
-
-                return new ExecutionProviderSmokeTestResult(true);
+                smoked.Add(request.ExecutionProvider);
+                return request.ExecutionProvider is ExecutionProviderKind.TensorRTRtx && !tensorRtRtxSmokePasses
+                    ? new ExecutionProviderSmokeTestResult(false, "TensorRT RTX smoke failed for this test.")
+                    : new ExecutionProviderSmokeTestResult(true);
             });
 
         StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(
             RuntimeStage.Translation,
             PreferredModelAlias: "madlad400-mt",
             RequirePreferredModelAlias: true,
-            PreferredExecutionProvider: ExecutionProviderKind.TensorRTRtx,
-            RequirePreferredExecutionProvider: true,
             SourceLanguage: "es",
             TargetLanguage: "en"));
 
         Assert.True(plan.IsRunnable(), $"Expected runnable plan but got {plan.Status}");
-        Assert.Equal("google/madlad400-3b-mt", plan.ModelId);
         Assert.Equal("madlad", plan.EngineFamily);
-        Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
-        Assert.Contains(
-            plan.Warnings,
-            warning =>
-                warning.Code == RuntimePlanWarningCode.PreferredExecutionProviderNotAllowedForEngine
-                && warning.Detail is not null
-                && warning.Detail.Contains("TensorRTRtx", StringComparison.Ordinal));
+        Assert.Equal(expectedProvider, plan.ExecutionProvider);
+        Assert.Equal(ExecutionProviderKind.TensorRTRtx, smoked[0]);
+        Assert.DoesNotContain(ExecutionProviderKind.DirectMl, smoked);
     }
 
     [Fact]
@@ -1959,6 +1955,38 @@ public sealed class RuntimePlannerTests
         Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("default")]
+    public async Task PlanAsync_OnlyCachedMadladQuantizedFiles_NeverSmokeTensorRtRtx(string? preferredVariant)
+    {
+        using var workspace = new RuntimePlannerTestWorkspace();
+        BundledModelManifestRegistry registry = workspace.WriteManifest(CreateMadladTranslationSpec() with
+        {
+            BenchmarkEntry = "encoder_model_quantized.onnx",
+            Variants =
+            [
+                new ManifestVariantSpec("quantized", "encoder_model_quantized.onnx", ["cpu", "dml", "cuda"]),
+                new ManifestVariantSpec("trt-fp16", "trt_rtx_mixed_fp16_fp32/encoder_model.onnx", ["trt-rtx"])
+            ]
+        });
+        string cacheRoot = workspace.CreateCacheRoot("google/madlad400-3b-mt");
+        workspace.WriteCacheFile(cacheRoot, "encoder_model_quantized.onnx");
+        var probes = new List<ExecutionProviderSmokeTestRequest>();
+        RuntimePlanner planner = CreatePlanner(registry,
+            [new("google/madlad400-3b-mt", cacheRoot, "main", ValidSha256, DateTimeOffset.UtcNow)],
+            [new(ExecutionProviderKind.TensorRTRtx, true)],
+            request => { probes.Add(request); return new ExecutionProviderSmokeTestResult(true); });
+
+        StageRuntimePlan plan = await planner.PlanAsync(new StageRuntimePlanningRequest(RuntimeStage.Translation,
+            PreferredModelAlias: "madlad400-mt", SourceLanguage: "en", TargetLanguage: "fr",
+            PreferredModelVariantAlias: preferredVariant));
+
+        Assert.True(plan.IsRunnable(), $"Expected CPU plan, got {plan.Status}: {plan.Fallback?.Detail}");
+        Assert.Equal(ExecutionProviderKind.Cpu, plan.ExecutionProvider);
+        Assert.DoesNotContain(probes, probe => probe.ExecutionProvider == ExecutionProviderKind.TensorRTRtx);
+    }
+
     [Fact]
     public async Task PlanAsync_WhenMadladQuantizedExportIsMissing_RequestsQuantizedVariantBeforeDefault()
     {
@@ -3013,7 +3041,8 @@ public sealed class RuntimePlannerTests
                         variants = model.Variants.Select(variant => new
                         {
                             alias = variant.Alias,
-                            entry_path = variant.EntryPath
+                            entry_path = variant.EntryPath,
+                            supported_providers = variant.SupportedProviders ?? []
                         })
                     })
                 },
@@ -3195,5 +3224,6 @@ public sealed class RuntimePlannerTests
 
     private sealed record ManifestVariantSpec(
         string Alias,
-        string EntryPath);
+        string EntryPath,
+        IReadOnlyList<string>? SupportedProviders = null);
 }
