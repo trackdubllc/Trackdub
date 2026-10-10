@@ -9,7 +9,7 @@ public sealed class ReleaseManifestUpdateService(
     HttpClient httpClient,
     IApplicationLogger? logger = null) : IUpdateService
 {
-    private const string DefaultManifestUrl = "https://api.trackdub.com/releases/manifest.json";
+    private const string DefaultManifestUrl = "https://releases.trackdub.ai/manifest.json";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

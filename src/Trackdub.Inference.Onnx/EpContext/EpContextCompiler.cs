@@ -39,7 +39,8 @@ public sealed class EpContextCompiler
         string? EpContextPath,
         double CompileMilliseconds,
         string? FailureReason,
-        string SelectedProvider = "unknown");
+        string SelectedProvider = "unknown",
+        IReadOnlyList<EpContextArtifact.ArtifactFile>? ArtifactFiles = null);
 
     public async Task<CompileResult> CompileAsync(string sourceModelPath, string epContextPath, CancellationToken cancellationToken = default)
     {
@@ -69,12 +70,10 @@ public sealed class EpContextCompiler
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(epContextPath))!);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         // Compile into a guid-named temp subdirectory rather than a temp-suffixed final path: the
-        // model and sidecar keep their FINAL filenames while isolated, so the sidecar name ORT embeds
-        // in the compiled model (derived from the output path it was given) matches the name
-        // GetArtifactExternalInitializersPath computes from the published epContextPath after move.
+        // model, its sidecar, and any engine files keep their FINAL filenames while isolated, so the
+        // names ORT embeds in the compiled model (derived from the output path) still resolve once
+        // EpContextArtifact.PublishStagedArtifact moves the set next to the source model.
         string? tempDir = null;
-        string? tempPath = null;
-        string? tempSidecarPath = null;
         try
         {
 #if WINDOWS
@@ -99,18 +98,6 @@ public sealed class EpContextCompiler
             }
 
             bool embed = EpContextArtifact.ShouldEmbedEpContext(sourceModelPath);
-            if (embed)
-            {
-                // A previous non-embedded compile may have left a sidecar next to this artifact.
-                // The new artifact embeds initializers, so that sidecar is stale and must not
-                // survive as an orphan or be mistaken for part of this artifact.
-                TryDeleteExternalInitializers(epContextPath);
-            }
-
-            // Compile under the FINAL filename inside an isolated temp directory: the sidecar name
-            // ORT embeds in the model (derived from the output path's filename) then matches the
-            // name GetArtifactExternalInitializersPath computes for the final published path, so
-            // publishing (a same-name move) never breaks the external-initializers reference.
             string tempDirName = Path.GetFileName(".epc-tmp-" + Guid.NewGuid().ToString("N"));
             if (string.IsNullOrEmpty(tempDirName) || Path.IsPathRooted(tempDirName))
             {
@@ -125,17 +112,17 @@ public sealed class EpContextCompiler
                 throw new InvalidOperationException($"EP-context output path '{epContextPath}' does not resolve to a valid relative file name.");
             }
 
-            tempPath = Path.Join(tempDir, outputFileName);
+            string tempPath = Path.Join(tempDir, outputFileName);
             using (var compileOptions = new OrtModelCompilationOptions(sessionOptions))
             {
                 compileOptions.SetInputModelPath(sourceModelPath);
                 compileOptions.SetOutputModelPath(tempPath);
-                // Embed the compiled engine in the EP-context graph under 2GB (NVIDIA protobuf limit).
-                // Externalize initializers only when embedding is off, so sub-2GB models stay one file.
+                // Embed the compiled engine in the EP-context graph under 2GB (protobuf limit).
+                // Otherwise ORT writes the engine as a separate file beside the output model and
+                // externalizes any remaining initializers.
                 compileOptions.SetEpContextEmbedMode(embed);
                 if (!embed)
                 {
-                    tempSidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(tempPath);
                     compileOptions.SetOutputModelExternalInitializersFile(
                         Path.GetFileNameWithoutExtension(epContextPath) + ".ext_init",
                         64);
@@ -152,7 +139,6 @@ public sealed class EpContextCompiler
             // Conv/Squeeze nodes and a ~6s cold-load regression versus the source graph.
             if (!TryContainsEpContextNodes(tempPath))
             {
-                TryDeletePartial(tempPath);
                 return new CompileResult(
                     false,
                     null,
@@ -163,46 +149,24 @@ public sealed class EpContextCompiler
                     selectedLabel);
             }
 
-            // Atomic publish: move from the temp dir then rename, so concurrent readers never see a
-            // half-written artifact whose truncated ONNX error would escape the TRT fallback (see
-            // review 5313875883). Both files keep their final filenames throughout, so the sidecar
-            // name embedded in the model always matches GetArtifactExternalInitializersPath.
-            PublishAtomically(tempPath, epContextPath);
-            string finalSidecar = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
-            if (!embed && tempSidecarPath is not null && File.Exists(tempSidecarPath))
-            {
-                PublishAtomically(tempSidecarPath, finalSidecar);
-            }
-            else if (embed)
-            {
-                TryDeleteFile(finalSidecar);
-            }
-
-            return new CompileResult(true, epContextPath, stopwatch.Elapsed.TotalMilliseconds, null, selectedLabel);
+            IReadOnlyList<EpContextArtifact.ArtifactFile> artifactFiles =
+                EpContextArtifact.PublishStagedArtifact(tempDir, sourceModelPath, epContextPath,
+                    files => EpContextArtifact.CreateStamp(sourceModelPath, new FileInfo(sourceModelPath), null,
+                        EpContextLoadPathResolver.CurrentHardware.GpuArchitecture,
+                        EpContextLoadPathResolver.CurrentHardware.DriverVersion, files, epContextPath));
+            return new CompileResult(true, epContextPath, stopwatch.Elapsed.TotalMilliseconds, null, selectedLabel, artifactFiles);
         }
-        catch (Exception ex) when (ex is OnnxRuntimeException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
+        catch (Exception ex) when (ex is OnnxRuntimeException or InvalidOperationException or IOException or UnauthorizedAccessException or DllNotFoundException or EntryPointNotFoundException)
         {
             stopwatch.Stop();
-            // Best-effort remove any half-published final (e.g. Move succeeded for .onnx but not sidecar).
-            TryDeletePartial(epContextPath);
+            // Publication rolls back its own files; failures before it must preserve old artifacts.
             return new CompileResult(false, null, stopwatch.Elapsed.TotalMilliseconds, ex.Message);
         }
         finally
         {
-            // Ensure temp files/dir do not leak if publish succeeded (Move already removed them) or on early return.
-            if (tempPath is not null)
-            {
-                TryDeletePartial(tempPath);
-            }
-
-            if (tempSidecarPath is not null)
-            {
-                TryDeleteFile(tempSidecarPath);
-            }
-
             if (tempDir is not null)
             {
-                TryDeleteEmptyDirectory(tempDir);
+                TryDeleteDirectory(tempDir);
             }
         }
     }
@@ -320,66 +284,7 @@ public sealed class EpContextCompiler
         throw new InvalidDataException("Invalid ONNX varint.");
     }
 
-    private static void TryDeleteExternalInitializers(string epContextPath)
-    {
-        try
-        {
-            string sidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
-            if (File.Exists(sidecarPath))
-            {
-                File.Delete(sidecarPath);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Best-effort stale-sidecar cleanup; the artifact validation will reject a stale
-            // sidecar if it cannot be removed here.
-        }
-    }
-
-    private static void TryDeletePartial(string epContextPath)
-    {
-        try
-        {
-            if (File.Exists(epContextPath))
-            {
-                File.Delete(epContextPath);
-            }
-
-            // A rejected compile can still have written the external-initializers sidecar
-            // before the EP-context-node check ran; remove it too so no orphan is left behind.
-            string sidecarPath = EpContextArtifact.GetArtifactExternalInitializersPath(epContextPath);
-            if (File.Exists(sidecarPath))
-            {
-                File.Delete(sidecarPath);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Log the deletion failure for debugging partial EP-context artifact cleanup.
-            // Best-effort cleanup of a rejected compile's partial output; failure to delete is non-fatal.
-            System.Diagnostics.Trace.TraceWarning(
-                $"EpContextCompiler: failed to delete partial output '{epContextPath}': {ex.Message}");
-        }
-    }
-
-    private static void TryDeleteFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            System.Diagnostics.Trace.TraceWarning(
-                $"EpContextCompiler: failed to delete file '{path}': {ex.Message}");
-        }
-    }
-
-    private static void TryDeleteEmptyDirectory(string path)
+    internal static void TryDeleteDirectory(string path)
     {
         try
         {
@@ -392,21 +297,6 @@ public sealed class EpContextCompiler
         {
             System.Diagnostics.Trace.TraceWarning(
                 $"EpContextCompiler: failed to delete temp directory '{path}': {ex.Message}");
-        }
-    }
-
-    private static void PublishAtomically(string sourcePath, string destinationPath)
-    {
-        // Same directory => rename is atomic on NTFS/ext4. Overwrite atomically.
-        try
-        {
-            File.Move(sourcePath, destinationPath, overwrite: true);
-        }
-        catch (IOException)
-        {
-            // Fallback for runtimes without the overwrite overload or cross-volume move.
-            TryDeleteFile(destinationPath);
-            File.Move(sourcePath, destinationPath);
         }
     }
 }

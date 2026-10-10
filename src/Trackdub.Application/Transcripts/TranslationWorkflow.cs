@@ -33,14 +33,21 @@ public sealed class TranslationWorkflow(
         return await ReloadAsync(selectedTranslationTargetLanguage, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<TranscriptProjectState> GenerateTranslationAsync(
+    public Task<TranscriptProjectState> GenerateTranslationAsync(
         GenerateTranslationRequest request,
         CancellationToken cancellationToken,
-        IProgress<PipelineProgressEvent>? progress = null)
+        IProgress<PipelineProgressEvent>? progress = null) =>
+        GenerateTranslationAsync(request, cancellationToken, progress, segmentObserver: null);
+
+    internal async Task<TranscriptProjectState> GenerateTranslationAsync(
+        GenerateTranslationRequest request,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        ITranslatedSegmentObserver? segmentObserver)
     {
         TranscriptProjectState currentState = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await translationOrchestrationService
-            .GenerateTranslationAsync(currentState, request, cancellationToken, progress)
+            .GenerateTranslationAsync(currentState, request, cancellationToken, progress, segmentObserver)
             .ConfigureAwait(false);
         return await ReloadAsync(
             TranscriptWorkflowUtilities.NormalizeTranslationTargetLanguageCode(request.TargetLanguage),

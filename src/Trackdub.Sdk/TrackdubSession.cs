@@ -51,6 +51,7 @@ public sealed class TrackdubSession : IDubbingSession
                 DefaultTargetLanguage = options.DefaultTargetLanguage,
                 ModelTierPreference = options.ModelTierPreference,
                 TtsTiming = options.TtsTiming,
+                TtsMaxConcurrency = options.TtsMaxConcurrency,
                 AsrModelOverride = options.AsrModelOverride,
             };
 }

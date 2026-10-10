@@ -113,6 +113,7 @@ public sealed class JsonStudioSettingsService(
             WindowLayout = NormalizeWindowLayout(settings.WindowLayout ?? StudioSettings.Default.WindowLayout),
             RecentProjects = recentProjects,
             TtsTiming = NormalizeTtsTiming(settings.TtsTiming),
+            TtsMaxConcurrency = NormalizeTtsMaxConcurrency(settings.TtsMaxConcurrency),
             TranscriptConfidenceThreshold = NormalizeConfidenceThreshold(settings.TranscriptConfidenceThreshold),
             AsrModelOverride = NormalizeAsrModelOverride(settings.AsrModelOverride),
             TranslationModelOverride = NormalizeTranslationModelOverride(settings.TranslationModelOverride),
@@ -255,7 +256,7 @@ public sealed class JsonStudioSettingsService(
             : TtsTimingSettings.Default.RubberbandStretchThreshold;
         double? autoStretchMaxOverrun = settings.AutoStretchMaxOverrun is double autoStretch &&
                                         double.IsFinite(autoStretch) &&
-                                        autoStretch >= 0d
+                                        autoStretch is >= 0d and <= 1d
             ? autoStretch
             : null;
         return settings with
@@ -264,6 +265,9 @@ public sealed class JsonStudioSettingsService(
             AutoStretchMaxOverrun = autoStretchMaxOverrun
         };
     }
+
+    private static int? NormalizeTtsMaxConcurrency(int? configured) =>
+        configured is int value && value > 0 ? Math.Min(value, 8) : null;
 
     private static double NormalizeConfidenceThreshold(double threshold) =>
         double.IsFinite(threshold) && threshold is >= 0d and <= 1d

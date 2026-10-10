@@ -90,11 +90,19 @@ public sealed class TtsOrchestrationService(
             cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task GenerateTtsForAllSpeakersAsync(
+    public Task GenerateTtsForAllSpeakersAsync(
         TranscriptProjectState currentState,
         GenerateTtsForAllSpeakersRequest request,
         CancellationToken cancellationToken,
-        IProgress<PipelineProgressEvent>? progress = null)
+        IProgress<PipelineProgressEvent>? progress = null) =>
+        GenerateTtsForAllSpeakersAsync(currentState, request, cancellationToken, progress, prefetch: null);
+
+    internal async Task GenerateTtsForAllSpeakersAsync(
+        TranscriptProjectState currentState,
+        GenerateTtsForAllSpeakersRequest request,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        TtsStreamingPrefetch? prefetch)
     {
         DateTimeOffset progressStartedAt = DateTimeOffset.UtcNow;
         PipelineProgressReporter.Started(progress, StageNames.Tts, phase: "Preparing speakers");
@@ -132,47 +140,32 @@ public sealed class TtsOrchestrationService(
                     continue;
                 }
 
-                // An explicit --voice override in the request must take precedence over any
-                // previously persisted non-fallback assignment (e.g. on a resume run). Only when
-                // the request carries no explicit override for the speaker do we honor the
-                // pre-existing assignment, falling back to the request path otherwise.
-                VoiceAssignment? assignment;
-                if (RequestHasExplicitVoiceOverride(request, speaker.Id))
-                {
-                    assignment = await TryPersistRequestedVoiceAssignmentAsync(
+                TranslationRevision translationRevision = currentState.CurrentTranslationRevision
+                    ?? throw new InvalidOperationException("Generate or load a translation before starting TTS.");
+                // A streaming prefetch resolved this speaker before translation; reuse that plan so
+                // the stage renders with exactly the voice the prefetched clips were made with.
+                TtsSpeakerPlan plan = prefetch is not null && prefetch.SpeakerPlans.TryGetValue(speaker.Id, out TtsSpeakerPlan? prefetchedPlan)
+                    ? prefetchedPlan
+                    : await ResolveAllSpeakersPlanAsync(
                         currentState,
-                        speaker.Id,
+                        speaker,
+                        translationRevision.TargetLanguage,
                         request,
-                        cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    assignmentsBySpeakerId.TryGetValue(speaker.Id, out assignment);
-                    if (assignment is null)
-                    {
-                        assignment = await TryPersistRequestedVoiceAssignmentAsync(
-                            currentState,
-                            speaker.Id,
-                            request,
-                            cancellationToken).ConfigureAwait(false);
-                    }
-                }
-
-                await RunTtsForSpeakerAsync(
+                        assignmentsBySpeakerId,
+                        reservedStockVoiceIds,
+                        cancellationToken,
+                        progress).ConfigureAwait(false);
+                await RunSpeakerPlanAsync(
                     currentState,
                     speaker.Id,
                     segmentIndices: null,
-                    assignment,
-                    request.PreferredModelAlias,
-                    request.UseReferenceClipForVoiceCloningBySpeakerId?.TryGetValue(speaker.Id, out bool useReferenceClipForVoiceCloning) == true
-                        ? useReferenceClipForVoiceCloning
-                        : false,
+                    plan,
                     request.PreferredExecutionProvider,
                     request.RequirePreferredExecutionProvider,
                     request.PreferredModelVariantAlias,
                     cancellationToken,
                     progress,
-                    reservedStockVoiceIds).ConfigureAwait(false);
+                    prefetch).ConfigureAwait(false);
             }
 
             PipelineProgressReporter.Completed(
@@ -469,11 +462,41 @@ public sealed class TtsOrchestrationService(
 
         TranslationRevision translationRevision = currentState.CurrentTranslationRevision
             ?? throw new InvalidOperationException("Generate or load a translation before starting TTS.");
-        if (currentState.TranslatedSegments.Count == 0)
-        {
-            throw new InvalidOperationException("The current translation revision has no translated segments.");
-        }
+        TtsSpeakerPlan plan = await ResolveSpeakerPlanAsync(
+            currentState,
+            speaker,
+            translationRevision.TargetLanguage,
+            voiceAssignmentOverride,
+            preferredModelAlias,
+            useReferenceClipForVoiceCloning,
+            cancellationToken,
+            progress,
+            reservedStockVoiceIds).ConfigureAwait(false);
+        await RunSpeakerPlanAsync(
+            currentState,
+            speakerId,
+            segmentIndices,
+            plan,
+            preferredExecutionProvider,
+            requirePreferredExecutionProvider,
+            preferredModelVariantAlias,
+            cancellationToken,
+            progress,
+            prefetch: null).ConfigureAwait(false);
+    }
 
+    private async Task<TtsSpeakerPlan> ResolveSpeakerPlanAsync(
+        TranscriptProjectState currentState,
+        ProjectSpeaker speaker,
+        string targetLanguage,
+        VoiceAssignment? voiceAssignmentOverride,
+        string? preferredModelAlias,
+        bool useReferenceClipForVoiceCloning,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        HashSet<string>? reservedStockVoiceIds)
+    {
+        Guid speakerId = speaker.Id;
         VoiceAssignment? persistedAssignment = voiceAssignmentOverride ??
             currentState.VoiceAssignments.FirstOrDefault(candidate => candidate.SpeakerId == speakerId && !candidate.IsFallback);
         VoiceAssignment assignment = persistedAssignment ??
@@ -497,7 +520,7 @@ public sealed class TtsOrchestrationService(
                     currentState,
                     speaker,
                     assignment,
-                    translationRevision.TargetLanguage,
+                    targetLanguage,
                     insufficientSpeech,
                     reservedStockVoiceIds,
                     cancellationToken).ConfigureAwait(false);
@@ -528,10 +551,10 @@ public sealed class TtsOrchestrationService(
                 currentState,
                 speaker,
                 assignment,
-                translationRevision.TargetLanguage,
+                targetLanguage,
                 reservedStockVoiceIds,
                 cancellationToken).ConfigureAwait(false);
-            preferredModelAlias = StockTtsVoiceMatcher.SupportsKokoro(translationRevision.TargetLanguage)
+            preferredModelAlias = StockTtsVoiceMatcher.SupportsKokoro(targetLanguage)
                 ? substituteAssignment.VoiceModelId
                 : null;
             assignment = substituteAssignment;
@@ -543,29 +566,209 @@ public sealed class TtsOrchestrationService(
                 $"{speaker.DisplayName}: persisted voice-clone model is not available for a non-clone run. Using {DescribeStockFallback(assignment)}.");
         }
 
+        return new TtsSpeakerPlan(assignment, preferredModelAlias, projectArtifacts, useReferenceClipForVoiceCloning);
+    }
+
+    private async Task RunSpeakerPlanAsync(
+        TranscriptProjectState currentState,
+        Guid speakerId,
+        IReadOnlySet<int>? segmentIndices,
+        TtsSpeakerPlan plan,
+        ExecutionProviderKind? preferredExecutionProvider,
+        bool requirePreferredExecutionProvider,
+        string? preferredModelVariantAlias,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        TtsStreamingPrefetch? prefetch)
+    {
+        ProjectSpeaker speaker = currentState.Speakers.FirstOrDefault(speaker => speaker.Id == speakerId)
+            ?? throw new InvalidOperationException("The selected speaker was not found.");
+        TranslationRevision translationRevision = currentState.CurrentTranslationRevision
+            ?? throw new InvalidOperationException("Generate or load a translation before starting TTS.");
+        if (currentState.TranslatedSegments.Count == 0)
+        {
+            throw new InvalidOperationException("The current translation revision has no translated segments.");
+        }
+
         PipelineProgressReporter.Phase(
             progress,
             StageNames.Tts,
             "Preparing speaker",
             currentItemLabel: speaker.DisplayName);
         await startTtsStageHandler.HandleAsync(
-            new StartTtsStageRequest(
-                currentState.ProjectState.Project.Id,
-                TranscriptWorkflowUtilities.GetRequiredMediaAsset(currentState),
+            CreateStageRequest(
+                currentState,
                 speakerId,
                 translationRevision.TargetLanguage,
-                assignment,
-                currentState.TranscriptSegments,
+                plan,
                 currentState.TranslatedSegments,
                 segmentIndices,
-                preferredModelAlias,
-                projectArtifacts,
-                useReferenceClipForVoiceCloning,
                 preferredExecutionProvider,
                 requirePreferredExecutionProvider,
                 preferredModelVariantAlias),
             cancellationToken,
-            progress).ConfigureAwait(false);
+            progress,
+            prefetch).ConfigureAwait(false);
+    }
+
+    private static StartTtsStageRequest CreateStageRequest(
+        TranscriptProjectState currentState,
+        Guid speakerId,
+        string targetLanguage,
+        TtsSpeakerPlan plan,
+        IReadOnlyList<TranslatedSegment> translatedSegments,
+        IReadOnlySet<int>? segmentIndices,
+        ExecutionProviderKind? preferredExecutionProvider,
+        bool requirePreferredExecutionProvider,
+        string? preferredModelVariantAlias) =>
+        new(
+            currentState.ProjectState.Project.Id,
+            TranscriptWorkflowUtilities.GetRequiredMediaAsset(currentState),
+            speakerId,
+            targetLanguage,
+            plan.Assignment,
+            currentState.TranscriptSegments,
+            translatedSegments,
+            segmentIndices,
+            plan.PreferredModelAlias,
+            plan.ProjectArtifacts,
+            plan.UseReferenceClipForVoiceCloning,
+            preferredExecutionProvider,
+            requirePreferredExecutionProvider,
+            preferredModelVariantAlias);
+
+    // An explicit --voice override in the request must take precedence over any previously
+    // persisted non-fallback assignment (e.g. on a resume run). Only when the request carries no
+    // explicit override for the speaker do we honor the pre-existing assignment, falling back to
+    // the request path otherwise.
+    private async Task<TtsSpeakerPlan> ResolveAllSpeakersPlanAsync(
+        TranscriptProjectState currentState,
+        ProjectSpeaker speaker,
+        string targetLanguage,
+        GenerateTtsForAllSpeakersRequest request,
+        IReadOnlyDictionary<Guid, VoiceAssignment> assignmentsBySpeakerId,
+        HashSet<string> reservedStockVoiceIds,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress)
+    {
+        VoiceAssignment? assignment;
+        if (RequestHasExplicitVoiceOverride(request, speaker.Id))
+        {
+            assignment = await TryPersistRequestedVoiceAssignmentAsync(
+                currentState,
+                speaker.Id,
+                request,
+                cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            assignmentsBySpeakerId.TryGetValue(speaker.Id, out assignment);
+            if (assignment is null)
+            {
+                assignment = await TryPersistRequestedVoiceAssignmentAsync(
+                    currentState,
+                    speaker.Id,
+                    request,
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return await ResolveSpeakerPlanAsync(
+            currentState,
+            speaker,
+            targetLanguage,
+            assignment,
+            request.PreferredModelAlias,
+            request.UseReferenceClipForVoiceCloningBySpeakerId?.TryGetValue(speaker.Id, out bool useReferenceClipForVoiceCloning) == true
+                && useReferenceClipForVoiceCloning,
+            cancellationToken,
+            progress,
+            reservedStockVoiceIds).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Resolves every speaker's TTS plan before translation runs and returns a prefetch that renders
+    /// stock-voice segments as the translation stream produces them. Pass it to translation as the
+    /// segment observer and to the TTS stage, which reuses these plans and claims the clips.
+    /// </summary>
+    internal async Task<TtsStreamingPrefetch> CreateStreamingPrefetchAsync(
+        TranscriptProjectState currentState,
+        GenerateTtsForAllSpeakersRequest request,
+        string targetLanguage,
+        IApplicationLogger? logger,
+        CancellationToken cancellationToken,
+        CancellationToken runCancellationToken)
+    {
+        string normalizedTargetLanguage = targetLanguage.Trim().ToLowerInvariant();
+        Dictionary<Guid, VoiceAssignment> assignmentsBySpeakerId = currentState.VoiceAssignments
+            .Where(assignment => !assignment.IsFallback)
+            .ToDictionary(assignment => assignment.SpeakerId);
+        HashSet<string> reservedStockVoiceIds = CollectReservedStockVoiceIds(currentState, request);
+        var plans = new Dictionary<Guid, TtsSpeakerPlan>();
+        var speakersBySegmentIndex = new Dictionary<int, TtsPrefetchSpeaker>();
+        int? maxConcurrency = null;
+        foreach (ProjectSpeaker speaker in currentState.Speakers.OrderBy(speaker => speaker.CreatedAtUtc))
+        {
+            if (!currentState.TranscriptSegments.Any(segment => segment.SpeakerId == speaker.Id))
+            {
+                continue;
+            }
+
+            TtsSpeakerPlan plan = await ResolveAllSpeakersPlanAsync(
+                currentState,
+                speaker,
+                normalizedTargetLanguage,
+                request,
+                assignmentsBySpeakerId,
+                reservedStockVoiceIds,
+                cancellationToken,
+                progress: null).ConfigureAwait(false);
+            plans[speaker.Id] = plan;
+
+            (TtsPrefetchSpeaker Speaker, int MaxConcurrency)? prepared;
+            try
+            {
+                prepared = await startTtsStageHandler.PreparePrefetchSpeakerAsync(
+                    CreateStageRequest(
+                        currentState,
+                        speaker.Id,
+                        normalizedTargetLanguage,
+                        plan,
+                        translatedSegments: [],
+                        segmentIndices: null,
+                        request.PreferredExecutionProvider,
+                        request.RequirePreferredExecutionProvider,
+                        request.PreferredModelVariantAlias),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // The TTS stage reports this speaker's voice problem; prefetch just skips it.
+                logger?.LogWarning($"TTS prefetch skipped speaker {speaker.DisplayName}: {ex.Message}");
+                continue;
+            }
+
+            if (prepared is not { } speakerPrefetch)
+            {
+                continue;
+            }
+
+            // One shared pool renders every speaker, so it must honour the tightest per-speaker
+            // bound: a large-model GPU speaker's VRAM cap would otherwise be exceeded.
+            maxConcurrency = Math.Min(maxConcurrency ?? int.MaxValue, speakerPrefetch.MaxConcurrency);
+            foreach (int segmentIndex in speakerPrefetch.Speaker.SourceSegmentsByIndex.Keys)
+            {
+                speakersBySegmentIndex[segmentIndex] = speakerPrefetch.Speaker;
+            }
+        }
+
+        return new TtsStreamingPrefetch(
+            startTtsStageHandler,
+            speakersBySegmentIndex,
+            plans,
+            maxConcurrency ?? 1,
+            logger,
+            runCancellationToken);
     }
 
     private static bool RequestHasExplicitVoiceOverride(GenerateTtsForAllSpeakersRequest request, Guid speakerId) =>
@@ -1350,3 +1553,10 @@ public sealed class TtsOrchestrationService(
         AudioClipExtractionResult ExtractionResult,
         ReferenceClipAnalysis Analysis);
 }
+
+/// <summary>The voice decisions for one speaker that every synthesized segment of that speaker uses.</summary>
+internal sealed record TtsSpeakerPlan(
+    VoiceAssignment Assignment,
+    string? PreferredModelAlias,
+    IReadOnlyList<ProjectArtifact> ProjectArtifacts,
+    bool UseReferenceClipForVoiceCloning);

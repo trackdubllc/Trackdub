@@ -100,7 +100,11 @@ public sealed class DependencyGraphTests
 
         Assert.Contains(
             inference.Descendants("PackageReference"),
-            element => element.Attribute("Include")?.Value == "Microsoft.WindowsAppSDK.ML");
+            element => element.Attribute("Include")?.Value == "Microsoft.Windows.AI.MachineLearning");
+
+        Assert.Contains(
+            inference.Descendants("PackageReference"),
+            element => element.Attribute("Include")?.Value == "Microsoft.ML.OnnxRuntimeGenAI.WinML");
 
         Assert.Contains(
             composition.Descendants("PackageReference"),
@@ -262,9 +266,9 @@ public sealed class DependencyGraphTests
 
         AssertDnnlRuntimeAssetExclusion(
             Path.Join(repoRoot, "src", "Trackdub.Inference.Onnx", "Trackdub.Inference.Onnx.csproj"),
-            "Microsoft.WindowsAppSDK.ML",
+            "Microsoft.Windows.AI.MachineLearning",
             "Microsoft.ML.OnnxRuntimeGenAI",
-            "Microsoft.WindowsAppSDK.Runtime",
+            "Microsoft.ML.OnnxRuntimeGenAI.WinML",
             "Microsoft.ML.OnnxRuntime.Gpu",
             "Microsoft.ML.OnnxRuntimeGenAI.Cuda",
             "Microsoft.ML.OnnxRuntime");

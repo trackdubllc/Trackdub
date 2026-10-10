@@ -413,9 +413,16 @@ public sealed class TranscriptWorkspace(
         GenerateTranslationRequest request,
         CancellationToken cancellationToken,
         IProgress<PipelineProgressEvent>? progress = null) =>
+        GenerateTranslationAsync(request, cancellationToken, progress, segmentObserver: null);
+
+    internal Task<TranscriptProjectState> GenerateTranslationAsync(
+        GenerateTranslationRequest request,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        ITranslatedSegmentObserver? segmentObserver) =>
         RunPipelineAsync(
             nameof(GenerateTranslationAsync),
-            ct => Translation.GenerateTranslationAsync(request, ct, progress),
+            ct => Translation.GenerateTranslationAsync(request, ct, progress, segmentObserver),
             cancellationToken);
 
     public Task<TranscriptProjectState> RetranslateSegmentAsync(
@@ -469,10 +476,31 @@ public sealed class TranscriptWorkspace(
         GenerateTtsForAllSpeakersRequest request,
         CancellationToken cancellationToken,
         IProgress<PipelineProgressEvent>? progress = null) =>
+        GenerateTtsForAllSpeakersAsync(request, cancellationToken, progress, prefetch: null);
+
+    internal Task<TranscriptProjectState> GenerateTtsForAllSpeakersAsync(
+        GenerateTtsForAllSpeakersRequest request,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        TtsStreamingPrefetch? prefetch) =>
         RunPipelineAsync(
             nameof(GenerateTtsForAllSpeakersAsync),
-            ct => Tts.GenerateTtsForAllSpeakersAsync(request, ct, progress),
+            ct => Tts.GenerateTtsForAllSpeakersAsync(request, ct, progress, prefetch),
             cancellationToken);
+
+    /// <summary>
+    /// Resolves every speaker's TTS plan and returns a prefetch that renders segments while the
+    /// translation stream runs. The prefetch lives until <paramref name="runCancellationToken"/>
+    /// is cancelled or it is disposed.
+    /// </summary>
+    internal Task<TtsStreamingPrefetch> CreateTtsStreamingPrefetchAsync(
+        GenerateTtsForAllSpeakersRequest request,
+        string targetLanguage,
+        CancellationToken runCancellationToken) =>
+        RunPipelineAsync(
+            nameof(CreateTtsStreamingPrefetchAsync),
+            ct => Tts.CreateStreamingPrefetchAsync(request, targetLanguage, logger, ct, runCancellationToken),
+            runCancellationToken);
 
     public Task<TranscriptProjectState> RegenerateStaleTtsForSpeakerAsync(
         RegenerateStaleTtsForSpeakerRequest request,

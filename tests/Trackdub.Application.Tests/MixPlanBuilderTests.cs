@@ -90,6 +90,45 @@ public sealed class MixPlanBuilderTests
         Assert.Contains("1", warning.Message);
     }
 
+    [Theory]
+    [InlineData(10.0d)]
+    [InlineData(null)]
+    public void Build_warns_when_take_extends_past_shorter_media_duration(double? sourceDurationSeconds)
+    {
+        // Export renders only through the media duration, so a take that fits the longer (or
+        // unknown) source audio but passes the media end must still warn.
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 5.0d, 6.0d, "Hello", context.SpeakerId);
+        ProjectArtifact normalized = CreateArtifact(
+            context,
+            ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath,
+            createdOffsetSeconds: 0,
+            durationSeconds: sourceDurationSeconds);
+        ProjectArtifact takeArtifact = CreateArtifact(
+            context,
+            ArtifactKind.TtsTake,
+            "artifacts/tts/take.wav",
+            createdOffsetSeconds: 2,
+            durationSeconds: 2.0d);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: segment.SegmentIndex)
+            .Complete(takeArtifact.Id, durationSamples: 48000, sampleRate: 24000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId,
+            context.MediaAssetId,
+            [normalized, takeArtifact],
+            [segment],
+            [],
+            [take],
+            MediaDurationSeconds: 6.0d));
+
+        // Take runs 5.0s–7.0s: inside the 10.0s source audio but 1.0s past the 6.0s media end.
+        MixPlanWarning warning = Assert.Single(plan.Warnings);
+        Assert.Equal(MixPlanWarningCode.TakeExceedsSourceAudio, warning.Code);
+        Assert.Contains("(6 s)", warning.Message);
+    }
+
     [Fact]
     public void Build_does_not_warn_when_take_fits_within_source_audio()
     {

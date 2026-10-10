@@ -376,6 +376,7 @@ public sealed class DubbingPipelineEngine(
         IStageWarmupCoordinator? warmupCoordinator =
             session.Services?.GetService<IStageWarmupCoordinator>();
         PendingStageWarmup? pendingWarmup = null;
+        TtsStreamingPrefetch? ttsPrefetch = null;
 
         try
         {
@@ -432,6 +433,16 @@ public sealed class DubbingPipelineEngine(
                     continue;
                 }
 
+                if (ttsPrefetch is null &&
+                    ShouldOverlapTtsWithTranslation(options, stagesToRun, i, declinedOptionalStages))
+                {
+                    ttsPrefetch = await TryCreateTtsPrefetchAsync(
+                        session,
+                        options,
+                        runtimeSelections,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
                 Task<StageOutcome> stageTask = ExecuteStageAsync(
                     session,
                     options,
@@ -441,10 +452,21 @@ public sealed class DubbingPipelineEngine(
                     progress,
                     projectId,
                     runId,
-                    cancellationToken);
+                    cancellationToken,
+                    ttsPrefetch);
 
                 StageOutcome outcome = await stageTask.ConfigureAwait(false);
                 stageOutcomes.Add(outcome);
+
+                // Unclaimed clips are useless once TTS has run or translation produced no revision.
+                if (ttsPrefetch is not null &&
+                    (string.Equals(stageName, StageNames.Tts, StringComparison.OrdinalIgnoreCase) ||
+                     (string.Equals(stageName, StageNames.Translation, StringComparison.OrdinalIgnoreCase) &&
+                      outcome.Status == StageStatus.Failed)))
+                {
+                    await ttsPrefetch.DisposeAsync().ConfigureAwait(false);
+                    ttsPrefetch = null;
+                }
 
                 // Keep the active stage's GenAI residency secure through its actual work.
                 // Once released, warm the next stage; its lease is joined at the top of that
@@ -469,12 +491,59 @@ public sealed class DubbingPipelineEngine(
         }
         finally
         {
+            if (ttsPrefetch is not null)
+            {
+                await ttsPrefetch.DisposeAsync().ConfigureAwait(false);
+            }
+
             // Stop joining warmup promptly on cancellation; the coordinator receives the
             // same token and will stop at its next cancellable checkpoint.
             if (pendingWarmup is not null)
             {
                 await ObserveWarmupAsync(pendingWarmup.Task, cancellationToken).ConfigureAwait(false);
             }
+        }
+    }
+
+    /// <summary>
+    /// TTS overlaps translation when segment streaming is on and TTS runs later in this run:
+    /// the stage at <paramref name="index"/> must be translation.
+    /// </summary>
+    internal static bool ShouldOverlapTtsWithTranslation(
+        DubbingSessionOptions options,
+        string[] stagesToRun,
+        int index,
+        IReadOnlySet<string> declinedOptionalStages) =>
+        options.EnableTranslationSegmentStreaming &&
+        string.Equals(stagesToRun[index], StageNames.Translation, StringComparison.OrdinalIgnoreCase) &&
+        !declinedOptionalStages.Contains(StageNames.Tts) &&
+        stagesToRun.Skip(index + 1).Contains(StageNames.Tts, StringComparer.OrdinalIgnoreCase);
+
+    private static async Task<TtsStreamingPrefetch?> TryCreateTtsPrefetchAsync(
+        IDubbingSession session,
+        DubbingSessionOptions options,
+        RuntimeModelSelections runtimeSelections,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            TranscriptProjectState state = await session.Workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
+            if (state.TranscriptSegments.Count == 0)
+            {
+                return null;
+            }
+
+            return await session.Workspace.CreateTtsStreamingPrefetchAsync(
+                BuildPipelineTtsRequest(state, options, runtimeSelections),
+                options.TargetLanguageCode,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Overlap is an optimization: without it the TTS stage synthesizes every segment itself.
+            TryResolveService<IApplicationLogger>(session)?.LogWarning(
+                "TTS will not overlap translation: the streaming prefetch could not be prepared.", ex);
+            return null;
         }
     }
 
@@ -1139,7 +1208,8 @@ public sealed class DubbingPipelineEngine(
         IProgress<PipelineProgressEvent>? progress,
         Guid projectId,
         Guid runId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TtsStreamingPrefetch? ttsPrefetch = null)
     {
         DateTimeOffset stageStart = DateTimeOffset.UtcNow;
         ReportProgress(progress, stageName, PipelineProgressEventKind.Started, null);
@@ -1156,7 +1226,8 @@ public sealed class DubbingPipelineEngine(
                     stageName,
                     runtimeSelections,
                     progress,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    ttsPrefetch).ConfigureAwait(false);
 
                 DateTimeOffset stageEnd = DateTimeOffset.UtcNow;
                 PipelineProgressEventKind eventKind = workflowResult.Status switch
@@ -1278,7 +1349,8 @@ public sealed class DubbingPipelineEngine(
         string stageName,
         RuntimeModelSelections runtimeSelections,
         IProgress<PipelineProgressEvent>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TtsStreamingPrefetch? ttsPrefetch = null)
     {
         TranscriptWorkspace workspace = session.Workspace;
         InferenceModelPreferences modelPreferences =
@@ -1350,7 +1422,8 @@ public sealed class DubbingPipelineEngine(
                     options,
                     runtimeSelections,
                     progress,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    ttsPrefetch).ConfigureAwait(false);
 
             case StageNames.Tts:
                 return await RunTtsStageAsync(
@@ -1358,7 +1431,8 @@ public sealed class DubbingPipelineEngine(
                     options,
                     runtimeSelections,
                     progress,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    ttsPrefetch).ConfigureAwait(false);
 
             case StageNames.Export:
                 return await RunExportStageAsync(
@@ -1628,7 +1702,8 @@ public sealed class DubbingPipelineEngine(
         DubbingSessionOptions options,
         RuntimeModelSelections runtimeSelections,
         IProgress<PipelineProgressEvent>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ITranslatedSegmentObserver? segmentObserver = null)
     {
         TranscriptProjectState translationState = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
         if (translationState.TranscriptSegments.Count == 0)
@@ -1654,7 +1729,8 @@ public sealed class DubbingPipelineEngine(
                     RuntimeStage.Translation),
                 EnableSegmentStreaming: options.EnableTranslationSegmentStreaming),
             cancellationToken,
-            progress).ConfigureAwait(false);
+            progress,
+            segmentObserver).ConfigureAwait(false);
         return BuildStageWorkflowResultFromStageRun(translatedState, StageNames.Translation, stageWorkStartedUtc);
     }
 
@@ -1663,7 +1739,8 @@ public sealed class DubbingPipelineEngine(
         DubbingSessionOptions options,
         RuntimeModelSelections runtimeSelections,
         IProgress<PipelineProgressEvent>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TtsStreamingPrefetch? ttsPrefetch = null)
     {
         TranscriptWorkspace workspace = session.Workspace;
         TranscriptProjectState ttsState = await workspace.Project.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -1684,21 +1761,7 @@ public sealed class DubbingPipelineEngine(
                     : "Cloning each speaker from source audio.");
         }
 
-        RuntimeExecutionProviderSelection ttsExecutionProvider =
-            RuntimeModelSetupCoordinator.CreateExecutionProviderSelection(
-                runtimeSelections,
-                RuntimeStage.Tts);
-        GenerateTtsForAllSpeakersRequest ttsRequest = BuildUnattendedTtsRequest(
-            ttsState,
-            options,
-            runtimeSelections.TtsModelAlias) with
-        {
-            PreferredExecutionProvider = ttsExecutionProvider.PreferredExecutionProvider,
-            RequirePreferredExecutionProvider = ttsExecutionProvider.RequirePreferredExecutionProvider,
-            PreferredModelVariantAlias = RuntimeModelSetupCoordinator.ResolvePreferredModelVariantAlias(
-                runtimeSelections,
-                RuntimeStage.Tts),
-        };
+        GenerateTtsForAllSpeakersRequest ttsRequest = BuildPipelineTtsRequest(ttsState, options, runtimeSelections);
         if (ttsRequest.VoiceIdsBySpeakerId is { Count: > 0 })
         {
             ReportProgress(
@@ -1721,8 +1784,31 @@ public sealed class DubbingPipelineEngine(
         TranscriptProjectState ttsResult = await workspace.GenerateTtsForAllSpeakersAsync(
             ttsRequest,
             cancellationToken,
-            progress).ConfigureAwait(false);
+            progress,
+            ttsPrefetch).ConfigureAwait(false);
         return BuildStageWorkflowResultFromStageRun(ttsResult, StageNames.Tts, stageWorkStartedUtc);
+    }
+
+    private static GenerateTtsForAllSpeakersRequest BuildPipelineTtsRequest(
+        TranscriptProjectState state,
+        DubbingSessionOptions options,
+        RuntimeModelSelections runtimeSelections)
+    {
+        RuntimeExecutionProviderSelection ttsExecutionProvider =
+            RuntimeModelSetupCoordinator.CreateExecutionProviderSelection(
+                runtimeSelections,
+                RuntimeStage.Tts);
+        return BuildUnattendedTtsRequest(
+            state,
+            options,
+            runtimeSelections.TtsModelAlias) with
+        {
+            PreferredExecutionProvider = ttsExecutionProvider.PreferredExecutionProvider,
+            RequirePreferredExecutionProvider = ttsExecutionProvider.RequirePreferredExecutionProvider,
+            PreferredModelVariantAlias = RuntimeModelSetupCoordinator.ResolvePreferredModelVariantAlias(
+                runtimeSelections,
+                RuntimeStage.Tts),
+        };
     }
 
     private static async Task<StageWorkflowResult> RunExportStageAsync(
@@ -2746,6 +2832,11 @@ public sealed class DubbingPipelineEngine(
             snapshot["TtsTiming.EnableRubberbandStretch"] = options.TtsTiming.EnableRubberbandStretch.ToString();
             snapshot["TtsTiming.RubberbandStretchThreshold"] =
                 options.TtsTiming.RubberbandStretchThreshold.ToString("G17", CultureInfo.InvariantCulture);
+            if (options.TtsTiming.AutoStretchMaxOverrun is double autoStretchMaxOverrun)
+            {
+                snapshot["TtsTiming.AutoStretchMaxOverrun"] =
+                    autoStretchMaxOverrun.ToString("G17", CultureInfo.InvariantCulture);
+            }
         }
 
         // Audio/subtitle/encoder flags (and the pre-existing ExportFormat) gate the Export

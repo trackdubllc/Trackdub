@@ -381,6 +381,18 @@ internal sealed class RuntimePlanFactory
         }
 
         ExecutionProviderAvailability availability = GetAvailability(providerAvailabilities, provider);
+        if (availability.IsAvailable &&
+            availability.EngineFamilies is { } hostedFamilies &&
+            !hostedFamilies.Contains(candidate.Entry.EngineFamily, StringComparer.OrdinalIgnoreCase))
+        {
+            availability = availability with
+            {
+                IsAvailable = false,
+                Detail = $"{provider} is only available to {string.Join(", ", hostedFamilies)} on this machine; " +
+                         $"'{candidate.Entry.EngineFamily}' runs in-process. {availability.Detail}",
+            };
+        }
+
         if (provider is not ExecutionProviderKind.Cpu && !availability.IsAvailable)
         {
             if (requirePreferredExecutionProvider)
@@ -618,7 +630,6 @@ internal sealed class RuntimePlanFactory
                 string preferredDefaultRelativeEntryPath = Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath);
                 BundledModelManifestVariant? preferredDefaultVariant = entry.Variants
                     .FirstOrDefault(variant =>
-                        variant.Alias.Equals("default", StringComparison.OrdinalIgnoreCase) &&
                         Path.GetRelativePath(entry.RootDirectory, variant.EntryPath)
                             .Equals(preferredDefaultRelativeEntryPath, StringComparison.OrdinalIgnoreCase));
                 if (preferredDefaultVariant is null ||
@@ -650,7 +661,6 @@ internal sealed class RuntimePlanFactory
         string defaultRelativeEntryPath = Path.GetRelativePath(entry.RootDirectory, entry.DefaultBenchmarkEntryPath);
         BundledModelManifestVariant? defaultVariant = entry.Variants
             .FirstOrDefault(variant =>
-                variant.Alias.Equals("default", StringComparison.OrdinalIgnoreCase) &&
                 Path.GetRelativePath(entry.RootDirectory, variant.EntryPath)
                     .Equals(defaultRelativeEntryPath, StringComparison.OrdinalIgnoreCase));
         if (defaultVariant is null ||

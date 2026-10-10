@@ -250,7 +250,7 @@ public static class Program
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
-            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>] [--mock] [--dry-run] [--report-dir <directory>] " + ResourceTelemetryOptionsParser.Usage);
+            output.WriteLine("controlled <fixture> --output <directory> [--stage <name>] [--model <alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--translation-streaming] [--language <code>] [--source-language <code>] [--runs <count>] [--mock] [--dry-run] [--report-dir <directory>] " + ResourceTelemetryOptionsParser.Usage);
             output.WriteLine(ResourceTelemetryOptionsParser.Description);
             return args.Length == 0 ? 1 : 0;
         }
@@ -311,6 +311,7 @@ public static class Program
                     Provider = shared.Provider,
                     Mode = shared.Mode,
                     ReuseEngineCache = shared.ReuseEngineCache,
+                    TranslationStreaming = shared.TranslationStreaming,
                     TargetLanguage = shared.TargetLanguage,
                     SourceLanguage = shared.SourceLanguage,
                     ModelDirectory = shared.ModelDirectory,
@@ -540,7 +541,7 @@ public static class Program
     {
         if (args.Length == 0 || args[0] is "--help" or "-h")
         {
-            output.WriteLine("controlled-matrix <fixture> --output <directory> [--stages <comma-separated>] [--model <stage=alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--language <code>] [--source-language <code>] [--runs <count>] " + ResourceTelemetryOptionsParser.Usage);
+            output.WriteLine("controlled-matrix <fixture> --output <directory> [--stages <comma-separated>] [--model <stage=alias>] [--provider <kind>] [--mode fresh-process|warm-host|artifact-resume] [--reuse-engine-cache] [--translation-streaming] [--language <code>] [--source-language <code>] [--runs <count>] " + ResourceTelemetryOptionsParser.Usage);
             output.WriteLine("With no --stages, runs the full extended pipeline stage catalog in canonical order.");
             output.WriteLine(ResourceTelemetryOptionsParser.Description);
             return args.Length == 0 ? 1 : 0;

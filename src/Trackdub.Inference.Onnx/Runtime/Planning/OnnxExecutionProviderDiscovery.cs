@@ -7,6 +7,7 @@ using Trackdub.Inference.Onnx.TensorRtRtx;
 using Trackdub.Inference.Runtime.Migraphx;
 using Trackdub.Inference.Runtime.NativeCudaTensorRt;
 using Trackdub.Inference.Runtime.Planning;
+using Trackdub.Inference.Onnx.Worker;
 
 namespace Trackdub.Inference.Onnx.Runtime.Planning;
 
@@ -22,6 +23,11 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
     private readonly IVitisAiCatalogReadinessProbe _vitisAiCatalogReadinessProbe;
     private readonly ITensorRtRtxReadinessProbe _tensorRtRtxReadinessProbe;
     private readonly Func<CancellationToken, Task<bool>> _isTensorRtRtxEnabled;
+    private readonly Func<string?> _directMlUnavailableReason;
+    private readonly IInferenceWorkerClient? _workerClient;
+
+    /// <summary>Engine families the ORT 1.30 inference worker runs on CUDA (ADR-0017).</summary>
+    internal static IReadOnlyList<string> WorkerCudaEngineFamilies { get; } = ["kokoro"];
 
     public OnnxExecutionProviderDiscovery()
         : this(new NullOpenVinoAvailabilityProvider())
@@ -76,7 +82,9 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
         IOpenVinoCatalogReadinessProbe openVinoCatalogReadinessProbe,
         IQnnCatalogReadinessProbe qnnCatalogReadinessProbe,
         IVitisAiCatalogReadinessProbe vitisAiCatalogReadinessProbe,
-        Func<CancellationToken, Task<bool>>? isTensorRtRtxEnabled = null)
+        Func<CancellationToken, Task<bool>>? isTensorRtRtxEnabled = null,
+        Func<string?>? directMlUnavailableReason = null,
+        IInferenceWorkerClient? workerClient = null)
     {
         _openVino = openVino ?? throw new ArgumentNullException(nameof(openVino));
         _linuxRuntimeProbe = linuxRuntimeProbe ?? throw new ArgumentNullException(nameof(linuxRuntimeProbe));
@@ -92,6 +100,8 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
         _vitisAiCatalogReadinessProbe = vitisAiCatalogReadinessProbe
             ?? throw new ArgumentNullException(nameof(vitisAiCatalogReadinessProbe));
         _isTensorRtRtxEnabled = isTensorRtRtxEnabled ?? (static _ => Task.FromResult(false));
+        _directMlUnavailableReason = directMlUnavailableReason ?? DirectMlRuntimeProbe.GetUnavailableReason;
+        _workerClient = workerClient;
     }
 
     public async Task<IReadOnlyList<ExecutionProviderAvailability>> DiscoverAsync(
@@ -129,15 +139,20 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
         bool tensorRtRtxEnabled = await _isTensorRtRtxEnabled(cancellationToken).ConfigureAwait(false);
 
         // Windows providers
-        bool directMlAvailable = isWindows && hardwareProfile.HasGpu
+        bool directMlBuildRoute = isWindows && hardwareProfile.HasGpu
             && OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes;
-        availabilities.Add(directMlAvailable
+        // The build can carry DirectML while the loaded onnxruntime.dll cannot (an app that
+        // replaces Windows ML's runtime with a CPU/GPU ORT build). Report that, instead of
+        // letting every DirectML session silently fall back to the CPU.
+        string? directMlUnavailableReason = directMlBuildRoute ? _directMlUnavailableReason() : null;
+        availabilities.Add(directMlBuildRoute && directMlUnavailableReason is null
             ? new(ExecutionProviderKind.DirectMl, true,
                 "Windows ML legacy DirectML route can be probed on this machine.")
             : new(ExecutionProviderKind.DirectMl, false,
-                isWindows && hardwareProfile.HasGpu
+                directMlUnavailableReason
+                ?? (isWindows && hardwareProfile.HasGpu
                     ? "DirectML requires the net10.0-windows10.0.19041.0 build; this build supports TensorRT RTX and CPU."
-                    : "DirectML legacy GPU probing requires Windows with a GPU-capable Windows ML path."));
+                    : "DirectML legacy GPU probing requires Windows with a GPU-capable Windows ML path.")));
 
         TensorRtRtxReadinessReport? tensorRtRtxReport = null;
         bool tensorRtAvailable = false;
@@ -180,13 +195,20 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
         bool windowsCudaAvailable = windowsCudaListed;
         bool windowsTensorRtAvailable = windowsTensorRtLibs && windowsTensorRtListed;
 
-        availabilities.Add(ResolveCudaAvailability(
+        ExecutionProviderAvailability cudaAvailability = ResolveCudaAvailability(
             isLinux,
             linuxNvidiaDriverLoaded,
             isWindows,
             isNvidiaGpu,
             allowNativeCudaTensorRtOnWindows,
-            windowsCudaAvailable));
+            windowsCudaAvailable);
+        if (!cudaAvailability.IsAvailable && isWindows && isNvidiaGpu &&
+            await ResolveWorkerCudaAvailabilityAsync(cancellationToken).ConfigureAwait(false) is { } workerCuda)
+        {
+            cudaAvailability = workerCuda;
+        }
+
+        availabilities.Add(cudaAvailability);
 
         availabilities.Add(ResolveTensorRtAvailability(
             isLinux,
@@ -228,6 +250,27 @@ public sealed class OnnxExecutionProviderDiscovery : IExecutionProviderDiscovery
             cancellationToken).ConfigureAwait(false));
 
         return availabilities;
+    }
+
+    /// <summary>
+    /// CUDA through the inference worker, for the engine families it hosts. Null when the worker is
+    /// not installed or its handshake fails; unavailable (with the worker's reason) when it runs but
+    /// cannot use CUDA, for example without cuDNN 9.
+    /// </summary>
+    private async Task<ExecutionProviderAvailability?> ResolveWorkerCudaAvailabilityAsync(CancellationToken cancellationToken)
+    {
+        if (_workerClient is not { IsInstalled: true } ||
+            await _workerClient.TryGetHelloAsync(cancellationToken).ConfigureAwait(false) is not { } hello)
+        {
+            return null;
+        }
+
+        return hello.CudaAvailable
+            ? new(ExecutionProviderKind.Cuda, true,
+                $"CUDA through the ONNX Runtime {hello.OnnxRuntimeVersion} inference worker: {hello.CudaDetail}",
+                WorkerCudaEngineFamilies)
+            : new(ExecutionProviderKind.Cuda, false,
+                $"The inference worker cannot use CUDA: {hello.CudaDetail}");
     }
 
     private static ExecutionProviderAvailability ResolveCudaAvailability(

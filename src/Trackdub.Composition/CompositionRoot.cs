@@ -48,6 +48,7 @@ using Trackdub.Infrastructure.Transcription;
 using Trackdub.Infrastructure.Tts;
 using Trackdub.Infrastructure.Dubbing;
 using Trackdub.Inference.Onnx;
+using Trackdub.Inference.Onnx.Worker;
 using Trackdub.Inference.Onnx.Dnnl;
 using Trackdub.Inference.Onnx.Chatterbox;
 using Trackdub.Inference.Onnx.CosyVoice;
@@ -445,6 +446,10 @@ public static class CompositionRoot
         services.TryAddScoped<IPreviewRangeRenderer, PreviewRangeRenderer>();
         services.TryAddScoped<TtsTimingOptions>(sp =>
             CreateTtsTimingOptions(sp.GetRequiredService<TranscriptWorkspaceContext>().Settings.TtsTiming));
+        services.TryAddScoped<TtsExecutionOptions>(sp =>
+            CreateTtsExecutionOptions(
+                sp.GetRequiredService<TranscriptWorkspaceContext>().Settings.TtsMaxConcurrency,
+                AcceleratorVramDetector.DetectMaxDedicatedVramMb()));
 
         services.TryAddScoped<MixPlanBuilder>();
         services.TryAddScoped<MixPlanStore>();
@@ -571,6 +576,7 @@ public static class CompositionRoot
         services.TryAddSingleton<IHardwareInfoService, HardwareInfoService>();
         services.TryAddSingleton<IMediaGpuHintProvider, MediaGpuHintProvider>();
         services.TryAddSingleton<IMediaHardwareCapabilitiesService, MediaHardwareCapabilitiesService>();
+        services.TryAddSingleton<IInferenceWorkerClient>(_ => new InferenceWorkerClient());
         services.TryAddSingleton<IExecutionProviderDiscovery>(sp =>
             new OnnxExecutionProviderDiscovery(
                 sp.GetRequiredService<IOpenVinoAvailabilityProvider>(),
@@ -586,7 +592,8 @@ public static class CompositionRoot
                     (await sp.GetRequiredService<IStudioSettingsService>()
                         .LoadAsync(cancellationToken)
                         .ConfigureAwait(false))
-                    .NvidiaTensorRtRtxLicenseAccepted));
+                    .NvidiaTensorRtRtxLicenseAccepted,
+                workerClient: sp.GetService<IInferenceWorkerClient>()));
         services.TryAddSingleton<IExecutionProviderSmokeTester, OnnxExecutionProviderSmokeTester>();
         services.TryAddSingleton<ISmokeVerdictStore>(sp =>
             new FileSmokeVerdictStore(Path.Join(
@@ -723,6 +730,7 @@ public static class CompositionRoot
                 sp.GetRequiredService<OpenAiCloudTranslationEngine>(),
                 sp.GetRequiredService<GeminiCloudTranslationEngine>()));
         services.TryAddScoped<RoutedTtsEngine>();
+        services.TryAddScoped<ITtsAcceleratorPlacementResolver>(sp => sp.GetRequiredService<RoutedTtsEngine>());
         services.TryAddScoped<ITtsEngine>(sp =>
             new CloudAwareTtsEngine(
                 sp.GetRequiredService<RoutedTtsEngine>(),
@@ -766,6 +774,15 @@ public static class CompositionRoot
             AutoStretchMaxOverrun = normalized.AutoStretchMaxOverrun ?? TtsTimingOptions.Default.AutoStretchMaxOverrun
         };
     }
+
+    private static TtsExecutionOptions CreateTtsExecutionOptions(
+        int? configuredMaxConcurrency,
+        long maxAcceleratorVramMb) =>
+        new(
+            ConfiguredMaxConcurrency: configuredMaxConcurrency is int value && value >= TtsExecutionOptions.MinConcurrency
+                ? Math.Min(value, TtsExecutionOptions.AbsoluteMaxConcurrency)
+                : null,
+            MaxAcceleratorVramMb: maxAcceleratorVramMb);
 
 #if LINUX
     [SupportedOSPlatform("linux")]

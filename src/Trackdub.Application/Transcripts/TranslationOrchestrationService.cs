@@ -191,11 +191,19 @@ public sealed class TranslationOrchestrationService(
         }
     }
 
-    public async Task GenerateTranslationAsync(
+    public Task GenerateTranslationAsync(
         TranscriptProjectState currentState,
         GenerateTranslationRequest request,
         CancellationToken cancellationToken,
-        IProgress<PipelineProgressEvent>? progress = null)
+        IProgress<PipelineProgressEvent>? progress = null) =>
+        GenerateTranslationAsync(currentState, request, cancellationToken, progress, segmentObserver: null);
+
+    internal async Task GenerateTranslationAsync(
+        TranscriptProjectState currentState,
+        GenerateTranslationRequest request,
+        CancellationToken cancellationToken,
+        IProgress<PipelineProgressEvent>? progress,
+        ITranslatedSegmentObserver? segmentObserver)
     {
         DateTimeOffset progressStartedAt = DateTimeOffset.UtcNow;
         PipelineProgressReporter.Started(progress, StageNames.Translation, phase: "Preparing");
@@ -278,6 +286,7 @@ public sealed class TranslationOrchestrationService(
                     targetLanguage,
                     translationInputSegments.Length,
                     progress,
+                    segmentObserver,
                     cancellationToken).ConfigureAwait(false);
                 translatedTextSegments = streamCommit.Items.Select(item => item.Payload).ToArray();
             }
@@ -864,7 +873,8 @@ public sealed class TranslationOrchestrationService(
     private static async Task<TranslationStreamCommit> CollectTranslationStreamAsync(
         IStreamingTranslationEngine streamingEngine, TranslationRequest translationRequest, Guid runId,
         Guid sourceRevisionId, string targetLanguage, int inputSegmentCount,
-        IProgress<PipelineProgressEvent>? progress, CancellationToken cancellationToken)
+        IProgress<PipelineProgressEvent>? progress, ITranslatedSegmentObserver? segmentObserver,
+        CancellationToken cancellationToken)
     {
         string snapshotId = $"{sourceRevisionId:N}:{targetLanguage}";
         List<PipelineStreamItem<TranslatedTextSegment>> collected = [];
@@ -881,6 +891,7 @@ public sealed class TranslationOrchestrationService(
                 {
                     // Retain the complete envelope. Revision acceptance belongs to the real commit boundary.
                     collected.Add(item);
+                    segmentObserver?.OnSegmentTranslated(item.Payload.Index, item.Payload.Text);
                     PipelineProgressReporter.Phase(progress, StageNames.Translation, "Translating",
                         $"{collected.Count}/{inputSegmentCount} segment(s) translated.");
                 }

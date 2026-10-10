@@ -341,9 +341,17 @@ internal static class OnnxExecutionSessionFactory
         string loadPath = selectedProvider is ExecutionProviderKind.TensorRTRtx
             ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath
             : modelPath;
-        InferenceSession session = sessionFactory is null
-            ? new InferenceSession(loadPath, options)
-            : sessionFactory(loadPath, options);
+        // Without a current artifact, a large graph's engine build is captured as one, so the next
+        // process loads engines instead of rebuilding them (minutes for multi-GB models).
+        InferenceSession session =
+            sessionFactory is null &&
+            selectedProvider is ExecutionProviderKind.TensorRTRtx &&
+            string.Equals(loadPath, modelPath, StringComparison.Ordinal) &&
+            EpContext.EpContextCapture.ShouldCapture(modelPath)
+                ? EpContext.EpContextCapture.CreateSession(modelPath, options, static (path, o) => new InferenceSession(path, o))
+                : sessionFactory is null
+                    ? new InferenceSession(loadPath, options)
+                    : sessionFactory(loadPath, options);
         if (selectedProvider is ExecutionProviderKind.TensorRTRtx)
         {
             TensorRtRtxTeardownGuard.Track(session);
@@ -578,8 +586,10 @@ internal static class OnnxExecutionSessionFactory
         InferenceSession? decoderSession = null;
         try
         {
-            encoderSession = new InferenceSession(encoderModelPath, encoderOptions);
-            decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
+            // Through CreateSession so smoke probes load (or capture) EP-context artifacts like
+            // pooled sessions do, instead of rebuilding every engine from source.
+            encoderSession = CreateSession(encoderModelPath, encoderOptions, null, cancellationToken, selections.Encoder.SelectedProvider);
+            decoderSession = CreateSession(decoderModelPath, decoderOptions, null, cancellationToken, selections.Decoder.SelectedProvider);
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 provider, bootstrap, selections, encoderSession, decoderSession);
             CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
@@ -619,8 +629,10 @@ internal static class OnnxExecutionSessionFactory
         InferenceSession? decoderSession = null;
         try
         {
-            encoderSession = new InferenceSession(encoderModelPath, encoderOptions);
-            decoderSession = new InferenceSession(decoderModelPath, decoderOptions);
+            // Through CreateSession so smoke probes load (or capture) EP-context artifacts like
+            // pooled sessions do, instead of rebuilding every engine from source.
+            encoderSession = CreateSession(encoderModelPath, encoderOptions, null, cancellationToken, selections.Encoder.SelectedProvider);
+            decoderSession = CreateSession(decoderModelPath, decoderOptions, null, cancellationToken, selections.Decoder.SelectedProvider);
             DualSessionMetadata metadata = ResolveDualSessionMetadata(
                 provider, bootstrap, selections, encoderSession, decoderSession);
             CpuExecutionAdmission.Shared.RegisterSession(encoderSession, metadata.EncoderProvider);
@@ -631,7 +643,10 @@ internal static class OnnxExecutionSessionFactory
                 decoderSession,
                 bootstrap.RequestedProviderLabel,
                 FormatProviderLabel(metadata.SelectedProvider),
-                metadata.BootstrapDetail);
+                metadata.BootstrapDetail)
+            {
+                SelectedProviderKind = metadata.SelectedProvider
+            };
         }
         catch
         {
@@ -729,12 +744,25 @@ internal static class OnnxExecutionSessionFactory
             graphRole: "default",
             optionsFingerprint,
             cancellationToken).ConfigureAwait(false));
+        if (allowTrtInitFallback && optionsSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx)
+        {
+            // TRT RTX init can still fall back to DirectML/CPU inside the pool factory, after this
+            // key is admitted; reserve for the fallback provider, not TRT RTX's measured factor.
+            key = key with
+            {
+                EstimatedVramMb = SessionPoolKey.EstimateVramMb(
+                    modelPath, optionsSelection.SelectedProvider, providerMayFallBack: true),
+            };
+        }
 
         SessionLease? poolLease = null;
         try
         {
+            // The key is admitted for the pre-creation provider; reporting the provider the
+            // fallback actually created the session with lets the pool move a CPU fallback's
+            // accounting from the device budget to host RAM.
             poolLease = await pool
-                .GetLeaseAsync(
+                .GetLeaseReportingProviderAsync(
                     key,
                     ct =>
                     {
@@ -755,7 +783,13 @@ internal static class OnnxExecutionSessionFactory
                             optionsHolder.Current = selection.Options;
                         }
 
-                        return Task.FromResult(session);
+                        // Report where ORT actually placed the graph: a device EP that initialised
+                        // but left every node on the CPU must be charged to host RAM.
+                        ExecutionProviderKind placed = ResolveEffectiveProviderKindFromSession(
+                            session,
+                            selection.SelectedProvider,
+                            useCatalogDevicePolicy);
+                        return Task.FromResult(new CreatedPoolSession(session, placed));
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -1364,6 +1398,7 @@ internal static class OnnxExecutionSessionFactory
             pair.EncoderLease.Session, pair.DecoderLease.Session,
             pair.RequestedProviderLabel, FormatProviderLabel(pair.SelectedProvider), pair.BootstrapDetail)
         {
+            SelectedProviderKind = pair.SelectedProvider,
             EncoderPoolLease = pair.EncoderLease,
             DecoderPoolLease = pair.DecoderLease
         };
@@ -2406,6 +2441,9 @@ internal static class OnnxExecutionSessionFactory
         string SelectedProvider,
         string? BootstrapDetail) : IDisposable
     {
+        /// <summary>Provider the sessions actually run on, after any downgrade.</summary>
+        internal ExecutionProviderKind SelectedProviderKind { get; init; } = ExecutionProviderKind.Cpu;
+
         internal SessionLease? EncoderPoolLease { get; init; }
         internal SessionLease? DecoderPoolLease { get; init; }
 
