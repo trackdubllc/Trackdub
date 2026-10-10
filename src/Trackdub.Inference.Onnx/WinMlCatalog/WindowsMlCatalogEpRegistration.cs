@@ -2,6 +2,7 @@
 using System.Runtime.Versioning;
 using Microsoft.Windows.AI.MachineLearning;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Inference.Onnx.WindowsMl;
 
 namespace Trackdub.Inference.Onnx.WinMlCatalog;
 
@@ -24,6 +25,7 @@ internal static class WindowsMlCatalogEpRegistration
             return new WinMlCatalogBootstrapResult(false, providerId, hardwareBlocker, hardwareDetail);
         }
 
+        CatalogPreparationPhase phase = CatalogPreparationPhase.Register;
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -43,30 +45,42 @@ internal static class WindowsMlCatalogEpRegistration
                     $"{ortExecutionProviderName} is not offered by the Windows ML catalog on this machine.");
             }
 
-            if (provider.ReadyState is ExecutionProviderReadyState.NotPresent or ExecutionProviderReadyState.NotReady)
+            CatalogPreparationPlan plan = WindowsMlCatalogPreparationPolicy.Plan(
+                WindowsMlEnsureReady.MapReadyState(provider.ReadyState),
+                allowProviderDownloads,
+                ortExecutionProviderName);
+            phase = plan.Phase;
+            if (plan.StopWithoutAcquisition)
             {
-                if (!allowProviderDownloads)
-                {
-                    WinMlCatalogReadinessBlocker blocker = provider.ReadyState is ExecutionProviderReadyState.NotPresent
-                        ? WinMlCatalogReadinessBlocker.EpNotPresent
-                        : WinMlCatalogReadinessBlocker.EpNotReady;
-                    return new WinMlCatalogBootstrapResult(
-                        false,
-                        providerId,
-                        blocker,
-                        $"{ortExecutionProviderName} is not ready. Use Install provider in Model Manager.");
-                }
+                return new WinMlCatalogBootstrapResult(
+                    false,
+                    providerId,
+                    WinMlCatalogReadinessBlocker.EpNotPresent,
+                    plan.StopDetail ?? $"{ortExecutionProviderName} is not installed.");
+            }
 
-                ExecutionProviderReadyResult readyResult = await provider.EnsureReadyAsync()
-                    .AsTask(timeoutCts.Token)
+            if (plan.CallEnsureReady)
+            {
+                ExecutionProviderReadyResult readyResult = await WindowsMlEnsureReady
+                    .EnsureReadyBoundedAsync(provider, timeoutCts.Token)
                     .ConfigureAwait(false);
-                if (readyResult.Status is not ExecutionProviderReadyResultState.Success)
+                CatalogPreparationOutcome outcome = WindowsMlCatalogPreparationPolicy.Classify(
+                    WindowsMlEnsureReady.MapEnsureStatus(readyResult.Status),
+                    plan.Phase,
+                    ortExecutionProviderName,
+                    WindowsMlEnsureReady.FormatHResult(readyResult),
+                    readyResult.DiagnosticText);
+                if (outcome.Disposition is not CatalogPreparationDisposition.Register)
                 {
                     return new WinMlCatalogBootstrapResult(
                         false,
                         providerId,
-                        WinMlCatalogReadinessBlocker.EpDownloadFailed,
-                        $"EnsureReadyAsync failed for {ortExecutionProviderName}: {readyResult.Status}.");
+                        outcome.Disposition is CatalogPreparationDisposition.Pending
+                            ? WinMlCatalogReadinessBlocker.EpPreparationPending
+                            : plan.Phase is CatalogPreparationPhase.Acquire
+                                ? WinMlCatalogReadinessBlocker.EpDownloadFailed
+                                : WinMlCatalogReadinessBlocker.EpRegisterFailed,
+                        outcome.Detail);
                 }
             }
 
@@ -96,16 +110,16 @@ internal static class WindowsMlCatalogEpRegistration
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            // When downloads are allowed the timeout means the download/install stalled → EpDownloadFailed.
-            // When downloads are disabled we only checked readiness and it timed out → EpRegisterFailed
-            // (not EpDownloadFailed, which would be misleading since no download was attempted).
-            WinMlCatalogReadinessBlocker blocker = allowProviderDownloads
+            // Only the acquire phase downloads. A timeout while preparing an installed
+            // provider, or while registering, is a preparation/registration-check failure.
+            WinMlCatalogReadinessBlocker blocker = phase == CatalogPreparationPhase.Acquire
                 ? WinMlCatalogReadinessBlocker.EpDownloadFailed
                 : WinMlCatalogReadinessBlocker.EpRegisterFailed;
-            string detail = allowProviderDownloads
-                ? $"{ortExecutionProviderName} catalog registration timed out."
-                : $"{ortExecutionProviderName} catalog readiness check timed out. Use Install provider in Model Manager.";
-            return new WinMlCatalogBootstrapResult(false, providerId, blocker, detail);
+            return new WinMlCatalogBootstrapResult(
+                false,
+                providerId,
+                blocker,
+                WindowsMlCatalogPreparationPolicy.TimeoutDetail(ortExecutionProviderName, phase));
         }
         catch (OperationCanceledException)
         {

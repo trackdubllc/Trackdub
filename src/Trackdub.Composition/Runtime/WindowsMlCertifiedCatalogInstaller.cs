@@ -19,6 +19,7 @@ internal sealed class WindowsMlCertifiedCatalogInstaller : IWindowsMlCertifiedCa
         ArgumentNullException.ThrowIfNull(progress);
 
         progress.Report("Contacting Windows ML catalog to ensure all certified providers...");
+        WindowsMlProviderRegistrationPolicy.Shared.Invalidate();
 
         WindowsMlProviderRegistrationResult result =
             await WindowsMlProviderRegistrationPolicy.Shared

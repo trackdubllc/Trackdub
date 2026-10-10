@@ -214,7 +214,7 @@ public sealed class WindowsMlProviderRegistrationPolicyTests
     }
 
     [Fact]
-    public async Task RegisterForSessionAsync_DirectMlCachesFailureToAvoidPerSessionBootstrap()
+    public async Task RegisterForSessionAsync_DirectMlDoesNotCacheFailureSoALaterAttemptCanSucceed()
     {
         var registerCalls = 0;
         var policy = new WindowsMlProviderRegistrationPolicy(
@@ -223,8 +223,8 @@ public sealed class WindowsMlProviderRegistrationPolicyTests
                 registerCalls++;
                 return Task.FromResult(new WindowsMlBootstrapResult(
                     WindowsMlBootstrapMode.RegisterInstalledCertified,
-                    Succeeded: false,
-                    FailureReason: "catalog unavailable"));
+                    Succeeded: registerCalls > 1,
+                    FailureReason: registerCalls > 1 ? null : "catalog unavailable"));
             },
             ensureAndRegisterCertifiedAsync: _ =>
             {
@@ -235,10 +235,13 @@ public sealed class WindowsMlProviderRegistrationPolicyTests
             .RegisterForSessionAsync(ExecutionProviderKind.DirectMl, CancellationToken.None);
         WindowsMlProviderRegistrationResult second = await policy
             .RegisterForSessionAsync(ExecutionProviderKind.DirectMl, CancellationToken.None);
+        WindowsMlProviderRegistrationResult third = await policy
+            .RegisterForSessionAsync(ExecutionProviderKind.DirectMl, CancellationToken.None);
 
-        Assert.Equal(1, registerCalls);
+        Assert.Equal(2, registerCalls);
         Assert.False(first.RegistrationSucceeded);
-        Assert.False(second.RegistrationSucceeded);
+        Assert.True(second.RegistrationSucceeded);
+        Assert.True(third.RegistrationSucceeded);
         Assert.Contains("catalog unavailable", first.Detail, StringComparison.Ordinal);
     }
 
@@ -549,7 +552,7 @@ public sealed class WindowsMlProviderRegistrationPolicyTests
     }
 
     [Fact]
-    public async Task EnsureAllCertifiedCatalogAsync_CachesFailureToAvoidRepeatedCatalogCalls()
+    public async Task EnsureAllCertifiedCatalogAsync_DoesNotCacheFailureSoALaterAttemptCanSucceed()
     {
         var ensureCalls = 0;
         var policy = new WindowsMlProviderRegistrationPolicy(
@@ -560,21 +563,25 @@ public sealed class WindowsMlProviderRegistrationPolicyTests
                 ensureCalls++;
                 return Task.FromResult(new WindowsMlBootstrapResult(
                     WindowsMlBootstrapMode.EnsureAndRegisterCertified,
-                    Succeeded: false,
-                    FailureReason: "catalog timed out"));
+                    Succeeded: ensureCalls > 1,
+                    FailureReason: ensureCalls > 1 ? null : "catalog timed out"));
             });
 
         WindowsMlProviderRegistrationResult first = await policy
             .EnsureAllCertifiedCatalogAsync(CancellationToken.None);
         WindowsMlProviderRegistrationResult second = await policy
             .EnsureAllCertifiedCatalogAsync(CancellationToken.None);
+        policy.Invalidate();
+        WindowsMlProviderRegistrationResult afterInvalidate = await policy
+            .EnsureAllCertifiedCatalogAsync(CancellationToken.None);
 
-        Assert.Equal(1, ensureCalls);
+        Assert.Equal(3, ensureCalls);
         Assert.False(first.RegistrationSucceeded);
-        Assert.False(second.RegistrationSucceeded);
+        Assert.True(second.RegistrationSucceeded);
+        Assert.True(afterInvalidate.RegistrationSucceeded);
         Assert.Equal(WindowsMlBootstrapMode.EnsureAllCertifiedCatalog, first.Mode);
         Assert.Contains("catalog timed out", first.Detail, StringComparison.Ordinal);
-        Assert.Contains("catalog timed out", second.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("catalog timed out", second.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

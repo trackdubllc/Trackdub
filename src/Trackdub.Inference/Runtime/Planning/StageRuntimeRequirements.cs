@@ -43,10 +43,12 @@ internal static class StageRuntimeRequirementsCatalog
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. providers.Where(static p => p is not ExecutionProviderKind.TensorRTRtx and not ExecutionProviderKind.TensorRt)];
 
-    // ORT GenAI families: no TensorRT (NvTensorRtRtx crashes the host) and no DirectML. With GenAI
-    // 0.17.1 on Windows ML 2.4, the bundled Whisper export segfaults in the encoder pass on DirectML
-    // and the bundled Qwen2.5 export fails its first DirectML kernel (0x80070057); both are CPU/CUDA
-    // exports, not DirectML ones.
+    // Approved-export policy for the bundled GenAI graphs, not a platform ban on DirectML or
+    // TensorRT. Dated observation (GenAI 0.17.1 on Windows ML 2.4, CPU/CUDA-targeted exports):
+    // the bundled Whisper export segfaults in the encoder pass on DirectML, and the bundled
+    // Qwen2.5 export fails its first DirectML kernel (0x80070057). NvTensorRtRtx has terminated
+    // the host on these same exports. Keep the guard until an export built for that provider is
+    // retested in an isolated process. Do not treat the observation as a provider-wide restriction.
     private static IReadOnlyList<ExecutionProviderKind> GenAiProviders(
         IReadOnlyList<ExecutionProviderKind> providers) =>
         [.. WithoutTensorRtFamilies(providers).Where(static p => p is not ExecutionProviderKind.DirectMl)];

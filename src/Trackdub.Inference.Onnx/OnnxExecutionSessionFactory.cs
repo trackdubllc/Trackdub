@@ -338,17 +338,20 @@ internal static class OnnxExecutionSessionFactory
         using var phase = BenchmarkPhaseCapture.Start("onnx-session-create");
         // EP-context artifacts embed a TensorRT-RTX-serialized engine that only that EP can
         // deserialize; only TRT-RTX sessions may load one (see EpContextWarmupService).
-        string loadPath = selectedProvider is ExecutionProviderKind.TensorRTRtx
-            ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath) ?? modelPath
+        IReadOnlyDictionary<string, string>? trtOptions = selectedProvider is ExecutionProviderKind.TensorRTRtx
+            ? TryGetAppendedTensorRtRtxOptions(options)
+            : null;
+        string loadPath = trtOptions is not null
+            ? EpContext.EpContextLoadPathResolver.TryResolveLoadPath(modelPath, trtOptions) ?? modelPath
             : modelPath;
         // Without a current artifact, a large graph's engine build is captured as one, so the next
         // process loads engines instead of rebuilding them (minutes for multi-GB models).
         InferenceSession session =
             sessionFactory is null &&
-            selectedProvider is ExecutionProviderKind.TensorRTRtx &&
+            trtOptions is not null &&
             string.Equals(loadPath, modelPath, StringComparison.Ordinal) &&
             EpContext.EpContextCapture.ShouldCapture(modelPath)
-                ? EpContext.EpContextCapture.CreateSession(modelPath, options, static (path, o) => new InferenceSession(path, o))
+                ? EpContext.EpContextCapture.CreateSession(modelPath, options, trtOptions, static (path, o) => new InferenceSession(path, o))
                 : sessionFactory is null
                     ? new InferenceSession(loadPath, options)
                     : sessionFactory(loadPath, options);
@@ -1903,6 +1906,14 @@ internal static class OnnxExecutionSessionFactory
         }
     }
 
+    // EP-context artifacts are keyed by the provider options their engines were built with, so
+    // session creation needs the options appended here, not a re-derivation from the model.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SessionOptions, IReadOnlyDictionary<string, string>>
+        AppendedTensorRtRtxOptions = new();
+
+    internal static IReadOnlyDictionary<string, string>? TryGetAppendedTensorRtRtxOptions(SessionOptions options) =>
+        AppendedTensorRtRtxOptions.TryGetValue(options, out IReadOnlyDictionary<string, string>? trtOptions) ? trtOptions : null;
+
     internal static ExecutionProviderKind AppendTensorRtRtxOrFallbackProvider(
         SessionOptions options,
         IReadOnlyDictionary<string, string>? additionalTrtOptions = null,
@@ -1917,6 +1928,7 @@ internal static class OnnxExecutionSessionFactory
         {
             IReadOnlyDictionary<string, string> trtOptions = BuildTensorRtRtxOptions(additionalTrtOptions, enableCudaGraph);
             options.AppendExecutionProvider(OrtEnv.Instance(), new[] { trtDevice }, trtOptions);
+            AppendedTensorRtRtxOptions.AddOrUpdate(options, trtOptions);
             return ExecutionProviderKind.TensorRTRtx;
         }
 
@@ -1971,7 +1983,7 @@ internal static class OnnxExecutionSessionFactory
         ExecutionProviderKind SelectedProvider,
         string? FallbackReason = null);
 
-    private static bool IsTensorRtRtxDeviceCandidate(string epName, OrtHardwareDeviceType hardwareDeviceType) =>
+    internal static bool IsTensorRtRtxDeviceCandidate(string epName, OrtHardwareDeviceType hardwareDeviceType) =>
         // Only accept the single canonical standalone EP ABI plugin name.
         // "NvTensorRtExecutionProvider" and "TensorrtExecutionProvider" are the old CUDA-based TensorRT EP —
         // they must NOT be treated as TRT RTX candidates (different EP family, different options).
@@ -2013,7 +2025,7 @@ internal static class OnnxExecutionSessionFactory
     /// for a session whose call site is verified to feed stable, IoBinding-backed device buffers
     /// across iterations.
     /// </param>
-    private static IReadOnlyDictionary<string, string> BuildTensorRtRtxOptions(
+    internal static IReadOnlyDictionary<string, string> BuildTensorRtRtxOptions(
         IReadOnlyDictionary<string, string>? additionalTrtOptions,
         bool enableCudaGraph = false)
     {

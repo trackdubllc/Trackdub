@@ -113,8 +113,8 @@ Every field is required; write "unknown" or "nothing" rather than leaving one ou
 - **Result:** The pipeline works (O-5). No crash has been attributed to the version gap.
 - **Reproduced:** not applicable; this is a configuration fact.
 - **Cause confidence:** not applicable. The risk is explained in [upstream](../upstream/ort-and-genai-source.md). Nobody has inspected the output folder to confirm which managed copy ships ([upstream/packages.md](../upstream/packages.md)).
-- **Status:** current. Open question: drop the stock managed package on Windows and use Windows ML's matched managed API?
-- **Acted on in:** `src/Trackdub.Inference.Onnx/Trackdub.Inference.Onnx.csproj` (`ExcludeAssets="native"` on the stock package).
+- **Status:** superseded on 2026-10-10. The Windows host project no longer references stock managed ORT. Its output `Microsoft.ML.OnnxRuntime.dll` matched the Windows ML 2.4.89 package copy, and its `onnxruntime.dll` matched that package's win-x64 native. The CUDA worker output matched stock managed ORT 1.30 and `Microsoft.ML.OnnxRuntime.Gpu.Windows` 1.30 win-x64 native, under `inference-worker\` only. This was a file-hash check of a Debug build, not a model run.
+- **Acted on in:** `src/Trackdub.Inference.Onnx/Trackdub.Inference.Onnx.csproj` (Windows ML managed binding on the host; stock managed ORT only for the worker host compile) and `src/Trackdub.InferenceWorker/Trackdub.InferenceWorker.csproj`.
 
 ### O-7. Deep scratch paths broke native DLL loading
 

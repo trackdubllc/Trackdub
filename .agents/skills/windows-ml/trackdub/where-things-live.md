@@ -5,7 +5,7 @@ Tier 3 pointers. This file says where to look, not what is true. Read the file i
 | Concern | Read |
 | --- | --- |
 | Package pins (Windows ML, GenAI, managed ORT) | `Directory.Packages.props` |
-| Per-TFM package wiring (which ORT package is managed-only on Windows) | `src/Trackdub.Inference.Onnx/Trackdub.Inference.Onnx.csproj` |
+| Per-TFM package wiring (Windows ML managed binding on the Windows host; stock managed ORT only for the worker host compile) | `src/Trackdub.Inference.Onnx/Trackdub.Inference.Onnx.csproj` |
 | Native asset copies into app output, and shipping the worker to `inference-worker\` | `src/Trackdub.Composition/Trackdub.Composition.csproj` |
 | Catalog bootstrap: per-provider ensure and register | `src/Trackdub.Inference.Onnx/WindowsMl/WindowsMlExecutionProviderBootstrapper.Windows.cs` |
 | Which provider uses which registration route; no bulk download on hot paths | `src/Trackdub.Inference.Onnx/WindowsMl/WindowsMlProviderRegistrationPolicy.cs` |

@@ -92,6 +92,7 @@ public sealed class MigraphxRuntimeReadinessService(IMigraphxReadinessProbe read
         {
             MigraphxReadinessBlocker.None => "Not ready",
             MigraphxReadinessBlocker.EpNotPresent or MigraphxReadinessBlocker.EpDownloadFailed => "Install required",
+            MigraphxReadinessBlocker.EpPreparationPending => "Preparing",
             MigraphxReadinessBlocker.DriverVersionMismatch or MigraphxReadinessBlocker.OsVersionUnsupported => "Blocked",
             MigraphxReadinessBlocker.GpuVendorMismatch => "No AMD GPU",
             MigraphxReadinessBlocker.OrtProviderUnavailable => "ORT EP missing",

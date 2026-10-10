@@ -30,6 +30,15 @@ internal static class GenAiNativeRuntimeSelection
          (pair.OrtFlavor == "Stock" && pair.OrtPackageVersion == "1.30.0" &&
           pair.OrtVersion == "1.30.0" && pair.GenAiFlavor is "Cpu" or "Cuda"));
 
+    /// <summary>
+    /// ORT file identity for a Windows ML host or the stock CUDA worker.
+    /// A Stock row recorded next to GenAI.WinML is the worker's onnxruntime.dll, not a GenAI pair.
+    /// GenAI loading still requires <see cref="IsSupported"/>.
+    /// </summary>
+    internal static bool IsKnownOrt(NativePairManifest pair) =>
+        (pair.OrtFlavor == "WindowsML" && pair.OrtPackageVersion == "2.4.89" && pair.OrtVersion == "1.27.1") ||
+        (pair.OrtFlavor == "Stock" && pair.OrtPackageVersion == "1.30.0" && pair.OrtVersion == "1.30.0");
+
     internal static string HashFile(string path)
     {
         using var stream = File.OpenRead(path);
@@ -130,7 +139,7 @@ internal static class GenAiNativeRuntimeSelection
             string? path = SelectPath(typeof(OrtEnv), "onnxruntime.dll");
             if (path is null) throw new InvalidOperationException("Native runtime identity not verified: ORT path is missing.");
             string hash = HashFile(path);
-            selectedPair = ReadManifests().FirstOrDefault(p => p.Rid == Rid && IsSupported(p) &&
+            selectedPair = ReadManifests().FirstOrDefault(p => p.Rid == Rid && IsKnownOrt(p) &&
                 string.Equals(p.OrtSha256, hash, StringComparison.OrdinalIgnoreCase));
             if (selectedPair is null && requireVerified)
                 throw new InvalidOperationException($"Native runtime identity not verified: '{path}' has no supported build-time provenance.");

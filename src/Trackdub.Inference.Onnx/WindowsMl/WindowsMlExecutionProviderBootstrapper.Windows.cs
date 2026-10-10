@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Microsoft.Windows.AI.MachineLearning;
 using Trackdub.Inference.Onnx.TensorRtRtx;
+using Trackdub.Inference.Onnx.WinMlCatalog;
 
 namespace Trackdub.Inference.Onnx.WindowsMl;
 
@@ -86,22 +87,48 @@ public sealed class WindowsMlExecutionProviderBootstrapper
         CancellationToken cancellationToken)
     {
         var failures = new List<string>();
+        var pending = new List<string>();
         int registered = 0;
         foreach (ExecutionProvider provider in catalog.FindAllProviders())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (WindowsMlCatalogProviderFilter.IsExcludedFromBulkRegistration(provider.Name) ||
-                (!allowDownloads && provider.ReadyState is not ExecutionProviderReadyState.Ready))
+            if (WindowsMlCatalogProviderFilter.IsExcludedFromBulkRegistration(provider.Name))
             {
                 continue;
             }
 
-            if (provider.ReadyState is not ExecutionProviderReadyState.Ready)
+            CatalogPreparationPlan plan = WindowsMlCatalogPreparationPolicy.Plan(
+                WindowsMlEnsureReady.MapReadyState(provider.ReadyState),
+                allowDownloads,
+                provider.Name);
+            // Not installed, and this call is not allowed to acquire packages. Skip quietly:
+            // absence of an optional catalog provider is not a failure of the ones already installed.
+            if (plan.StopWithoutAcquisition)
             {
-                ExecutionProviderReadyResult ready = await provider.EnsureReadyAsync().AsTask(cancellationToken);
-                if (ready.Status is not ExecutionProviderReadyResultState.Success)
+                continue;
+            }
+
+            if (plan.CallEnsureReady)
+            {
+                ExecutionProviderReadyResult ready = await WindowsMlEnsureReady
+                    .EnsureReadyBoundedAsync(provider, cancellationToken)
+                    .ConfigureAwait(false);
+                CatalogPreparationOutcome outcome = WindowsMlCatalogPreparationPolicy.Classify(
+                    WindowsMlEnsureReady.MapEnsureStatus(ready.Status),
+                    plan.Phase,
+                    provider.Name,
+                    WindowsMlEnsureReady.FormatHResult(ready),
+                    ready.DiagnosticText);
+                if (outcome.Disposition is CatalogPreparationDisposition.Pending)
                 {
-                    failures.Add($"EnsureReadyAsync failed for {provider.Name}: {ready.Status}.");
+                    // Still preparing is not a failure; the single-provider paths report it the same way.
+                    pending.Add(outcome.Detail);
+                    continue;
+                }
+
+                if (outcome.Disposition is not CatalogPreparationDisposition.Register)
+                {
+                    failures.Add(outcome.Detail);
                     continue;
                 }
             }
@@ -116,9 +143,8 @@ public sealed class WindowsMlExecutionProviderBootstrapper
             }
         }
 
-        return failures.Count == 0
-            ? (true, null)
-            : (registered > 0, string.Join(" ", failures));
+        string? detail = failures.Count + pending.Count == 0 ? null : string.Join(" ", failures.Concat(pending));
+        return (registered > 0 || (failures.Count == 0 && pending.Count == 0), detail);
     }
 
     private static bool TryEnsureWinMlProjectionDeployed(out string? failureReason)

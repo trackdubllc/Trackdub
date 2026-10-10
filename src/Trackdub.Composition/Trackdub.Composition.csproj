@@ -105,6 +105,7 @@
     <!-- WinML 2.x ships onnxruntime.dll and DirectML.dll under RID-specific runtimes/*/native paths.
          This target force-overwrites to guarantee WinML's ORT wins over the CPU-only onnxruntime.dll
          that Microsoft.ML.OnnxRuntime (pulled transitively by OnnxRuntimeGenAI) would otherwise copy. -->
+    <_WinMlAssets Include="$(PkgMicrosoft_Windows_AI_MachineLearning)\lib\$(_WinMlProjectionLibTfm)\Microsoft.ML.OnnxRuntime.dll" TargetPath="Microsoft.ML.OnnxRuntime.dll" />
     <_WinMlAssets Include="$(PkgMicrosoft_Windows_AI_MachineLearning)\runtimes\$(_WinMlRuntimeIdentifier)\native\onnxruntime.dll" TargetPath="onnxruntime.dll" />
     <_WinMlAssets Include="$(PkgMicrosoft_Windows_AI_MachineLearning)\runtimes\$(_WinMlRuntimeIdentifier)\native\DirectML.dll" TargetPath="DirectML.dll" />
     <_WinMlAssets Include="$(PkgMicrosoft_Windows_AI_MachineLearning)\runtimes\$(_WinMlRuntimeIdentifier)\native\Microsoft.Windows.AI.MachineLearning.dll" TargetPath="Microsoft.Windows.AI.MachineLearning.dll" />
@@ -136,6 +137,15 @@
                              TargetPath="%(_WinMlAssets.TargetPath)"
                              Visible="false" />
     </ItemGroup>
+  </Target>
+
+  <!-- Stock CUDA provider DLLs belong to the worker output. They must not land beside the
+       application's Windows ML onnxruntime.dll. -->
+  <Target Name="RejectWorkerCudaNativesAtAppRoot"
+          AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
+    <Error Condition="Exists('$(TargetDir)onnxruntime_providers_cuda.dll') Or Exists('$(TargetDir)onnxruntime_providers_tensorrt.dll') Or Exists('$(TargetDir)onnxruntime_providers_shared.dll')"
+           Text="Stock CUDA/TensorRT provider DLLs were copied to the application root. They belong under inference-worker\ only." />
   </Target>
 
   <!-- ADR-0017: the ORT 1.30 worker ships in its own inference-worker\ folder, where
