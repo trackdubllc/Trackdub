@@ -312,17 +312,26 @@ public static class EpContextArtifact
 
             return published;
         }
-        catch
+        catch (Exception publishError)
         {
             // This list also covers engines moved before a stamp could record them.
             mayDeleteRollback = false;
-            foreach (string path in movedPaths) File.Delete(path);
-            // Restore the old stamp last so readers cannot validate a partially restored set.
-            foreach ((string original, string backup) in backups.AsEnumerable().Reverse())
+            try
             {
-                File.Move(backup, original, overwrite: true);
+                foreach (string path in movedPaths) File.Delete(path);
+                // Restore the old stamp last so readers cannot validate a partially restored set.
+                foreach ((string original, string backup) in backups.AsEnumerable().Reverse())
+                {
+                    File.Move(backup, original, overwrite: true);
+                }
+                mayDeleteRollback = true;
             }
-            mayDeleteRollback = true;
+            catch (Exception rollbackError) when (rollbackError is IOException or UnauthorizedAccessException)
+            {
+                // Keep backups for recovery, and retain the original publication failure for callers.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"EpContextArtifact: rollback failed after publish error '{publishError.Message}': {rollbackError.Message}");
+            }
             throw;
         }
         finally

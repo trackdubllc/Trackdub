@@ -54,6 +54,32 @@ public sealed class EpContextPublicationTests : IDisposable
     }
 
     [Fact]
+    public void Failed_rollback_preserves_original_publish_error_and_recovery_backups()
+    {
+        string output = EpContextArtifact.GetEpContextPath(Source);
+        EpContextArtifact.PublishStagedArtifact(Stage(output, "old.engine", [1, 2]), Source,
+            createStamp: files => Stamp(files));
+        File.WriteAllBytes(Source, [1, 2]);
+        var originalError = new IOException("original stamp failure");
+
+        IOException failure = Assert.Throws<IOException>(() => EpContextArtifact.PublishStagedArtifact(
+            Stage(output, "new.engine", [3, 4]), Source,
+            createStamp: files =>
+            {
+                if (files.Count == 0) return Stamp(files);
+                // The old engine is now backed up. A directory at its original path prevents restore.
+                Directory.CreateDirectory(Path.Join(directory, "old.engine"));
+                throw originalError;
+            }));
+
+        Assert.Same(originalError, failure);
+        string backupDirectory = Assert.Single(Directory.GetDirectories(directory, ".epc-rollback-*"));
+        Assert.NotEmpty(Directory.GetFiles(backupDirectory));
+        Assert.False(File.Exists(Path.Join(directory, "new.engine")));
+        Assert.False(File.Exists(EpContextArtifact.GetStampPath(Source)));
+    }
+
+    [Fact]
     public void Failed_model_move_removes_engines_even_before_stamp_exists()
     {
         string output = EpContextArtifact.GetEpContextPath(Source);
