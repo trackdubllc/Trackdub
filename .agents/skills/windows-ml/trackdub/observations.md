@@ -55,7 +55,7 @@ Every field is required; write "unknown" or "nothing" rather than leaving one ou
 - **Setup:** Same probe as O-2. `config.SetProviderOption("DML", "enable_graph_capture", "0")` versus lower-case `dml`.
 - **Result:** The option appeared to take effect only with `DML`.
 - **Reproduced:** Once.
-- **Cause confidence:** contradicted. GenAI main normalizes provider names case-insensitively ([upstream](../upstream/ort-and-genai-source.md)); 0.17.1's behaviour is unverified. The difference may have come from another variable in the probe.
+- **Cause confidence:** unknown. GenAI main normalizes provider names case-insensitively ([upstream](../upstream/ort-and-genai-source.md)); 0.17.1's behaviour is unverified. The difference may have come from another variable in the probe.
 - **Status:** needs re-test. Do not encode casing rules from this.
 - **Acted on in:** nothing in code.
 
