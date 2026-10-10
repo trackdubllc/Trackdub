@@ -117,7 +117,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
         }
     }
 
-<<<<<<< Updated upstream
+    public static bool RootsEqual(string left, string right)
     {
         if (TryNormalizeRoot(left, out string? normalizedLeft) &&
             TryNormalizeRoot(right, out string? normalizedRight))
@@ -128,7 +128,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
         // Never throw from equality: fall back to a raw trimmed comparison when
         // either path is missing or cannot be normalized.
         return string.Equals(left?.Trim(), right?.Trim(), RootPathComparison);
-=======
+    }
 
     public static IReadOnlyList<LocalModelVariantRecord> CompatibleVariants(
         LocalModelCacheRecord record, IEnumerable<LocalModelVariantRecord> variants) =>

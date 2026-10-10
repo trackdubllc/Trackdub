@@ -18,6 +18,14 @@ internal static class TtsTimingResumeIdentity
     internal static string Append(string fingerprint, double value) =>
         string.Concat(fingerprint, FingerprintSuffix, Normalize(value));
 
+    // Strips the timing suffix so a legacy (pre-suffix) fingerprint can be looked up. The base
+    // hash already encodes AutoStretchMaxOverrun, so a legacy match proves the same limit was used.
+    internal static string WithoutSuffix(string fingerprint)
+    {
+        int suffixIndex = fingerprint.LastIndexOf(FingerprintSuffix, StringComparison.Ordinal);
+        return suffixIndex < 0 ? fingerprint : fingerprint[..suffixIndex];
+    }
+
     internal static bool Matches(string? fingerprint, string expectedValue) =>
         fingerprint?.EndsWith(string.Concat(FingerprintSuffix, expectedValue), StringComparison.Ordinal) == true;
 }

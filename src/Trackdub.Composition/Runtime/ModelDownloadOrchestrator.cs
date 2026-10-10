@@ -318,7 +318,16 @@ public sealed class ModelDownloadOrchestrator(
         }
 
         LocalModelCacheRecord? record = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
+        ModelCacheState currentState = ModelInventoryService.DetermineState(entry, record);
+        string modelRootDirectory = ResolveVerificationModelRootDirectory(entry, record);
+
+        IReadOnlyList<string> requiredFiles = ModelDownloadManifestFiles.ResolveRequiredFiles(entry);
+        IReadOnlyList<string> missingFiles = ResolveMissingRequiredFiles(modelRootDirectory, requiredFiles);
+        if (currentState is ModelCacheState.Missing && missingFiles.Count > 0)
+        {
+            return new ModelVerificationResult(modelId, ModelCacheState.Missing, ModelCacheState.Missing, false, null);
         }
+
         if (missingFiles.Count > 0)
         {
             await SetModelIntegrityStateAsync(modelId, integrityFailed: true, entry, modelRootDirectory, cancellationToken)

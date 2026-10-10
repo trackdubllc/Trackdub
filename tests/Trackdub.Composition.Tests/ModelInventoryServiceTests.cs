@@ -30,6 +30,41 @@ public sealed class ModelInventoryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Inventory_ignores_malformed_legacy_root_when_a_valid_installation_exists()
+    {
+        var (registry, paths) = CreateRegistry("", sha256: new string('a', 64));
+        LocalModelCacheRecordStore store = await InstallModelAsync(paths, "model.onnx");
+        LocalModelCacheRecord valid = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
+        await store.MutateAsync(
+            records => records.Append(valid with { RootPath = "invalid\0root" }).ToArray(),
+            TestContext.Current.CancellationToken);
+        var service = new ModelInventoryService(registry, store, paths);
+
+        ModelInventoryEntry entry = Assert.Single(await service.GetAllAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(ModelCacheState.Installed, entry.State);
+        Assert.Equal(valid.RootPath, entry.ModelRootPath);
+    }
+
+    [Fact]
+    public async Task Inventory_ignores_malformed_legacy_root_when_it_is_the_only_record()
+    {
+        var (registry, paths) = CreateRegistry("", sha256: new string('a', 64));
+        Directory.CreateDirectory(paths.ModelCacheDirectory);
+        var store = new LocalModelCacheRecordStore(paths);
+        await store.MutateAsync(
+            _ =>
+            [
+                new LocalModelCacheRecord("example/translation-model", "invalid\0root", "main", new string('a', 64), DateTimeOffset.UtcNow)
+            ],
+            TestContext.Current.CancellationToken);
+        var service = new ModelInventoryService(registry, store, paths);
+
+        ModelInventoryEntry entry = Assert.Single(await service.GetAllAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(ModelCacheState.Corrupt, entry.State);
+        Assert.Null(entry.ModelRootPath);
+    }
+
+    [Fact]
     public async Task GetAllAsync_excludes_deprecated_models()
     {
         (BundledModelManifestRegistry registry, TrackdubStoragePaths storagePaths) = CreateRegistry(
