@@ -347,6 +347,93 @@ public sealed class BatchProcessorTests : IDisposable
         Assert.Equal(BatchFileStatus.Skipped, report.Files[2].Status);
     }
 
+    // ─── Project lock: batch runs are mutually excluded with CLI and desktop runs ──
+
+    [Fact]
+    public async Task ExecuteAsync_LockedProject_FailsThatFileNamingTheHolder_AndContinues()
+    {
+        var recording = new RecordingEngine();
+        var processor = new BatchProcessor(recording);
+        string locked = WriteMedia("locked.mp4");
+        string free = WriteMedia("free.mp4");
+        using ProjectLock holder = ProjectLock.Acquire(ProjectDirectoryOf(locked));
+
+        BatchReport report = await processor.ExecuteAsync(
+            [locked, free], CreateTemplateOptions(), new BatchOptions { ContinueOnError = true },
+            progress: null, CancellationToken.None);
+
+        Assert.Equal(BatchFileStatus.Failed, report.Files[0].Status);
+        Assert.Contains(
+            $"locked by process {Environment.ProcessId}",
+            report.Files[0].Reason,
+            StringComparison.Ordinal);
+        Assert.Equal(BatchFileStatus.Success, report.Files[1].Status);
+        Assert.Equal(free, Assert.Single(recording.Options).SourceMediaPath);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_LockedProject_FailFast_SkipsTheRest()
+    {
+        var recording = new RecordingEngine();
+        var processor = new BatchProcessor(recording);
+        string locked = WriteMedia("locked.mp4");
+        string next = WriteMedia("next.mp4");
+        using ProjectLock holder = ProjectLock.Acquire(ProjectDirectoryOf(locked));
+
+        BatchReport report = await processor.ExecuteAsync(
+            [locked, next], CreateTemplateOptions(), new BatchOptions { ContinueOnError = false },
+            progress: null, CancellationToken.None);
+
+        Assert.Equal(BatchFileStatus.Failed, report.Files[0].Status);
+        Assert.Equal(BatchFileStatus.Skipped, report.Files[1].Status);
+        Assert.Empty(recording.Options);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_HoldsTheProjectLockOnlyWhileThatFileRuns()
+    {
+        string first = WriteMedia("first.mp4");
+        string second = WriteMedia("second.mp4");
+        var lockedDuringRun = new List<bool>();
+        var recording = new RecordingEngine
+        {
+            OnExecute = options => lockedDuringRun.Add(IsLocked(ProjectDirectoryOf(options.SourceMediaPath)))
+        };
+        var processor = new BatchProcessor(recording);
+
+        BatchReport report = await processor.ExecuteAsync(
+            [first, second], CreateTemplateOptions(), new BatchOptions { ContinueOnError = true },
+            progress: null, CancellationToken.None);
+
+        Assert.Equal(2, report.SucceededCount);
+        Assert.Equal([true, true], lockedDuringRun);
+        Assert.False(IsLocked(ProjectDirectoryOf(first)));
+        Assert.False(IsLocked(ProjectDirectoryOf(second)));
+    }
+
+    private string WriteMedia(string name)
+    {
+        string path = Path.Join(_tempDir, name);
+        File.WriteAllBytes(path, [0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70]);
+        return path;
+    }
+
+    private static string ProjectDirectoryOf(string mediaPath) =>
+        TrackdubProjectPaths.ResolveProjectDirectory(mediaPath, CreateTemplateOptions().ProjectOutputDirectory);
+
+    private static bool IsLocked(string projectDirectory)
+    {
+        try
+        {
+            using ProjectLock probe = ProjectLock.Acquire(projectDirectory);
+            return false;
+        }
+        catch (ProjectLockedException)
+        {
+            return true;
+        }
+    }
+
     /// <summary>
     /// Minimal engine double that throws a fixed exception from <see cref="ExecuteAsync"/>,
     /// used to exercise <see cref="BatchProcessor"/> error handling without a real pipeline.
@@ -464,12 +551,15 @@ public sealed class BatchProcessorTests : IDisposable
     {
         public List<DubbingSessionOptions> Options { get; } = [];
 
+        public Action<DubbingSessionOptions>? OnExecute { get; init; }
+
         public Task<DubbingRunResult> ExecuteAsync(
             DubbingSessionOptions options,
             IProgress<PipelineProgressEvent>? progress = null,
             CancellationToken cancellationToken = default)
         {
             Options.Add(options);
+            OnExecute?.Invoke(options);
             return Task.FromResult(SuccessResult());
         }
 
