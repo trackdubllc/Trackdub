@@ -174,9 +174,9 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
 
     [Theory]
     [InlineData(ExecutionProviderKind.TensorRTRtx, 253)] // 100 * 1.25 + 128
+    [InlineData(ExecutionProviderKind.DirectMl, 253)]
     [InlineData(ExecutionProviderKind.Cpu, 328)]         // 100 * 2 + 128
     [InlineData(ExecutionProviderKind.Dnnl, 328)]
-    [InlineData(ExecutionProviderKind.DirectMl, 328)]
     [InlineData(ExecutionProviderKind.Cuda, 328)]
     [InlineData(ExecutionProviderKind.TensorRt, 328)]
     [InlineData(ExecutionProviderKind.OpenVino, 328)]
@@ -208,10 +208,10 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
         WriteBytes("encoder_model.onnx_data", 100 * MiB);
 
         SessionPoolKey trt = SessionPoolKey.ForEncoder("madlad", encoder, ExecutionProviderKind.TensorRTRtx);
-        SessionPoolKey dml = SessionPoolKey.ForEncoder("madlad", encoder, ExecutionProviderKind.DirectMl);
+        SessionPoolKey cuda = SessionPoolKey.ForEncoder("madlad", encoder, ExecutionProviderKind.Cuda);
 
         Assert.Equal(253, trt.EstimatedVramMb);
-        Assert.Equal(328, dml.EstimatedVramMb);
+        Assert.Equal(328, cuda.EstimatedVramMb);
     }
 
     [Fact]
@@ -250,25 +250,50 @@ public sealed class SessionPoolKeyVramEstimateTests : IDisposable
         Assert.Equal(148, lease.ResolvedPoolKey.EstimatedVramMb);
     }
 
+    /// <summary>Default accelerator budget on the 12 GB RTX 5070 the factors were measured on.</summary>
+    private static long Rtx5070BudgetMb => InferenceSessionPool.ScaleAcceleratorBudgetMb(11_943);
+
     /// <summary>
     /// MADLAD-400 3B <c>trt_rtx_mixed_fp16_fp32</c> encoder + decoder, sized from the exported
     /// files. On TensorRT RTX the bundle fits the default budget of a 12 GB card (it runs there,
-    /// using ~8 GB); the generic 2× factor would refuse it.
+    /// using ~8 GB); the unmeasured 2× factor would refuse it.
     /// </summary>
     [Fact]
-    public void MadladFp16Bundle_FitsTwelveGigabyteBudgetOnTensorRtRtxOnly()
+    public void MadladFp16Bundle_FitsTwelveGigabyteBudgetOnlyWithMeasuredFactor()
     {
         const long encoderBytes = 1_433_988L + 2_671_905_792L;
         const long decoderBytes = 2_594_639L + 3_879_930_880L;
-        long budgetMb = InferenceSessionPool.ScaleAcceleratorBudgetMb(12_227);
 
         long trtMb = SessionPoolKey.EstimateFromWeightBytes(encoderBytes, ExecutionProviderKind.TensorRTRtx)
             + SessionPoolKey.EstimateFromWeightBytes(decoderBytes, ExecutionProviderKind.TensorRTRtx);
-        long genericMb = SessionPoolKey.EstimateFromWeightBytes(encoderBytes, ExecutionProviderKind.DirectMl)
-            + SessionPoolKey.EstimateFromWeightBytes(decoderBytes, ExecutionProviderKind.DirectMl);
+        long unmeasuredMb = SessionPoolKey.EstimateFromWeightBytes(encoderBytes, ExecutionProviderKind.Cuda)
+            + SessionPoolKey.EstimateFromWeightBytes(decoderBytes, ExecutionProviderKind.Cuda);
 
-        Assert.InRange(trtMb, 7_600, budgetMb);
-        Assert.True(genericMb > budgetMb, $"2x estimate {genericMb} MB should exceed {budgetMb} MB.");
+        Assert.Equal(8_069, trtMb);
+        Assert.True(trtMb <= Rtx5070BudgetMb, $"{trtMb} MB should fit {Rtx5070BudgetMb} MB.");
+        Assert.True(unmeasuredMb > Rtx5070BudgetMb, $"2x estimate {unmeasuredMb} MB should exceed {Rtx5070BudgetMb} MB.");
+    }
+
+    /// <summary>
+    /// qwen3-asr-0.6b encoder + decoder-init + decoder-step on DirectML: both decoder graphs
+    /// reference the same 3.0 GB <c>decoder_weights.data</c>. At 2× the bundle needed 13274 MB
+    /// and failed the ASR stage against the 8957 MB budget, while the run measured 6526 MiB.
+    /// </summary>
+    [Fact]
+    public void Qwen3AsrBundle_FitsTwelveGigabyteBudgetOnDirectMl()
+    {
+        const long encoderBytes = 745_762_694L;
+        const long decoderInitBytes = 286_310L + 3_006_500_864L;
+        const long decoderStepBytes = 285_813L + 3_006_500_864L;
+
+        long Bundle(ExecutionProviderKind provider) =>
+            SessionPoolKey.EstimateFromWeightBytes(encoderBytes, provider)
+            + SessionPoolKey.EstimateFromWeightBytes(decoderInitBytes, provider)
+            + SessionPoolKey.EstimateFromWeightBytes(decoderStepBytes, provider);
+
+        Assert.Equal(8_957, Rtx5070BudgetMb);
+        Assert.Equal(8_438, Bundle(ExecutionProviderKind.DirectMl));
+        Assert.Equal(13_274, Bundle(ExecutionProviderKind.Cuda));
     }
 
     // ── Minimal ONNX protobuf writer ─────────────────────────────────────────

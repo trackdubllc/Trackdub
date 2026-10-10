@@ -96,12 +96,12 @@ internal sealed class InferenceSessionPool : IDisposable
     /// <summary>
     /// Default accelerator (VRAM) admission budget per device when <c>enableMemoryAdmission</c> is on.
     /// Scaled with detected GPU VRAM (three-quarters of the largest adapter, floor 4GB,
-    /// cap 16GB) so large bundles such as MADLAD-400 (~6.4GB quantized reservation, ~8.1GB
+    /// cap 16GB) so large bundles such as MADLAD-400 (~6.4GB quantized reservation at 2x, ~8.1GB
     /// for the external-data fp16 export on TensorRT RTX) fit on 12GB GPUs out-of-the-box,
     /// while small GPUs keep the conservative 4GB guard.
     /// Deliberately a larger fraction than the host-RAM default (quarter): VRAM is the
     /// working set's home, and reservations already include weights plus slack (2x on
-    /// unmeasured providers, a measured 1.25x on TensorRT RTX — see
+    /// unmeasured providers, a measured 1.25x on TensorRT RTX and DirectML — see
     /// <see cref="SessionPoolKey.ResidentPercentOfWeights"/>), while process-GPU observation
     /// charges any real usage beyond them.
     /// An explicit <c>TRACKDUB_SESSION_VRAM_BUDGET_MB</c> always wins over this default.
