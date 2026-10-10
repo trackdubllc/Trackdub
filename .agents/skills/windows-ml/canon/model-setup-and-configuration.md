@@ -12,6 +12,8 @@ The Learn overview does not establish exact CLI flags, full export recipes, mode
 
 ## Runtime and CPU inference
 
+For an executable, standalone project with package references, acquisition instructions, tensor metadata checks, image preprocessing, inference and top-five output, see [the C# ResNet walkthrough](../samples/ResNetWalkthrough/README.md). It also demonstrates explicit device selection, per-provider installation-result handling and compiled-artifact validation. Build validation is recorded separately from unexecuted model/provider inference.
+
 Choose language, architecture, Windows target and deployment mode using [deployment instructions](https://learn.microsoft.com/windows/ai/new-windows-ml/distributing-your-app). Establish CPU inference before optional acceleration. [Getting started](https://learn.microsoft.com/windows/ai/new-windows-ml/get-started).
 
 Inputs, preprocessing and inference code differ by model. The general Learn example is:
@@ -25,6 +27,8 @@ using InferenceSession session = new(modelPath, sessionOptions);
 The application supplies `modelPath` and `sessionOptions`. Session creation alone is not a complete inference example. [Run ONNX models](https://learn.microsoft.com/windows/ai/new-windows-ml/run-onnx-models).
 
 ## Configure acceleration
+
+Use [configuration coverage for all eight providers](provider-configuration-coverage.md) to distinguish documented settings and restrictions from unresolved provider-specific details.
 
 Prepare/register the EP, enumerate its devices, filter to the intended provider and hardware class, and append the selection with documented options. Begin with explicit selection; evaluate automatic policies afterwards. [Selection](https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers).
 

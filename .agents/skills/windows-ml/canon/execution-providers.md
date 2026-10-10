@@ -54,6 +54,8 @@ Source: [WebGPU EP](https://learn.microsoft.com/windows/ai/new-windows-ml/webgpu
 
 ## Provider options and model limits
 
+See [per-provider configuration coverage](provider-configuration-coverage.md) for eight-provider tables of hardware, deployment, documented options, precision/model restrictions, unresolved details and diagnostic checks.
+
 For setup, use [model configuration](model-setup-and-configuration.md). Microsoft Learn's inventory does not enumerate every provider's operator, backend-option, shape or quantization restrictions. If a requested detail is only in a linked external vendor/ORT page, mark it not established under the Microsoft-Learn-only rule. Do not transfer one provider's options to another.
 
 ## Licensing and scope
