@@ -39,10 +39,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AssemblyMetadata Include="TrackdubHostOrtRuntimeVersion" Value="$(WindowsMlOnnxRuntimeVersion)"
-                      Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'" />
     <AssemblyMetadata Include="TrackdubHostOrtRuntimeVersion" Value="$(OnnxRuntimeVersion)"
-                      Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'" />
+                      Condition="'$(TrackdubOrtHost)' == 'Stock'" />
+    <AssemblyMetadata Include="TrackdubHostOrtRuntimeVersion" Value="$(WindowsMlOnnxRuntimeVersion)"
+                      Condition="'$(TrackdubOrtHost)' != 'Stock' And '$(TargetFramework)' == 'net10.0-windows10.0.19041.0'" />
+    <AssemblyMetadata Include="TrackdubHostOrtRuntimeVersion" Value="$(OnnxRuntimeVersion)"
+                      Condition="'$(TrackdubOrtHost)' != 'Stock' And '$(TargetFramework)' != 'net10.0-windows10.0.19041.0'" />
   </ItemGroup>
 
   <ItemGroup>
