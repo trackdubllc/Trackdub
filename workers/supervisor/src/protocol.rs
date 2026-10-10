@@ -3,6 +3,7 @@
 //! C# host. See `workers/PROTOCOL.md`.
 
 use anyhow::Context;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -32,20 +33,18 @@ impl TensorEnvelope {
             self.shape.iter().all(|&d| d >= 0),
             "tensor shape must not contain negative dims"
         );
-        base64_len(&self.data)?;
+        let bytes = STANDARD
+            .decode(&self.data)
+            .context("invalid base64 payload")?;
+        if self.dtype == "utf8" {
+            anyhow::ensure!(
+                self.shape == vec![bytes.len() as i64],
+                "utf8 shape must equal byte count"
+            );
+            std::str::from_utf8(&bytes).context("invalid utf8 payload")?;
+        }
         Ok(())
     }
-}
-
-/// Minimal base64 length sanity: length % 4 == 1 is never valid base64.
-/// Full decode happens at tensor construction; this catches truncation early.
-fn base64_len(data: &str) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        data.len() % 4 != 1,
-        "payload length {} is never valid base64",
-        data.len()
-    );
-    Ok(())
 }
 
 /// Planner-approved load plan. The sidecar executes it; it never selects
@@ -114,10 +113,8 @@ impl Response {
     /// The malformed-line answer every worker must give (and the supervisor
     /// must accept): no id available, protocol version always present.
     pub fn invalid_json(detail: &str) -> Self {
-        Self::error(None, "invalid-json").with(
-            "detail",
-            serde_json::Value::String(detail.to_string()),
-        )
+        Self::error(None, "invalid-json")
+            .with("detail", serde_json::Value::String(detail.to_string()))
     }
 
     /// Boundary-validate every inbound tensor envelope before dispatch.
@@ -211,10 +208,14 @@ mod tests {
 
     #[test]
     fn invalid_json_answer_has_no_id_but_names_the_reason() {
-        let v = serde_json::to_value(&Response::invalid_json("expected value")).expect("serializes");
+        let v =
+            serde_json::to_value(&Response::invalid_json("expected value")).expect("serializes");
         assert!(v.get("id").is_none());
         assert_eq!(v["reason"], "invalid-json");
-        assert!(v["detail"].as_str().unwrap_or_default().contains("expected value"));
+        assert!(v["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("expected value"));
     }
 
     #[test]
