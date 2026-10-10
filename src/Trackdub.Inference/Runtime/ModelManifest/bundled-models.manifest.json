@@ -1551,7 +1551,7 @@
           ]
         }
       ],
-      "expected_runtime": "ort-genai|onnxruntime-directml|tensorrt-rtx|onnxruntime-cpu",
+      "expected_runtime": "ort-genai|onnxruntime-cpu|onnxruntime-cuda",
       "provider_id": "tonythethompson/Qwen2.5-1.5B-Instruct"
     },
     {
