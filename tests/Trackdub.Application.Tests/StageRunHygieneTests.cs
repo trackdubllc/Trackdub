@@ -922,6 +922,158 @@ public sealed class StageArtifactResumeEvaluatorTests
     }
 
     [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, true)]
+    public void CanResumeStage_tts_timing_identity_gates_resume(
+        bool snapshotHasKey,
+        bool takeHasSuffix,
+        bool expected)
+    {
+        var artifactStore = new FakeArtifactStore();
+        Guid projectId = Guid.NewGuid();
+        Guid mediaAssetId = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Guid translationRevisionId = Guid.NewGuid();
+        Guid voiceAssignmentId = Guid.NewGuid();
+        StageRunRecord run = StageRunRecord
+            .Start(projectId, StageNames.Tts, now.AddHours(-1))
+            .Complete(now);
+
+        Guid artifactId = Guid.NewGuid();
+        const string takePath = "artifacts/tts/run/segment-0.wav";
+        artifactStore.Seed(takePath);
+        ProjectArtifact ttsArtifact = new(
+            artifactId,
+            projectId,
+            mediaAssetId,
+            ArtifactKind.TtsTake,
+            takePath,
+            "hash",
+            64,
+            null,
+            null,
+            null,
+            now,
+            StageRunId: run.Id);
+
+        string baseFingerprint = "0123456789abcdef";
+        TtsTake take = TtsTake
+            .CreateStock(
+                projectId,
+                voiceAssignmentId,
+                Guid.NewGuid(),
+                segmentIndex: 0,
+                translatedTextHash: TtsTextHash.Compute(0, "hola"),
+                inputFingerprint: takeHasSuffix
+                    ? TtsTimingResumeIdentity.Append(baseFingerprint, 0.20d)
+                    : baseFingerprint)
+            .Complete(artifactId, run.Id, durationSamples: 24000, sampleRate: 24000, provider: "test", modelId: null, voiceId: null, durationOverrunRatio: null);
+
+        TranslationRevision translationRevision = TranslationRevision.Create(
+            projectId,
+            run.Id,
+            Guid.NewGuid(),
+            "es",
+            revisionNumber: 1,
+            now);
+        translationRevision = translationRevision with { Id = translationRevisionId };
+
+        TranscriptProjectState state = CreateState(
+            projectId,
+            [run],
+            [ttsArtifact],
+            currentTranslationRevision: translationRevision,
+            translatedSegments: [TranslatedSegment.Create(translationRevisionId, 0, 0, 1.5, "hola")],
+            ttsTakes: [take]);
+
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (snapshotHasKey)
+        {
+            snapshot[TtsTimingResumeIdentity.SnapshotKey] = TtsTimingResumeIdentity.Normalize(0.20d);
+        }
+
+        Assert.Equal(expected, StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Tts,
+            snapshot,
+            projectRootPath: artifactStore.GetPath(".")));
+    }
+
+    [Theory]
+    [InlineData(0.20d, 0.20d, true)]
+    [InlineData(0.10d, 0.20d, false)]
+    public void CanResumeStage_tts_changed_overrun_limit_reruns(double snapshotOverrun, double takeOverrun, bool expected)
+    {
+        var artifactStore = new FakeArtifactStore();
+        Guid projectId = Guid.NewGuid();
+        Guid mediaAssetId = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Guid translationRevisionId = Guid.NewGuid();
+        Guid voiceAssignmentId = Guid.NewGuid();
+        StageRunRecord run = StageRunRecord
+            .Start(projectId, StageNames.Tts, now.AddHours(-1))
+            .Complete(now);
+
+        Guid artifactId = Guid.NewGuid();
+        const string takePath = "artifacts/tts/run/segment-0.wav";
+        artifactStore.Seed(takePath);
+        ProjectArtifact ttsArtifact = new(
+            artifactId,
+            projectId,
+            mediaAssetId,
+            ArtifactKind.TtsTake,
+            takePath,
+            "hash",
+            64,
+            null,
+            null,
+            null,
+            now,
+            StageRunId: run.Id);
+
+        TtsTake take = TtsTake
+            .CreateStock(
+                projectId,
+                voiceAssignmentId,
+                Guid.NewGuid(),
+                segmentIndex: 0,
+                translatedTextHash: TtsTextHash.Compute(0, "hola"),
+                inputFingerprint: TtsTimingResumeIdentity.Append("0123456789abcdef", takeOverrun))
+            .Complete(artifactId, run.Id, durationSamples: 24000, sampleRate: 24000, provider: "test", modelId: null, voiceId: null, durationOverrunRatio: null);
+
+        TranslationRevision translationRevision = TranslationRevision.Create(
+            projectId,
+            run.Id,
+            Guid.NewGuid(),
+            "es",
+            revisionNumber: 1,
+            now);
+        translationRevision = translationRevision with { Id = translationRevisionId };
+
+        TranscriptProjectState state = CreateState(
+            projectId,
+            [run],
+            [ttsArtifact],
+            currentTranslationRevision: translationRevision,
+            translatedSegments: [TranslatedSegment.Create(translationRevisionId, 0, 0, 1.5, "hola")],
+            ttsTakes: [take]);
+
+        var snapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [TtsTimingResumeIdentity.SnapshotKey] = TtsTimingResumeIdentity.Normalize(snapshotOverrun)
+        };
+
+        Assert.Equal(expected, StageArtifactResumeEvaluator.CanResumeStage(
+            state,
+            artifactStore,
+            StageNames.Tts,
+            snapshot,
+            projectRootPath: artifactStore.GetPath(".")));
+    }
+
+    [Theory]
     [InlineData(SourceMediaStatus.Missing)]
     [InlineData(SourceMediaStatus.Changed)]
     public void CanResumeStage_returns_false_when_source_media_missing_or_changed(SourceMediaStatus status)

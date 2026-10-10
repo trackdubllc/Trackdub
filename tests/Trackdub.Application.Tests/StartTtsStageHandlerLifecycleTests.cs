@@ -263,6 +263,37 @@ public sealed class StartTtsStageHandlerLifecycleTests
         Assert.Empty(logger.Warnings);
     }
 
+    [Fact]
+    public async Task HandleAsync_ReusesLegacyUnsuffixedFingerprintTake()
+    {
+        StartTtsStageRequest request = CreateRequest();
+        // First pass computes the suffixed fingerprint for a one-segment request.
+        var firstRepo = new FakeTtsTakeRepository();
+        var firstEngine = new FakeTtsEngine();
+        var stageRunStore = new FakeProjectStageRunStore();
+        using (var firstHandler = CreateHandler(stageRunStore, firstEngine, ttsTakeRepository: firstRepo))
+        {
+            await firstHandler.HandleAsync(request, TestContext.Current.CancellationToken);
+        }
+
+        string suffixedFingerprint = Assert.Single(firstRepo.All).InputFingerprint!;
+        string legacyFingerprint = TtsTimingResumeIdentity.WithoutSuffix(suffixedFingerprint);
+        Assert.NotEqual(suffixedFingerprint, legacyFingerprint);
+
+        // A take persisted before the timing suffix (bare hash) must be reused, not re-synthesized.
+        var reuseRepo = new FakeTtsTakeRepository();
+        TtsTake legacyTake = Assert.Single(firstRepo.All) with { InputFingerprint = legacyFingerprint };
+        reuseRepo.Seed(legacyTake);
+        var reuseEngine = new FakeTtsEngine();
+        using var reuseHandler = CreateHandler(new FakeProjectStageRunStore(), reuseEngine, ttsTakeRepository: reuseRepo);
+
+        StartTtsStageResult result = await reuseHandler.HandleAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StageRunStatus.Completed, result.StageRun.Status);
+        Assert.Equal(legacyTake.Id, Assert.Single(reuseRepo.All).Id);
+        Assert.Null(reuseEngine.LastOptions);
+    }
+
     private static StartTtsStageHandler CreateHandler(
         IProjectStageRunStore stageRunStore,
         FakeTtsEngine? ttsEngine = null,
