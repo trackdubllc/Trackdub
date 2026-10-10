@@ -12,6 +12,8 @@ The Learn overview does not establish exact CLI flags, full export recipes, mode
 
 ## Runtime and CPU inference
 
+For an executable, standalone project with package references, acquisition instructions, tensor metadata checks, image preprocessing, inference and top-five output, see [the C# ResNet walkthrough](../samples/ResNetWalkthrough/README.md). It also demonstrates explicit device selection, per-provider installation-result handling and compiled-artifact validation. Build validation is recorded separately from unexecuted model/provider inference.
+
 Choose language, architecture, Windows target and deployment mode using [deployment instructions](https://learn.microsoft.com/windows/ai/new-windows-ml/distributing-your-app). Establish CPU inference before optional acceleration. [Getting started](https://learn.microsoft.com/windows/ai/new-windows-ml/get-started).
 
 Inputs, preprocessing and inference code differ by model. The general Learn example is:
