@@ -319,3 +319,5 @@ __pycache__/
 /.freebuff/
 /docs/Video Cleanup-1.0.1-v1
 /workers/supervisor/target
+
+e2e-*-log.txt

@@ -71,7 +71,8 @@ public sealed class ModelDownloadOrchestrator(
             // installed this model while we waited on the gate, don't re-download it.
             // Also handles manifest-delta: if the model is installed but new files were added
             // to the manifest since first install, fetch only the files absent on disk.
-            ModelCacheState gatedState = await GetCurrentStateAsync(modelId, cancellationToken).ConfigureAwait(false);
+            LocalModelCacheRecord? selectedRecord = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
+            ModelCacheState gatedState = ModelInventoryService.DetermineState(entry, selectedRecord);
             // Pre-compute required files only in the Installed/Ready branch (needed for the
             // missing-file check). For Missing/Corrupt paths the computation is deferred into
             // the inner try block so that malformed manifest paths throw a caught exception
@@ -91,19 +92,20 @@ public sealed class ModelDownloadOrchestrator(
                     return new ModelDownloadResult(modelId, false, gatedState, ex.Message);
                 }
 
-                IReadOnlyList<string> missingFiles = ResolveMissingRequiredFiles(modelRootDirectory, precomputedRequiredFiles);
+                string installedRootDirectory = ResolveVerificationModelRootDirectory(entry, selectedRecord);
+                IReadOnlyList<string> missingFiles = ResolveMissingRequiredFiles(installedRootDirectory, precomputedRequiredFiles);
                 if (missingFiles.Count == 0)
                 {
                     // Files exist on disk, but the manifest may carry per-file hashes.
                     // Re-verify so a corrupt-but-present model falls through to re-download
                     // rather than being served as Installed.
                     var (failedPath, hashResult) = await VerifyRequiredFilesAsync(
-                        entry, modelRootDirectory, precomputedRequiredFiles, cancellationToken).ConfigureAwait(false);
+                        entry, installedRootDirectory, precomputedRequiredFiles, cancellationToken).ConfigureAwait(false);
 
                     if (hashResult.WasVerified && !hashResult.IsValid)
                     {
                         await SetModelIntegrityStateAsync(
-                            modelId, integrityFailed: true, entry, modelRootDirectory, cancellationToken).ConfigureAwait(false);
+                            modelId, integrityFailed: true, entry, installedRootDirectory, cancellationToken).ConfigureAwait(false);
                         logger?.LogWarning(
                             $"Model '{modelId}' file '{failedPath}' failed hash verification (expected {hashResult.ExpectedSha256}, actual {hashResult.ActualSha256}). Marking corrupt and re-downloading.");
                         // Fall through to the download path below.
@@ -119,7 +121,10 @@ public sealed class ModelDownloadOrchestrator(
                 {
                     // Manifest has grown since first install (e.g. new voice packs added).
                     // Only fetch the files that are absent on disk.
-                    deltaFiles = missingFiles;
+                    // Downloads only modify the configured cache; an external installation's
+                    // existing files cannot satisfy a partial install in that destination.
+                    if (LocalModelCacheRecordStore.RootsEqual(installedRootDirectory, modelRootDirectory))
+                        deltaFiles = missingFiles;
                 }
             }
 
@@ -313,21 +318,7 @@ public sealed class ModelDownloadOrchestrator(
         }
 
         LocalModelCacheRecord? record = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
-        ModelCacheState currentState = record is not null &&
-            !string.IsNullOrWhiteSpace(entry.Sha256) &&
-            !string.IsNullOrWhiteSpace(record.Sha256) &&
-            !string.Equals(entry.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase)
-                ? ModelCacheState.Corrupt
-                : ResolveRecordState(record);
-        string modelRootDirectory = ResolveVerificationModelRootDirectory(entry, record);
-
-        IReadOnlyList<string> requiredFiles = ModelDownloadManifestFiles.ResolveRequiredFiles(entry);
-        IReadOnlyList<string> missingFiles = ResolveMissingRequiredFiles(modelRootDirectory, requiredFiles);
-        if (currentState is ModelCacheState.Missing && missingFiles.Count > 0)
-        {
-            return new ModelVerificationResult(modelId, ModelCacheState.Missing, ModelCacheState.Missing, false, null);
         }
-
         if (missingFiles.Count > 0)
         {
             await SetModelIntegrityStateAsync(modelId, integrityFailed: true, entry, modelRootDirectory, cancellationToken)
@@ -674,29 +665,14 @@ public sealed class ModelDownloadOrchestrator(
 
     private async Task<ModelCacheState> GetCurrentStateAsync(string modelId, CancellationToken cancellationToken)
     {
-        IReadOnlyList<LocalModelCacheRecord> records = await cacheStore.LoadAsync(cancellationToken).ConfigureAwait(false);
         BundledModelManifestEntry? entry = FindEntry(modelId);
         if (entry is null)
         {
             return ModelCacheState.Missing;
         }
-        LocalModelCacheRecord? record = ModelInventoryService.SelectBestCacheRecord(
-            entry,
-            records.Where(r => r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase)).ToArray(),
-            storagePaths.ModelCacheDirectory);
-        return record is not null && !string.IsNullOrWhiteSpace(entry.Sha256) &&
-            !string.IsNullOrWhiteSpace(record.Sha256) &&
-            !string.Equals(entry.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase)
-                ? ModelCacheState.Corrupt
-                : ResolveRecordState(record);
+        LocalModelCacheRecord? record = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
+        return ModelInventoryService.DetermineState(entry, record);
     }
-
-    private static ModelCacheState ResolveRecordState(LocalModelCacheRecord? record) =>
-        record is null
-            ? ModelCacheState.Missing
-            : record.IntegrityFailed
-                ? ModelCacheState.Corrupt
-                : ModelCacheState.Installed;
 
     private Task SetModelIntegrityStateAsync(
         string modelId,

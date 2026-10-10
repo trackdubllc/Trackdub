@@ -1224,6 +1224,6 @@ public sealed class StartTtsStageHandler(
             TtsAudioPostProcessVersion, "\0",
             voiceAssignmentId.ToString("D"));
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return TtsTimingResumeIdentity.Append(Convert.ToHexString(hash).ToLowerInvariant(), timingOptions.AutoStretchMaxOverrun);
     }
 }

@@ -242,6 +242,8 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         ModelVerificationResult verification = await orchestrator.VerifyAsync("example/model", TestContext.Current.CancellationToken);
 
         Assert.True(verification.HashMatch, verification.FailureReason);
+        Assert.Equal(ModelCacheState.Corrupt, verification.PreviousState);
+        Assert.Equal(ModelCacheState.Installed, verification.NewState);
         LocalModelCacheRecord record = Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken));
         Assert.Equal(expectedSha, record.Sha256);
         Assert.NotEqual(tokenizerHash, record.Sha256);
@@ -866,6 +868,51 @@ public sealed class ModelDownloadOrchestratorTests : IDisposable
         Assert.Equal(ModelCacheState.Installed, verification.NewState);
         IReadOnlyList<LocalModelCacheRecord> records = await store.LoadAsync(TestContext.Current.CancellationToken);
         Assert.False(Assert.Single(records).IntegrityFailed);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Download_and_repair_reuse_complete_external_installation(bool repair)
+    {
+        var (registry, paths, externalRoot) = CreateRegistryWithManifestRootOutsideConfiguredCache();
+        Directory.CreateDirectory(Path.Join(externalRoot, "onnx"));
+        await File.WriteAllTextAsync(Path.Join(externalRoot, "onnx", "model.onnx"), "hello", TestContext.Current.CancellationToken);
+        var store = new LocalModelCacheRecordStore(paths);
+        await store.SaveAsync([new LocalModelCacheRecord("example/model", externalRoot, "main", "", DateTimeOffset.UtcNow)],
+            TestContext.Current.CancellationToken);
+        var downloader = new CaptureDestinationDownloader();
+        using var orchestrator = new ModelDownloadOrchestrator(registry, store, downloader, paths);
+
+        ModelDownloadResult result = repair
+            ? await orchestrator.RepairAsync("example/model", cancellationToken: TestContext.Current.CancellationToken)
+            : await orchestrator.DownloadAsync("example/model", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success, result.FailureReason);
+        Assert.Empty(downloader.Destinations);
+        Assert.Equal(externalRoot, Assert.Single(await store.LoadAsync(TestContext.Current.CancellationToken)).RootPath);
+    }
+
+    [Fact]
+    public async Task Download_external_installation_with_missing_sidecar_creates_complete_configured_installation()
+    {
+        var (registry, paths, externalRoot) = CreateRegistryWithManifestRootOutsideConfiguredCache(
+            "[ \"onnx/model.onnx\", \"tokenizer.json\" ]");
+        Directory.CreateDirectory(Path.Join(externalRoot, "onnx"));
+        await File.WriteAllTextAsync(Path.Join(externalRoot, "onnx", "model.onnx"), "external", TestContext.Current.CancellationToken);
+        var store = new LocalModelCacheRecordStore(paths);
+        await store.SaveAsync([new LocalModelCacheRecord("example/model", externalRoot, "main", "", DateTimeOffset.UtcNow)],
+            TestContext.Current.CancellationToken);
+        var downloader = new CaptureDestinationDownloader();
+        using var orchestrator = new ModelDownloadOrchestrator(registry, store, downloader, paths);
+
+        ModelDownloadResult result = await orchestrator.DownloadAsync("example/model", cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success, result.FailureReason);
+        Assert.Equal(["onnx/model.onnx", "tokenizer.json"], downloader.HubDownloads);
+        Assert.Equal("external", await File.ReadAllTextAsync(Path.Join(externalRoot, "onnx", "model.onnx"), TestContext.Current.CancellationToken));
+        Assert.False(File.Exists(Path.Join(externalRoot, "tokenizer.json")));
+        Assert.Equal(2, (await store.LoadAsync(TestContext.Current.CancellationToken)).Count);
     }
 
     [Theory]

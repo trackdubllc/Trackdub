@@ -62,11 +62,7 @@ public sealed class ModelInventoryService(
         ModelCacheState state = DetermineState(manifest, cacheRecord);
         bool canAutoDownload = ModelDownloadManifestFiles.CanAutoDownloadAll(manifest);
         string? failureReason = state == ModelCacheState.Corrupt
-            ? (cacheRecord!.IntegrityFailed || HasManifestHashMismatch(manifest, cacheRecord!))
-                ? "Model failed integrity verification; use repair or re-download."
-                : "Model files missing or corrupted on disk."
-            : state == ModelCacheState.Blocked
-                ? "Non-commercial model blocked by product policy."
+            ? cacheRecord!.IntegrityFailed || HasManifestHashMismatch(manifest, cacheRecord)
                 : state == ModelCacheState.Missing && !canAutoDownload
                     ? "No downloadable source configured for this model; install or import the model files into the local cache."
                 : null;
