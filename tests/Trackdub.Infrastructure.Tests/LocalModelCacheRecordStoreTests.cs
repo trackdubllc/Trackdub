@@ -123,6 +123,48 @@ public sealed class LocalModelCacheRecordStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Root_case_comparison_preserves_distinct_installations_on_non_Windows()
+    {
+        LocalModelCacheRecordStore store = CreateStore();
+        string upperRoot = Path.Join(tempRoot, "Foo");
+        string lowerRoot = Path.Join(tempRoot, "foo");
+        Directory.CreateDirectory(upperRoot);
+        Directory.CreateDirectory(lowerRoot);
+        LocalModelCacheRecord original = BuildGoldenRecords()[0] with { RootPath = upperRoot, Variants = [] };
+        LocalModelCacheRecord newer = original with { RootPath = lowerRoot, CachedAtUtc = original.CachedAtUtc.AddDays(1) };
+        await store.SaveAsync([original, newer], TestContext.Current.CancellationToken);
+        await store.MutateAsync(records => records, TestContext.Current.CancellationToken);
+
+        Assert.Equal(OperatingSystem.IsWindows(), LocalModelCacheRecordStore.RootsEqual(upperRoot, lowerRoot));
+        IReadOnlyList<LocalModelCacheRecord> records = await store.LoadAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(OperatingSystem.IsWindows() ? 1 : 2, records.Count);
+        var lookup = new LocalModelCacheRecordLookup(store);
+        Assert.Equal(OperatingSystem.IsWindows() ? lowerRoot : upperRoot, lookup.Find(original.ModelId, upperRoot)!.RootPath);
+        Assert.Equal(lowerRoot, lookup.Find(original.ModelId, lowerRoot)!.RootPath);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("invalid\0root")]
+    public async Task Invalid_legacy_root_does_not_block_valid_index_records(string invalidRoot)
+    {
+        LocalModelCacheRecordStore store = CreateStore();
+        LocalModelCacheRecord valid = BuildGoldenRecords()[0] with { RootPath = tempRoot, Variants = [] };
+        LocalModelCacheRecord invalid = valid with { RootPath = invalidRoot };
+        TrackdubStoragePaths paths = CreateStoragePaths();
+        Directory.CreateDirectory(paths.ModelCacheDirectory);
+        await File.WriteAllTextAsync(paths.ModelCacheIndexPath,
+            JsonSerializer.Serialize(new[] { invalid, valid }), TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, (await store.LoadAsync(TestContext.Current.CancellationToken)).Count);
+        await store.MutateAsync(records => records, TestContext.Current.CancellationToken);
+        Assert.Equal(2, (await store.LoadAsync(TestContext.Current.CancellationToken)).Count);
+        Assert.False(LocalModelCacheRecordStore.RootsEqual(invalidRoot, tempRoot));
+        Assert.Equal(tempRoot, new LocalModelCacheRecordLookup(store).Find(valid.ModelId, tempRoot)!.RootPath);
+    }
+
+    [Fact]
     public async Task Cancelled_mutation_preserves_existing_index()
     {
         LocalModelCacheRecordStore store = CreateStore();
