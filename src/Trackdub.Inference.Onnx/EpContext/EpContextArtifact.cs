@@ -261,13 +261,16 @@ public static class EpContextArtifact
         }
     }
 
-    /// <summary>Native ORT version this build compiles EP-context artifacts against.</summary>
-    public static string HostOrtRuntimeVersion =>
-#if WINDOWS
-        "1.27.1";
-#else
-        "1.30.0";
-#endif
+    /// <summary>
+    /// Native ORT version this build compiles EP-context artifacts against, stamped into the assembly
+    /// from the central package pins (<c>WindowsMlOnnxRuntimeVersion</c> / <c>OnnxRuntimeVersion</c>).
+    /// </summary>
+    public static string HostOrtRuntimeVersion { get; } =
+        typeof(EpContextArtifact).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), inherit: false)
+            .Cast<System.Reflection.AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute => attribute.Key == "TrackdubHostOrtRuntimeVersion")?.Value
+        ?? "unknown";
 
     /// <summary>
     /// Stable identity of the compile/provider options that affect the engine.
@@ -555,9 +558,25 @@ public static class EpContextArtifact
         }
     }
 
+    // Hashes are paid once per file version per process; length and modification time gate
+    // replacements. A same-size, same-mtime overwrite is caught by the next process.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Path, long Length, long LastWriteUtcTicks), string>
+        Sha256ByFileVersion = new();
+
     public static string ComputeSha256(string filePath)
     {
+        var info = new FileInfo(filePath);
+        var key = (info.FullName, info.Length, info.LastWriteTimeUtc.Ticks);
+        if (Sha256ByFileVersion.TryGetValue(key, out string? cached))
+        {
+            return cached;
+        }
+
         using FileStream stream = File.OpenRead(filePath);
-        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).ToLowerInvariant();
+        string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).ToLowerInvariant();
+        Sha256ByFileVersion[key] = hash;
+        return hash;
     }
+
+    internal static void ClearHashCacheForTesting() => Sha256ByFileVersion.Clear();
 }

@@ -69,6 +69,8 @@ public sealed class EpContextArtifactStampTests
             DateTime written = File.GetLastWriteTimeUtc(sourcePath);
             File.WriteAllBytes(sourcePath, [9, 8, 7, 6]);
             File.SetLastWriteTimeUtc(sourcePath, written);
+            // Within one process the memoized hash still matches; a fresh process re-hashes.
+            EpContextArtifact.ClearHashCacheForTesting();
 
             Assert.Equal(4, new FileInfo(sourcePath).Length);
             Assert.Null(EpContextArtifact.TryResolveValidLoadPath(sourcePath, stamp.EnvironmentFingerprint));
