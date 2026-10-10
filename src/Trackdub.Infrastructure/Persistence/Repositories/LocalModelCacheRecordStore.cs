@@ -118,7 +118,6 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
     }
 
 <<<<<<< Updated upstream
-    public static bool RootsEqual(string left, string right)
     {
         if (TryNormalizeRoot(left, out string? normalizedLeft) &&
             TryNormalizeRoot(right, out string? normalizedRight))
@@ -130,28 +129,6 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
         // either path is missing or cannot be normalized.
         return string.Equals(left?.Trim(), right?.Trim(), RootPathComparison);
 =======
-    private static StringComparer RootComparer =>
-        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-
-    public static bool RootsEqual(string left, string right) =>
-        RootComparer.Equals(NormalizeRoot(left), NormalizeRoot(right));
-
-    private static string NormalizeRoot(string root)
-    {
-        if (string.IsNullOrWhiteSpace(root))
-            return root;
-
-        try
-        {
-            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            // Preserve malformed legacy records without blocking other installations in the index.
-            return root;
-        }
->>>>>>> Stashed changes
-    }
 
     public static IReadOnlyList<LocalModelVariantRecord> CompatibleVariants(
         LocalModelCacheRecord record, IEnumerable<LocalModelVariantRecord> variants) =>
