@@ -87,6 +87,7 @@ public sealed class WindowsMlExecutionProviderBootstrapper
         CancellationToken cancellationToken)
     {
         var failures = new List<string>();
+        var pending = new List<string>();
         int registered = 0;
         foreach (ExecutionProvider provider in catalog.FindAllProviders())
         {
@@ -118,6 +119,13 @@ public sealed class WindowsMlExecutionProviderBootstrapper
                     provider.Name,
                     WindowsMlEnsureReady.FormatHResult(ready),
                     ready.DiagnosticText);
+                if (outcome.Disposition is CatalogPreparationDisposition.Pending)
+                {
+                    // Still preparing is not a failure; the single-provider paths report it the same way.
+                    pending.Add(outcome.Detail);
+                    continue;
+                }
+
                 if (outcome.Disposition is not CatalogPreparationDisposition.Register)
                 {
                     failures.Add(outcome.Detail);
@@ -135,9 +143,8 @@ public sealed class WindowsMlExecutionProviderBootstrapper
             }
         }
 
-        return failures.Count == 0
-            ? (true, null)
-            : (registered > 0, string.Join(" ", failures));
+        string? detail = failures.Count + pending.Count == 0 ? null : string.Join(" ", failures.Concat(pending));
+        return (failures.Count == 0 || registered > 0, detail);
     }
 
     private static bool TryEnsureWinMlProjectionDeployed(out string? failureReason)

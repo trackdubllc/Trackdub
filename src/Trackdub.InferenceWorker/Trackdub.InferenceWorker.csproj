@@ -60,6 +60,15 @@
     </ItemGroup>
   </Target>
 
+  <!-- Publish builds ResolvedFileToPublish after GetCopyToPublishDirectoryItems, so drop the Windows ML
+       binding again before publish conflict resolution can pick it over the stock one. -->
+  <Target Name="DropWinMlManagedOrtFromPublish" BeforeTargets="_HandleFileConflictsForPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Filename)%(Extension)' == 'Microsoft.ML.OnnxRuntime.dll' And $([System.String]::Copy('%(FullPath)').Contains('windows.ai.machinelearning'))" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="UseOrtGpuRuntimeAtRoot" AfterTargets="CopyFilesToOutputDirectory">
     <PropertyGroup>
       <_OrtGpuRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_OrtGpuRid>
