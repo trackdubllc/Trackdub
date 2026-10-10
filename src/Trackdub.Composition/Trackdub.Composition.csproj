@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Ships RID-specific payloads (the inference worker, Windows ML natives). Left RID-agnostic, a
+         RID-specific publish of a consumer would also build it without the RID and publish two different
+         inference-worker\ copies (NETSDK1152). -->
+    <IsRidAgnostic>false</IsRidAgnostic>
     <TargetFrameworks>net10.0;net10.0-windows10.0.19041.0</TargetFrameworks>
       <!-- Directory.Build.props sets TargetFramework=net10.0; clear it so multi-target restore/build includes both legs consistently. -->
       <TargetFramework Condition="'$(TargetFrameworks)' != ''"/>
