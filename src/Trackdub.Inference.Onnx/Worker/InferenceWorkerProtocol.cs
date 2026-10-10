@@ -30,8 +30,22 @@ public static class InferenceWorkerProtocol
     };
 
     /// <summary>Identifies the exact build; the worker must match the application.</summary>
-    public static string BuildStamp { get; } =
-        typeof(InferenceWorkerProtocol).Assembly.ManifestModule.ModuleVersionId.ToString("N");
+    public static string BuildStamp { get; } = ComputeBuildStamp(typeof(InferenceWorkerProtocol).Assembly);
+
+    // The worker compiles this assembly separately (TrackdubOrtHost=Stock), so its module ID never
+    // matches the application's. The informational version carries the source revision
+    // ("1.0.0+<commit>") and is identical across both compilations; the module ID remains the
+    // fallback for builds without a source revision.
+    internal static string ComputeBuildStamp(System.Reflection.Assembly assembly)
+    {
+        string? informational = assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), inherit: false)
+            .Cast<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()?.InformationalVersion;
+        return !string.IsNullOrWhiteSpace(informational) && informational.Contains('+', StringComparison.Ordinal)
+            ? informational
+            : assembly.ManifestModule.ModuleVersionId.ToString("N");
+    }
 
     public static async Task WriteAsync(Stream stream, WorkerMessage message, CancellationToken cancellationToken)
     {
