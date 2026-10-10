@@ -40,6 +40,8 @@ public sealed class BatchProcessor
 
     /// <summary>
     /// Execute the pipeline for each file in order. Returns a structured batch report.
+    /// Each file's project directory is held under <see cref="ProjectLock"/> while it runs;
+    /// a project locked by another run is reported as a failed file.
     /// </summary>
     /// <param name="mediaFiles">Ordered list of media file paths to process.</param>
     /// <param name="templateOptions">Template session options; SourceMediaPath is overridden per file.</param>
@@ -78,6 +80,11 @@ public sealed class BatchProcessor
                     throw new FileNotFoundException(
                         $"The media file was not found: '{filePath}'", filePath);
                 }
+
+                // Excludes a concurrent CLI or desktop run on the same project; a held lock
+                // fails only this file (ProjectLockedException names the holder's PID).
+                using ProjectLock projectLock = ProjectLock.Acquire(
+                    TrackdubProjectPaths.ResolveProjectDirectory(filePath, fileOptions.ProjectOutputDirectory));
 
                 DubbingRunResult result = await _engine.ExecuteAsync(fileOptions, progress, ct)
                     .ConfigureAwait(false);
