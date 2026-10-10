@@ -847,6 +847,70 @@ public sealed class ExportStageHandlerTests
         Assert.Equal(StageRunStatus.Failed, Assert.Single(stageRunStore.All).Status);
     }
 
+    [Theory]
+    [InlineData(null, 5.5d, "take-exceeds-source-audio")]
+    [InlineData(0d, 5.5d, "take-exceeds-source-audio")]
+    [InlineData(null, 0d, "export-error")]
+    public async Task ExportAsync_probes_missing_take_duration_before_rendering(
+        double? storedDuration, double probedDuration, string failureCode)
+    {
+        using var temp = new TempDirectory();
+        TestExportContext context = CreateContext(temp.Path, includeCompletedTake: true);
+        TranscriptProjectState state = context.State with
+        {
+            ProjectState = context.State.ProjectState with
+            {
+                Artifacts = context.State.ProjectState.Artifacts.Select(artifact => artifact.Kind == ArtifactKind.TtsTake
+                    ? artifact with { DurationSeconds = storedDuration }
+                    : artifact).ToArray()
+            },
+            TtsTakes = context.State.TtsTakes.Select(take => take with { DurationSamples = null, SampleRate = null }).ToArray()
+        };
+        var probe = new FakeMediaProbe { Snapshot = CreateProbeSnapshot(probedDuration) };
+        var renderer = new FakeMixRenderer();
+        ExportStageHandler handler = CreateHandler(new FakeArtifactStore(temp.Path), renderer,
+            new FakeLoudnessNormalizer(), new FakeExportRenderer(), probe,
+            new FakeMediaAssetRepository(), new FakeProjectStageRunStore());
+
+        ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() => handler.ExportAsync(
+            state, new ExportStageRequest(context.Project.Id, Path.Join(temp.Path, "delivery", "dub.mp4"), []),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(failureCode, Assert.Single(exception.Report.Causes).Code);
+        Assert.EndsWith("take-0001.wav", Assert.Single(probe.Calls));
+        Assert.Empty(renderer.Calls);
+        Assert.Equal(storedDuration, state.ProjectState.Artifacts.Single(artifact => artifact.Kind == ArtifactKind.TtsTake).DurationSeconds);
+    }
+
+    [Fact]
+    public async Task ExportAsync_probes_missing_source_duration_before_rendering()
+    {
+        using var temp = new TempDirectory();
+        TestExportContext context = CreateContext(temp.Path, includeCompletedTake: true);
+        TranscriptProjectState state = context.State with
+        {
+            ProjectState = context.State.ProjectState with
+            {
+                Artifacts = context.State.ProjectState.Artifacts.Select(artifact => artifact.Kind == ArtifactKind.NormalizedAudio
+                    ? artifact with { DurationSeconds = null }
+                    : artifact).ToArray()
+            }
+        };
+        var probe = new FakeMediaProbe { Snapshot = CreateProbeSnapshot(1.5d) };
+        var renderer = new FakeMixRenderer();
+        ExportStageHandler handler = CreateHandler(new FakeArtifactStore(temp.Path), renderer,
+            new FakeLoudnessNormalizer(), new FakeExportRenderer(), probe,
+            new FakeMediaAssetRepository(), new FakeProjectStageRunStore());
+
+        ExportStageException exception = await Assert.ThrowsAsync<ExportStageException>(() => handler.ExportAsync(
+            state, new ExportStageRequest(context.Project.Id, Path.Join(temp.Path, "delivery", "dub.mp4"), []),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("take-exceeds-source-audio", Assert.Single(exception.Report.Causes).Code);
+        Assert.EndsWith("normalized_audio.wav", Assert.Single(probe.Calls));
+        Assert.Empty(renderer.Calls);
+    }
+
     [Fact]
     public async Task ExportAsync_marks_stage_failed_when_unexpected_error_report_write_fails()
     {

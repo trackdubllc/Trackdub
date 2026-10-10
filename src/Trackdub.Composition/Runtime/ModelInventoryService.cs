@@ -62,13 +62,11 @@ public sealed class ModelInventoryService(
         ModelCacheState state = DetermineState(manifest, cacheRecord);
         bool canAutoDownload = ModelDownloadManifestFiles.CanAutoDownloadAll(manifest);
         string? failureReason = state == ModelCacheState.Corrupt
-            ? (cacheRecord!.IntegrityFailed || HasManifestHashMismatch(manifest, cacheRecord!))
+            ? cacheRecord!.IntegrityFailed || HasManifestHashMismatch(manifest, cacheRecord)
                 ? "Model failed integrity verification; use repair or re-download."
                 : "Model files missing or corrupted on disk."
-            : state == ModelCacheState.Blocked
-                ? "Non-commercial model blocked by product policy."
-                : state == ModelCacheState.Missing && !canAutoDownload
-                    ? "No downloadable source configured for this model; install or import the model files into the local cache."
+            : state == ModelCacheState.Missing && !canAutoDownload
+                ? "No downloadable source configured for this model; install or import the model files into the local cache."
                 : null;
 
         long? fileSize = cacheRecord is not null && state is ModelCacheState.Installed or ModelCacheState.Ready
@@ -627,7 +625,17 @@ public sealed class ModelInventoryService(
             return ModelCacheState.Corrupt;
 
         string modelRootDirectory = cacheRecord.RootPath;
-        string benchmarkEntryPath = ResolveCachedBenchmarkEntryPath(manifest, cacheRecord);
+        string benchmarkEntryPath;
+        try
+        {
+            benchmarkEntryPath = ResolveCachedBenchmarkEntryPath(manifest, cacheRecord);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or InvalidOperationException)
+        {
+            // Malformed legacy roots (e.g. embedded null characters) must not block the
+            // selection of other valid installations in the same index.
+            return ModelCacheState.Corrupt;
+        }
 
         if (!Directory.Exists(modelRootDirectory) && !File.Exists(benchmarkEntryPath))
             return ModelCacheState.Corrupt;
@@ -661,7 +669,7 @@ public sealed class ModelInventoryService(
             return null;
 
         IEnumerable<LocalModelCacheRecord> ordered = cacheRecords
-            .OrderByDescending(record => ModelDownloadPathGuard.IsModelRootUnderConfiguredCache(record.RootPath, configuredModelCacheDirectory, out _) ? 1 : 0)
+            .OrderByDescending(record => IsUnderConfiguredCache(record.RootPath, configuredModelCacheDirectory) ? 1 : 0)
             .ThenByDescending(record =>
                 DetermineState(manifest, record) == ModelCacheState.Installed ? 1 : 0)
             .ThenByDescending(record => record.CachedAtUtc)
@@ -670,6 +678,19 @@ public sealed class ModelInventoryService(
         return ordered.FirstOrDefault(record =>
                 DetermineState(manifest, record) == ModelCacheState.Installed)
             ?? ordered.FirstOrDefault();
+    }
+
+    private static bool IsUnderConfiguredCache(string rootPath, string configuredModelCacheDirectory)
+    {
+        try
+        {
+            return ModelDownloadPathGuard.IsModelRootUnderConfiguredCache(rootPath, configuredModelCacheDirectory, out _);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            // A malformed legacy root must not abort selection of other valid records.
+            return false;
+        }
     }
 
     private static bool HasManifestHashMismatch(BundledModelManifestEntry manifest, LocalModelCacheRecord record) =>

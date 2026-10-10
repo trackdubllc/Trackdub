@@ -636,6 +636,12 @@ public static class StageArtifactResumeEvaluator
                 continue;
             }
 
+            if (snapshot.TryGetValue(TtsTimingResumeIdentity.SnapshotKey, out string? expectedOverrun) &&
+                !TtsTimingResumeIdentity.Matches(take.InputFingerprint, expectedOverrun))
+            {
+                return false;
+            }
+
             speakerIdBySegmentIndex.TryGetValue(segment.SegmentIndex, out Guid? speakerId);
             // Mirrors GenerateTtsForAllSpeakersAsync/BuildUnattendedTtsRequest: an explicit
             // clone-map entry wins; with no map, global cloning applies to speakers that have

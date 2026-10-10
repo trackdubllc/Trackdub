@@ -538,6 +538,21 @@ public sealed class StartTtsStageHandler(
             ct => ttsTakeRepository.GetByFingerprintAsync(request.ProjectId, inputFingerprint, ct),
             cancellationToken)
             .ConfigureAwait(false);
+        if (cachedTake is null)
+        {
+            // Backward compatibility: before the timing suffix was introduced, fingerprints were
+            // the bare SHA-256 hash, which already encodes AutoStretchMaxOverrun. A match on that
+            // legacy hash therefore proves the same timing limit produced the take, so reuse it
+            // instead of re-synthesizing every segment after upgrade.
+            string legacyFingerprint = TtsTimingResumeIdentity.WithoutSuffix(inputFingerprint);
+            if (!string.Equals(legacyFingerprint, inputFingerprint, StringComparison.Ordinal))
+            {
+                cachedTake = await RunSerializedPersistenceAsync(
+                    ct => ttsTakeRepository.GetByFingerprintAsync(request.ProjectId, legacyFingerprint, ct),
+                    cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
         if (cachedTake is not null)
         {
             // Voice-cloning consent and audit must be enforced even for cache hits —
@@ -1224,6 +1239,6 @@ public sealed class StartTtsStageHandler(
             TtsAudioPostProcessVersion, "\0",
             voiceAssignmentId.ToString("D"));
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        return TtsTimingResumeIdentity.Append(Convert.ToHexString(hash).ToLowerInvariant(), timingOptions.AutoStretchMaxOverrun);
     }
 }
