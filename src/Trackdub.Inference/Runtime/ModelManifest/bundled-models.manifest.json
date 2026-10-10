@@ -837,7 +837,7 @@
           ]
         }
       },
-      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml",
+      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml|onnxruntime-cpu",
       "provider_id": "tonythethompson/qwen3-asr-0.6b-onnx",
       "variants": [],
       "download_file_hashes": {
@@ -1118,7 +1118,7 @@
           ]
         }
       },
-      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml",
+      "expected_runtime": "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml|onnxruntime-cpu",
       "provider_id": "tonythethompson/qwen3-asr-1.7b-onnx",
       "variants": [],
       "download_file_hashes": {
@@ -1551,7 +1551,7 @@
           ]
         }
       ],
-      "expected_runtime": "ort-genai|onnxruntime-directml|tensorrt-rtx",
+      "expected_runtime": "ort-genai|onnxruntime-cpu|onnxruntime-cuda",
       "provider_id": "tonythethompson/Qwen2.5-1.5B-Instruct"
     },
     {

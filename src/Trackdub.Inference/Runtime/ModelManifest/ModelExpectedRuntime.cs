@@ -18,8 +18,9 @@ public static class ModelExpectedRuntime
     public const string WindowsMlCatalogOrMigraphxOrDirectMl = "windows-ml|onnxruntime-migraphx|onnxruntime-directml";
 
     /// <summary>
-    /// Canonical Windows ONNX token when TensorRT RTX plugin smoke has passed for the model.
+    /// Canonical Windows ONNX token when TensorRT RTX plugin smoke has passed for the model and the
+    /// stage allow-list keeps CPU as a planned fallback.
     /// </summary>
-    public const string TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMl =
-        "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml";
+    public const string TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMlOrCpu =
+        "trt-rtx|windows-ml|onnxruntime-migraphx|onnxruntime-directml|onnxruntime-cpu";
 }

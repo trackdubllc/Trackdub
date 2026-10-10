@@ -16,6 +16,11 @@ public interface IInferenceWorkerClient
     /// <summary>Starts the worker if needed and returns its handshake, or null when it is unusable.</summary>
     Task<WorkerHelloResult?> TryGetHelloAsync(CancellationToken cancellationToken);
 
+    /// <remarks>
+    /// Cancelling a call while its request is still being written kills the worker, because its
+    /// input pipe may then hold a partial frame. Other calls in flight on that worker fail with
+    /// <see cref="InferenceWorkerException"/>, and the next call starts a fresh worker.
+    /// </remarks>
     Task<TtsSynthesisResult> SynthesizeTtsAsync(
         TtsSynthesisRequest request,
         StageRuntimePlan plan,
@@ -42,6 +47,10 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
     private readonly ConcurrentDictionary<long, PendingCall> pending = new();
     private readonly Queue<string> stderrTail = new();
     private Process? process;
+
+    // Replaced workers' handles. Fast-path callers may still hold a snapshot of one and read
+    // HasExited, which throws on a disposed Process, so they are released only when the client is.
+    private readonly List<Process> retired = [];
 
     // A handshaken worker is published as one immutable snapshot so callers on the lock-free fast
     // path never pair a process with another process's handshake.
@@ -191,6 +200,13 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
             }
 
             Process started = Start(executablePath);
+
+            current = null;
+            if (process is not null)
+            {
+                retired.Add(process);
+            }
+
             process = started;
             bool handshaken = false;
             try
@@ -340,7 +356,19 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         await writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await InferenceWorkerProtocol.WriteAsync(target.StandardInput.BaseStream, message, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await InferenceWorkerProtocol.WriteAsync(target.StandardInput.BaseStream, message, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancelled mid-frame (a worker that stopped draining its input can block the write
+                // indefinitely): the pipe may hold a partial frame, so this worker cannot be trusted
+                // with another message. Killing it ends its read loop and the next call restarts it.
+                KillQuietly(target);
+                throw;
+            }
         }
         catch (IOException ex)
         {
@@ -407,6 +435,11 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         }
 
         process?.Dispose();
+        foreach (Process old in retired)
+        {
+            old.Dispose();
+        }
+
         writeGate.Dispose();
 
         // Not disposed: queued EnsureStartedAsync callers must wake and throw, not hang.

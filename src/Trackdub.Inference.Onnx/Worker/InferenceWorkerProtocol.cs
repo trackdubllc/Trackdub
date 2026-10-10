@@ -35,11 +35,18 @@ public static class InferenceWorkerProtocol
 
     public static async Task WriteAsync(Stream stream, WorkerMessage message, CancellationToken cancellationToken)
     {
-        byte[] body = JsonSerializer.SerializeToUtf8Bytes(message, JsonOptions);
-        byte[] header = new byte[4];
-        BinaryPrimitives.WriteInt32LittleEndian(header, body.Length);
-        await stream.WriteAsync(header, cancellationToken).ConfigureAwait(false);
-        await stream.WriteAsync(body, cancellationToken).ConfigureAwait(false);
+        // One buffer holds the whole frame: the prefix is reserved, the body serialized after it and
+        // its length backfilled, so a large audio payload is never held twice.
+        using var frame = new MemoryStream();
+        frame.Write(stackalloc byte[4]);
+        JsonSerializer.Serialize(frame, message, JsonOptions);
+        byte[] buffer = frame.GetBuffer();
+        int length = checked((int)frame.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, length - 4);
+
+        // The frame goes out in one write. A cancellation that interrupts it leaves the pipe in an
+        // unknown state; callers must then retire the stream rather than send another frame.
+        await stream.WriteAsync(buffer.AsMemory(0, length), cancellationToken).ConfigureAwait(false);
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
