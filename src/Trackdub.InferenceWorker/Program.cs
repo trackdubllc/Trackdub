@@ -13,6 +13,7 @@ Stream input = Console.OpenStandardInput();
 Stream output = Console.OpenStandardOutput();
 var writeGate = new SemaphoreSlim(1, 1);
 var inFlight = new ConcurrentDictionary<long, CancellationTokenSource>();
+var handlers = new ConcurrentDictionary<long, Task>();
 var kokoro = new Lazy<KokoroTtsEngine>(() => new KokoroTtsEngine(
     new PlanSuppliedByApplication(),
     BenchmarkModelPathResolver.CreateDefault(),
@@ -107,33 +108,75 @@ static WorkerHelloResult DescribeWorker()
         detail);
 }
 
+async Task CancelQuietlyAsync(CancellationTokenSource source)
+{
+    try
+    {
+        await source.CancelAsync().ConfigureAwait(false);
+    }
+    catch (ObjectDisposedException)
+    {
+        // The request finished and disposed its source between lookup and cancel.
+    }
+}
+
+// Cancel what is still running, let it finish (its sessions are released by the engine), then
+// release the engine's native ONNX Runtime sessions before the process exits.
+async Task DrainAsync()
+{
+    foreach (CancellationTokenSource source in inFlight.Values)
+    {
+        await CancelQuietlyAsync(source).ConfigureAwait(false);
+    }
+
+    try
+    {
+        await Task.WhenAll(handlers.Values).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+    }
+    catch (TimeoutException)
+    {
+        Console.Error.WriteLine("[worker] In-flight requests did not stop within 10 s; exiting anyway.");
+        return;
+    }
+    catch (Exception ex)
+    {
+        // Handlers report their own failures; a broken pipe while answering must not skip cleanup.
+        Console.Error.WriteLine($"[worker] An in-flight request failed during shutdown: {ex.Message}");
+    }
+
+    if (kokoro.IsValueCreated)
+    {
+        kokoro.Value.Dispose();
+    }
+}
+
 while (await InferenceWorkerProtocol.ReadAsync(input, CancellationToken.None).ConfigureAwait(false) is { } message)
 {
     switch (message.Kind)
     {
         case InferenceWorkerProtocol.Shutdown:
-            foreach (CancellationTokenSource source in inFlight.Values)
-            {
-                await source.CancelAsync().ConfigureAwait(false);
-            }
-
+            await DrainAsync().ConfigureAwait(false);
             return 0;
         case InferenceWorkerProtocol.Cancel:
             long target = InferenceWorkerProtocol.FromPayload<long>(message.Payload);
             if (inFlight.TryGetValue(target, out CancellationTokenSource? running))
             {
-                await running.CancelAsync().ConfigureAwait(false);
+                await CancelQuietlyAsync(running).ConfigureAwait(false);
             }
 
             break;
         default:
             var cancellation = new CancellationTokenSource();
             inFlight[message.Id] = cancellation;
-            _ = Task.Run(() => HandleAsync(message, cancellation.Token));
+            Task handler = Task.Run(() => HandleAsync(message, cancellation.Token));
+            handlers[message.Id] = handler;
+            _ = handler.ContinueWith(done => handlers.TryRemove(message.Id, out _), TaskScheduler.Default);
             break;
     }
 }
 
+// The application closed the pipe without a shutdown message.
+await DrainAsync().ConfigureAwait(false);
 return 0;
 
 /// <summary>The worker never plans: the application's planner already chose model and provider.</summary>

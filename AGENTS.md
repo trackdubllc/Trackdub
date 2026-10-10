@@ -17,7 +17,8 @@ Media → Application, Analyzers, Contracts, Domain
 Media.Playback → Application, Domain
 Inference → Contracts, Domain
 Inference.Onnx → Inference, Contracts, Domain
-Composition → Application, Inference, Inference.Onnx, Infrastructure, Licensing, Media, Media.Playback
+InferenceWorker → Inference.Onnx
+Composition → Application, Inference, Inference.Onnx, InferenceWorker, Infrastructure, Licensing, Media, Media.Playback
 Sdk → Application, Composition, Licensing
 Cli → Sdk
 DubBench → Benchmarks, Domain, Inference, Inference.Onnx

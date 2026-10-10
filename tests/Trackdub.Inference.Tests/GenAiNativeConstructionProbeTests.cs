@@ -11,8 +11,11 @@ public sealed class GenAiNativeConstructionProbeTests
         string model = Environment.GetEnvironmentVariable("TRACKDUB_GENAI_PROBE_MODEL")!;
         var info = new ProcessStartInfo(executable)
         {
-            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
-            WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(executable))!, CreateNoWindow = true
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(executable))!,
+            CreateNoWindow = true
         };
         info.ArgumentList.Add(model);
         using var process = new Process { StartInfo = info };

@@ -65,7 +65,8 @@ public sealed class TtsStreamingPrefetchTests
         Assert.Equal(1, prefetch.MissedCount);
         // Two prefetch renders plus one stage render of the committed segment 0 text.
         Assert.Equal(3, engine.SynthesizeCallCount);
-        Assert.Equal(request.TranslatedSegments[0].Text, engine.LastInputText);
+        // Prefetch renders finish in any order, so the take's text hash (not the engine's last
+        // input) proves the committed text was synthesized.
         TtsTake segmentZero = Assert.Single(result.Takes, take => take.SegmentIndex == 0);
         Assert.Equal(
             TtsTextHash.Compute(0, request.TranslatedSegments[0].Text),

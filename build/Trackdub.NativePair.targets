@@ -48,7 +48,10 @@
         }
         }
         Directory.CreateDirectory(Path.GetDirectoryName(OutputFile));
-        File.WriteAllText(OutputFile, code.ToString(), new UTF8Encoding(false));
+        // Rewriting identical content would bump the timestamp and force every dependent recompile.
+        string content = code.ToString();
+        if (!File.Exists(OutputFile) || File.ReadAllText(OutputFile) != content)
+          File.WriteAllText(OutputFile, content, new UTF8Encoding(false));
       ]]></Code>
     </Task>
   </UsingTask>

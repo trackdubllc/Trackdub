@@ -42,10 +42,14 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
     private readonly ConcurrentDictionary<long, TaskCompletionSource<WorkerMessage>> pending = new();
     private readonly Queue<string> stderrTail = new();
     private Process? process;
-    private WorkerHelloResult? hello;
+
+    // A handshaken worker is published as one immutable snapshot so callers on the lock-free fast
+    // path never pair a process with another process's handshake.
+    private volatile RunningWorker? current;
     private string? unusableReason;
     private long nextId;
     private int starts;
+    private int disposed;
 
     public InferenceWorkerClient(string? executablePath = null)
     {
@@ -70,7 +74,7 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
     {
         try
         {
-            return await EnsureStartedAsync(cancellationToken).ConfigureAwait(false);
+            return (await EnsureStartedAsync(cancellationToken).ConfigureAwait(false)).Hello;
         }
         catch (InferenceWorkerException)
         {
@@ -117,8 +121,7 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
 
     private async Task<WorkerMessage> SendAsync(string kind, JsonElement payload, CancellationToken cancellationToken)
     {
-        await EnsureStartedAsync(cancellationToken).ConfigureAwait(false);
-        Process running = process!;
+        Process running = (await EnsureStartedAsync(cancellationToken).ConfigureAwait(false)).Process;
         long id = Interlocked.Increment(ref nextId);
         var completion = new TaskCompletionSource<WorkerMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         pending[id] = completion;
@@ -147,19 +150,20 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         }
     }
 
-    private async Task<WorkerHelloResult> EnsureStartedAsync(CancellationToken cancellationToken)
+    private async Task<RunningWorker> EnsureStartedAsync(CancellationToken cancellationToken)
     {
-        if (process is { HasExited: false } && hello is not null)
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+        if (current is { Process.HasExited: false } running)
         {
-            return hello;
+            return running;
         }
 
         await startGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (process is { HasExited: false } && hello is not null)
+            if (current is { Process.HasExited: false } alreadyRunning)
             {
-                return hello;
+                return alreadyRunning;
             }
 
             if (unusableReason is not null)
@@ -215,8 +219,9 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
                 throw new InferenceWorkerException(unusableReason);
             }
 
-            hello = result;
-            return result;
+            var worker = new RunningWorker(started, result);
+            current = worker;
+            return worker;
         }
         finally
         {
@@ -260,9 +265,10 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
 
     private async Task ReadLoopAsync(Process owner)
     {
-        Stream output = owner.StandardOutput.BaseStream;
+        string reason = "The inference worker exited unexpectedly.";
         try
         {
+            Stream output = owner.StandardOutput.BaseStream;
             while (await InferenceWorkerProtocol.ReadAsync(output, CancellationToken.None).ConfigureAwait(false) is { } message)
             {
                 if (pending.TryGetValue(message.Id, out TaskCompletionSource<WorkerMessage>? completion))
@@ -274,9 +280,14 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException or ObjectDisposedException)
         {
         }
+        catch (Exception ex)
+        {
+            // Nothing observes this loop's task, so every failure must reach the pending calls.
+            reason = $"The inference worker connection failed ({ex.GetType().Name}: {ex.Message}).";
+        }
 
         // The worker exited or its stream broke: every outstanding call fails with what it said.
-        string reason = $"The inference worker exited unexpectedly. Output: {StderrSnapshot()}";
+        reason = $"{reason} Output: {StderrSnapshot()}";
         foreach (TaskCompletionSource<WorkerMessage> completion in pending.Values)
         {
             completion.TrySetException(new InferenceWorkerException(reason));
@@ -327,6 +338,11 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref disposed, 1) != 0)
+        {
+            return;
+        }
+
         if (process is { HasExited: false } running)
         {
             try
@@ -347,6 +363,8 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         startGate.Dispose();
         writeGate.Dispose();
     }
+
+    private sealed record RunningWorker(Process Process, WorkerHelloResult Hello);
 }
 
 public sealed class InferenceWorkerException(string message) : InvalidOperationException(message);

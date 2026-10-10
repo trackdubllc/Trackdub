@@ -706,7 +706,7 @@ public sealed class TtsOrchestrationService(
         HashSet<string> reservedStockVoiceIds = CollectReservedStockVoiceIds(currentState, request);
         var plans = new Dictionary<Guid, TtsSpeakerPlan>();
         var speakersBySegmentIndex = new Dictionary<int, TtsPrefetchSpeaker>();
-        int maxConcurrency = 1;
+        int? maxConcurrency = null;
         foreach (ProjectSpeaker speaker in currentState.Speakers.OrderBy(speaker => speaker.CreatedAtUtc))
         {
             if (!currentState.TranscriptSegments.Any(segment => segment.SpeakerId == speaker.Id))
@@ -753,7 +753,9 @@ public sealed class TtsOrchestrationService(
                 continue;
             }
 
-            maxConcurrency = Math.Max(maxConcurrency, speakerPrefetch.MaxConcurrency);
+            // One shared pool renders every speaker, so it must honour the tightest per-speaker
+            // bound: a large-model GPU speaker's VRAM cap would otherwise be exceeded.
+            maxConcurrency = Math.Min(maxConcurrency ?? int.MaxValue, speakerPrefetch.MaxConcurrency);
             foreach (int segmentIndex in speakerPrefetch.Speaker.SourceSegmentsByIndex.Keys)
             {
                 speakersBySegmentIndex[segmentIndex] = speakerPrefetch.Speaker;
@@ -764,7 +766,7 @@ public sealed class TtsOrchestrationService(
             startTtsStageHandler,
             speakersBySegmentIndex,
             plans,
-            maxConcurrency,
+            maxConcurrency ?? 1,
             logger,
             runCancellationToken);
     }

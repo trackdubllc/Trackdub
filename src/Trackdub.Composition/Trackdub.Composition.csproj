@@ -138,6 +138,35 @@
     </ItemGroup>
   </Target>
 
+  <!-- ADR-0017: the ORT 1.30 worker ships in its own inference-worker\ folder, where
+       InferenceWorkerClient looks for it, so its onnxruntime.dll never shares a directory with
+       Windows ML's. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl'">
+    <ProjectReference Include="..\Trackdub.InferenceWorker\Trackdub.InferenceWorker.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false"
+                      OutputItemType="_InferenceWorkerTargetPath" />
+  </ItemGroup>
+
+  <Target Name="AddInferenceWorkerToOutputItems"
+          BeforeTargets="GetCopyToOutputDirectoryItems"
+          DependsOnTargets="ResolveProjectReferences"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' != 'Dnnl' And '$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <_InferenceWorkerOutputDir>@(_InferenceWorkerTargetPath->'%(RootDir)%(Directory)')</_InferenceWorkerOutputDir>
+    </PropertyGroup>
+    <Error Condition="'$(_InferenceWorkerOutputDir)' == '' Or !Exists('$(_InferenceWorkerOutputDir)Trackdub.InferenceWorker.exe')"
+           Text="Trackdub.InferenceWorker.exe was not built at '$(_InferenceWorkerOutputDir)'." />
+    <ItemGroup>
+      <_InferenceWorkerFiles Include="$(_InferenceWorkerOutputDir)**\*" />
+      <ContentWithTargetPath Include="@(_InferenceWorkerFiles)"
+                             TargetPath="inference-worker\%(RecursiveDir)%(Filename)%(Extension)"
+                             CopyToOutputDirectory="PreserveNewest"
+                             CopyToPublishDirectory="PreserveNewest"
+                             Visible="false" />
+    </ItemGroup>
+  </Target>
+
   <!-- Copy OnnxRuntime.Gpu native Linux assets to output (mirrors DirectML pattern for Windows) -->
   <Target Name="CopyOrtGpuAssetsToOutput"
           AfterTargets="CopyFilesToOutputDirectory"

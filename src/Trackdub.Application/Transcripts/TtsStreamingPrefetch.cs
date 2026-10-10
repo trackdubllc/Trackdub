@@ -71,6 +71,9 @@ public sealed class TtsStreamingPrefetch : ITranslatedSegmentObserver, IAsyncDis
     private readonly StartTtsStageHandler handler;
     private readonly IReadOnlyDictionary<int, TtsPrefetchSpeaker> speakersBySegmentIndex;
     private readonly ConcurrentDictionary<string, Task<TtsPrefetchedClip?>> renders = new(StringComparer.Ordinal);
+
+    // Renders whose claim the stage cancelled; disposal must still await them and delete their clips.
+    private readonly ConcurrentBag<Task<TtsPrefetchedClip?>> abandoned = [];
     private readonly SemaphoreSlim renderSlots;
     private readonly CancellationTokenSource lifetime;
     private readonly string stagingDirectory;
@@ -145,6 +148,11 @@ public sealed class TtsStreamingPrefetch : ITranslatedSegmentObserver, IAsyncDis
         {
             clip = null;
         }
+        catch (OperationCanceledException)
+        {
+            abandoned.Add(render);
+            throw;
+        }
 
         if (clip is null)
         {
@@ -193,7 +201,7 @@ public sealed class TtsStreamingPrefetch : ITranslatedSegmentObserver, IAsyncDis
     public async ValueTask DisposeAsync()
     {
         await lifetime.CancelAsync().ConfigureAwait(false);
-        foreach (Task<TtsPrefetchedClip?> render in renders.Values)
+        foreach (Task<TtsPrefetchedClip?> render in renders.Values.Concat(abandoned))
         {
             try
             {
@@ -201,6 +209,7 @@ public sealed class TtsStreamingPrefetch : ITranslatedSegmentObserver, IAsyncDis
             }
             catch (OperationCanceledException)
             {
+                // Cancelled by the lifetime token above: the render produced no clip to delete.
             }
         }
 
@@ -211,8 +220,10 @@ public sealed class TtsStreamingPrefetch : ITranslatedSegmentObserver, IAsyncDis
         {
             Directory.Delete(stagingDirectory, recursive: true);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            // Best effort: the directory lives under the temp path, and a leftover file costs only disk.
+            logger?.LogWarning($"TTS prefetch could not remove its staging directory '{stagingDirectory}'.", ex);
         }
 
         lifetime.Dispose();
