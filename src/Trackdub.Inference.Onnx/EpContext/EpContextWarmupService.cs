@@ -88,7 +88,9 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
         }
 
         string epContextPath = EpContextArtifact.GetEpContextPath(sourcePath);
-        bool haveValid = EpContextLoadPathResolver.TryResolveLoadPath(sourcePath) is not null;
+        bool haveValid = EpContextLoadPathResolver.TryResolveLoadPath(
+            sourcePath,
+            OnnxExecutionSessionFactory.BuildTensorRtRtxOptions(EpContextTrtProfiles.Resolve(sourcePath))) is not null;
         double compileMs = 0;
         if (!haveValid)
         {

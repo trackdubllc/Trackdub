@@ -6,8 +6,10 @@ namespace Trackdub.Inference.Onnx.EpContext;
 
 /// <summary>
 /// EP-context artifact paths and machine stamp. A stamp is valid only for the model bytes,
-/// GPU architecture, driver, and TRT RTX EP version it was compiled against — the same
-/// invalidation triggers as <c>SmokeVerdictKey</c> and the residual engine cache.
+/// GPU architecture, driver, and TRT RTX EP version it was compiled against (the triggers it
+/// shares with <c>SmokeVerdictKey</c> and the residual engine cache), and additionally for the
+/// host ORT runtime version and, when supplied, the compile-option identity, which smoke
+/// verdicts do not track.
 /// Load-path checks require schema 2 content hashes for the source graph and its external
 /// weights. Length and modification time reject obvious replacements before that hash.
 /// Unknown hardware or driver values do not match. Compile-option identity is compared when
@@ -342,7 +344,8 @@ public static class EpContextArtifact
         string stagingDirectory,
         string sourceModelPath,
         string? outputPath = null,
-        Func<IReadOnlyList<ArtifactFile>, Stamp>? createStamp = null)
+        Func<IReadOnlyList<ArtifactFile>, Stamp>? createStamp = null,
+        Func<string, bool>? existingArtifactUsable = null)
     {
         string epContextPath = Path.GetFullPath(outputPath ?? GetEpContextPath(sourceModelPath));
         string targetDirectory = Path.GetDirectoryName(Path.GetFullPath(epContextPath))!;
@@ -366,7 +369,8 @@ public static class EpContextArtifact
                     epContextPath,
                     stampPath,
                     probe.EnvironmentFingerprint,
-                    probe.CompileOptionsIdentity) is not null)
+                    probe.CompileOptionsIdentity) is not null &&
+                (existingArtifactUsable?.Invoke(epContextPath) ?? true))
             {
                 return TryReadStamp(stampPath)!.ArtifactFiles ?? [];
             }

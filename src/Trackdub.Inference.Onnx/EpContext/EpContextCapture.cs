@@ -39,6 +39,7 @@ internal static class EpContextCapture
     internal static InferenceSession CreateSession(
         string sourceModelPath,
         SessionOptions options,
+        IReadOnlyDictionary<string, string> effectiveTrtOptions,
         Func<string, SessionOptions, InferenceSession> createSession)
     {
         string fullSource = Path.GetFullPath(sourceModelPath);
@@ -72,7 +73,7 @@ internal static class EpContextCapture
 
         try
         {
-            Publish(fullSource, stagingDirectory);
+            Publish(fullSource, stagingDirectory, effectiveTrtOptions);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
@@ -86,7 +87,10 @@ internal static class EpContextCapture
         return session;
     }
 
-    private static void Publish(string sourceModelPath, string stagingDirectory)
+    private static void Publish(
+        string sourceModelPath,
+        string stagingDirectory,
+        IReadOnlyDictionary<string, string> effectiveTrtOptions)
     {
         string stagedModel = Path.Join(stagingDirectory, Path.GetFileName(EpContextArtifact.GetEpContextPath(sourceModelPath)));
         // A graph the EP did not claim yields a plain reserialized model that would not skip the
@@ -97,11 +101,18 @@ internal static class EpContextCapture
             return;
         }
 
+        // Loads reject an artifact that is not optimal for the session's device; publishing one
+        // would replace a usable artifact with one every later session rebuilds past.
+        if (!EpContextCompatibility.AllowsTensorRtRtxArtifact(stagedModel))
+        {
+            MarkFailed(sourceModelPath, "Captured artifact is not EP_SUPPORTED_OPTIMAL for the selected TensorRT-RTX device.");
+            return;
+        }
+
         (string gpuArchitecture, string? driverVersion) = EpContextLoadPathResolver.CurrentHardware;
-        string compileOptionsIdentity = EpContextArtifact.BuildCompileOptionsIdentity(
-            EpContextTrtProfiles.Resolve(sourceModelPath),
-            EpContextArtifact.ShouldEmbedEpContext(sourceModelPath));
+        string compileOptionsIdentity = EpContextLoadPathResolver.BuildCompileOptionsIdentity(sourceModelPath, effectiveTrtOptions);
         EpContextArtifact.PublishStagedArtifact(stagingDirectory, sourceModelPath,
+            existingArtifactUsable: EpContextCompatibility.AllowsTensorRtRtxArtifact,
             createStamp: artifactFiles => EpContextArtifact.CreateStamp(
                 sourceModelPath,
                 new FileInfo(sourceModelPath),

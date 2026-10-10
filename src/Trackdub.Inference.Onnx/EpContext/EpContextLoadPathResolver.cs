@@ -23,13 +23,14 @@ internal static class EpContextLoadPathResolver
 
     /// <summary>
     /// Valid EP-context sibling for <paramref name="sourceModelPath"/>, or <see langword="null"/>.
-    /// Stamp identity and selected-device compatibility both have to pass.
+    /// Stamp identity (including the TensorRT RTX options the session appends) and
+    /// selected-device compatibility both have to pass.
     /// </summary>
-    public static string? TryResolveLoadPath(string sourceModelPath)
+    public static string? TryResolveLoadPath(
+        string sourceModelPath,
+        IReadOnlyDictionary<string, string> effectiveTrtOptions)
     {
-        string compileOptionsIdentity = EpContextArtifact.BuildCompileOptionsIdentity(
-            EpContextTrtProfiles.Resolve(sourceModelPath),
-            EpContextArtifact.ShouldEmbedEpContext(sourceModelPath));
+        string compileOptionsIdentity = BuildCompileOptionsIdentity(sourceModelPath, effectiveTrtOptions);
         string? compiledPath = EpContextArtifact.TryResolveValidLoadPath(
             sourceModelPath,
             CurrentEnvironmentFingerprint,
@@ -39,12 +40,16 @@ internal static class EpContextLoadPathResolver
             return null;
         }
 
-        return EpContextCompatibility.AllowsCachedArtifact(
-            compiledPath,
-            TensorRtRtxProviderConstants.PluginOrtExecutionProviderName)
-            ? compiledPath
-            : null;
+        return EpContextCompatibility.AllowsTensorRtRtxArtifact(compiledPath) ? compiledPath : null;
     }
+
+    /// <summary>Identity of the options an engine for <paramref name="sourceModelPath"/> is built with.</summary>
+    public static string BuildCompileOptionsIdentity(
+        string sourceModelPath,
+        IReadOnlyDictionary<string, string> effectiveTrtOptions) =>
+        EpContextArtifact.BuildCompileOptionsIdentity(
+            effectiveTrtOptions,
+            EpContextArtifact.ShouldEmbedEpContext(sourceModelPath));
 
     private static (string GpuArchitecture, string? DriverVersion) ProbeHardware()
     {

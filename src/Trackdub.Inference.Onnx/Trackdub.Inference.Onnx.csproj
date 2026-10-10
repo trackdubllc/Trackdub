@@ -79,6 +79,13 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- DNNL excludes Windows ML's runtime assets and its native package ships no managed binding, so
+       the stock managed Microsoft.ML.OnnxRuntime.dll has to reach the app output (compile still
+       binds against the Windows ML lib reference above). -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0' And '$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'">
+    <PackageReference Update="Microsoft.ML.OnnxRuntime.Managed" ExcludeAssets="compile" PrivateAssets="compile" />
+  </ItemGroup>
+
   <!-- Keep the portable TFM's package graph identical across restore hosts. Locked restores use
        one net10.0 graph; runtime asset selection below remains RID-specific. -->
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0-windows10.0.19041.0'">

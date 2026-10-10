@@ -31,11 +31,11 @@ public sealed class EpContextArtifactStampTests
 
             // Same EP ABI plugin version, different vendored TensorRT-RTX runtime → stale artifact.
             string otherRuntime =
-                $"Blackwell|32.0.16.1714|{TensorRtRtxProviderConstants.BundledVersion}+trt-rtx-1.5.0";
+                $"Blackwell|32.0.16.1714|{TensorRtRtxProviderConstants.BundledVersion}+trt-rtx-1.5.0|{EpContextArtifact.HostOrtRuntimeVersion}";
             Assert.Null(EpContextArtifact.TryResolveValidLoadPath(sourcePath, otherRuntime));
 
             // Pre-upgrade stamps carried only the EP ABI version and must not match either.
-            string legacy = $"Blackwell|32.0.16.1714|{TensorRtRtxProviderConstants.BundledVersion}";
+            string legacy = $"Blackwell|32.0.16.1714|{TensorRtRtxProviderConstants.BundledVersion}|{EpContextArtifact.HostOrtRuntimeVersion}";
             Assert.Null(EpContextArtifact.TryResolveValidLoadPath(sourcePath, legacy));
         }
         finally

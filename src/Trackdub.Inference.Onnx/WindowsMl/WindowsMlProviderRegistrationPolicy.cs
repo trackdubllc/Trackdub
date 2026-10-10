@@ -20,13 +20,23 @@ public sealed class WindowsMlProviderRegistrationPolicy
 {
     private readonly Func<CancellationToken, Task<WindowsMlBootstrapResult>> _registerInstalledCertifiedAsync;
     private readonly Func<CancellationToken, Task<WindowsMlBootstrapResult>> _ensureAndRegisterCertifiedAsync;
+    // A partial success (some providers failed or are still preparing) is reused only briefly, so
+    // sessions do not each rerun a multi-minute catalog bootstrap, yet a provider that finishes
+    // preparing is still picked up without an explicit Invalidate().
+    private static readonly long PartialSuccessReuseMilliseconds = (long)TimeSpan.FromMinutes(5).TotalMilliseconds;
+
     private readonly SemaphoreSlim _cacheGate = new(1, 1);
-    private WindowsMlBootstrapResult? _registerInstalledCertifiedResult;
-    private WindowsMlBootstrapResult? _ensureAndRegisterCertifiedResult;
+    private CachedBootstrap? _registerInstalledCertifiedResult;
+    private CachedBootstrap? _ensureAndRegisterCertifiedResult;
 
     // Separate cache for the bulk EnsureAllCertifiedCatalog operation so it does not
     // poison the per-provider session cache used by RegisterForSessionAsync.
-    private WindowsMlBootstrapResult? _ensureAllCertifiedCatalogResult;
+    private CachedBootstrap? _ensureAllCertifiedCatalogResult;
+
+    // Bumped by Invalidate(); a bootstrap that started before an invalidation does not cache.
+    private int _generation;
+
+    private sealed record CachedBootstrap(WindowsMlBootstrapResult Result, long CachedAtTicks);
 
     public static WindowsMlProviderRegistrationPolicy Shared { get; } = CreateShared();
 
@@ -52,20 +62,14 @@ public sealed class WindowsMlProviderRegistrationPolicy
     /// Drops cached bulk results so the next registration reads the catalog again.
     /// Call this after an install or preparation attempt. Failures are not cached;
     /// this still clears a prior success that should not hide a new provider.
+    /// Never waits for a bootstrap in progress: that bootstrap's result is simply not cached.
     /// </summary>
     public void Invalidate()
     {
-        _cacheGate.Wait();
-        try
-        {
-            _registerInstalledCertifiedResult = null;
-            _ensureAndRegisterCertifiedResult = null;
-            _ensureAllCertifiedCatalogResult = null;
-        }
-        finally
-        {
-            _cacheGate.Release();
-        }
+        Interlocked.Increment(ref _generation);
+        Volatile.Write(ref _registerInstalledCertifiedResult, null);
+        Volatile.Write(ref _ensureAndRegisterCertifiedResult, null);
+        Volatile.Write(ref _ensureAllCertifiedCatalogResult, null);
     }
 
     public Task<WindowsMlProviderRegistrationResult> EnsureAllCertifiedCatalogAsync(
@@ -123,11 +127,12 @@ public sealed class WindowsMlProviderRegistrationPolicy
         await _cacheGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            int generation = Volatile.Read(ref _generation);
             WindowsMlBootstrapResult? cached = ResolveCachedResult(mode);
 
-            if (cacheCompletedResult && IsReusableSuccess(cached))
+            if (cacheCompletedResult && cached is not null)
             {
-                return cached!;
+                return cached;
             }
 
             WindowsMlBootstrapResult result = mode switch
@@ -144,15 +149,15 @@ public sealed class WindowsMlProviderRegistrationPolicy
                 _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported Windows ML bootstrap mode.")
             };
 
-            if (cacheCompletedResult && IsReusableSuccess(result))
+            if (cacheCompletedResult && TryCreateCacheEntry(result, generation, out CachedBootstrap? entry))
             {
                 if (mode is WindowsMlBootstrapMode.RegisterInstalledCertified)
                 {
-                    _registerInstalledCertifiedResult = result;
+                    Volatile.Write(ref _registerInstalledCertifiedResult, entry);
                 }
                 else
                 {
-                    _ensureAndRegisterCertifiedResult = result;
+                    Volatile.Write(ref _ensureAndRegisterCertifiedResult, entry);
                 }
             }
 
@@ -166,16 +171,16 @@ public sealed class WindowsMlProviderRegistrationPolicy
 
     private WindowsMlBootstrapResult? ResolveCachedResult(WindowsMlBootstrapMode mode)
     {
-        if (mode is WindowsMlBootstrapMode.RegisterInstalledCertified &&
-            IsReusableSuccess(_ensureAndRegisterCertifiedResult))
+        WindowsMlBootstrapResult? ensured = Reusable(Volatile.Read(ref _ensureAndRegisterCertifiedResult));
+        if (mode is WindowsMlBootstrapMode.RegisterInstalledCertified && ensured is not null)
         {
-            return _ensureAndRegisterCertifiedResult;
+            return ensured;
         }
 
         return mode switch
         {
-            WindowsMlBootstrapMode.RegisterInstalledCertified => _registerInstalledCertifiedResult,
-            WindowsMlBootstrapMode.EnsureAndRegisterCertified => _ensureAndRegisterCertifiedResult,
+            WindowsMlBootstrapMode.RegisterInstalledCertified => Reusable(Volatile.Read(ref _registerInstalledCertifiedResult)),
+            WindowsMlBootstrapMode.EnsureAndRegisterCertified => ensured,
             WindowsMlBootstrapMode.EnsureAllCertifiedCatalog =>
                 throw new ArgumentOutOfRangeException(
                     nameof(mode),
@@ -192,21 +197,24 @@ public sealed class WindowsMlProviderRegistrationPolicy
         await _cacheGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (IsReusableSuccess(_ensureAllCertifiedCatalogResult))
-                return FormatAllCertifiedCatalogResult(_ensureAllCertifiedCatalogResult!);
+            int generation = Volatile.Read(ref _generation);
+            WindowsMlBootstrapResult? cached = Reusable(Volatile.Read(ref _ensureAllCertifiedCatalogResult));
+            if (cached is not null)
+                return FormatAllCertifiedCatalogResult(cached);
 
-            if (IsReusableSuccess(_ensureAndRegisterCertifiedResult))
+            CachedBootstrap? ensured = Volatile.Read(ref _ensureAndRegisterCertifiedResult);
+            if (Reusable(ensured) is { } ensuredResult)
             {
-                _ensureAllCertifiedCatalogResult = _ensureAndRegisterCertifiedResult;
-                return FormatAllCertifiedCatalogResult(_ensureAndRegisterCertifiedResult!);
+                Volatile.Write(ref _ensureAllCertifiedCatalogResult, ensured);
+                return FormatAllCertifiedCatalogResult(ensuredResult);
             }
 
             WindowsMlBootstrapResult result = await _ensureAndRegisterCertifiedAsync(cancellationToken)
                 .ConfigureAwait(false);
-            if (IsReusableSuccess(result))
+            if (TryCreateCacheEntry(result, generation, out CachedBootstrap? entry))
             {
-                _ensureAndRegisterCertifiedResult = result;
-                _ensureAllCertifiedCatalogResult = result;
+                Volatile.Write(ref _ensureAndRegisterCertifiedResult, entry);
+                Volatile.Write(ref _ensureAllCertifiedCatalogResult, entry);
             }
 
             return FormatAllCertifiedCatalogResult(result);
@@ -217,8 +225,26 @@ public sealed class WindowsMlProviderRegistrationPolicy
         }
     }
 
-    private static bool IsReusableSuccess(WindowsMlBootstrapResult? result) =>
-        result is { Succeeded: true } && string.IsNullOrWhiteSpace(result.FailureReason);
+    private bool TryCreateCacheEntry(WindowsMlBootstrapResult result, int generation, out CachedBootstrap? entry)
+    {
+        entry = result.Succeeded && Volatile.Read(ref _generation) == generation
+            ? new CachedBootstrap(result, Environment.TickCount64)
+            : null;
+        return entry is not null;
+    }
+
+    private static WindowsMlBootstrapResult? Reusable(CachedBootstrap? cached)
+    {
+        if (cached is null || !cached.Result.Succeeded)
+        {
+            return null;
+        }
+
+        bool partial = !string.IsNullOrWhiteSpace(cached.Result.FailureReason);
+        return !partial || Environment.TickCount64 - cached.CachedAtTicks < PartialSuccessReuseMilliseconds
+            ? cached.Result
+            : null;
+    }
 
     private static WindowsMlProviderRegistrationResult FormatAllCertifiedCatalogResult(
         WindowsMlBootstrapResult result)
@@ -227,7 +253,9 @@ public sealed class WindowsMlProviderRegistrationPolicy
             "Catalog ensure-and-register completed for all certified providers. Individual execution providers may still be not installed, not ready, or unavailable on this hardware; use per-provider status below or run pipeline discovery.";
 
         string detail = result.Succeeded
-            ? $"Windows ML {routeDetail}"
+            ? string.IsNullOrWhiteSpace(result.FailureReason)
+                ? $"Windows ML {routeDetail}"
+                : $"Windows ML {routeDetail} Some providers are not ready yet (for example, still preparing): {result.FailureReason}"
             : string.IsNullOrWhiteSpace(result.FailureReason)
                 ? $"Windows ML catalog ensure-and-register did not complete via {WindowsMlBootstrapMode.EnsureAllCertifiedCatalog}. {routeDetail}"
                 : $"Windows ML catalog ensure-and-register did not complete via {WindowsMlBootstrapMode.EnsureAllCertifiedCatalog}. {routeDetail} Failure: {result.FailureReason}";

@@ -151,9 +151,7 @@ public sealed class EpContextCompiler
                     selectedLabel);
             }
 
-            if (!EpContextCompatibility.AllowsCachedArtifact(
-                    tempPath,
-                    TensorRtRtxProviderConstants.PluginOrtExecutionProviderName))
+            if (!EpContextCompatibility.AllowsTensorRtRtxArtifact(tempPath))
             {
                 return new CompileResult(
                     false,
@@ -165,10 +163,14 @@ public sealed class EpContextCompiler
                     selectedLabel);
             }
 
-            string compileOptionsIdentity = EpContextArtifact.BuildCompileOptionsIdentity(modelTrtOptions, embed);
+            string compileOptionsIdentity = EpContextLoadPathResolver.BuildCompileOptionsIdentity(
+                sourceModelPath,
+                OnnxExecutionSessionFactory.TryGetAppendedTensorRtRtxOptions(sessionOptions)
+                    ?? OnnxExecutionSessionFactory.BuildTensorRtRtxOptions(modelTrtOptions));
             IReadOnlyList<EpContextArtifact.ArtifactFile> artifactFiles =
                 EpContextArtifact.PublishStagedArtifact(tempDir, sourceModelPath, epContextPath,
-                    files => EpContextArtifact.CreateStamp(sourceModelPath, new FileInfo(sourceModelPath), null,
+                    existingArtifactUsable: EpContextCompatibility.AllowsTensorRtRtxArtifact,
+                    createStamp: files => EpContextArtifact.CreateStamp(sourceModelPath, new FileInfo(sourceModelPath), null,
                         EpContextLoadPathResolver.CurrentHardware.GpuArchitecture,
                         EpContextLoadPathResolver.CurrentHardware.DriverVersion, files, epContextPath,
                         compileOptionsIdentity));

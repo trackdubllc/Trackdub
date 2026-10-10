@@ -1,10 +1,11 @@
 using Microsoft.ML.OnnxRuntime;
+using Trackdub.Inference.Runtime.TensorRtRtx;
 
 namespace Trackdub.Inference.Onnx.EpContext;
 
 /// <summary>
 /// Reuse of a compiled EP-context model requires
-/// <see cref="OrtCompiledModelCompatibility.EP_SUPPORTED_OPTIMAL"/> for the devices the session
+/// <see cref="OrtCompiledModelCompatibility.EP_SUPPORTED_OPTIMAL"/> for the device the session
 /// will select. Supported-but-recompilation-preferred, unsupported, not-applicable, missing
 /// metadata, an empty device group, and API failures are cache misses. The original model is
 /// then used, and a later compile can replace the artifact.
@@ -32,14 +33,20 @@ internal static class EpContextCompatibility
         return true;
     }
 
+    public static bool AllowsTensorRtRtxArtifact(string compiledModelPath) =>
+        AllowsCachedArtifact(compiledModelPath, TensorRtRtxProviderConstants.PluginOrtExecutionProviderName);
+
     public static bool AllowsCachedArtifact(string compiledModelPath, string executionProviderName)
     {
         try
         {
-            OrtEpDevice[] selected = OrtEnv.Instance()
+            // Session creation appends exactly this device (AppendTensorRtRtxOrFallbackProvider).
+            OrtEpDevice? sessionDevice = OrtEnv.Instance()
                 .GetEpDevices()
-                .Where(device => string.Equals(device.EpName, executionProviderName, StringComparison.Ordinal))
-                .ToArray();
+                .FirstOrDefault(device => OnnxExecutionSessionFactory.IsTensorRtRtxDeviceCandidate(
+                    device.EpName,
+                    device.HardwareDevice.Type));
+            OrtEpDevice[] selected = sessionDevice is null ? [] : [sessionDevice];
             if (!IsSelectedDeviceGroup(selected, executionProviderName))
             {
                 return false;
