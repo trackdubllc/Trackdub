@@ -138,6 +138,46 @@
     </ItemGroup>
   </Target>
 
+  <!-- The worker has a separate native ORT runtime and must remain isolated from the
+       application output. Build it into an intermediate directory, then expose the complete
+       output (managed and native files) under inference-worker/ for both library and app builds. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <_InferenceWorkerOutputDir>$(IntermediateOutputPath)inference-worker\</_InferenceWorkerOutputDir>
+  </PropertyGroup>
+
+  <Target Name="BuildInferenceWorker"
+          BeforeTargets="CopyFilesToOutputDirectory;GetCopyToOutputDirectoryItems"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <MSBuild Projects="..\Trackdub.InferenceWorker\Trackdub.InferenceWorker.csproj"
+             Targets="Restore;Build"
+             Properties="TargetFramework=net10.0-windows10.0.19041.0;OutputPath=$(_InferenceWorkerOutputDir);RuntimeIdentifier=$(RuntimeIdentifier)" />
+    <ItemGroup>
+      <_InferenceWorkerFiles Include="$(_InferenceWorkerOutputDir)**\*" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="CopyInferenceWorkerToOutput"
+          AfterTargets="CopyFilesToOutputDirectory"
+          DependsOnTargets="BuildInferenceWorker"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <Copy SourceFiles="@(_InferenceWorkerFiles)"
+          DestinationFiles="@(_InferenceWorkerFiles->'$(TargetDir)inference-worker\%(RecursiveDir)%(Filename)%(Extension)')"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false" />
+  </Target>
+
+  <Target Name="AddInferenceWorkerToOutputItems"
+          BeforeTargets="GetCopyToOutputDirectoryItems"
+          DependsOnTargets="BuildInferenceWorker"
+          Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
+    <ItemGroup>
+      <ContentWithTargetPath Include="@(_InferenceWorkerFiles)"
+                             CopyToOutputDirectory="Always"
+                             TargetPath="inference-worker\%(RecursiveDir)%(Filename)%(Extension)"
+                             Visible="false" />
+    </ItemGroup>
+  </Target>
+
   <!-- Copy OnnxRuntime.Gpu native Linux assets to output (mirrors DirectML pattern for Windows) -->
   <Target Name="CopyOrtGpuAssetsToOutput"
           AfterTargets="CopyFilesToOutputDirectory"
