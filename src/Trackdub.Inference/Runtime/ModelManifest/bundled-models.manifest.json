@@ -4081,8 +4081,6 @@
       },
       "download_files": [
         "config.json",
-        "decoder_model_quantized.onnx",
-        "encoder_model_quantized.onnx",
         "spiece.model",
         "tokenizer_config.json"
       ],
@@ -4106,6 +4104,7 @@
         {
           "alias": "quantized",
           "entry_path": "encoder_model_quantized.onnx",
+          "is_default": true,
           "download_files": [
             "decoder_model_quantized.onnx"
           ]

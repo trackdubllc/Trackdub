@@ -76,8 +76,14 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         {
             return (await EnsureStartedAsync(cancellationToken).ConfigureAwait(false)).Hello;
         }
-        catch (InferenceWorkerException)
+        catch (Exception ex) when (ex is InferenceWorkerException
+            or System.ComponentModel.Win32Exception
+            or InvalidDataException
+            or JsonException
+            or IOException)
         {
+            // Discovery asks whether the worker is usable; a worker that cannot start or answers
+            // garbage is simply unusable, not a reason to fail discovery for every provider.
             return null;
         }
     }
@@ -163,6 +169,9 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
             {
                 return alreadyRunning;
             }
+
+            // DisposeAsync may have run while this call waited for the gate.
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
 
             if (unusableReason is not null)
             {
@@ -362,6 +371,7 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         }
         catch (InvalidOperationException)
         {
+            // The process already exited between the check and the kill; nothing is left to stop.
         }
     }
 
@@ -374,6 +384,10 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         {
             return;
         }
+
+        // Wait out any start in progress so the process it creates is the one killed below.
+        // Callers queued behind it then see the disposed flag inside the gate.
+        await startGate.WaitAsync().ConfigureAwait(false);
 
         if (process is { HasExited: false } running)
         {
@@ -392,8 +406,10 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
         }
 
         process?.Dispose();
-        startGate.Dispose();
         writeGate.Dispose();
+
+        // Not disposed: queued EnsureStartedAsync callers must wake and throw, not hang.
+        startGate.Release();
     }
 
     private sealed record RunningWorker(Process Process, WorkerHelloResult Hello);

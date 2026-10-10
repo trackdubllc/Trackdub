@@ -39,9 +39,10 @@ internal sealed class TtsPrefetchedClip(string audioPath, TtsRenderOutput output
         {
             File.Delete(AudioPath);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // The staging directory is removed when the prefetch is disposed.
+            // A scanner or indexer may hold the file; the staging directory is removed when the
+            // prefetch is disposed.
         }
     }
 }
@@ -220,7 +221,7 @@ public sealed class TtsStreamingPrefetch : ITranslatedSegmentObserver, IAsyncDis
         {
             Directory.Delete(stagingDirectory, recursive: true);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Best effort: the directory lives under the temp path, and a leftover file costs only disk.
             logger?.LogWarning($"TTS prefetch could not remove its staging directory '{stagingDirectory}'.", ex);
