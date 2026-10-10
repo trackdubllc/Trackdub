@@ -1967,7 +1967,7 @@ public sealed class ModelManifestLoaderTests
             manifest.Optimization!.Olive!.Components);
         Assert.Contains(OliveOptimizationProvider.TensorRtRtx, manifest.Optimization.Olive.SupportedProviders);
         Assert.Equal(
-            ModelExpectedRuntime.TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMl,
+            ModelExpectedRuntime.TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMlOrCpu,
             manifest.ExpectedRuntime);
     }
 

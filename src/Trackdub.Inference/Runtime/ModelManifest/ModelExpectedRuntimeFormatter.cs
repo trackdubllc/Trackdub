@@ -39,9 +39,9 @@ public static class ModelExpectedRuntimeFormatter
             return "Runtime: MIGraphX (AMD GPU)";
         }
 
-        if (normalized.Equals(ModelExpectedRuntime.TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMl, StringComparison.OrdinalIgnoreCase))
+        if (normalized.Equals(ModelExpectedRuntime.TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMlOrCpu, StringComparison.OrdinalIgnoreCase))
         {
-            return "Runtime: TensorRT RTX, Windows ML catalog, MIGraphX, or DirectML fallback";
+            return "Runtime: TensorRT RTX, Windows ML catalog, MIGraphX, DirectML fallback, or CPU";
         }
 
         if (normalized.Equals(ModelExpectedRuntime.WindowsMlCatalogOrMigraphxOrDirectMl, StringComparison.OrdinalIgnoreCase)
