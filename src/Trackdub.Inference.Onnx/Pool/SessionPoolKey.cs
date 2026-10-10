@@ -191,21 +191,30 @@ internal sealed record SessionPoolKey
     /// Resident memory per weight byte, in percent, for <paramref name="provider"/>.
     /// </summary>
     /// <remarks>
-    /// TensorRT RTX builds its engine from the initializers and holds the weights roughly
-    /// once: MADLAD-400 3B <c>trt_rtx_mixed_fp16_fp32</c> encoder + decoder (6.55 GB of
-    /// external weights) raised process GPU usage by ~8 GB on a 12 GB RTX 5070, about 1.2×
-    /// weights. 125% plus the per-graph allowance covers that measurement. Every other
-    /// provider is unmeasured and keeps the conservative 2× (weights, initialization and
-    /// pre-packing copies, activation slack).
+    /// TensorRT RTX and DirectML hold each session's weights roughly once, both measured on a
+    /// 12 GB RTX 5070:
+    /// <list type="bullet">
+    /// <item>TensorRT RTX: MADLAD-400 3B <c>trt_rtx_mixed_fp16_fp32</c> encoder + decoder
+    /// (6.55 GB of external weights) raised process GPU usage by ~8 GB, about 1.2× weights.</item>
+    /// <item>DirectML (Windows ML 2.4.89, ORT 1.27.1): qwen3-asr-0.6b encoder + decoder-init +
+    /// decoder-step (711 MiB inline plus a 2867 MiB sidecar each decoder graph loads, 6445 MiB
+    /// per-session weights) raised process GPU usage by 6526 MiB, about 1.0×.</item>
+    /// </list>
+    /// 125% plus the per-graph allowance covers both. Every other provider is unmeasured and
+    /// keeps the conservative 2× (weights, initialization and pre-packing copies, activation
+    /// slack). On Windows, process-GPU observation still charges any real usage beyond an
+    /// estimate.
     /// <para>
     /// Set <paramref name="providerMayFallBack"/> when session creation can still fall back
     /// from TensorRT RTX to another provider after the key is admitted (the pooled
-    /// single-session TRT init fallback). The admitted reservation cannot follow the session to
-    /// its effective provider, so it uses the conservative factor.
+    /// single-session TRT init fallback, which can end on CPU). The admitted reservation cannot
+    /// follow the session to its effective provider, so it uses the conservative factor.
     /// </para>
     /// </remarks>
     internal static int ResidentPercentOfWeights(ExecutionProviderKind provider, bool providerMayFallBack = false) =>
-        provider is ExecutionProviderKind.TensorRTRtx && !providerMayFallBack ? 125 : 200;
+        !providerMayFallBack && provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.DirectMl
+            ? 125
+            : 200;
 
     /// <summary>
     /// Resident estimate for <paramref name="weightBytes"/> of model weights on
