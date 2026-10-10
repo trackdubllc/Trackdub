@@ -284,7 +284,8 @@ public sealed class ExportStageHandler(
         {
             var durationsByPath = new Dictionary<string, double>(StringComparer.Ordinal);
             ProjectArtifact sourceArtifact = currentState.ProjectState.Artifacts
-                .First(artifact => artifact.RelativePath == mixPlan.SourceAudioRelativePath);
+                .Where(artifact => artifact.RelativePath == mixPlan.SourceAudioRelativePath)
+                .OrderByDescending(artifact => artifact.CreatedAtUtc).First();
             if (!HasUsableDuration(sourceArtifact.DurationSeconds))
             {
                 durationsByPath[sourceArtifact.RelativePath] = await ProbeAudioDurationAsync(

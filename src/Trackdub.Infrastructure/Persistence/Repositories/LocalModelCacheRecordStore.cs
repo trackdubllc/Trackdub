@@ -166,12 +166,7 @@ public sealed class LocalModelCacheRecordStore(TrackdubStoragePaths storagePaths
 
     private static IReadOnlyList<LocalModelCacheRecord> NormalizeRecords(IReadOnlyList<LocalModelCacheRecord> records) =>
         records.GroupBy(record => record.ModelId, StringComparer.OrdinalIgnoreCase)
-<<<<<<< Updated upstream
             .SelectMany(model => model.GroupBy(record => NormalizeRootKey(record.RootPath), RootPathComparer))
-=======
-            .SelectMany(model => model.GroupBy(record =>
-                NormalizeRoot(record.RootPath), RootComparer))
->>>>>>> Stashed changes
             .Select(group =>
             {
                 LocalModelCacheRecord newest = group.OrderByDescending(record => record.CachedAtUtc)
