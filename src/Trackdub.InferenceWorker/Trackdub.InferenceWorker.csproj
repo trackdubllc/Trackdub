@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    ORT 1.30 inference worker (ADR-0017). The application process loads Windows ML's ORT for
-    DirectML; this process loads the ORT 1.30 GPU build for engines that need it (ORT GenAI, the
-    native CUDA execution provider). It ships in its own inference-worker/ folder so the two
+    ORT 1.30 inference worker (ADR-0017, amended 2026-10-09). The application process loads
+    Windows ML's ORT. GenAI stays in that process. This process loads the ORT 1.30 GPU build
+    only for native-CUDA engines (Kokoro). It ships under inference-worker/ so the two
     onnxruntime.dll files never share a directory.
   -->
   <PropertyGroup>
@@ -19,20 +19,53 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Trackdub.Inference.Onnx\Trackdub.Inference.Onnx.csproj"
-                      SetTargetFramework="TargetFramework=net10.0-windows10.0.19041.0" />
+                      SetTargetFramework="TargetFramework=net10.0-windows10.0.19041.0"
+                      AdditionalProperties="TrackdubOrtHost=Stock" />
+    <!-- Direct reference so a worker-only restore still has the CUDA payload. Assets are copied
+         by UseOrtGpuRuntimeAtRoot into this output, never into the application root. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu.Windows" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>
 
+  <!-- Inference.Onnx still restores Windows ML, whose managed ORT (assembly 0.0.0.0) would otherwise
+       flow here and win over the stock 1.30 binding the worker host was compiled against. -->
+  <Target Name="ReferenceStockManagedOrt" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)"
+                 Condition="'%(Filename)' == 'Microsoft.ML.OnnxRuntime' And $([System.String]::Copy('%(Identity)').Contains('windows.ai.machinelearning'))" />
+      <Reference Include="$(PkgMicrosoft_ML_OnnxRuntime_Managed)\lib\net8.0\Microsoft.ML.OnnxRuntime.dll">
+        <Private>true</Private>
+      </Reference>
+    </ItemGroup>
+    <Error Condition="!Exists('$(PkgMicrosoft_ML_OnnxRuntime_Managed)\lib\net8.0\Microsoft.ML.OnnxRuntime.dll')"
+           Text="Stock managed ORT was not restored at $(PkgMicrosoft_ML_OnnxRuntime_Managed)\lib\net8.0\Microsoft.ML.OnnxRuntime.dll." />
+  </Target>
+
   <!--
-    The Windows build of Trackdub.Inference.Onnx also carries Windows ML's ORT; this process must
-    load the ORT 1.30 GPU build instead, whose onnxruntime.dll hosts the CUDA provider bridge and
-    matches ORT GenAI. Overwrite the root copy after every build.
+    The worker reference of Trackdub.Inference.Onnx is compiled against stock managed ORT 1.30.
+    This target then places the matching ORT 1.30 GPU native build at the worker output root.
+    Composition publishes that output only under inference-worker/.
   -->
+  <!-- NuGet still copies Windows ML's managed ORT (assembly 0.0.0.0) because that package stays on the
+       compile graph for its projection. Drop it from the output set, then the GPU target writes stock
+       managed ORT 1.30 last so the worker process has one binding. -->
+  <Target Name="DropWinMlManagedOrtFromOutput" AfterTargets="GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems">
+    <ItemGroup>
+      <ContentWithTargetPath Remove="@(ContentWithTargetPath)"
+                             Condition="'%(Filename)' == 'Microsoft.ML.OnnxRuntime' And $([System.String]::Copy('%(Identity)').Contains('windows.ai.machinelearning'))" />
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)"
+                               Condition="'%(Filename)' == 'Microsoft.ML.OnnxRuntime' And $([System.String]::Copy('%(Identity)').Contains('windows.ai.machinelearning'))" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Filename)%(Extension)' == 'Microsoft.ML.OnnxRuntime.dll' And $([System.String]::Copy('%(FullPath)').Contains('windows.ai.machinelearning'))" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="UseOrtGpuRuntimeAtRoot" AfterTargets="CopyFilesToOutputDirectory">
     <PropertyGroup>
       <_OrtGpuRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_OrtGpuRid>
       <_OrtGpuRid Condition="'$(_OrtGpuRid)' == '' And '$(PlatformTarget)' == 'ARM64'">win-arm64</_OrtGpuRid>
       <_OrtGpuRid Condition="'$(_OrtGpuRid)' == ''">win-x64</_OrtGpuRid>
-      <_OrtGpuNativeDir>$(NuGetPackageRoot)microsoft.ml.onnxruntime.gpu.windows\$(OnnxRuntimeVersion)\runtimes\$(_OrtGpuRid)\native\</_OrtGpuNativeDir>
+      <_OrtGpuNativeDir>$(PkgMicrosoft_ML_OnnxRuntime_Gpu_Windows)\runtimes\$(_OrtGpuRid)\native\</_OrtGpuNativeDir>
     </PropertyGroup>
     <ItemGroup>
       <_OrtGpuNative Include="$(_OrtGpuNativeDir)*.dll" />
@@ -43,6 +76,13 @@
     <Warning Condition="'@(_OrtGpuNative)' == '' And '$(_OrtGpuRid)' != 'win-x64'"
              Text="The ORT GPU package has no $(_OrtGpuRid) runtime; the inference worker will not offer native CUDA on $(_OrtGpuRid)." />
     <Copy Condition="'@(_OrtGpuNative)' != ''" SourceFiles="@(_OrtGpuNative)" DestinationFolder="$(TargetDir)" OverwriteReadOnlyFiles="true" SkipUnchangedFiles="false" />
+    <Copy SourceFiles="$(PkgMicrosoft_ML_OnnxRuntime_Managed)\lib\net8.0\Microsoft.ML.OnnxRuntime.dll"
+          DestinationFolder="$(TargetDir)"
+          OverwriteReadOnlyFiles="true"
+          SkipUnchangedFiles="false" />
+    <!-- Composition copies this tree with PreserveNewest. The stock package file is older than
+         Windows ML's, so stamp the written file or a previous WinML copy is kept. -->
+    <Touch Files="$(TargetDir)Microsoft.ML.OnnxRuntime.dll" AlwaysCreate="false" />
   </Target>
 
 </Project>

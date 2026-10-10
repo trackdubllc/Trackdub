@@ -14,6 +14,7 @@ public enum MigraphxReadinessBlocker
     OsVersionUnsupported,
     DriverVersionMismatch,
     EpNotPresent,
+    EpPreparationPending,
     EpDownloadFailed,
     EpRegisterFailed,
     OrtProviderUnavailable,

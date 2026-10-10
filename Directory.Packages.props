@@ -50,7 +50,10 @@
     <PackageVersion Include="Microsoft.ML.OnnxRuntimeGenAI.WinML" Version="0.17.1" />
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="3.0.0-preview.26502.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="$(OnnxRuntimeVersion)" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime.Managed" Version="$(OnnxRuntimeVersion)" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime.Gpu" Version="$(OnnxRuntimeVersion)" />
+    <!-- Native CUDA/TensorRT payload for the out-of-process worker. Not a compile reference. -->
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime.Gpu.Windows" Version="$(OnnxRuntimeVersion)" />
 
     <!-- Windows ML 2.4 ships ONNX Runtime 1.27.1 with DirectML. -->
     <PackageVersion Include="Microsoft.Windows.AI.MachineLearning" Version="2.4.89" />

@@ -1,6 +1,8 @@
 using System.Runtime.Versioning;
 using Microsoft.Windows.AI.MachineLearning;
 using Trackdub.Contracts.ApplicationContracts;
+using Trackdub.Inference.Onnx.WinMlCatalog;
+using Trackdub.Inference.Onnx.WindowsMl;
 using Trackdub.Inference.Runtime.Migraphx;
 
 namespace Trackdub.Inference.Onnx.Migraphx;
@@ -20,6 +22,7 @@ internal sealed class WindowsMlMigraphxCatalogService
             return new MigraphxBootstrapResult(false, MigraphxProviderIds.WinMl, hardwareBlocker, hardwareDetail);
         }
 
+        CatalogPreparationPhase phase = CatalogPreparationPhase.Register;
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -39,48 +42,42 @@ internal sealed class WindowsMlMigraphxCatalogService
                     $"{MigraphxProviderConstants.OrtExecutionProviderName} is not offered by the Windows ML catalog on this machine.");
             }
 
-            if (migraphx.ReadyState is ExecutionProviderReadyState.NotPresent)
+            CatalogPreparationPlan plan = WindowsMlCatalogPreparationPolicy.Plan(
+                WindowsMlEnsureReady.MapReadyState(migraphx.ReadyState),
+                allowProviderDownloads,
+                MigraphxProviderConstants.OrtExecutionProviderName);
+            phase = plan.Phase;
+            if (plan.StopWithoutAcquisition)
             {
-                if (!allowProviderDownloads)
-                {
-                    return new MigraphxBootstrapResult(
-                        false,
-                        MigraphxProviderIds.WinMl,
-                        MigraphxReadinessBlocker.EpNotPresent,
-                        $"{MigraphxProviderConstants.OrtExecutionProviderName} is not installed. Enable provider downloads in Model Manager.");
-                }
-
-                ExecutionProviderReadyResult readyResult = await migraphx.EnsureReadyAsync().AsTask(timeoutCts.Token)
-                    .ConfigureAwait(false);
-                if (readyResult.Status is not ExecutionProviderReadyResultState.Success)
-                {
-                    return new MigraphxBootstrapResult(
-                        false,
-                        MigraphxProviderIds.WinMl,
-                        MigraphxReadinessBlocker.EpDownloadFailed,
-                        $"EnsureReadyAsync failed for {MigraphxProviderConstants.OrtExecutionProviderName}: {readyResult.Status}.");
-                }
+                return new MigraphxBootstrapResult(
+                    false,
+                    MigraphxProviderIds.WinMl,
+                    MigraphxReadinessBlocker.EpNotPresent,
+                    plan.StopDetail ?? $"{MigraphxProviderConstants.OrtExecutionProviderName} is not installed.");
             }
-            else if (migraphx.ReadyState is ExecutionProviderReadyState.NotReady)
-            {
-                if (!allowProviderDownloads)
-                {
-                    return new MigraphxBootstrapResult(
-                        false,
-                        MigraphxProviderIds.WinMl,
-                        MigraphxReadinessBlocker.EpNotPresent,
-                        $"{MigraphxProviderConstants.OrtExecutionProviderName} is not ready. Enable provider downloads in Model Manager.");
-                }
 
-                ExecutionProviderReadyResult readyResult = await migraphx.EnsureReadyAsync().AsTask(timeoutCts.Token)
+            if (plan.CallEnsureReady)
+            {
+                ExecutionProviderReadyResult readyResult = await WindowsMlEnsureReady
+                    .EnsureReadyBoundedAsync(migraphx, timeoutCts.Token)
                     .ConfigureAwait(false);
-                if (readyResult.Status is not ExecutionProviderReadyResultState.Success)
+                CatalogPreparationOutcome outcome = WindowsMlCatalogPreparationPolicy.Classify(
+                    WindowsMlEnsureReady.MapEnsureStatus(readyResult.Status),
+                    plan.Phase,
+                    MigraphxProviderConstants.OrtExecutionProviderName,
+                    WindowsMlEnsureReady.FormatHResult(readyResult),
+                    readyResult.DiagnosticText);
+                if (outcome.Disposition is not CatalogPreparationDisposition.Register)
                 {
                     return new MigraphxBootstrapResult(
                         false,
                         MigraphxProviderIds.WinMl,
-                        MigraphxReadinessBlocker.EpDownloadFailed,
-                        $"EnsureReadyAsync failed while preparing {MigraphxProviderConstants.OrtExecutionProviderName}: {readyResult.Status}.");
+                        outcome.Disposition is CatalogPreparationDisposition.Pending
+                            ? MigraphxReadinessBlocker.EpPreparationPending
+                            : plan.Phase is CatalogPreparationPhase.Acquire
+                                ? MigraphxReadinessBlocker.EpDownloadFailed
+                                : MigraphxReadinessBlocker.EpRegisterFailed,
+                        outcome.Detail);
                 }
             }
 
@@ -113,8 +110,12 @@ internal sealed class WindowsMlMigraphxCatalogService
             return new MigraphxBootstrapResult(
                 false,
                 MigraphxProviderIds.WinMl,
-                MigraphxReadinessBlocker.EpDownloadFailed,
-                "MIGraphX catalog registration timed out.");
+                phase == CatalogPreparationPhase.Acquire
+                    ? MigraphxReadinessBlocker.EpDownloadFailed
+                    : MigraphxReadinessBlocker.EpRegisterFailed,
+                WindowsMlCatalogPreparationPolicy.TimeoutDetail(
+                    MigraphxProviderConstants.OrtExecutionProviderName,
+                    phase));
         }
         catch (OperationCanceledException)
         {

@@ -24,6 +24,7 @@ public enum WinMlCatalogReadinessBlocker
     DriverVersionMismatch,
     EpNotPresent,
     EpNotReady,
+    EpPreparationPending,
     EpDownloadFailed,
     EpRegisterFailed,
     OrtProviderUnavailable,

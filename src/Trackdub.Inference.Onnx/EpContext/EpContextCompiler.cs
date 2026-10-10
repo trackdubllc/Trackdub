@@ -2,6 +2,7 @@ using Microsoft.ML.OnnxRuntime;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.TensorRtRtx;
+using Trackdub.Inference.Runtime.TensorRtRtx;
 #if WINDOWS
 using Trackdub.Inference.Onnx.WindowsMl;
 #endif
@@ -79,8 +80,9 @@ public sealed class EpContextCompiler
 #if WINDOWS
             WindowsMlOnnxRuntimeNativeResolver.EnsureInitialized();
 #endif
+            IReadOnlyDictionary<string, string>? modelTrtOptions = EpContextTrtProfiles.Resolve(sourceModelPath);
             using SessionOptions sessionOptions = CreateCompileSessionOptions(
-                EpContextTrtProfiles.Resolve(sourceModelPath),
+                modelTrtOptions,
                 out ExecutionProviderKind selectedProvider);
             string selectedLabel = selectedProvider.ToString();
             // EP context engines are provider-specific. Compiling on anything but TensorRT RTX
@@ -149,11 +151,27 @@ public sealed class EpContextCompiler
                     selectedLabel);
             }
 
+            if (!EpContextCompatibility.AllowsCachedArtifact(
+                    tempPath,
+                    TensorRtRtxProviderConstants.PluginOrtExecutionProviderName))
+            {
+                return new CompileResult(
+                    false,
+                    null,
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    "Compiled artifact is not EP_SUPPORTED_OPTIMAL for the selected TensorRT-RTX devices "
+                    + $"(missing compatibility metadata, a non-optimal status, or an empty device group) under provider '{selectedLabel}'. "
+                    + "It was not published.",
+                    selectedLabel);
+            }
+
+            string compileOptionsIdentity = EpContextArtifact.BuildCompileOptionsIdentity(modelTrtOptions, embed);
             IReadOnlyList<EpContextArtifact.ArtifactFile> artifactFiles =
                 EpContextArtifact.PublishStagedArtifact(tempDir, sourceModelPath, epContextPath,
                     files => EpContextArtifact.CreateStamp(sourceModelPath, new FileInfo(sourceModelPath), null,
                         EpContextLoadPathResolver.CurrentHardware.GpuArchitecture,
-                        EpContextLoadPathResolver.CurrentHardware.DriverVersion, files, epContextPath));
+                        EpContextLoadPathResolver.CurrentHardware.DriverVersion, files, epContextPath,
+                        compileOptionsIdentity));
             return new CompileResult(true, epContextPath, stopwatch.Elapsed.TotalMilliseconds, null, selectedLabel, artifactFiles);
         }
         catch (Exception ex) when (ex is OnnxRuntimeException or InvalidOperationException or IOException or UnauthorizedAccessException or DllNotFoundException or EntryPointNotFoundException)

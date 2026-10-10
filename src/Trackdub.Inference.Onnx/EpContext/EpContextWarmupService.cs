@@ -44,8 +44,7 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
         CancellationToken cancellationToken = default)
     {
         HardwareProfile hardware = await _hardwareProfileProvider.GetCurrentAsync(cancellationToken).ConfigureAwait(false);
-        string fingerprint =
-            $"{hardware.NvidiaGpuArchitecture}|{(string.IsNullOrWhiteSpace(hardware.GpuDriverVersion) ? "unknown" : hardware.GpuDriverVersion)}|{Trackdub.Inference.Runtime.TensorRtRtx.TensorRtRtxProviderConstants.BundledFingerprintVersion}";
+        string fingerprint = EpContextLoadPathResolver.CurrentEnvironmentFingerprint;
 
         IReadOnlyList<string> sources = sourceModelPaths is { Count: > 0 }
             ? sourceModelPaths
@@ -89,8 +88,7 @@ public sealed class EpContextWarmupService : IEpContextWarmupService
         }
 
         string epContextPath = EpContextArtifact.GetEpContextPath(sourcePath);
-        bool haveValid = EpContextArtifact.TryResolveValidLoadPath(
-            sourcePath, EpContextLoadPathResolver.CurrentEnvironmentFingerprint) is not null;
+        bool haveValid = EpContextLoadPathResolver.TryResolveLoadPath(sourcePath) is not null;
         double compileMs = 0;
         if (!haveValid)
         {

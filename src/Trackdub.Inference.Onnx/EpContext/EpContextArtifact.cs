@@ -8,12 +8,15 @@ namespace Trackdub.Inference.Onnx.EpContext;
 /// EP-context artifact paths and machine stamp. A stamp is valid only for the model bytes,
 /// GPU architecture, driver, and TRT RTX EP version it was compiled against — the same
 /// invalidation triggers as <c>SmokeVerdictKey</c> and the residual engine cache.
-/// Load-path checks use size + mtime (cheap) rather than hashing multi-hundred-MB graphs;
-/// optional external-data and artifact-sidecar identities are checked the same way.
+/// Load-path checks require schema 2 content hashes for the source graph and its external
+/// weights. Length and modification time reject obvious replacements before that hash.
+/// Unknown hardware or driver values do not match. Compile-option identity is compared when
+/// the caller supplies the options used for the session.
 /// </summary>
 public static class EpContextArtifact
 {
     public const string EpContextSuffix = ".epc";
+    public const int CurrentSchemaVersion = 2;
     private const int LargeModelEmbedThresholdBytes = 2_000_000_000;
 
     public sealed record Stamp(
@@ -30,10 +33,16 @@ public static class EpContextArtifact
         long? ExternalDataLastWriteUtcTicks = null,
         long? ArtifactExternalInitializersLengthBytes = null,
         long? ArtifactExternalInitializersLastWriteUtcTicks = null,
-        IReadOnlyList<ArtifactFile>? ArtifactFiles = null)
+        IReadOnlyList<ArtifactFile>? ArtifactFiles = null,
+        string? ExternalDataSha256 = null,
+        string? OrtRuntimeVersion = null,
+        string? CompileOptionsIdentity = null)
     {
         public string EnvironmentFingerprint =>
-            $"{GpuArchitecture}|{Normalize(DriverVersion)}|{Normalize(TrtRtxEpVersion)}";
+            $"{GpuArchitecture}|{Normalize(DriverVersion)}|{Normalize(TrtRtxEpVersion)}|{Normalize(OrtRuntimeVersion)}";
+
+        public bool HasIdentifiedHardware =>
+            !IsUnknown(GpuArchitecture) && !IsUnknown(DriverVersion) && !IsUnknown(OrtRuntimeVersion);
 
         /// <summary>
         /// Validates the compiled artifact's optional external-initializers sidecar identity.
@@ -53,14 +62,37 @@ public static class EpContextArtifact
         /// (audit: replacing external data must invalidate the artifact even though the
         /// .onnx container's length and mtime do not change).
         /// </summary>
-        public bool MatchesSource(FileInfo source, FileInfo? externalData = null) =>
-            source.Length == SourceLengthBytes &&
-            source.LastWriteTimeUtc.Ticks == SourceLastWriteUtcTicks &&
-            (externalData?.Exists ?? false) == ExternalDataLengthBytes.HasValue &&
-            (!ExternalDataLengthBytes.HasValue ||
-                (externalData is not null &&
-                 externalData.Length == ExternalDataLengthBytes.Value &&
-                 externalData.LastWriteTimeUtc.Ticks == ExternalDataLastWriteUtcTicks));
+        public bool MatchesSource(FileInfo source, FileInfo? externalData = null)
+        {
+            if (SchemaVersion < CurrentSchemaVersion || string.IsNullOrWhiteSpace(SourceSha256))
+            {
+                return false;
+            }
+
+            if (source.Length != SourceLengthBytes ||
+                source.LastWriteTimeUtc.Ticks != SourceLastWriteUtcTicks ||
+                !string.Equals(ComputeSha256(source.FullName), SourceSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            bool externalExists = externalData?.Exists ?? false;
+            if (externalExists != ExternalDataLengthBytes.HasValue)
+            {
+                return false;
+            }
+
+            if (!externalExists)
+            {
+                return ExternalDataSha256 is null;
+            }
+
+            return externalData is not null &&
+                externalData.Length == ExternalDataLengthBytes &&
+                externalData.LastWriteTimeUtc.Ticks == ExternalDataLastWriteUtcTicks &&
+                !string.IsNullOrWhiteSpace(ExternalDataSha256) &&
+                string.Equals(ComputeSha256(externalData.FullName), ExternalDataSha256, StringComparison.OrdinalIgnoreCase);
+        }
 
         /// <summary>
         /// Checks the engine files a non-embedded artifact loads from its own directory. Stamps
@@ -77,6 +109,10 @@ public static class EpContextArtifact
 
         private static string Normalize(string? value) =>
             string.IsNullOrWhiteSpace(value) ? "unknown" : value.Trim();
+
+        private static bool IsUnknown(string? value) =>
+            string.IsNullOrWhiteSpace(value) ||
+            value.Trim().Equals("unknown", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>A file published beside the EP-context model, such as a serialized engine.</summary>
@@ -154,7 +190,10 @@ public static class EpContextArtifact
     /// Returns a loadable EP-context path when an artifact exists and its stamp matches the
     /// current machine fingerprint and source identity; otherwise <see langword="null"/>.
     /// </summary>
-    public static string? TryResolveValidLoadPath(string sourceModelPath, string currentEnvironmentFingerprint)
+    public static string? TryResolveValidLoadPath(
+        string sourceModelPath,
+        string currentEnvironmentFingerprint,
+        string? currentCompileOptionsIdentity = null)
     {
         if (IsEpContextPath(sourceModelPath) || !File.Exists(sourceModelPath))
         {
@@ -168,18 +207,32 @@ public static class EpContextArtifact
             return null;
         }
 
-        return HasMatchingSourceStamp(sourceModelPath, epContextPath, stampPath, currentEnvironmentFingerprint);
+        return HasMatchingSourceStamp(
+            sourceModelPath,
+            epContextPath,
+            stampPath,
+            currentEnvironmentFingerprint,
+            currentCompileOptionsIdentity);
     }
 
     private static string? HasMatchingSourceStamp(
         string sourceModelPath,
         string epContextPath,
         string stampPath,
-        string currentEnvironmentFingerprint)
+        string currentEnvironmentFingerprint,
+        string? currentCompileOptionsIdentity = null)
     {
         Stamp? stamp = TryReadStamp(stampPath);
         if (stamp is null ||
+            stamp.SchemaVersion < CurrentSchemaVersion ||
+            !stamp.HasIdentifiedHardware ||
             !stamp.EnvironmentFingerprint.Equals(currentEnvironmentFingerprint, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (currentCompileOptionsIdentity is not null &&
+            !string.Equals(stamp.CompileOptionsIdentity, currentCompileOptionsIdentity, StringComparison.Ordinal))
         {
             return null;
         }
@@ -206,6 +259,43 @@ public static class EpContextArtifact
         }
     }
 
+    /// <summary>Native ORT version this build compiles EP-context artifacts against.</summary>
+    public static string HostOrtRuntimeVersion =>
+#if WINDOWS
+        "1.27.1";
+#else
+        "1.30.0";
+#endif
+
+    /// <summary>
+    /// Stable identity of the compile/provider options that affect the engine.
+    /// Path-valued options such as the runtime cache directory are omitted.
+    /// </summary>
+    public static string BuildCompileOptionsIdentity(
+        IReadOnlyDictionary<string, string>? providerOptions,
+        bool embedEpContext)
+    {
+        var pairs = new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["enable_cuda_graph"] = "0",
+            ["ep_context_embed_mode"] = embedEpContext ? "1" : "0",
+        };
+        if (providerOptions is not null)
+        {
+            foreach ((string key, string value) in providerOptions)
+            {
+                if (key.EndsWith("_path", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                pairs[key] = value;
+            }
+        }
+
+        return string.Join('\n', pairs.Select(pair => pair.Key + "=" + pair.Value));
+    }
+
     public static Stamp CreateStamp(
         string sourceModelPath,
         FileInfo source,
@@ -213,18 +303,19 @@ public static class EpContextArtifact
         string gpuArchitecture,
         string? driverVersion,
         IReadOnlyList<ArtifactFile>? artifactFiles = null,
-        string? outputPath = null)
+        string? outputPath = null,
+        string? compileOptionsIdentity = null)
     {
         string externalDataPath = GetSourceExternalDataPath(sourceModelPath);
         var externalData = new FileInfo(externalDataPath);
         string epContextPath = outputPath ?? GetEpContextPath(sourceModelPath);
         var artifactSidecar = new FileInfo(GetArtifactExternalInitializersPath(epContextPath));
         return new(
-            SchemaVersion: 1,
+            SchemaVersion: CurrentSchemaVersion,
             SourceFileName: Path.GetFileName(sourceModelPath),
             SourceLengthBytes: source.Length,
             SourceLastWriteUtcTicks: source.LastWriteTimeUtc.Ticks,
-            SourceSha256: sourceSha256,
+            SourceSha256: sourceSha256 ?? ComputeSha256(source.FullName),
             GpuArchitecture: gpuArchitecture,
             DriverVersion: driverVersion,
             TrtRtxEpVersion: TensorRtRtxProviderConstants.BundledFingerprintVersion,
@@ -233,7 +324,10 @@ public static class EpContextArtifact
             CreatedAtUtc: DateTimeOffset.UtcNow,
             ArtifactExternalInitializersLengthBytes: artifactSidecar.Exists ? artifactSidecar.Length : null,
             ArtifactExternalInitializersLastWriteUtcTicks: artifactSidecar.Exists ? artifactSidecar.LastWriteTimeUtc.Ticks : null,
-            ArtifactFiles: artifactFiles);
+            ArtifactFiles: artifactFiles,
+            ExternalDataSha256: externalData.Exists ? ComputeSha256(externalData.FullName) : null,
+            OrtRuntimeVersion: HostOrtRuntimeVersion,
+            CompileOptionsIdentity: compileOptionsIdentity);
     }
 
     /// <summary>
@@ -264,11 +358,18 @@ public static class EpContextArtifact
         // FileShare.None serializes publishers across processes, not just sessions in this host.
         // Keep the lock file: deleting it after releasing would let waiters lock different inodes.
         using FileStream publicationLock = AcquirePublicationLock(epContextPath + ".publish.lock");
-        if (createStamp is not null && File.Exists(epContextPath) && File.Exists(stampPath) &&
-            HasMatchingSourceStamp(sourceModelPath, epContextPath, stampPath,
-                createStamp([]).EnvironmentFingerprint) is not null)
+        if (createStamp is not null && File.Exists(epContextPath) && File.Exists(stampPath))
         {
-            return TryReadStamp(stampPath)!.ArtifactFiles ?? [];
+            Stamp probe = createStamp([]);
+            if (HasMatchingSourceStamp(
+                    sourceModelPath,
+                    epContextPath,
+                    stampPath,
+                    probe.EnvironmentFingerprint,
+                    probe.CompileOptionsIdentity) is not null)
+            {
+                return TryReadStamp(stampPath)!.ArtifactFiles ?? [];
+            }
         }
 
         string rollbackDirectory = Path.Join(targetDirectory, ".epc-rollback-" + Guid.NewGuid().ToString("N"));

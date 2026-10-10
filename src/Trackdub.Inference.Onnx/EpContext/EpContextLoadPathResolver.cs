@@ -16,14 +16,35 @@ internal static class EpContextLoadPathResolver
     private static readonly Lazy<(string GpuArchitecture, string? DriverVersion)> Hardware = new(ProbeHardware);
 
     public static string CurrentEnvironmentFingerprint =>
-        $"{CurrentHardware.GpuArchitecture}|{(string.IsNullOrWhiteSpace(CurrentHardware.DriverVersion) ? "unknown" : CurrentHardware.DriverVersion)}|{TensorRtRtxProviderConstants.BundledFingerprintVersion}";
+        $"{CurrentHardware.GpuArchitecture}|{(string.IsNullOrWhiteSpace(CurrentHardware.DriverVersion) ? "unknown" : CurrentHardware.DriverVersion)}|{TensorRtRtxProviderConstants.BundledFingerprintVersion}|{EpContextArtifact.HostOrtRuntimeVersion}";
 
     /// <summary>GPU architecture and driver the fingerprint (and new stamps) are built from.</summary>
     public static (string GpuArchitecture, string? DriverVersion) CurrentHardware => Hardware.Value;
 
-    /// <summary>Valid EP-context sibling for <paramref name="sourceModelPath"/>, or <see langword="null"/>.</summary>
-    public static string? TryResolveLoadPath(string sourceModelPath) =>
-        EpContextArtifact.TryResolveValidLoadPath(sourceModelPath, CurrentEnvironmentFingerprint);
+    /// <summary>
+    /// Valid EP-context sibling for <paramref name="sourceModelPath"/>, or <see langword="null"/>.
+    /// Stamp identity and selected-device compatibility both have to pass.
+    /// </summary>
+    public static string? TryResolveLoadPath(string sourceModelPath)
+    {
+        string compileOptionsIdentity = EpContextArtifact.BuildCompileOptionsIdentity(
+            EpContextTrtProfiles.Resolve(sourceModelPath),
+            EpContextArtifact.ShouldEmbedEpContext(sourceModelPath));
+        string? compiledPath = EpContextArtifact.TryResolveValidLoadPath(
+            sourceModelPath,
+            CurrentEnvironmentFingerprint,
+            compileOptionsIdentity);
+        if (compiledPath is null)
+        {
+            return null;
+        }
+
+        return EpContextCompatibility.AllowsCachedArtifact(
+            compiledPath,
+            TensorRtRtxProviderConstants.PluginOrtExecutionProviderName)
+            ? compiledPath
+            : null;
+    }
 
     private static (string GpuArchitecture, string? DriverVersion) ProbeHardware()
     {

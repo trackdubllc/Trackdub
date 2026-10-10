@@ -401,24 +401,27 @@ public sealed class OnnxExecutionProviderSmokeTester : IExecutionProviderSmokeTe
             .ConfigureAwait(false);
     }
 
-    // ORT GenAI's NvTensorRtRtx device terminates the host process (native stack overflow) on
-    // bundled GenAI models such as qwen-instruct (Qwen2.5-1.5B), and its DirectML device segfaults
-    // running the bundled Whisper export (GenAI 0.17.1 on Windows ML 2.4). A fatal crash cannot be
-    // caught and reported as a smoke failure, so the attempt must be refused before touching native code.
+    // Approved-export guard for the bundled GenAI graphs (GenAI 0.17.1 on Windows ML 2.4).
+    // Those exports are CPU/CUDA-targeted. On that pair, NvTensorRtRtx terminated the host and
+    // DirectML segfaulted or failed the first kernel. This is not a claim that every GenAI graph
+    // is incompatible with those providers. A fatal crash cannot be reported as a smoke failure,
+    // so the attempt is refused until an export built for the provider is retested in an isolated process.
     private static void ThrowIfGenAiTensorRtProvider(ExecutionProviderKind provider)
     {
         if (provider is ExecutionProviderKind.TensorRTRtx or ExecutionProviderKind.TensorRt)
         {
             throw new NotSupportedException(
-                "ORT GenAI NvTensorRtRtx is excluded for GenAI model loads: it terminates the host "
-                + "process (native stack overflow) on bundled GenAI models. Use cpu.");
+                "Bundled GenAI exports are excluded from NvTensorRtRtx: on GenAI 0.17.1 / Windows ML 2.4 "
+                + "those CPU/CUDA exports terminated the host (native stack overflow). This is an approved-export "
+                + "guard, not a provider-wide ban. Use cpu until a TensorRT-targeted export is retested.");
         }
 
         if (provider is ExecutionProviderKind.DirectMl)
         {
             throw new NotSupportedException(
-                "ORT GenAI DirectML is excluded for GenAI model loads: the bundled GenAI exports are "
-                + "CPU/CUDA exports, and running the Whisper one on DirectML terminates the host process. Use cpu.");
+                "Bundled GenAI exports are excluded from DirectML: on GenAI 0.17.1 / Windows ML 2.4 "
+                + "those CPU/CUDA exports terminated the host or failed their first DirectML kernel. "
+                + "This is an approved-export guard, not a provider-wide ban. Use cpu until a DirectML-targeted export is retested.");
         }
     }
 

@@ -98,6 +98,9 @@ internal static class EpContextCapture
         }
 
         (string gpuArchitecture, string? driverVersion) = EpContextLoadPathResolver.CurrentHardware;
+        string compileOptionsIdentity = EpContextArtifact.BuildCompileOptionsIdentity(
+            EpContextTrtProfiles.Resolve(sourceModelPath),
+            EpContextArtifact.ShouldEmbedEpContext(sourceModelPath));
         EpContextArtifact.PublishStagedArtifact(stagingDirectory, sourceModelPath,
             createStamp: artifactFiles => EpContextArtifact.CreateStamp(
                 sourceModelPath,
@@ -105,7 +108,8 @@ internal static class EpContextCapture
                 sourceSha256: null,
                 gpuArchitecture,
                 driverVersion,
-                artifactFiles));
+                artifactFiles,
+                compileOptionsIdentity: compileOptionsIdentity));
     }
 
     internal static bool ShouldRetryWithoutCapture(Exception exception) =>

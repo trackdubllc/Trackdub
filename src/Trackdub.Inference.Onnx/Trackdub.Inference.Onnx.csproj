@@ -20,6 +20,16 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
     <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TrackdubOrtRuntimeFlavor)' == 'Dnnl'">
+    <DefineConstants>$(DefineConstants);TRACKDUB_ORT_DNNL</DefineConstants>
+  </PropertyGroup>
+  <!-- The CUDA worker compiles this project a second time against stock managed ORT 1.30.
+       The Windows ML host keeps the default output, which references Windows ML's managed binding. -->
+  <PropertyGroup Condition="'$(TrackdubOrtHost)' == 'Stock'">
+    <OutputPath>$(MSBuildThisFileDirectory)bin\$(Configuration)\$(TargetFramework)\stock-ort\</OutputPath>
+    <IntermediateOutputPath>$(MSBuildThisFileDirectory)obj\$(Configuration)\$(TargetFramework)\stock-ort\</IntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Trackdub.Inference.Onnx.Tests" />
@@ -57,14 +67,16 @@
   </ItemGroup>
 
   <!-- Windows: Windows ML owns the ORT environment and catalog EP registration, and GenAI runs on the
-       same Windows ML runtime through its .WinML package. -->
+       same Windows ML runtime through its .WinML package. The Windows ML package's lib folder is the
+       managed Microsoft.ML.OnnxRuntime.dll (native 1.27.1). Stock ORT 1.30's managed binding is not
+       referenced here, so it cannot win the compile or the app output. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
     <PackageReference Include="Microsoft.Windows.AI.MachineLearning" GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.ML.OnnxRuntimeGenAI.WinML" GeneratePathProperty="true" />
-    <!-- Managed ORT API surface only. The native runtime is Windows ML's (see Trackdub.Composition);
-         this package's ORT build must not land beside onnxruntime-genai.dll, where GenAI would
-         load it instead of Windows ML's. -->
-    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" ExcludeAssets="native" />
+    <!-- Restored so the worker and native-pair hash can see the CUDA build. Assets stay out of this project. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu.Windows" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
+    <!-- Stock managed binding for the worker host only. ExcludeAssets keeps it out of the Windows ML host graph. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- Keep the portable TFM's package graph identical across restore hosts. Locked restores use
@@ -111,4 +123,22 @@
   </ItemGroup>
 
   <Import Project="../../build/Trackdub.NativePair.targets" />
+
+  <!-- NuGet selects Windows ML's managed ORT for this TFM. The worker host swaps that reference
+       for stock ORT 1.30 so its compile identity matches the CUDA native it loads. -->
+  <Target Name="ReferenceStockManagedOrt"
+          AfterTargets="ResolveAssemblyReferences"
+          BeforeTargets="FindReferenceAssembliesForReferences"
+          Condition="'$(TrackdubOrtHost)' == 'Stock'">
+    <ItemGroup>
+      <ReferencePath Remove="@(ReferencePath)" Condition="'%(Filename)' == 'Microsoft.ML.OnnxRuntime'" />
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'Microsoft.ML.OnnxRuntime'" />
+      <ReferencePath Include="$(PkgMicrosoft_ML_OnnxRuntime_Managed)\lib\net8.0\Microsoft.ML.OnnxRuntime.dll" />
+      <ReferenceCopyLocalPaths Include="$(PkgMicrosoft_ML_OnnxRuntime_Managed)\lib\net8.0\Microsoft.ML.OnnxRuntime.dll">
+        <Private>true</Private>
+      </ReferenceCopyLocalPaths>
+    </ItemGroup>
+    <Error Condition="!Exists('$(PkgMicrosoft_ML_OnnxRuntime_Managed)\lib\net8.0\Microsoft.ML.OnnxRuntime.dll')"
+           Text="Stock managed ORT was not restored at $(PkgMicrosoft_ML_OnnxRuntime_Managed)\lib\net8.0\Microsoft.ML.OnnxRuntime.dll." />
+  </Target>
 </Project>

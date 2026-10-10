@@ -99,8 +99,7 @@ public abstract class WinMlCatalogRuntimeReadinessServiceBase
 
         bool canInstall = report.Route is WinMlCatalogPlatformRoute.WinMlCatalog &&
                           report.Blocker is WinMlCatalogReadinessBlocker.EpNotPresent
-                              or WinMlCatalogReadinessBlocker.EpDownloadFailed
-                              or WinMlCatalogReadinessBlocker.EpNotReady;
+                              or WinMlCatalogReadinessBlocker.EpDownloadFailed;
 
         return new WinMlCatalogRuntimeReadinessSnapshot(
             IsSupportedPlatform: true,
@@ -123,7 +122,8 @@ public abstract class WinMlCatalogRuntimeReadinessServiceBase
             WinMlCatalogReadinessBlocker.None => "Not ready",
             WinMlCatalogReadinessBlocker.EpNotPresent or WinMlCatalogReadinessBlocker.EpDownloadFailed =>
                 "Install required",
-            WinMlCatalogReadinessBlocker.EpNotReady => "Install required",
+            WinMlCatalogReadinessBlocker.EpNotReady => "Prepare installed provider",
+            WinMlCatalogReadinessBlocker.EpPreparationPending => "Preparing",
             WinMlCatalogReadinessBlocker.HardwareNotSupported or WinMlCatalogReadinessBlocker.GpuVendorMismatch =>
                 "Hardware mismatch",
             WinMlCatalogReadinessBlocker.DriverVersionMismatch or WinMlCatalogReadinessBlocker.OsVersionUnsupported =>

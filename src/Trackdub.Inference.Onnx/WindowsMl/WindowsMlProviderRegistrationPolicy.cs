@@ -48,6 +48,26 @@ public sealed class WindowsMlProviderRegistrationPolicy
         CancellationToken cancellationToken) =>
         RegisterAsync(provider, allowProviderDownloads: true, cacheCompletedResult: true, cancellationToken);
 
+    /// <summary>
+    /// Drops cached bulk results so the next registration reads the catalog again.
+    /// Call this after an install or preparation attempt. Failures are not cached;
+    /// this still clears a prior success that should not hide a new provider.
+    /// </summary>
+    public void Invalidate()
+    {
+        _cacheGate.Wait();
+        try
+        {
+            _registerInstalledCertifiedResult = null;
+            _ensureAndRegisterCertifiedResult = null;
+            _ensureAllCertifiedCatalogResult = null;
+        }
+        finally
+        {
+            _cacheGate.Release();
+        }
+    }
+
     public Task<WindowsMlProviderRegistrationResult> EnsureAllCertifiedCatalogAsync(
         CancellationToken cancellationToken) =>
         EnsureAllCertifiedCatalogCoreAsync(cancellationToken);
@@ -105,9 +125,9 @@ public sealed class WindowsMlProviderRegistrationPolicy
         {
             WindowsMlBootstrapResult? cached = ResolveCachedResult(mode);
 
-            if (cacheCompletedResult && cached != null)
+            if (cacheCompletedResult && IsReusableSuccess(cached))
             {
-                return cached;
+                return cached!;
             }
 
             WindowsMlBootstrapResult result = mode switch
@@ -124,7 +144,7 @@ public sealed class WindowsMlProviderRegistrationPolicy
                 _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported Windows ML bootstrap mode.")
             };
 
-            if (cacheCompletedResult)
+            if (cacheCompletedResult && IsReusableSuccess(result))
             {
                 if (mode is WindowsMlBootstrapMode.RegisterInstalledCertified)
                 {
@@ -147,7 +167,7 @@ public sealed class WindowsMlProviderRegistrationPolicy
     private WindowsMlBootstrapResult? ResolveCachedResult(WindowsMlBootstrapMode mode)
     {
         if (mode is WindowsMlBootstrapMode.RegisterInstalledCertified &&
-            _ensureAndRegisterCertifiedResult?.Succeeded is true)
+            IsReusableSuccess(_ensureAndRegisterCertifiedResult))
         {
             return _ensureAndRegisterCertifiedResult;
         }
@@ -172,19 +192,23 @@ public sealed class WindowsMlProviderRegistrationPolicy
         await _cacheGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_ensureAllCertifiedCatalogResult is not null)
-                return FormatAllCertifiedCatalogResult(_ensureAllCertifiedCatalogResult);
+            if (IsReusableSuccess(_ensureAllCertifiedCatalogResult))
+                return FormatAllCertifiedCatalogResult(_ensureAllCertifiedCatalogResult!);
 
-            if (_ensureAndRegisterCertifiedResult is not null)
+            if (IsReusableSuccess(_ensureAndRegisterCertifiedResult))
             {
                 _ensureAllCertifiedCatalogResult = _ensureAndRegisterCertifiedResult;
-                return FormatAllCertifiedCatalogResult(_ensureAndRegisterCertifiedResult);
+                return FormatAllCertifiedCatalogResult(_ensureAndRegisterCertifiedResult!);
             }
 
             WindowsMlBootstrapResult result = await _ensureAndRegisterCertifiedAsync(cancellationToken)
                 .ConfigureAwait(false);
-            _ensureAndRegisterCertifiedResult = result;
-            _ensureAllCertifiedCatalogResult = result;
+            if (IsReusableSuccess(result))
+            {
+                _ensureAndRegisterCertifiedResult = result;
+                _ensureAllCertifiedCatalogResult = result;
+            }
+
             return FormatAllCertifiedCatalogResult(result);
         }
         finally
@@ -192,6 +216,9 @@ public sealed class WindowsMlProviderRegistrationPolicy
             _cacheGate.Release();
         }
     }
+
+    private static bool IsReusableSuccess(WindowsMlBootstrapResult? result) =>
+        result is { Succeeded: true } && string.IsNullOrWhiteSpace(result.FailureReason);
 
     private static WindowsMlProviderRegistrationResult FormatAllCertifiedCatalogResult(
         WindowsMlBootstrapResult result)
