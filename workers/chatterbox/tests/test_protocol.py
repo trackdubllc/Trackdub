@@ -63,8 +63,14 @@ def test_infer_before_load_is_no_model_loaded():
 
 
 def test_load_without_model_stack_is_dependency_missing_not_crash():
-    (resp,) = run_worker([json.dumps({"id": "l1", "op": "load",
-                                      "plan": {"model": "somewhere", "providers": ["CPU"]}})])
+    from unittest.mock import patch
+
+    with patch(
+        "worker._import_model_stack",
+        side_effect=ImportError("model stack missing: install with `uv sync --extra model`"),
+    ):
+        (resp,) = run_worker([json.dumps({"id": "l1", "op": "load",
+                                          "plan": {"model": "somewhere", "providers": ["CPU"]}})])
     assert resp["status"] == "error"
     assert resp["reason"] == "dependency-missing"
     assert "uv sync --extra model" in resp["detail"]
