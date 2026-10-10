@@ -151,6 +151,9 @@ def handle_infer(request_id, inputs):
     text = inputs["text"]
     if isinstance(text, dict):
         try:
+            if "data" not in text:
+                respond(request_id, "error", reason="bad-inputs", detail="text envelope missing 'data' key")
+                return
             text = base64.b64decode(text["data"]).decode("utf-8")
         except Exception as ex:
             respond(request_id, "error", reason="bad-inputs", detail=f"text envelope undecodable: {ex}")
