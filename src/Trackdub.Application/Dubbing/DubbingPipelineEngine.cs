@@ -2839,6 +2839,9 @@ public sealed class DubbingPipelineEngine(
             }
         }
 
+        snapshot[TtsTimingResumeIdentity.SnapshotKey] =
+            TtsTimingResumeIdentity.Normalize(options.TtsTiming?.AutoStretchMaxOverrun);
+
         // Audio/subtitle/encoder flags (and the pre-existing ExportFormat) gate the Export
         // stage's artifact resume: any change here must invalidate a cached export so it reruns
         // without requiring --force-rerun. These values are produced by ExportResumeGating so

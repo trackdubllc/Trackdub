@@ -265,7 +265,7 @@ public sealed class ExportStageHandler(
         IReadOnlyList<TtsCandidateGroup>? candidateGroups = candidateGroupRepository is not null
             ? await candidateGroupRepository.GetByProjectAsync(request.ProjectId, cancellationToken).ConfigureAwait(false)
             : null;
-        MixPlan mixPlan = mixPlanBuilder.Build(new MixPlanBuildRequest(
+        var buildRequest = new MixPlanBuildRequest(
             request.ProjectId,
             mediaAsset.Id,
             currentState.ProjectState.Artifacts,
@@ -278,7 +278,38 @@ public sealed class ExportStageHandler(
             RestoreOriginalPan: request.RestoreOriginalPan,
             ApplyTimbrePolish: request.ApplyTimbrePolish,
             CandidateGroups: candidateGroups,
-            MediaDurationSeconds: mediaAsset.DurationSeconds));
+            MediaDurationSeconds: mediaAsset.DurationSeconds);
+        MixPlan mixPlan = mixPlanBuilder.Build(buildRequest);
+        if (mixPlan.Warnings.Count == 0)
+        {
+            var durationsByPath = new Dictionary<string, double>(StringComparer.Ordinal);
+            ProjectArtifact sourceArtifact = currentState.ProjectState.Artifacts
+                .First(artifact => artifact.RelativePath == mixPlan.SourceAudioRelativePath);
+            if (!HasUsableDuration(sourceArtifact.DurationSeconds))
+            {
+                durationsByPath[sourceArtifact.RelativePath] = await ProbeAudioDurationAsync(
+                    sourceArtifact.RelativePath, cancellationToken).ConfigureAwait(false);
+            }
+            foreach (MixSpeechClip clip in mixPlan.SpeechClips.Where(static clip => !clip.IsSilentGap))
+            {
+                if (!HasUsableDuration(clip.TakeDurationSeconds) && clip.TakeRelativePath is string relativePath &&
+                    !durationsByPath.ContainsKey(relativePath))
+                {
+                    durationsByPath[relativePath] = await ProbeAudioDurationAsync(
+                        relativePath, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            if (durationsByPath.Count > 0)
+            {
+                mixPlan = mixPlanBuilder.Build(buildRequest with
+                {
+                    Artifacts = currentState.ProjectState.Artifacts.Select(artifact =>
+                        durationsByPath.TryGetValue(artifact.RelativePath, out double duration)
+                            ? artifact with { DurationSeconds = duration }
+                            : artifact).ToArray()
+                });
+            }
+        }
         await mixPlanStore.SaveAsync(mixPlan, cancellationToken).ConfigureAwait(false);
         if (mixPlan.Warnings.Count > 0)
         {
@@ -292,6 +323,20 @@ public sealed class ExportStageHandler(
         }
         return mixPlan;
     }
+
+    private async Task<double> ProbeAudioDurationAsync(string relativePath, CancellationToken cancellationToken)
+    {
+        MediaProbeSnapshot probe = await mediaProbe.ProbeAsync(
+            artifactStore.GetPath(relativePath), cancellationToken).ConfigureAwait(false);
+        if (!HasUsableDuration(probe.DurationSeconds))
+        {
+            throw new InvalidOperationException($"Cannot establish audio duration for '{relativePath}' before export.");
+        }
+        return probe.DurationSeconds;
+    }
+
+    private static bool HasUsableDuration(double? duration) =>
+        duration is double value && double.IsFinite(value) && value > 0d;
 
     private async Task<RenderedSubtitleArtifacts> CheckSubtitleCuesAsync(
         TranscriptProjectState currentState,

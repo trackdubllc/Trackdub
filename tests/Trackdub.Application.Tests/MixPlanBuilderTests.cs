@@ -222,6 +222,28 @@ public sealed class MixPlanBuilderTests
         Assert.Empty(plan.Warnings);
     }
 
+    [Theory]
+    [InlineData(3.009d, 10d, false)]
+    [InlineData(3.011d, 10d, true)]
+    [InlineData(3d, 9d, true)]
+    public void Build_applies_overrun_tolerance_and_media_boundary(double takeDuration, double mediaDuration, bool warns)
+    {
+        TestProjectContext context = CreateContext();
+        TranscriptSegment segment = TranscriptSegment.Create(context.TranscriptRevisionId, 0, 7d, 9.5d, "Hello", context.SpeakerId);
+        ProjectArtifact source = CreateArtifact(context, ArtifactKind.NormalizedAudio,
+            ProjectArtifactPaths.NormalizedAudioRelativePath, createdOffsetSeconds: 0, durationSeconds: 10d);
+        ProjectArtifact artifact = CreateArtifact(context, ArtifactKind.TtsTake,
+            "artifacts/tts/take.wav", createdOffsetSeconds: 2, durationSeconds: takeDuration);
+        TtsTake take = TtsTake.Create(context.ProjectId, context.VoiceAssignmentId, segmentIndex: 0)
+            .Complete(artifact.Id, durationSamples: 72000, sampleRate: 24000, provider: "fake");
+
+        MixPlan plan = new MixPlanBuilder().Build(new MixPlanBuildRequest(
+            context.ProjectId, context.MediaAssetId, [source, artifact], [segment], [], [take],
+            MediaDurationSeconds: mediaDuration));
+
+        Assert.Equal(warns, plan.Warnings.Any(warning => warning.Code == MixPlanWarningCode.TakeExceedsSourceAudio));
+    }
+
     [Fact]
     public void Build_uses_normalized_audio_for_original_pan_reference_when_ambiance_is_source_lane()
     {
