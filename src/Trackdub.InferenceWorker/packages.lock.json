@@ -10,18 +10,18 @@
       },
       "Microsoft.ML.OnnxRuntime.Gpu.Windows": {
         "type": "Direct",
-        "requested": "[1.30.0, )",
-        "resolved": "1.30.0",
-        "contentHash": "TA9/mtOhJI+MJZXzkGkHbYJFGMCkRcBzS7XEMdauC36exh6q4+lw7P/90MbIgrrwYK04SIFykvTFnAXDpDpscA==",
+        "requested": "[1.31.0, )",
+        "resolved": "1.31.0",
+        "contentHash": "Hm5ysNQmVDDYDK0wdND2gN5tGbgM0qEu7rL+HrEyi1zNadBKK1k9hXdIacBLc6kyIY4d2DsxXp5vrBJROn189w==",
         "dependencies": {
-          "Microsoft.ML.OnnxRuntime.Managed": "1.30.0"
+          "Microsoft.ML.OnnxRuntime.Managed": "1.31.0"
         }
       },
       "Microsoft.ML.OnnxRuntime.Managed": {
         "type": "Direct",
-        "requested": "[1.30.0, )",
-        "resolved": "1.30.0",
-        "contentHash": "KHW+vp+i4Mdf6RhIsMvurTVepafXHjg8/VQ0o6sa2wEK0KzV/4iEoRTUvsymcRP+XPAM/r6kZCaTADdV6Xn4RA==",
+        "requested": "[1.31.0, )",
+        "resolved": "1.31.0",
+        "contentHash": "o9nvEiddLLlAMOHN0XZ/06Oal0W6S7iWiSb8lzQAwfQKNOZtX4C8he5/I7Mc/DlSprNfovAW6kCkwX2BAE0JHw==",
         "dependencies": {
           "System.Numerics.Tensors": "9.0.0"
         }
