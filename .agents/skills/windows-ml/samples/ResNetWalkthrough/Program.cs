@@ -164,9 +164,9 @@ internal static class Program
             for (int x = 0; x < 224; x++)
             {
                 Color pixel = image.GetPixel(x, y);
-                tensor[0, 0, y, x] = (pixel.R / 255f - mean[0]) / deviation[0];
-                tensor[0, 1, y, x] = (pixel.G / 255f - mean[1]) / deviation[1];
-                tensor[0, 2, y, x] = (pixel.B / 255f - mean[2]) / deviation[2];
+                tensor[0, 0, y, x] = ((pixel.R / 255f) - mean[0]) / deviation[0];
+                tensor[0, 1, y, x] = ((pixel.G / 255f) - mean[1]) / deviation[1];
+                tensor[0, 2, y, x] = ((pixel.B / 255f) - mean[2]) / deviation[2];
             }
         }
         return tensor;
