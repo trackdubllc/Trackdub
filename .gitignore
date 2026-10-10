@@ -195,7 +195,6 @@ MagicPaths/
 /docs/milestones/
 /output/
 /tools/marketing/
-/tools/skills/
 /gitlab-ci.yml
 /tools/gitlab-review-agent/
 *.original.md
@@ -234,29 +233,14 @@ MagicPaths/
 /.kiro
 /sourcery
 output/unused-code-audit/
-# .opencode/ is tracked (see line ~183), with these two exceptions kept
-# deliberately: per-developer local config and local skill installs stay
-# out of version control. The project config is at the repo root.
+# .opencode/ is tracked (see line ~183), with this exception kept
+# deliberately: per-developer local config stays out of version control.
+# The project config is at the repo root.
 .opencode/opencode.jsonc
-/.opencode/skills
 .codex/config.toml
 .codex/environments/
 .aider*
 .bob/DO NOT USE mcp.json
-
-# Local agent skill overlays (committed skills under these trees are tracked explicitly)
-/.github/skills/*
-!/.github/skills/code-review/
-!/.github/skills/code-review/**
-/.bob/skills
-/.autohand/skills
-/.openhands/skills
-/.windsurf/skills
-/.cline/skills
-/.gemini/skills
-/.trae/skills
-/.kiro/skills
-/.codex/skills
 
 # Cursor local state (hooks config + check-pr-threads.ps1 stay tracked)
 .cursor/hooks/state/
@@ -269,16 +253,8 @@ output/unused-code-audit/
 # Local git hooks (use repo scripts under tools/ instead)
 /.githooks
 .githooks/
-/.adal/skills
-/.agents/skills
-# Agent skill caches stay local; explicitly maintained repository skills
-# are committed exceptions (Claude Code loads from .claude/skills/).
-/.claude/skills/*
-!/.claude/skills/gh-stack
-!/.claude/skills/trackdub-media-cleanup
 /.claude/settings.local.json
 /.openclaude/
-/.codeartsdoer/skills
 /.codemaker
 /.codestudio
 /.commandcode
@@ -289,11 +265,8 @@ output/unused-code-audit/
 /.forge
 /.inferencesh
 /.iflow
-/.kilocode/skills
-/.junie/skills
 /.jazz
 /.hermes
-/.cursor/skills
 /.mcpjam
 /.lingma
 /.kode
@@ -307,7 +280,6 @@ output/unused-code-audit/
 /.rovodev
 /.tabnine
 /.zencoder
-/skills
 /data
 /.roo
 /.vibe
@@ -325,7 +297,6 @@ output/unused-code-audit/
 !/.qoder/repowiki/en/content
 /.qoder/repowiki/knowledge/*
 !/.qoder/repowiki/knowledge/en
-/.pi/skills
 /.neovate
 /.tinycloud
 /.moxby

@@ -13,6 +13,7 @@ supervisor gates on.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import sys
 
@@ -54,6 +55,23 @@ def handle_health(request_id):
         activeProvider=_model_device,
         worker=WORKER_STAMP,
     )
+
+
+@contextlib.contextmanager
+def _protocol_stdout():
+    """Reserve stdout for the protocol while third-party model code runs.
+
+    Model libraries print banners to stdout (e.g. perth's "loaded PerthNet
+    (Implicit) at step 250,000"), which would interleave with the JSON-lines
+    stream and corrupt the host's read. PROTOCOL.md gives stdout to the
+    protocol; shunt everything else to stderr for the duration.
+    """
+    protocol_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        yield
+    finally:
+        sys.stdout = protocol_stdout
 
 
 def _import_model_stack():
@@ -132,7 +150,13 @@ def handle_load(request_id, plan):
                           f"(expected {CHATTERBOX_REPO} or a local snapshot dir)")
             return
     try:
-        torch, ChatterboxTTS = _import_model_stack()
+        # Import inside the protocol-stdout guard: torch/chatterbox/transformers
+        # imports can print banners at import time (the perth class of bug), and
+        # any import-time stdout write would land in the protocol stream ahead
+        # of the "loaded" response. Only Python-level writes are redirected;
+        # native-fd writes cannot be swapped this way and remain a known gap.
+        with _protocol_stdout():
+            torch, ChatterboxTTS = _import_model_stack()
     except ImportError as ex:
         respond(request_id, "error", reason="dependency-missing", detail=str(ex))
         return
@@ -145,11 +169,12 @@ def handle_load(request_id, plan):
                       f"({'required ' if plan.get('requirePreferred') else ''}{wanted})")
         return
     try:
-        if ckpt.is_dir():
-            # from_local(ckpt_dir, device) — verified against chatterbox-tts 0.1.7.
-            _model = ChatterboxTTS.from_local(ckpt, device)
-        else:
-            _model = ChatterboxTTS.from_pretrained(device)
+        with _protocol_stdout():
+            if ckpt.is_dir():
+                # from_local(ckpt_dir, device) — verified against chatterbox-tts 0.1.7.
+                _model = ChatterboxTTS.from_local(ckpt, device)
+            else:
+                _model = ChatterboxTTS.from_pretrained(device)
         _model_device = device
         _voice_prompt = str(voice_prompt) if voice_prompt is not None else None
     except Exception as ex:  # model download / native load failure: report, don't crash
@@ -192,7 +217,7 @@ def handle_infer(request_id, inputs):
     try:
         import torch
 
-        with torch.inference_mode():
+        with torch.inference_mode(), _protocol_stdout():
             generate_kwargs = {}
             if _voice_prompt is not None:
                 generate_kwargs["audio_prompt_path"] = _voice_prompt

@@ -726,7 +726,7 @@ public sealed class InferenceSessionPoolTests
         try
         {
             File.WriteAllBytes(path, new byte[3 * 1024 * 1024]); // 3 MB → 3*2+128 = 134
-            long estimate = SessionPoolKey.EstimateVramMb(path);
+            long estimate = SessionPoolKey.EstimateVramMb(path, ExecutionProviderKind.Cpu);
             Assert.Equal(134, estimate);
         }
         finally
@@ -938,6 +938,8 @@ public sealed class InferenceSessionPoolTests
 
         Assert.Contains("dedicated GPU memory is attributed to this bucket", failure.Message, StringComparison.Ordinal);
         Assert.Contains("TRACKDUB_SESSION_PROCESS_GPU_ADMISSION", failure.Message, StringComparison.Ordinal);
+        // MadladTranslationEngine falls back to CPU on messages naming the admission budget.
+        Assert.Contains("admission budget", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, factoryCalls);
     }
 

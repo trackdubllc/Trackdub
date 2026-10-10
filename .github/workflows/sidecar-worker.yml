@@ -1,0 +1,83 @@
+name: Sidecar worker suites
+
+on:
+  pull_request:
+    paths:
+      - "workers/**"
+      - "tools/Trackdub.SidecarHost/**"
+      - "tools/Trackdub.SidecarHost.Tests/**"
+      - ".github/workflows/sidecar-worker.yml"
+  push:
+    branches: [main]
+    paths:
+      - "workers/**"
+      - "tools/Trackdub.SidecarHost/**"
+      - "tools/Trackdub.SidecarHost.Tests/**"
+  workflow_dispatch:
+
+concurrency:
+  group: sidecar-worker-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-supervisor:
+    name: Rust supervisor
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run supervisor tests
+        run: cargo test --manifest-path workers/supervisor/Cargo.toml
+
+      - name: Clippy
+        run: cargo clippy --manifest-path workers/supervisor/Cargo.toml -- -D warnings
+
+  python-protocol:
+    name: Python protocol worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Sync dev dependencies
+        run: uv sync --dev
+        working-directory: workers/chatterbox
+
+      - name: Run protocol tests
+        run: uv run pytest tests -q
+        working-directory: workers/chatterbox
+
+  csharp-host:
+    name: C# sidecar host
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/.dotnet
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run host tests
+        run: dotnet test tools/Trackdub.SidecarHost.Tests -m:1
+
+# Live-worker tests stay env-gated OFF in CI (TRACKDUB_SIDECAR_TESTS is not
+# set here): CI runs the cheap suites only; the live evidence is committed
+# under tools/sidecar-evidence/. Live CI is a maintainer decision, not this
+# workflow's.

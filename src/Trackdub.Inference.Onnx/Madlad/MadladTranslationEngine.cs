@@ -62,11 +62,11 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             return [];
         }
 
-        // GPU-first with CPU fallback: the 3B MADLAD encoder+decoder bundle (~6.4GB)
-        // can exceed the accelerator admission budget on smaller GPUs (e.g. 4GB DML
-        // budget on RTX 5070), and a TensorRT RTX engine build can fail for lack of
-        // free VRAM. On either failure, re-plan pinned to CPU and retry instead of
-        // failing the stage. An explicitly required GPU pin
+        // GPU-first with CPU fallback: the 3B MADLAD encoder+decoder bundle (~6.4GB for the
+        // quantized export at 2x, ~8.1GB for the external-data fp16 export on TensorRT RTX)
+        // can exceed the accelerator admission budget on smaller GPUs, or stall behind GPU
+        // memory the pool cannot evict. On those admission failures, re-plan pinned to
+        // CPU and retry instead of failing the stage. An explicitly required GPU pin
         // (RequirePreferredExecutionProvider) is honored — no silent fallback.
         StageRuntimePlan effectivePlan = plan;
         string effectiveEncoderModelPath = encoderModelPath;

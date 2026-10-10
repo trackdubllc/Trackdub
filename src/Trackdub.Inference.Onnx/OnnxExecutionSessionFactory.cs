@@ -744,12 +744,25 @@ internal static class OnnxExecutionSessionFactory
             graphRole: "default",
             optionsFingerprint,
             cancellationToken).ConfigureAwait(false));
+        if (allowTrtInitFallback && optionsSelection.SelectedProvider is ExecutionProviderKind.TensorRTRtx)
+        {
+            // TRT RTX init can still fall back to DirectML/CPU inside the pool factory, after this
+            // key is admitted; reserve for the fallback provider, not TRT RTX's measured factor.
+            key = key with
+            {
+                EstimatedVramMb = SessionPoolKey.EstimateVramMb(
+                    modelPath, optionsSelection.SelectedProvider, providerMayFallBack: true),
+            };
+        }
 
         SessionLease? poolLease = null;
         try
         {
+            // The key is admitted for the pre-creation provider; reporting the provider the
+            // fallback actually created the session with lets the pool move a CPU fallback's
+            // accounting from the device budget to host RAM.
             poolLease = await pool
-                .GetLeaseAsync(
+                .GetLeaseReportingProviderAsync(
                     key,
                     ct =>
                     {
@@ -770,7 +783,7 @@ internal static class OnnxExecutionSessionFactory
                             optionsHolder.Current = selection.Options;
                         }
 
-                        return Task.FromResult(session);
+                        return Task.FromResult(new CreatedPoolSession(session, selection.SelectedProvider));
                     },
                     cancellationToken)
                 .ConfigureAwait(false);
