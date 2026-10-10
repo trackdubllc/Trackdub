@@ -30,7 +30,6 @@ Rules when using and when editing this skill:
 | --- | --- |
 | Which providers exist, their requirements and limits | [canon/execution-providers.md](canon/execution-providers.md) |
 | Per-provider hardware, options, precision gaps, deployment constraints and diagnostic checks | [canon/provider-configuration-coverage.md](canon/provider-configuration-coverage.md) |
-| Build and run a complete C# ResNet example with explicit selection and validated compilation | [samples/ResNetWalkthrough/README.md](samples/ResNetWalkthrough/README.md) |
 | Get a model running: sourcing, CPU path, acceleration, GenAI, compile and cache | [canon/model-setup-and-configuration.md](canon/model-setup-and-configuration.md) |
 | Packages, deployment mode, install → register → select lifecycle, with C# recipes | [canon/deployment-and-lifecycle.md](canon/deployment-and-lifecycle.md) |
 | Updates, offline devices, version traps, language differences | [canon/structure-and-edge-cases.md](canon/structure-and-edge-cases.md) |
