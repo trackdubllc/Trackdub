@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Trackdub.Contracts.Pipeline;
+using Trackdub.Contracts.Licensing;
 using Trackdub.Domain;
 using Trackdub.Inference.Onnx.Pool;
 using Trackdub.Inference.Onnx.Runtime.Routing;
@@ -14,13 +15,15 @@ namespace Trackdub.Inference.Onnx.Madlad;
 
 public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
     BenchmarkModelPathResolver modelPathResolver,
-    IRuntimePlanningPreferences? runtimePlanningPreferences = null)
+    IRuntimePlanningPreferences? runtimePlanningPreferences = null,
+    IRuntimeModelBootstrapService? runtimeModelBootstrapService = null)
     : IStreamingTranslationEngineAdapter, IStageRuntimeExecutionReporter
 {
     public const string EngineFamilyName = "madlad";
 
     private readonly IRuntimePlanner runtimePlanner = runtimePlanner ?? throw new ArgumentNullException(nameof(runtimePlanner));
     private readonly BenchmarkModelPathResolver modelPathResolver = modelPathResolver ?? throw new ArgumentNullException(nameof(modelPathResolver));
+    private readonly IRuntimeModelBootstrapService? runtimeModelBootstrapService = runtimeModelBootstrapService;
 
     public StageRuntimeExecutionSummary? LastExecutionSummary { get; private set; }
 
@@ -62,11 +65,11 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             return [];
         }
 
-        // GPU-first with CPU fallback: the 3B MADLAD encoder+decoder bundle (~6.4GB for the
-        // quantized export at 2x, ~8.1GB for the external-data fp16 export on TensorRT RTX)
-        // can exceed the accelerator admission budget on smaller GPUs, or stall behind GPU
-        // memory the pool cannot evict. On those admission failures, re-plan pinned to
-        // CPU and retry instead of failing the stage. An explicitly required GPU pin
+        // GPU-first with CPU fallback: the 3B MADLAD encoder+decoder bundle (~6.4GB)
+        // can exceed the accelerator admission budget on smaller GPUs (e.g. 4GB DML
+        // budget on RTX 5070), and a TensorRT RTX engine build can fail for lack of
+        // free VRAM. On either failure, re-plan pinned to CPU and retry instead of
+        // failing the stage. An explicitly required GPU pin
         // (RequirePreferredExecutionProvider) is honored — no silent fallback.
         StageRuntimePlan effectivePlan = plan;
         string effectiveEncoderModelPath = encoderModelPath;
@@ -83,7 +86,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             catch (Exception ex) when (IsAcceleratorSessionFailure(ex, effectivePlan) && CanFallBackToCpu(request, effectivePlan))
             {
                 effectivePlan = await ReplanForCpuAsync(request, cancellationToken).ConfigureAwait(false);
-                EnsurePlanReady(effectivePlan, RuntimeStage.Translation);
+                effectivePlan = await EnsureCpuPlanReadyAsync(effectivePlan, request, cancellationToken).ConfigureAwait(false);
                 effectiveEncoderModelPath = ResolveEncoderModelPath(effectivePlan, request.ResolvedModelEntryPath);
                 effectiveDecoderModelPath = ResolveDecoderModelPath(effectivePlan, effectiveEncoderModelPath);
                 sessionLease = await OnnxExecutionSessionFactory
@@ -191,7 +194,7 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
             catch (Exception ex) when (IsAcceleratorSessionFailure(ex, effectivePlan) && CanFallBackToCpu(request, effectivePlan))
             {
                 effectivePlan = await ReplanForCpuAsync(request, cancellationToken).ConfigureAwait(false);
-                EnsurePlanReady(effectivePlan, RuntimeStage.Translation);
+                effectivePlan = await EnsureCpuPlanReadyAsync(effectivePlan, request, cancellationToken).ConfigureAwait(false);
                 effectiveEncoderModelPath = ResolveEncoderModelPath(effectivePlan, request.ResolvedModelEntryPath);
                 effectiveDecoderModelPath = ResolveDecoderModelPath(effectivePlan, effectiveEncoderModelPath);
                 using (OnnxExecutionSessionFactory.OpusSessionLease sessionLease = await OnnxExecutionSessionFactory
@@ -257,6 +260,39 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
         plan.ExecutionProvider is not null &&
         plan.ExecutionProvider != ExecutionProviderKind.Cpu;
 
+    private async Task<StageRuntimePlan> EnsureCpuPlanReadyAsync(
+        StageRuntimePlan cpuPlan,
+        TranslationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (cpuPlan.Status != StageRuntimePlanStatus.DownloadRequired)
+        {
+            EnsurePlanReady(cpuPlan, RuntimeStage.Translation);
+            return cpuPlan;
+        }
+
+        if (runtimeModelBootstrapService is null)
+        {
+            EnsurePlanReady(cpuPlan, RuntimeStage.Translation);
+            return cpuPlan;
+        }
+
+        await runtimeModelBootstrapService.DownloadRequiredModelAsync(
+            new RuntimeModelRequest(
+                RuntimeStage.Translation,
+                PreferredModelAlias: request.PreferredModelAlias,
+                SourceLanguage: request.SourceLanguage,
+                TargetLanguage: request.TargetLanguage,
+                PreferredExecutionProvider: ExecutionProviderKind.Cpu,
+                RequirePreferredExecutionProvider: true,
+                PreferredModelVariantAlias: null),
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        StageRuntimePlan refreshedCpuPlan = await ReplanForCpuAsync(request, cancellationToken).ConfigureAwait(false);
+        EnsurePlanReady(refreshedCpuPlan, RuntimeStage.Translation);
+        return refreshedCpuPlan;
+    }
+
     private async Task<StageRuntimePlan> ReplanForCpuAsync(
         TranslationRequest request,
         CancellationToken cancellationToken)
@@ -269,7 +305,9 @@ public sealed class MadladTranslationEngine(IRuntimePlanner runtimePlanner,
                 TargetLanguage: request.TargetLanguage,
                 PreferredExecutionProvider: ExecutionProviderKind.Cpu,
                 RequirePreferredExecutionProvider: true,
-                PreferredModelVariantAlias: request.PreferredModelVariantAlias),
+                // The accelerator-only variant may be the requested model, but CPU fallback
+                // must replan onto a variant whose files can actually run on CPU.
+                PreferredModelVariantAlias: null),
             runtimePlanningPreferences,
             cancellationToken).ConfigureAwait(false);
 
