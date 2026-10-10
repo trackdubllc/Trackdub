@@ -133,7 +133,7 @@ public sealed class PooledSingleTrtFallbackAdmissionTests : IDisposable
     {
         using var pool = new InferenceSessionPool(
             maxSessions: 8, enableMemoryAdmission: true, memoryBudgetMb: 100, hostMemoryBudgetMb: 100);
-        SessionLease hostHolder = await pool.GetLeaseAsync(
+        using SessionLease hostHolder = await pool.GetLeaseAsync(
             Key(ExecutionProviderKind.Cpu, "cpu", 80), CreateSession, CancellationToken.None);
         var created = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var guard = new CancellationTokenSource(ConcurrencyTestTimeouts.HangGuard);
@@ -155,6 +155,73 @@ public sealed class PooledSingleTrtFallbackAdmissionTests : IDisposable
         hostHolder.Dispose();
         using SessionLease fallback = await fallbackTask.WaitAsync(guard.Token);
         Assert.NotNull(fallback.Session);
+    }
+
+    [Fact]
+    public async Task A_waiting_cpu_fallback_is_accounted_against_host_ram()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8, enableMemoryAdmission: true, memoryBudgetMb: 100, hostMemoryBudgetMb: 100);
+        using SessionLease hostHolder = await pool.GetLeaseAsync(
+            Key(ExecutionProviderKind.Cpu, "cpu", 50), CreateSession, CancellationToken.None);
+        var created = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var guard = new CancellationTokenSource(ConcurrencyTestTimeouts.HangGuard);
+
+        Task<SessionLease> fallbackTask = pool.GetLeaseReportingProviderAsync(
+            Key(ExecutionProviderKind.TensorRTRtx, "trt", 80),
+            CreatedOn(ExecutionProviderKind.Cpu, created.SetResult),
+            guard.Token);
+        await created.Task.WaitAsync(guard.Token);
+
+        // The created session is charged against host RAM while it waits: a direct CPU request
+        // that would fit the leftover budget (100 - 50) is blocked because the waiting fallback's
+        // 80 MB already consumes the host budget. Without the immediate charge it would be
+        // admitted against invisible memory.
+        using var blocked = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => pool.GetLeaseAsync(Key(ExecutionProviderKind.Cpu, "cpu2", 30), CreateSession, blocked.Token));
+
+        hostHolder.Dispose();
+        using SessionLease fallback = await fallbackTask.WaitAsync(guard.Token);
+        Assert.NotNull(fallback.Session);
+    }
+
+    [Fact]
+    public async Task Bundle_with_a_published_cpu_fallback_fails_fast_instead_of_hanging()
+    {
+        using var pool = new InferenceSessionPool(
+            maxSessions: 8, enableMemoryAdmission: true, memoryBudgetMb: 1000, hostMemoryBudgetMb: 100);
+        SessionPoolKey gpuFallbackKey = Key(ExecutionProviderKind.TensorRTRtx, "trt", 80);
+
+        // Publish a GPU-keyed session that fell back to CPU: it lives in the host-RAM bucket.
+        using (await pool.GetLeaseReportingProviderAsync(
+                   gpuFallbackKey, CreatedOn(ExecutionProviderKind.Cpu), CancellationToken.None))
+        {
+        }
+
+        // A bundle pairing that fallback session with a direct CPU session needs 80 + 80 = 160 MB
+        // of host RAM, more than the 100 MB budget. Preflight must charge the fallback to host RAM
+        // and fail fast — never pin it and then wait on memory the bundle's own pin holds.
+        SessionPoolKey cpuKey = Key(ExecutionProviderKind.Cpu, "cpu", 80);
+        int factoryCalls = 0;
+        using var guard = new CancellationTokenSource(ConcurrencyTestTimeouts.HangGuard);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => pool.GetLeaseBundleAsync(
+            [
+                new SessionLeaseRequest(gpuFallbackKey, _ =>
+                {
+                    factoryCalls++;
+                    return Task.FromResult(CreateMinimalSession());
+                }),
+                new SessionLeaseRequest(cpuKey, _ =>
+                {
+                    factoryCalls++;
+                    return Task.FromResult(CreateMinimalSession());
+                }),
+            ],
+            guard.Token));
+
+        Assert.Equal(0, factoryCalls);
     }
 
     [Fact]

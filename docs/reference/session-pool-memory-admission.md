@@ -49,7 +49,9 @@ bucket, the pool moves the session's accounting before publishing it:
   the estimate exceeds the host budget, the session is discarded and the request fails, as a
   direct CPU request would (see [Raising the limits](#raising-the-limits)). Otherwise idle
   host-RAM sessions are evicted to fit, or the request waits for host RAM to be released,
-  without holding any device reservation.
+  without holding any device reservation. The already-created session is charged against the
+  host budget for the whole wait, so while it waits its real memory is never hidden from the
+  budget (concurrent CPU fallbacks for distinct keys each count toward the host ceiling).
 - Once published, the session counts against host RAM, is evicted only to make room in host
   RAM, and leaves the device budget free for GPU sessions. Later pool hits on the same key reuse
   it without admitting again.

@@ -1023,7 +1023,11 @@ internal sealed class InferenceSessionPool : IDisposable
     /// <summary>
     /// Admits a session that already exists against <paramref name="bucket"/>, the bucket of the
     /// provider it was created with, and takes the pending reservation there. The session is not
-    /// yet published, so it is never an eviction candidate for its own admission.
+    /// yet published, so it is never an eviction candidate for its own admission. When the bucket
+    /// cannot fit it immediately, the created session is charged against the bucket before the
+    /// wait: its memory is real and resident, so a wait must never hide it from the budget
+    /// (concurrent CPU fallbacks for distinct keys would otherwise each park a full model
+    /// unaccounted and silently exceed the host ceiling).
     /// </summary>
     private async Task ReadmitCreatedSessionAsync(
         SessionPoolKey key,
@@ -1055,12 +1059,52 @@ internal sealed class InferenceSessionPool : IDisposable
 
         if (!reserved)
         {
-            await WaitForAdmissionBudgetAsync(needMb, bucket, cancellationToken).ConfigureAwait(false);
+            // Charge the already-created session before waiting so the budget reflects its real
+            // memory for the whole wait, then wait for the bucket total (including it) to fit.
+            AddPendingReservation(bucket, needMb);
+            try
+            {
+                await WaitForAdmissionBudgetAsync(needMb, bucket, cancellationToken, alreadyReserved: true)
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                ReleaseReservation(bucket, needMb);
+                throw;
+            }
         }
     }
 
     private long ResolveReservationMb(SessionPoolKey key) =>
         key.EstimatedVramMb > 0 ? key.EstimatedVramMb : SessionPoolKey.DefaultEstimatedVramMb;
+
+    /// <summary>
+    /// Validates that a bundle's aggregate estimate per admission bucket fits that bucket's
+    /// budget. Buckets follow the provider each session was actually created with: a published
+    /// entry carries its creation bucket (<see cref="PoolEntry.Bucket"/>), so a GPU-keyed CPU
+    /// fallback is charged against host RAM rather than the accelerator bucket implied by its
+    /// key. Missing entries are checked against their key's bucket. Fail-fast at this point
+    /// (before any factory runs, and again after each residency pin) prevents a bundle from
+    /// pinning a fallback session and then waiting forever on memory that its own pin holds.
+    /// </summary>
+    private void ValidateBundleAdmission(SessionLeaseRequest[] ordered)
+    {
+        foreach (IGrouping<AdmissionBucket, SessionLeaseRequest> group in
+                 ordered.GroupBy(request =>
+                     entries.TryGetValue(request.Key, out PoolEntry? entry) && entry is not null
+                         ? entry.Bucket
+                         : BucketOf(request.Key)))
+        {
+            long totalMb = group.Sum(request => ResolveReservationMb(request.Key));
+            long budgetMb = BudgetFor(group.Key);
+            if (totalMb > budgetMb)
+            {
+                throw new InvalidOperationException(
+                    $"Session bundle needs ~{totalMb} MB across {group.Count()} graph(s) on " +
+                    $"{DescribeBucket(group.Key)}, which exceeds its admission budget of {budgetMb} MB.");
+            }
+        }
+    }
 
     /// <summary>
     /// Acquires every graph in <paramref name="requests"/> as one all-or-nothing bundle
@@ -1082,19 +1126,11 @@ internal sealed class InferenceSessionPool : IDisposable
         if (enableMemoryAdmission)
         {
             // Aggregate preflight: a bundle whose graphs jointly exceed a bucket's budget
-            // can never fit, so fail before invoking any factory.
-            foreach (IGrouping<AdmissionBucket, SessionLeaseRequest> group in
-                     ordered.GroupBy(request => BucketOf(request.Key)))
-            {
-                long totalMb = group.Sum(request => ResolveReservationMb(request.Key));
-                long budgetMb = BudgetFor(group.Key);
-                if (totalMb > budgetMb)
-                {
-                    throw new InvalidOperationException(
-                        $"Session bundle needs ~{totalMb} MB across {group.Count()} graph(s) on " +
-                        $"{DescribeBucket(group.Key)}, which exceeds its admission budget of {budgetMb} MB.");
-                }
-            }
+            // can never fit, so fail before invoking any factory. Buckets follow the provider
+            // each session was actually created with (a published CPU fallback is charged to
+            // host RAM, not its GPU key's bucket), so the check is repeated after each
+            // residency pin below — pinning a fallback session can change a bucket's total.
+            ValidateBundleAdmission(ordered);
         }
 
         // Serialize preparation and acquisition: while one bundle is pinning or acquiring,
@@ -1117,6 +1153,10 @@ internal sealed class InferenceSessionPool : IDisposable
                     {
                         pins.Add(await GetResidencyAsync(request.Key, request.Factory, cancellationToken)
                             .ConfigureAwait(false));
+                        // Recheck after each pin: a session pinned now is counted in the bucket
+                        // it was created in, and a later admission must not wait on memory this
+                        // bundle's own pin holds.
+                        ValidateBundleAdmission(ordered);
                     }
                     else
                     {
@@ -1168,6 +1208,7 @@ internal sealed class InferenceSessionPool : IDisposable
                                 {
                                     pins.Add(await GetResidencyAsync(request.Key, request.Factory, cancellationToken)
                                         .ConfigureAwait(false));
+                                    ValidateBundleAdmission(ordered);
                                 }
                                 else
                                 {
@@ -1530,10 +1571,21 @@ internal sealed class InferenceSessionPool : IDisposable
     /// <summary>
     /// Waits until <paramref name="needMb"/> fits in <paramref name="bucket"/>'s budget
     /// (evicting idle sessions in that bucket as needed), then takes the reservation.
-    /// Never holds a reservation while waiting. Host-backed providers share the host RAM budget;
-    /// accelerator providers share their device's VRAM budget.
+    /// Never holds a reservation while waiting unless <paramref name="alreadyReserved"/> is set.
+    /// Host-backed providers share the host RAM budget; accelerator providers share their
+    /// device's VRAM budget.
     /// </summary>
-    private async Task WaitForAdmissionBudgetAsync(long needMb, AdmissionBucket bucket, CancellationToken cancellationToken)
+    /// <param name="alreadyReserved">
+    /// When <see langword="true"/>, the caller already holds the <paramref name="needMb"/>
+    /// reservation in <paramref name="bucket"/> (a session that already exists and is resident),
+    /// so the wait only brings the bucket's total — including that reservation — within budget
+    /// and does not take a new one on success.
+    /// </param>
+    private async Task WaitForAdmissionBudgetAsync(
+        long needMb,
+        AdmissionBucket bucket,
+        CancellationToken cancellationToken,
+        bool alreadyReserved = false)
     {
         BenchmarkPhaseCapture.ObserveMaximum("admissionWaiters", Interlocked.Increment(ref admissionWaiters));
         try
@@ -1552,6 +1604,9 @@ internal sealed class InferenceSessionPool : IDisposable
                 // counters every 50 ms.
                 ProcessGpuObservation? observation = bucket.IsHost ? null : ReadObservedProcessGpu();
 
+                // A reservation already held for a resident session is part of the bucket's
+                // current total; only a not-yet-reserved needMb is an additional charge.
+                long chargeMb = alreadyReserved ? 0 : needMb;
                 bool acquired = false;
                 List<PoolEntry>? toDispose = null;
                 List<KeyValuePair<Guid, ExternalReservationState>>? idleExternals = null;
@@ -1566,7 +1621,7 @@ internal sealed class InferenceSessionPool : IDisposable
                     // the reservation total but each eviction is re-observed before the next, so
                     // an observation-held admission converges instead of discarding the device's
                     // warm cache in one pass.
-                    while (CurrentReservedMb(bucket) + needMb > BudgetFor(bucket))
+                    while (CurrentReservedMb(bucket) + chargeMb > BudgetFor(bucket))
                     {
                         PoolEntry? evicted = TryEvictLruIdle(onlyBucket: bucket);
                         if (evicted is null)
@@ -1578,9 +1633,9 @@ internal sealed class InferenceSessionPool : IDisposable
                         toDispose.Add(evicted);
                     }
 
-                    reservationBlocked = CurrentReservedMb(bucket) + needMb > BudgetFor(bucket);
+                    reservationBlocked = CurrentReservedMb(bucket) + chargeMb > BudgetFor(bucket);
                     observedBlocked = !reservationBlocked
-                        && AdmissionUsageMb(bucket, observation) + needMb > BudgetFor(bucket);
+                        && AdmissionUsageMb(bucket, observation) + chargeMb > BudgetFor(bucket);
 
                     if (observedBlocked)
                     {
@@ -1612,7 +1667,11 @@ internal sealed class InferenceSessionPool : IDisposable
 
                     if (!reservationBlocked && !observedBlocked)
                     {
-                        AddPendingReservation(bucket, needMb);
+                        if (!alreadyReserved)
+                        {
+                            AddPendingReservation(bucket, needMb);
+                        }
+
                         acquired = true;
                     }
                 }
