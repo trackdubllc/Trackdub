@@ -318,16 +318,7 @@ public sealed class ModelDownloadOrchestrator(
         }
 
         LocalModelCacheRecord? record = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
-<<<<<<< Updated upstream
-        ModelCacheState currentState = record is not null &&
-            !string.IsNullOrWhiteSpace(entry.Sha256) &&
-            !string.IsNullOrWhiteSpace(record.Sha256) &&
-            !string.Equals(entry.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase)
-                ? ModelCacheState.Corrupt
-                : ResolveRecordState(record);
-=======
         ModelCacheState currentState = ModelInventoryService.DetermineState(entry, record);
->>>>>>> Stashed changes
         string modelRootDirectory = ResolveVerificationModelRootDirectory(entry, record);
 
         IReadOnlyList<string> requiredFiles = ModelDownloadManifestFiles.ResolveRequiredFiles(entry);
@@ -688,20 +679,8 @@ public sealed class ModelDownloadOrchestrator(
         {
             return ModelCacheState.Missing;
         }
-<<<<<<< Updated upstream
-        LocalModelCacheRecord? record = ModelInventoryService.SelectBestCacheRecord(
-            entry,
-            records.Where(r => r.ModelId.Equals(entry.ModelId, StringComparison.OrdinalIgnoreCase)).ToArray(),
-            storagePaths.ModelCacheDirectory);
-        return record is not null && !string.IsNullOrWhiteSpace(entry.Sha256) &&
-            !string.IsNullOrWhiteSpace(record.Sha256) &&
-            !string.Equals(entry.Sha256, record.Sha256, StringComparison.OrdinalIgnoreCase)
-                ? ModelCacheState.Corrupt
-                : ResolveRecordState(record);
-=======
         LocalModelCacheRecord? record = await GetCurrentRecordAsync(modelId, cancellationToken).ConfigureAwait(false);
         return ModelInventoryService.DetermineState(entry, record);
->>>>>>> Stashed changes
     }
 
     private Task SetModelIntegrityStateAsync(
