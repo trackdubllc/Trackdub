@@ -39,6 +39,28 @@ created, after the key is admitted, so those keys reserve at 2× unless the rout
 (`RequirePreferredExecutionProvider`). Multi-graph bundles such as MADLAD create their sessions
 without that fallback and keep 1.25×.
 
+## Sessions that fall back while they are created
+
+A pooled single-session key is admitted against the bucket of its pre-creation provider. When
+TensorRT RTX init then falls back and the session is created on a provider in a different
+bucket, the pool moves the session's accounting before publishing it:
+
+- A fallback to DirectML stays on the same device, so its reservation is unchanged.
+- A fallback to CPU releases the device reservation, then admits the session against the
+  host-RAM budget with the same estimate, under the same rules as a direct CPU request. If
+  the estimate exceeds the host budget, the session is discarded and the request fails, as a
+  direct CPU request would (see [Raising the limits](#raising-the-limits)). Otherwise idle
+  host-RAM sessions are evicted to fit, or the request waits for host RAM to be released,
+  without holding any device reservation. The already-created session is charged against the
+  host budget for the whole wait, so while it waits its real memory is never hidden from the
+  budget (concurrent CPU fallbacks for distinct keys each count toward the host ceiling).
+- Once published, the session counts against host RAM, is evicted only to make room in host
+  RAM, and leaves the device budget free for GPU sessions. Later pool hits on the same key reuse
+  it without admitting again.
+
+The bucket follows the provider whose session options the fallback created the session with,
+not the per-input device the session reports afterwards.
+
 The estimate is admission sizing, not pool identity: two keys that differ only in their estimate
 (for example after a sidecar is re-measured) share one pooled session, which keeps the
 reservation it was admitted with.

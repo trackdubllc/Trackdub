@@ -743,8 +743,11 @@ internal static class OnnxExecutionSessionFactory
         SessionLease? poolLease = null;
         try
         {
+            // The key is admitted for the pre-creation provider; reporting the provider the
+            // fallback actually created the session with lets the pool move a CPU fallback's
+            // accounting from the device budget to host RAM.
             poolLease = await pool
-                .GetLeaseAsync(
+                .GetLeaseReportingProviderAsync(
                     key,
                     ct =>
                     {
@@ -765,7 +768,7 @@ internal static class OnnxExecutionSessionFactory
                             optionsHolder.Current = selection.Options;
                         }
 
-                        return Task.FromResult(session);
+                        return Task.FromResult(new CreatedPoolSession(session, selection.SelectedProvider));
                     },
                     cancellationToken)
                 .ConfigureAwait(false);

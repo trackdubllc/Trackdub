@@ -1,4 +1,5 @@
 using Microsoft.ML.OnnxRuntime;
+using Trackdub.Domain;
 
 namespace Trackdub.Inference.Onnx.Pool;
 
@@ -6,6 +7,13 @@ namespace Trackdub.Inference.Onnx.Pool;
 internal sealed record SessionLeaseRequest(
     SessionPoolKey Key,
     Func<CancellationToken, Task<InferenceSession>> Factory);
+
+/// <summary>
+/// A session created for a pool miss and the provider it was created with. The provider differs
+/// from <see cref="SessionPoolKey.Provider"/> when the factory's provider fallback ran after the
+/// key was admitted (for example TensorRT RTX init failing over to CPU).
+/// </summary>
+internal sealed record CreatedPoolSession(InferenceSession Session, ExecutionProviderKind Provider);
 
 /// <summary>
 /// Scoped, exclusive handle to a pooled <see cref="InferenceSession"/>.
