@@ -94,10 +94,21 @@ internal static class GenAiNativeRuntimeSelection
 
     private static string? LoadedPath(string fileName)
     {
-        using var process = Process.GetCurrentProcess();
-        string[] matches = process.Modules.Cast<ProcessModule>()
-            .Where(m => string.Equals(m.ModuleName, fileName, StringComparison.OrdinalIgnoreCase))
-            .Select(m => Path.GetFullPath(m.FileName)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        string[] matches;
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            matches = process.Modules.Cast<ProcessModule>()
+                .Where(m => string.Equals(m.ModuleName, fileName, StringComparison.OrdinalIgnoreCase))
+                .Select(m => Path.GetFullPath(m.FileName)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or NotSupportedException or InvalidOperationException)
+        {
+            // Restricted processes cannot list their modules. Callers then fall back to the on-disk
+            // candidate, and the post-load identity check fails closed on a null path.
+            return null;
+        }
+
         if (matches.Length > 1)
             throw new InvalidOperationException($"Native runtime identity not verified: multiple loaded {fileName} modules.");
         return matches.SingleOrDefault();
