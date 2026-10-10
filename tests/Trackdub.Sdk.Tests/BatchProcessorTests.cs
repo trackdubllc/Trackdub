@@ -395,9 +395,17 @@ public sealed class BatchProcessorTests : IDisposable
         string first = WriteMedia("first.mp4");
         string second = WriteMedia("second.mp4");
         var lockedDuringRun = new List<bool>();
+        bool? firstLockedWhileSecondRuns = null;
         var recording = new RecordingEngine
         {
-            OnExecute = options => lockedDuringRun.Add(IsLocked(ProjectDirectoryOf(options.SourceMediaPath)))
+            OnExecute = options =>
+            {
+                lockedDuringRun.Add(IsLocked(ProjectDirectoryOf(options.SourceMediaPath)));
+                if (options.SourceMediaPath == second)
+                {
+                    firstLockedWhileSecondRuns = IsLocked(ProjectDirectoryOf(first));
+                }
+            }
         };
         var processor = new BatchProcessor(recording);
 
@@ -407,6 +415,7 @@ public sealed class BatchProcessorTests : IDisposable
 
         Assert.Equal(2, report.SucceededCount);
         Assert.Equal([true, true], lockedDuringRun);
+        Assert.False(firstLockedWhileSecondRuns);
         Assert.False(IsLocked(ProjectDirectoryOf(first)));
         Assert.False(IsLocked(ProjectDirectoryOf(second)));
     }
