@@ -5,7 +5,6 @@ the real `serve()` loop over piped stdio, so what passes here is the exact
 byte behavior the Rust supervisor will speak to.
 """
 
-import base64
 import io
 import json
 import sys
