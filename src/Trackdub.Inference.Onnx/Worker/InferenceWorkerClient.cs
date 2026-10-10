@@ -191,6 +191,11 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
             }
 
             Process started = Start(executablePath);
+
+            // Unpublish the exited worker before releasing its handle, so no caller on the fast path
+            // reads HasExited from a disposed Process.
+            current = null;
+            process?.Dispose();
             process = started;
             bool handshaken = false;
             try

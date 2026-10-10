@@ -36,11 +36,15 @@ public static class InferenceWorkerProtocol
     public static async Task WriteAsync(Stream stream, WorkerMessage message, CancellationToken cancellationToken)
     {
         byte[] body = JsonSerializer.SerializeToUtf8Bytes(message, JsonOptions);
-        byte[] header = new byte[4];
-        BinaryPrimitives.WriteInt32LittleEndian(header, body.Length);
-        await stream.WriteAsync(header, cancellationToken).ConfigureAwait(false);
-        await stream.WriteAsync(body, cancellationToken).ConfigureAwait(false);
-        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        byte[] frame = new byte[4 + body.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(frame, body.Length);
+        body.CopyTo(frame, 4);
+
+        // Cancellation is honoured only before the first byte: a frame cut between its length
+        // prefix and its body would desynchronise every message after it on the shared pipe.
+        cancellationToken.ThrowIfCancellationRequested();
+        await stream.WriteAsync(frame, CancellationToken.None).ConfigureAwait(false);
+        await stream.FlushAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Reads one message, or null when the peer closed the stream.</summary>

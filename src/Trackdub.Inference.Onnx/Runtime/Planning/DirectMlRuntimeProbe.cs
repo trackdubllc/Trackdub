@@ -18,7 +18,7 @@ internal static class DirectMlRuntimeProbe
     {
         if (!OnnxRuntimeBuildCapabilities.SupportsWindowsMlRoutes)
         {
-            return null;
+            return "This build has no Windows ML routes, so DirectML cannot be appended.";
         }
 
         using var catalogOptions = new SessionOptions();
