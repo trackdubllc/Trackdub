@@ -144,7 +144,7 @@ public sealed class WindowsMlExecutionProviderBootstrapper
         }
 
         string? detail = failures.Count + pending.Count == 0 ? null : string.Join(" ", failures.Concat(pending));
-        return (failures.Count == 0 || registered > 0, detail);
+        return (registered > 0 || (failures.Count == 0 && pending.Count == 0), detail);
     }
 
     private static bool TryEnsureWinMlProjectionDeployed(out string? failureReason)
