@@ -400,6 +400,7 @@ public sealed class InferenceWorkerClient : IInferenceWorkerClient, IAsyncDispos
             }
             catch (Exception ex) when (ex is InferenceWorkerException or OperationCanceledException)
             {
+                // The worker ignored or could not receive the shutdown request; it is killed below.
             }
 
             KillQuietly(running);
