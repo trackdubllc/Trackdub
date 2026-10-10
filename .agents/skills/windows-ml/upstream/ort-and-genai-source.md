@@ -41,4 +41,4 @@ Checked 2026-10-09/10 using GitHits against the commits listed.
 ## EP-context capture session keys
 
 - **Claim.** ORT session config entries `ep.context_enable`, `ep.context_file_path` and `ep.context_embed_mode` capture an EP-context model on first session build. This is the alternative to the compile API that Learn documents.
-- **Source.** ORT EP-context design documentation and session option key constants (onnxruntime.ai, not Learn). Re-check against the ORT version in use.
+- **Source.** `kOrtSessionOptionEpContextEnable`, `kOrtSessionOptionEpContextFilePath` and `kOrtSessionOptionEpContextEmbedMode` in `include/onnxruntime/core/session/onnxruntime_session_options_config_keys.h` (lines 516, 526, 531), `microsoft/onnxruntime@ee5f6e7c`.

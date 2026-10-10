@@ -13,15 +13,16 @@ Every entry records:
   - *confirmed*: cause found and fix verified;
   - *suspected*: plausible cause, not isolated;
   - *unknown*: not investigated;
-  - *contradicted*: a higher tier disagrees.
+  - *contradicted*: a higher tier disagrees;
+  - *not applicable*: the entry records a state, not a failure.
 - **Status:**
   - *current*: still relied on;
   - *needs re-test*: cause not settled, or versions moved on;
   - *misconfiguration*: Trackdub's own setup caused it;
   - *superseded*: no longer applies.
-- **Acted on in:** files or PRs that encode a decision based on it.
+- **Acted on in:** files or PRs that encode a decision based on it, or "nothing".
 
-Add entries; do not rewrite history. When re-testing, append a dated result to the entry.
+Every field is required; write "unknown" or "nothing" rather than leaving one out. Add entries; do not rewrite history. When re-testing, append a dated result to the entry.
 
 ---
 
@@ -85,17 +86,19 @@ Add entries; do not rewrite history. When re-testing, append a dated result to t
 
   The run completed with no overrides.
 - **Reproduced:** Once.
-- **Cause confidence:** n/a.
-- **Status:** superseded as soon as pins, the planner or exports change. Re-run before quoting it.
+- **Cause confidence:** not applicable.
+- **Status:** needs re-test. It goes stale as soon as pins, the planner or exports change, so re-run before quoting it.
+- **Acted on in:** nothing; it was used as evidence in #419's description.
 
 ### O-6. Managed ORT 1.30 runs against native ORT 1.27.1 on Windows
 
 - **Observed:** 2026-10-09, from the build configuration, not from a failure.
 - **Setup:** On the Windows TFM, `Microsoft.ML.OnnxRuntime.Gpu` is referenced managed-only, with `ExcludeAssets="native"`; the native ORT is Windows ML's.
 - **Result:** The pipeline works (O-5). No crash has been attributed to the version gap.
-- **Reproduced:** n/a. This is a configuration fact.
-- **Cause confidence:** n/a. The risk is explained in [upstream](../upstream/ort-and-genai-source.md); the output folder has not been inspected to confirm which managed copy ships ([upstream/packages.md](../upstream/packages.md)).
+- **Reproduced:** not applicable; this is a configuration fact.
+- **Cause confidence:** not applicable. The risk is explained in [upstream](../upstream/ort-and-genai-source.md). Nobody has inspected the output folder to confirm which managed copy ships ([upstream/packages.md](../upstream/packages.md)).
 - **Status:** current. Open question: drop the stock managed package on Windows and use Windows ML's matched managed API?
+- **Acted on in:** `src/Trackdub.Inference.Onnx/Trackdub.Inference.Onnx.csproj` (`ExcludeAssets="native"` on the stock package).
 
 ### O-7. Deep scratch paths broke native DLL loading
 
@@ -104,4 +107,5 @@ Add entries; do not rewrite history. When re-testing, append a dated result to t
 - **Result:** The native DLL loader failed. The same probe moved to `D:\tdhost\...` worked.
 - **Reproduced:** Once.
 - **Cause confidence:** suspected (path length).
-- **Status:** current as a practical tip only.
+- **Status:** current, as a practical tip only.
+- **Acted on in:** nothing in code; probes since then have lived under `D:\tdhost\`.

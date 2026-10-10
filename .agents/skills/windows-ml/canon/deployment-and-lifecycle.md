@@ -70,7 +70,7 @@ Read the live [ONNX Runtime versions](https://learn.microsoft.com/windows/ai/new
 Check `ExecutionProviderReadyResult.Status` before registering:
 - `Success`: register the EP.
 - `Failure`: inspect `ExtendedError` (an HRESULT) and `DiagnosticText`.
-- `InProgress`: the operation hasn't completed. Await it; it is not a failure.
+- `InProgress`: preparation hasn't finished. It is not a failure, but the EP isn't ready yet either: don't register it now. Call `EnsureReadyAsync()` again later.
 
 Sources: [install](https://learn.microsoft.com/windows/ai/new-windows-ml/initialize-execution-providers), [register](https://learn.microsoft.com/windows/ai/new-windows-ml/register-execution-providers), [select](https://learn.microsoft.com/windows/ai/new-windows-ml/select-execution-providers), [run models](https://learn.microsoft.com/windows/ai/new-windows-ml/run-onnx-models).
 
@@ -124,9 +124,13 @@ foreach (OrtEpDevice d in OrtEnv.Instance().GetEpDevices())
 var devices = env.GetEpDevices()
     .Where(d => d.EpName == epName && d.HardwareDevice.Type == OrtHardwareDeviceType.NPU)
     .ToList();
-if (devices.Count == 0) { /* fall back */ }
 var so = new SessionOptions();
-so.AppendExecutionProvider(env, devices, epOptions);
+if (devices.Count > 0)
+{
+    so.AppendExecutionProvider(env, devices, epOptions);
+}
+// else: the requested EP or device is absent, so leave the options without it (the session runs
+// on CPU) or choose another EP; AppendExecutionProvider throws on an empty device list.
 ```
 
 **Select by policy once explicit selection works.**

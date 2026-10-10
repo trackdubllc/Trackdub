@@ -8,7 +8,7 @@ Checked 2026-10-10 in the local NuGet cache.
 
 - Native: `runtimes/win-x64/native/onnxruntime.dll` (product version `1.27.20260711.1.7b7c0e2`), `DirectML.dll`, `Microsoft.Windows.AI.MachineLearning.dll`.
 - Managed: `lib/net8.0-windows10.0.17763.0/Microsoft.ML.OnnxRuntime.dll` (assembly version `0.0.0.0`) and `Microsoft.Windows.AI.MachineLearning.Projection.dll`. The package therefore ships its own managed ORT API, built to match its native ORT.
-- **Consequence (inferred, standard .NET SDK conflict resolution).** A project that also references a stock `Microsoft.ML.OnnxRuntime*` package gets two copies of `Microsoft.ML.OnnxRuntime.dll`. The build normally keeps the one with the higher assembly version, which is the stock one. Confirm which copy is in the output folder.
+- **Consequence.** A project that also references a stock `Microsoft.ML.OnnxRuntime*` package brings in two competing copies of `Microsoft.ML.OnnxRuntime.dll`. These package files don't say which copy wins the build, so check the output folder.
 - Runtime dependency: `System.Numerics.Tensors`.
 
 ## Microsoft.ML.OnnxRuntimeGenAI.WinML 0.17.1
