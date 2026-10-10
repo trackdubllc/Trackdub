@@ -11,7 +11,7 @@ public sealed class ModelExpectedRuntimeFormatterTests
     [InlineData(ModelExpectedRuntime.TrtRtxOrWindowsMlCatalogOrMigraphxOrDirectMlOrCpu, "TensorRT RTX, Windows ML catalog, MIGraphX, DirectML fallback, or CPU")]
     [InlineData(ModelExpectedRuntime.OnnxDirectMlOrMigraphx, "Windows ML catalog, MIGraphX, or DirectML fallback")]
     [InlineData(ModelExpectedRuntime.OnnxCudaOrMigraphx, "CUDA or MIGraphX")]
-    [InlineData("ort-genai|onnxruntime-cpu|onnxruntime-cuda", "CUDA (ONNX Runtime)")]
+    [InlineData("ort-genai|onnxruntime-cpu|onnxruntime-cuda", "ONNX Runtime GenAI or CPU (ONNX Runtime) or CUDA (ONNX Runtime)")]
     public void FormatHint_MapsKnownManifestTokens(string token, string expectedFragment)
     {
         string? hint = ModelExpectedRuntimeFormatter.FormatHint(token);
