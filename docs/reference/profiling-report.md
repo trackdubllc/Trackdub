@@ -98,7 +98,7 @@ Raw per-rep samples are host-local on the reference machine and not committed (`
 
 ### Desktop project open, Model Manager and memory (2026-10-10)
 
-Measured on the reference machine (RTX 5070, Ryzen 7 5700X3D, 63 GB), core `eaeed1d9` (= gated pin), desktop built from gated `b1f6f755`.
+Measured on the reference machine (RTX 5070, Ryzen 7 5700X3D, 63 GB), core `eaeed1d9` (the core `main` tip when this was run), desktop built from the gated PR #103 branch tip `b1f6f755` (squash-merged since as `7b20b217`; that build's submodule pointed at `eaeed1d9`).
 
 **Build configuration, read first.** A Release desktop build refuses to start without a signed `trackdub.revocation.json`, which is deliberately not checked in (`docs/licensing/trust-ring-schema.md` in the gated repo) and was not available here. These rows therefore use `dotnet build -c Debug -p:Optimize=true -f net10.0-windows10.0.19041.0`, which selects the development trust ring and also attaches Avalonia developer tools (`#if DEBUG`). They are **not** like-for-like with the Release startup rows above. For reference, the idle shell in this same configuration: cold `firstVisibleUi` median 8,462.3 ms (n=5; 7,339.9–13,060.2), warm median 6,077.2 ms (n=10; 4,607.9–11,688.2), working set about 289 MB.
 
@@ -210,7 +210,7 @@ Record commit hash, model manifest IDs, and EP selection policy (`WindowsMlExecu
 
 ### Real-model parity and staged TRT-RTX smokes at core `eaeed1d9` (2026-10-10)
 
-Run on the reference machine at the current core `main` tip (clean worktree), `net10.0-windows10.0.19041.0`, Release, with `TRACKDUB_TRT_RTX_SMOKE=1`, `TRACKDUB_OPUS_FIXTURE_ROOT=<model-cache>\onnx-community\opus-mt-en-es\onnx` and `TRACKDUB_MADLAD_FIXTURE_ROOT=<model-cache>\google\madlad400-3b-mt`. The gitignored `build/*-trtrtx-validated*` staging directories come from the Olive validation runs of 2026-09-22/23 (`build/sortformer-4spk-trtrtx-validation.json` and `build/whisper-onnx-trtrtx-validation.json`, the latter holding only the last size run, large-v3, both read `"pass": true`; the per-size Whisper evidence is the staged tests below). Olive was **not** re-run. **10 executed, 10 passed, 0 skipped**; raw TRX and console log are host-local under `c7-evidence/2026-10-10-step23-eaeed1d9/`.
+Run on the reference machine at core `eaeed1d9` (the `main` tip when this was run; clean worktree), `net10.0-windows10.0.19041.0`, Release, with `TRACKDUB_TRT_RTX_SMOKE=1`, `TRACKDUB_OPUS_FIXTURE_ROOT=<model-cache>\onnx-community\opus-mt-en-es\onnx` and `TRACKDUB_MADLAD_FIXTURE_ROOT=<model-cache>\google\madlad400-3b-mt`. The gitignored `build/*-trtrtx-validated*` staging directories come from the Olive validation runs of 2026-09-22/23 (`build/sortformer-4spk-trtrtx-validation.json` and `build/whisper-onnx-trtrtx-validation.json`, the latter holding only the last size run, large-v3, both read `"pass": true`; the per-size Whisper evidence is the staged tests below). Olive was **not** re-run. **10 executed, 10 passed, 0 skipped**; raw TRX and console log are host-local under `c7-evidence/2026-10-10-step23-eaeed1d9/`.
 
 | Test | What it asserts | Result | Duration |
 |---|---|---|---|
@@ -236,7 +236,7 @@ Long waveform / timeline frame budget: measured 2026-10-10 as headless render co
 
 ### Waveform frame cost, headless (2026-10-10)
 
-`WaveformPeaksControl` (1600 × 140) on the Avalonia headless platform with the real Skia software renderer (`UseHeadlessDrawing = false`), `net10.0-windows10.0.19041.0`, Release, gated `b1f6f755` at core `eaeed1d9`. Each sample is one `CaptureRenderedFrame()` while `PositionSeconds` sweeps 90% of the duration; 30 warm-up and 300 measured frames per case. Peaks are synthetic and seeded; the bucket count follows the generator's rule (10 per second, capped at 12,000), and each case carries one segment lane and boundary per 4 s, capped at 1,500. Probe source and CSV are host-local under `c7-evidence/2026-10-10-step22-ui/`; the probe is a local, uncommitted test. Host CPU load was not quiet.
+`WaveformPeaksControl` (1600 × 140) on the Avalonia headless platform with the real Skia software renderer (`UseHeadlessDrawing = false`), `net10.0-windows10.0.19041.0`, Release, gated PR #103 branch tip `b1f6f755` (squash-merged as `7b20b217`) with its submodule at core `eaeed1d9`. Each sample is one `CaptureRenderedFrame()` while `PositionSeconds` sweeps 90% of the duration; 30 warm-up and 300 measured frames per case. Peaks are synthetic and seeded; the bucket count follows the generator's rule (10 per second, capped at 12,000), and each case carries one segment lane and boundary per 4 s, capped at 1,500. Probe source and CSV are host-local under `c7-evidence/2026-10-10-step22-ui/`; the probe is a local, uncommitted test. Host CPU load was not quiet.
 
 | Waveform | Buckets | Segments | p50 (ms) | p95 (ms) | p99 (ms) | max (ms) |
 |---|---|---|---|---|---|---|
