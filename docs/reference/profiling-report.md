@@ -1,7 +1,7 @@
 # Trackdub performance profiling report
 
-> **Status:** MIXED — controlled dubbing-pipeline samples are recorded below; reference-machine, startup, idle working-set, TRT-RTX EP rows measured 2026-10-06, and audio-preparation matrix rows (cold ×5 isolated + cold ×5 compatible + warm ×32 + silence) measured 2026-10-07; project-open/model-manager startup, steady-state memory, export, and waveform rows marked *pending local run* remain unmeasured.
-> **Last updated:** 2026-10-07
+> **Status:** MIXED — controlled dubbing-pipeline samples are recorded below; reference-machine, startup, idle working-set, TRT-RTX EP rows measured 2026-10-06, audio-preparation matrix rows (cold ×5 isolated + cold ×5 compatible + warm ×32 + silence) measured 2026-10-07, and project-open, Model Manager, project/translation memory, export and waveform rows measured 2026-10-10 at core `eaeed1d9`. No `pending local run` row remains. The 2026-10-10 desktop rows come from a Debug-config (`Optimize=true`) build with the development trust ring because no signed revocation feed was available for a Release build, and the host was not quiet; read [Desktop project open, Model Manager and memory](#desktop-project-open-model-manager-and-memory-2026-10-10) before comparing them with the Release rows.
+> **Last updated:** 2026-10-10
 > **Report branch:** core performance-audit stack beginning at `17c4a66` (not the revision used for the older samples)
 
 ## Measurement methodology (fill before claiming budgets)
@@ -91,10 +91,42 @@ Measured from process launch to first interactive shell frame (no project open).
 |---|---:|---:|---|
 | Avalonia shell cold start | TBD | median 19,305.8; n=5; range 10,145.3–28,826.1 | App-reported launch→`firstVisibleUi` (BenchmarkEvidenceReport `desktop-startup`), Release `net10.0-windows10.0.19041.0`; isolated `TRACKDUB_DATA_ROOT`/`TRACKDUB_CACHE_ROOT` wiped per rep (cold app state; OS page cache not cleared) |
 | Avalonia shell warm start (cache-warm roots) | TBD | median 9,207.5; n=32; range 4,207.3–26,990.2; p95 21,138.7 | Same harness, roots persist across reps; warm tail (largest 5): 18,992.9 / 19,006.7 / 19,053.5 / 21,138.7 / 26,990.2; run-order last 5: 12,815.4 / 12,994.3 / 15,788.1 / 7,422.6 / 6,590.5 |
-| Shell + empty project open | TBD | *pending local run* | Includes SQLite migrate/open |
-| Model Manager gate (bundled ONNX) | TBD | *pending local run* | Separate from shell; do not collapse readiness states |
+| Shell + empty project open | TBD | launch → interactive shell median 5,339.7 ms (n=10; range 4,901.9–6,579.6); select the recent media-only project → visible in titlebar median 1,430.5 ms (n=10; range 1,279.8–1,618.5); → last display-state apply median 756.6 ms (692.3–973.6) | Debug config + `Optimize=true`, **not** the Release build of the rows above; project folder is a fresh copy per rep, so SQLite migrate/open is paid every rep. Detail and caveats in [the 2026-10-10 section](#desktop-project-open-model-manager-and-memory-2026-10-10) |
+| Model Manager gate (bundled ONNX) | TBD | AI Models click → Settings window median 1,869.8 ms (n=10; range 991.4–2,023.1); → per-model readiness text rendered median 2,353.2 ms (2,193.7–2,485.5), empty model cache. Populated cache (n=5): 1,990.2 / 3,040.8 ms | Interpreted as opening Settings → Local Models, which is what the AI Models button does. Readiness is read per row ("Not downloaded", downloaded…), never collapsed; this is not a bundled-model integrity verify (that is the separate Verify all button). Same Debug-config caveat |
 
 Raw per-rep samples are host-local on the reference machine and not committed (`c7-evidence/{cold,warm,smoke}.csv`, harness `Measure-DesktopStartup.ps1` in the same directory); per-run app reports are under `cold|warm/data/benchmark-reports/` in that directory. Variance is high; the warm distribution has not converged by rep 32, so treat medians as provisional.
+
+### Desktop project open, Model Manager and memory (2026-10-10)
+
+Measured on the reference machine (RTX 5070, Ryzen 7 5700X3D, 63 GB), core `eaeed1d9` (the core `main` tip when this was run), desktop built from the gated PR #103 branch tip `b1f6f755` (squash-merged since as `7b20b217`; that build's submodule pointed at `eaeed1d9`).
+
+**Build configuration, read first.** A Release desktop build refuses to start without a signed `trackdub.revocation.json`, which is deliberately not checked in (`docs/licensing/trust-ring-schema.md` in the gated repo) and was not available here. These rows therefore use `dotnet build -c Debug -p:Optimize=true -f net10.0-windows10.0.19041.0`, which selects the development trust ring and also attaches Avalonia developer tools (`#if DEBUG`). They are **not** like-for-like with the Release startup rows above. For reference, the idle shell in this same configuration: cold `firstVisibleUi` median 8,462.3 ms (n=5; 7,339.9–13,060.2), warm median 6,077.2 ms (n=10; 4,607.9–11,688.2), working set about 289 MB.
+
+**Host state.** Not quiet. Host CPU load was 59–100% in the samples taken before each set (Docker, several node processes, an IDE agent). OS file caches were not cleared. The post-translation set ran in a noisier stretch (launch → interactive shell median 8,440.2 ms against 5,339.7 ms for media-only), so treat medians as provisional.
+
+**Method.** A host-local UI Automation harness (`Measure-DesktopProject.ps1`, raw CSVs and run logs under `c7-evidence/2026-10-10-step22-ui/`, not committed) drives the real app. Every rep uses fresh isolated `TRACKDUB_DATA_ROOT` / `TRACKDUB_CACHE_ROOT`, a saved settings template with onboarding already dismissed, and a fresh copy of the project folder listed as the only recent project, so SQLite migrate/open is paid every rep. It waits for the `RecentProjectsCombo`, settles 3 s, selects the project, and records (a) when the titlebar leaves *No project*, (b) app-log milestones read after the app exits (the logger buffers, so they cannot be read live; the clock is the app's own), (c) working set, private bytes and GPU-process memory 10 s after the project is visible, then (d) clicks **AI Models** and times the Settings window and its per-model readiness text. All three projects come from the 8 s `short.mp4` fixture and have **one segment**: `trackdub project create` (media-only) and the `baseline` projects from `controlled-matrix --stages asr` and `--stages translation`.
+
+| Project state | n | select → titlebar (ms) | select → last display-state apply (ms) | select → `Snap.Preview.FirstFrame` (ms) | working set (MB) |
+|---|---|---|---|---|---|
+| media-only (spine only) | 10 | 1,430.5 (1,279.8–1,618.5) | 756.6 (692.3–973.6) | 1,241.8 (1,163.4–1,457.3) | 427.1 (420.6–439.2) |
+| post-ASR | 9 of 10 | 1,559.5 (1,363.2–2,090.6) | 770.9 (734.1–915.5) | 1,317.7 (1,200.1–1,614.6) | 429.8 (419.0–456.7) |
+| post-translation | 9 of 10 | 2,700.2 (2,008.6–3,115.9) | 1,457.2 (884.7–1,594.3) | 2,284.3 (1,677.2–2,671.2) | 432.4 (427.4–445.1) |
+| post-translation, populated model cache | 5 | 1,991.8 (1,851.4–23,452.5) | 863.2 (815.7–22,485.4) | 1,675.6 (1,595.3–23,161.1) | 435.0 (429.1–652.4) |
+
+Medians with ranges in parentheses.
+
+| Model Manager (AI Models click) | n | → Settings window (ms) | → per-model readiness text (ms) |
+|---|---|---|---|
+| media-only set, empty model cache | 10 | 1,869.8 (991.4–2,023.1) | 2,353.2 (2,193.7–2,485.5) |
+| post-ASR set, empty model cache | 9 | 1,022.8 (925.5–1,850.4) | 2,303.7 (2,107.8–3,623.9) |
+| post-translation set, empty model cache | 9 | 2,928.5 (1,925.6–3,865.7) | 3,478.5 (2,372.8–4,525.3) |
+| post-translation set, populated model cache | 5 | 1,990.2 (1,528.2–2,430.5) | 3,040.8 (2,818.5–3,604.7) |
+
+- One rep in each of the post-ASR and post-translation sets failed in the harness (the recent-project item was not found in the dropdown), hence n=9. They are excluded, not imputed.
+- The window time is bimodal (about 1.0 s in some reps, about 1.9 s in others) and the cause was not investigated.
+- Projects that already carry normalized audio never log `Snap.Normalize.*` / `Snap.Stages.Ready`; only the media-only path does (median 2,332.9 ms, range 2,128.7–2,796.8). The last `ApplyDisplayState 'navigator'` line is the loaded mark common to all three states.
+- **Populated model cache, first open:** with the app cache root pointed at the real `%LOCALAPPDATA%\Trackdub` (so the real `model-cache` is visible), rep 1 took 23,452.5 ms to show the project: the open was dispatched in 46.8 ms but project-state apply started 22,373.8 ms later, and the working set reached 652.4 MB. Reps 2–5 took 1.9–2.2 s. The cause was not diagnosed (the app's console output shows ONNX Runtime session-creation warnings during that window); the n=5 median hides it.
+- Working set is flat across states (about 430 MB, against 289 MB idle) because these projects have one segment. It says nothing about a multi-hundred-segment project.
 
 ### Example row format (illustrative only — not measured)
 
@@ -113,17 +145,21 @@ Private bytes / working set after steady state (5 min idle, no pipeline run).
 | Scenario | Target (draft) | Measured | Notes |
 |---|---:|---:|---|
 | Idle shell, no media | TBD | working set median 281.8 MB (warm, n=32, range 268.5–287.5); private bytes median 263.0 MB; GPU process memory median 91 MB (range 91.0–101.4) | Sampled ~8 s after `firstVisibleUi`, not the 5-min-idle methodology above; post-start settle sample, real but shallow |
-| Project open, transcript loaded | TBD | *pending local run* | Typical editor session |
-| Post-ASR + translation (no TTS) | TBD | *pending local run* | Pipeline artifacts on disk; memory in-process |
+| Project open, transcript loaded | TBD | working set median 429.8 MB (n=9; range 419.0–456.7); private bytes median 473.4 MB; GPU process 248.4 MB. Idle shell, same build config: working set 289.2 MB median (cold, n=5; range 285.8–292.2) | Post-ASR project, **one segment from an 8 s clip**, sampled 10 s after the project became visible. Not a "typical editor session": a multi-hundred-segment project was not measured. Debug config + `Optimize=true` |
+| Post-ASR + translation (no TTS) | TBD | desktop with a post-translation project: working set median 432.4 MB (n=9; range 427.4–445.1). Benchmark-host process (`net10.0`, fresh process, vad → diarization → asr → translation): peak working set 12,269 MB; vad → diarization → asr alone: 6,637 MB | Two different things: the desktop figure is the app showing artifacts on disk; the benchmark-host figure is the engines resident in one process (Qwen3-ASR 0.6B and MADLAD400, both on CPU). Peak sampling cadence was dilated (longest tick gap 216–482 ms at a 25 ms cadence), so transient peaks may be missed |
 
 ## Export throughput
 
 | Export profile | Media duration | Wall time | Real-time factor | Measured |
 |---|---:|---:|---:|---|
-| Audio mix (default) | *pending local run* | *pending local run* | *pending local run* | *pending local run* |
-| Video mux (if applicable) | *pending local run* | *pending local run* | *pending local run* | *pending local run* |
+| Audio mix (default) | 8.0 s | median 3,768.1 ms (n=10; range 3,588.9–7,027.0) | 0.47 | measured 2026-10-10, core `eaeed1d9`; see method below |
+| Video mux (if applicable) | 8.0 s | not separable | not separable | The export stage emits `dub.wav`, `dubbed.mp4` and `dubbed.srt` in one stage run; the product records one duration for all of it, so the mix and the mux are not timed separately |
 
 **Method:** note FFmpeg/libmpv path, segment count, and whether `MatchOriginalLoudness` was enabled.
+
+**2026-10-10 run:** `trackdub run-stage --stage export` ×10 (CLI, Release `net10.0`) against one project built from the baseline `short.mp4` (sha256 `c4640c3f…95bd85`, 8.000 s, **one segment**): default `mp4` container, FFmpeg as resolved by the app (its health check passed; the binary path was not recorded), `MatchOriginalLoudness=False`, target −14 LUFS, `ApplyTimbrePolish=True`, `VideoEncoder=auto`, no burned-in subtitles. Wall time is the stage's own `StartedAtUtc`→`CompletedAtUtc` from the project's `StageRuns`; the CLI process wall time (including .NET and session start-up) was median 7,469.2 ms (7,215.0–13,667.2). RTF is stage time divided by media duration. With an 8 s clip fixed costs dominate, so **0.47 does not predict throughput for long media**; no long-form export was measured. One rep (7,027.0 ms) is a host-contention outlier.
+
+**Export did not run with default timing on this fixture.** The default dubbed take (Qwen3-TTS 0.6B, CPU) for the translated `en`→`fr` text extended 2.0 s and 3.7 s past the 8 s source in the two matrix runs, and the export stage refuses that ("Dubbed take extends … past the end of the source audio … Stretch the take to fit, trim it, or raise the auto-stretch limit"), so `controlled-matrix --stages export` ends `STAGE_FAILED` here (twice, including once with `--mode warm-host`). The export timings above were taken after re-running TTS with `--tts-auto-stretch-max-overrun 1`. A Kokoro attempt did not help: the `--model tts=kokoro-onnx` pin was not applied to the prerequisite TTS stage in the matrix run (it still used Qwen3-TTS), and a direct `run-stage --stage tts --model kokoro-onnx` take overran by 5.3 s.
 
 ## SQLite query plans
 
@@ -172,6 +208,21 @@ Record commit hash, model manifest IDs, and EP selection policy (`WindowsMlExecu
 | Commit SHA | `90cdcd75` |
 | Plugin dir | `%LOCALAPPDATA%\Trackdub\Providers\trt-rtx\0.4.2\cu13\win-x64` or `TRACKDUB_TRT_RTX_EP_DIR` |
 
+### Real-model parity and staged TRT-RTX smokes at core `eaeed1d9` (2026-10-10)
+
+Run on the reference machine at core `eaeed1d9` (the `main` tip when this was run; clean worktree), `net10.0-windows10.0.19041.0`, Release, with `TRACKDUB_TRT_RTX_SMOKE=1`, `TRACKDUB_OPUS_FIXTURE_ROOT=<model-cache>\onnx-community\opus-mt-en-es\onnx` and `TRACKDUB_MADLAD_FIXTURE_ROOT=<model-cache>\google\madlad400-3b-mt`. The gitignored `build/*-trtrtx-validated*` staging directories come from the Olive validation runs of 2026-09-22/23 (`build/sortformer-4spk-trtrtx-validation.json` and `build/whisper-onnx-trtrtx-validation.json`, the latter holding only the last size run, large-v3, both read `"pass": true`; the per-size Whisper evidence is the staged tests below). Olive was **not** re-run. **10 executed, 10 passed, 0 skipped**; raw TRX and console log are host-local under `c7-evidence/2026-10-10-step23-eaeed1d9/`.
+
+| Test | What it asserts | Result | Duration |
+|---|---|---|---|
+| `OpusMtTranslationEngine_UsesFixtureModelWhenProvided` | `en`→`es` through `opus-mt-en-es` returns non-empty text on `cpu` | pass | 4 m 43.6 s |
+| `MadladTranslationEngine_UsesFixtureModelWhenProvided` | MADLAD400 int8 returns non-empty text on `cpu` | pass | 1 m 05.7 s |
+| `MadladTranslationEngine_StreamParity_MatchesBatchPerSegment` | streaming and batch translation agree per segment (2 segments) | pass | 3 m 05.4 s |
+| `MadladTokenizerDecoder_EncodeSourceText_TerminatesWithEndOfSentence` | source ids end in a single `</s>` | pass | 1.4 s |
+| `SortFormerDiarizationEngineTests.DiarizeAsync_with_trtrtx_staged_model_selects_tensorrt_rtx_provider` | staged fp16 SortFormer selects the TensorRT RTX provider | pass | 1 m 25.7 s |
+| `WhisperOnnxTrtRtx_{Tiny,Base,Small,Medium,LargeV3}Model_SessionLoadsAndTranscribesSilence` | each staged Whisper loads on TRT-RTX and transcribes silence | pass ×5 | tiny 51.1 s, base 48.3 s, small 57.6 s, medium 3 m 11.0 s, large-v3 4 m 52.3 s |
+
+Scope limits: the Opus and MADLAD tests are fixture smokes plus streaming-vs-batch equivalence; they do not score translation quality. Durations include TensorRT RTX engine builds and ran on a busy host. The staging directories encode a model-cache state at validation time; if a cached model changes, the validation scripts must be run again. Earlier TRT-RTX smoke evidence (6/6 on 2026-10-06) was recorded at `90cdcd75`; this run replaces it with evidence at the pin.
+
 ## Avalonia UI / render budget (headless)
 
 | Check | Test class | Evidence |
@@ -181,7 +232,19 @@ Record commit hash, model manifest IDs, and EP selection policy (`WindowsMlExecu
 | Main window / side panel / transport | `*LayoutTests` | bounds and alignment |
 | Glossary panel chrome | `ComponentScreenshotTests.Glossary_panel_*` | expanded/collapsed layout |
 
-Long waveform / timeline frame budget: *pending local run* (needs media fixture + scrub profile).
+Long waveform / timeline frame budget: measured 2026-10-10 as headless render cost, see below. This is CPU-side layout plus Skia software raster per frame, **not** GPU present latency or on-screen smoothness in the running app.
+
+### Waveform frame cost, headless (2026-10-10)
+
+`WaveformPeaksControl` (1600 × 140) on the Avalonia headless platform with the real Skia software renderer (`UseHeadlessDrawing = false`), `net10.0-windows10.0.19041.0`, Release, gated PR #103 branch tip `b1f6f755` (squash-merged as `7b20b217`) with its submodule at core `eaeed1d9`. Each sample is one `CaptureRenderedFrame()` while `PositionSeconds` sweeps 90% of the duration; 30 warm-up and 300 measured frames per case. Peaks are synthetic and seeded; the bucket count follows the generator's rule (10 per second, capped at 12,000), and each case carries one segment lane and boundary per 4 s, capped at 1,500. Probe source and CSV are host-local under `c7-evidence/2026-10-10-step22-ui/`; the probe is a local, uncommitted test. Host CPU load was not quiet.
+
+| Waveform | Buckets | Segments | p50 (ms) | p95 (ms) | p99 (ms) | max (ms) |
+|---|---|---|---|---|---|---|
+| 60 s | 600 | 15 | 2.5–3.9 | 4.5–6.1 | 5.3–7.7 | 6.5–12.3 |
+| 30 min | 12,000 | 450 | 7.1–7.6 | 11.0–12.0 | 11.6–12.9 | 13.6–19.4 |
+| 2 h | 12,000 | 1,500 | 13.4–13.7 | 18.5–20.0 | 20.6–26.5 | 22.7–46.8 |
+
+Each cell is the range over four zoom levels (2, 10, 50 and 200 px/s); zoom moved p50 by at most 1.4 ms in the 60 s case and 0.5 ms in the others. Against a 60 fps reference of 16.7 ms (a reference, not a project budget): the 60 s and 30 min cases stay under it at p99, the 2 h case with 1,500 segments exceeds it from p95 up. The 30 min and 2 h cases have the same bucket count, so the p50 growth from about 7.4 to about 13.5 ms tracks segment count (450 → 1,500) rather than peaks; that is consistent with per-frame cost growing with the number of segment lanes and boundaries, but viewport culling was not tested.
 
 ## Load snap budget (progressive import/open)
 
