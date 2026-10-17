@@ -1,6 +1,7 @@
 using Trackdub.Composition.StarterPacks;
 using Trackdub.Contracts.ApplicationContracts;
 using Trackdub.Domain;
+using Trackdub.Domain.Benchmarking;
 
 namespace Trackdub.Benchmarks;
 
@@ -18,6 +19,23 @@ public sealed record BenchmarkOptions(
     bool Mock = false,
     bool DryRun = false)
 {
+    /// <summary>Sampling/input/I-O policy for the measured run; CLI always supplies it.</summary>
+    public BenchmarkExecutionSettings? Execution { get; init; }
+
+    /// <summary>Opt-in persistence of this run into the user benchmark history store.</summary>
+    public bool HistoryRequested { get; init; }
+
+    /// <summary>CUDA-graph lane requested on the command line; Auto resolves from device-bound eligibility.</summary>
+    public BenchmarkCudaGraphMode CudaGraphMode { get; init; } = BenchmarkCudaGraphMode.Auto;
+
+    /// <summary>Optional NVIDIA reference-tool run attached to the primary benchmark.</summary>
+    public BenchmarkReferenceToolKind ReferenceTool { get; init; } = BenchmarkReferenceToolKind.None;
+
+    public string? ReferenceToolPath { get; init; }
+
+    /// <summary>When true an unsatisfied reference tool fails the command (exit code 2).</summary>
+    public bool ReferenceToolRequired { get; init; }
+
     public static bool TryParse(
         IReadOnlyList<string> args,
         TextWriter errorWriter,
@@ -27,6 +45,22 @@ public sealed record BenchmarkOptions(
         var outputPath = Path.Join(Environment.CurrentDirectory, "benchmark-report.json");
         var providerPreference = BenchmarkProviderPreference.Cpu;
         var runCount = 5;
+        var runCountSpecified = false;
+        int? durationMilliseconds = null;
+        var warmupRuns = 1;
+        var warmupMilliseconds = 200;
+        var inputMode = BenchmarkInputMode.Synthetic;
+        var inputSeed = 42;
+        var inputShapeOverrides = new Dictionary<string, int[]>(StringComparer.Ordinal);
+        var ioMode = BenchmarkIoMode.Managed;
+        var artifactMode = BenchmarkArtifactMode.Auto;
+        var runtimeCacheMode = BenchmarkRuntimeCacheMode.Reuse;
+        string? runtimeCacheDirectory = null;
+        var cudaGraphMode = BenchmarkCudaGraphMode.Auto;
+        var referenceTool = BenchmarkReferenceToolKind.None;
+        string? referenceToolPath = null;
+        var referenceToolRequired = false;
+        var historyRequested = false;
         string? variant = null;
         var allVariants = false;
         var reportFormat = ReportFormat.Both;
@@ -112,6 +146,162 @@ public sealed record BenchmarkOptions(
                         return false;
                     }
 
+                    runCountSpecified = true;
+                    break;
+
+                case "--duration-ms":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string durationText)
+                        || !int.TryParse(durationText, out int durationValue)
+                        || durationValue < 0)
+                    {
+                        errorWriter.WriteLine($"Invalid measurement duration '{durationText}'. Expected a non-negative millisecond count.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    durationMilliseconds = durationValue;
+                    break;
+
+                case "--warmup-runs":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string warmupRunsText)
+                        || !int.TryParse(warmupRunsText, out warmupRuns)
+                        || warmupRuns < 1)
+                    {
+                        errorWriter.WriteLine($"Invalid warmup run count '{warmupRunsText}'. Expected a positive count.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--warmup-ms":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string warmupMsText)
+                        || !int.TryParse(warmupMsText, out warmupMilliseconds)
+                        || warmupMilliseconds < 0)
+                    {
+                        errorWriter.WriteLine($"Invalid warmup duration '{warmupMsText}'. Expected a non-negative millisecond count.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--input-mode":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string inputModeText)
+                        || !TryParseFlagEnum(inputModeText, out inputMode))
+                    {
+                        errorWriter.WriteLine($"Unknown input mode '{inputModeText}'. Expected synthetic, zeros, or profile.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--input-seed":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string inputSeedText)
+                        || !int.TryParse(inputSeedText, out inputSeed))
+                    {
+                        errorWriter.WriteLine($"Invalid input seed '{inputSeedText}'.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--input-shape":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string inputShapeText)
+                        || !TryParseInputShape(inputShapeText, out string shapeName, out int[] shapeDims))
+                    {
+                        errorWriter.WriteLine(
+                            $"Invalid input shape override '{inputShapeText}'. Expected <name>=<d1,d2,...> with dimensions >= 1.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    inputShapeOverrides[shapeName] = shapeDims;
+                    break;
+
+                case "--io-mode":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string ioModeText)
+                        || !TryParseFlagEnum(ioModeText, out ioMode))
+                    {
+                        errorWriter.WriteLine($"Unknown I/O mode '{ioModeText}'. Expected managed or device-bound.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--cuda-graphs":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string cudaGraphText)
+                        || !TryParseFlagEnum(cudaGraphText, out cudaGraphMode))
+                    {
+                        errorWriter.WriteLine($"Unknown CUDA graph mode '{cudaGraphText}'. Expected auto, off, on, or compare.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--artifact":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string artifactText)
+                        || !TryParseFlagEnum(artifactText, out artifactMode))
+                    {
+                        errorWriter.WriteLine($"Unknown artifact mode '{artifactText}'. Expected auto, source, or require.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--runtime-cache":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string cacheModeText)
+                        || !TryParseFlagEnum(cacheModeText, out runtimeCacheMode))
+                    {
+                        errorWriter.WriteLine($"Unknown runtime cache mode '{cacheModeText}'. Expected reuse or isolated.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--runtime-cache-dir":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string cacheDirText))
+                    {
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    runtimeCacheDirectory = cacheDirText.Trim();
+                    break;
+
+                case "--history":
+                    historyRequested = true;
+                    break;
+
+                case "--reference-tool":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string referenceToolText)
+                        || !TryParseReferenceTool(referenceToolText, out referenceTool))
+                    {
+                        errorWriter.WriteLine($"Unknown reference tool '{referenceToolText}'. Expected tensorrt-rtx or ort-perf-test.");
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    break;
+
+                case "--reference-tool-path":
+                    if (!TryReadValue(args, ref index, arg, errorWriter, out string referenceToolPathText))
+                    {
+                        options = DefaultWithHelp();
+                        return false;
+                    }
+
+                    referenceToolPath = referenceToolPathText.Trim();
+                    break;
+
+                case "--reference-tool-required":
+                    referenceToolRequired = true;
                     break;
 
                 case "--variant":
@@ -182,6 +372,13 @@ public sealed record BenchmarkOptions(
             }
         }
 
+        // Sampling floors come from the shared domain policy so CLI and other callers
+        // cannot drift: absent --runs means >=10 samples plus a 3s measurement floor;
+        // explicit --runs keeps exact-count behavior (including --runs 1 smoke runs).
+        BenchmarkSamplingPolicy sampling = BenchmarkSamplingPolicy.Resolve(
+            runCountSpecified ? runCount : null,
+            durationMilliseconds);
+
         if (showHelp)
         {
             options = new BenchmarkOptions(
@@ -194,7 +391,13 @@ public sealed record BenchmarkOptions(
                 reportFormat,
                 null,
                 scope,
-                ShowHelp: true);
+                ShowHelp: true)
+            {
+                Execution = BuildExecutionSettings(
+                    sampling, warmupRuns, warmupMilliseconds,
+                    inputMode, inputSeed, ioMode, artifactMode, runtimeCacheMode,
+                    runtimeCacheDirectory, cudaGraphMode, inputShapeOverrides)
+            };
             return true;
         }
 
@@ -227,11 +430,20 @@ public sealed record BenchmarkOptions(
             return false;
         }
 
+        if (referenceToolRequired && referenceTool is BenchmarkReferenceToolKind.None)
+        {
+            errorWriter.WriteLine("--reference-tool-required requires --reference-tool.");
+            options = DefaultWithHelp();
+            return false;
+        }
+
+        int effectiveRunCount = sampling.MinimumSamples;
+
         options = new BenchmarkOptions(
             string.IsNullOrWhiteSpace(modelPath) ? string.Empty : modelPath.Trim(),
             Path.GetFullPath(outputPath),
             providerPreference,
-            runCount,
+            effectiveRunCount,
             string.IsNullOrWhiteSpace(variant) ? null : variant,
             allVariants,
             reportFormat,
@@ -239,9 +451,106 @@ public sealed record BenchmarkOptions(
             string.IsNullOrWhiteSpace(scope) ? null : scope,
             ShowHelp: false,
             Mock: mock,
-            DryRun: dryRun);
+            DryRun: dryRun)
+        {
+            Execution = BuildExecutionSettings(
+                sampling, warmupRuns, warmupMilliseconds,
+                inputMode, inputSeed, ioMode, artifactMode, runtimeCacheMode,
+                runtimeCacheDirectory, cudaGraphMode, inputShapeOverrides),
+            HistoryRequested = historyRequested,
+            CudaGraphMode = cudaGraphMode,
+            ReferenceTool = referenceTool,
+            ReferenceToolPath = string.IsNullOrWhiteSpace(referenceToolPath) ? null : referenceToolPath,
+            ReferenceToolRequired = referenceToolRequired
+        };
 
         return true;
+    }
+
+    /// <summary>
+    /// Maps the parsed flags onto <see cref="BenchmarkExecutionSettings"/>. Without an explicit
+    /// --runs the measurement floor defaults to 3 seconds on top of the 10-sample minimum;
+    /// --duration-ms without --runs keeps that sample minimum and applies the duration floor;
+    /// an explicit --runs without --duration-ms preserves exact-count runs.
+    /// </summary>
+    private static BenchmarkExecutionSettings BuildExecutionSettings(
+        BenchmarkSamplingPolicy sampling,
+        int warmupRuns,
+        int warmupMilliseconds,
+        BenchmarkInputMode inputMode,
+        int inputSeed,
+        BenchmarkIoMode ioMode,
+        BenchmarkArtifactMode artifactMode,
+        BenchmarkRuntimeCacheMode runtimeCacheMode,
+        string? runtimeCacheDirectory,
+        BenchmarkCudaGraphMode cudaGraphMode,
+        IReadOnlyDictionary<string, int[]> inputShapeOverrides) =>
+        new(
+            MinimumWarmupRuns: warmupRuns,
+            MinimumWarmupMilliseconds: warmupMilliseconds,
+            MinimumMeasurementMilliseconds: sampling.MinimumMeasurementMilliseconds,
+            InputMode: inputMode,
+            InputSeed: inputSeed,
+            IoMode: ioMode,
+            TensorRtRtx: new BenchmarkTensorRtRtxSettings(
+                CudaGraphMode: cudaGraphMode,
+                ArtifactMode: artifactMode,
+                CacheMode: runtimeCacheMode,
+                RuntimeCacheDirectory: runtimeCacheDirectory),
+            InputShapeOverrides: inputShapeOverrides.Count == 0 ? null : inputShapeOverrides);
+
+    private static bool TryParseInputShape(string value, out string name, out int[] dimensions)
+    {
+        name = string.Empty;
+        dimensions = [];
+        var separatorIndex = value.IndexOf('=', StringComparison.Ordinal);
+        if (separatorIndex <= 0)
+        {
+            return false;
+        }
+
+        name = value[..separatorIndex].Trim();
+        if (name.Length == 0)
+        {
+            return false;
+        }
+
+        var parts = value[(separatorIndex + 1)..].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0
+            || !parts.All(p => int.TryParse(p, out _)))
+        {
+            return false;
+        }
+
+        dimensions = parts.Select(int.Parse).ToArray();
+        return dimensions.All(d => d >= 1);
+    }
+
+    /// <summary>Parses kebab/underscore CLI values like "device-bound" onto enum members.</summary>
+    private static bool TryParseFlagEnum<TEnum>(string value, out TEnum result)
+        where TEnum : struct, Enum =>
+        Enum.TryParse(value.Replace("-", string.Empty).Replace("_", string.Empty), ignoreCase: true, out result)
+            && Enum.IsDefined(result);
+
+    private static bool TryParseReferenceTool(string value, out BenchmarkReferenceToolKind kind)
+    {
+        if (string.Equals(value, "tensorrt-rtx", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "tensorrt_rtx", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "trt-rtx", StringComparison.OrdinalIgnoreCase))
+        {
+            kind = BenchmarkReferenceToolKind.TensorRtRtx;
+            return true;
+        }
+
+        if (string.Equals(value, "ort-perf-test", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "onnxruntime_perf_test", StringComparison.OrdinalIgnoreCase))
+        {
+            kind = BenchmarkReferenceToolKind.OrtPerfTest;
+            return true;
+        }
+
+        kind = BenchmarkReferenceToolKind.None;
+        return false;
     }
 
     private static BenchmarkOptions DefaultWithHelp() =>
